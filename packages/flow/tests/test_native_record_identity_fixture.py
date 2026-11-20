@@ -85,7 +85,7 @@ def test_pack_names_complete_value_identity_without_virtual_grid_claims() -> Non
     assert spec.fields["note"].control.automation_id == "noteBox"
     requirements = builder.load_contract()["read_requirements"]
     assert requirements["require_editable"] is False
-    assert requirements["value_contract"] == "openadapt.native-value-completeness/v2"
+    assert requirements["value_contract"] == "openadapt.native-value-read/v3"
     assert not requirements["runtime_protocol_qualified"]
 
 

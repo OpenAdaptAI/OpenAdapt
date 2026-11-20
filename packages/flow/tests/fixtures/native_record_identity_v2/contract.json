@@ -30,13 +30,13 @@
   "read_requirements": {
     "route": "/uia/read",
     "require_editable": false,
-    "value_contract": "openadapt.native-value-completeness/v2",
-    "proof_schema": "openadapt.native-value-completeness/v2",
+    "value_contract": "openadapt.native-value-read/v3",
+    "proof_schema": "openadapt.native-value-completeness/v3",
     "runtime_protocol_qualified": false,
-    "shared_helper_ref": "7f65509068feb035236dd1d8a78db4daa5038e69",
+    "shared_helper_ref": "4be4b543da10286105090950c57a89d5e7a9a497",
     "identity_match": "exact canonical signed int64 string",
     "identity_match_qualified": false,
-    "protocol_source_reference_seen": "87d29b31b81131d591a8033ceac84e533f68264b",
+    "protocol_source_reference_seen": "1a2503da4e240ba24620845cf85737d087c38e39",
     "protocol_source_finalized": false
   },
   "readback_template": {
@@ -80,7 +80,7 @@
     "row_count_evidence": false
   },
   "native_validation_required": [
-    "known-non-password readonly Edit; complete UIA/native agreement with proof v2",
+    "known-non-password readonly Edit; complete UIA/native agreement with proof v3",
     "actual selected id = get.id = native observed id = independently queried SQLite id",
     "no selection, list/get failure, missing/wrong row and mid-load selection replacement clear identity",
     "target note and every sibling checked directly in SQLite",

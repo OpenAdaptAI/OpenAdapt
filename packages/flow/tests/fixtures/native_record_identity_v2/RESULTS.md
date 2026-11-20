@@ -19,3 +19,20 @@ used. Windows PowerShell 5.1 and native WinForms event/provider behavior remain
 unmeasured. The shared consumer protocol, exact canonical-ID matching, live
 DB-row-to-control binding, combined campaign and held-out qualification remain
 held. No prior result or denominator changed.
+
+## Protocol reference correction
+
+The intended request contract is `openadapt.native-value-read/v3`; the separate
+proof schema is `openadapt.native-value-completeness/v3`, as defined by frozen
+#2291 at `1a2503da4e240ba24620845cf85737d087c38e39` and helper commit
+`4be4b543da10286105090950c57a89d5e7a9a497`. These source references replace the
+historical v2 references. Every false/null qualification hold remains in place;
+the legacy-shaped template remains nonauthoritative.
+
+The existing focused suite passed again: 21 cases, no skips (Python 3.12.13,
+3.73 seconds), with Flow and Types imports verified against the correction
+checkout. The existing generated-output check, changed-file Ruff lint/format
+checks and repository source-boundary guard passed. All checks used the shared
+CPU slot. No new test cases, native/GUI/provider execution, runtime integration
+or qualification claim was added. Generated fixture, template, base and save
+handler bytes are unchanged.

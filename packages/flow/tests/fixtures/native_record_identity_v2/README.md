@@ -12,6 +12,10 @@ records leave the ID empty. A failed list load also clears the selection and
 list. The original save handler still saves to the selected grid key; the new
 fixture adds no save guard.
 
+This PR delivers fixture data and offline generation only. The generated
+legacy-shaped readback template is nonauthoritative: it does not enforce exact
+canonical-ID matching or admit a runtime. That consumer work remains separate.
+
 `contract.json` declares the database mapping and a data-only readback template.
 The generator applies exact overrides to a hash-pinned base and emits a distinct
 script, pack and manifest. Run from `packages/flow`:
@@ -42,17 +46,18 @@ precede PowerShell pipeline enumeration. They open no GUI and send no desktop in
 These checks establish source behavior under those stand-ins, not native
 WinForms behavior.
 
-Native qualification is **unperformed**. The intended structural read requires
-the corrected known-non-password guard, mandatory `value_contract` negotiation
-and `openadapt.native-value-completeness/v2` proof. Readonly identity uses
-`require_editable=False`; it is not an editable-field baseline. Unsupported,
-sensitive, truncated or disagreeing values must refuse, with no caption,
-preview or OCR fallback. The protocol continuation was inspected at
-`87d29b31b81131d591a8033ceac84e533f68264b` with shared helper
-`7f65509068feb035236dd1d8a78db4daa5038e69`. Further consumer corrections
-are pending; this is a source reference, not a final runtime pin or native
-qualification. This fixture does not qualify an older
-runtime.
+Native qualification is **unperformed**. The intended structural read uses
+request contract `openadapt.native-value-read/v3` and the separate
+`openadapt.native-value-completeness/v3` proof schema. These are source references
+from frozen #2291 at `1a2503da4e240ba24620845cf85737d087c38e39`, with shared
+helper commit `4be4b543da10286105090950c57a89d5e7a9a497` (Git blob
+`78e47eb02e7498b5111766f25f3604e8ab78ee50`). They do not establish final protocol,
+runtime or native qualification; all contract holds remain false or null.
+Readonly identity uses `require_editable=False`; it is not an editable-field
+baseline. Unsupported, sensitive, truncated or disagreeing values must refuse,
+with no caption, preview or OCR fallback. The known-non-password guard and
+mandatory `value_contract` negotiation remain prerequisites for future consumer
+integration. This fixture does not qualify an older runtime.
 
 A future native case must independently compare the selected key, loaded DB
 row, actual managed control value and complete native UIA/Win32 observation,
