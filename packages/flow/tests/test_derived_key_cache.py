@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-import hashlib
+import hmac
 import json
 from collections import OrderedDict
 
@@ -21,14 +21,18 @@ PASSPHRASES = (
     "synthetic-cache-" + "q" * 16,
 )
 METHODS = ("data", "set", "encrypt", "decrypt", "clear")
+CACHE_MAC_KEY = b"c" * 32
+CACHE_DOMAIN = b"openadapt-flow/derived-key-cache/v1\0"
 
 
 def _synthetic_key(secret, salt, n, r, p):
     # An inexpensive independent KDF stand-in lets generated operation sequences
     # check cache behavior. The separate real-scrypt test keeps the real crypto.
-    return hashlib.sha256(
-        b"synthetic-cache-kdf\0" + salt + f"{n}:{r}:{p}:".encode() + secret
-    ).digest()
+    return hmac.digest(
+        b"k" * 32,
+        b"synthetic-kdf-oracle/v1\0" + salt + f"{n}:{r}:{p}:".encode() + secret,
+        "sha256",
+    )
 
 
 def _exercise(method, passphrase, salt, params):
@@ -108,6 +112,7 @@ def test_cache_lifecycle_across_all_callers(operations):
         patch.setattr(crypto, "_DERIVED", cache)
         patch.setattr(crypto, "_DERIVED_LIMIT", 3)
         patch.setattr(crypto, "derivations", 0)
+        patch.setattr(crypto, "_DERIVED_FINGERPRINT_KEY", CACHE_MAC_KEY)
         comparisons = []
         compare = crypto.hmac.compare_digest
 
@@ -156,7 +161,9 @@ def test_cache_lifecycle_across_all_callers(operations):
             for cached_slot, (fingerprint, key) in cache.items():
                 secret = model[cached_slot].encode()
                 assert len(fingerprint) == 32
-                assert fingerprint == hashlib.sha256(secret).digest()
+                assert fingerprint == hmac.digest(
+                    CACHE_MAC_KEY, CACHE_DOMAIN + secret, "sha256"
+                )
                 assert fingerprint != secret
                 assert key == _synthetic_key(secret, *cached_slot)
 
@@ -193,3 +200,30 @@ def test_real_scrypt_interoperates_after_wrong_passphrase_and_clear(monkeypatch)
     )
     assert crypto.derivations == before + 4
     assert all(len(fingerprint) == 32 for fingerprint, _ in crypto._DERIVED.values())
+
+
+def test_cache_tags_bind_key_and_domain_without_changing_data_keys(monkeypatch):
+    monkeypatch.setattr(crypto, "_DERIVED", OrderedDict())
+    assert len(crypto._DERIVED_FINGERPRINT_KEY) == 32
+    passphrase, salt = "synthetic-cache-domain-check", b"d" * 16
+    tags, data_keys = [], []
+    scopes = [
+        (b"a" * 32, CACHE_DOMAIN),
+        (b"b" * 32, CACHE_DOMAIN),
+        (b"a" * 32, b"synthetic-other-purpose/v1\0"),
+        (b"a" * 32, CACHE_DOMAIN),
+    ]
+    for mac_key, domain in scopes:
+        # Separate cache instances may have different private MAC namespaces;
+        # neither that namespace nor a clear changes the scrypt data key.
+        crypto._DERIVED.clear()
+        monkeypatch.setattr(crypto, "_DERIVED_FINGERPRINT_KEY", mac_key)
+        monkeypatch.setattr(crypto, "_DERIVED_FINGERPRINT_DOMAIN", domain)
+        data_keys.append(crypto.derive_data_key(passphrase, salt))
+        ((tag, _),) = crypto._DERIVED.values()
+        assert len(tag) == 32
+        assert tag == hmac.digest(mac_key, domain + passphrase.encode(), "sha256")
+        tags.append(tag)
+    assert len(set(data_keys)) == 1
+    assert len(set(tags[:3])) == 3
+    assert tags[0] == tags[3]

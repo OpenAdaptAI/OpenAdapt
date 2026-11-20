@@ -345,17 +345,20 @@ def test_newest_sealed_run_equal_nanoseconds_uses_lexical_name(
 ):
     root = tmp_path / "openadapt-quickstart"
     root.mkdir()
-    timestamp = 1_700_000_000_123_456_789
+    timestamp = 1_700_000_000_000_000_000
     for name in (*names, "run-z"):
         run = root / name
         run.mkdir()
         seal = run / "seal.json"
         seal.write_text("{}", encoding="utf-8")
-        when = timestamp - 1_000_000_000 if name == "run-z" else timestamp
+        when = timestamp - 2_000_000_000 if name == "run-z" else timestamp
         os.utime(seal, ns=(when, when))
     assert {(root / name / "seal.json").stat().st_mtime_ns for name in names} == {
         timestamp
     }
+    assert (
+        root / "run-z" / "seal.json"
+    ).stat().st_mtime_ns == timestamp - 2_000_000_000
     monkeypatch.chdir(tmp_path)
     # Equal times use lexical order, not a claim about run sequence numbers.
     assert cli._newest_sealed_run() == root / expected
