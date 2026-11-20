@@ -80,6 +80,16 @@ _PRIMARY_ENTITY_KINDS = frozenset(
         "self",
     }
 )
+# Retryability describes effects, not whether the same run may advance again.
+# A pending post-commit modal can be resumable while safe_to_retry is False;
+# an explicit abort can be terminal while no write was dispatched.
+_RESUMABLE_OUTCOMES = frozenset(
+    {
+        FormTxOutcome.HALTED_NEEDS_HUMAN,
+        FormTxOutcome.AUTH_REQUIRED,
+        FormTxOutcome.VALIDATION_BLOCKED,
+    }
+)
 _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "",
     "-- Select --",
@@ -268,7 +278,7 @@ class ReconcilerSession:
         self._bound_surface: Optional[FormSurfaceBackend] = None
         self._effect_state = _EffectState.NO_DISPATCH
         self._dispatch_attempts = 0
-        self._effect_failure_result: Optional[FormTxResult] = None
+        self._terminal_result: Optional[FormTxResult] = None
 
 
 def _is_action_button(ctrl: ObservedControl) -> bool:
@@ -604,8 +614,8 @@ class FormReconciler:
         *,
         preserve_decision_refusals: bool = False,
     ) -> FormTxResult:
-        if session._effect_failure_result is not None:
-            return session._effect_failure_result
+        if session._terminal_result is not None:
+            return session._terminal_result
         attempts_before = session._dispatch_attempts
         try:
             return advance()
@@ -667,10 +677,16 @@ class FormReconciler:
         )
         session._last_result = result
         if outcome is FormTxOutcome.DELIVERY_UNCERTAIN:
-            # All uncertainty paths, including pre-existing mutation/transition
-            # budget refusals, block re-entry and changed idempotency keys.
             session._effect_state = _EffectState.DELIVERY_UNCERTAIN
-            session._effect_failure_result = result
+        resumable = outcome in _RESUMABLE_OUTCOMES and (
+            safe_to_retry or session._commit_in_progress
+        )
+        if not resumable:
+            # A terminal/no-retry result ends this run. A paused unsafe result
+            # may continue only through an already pending commit (e.g. its
+            # modal), never by revisiting the form and dispatching another save.
+            # New outcome kinds fail closed unless explicitly resumable above.
+            session._terminal_result = result
         return result
 
     def _match_modal_rule(
@@ -2217,11 +2233,26 @@ class FormReconciler:
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
         """Apply a live human decision through the same dispatch safety boundary."""
+        # A terminal cached result must not hide a conflicting reuse of an
+        # already accepted decision key. This check performs no surface call.
+        self._validate_decision_key(session, resolution)
         return self._guard_effects(
             session,
             lambda: self._apply_human_resolution(session, resolution, surface=surface),
             preserve_decision_refusals=True,
         )
+
+    def _validate_decision_key(
+        self, session: ReconcilerSession, resolution: HumanResolutionInput
+    ) -> str:
+        decision_digest = canonical_sha256(resolution)
+        if (
+            resolution.idempotency_key in session.seen_idempotency_keys
+            and session._idempotent_decisions.get(resolution.idempotency_key)
+            != decision_digest
+        ):
+            raise ValueError("Conflicting human decision reused an idempotency_key")
+        return decision_digest
 
     def _apply_human_resolution(
         self,
@@ -2231,13 +2262,8 @@ class FormReconciler:
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
         """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable."""
-        decision_digest = canonical_sha256(resolution)
+        decision_digest = self._validate_decision_key(session, resolution)
         if resolution.idempotency_key in session.seen_idempotency_keys:
-            if (
-                session._idempotent_decisions.get(resolution.idempotency_key)
-                != decision_digest
-            ):
-                raise ValueError("Conflicting human decision reused an idempotency_key")
             cached = session._idempotent_results.get(resolution.idempotency_key)
             if cached is not None:
                 return cached

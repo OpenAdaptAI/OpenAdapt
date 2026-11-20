@@ -266,7 +266,7 @@ def test_cancellation_propagates_but_possible_dispatch_cannot_be_retried(
         reconciler.run_until_halt_or_done(session)
     if operation == "click":
         assert surface.saved == "Yes"
-        assert_frozen(reconciler, session, surface, session._effect_failure_result)
+        assert_frozen(reconciler, session, surface, session._terminal_result)
     else:
         surface.failure = None
         assert (
@@ -543,7 +543,7 @@ def test_popup_context_cannot_suppress_child_failure_or_cancellation(
     if exception is asyncio.CancelledError:
         with pytest.raises(asyncio.CancelledError):
             reconciler.run_until_halt_or_done(session)
-        result = session._effect_failure_result
+        result = session._terminal_result
     else:
         result = reconciler.run_until_halt_or_done(session)
     assert not issued
@@ -588,3 +588,293 @@ def test_surface_retained_by_a_judge_is_rebound_to_the_current_session():
     surface.failure = "click"
     result = second.run_until_halt_or_done(session)
     assert_frozen(second, session, surface, result)
+
+
+@pytest.mark.parametrize("refuted", [False, True])
+def test_terminal_readback_outcome_cannot_resend_on_an_unchanged_commit_screen(refuted):
+    from openadapt_flow.form_tx.types import SummaryVerdict
+
+    class RefutingJudge:
+        def evaluate(self, **kwargs):
+            return SummaryVerdict(passed=False, checked_count=1, failed_keys=("value",))
+
+    surface = Surface()
+    pack, dossier = inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(
+        surface, **({"summary_judge": RefutingJudge()} if refuted else {})
+    )
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == (
+        FormTxOutcome.READBACK_REFUTED if refuted else FormTxOutcome.VERIFIED_DONE
+    )
+    assert result.safe_to_retry is False and surface.mutation_count == 1
+    assert reconciler.run_until_halt_or_done(session) is result
+    assert surface.mutation_count == 1
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        FormTxOutcome.VERIFIED_DONE,
+        FormTxOutcome.READBACK_REFUTED,
+        FormTxOutcome.DELIVERY_UNCERTAIN,
+        FormTxOutcome.ABORTED_BY_HUMAN,
+        FormTxOutcome.ESCALATED_TO_OWNER,
+    ],
+)
+@pytest.mark.parametrize(
+    "operations",
+    [
+        ("run", "run", "same_key", "new_key", "run"),
+        ("new_key", "same_key", "run", "new_key", "same_key"),
+    ],
+)
+def test_terminal_run_state_rejects_every_followup_without_surface_calls(
+    outcome, operations
+):
+    from openadapt_flow.form_tx.types import SummaryVerdict
+
+    class RefutingJudge:
+        def evaluate(self, **kwargs):
+            return SummaryVerdict(passed=False, checked_count=1, failed_keys=("value",))
+
+    surface = Surface(
+        "post_snapshot" if outcome == FormTxOutcome.DELIVERY_UNCERTAIN else None
+    )
+    pack, dossier = inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(
+        surface,
+        **(
+            {"summary_judge": RefutingJudge()}
+            if outcome == FormTxOutcome.READBACK_REFUTED
+            else {}
+        ),
+    )
+    if outcome in (FormTxOutcome.ABORTED_BY_HUMAN, FormTxOutcome.ESCALATED_TO_OWNER):
+        surface.value = "No"
+        halt = reconciler.run_until_halt_or_done(session).halts[0]
+        action = (
+            HumanDecisionAction.ABORT_RUN
+            if outcome == FormTxOutcome.ABORTED_BY_HUMAN
+            else HumanDecisionAction.ESCALATE_TO_OWNER
+        )
+        decision = HumanResolutionInput(
+            halt_id=halt.halt_id,
+            action=action,
+            actor_id="operator",
+            idempotency_key="original",
+        )
+        result = reconciler.apply_human_resolution(session, decision)
+    else:
+        decision = HumanResolutionInput(
+            halt_id="stale",
+            action=HumanDecisionAction.PROVIDE_VALUE,
+            actor_id="operator",
+            idempotency_key="original",
+            provided_value="Yes",
+        )
+        result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == outcome
+    calls, mutations = list(surface.calls), surface.mutation_count
+    surface.failure = None
+    for operation in operations:
+        if operation == "run":
+            observed = reconciler.run_until_halt_or_done(session)
+        else:
+            observed = reconciler.apply_human_resolution(
+                session,
+                decision
+                if operation == "same_key"
+                else decision.model_copy(update={"idempotency_key": "another"}),
+            )
+        assert observed is result
+        assert surface.calls == calls and surface.mutation_count == mutations
+    if "original" in session.seen_idempotency_keys:
+        with pytest.raises(ValueError, match="Conflicting human decision"):
+            reconciler.apply_human_resolution(
+                session, decision.model_copy(update={"note": "changed payload"})
+            )
+        assert surface.calls == calls
+
+
+@pytest.mark.parametrize(
+    "paused",
+    [
+        FormTxOutcome.HALTED_NEEDS_HUMAN,
+        FormTxOutcome.AUTH_REQUIRED,
+        FormTxOutcome.VALIDATION_BLOCKED,
+    ],
+)
+def test_explicit_paused_states_remain_resumable_until_a_terminal_result(paused):
+    class PausingSurface(Surface):
+        paused = True
+
+        def _act(self, name, value="Yes"):
+            if (
+                self.paused
+                and paused == FormTxOutcome.VALIDATION_BLOCKED
+                and name == "click"
+            ):
+                # Genuine validation refusal: no save was applied. The unsafe
+                # applied-write/banner sibling is tested separately below.
+                self.calls.append(name)
+                return
+            return super()._act(name, value)
+
+        def snapshot(self, **kwargs):
+            snap = super().snapshot(**kwargs)
+            if self.paused and paused == FormTxOutcome.AUTH_REQUIRED:
+                return snap.model_copy(update={"auth_wall_present": True})
+            if self.paused and paused == FormTxOutcome.VALIDATION_BLOCKED:
+                return snap.model_copy(
+                    update={"banner_errors": ("synthetic validation",)}
+                )
+            return snap
+
+    surface = PausingSurface()
+    if paused == FormTxOutcome.HALTED_NEEDS_HUMAN:
+        surface.value = "No"
+    pack, dossier = inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == paused and session._terminal_result is None
+    surface.paused = False
+    action = (
+        HumanDecisionAction.PROVIDE_VALUE
+        if paused == FormTxOutcome.HALTED_NEEDS_HUMAN
+        else HumanDecisionAction.FIXED_ON_SCREEN
+    )
+    decision = HumanResolutionInput(
+        halt_id=result.halts[0].halt_id,
+        action=action,
+        actor_id="operator",
+        idempotency_key="resume",
+        provided_value="Yes" if action == HumanDecisionAction.PROVIDE_VALUE else None,
+    )
+    done = reconciler.apply_human_resolution(session, decision)
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+    assert surface.mutation_count == 1
+    calls = list(surface.calls)
+    assert reconciler.apply_human_resolution(session, decision) is done
+    assert reconciler.run_until_halt_or_done(session) is done
+    assert surface.calls == calls
+
+
+def test_pending_post_commit_modal_is_resumable_without_authorizing_a_second_commit():
+    from tests.test_form_tx_reconciler_and_receipts import (
+        FakeStatefulFormSurface,
+        _build_dossier,
+        _build_pack,
+    )
+
+    surface = FakeStatefulFormSurface(trigger_duplicate_modal_on_commit=True)
+    reconciler = FormReconciler(surface)
+    session = ReconcilerSession(_build_pack(), _build_dossier(has_pool="No"))
+    paused = reconciler.run_until_halt_or_done(session)
+    assert paused.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert paused.safe_to_retry is False and session._terminal_result is None
+    decision = HumanResolutionInput(
+        halt_id=paused.halts[0].halt_id,
+        action=HumanDecisionAction.CONFIRM_MODAL_ACTION,
+        actor_id="operator",
+        idempotency_key="confirm",
+    )
+    done = reconciler.apply_human_resolution(session, decision)
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+    mutations = surface.mutation_count
+    assert mutations == 1
+    assert reconciler.apply_human_resolution(session, decision) is done
+    assert reconciler.run_until_halt_or_done(session) is done
+    assert surface.mutation_count == mutations
+
+
+@pytest.mark.parametrize("refuted", [False, True])
+def test_real_headless_terminal_readback_on_same_commit_screen_never_posts_twice(
+    request, refuted
+):
+    from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
+    from tests.test_form_tx_frames import load, profile
+
+    case = request.getfixturevalue("app")
+    record_value = "No" if refuted else "Yes"
+    frame = load(
+        case,
+        '''<!doctype html><body data-authenticated>
+<label>Value<input id="value" value="Yes"></label>
+<label>Independent read view<input id="readback" readonly value="'''
+        + record_value
+        + """"></label>
+<button id="save" onclick="fetch('/save', {method:'POST'})">Save</button></body>""",
+    )
+    surface = PlaywrightFormSurface(frame, profile(1000))
+    pack, dossier = inputs()
+    readback = pack.bindings[0].model_copy(
+        update={"anchor": FieldAnchorSpec(css_selector="#readback")}
+    )
+    pack = pack.model_copy(
+        update={"summary_check": SummaryCheckSpec(field_readbacks=(readback,))}
+    )
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == (
+        FormTxOutcome.READBACK_REFUTED if refuted else FormTxOutcome.VERIFIED_DONE
+    )
+    assert frame.locator("#save").is_visible() and case.posts == ["/save"]
+    assert (result.receipt is None) == refuted
+    for key in ("one", "one", "different"):
+        assert reconciler.run_until_halt_or_done(session) is result
+        assert (
+            reconciler.apply_human_resolution(
+                session,
+                HumanResolutionInput(
+                    halt_id="stale",
+                    action=HumanDecisionAction.PROVIDE_VALUE,
+                    actor_id="operator",
+                    idempotency_key=key,
+                    provided_value="Yes",
+                ),
+            )
+            is result
+        )
+    assert case.posts == ["/save"]
+
+
+def test_unsafe_paused_validation_cannot_reopen_a_commit_after_a_write_was_observed():
+    class AppliedThenBlocked(Surface):
+        blocked = True
+
+        def snapshot(self, **kwargs):
+            snap = super().snapshot(**kwargs)
+            if self.saved is not None and self.blocked:
+                return snap.model_copy(
+                    update={"banner_errors": ("post-write validation",)}
+                )
+            return snap
+
+    surface = AppliedThenBlocked()
+    pack, dossier = inputs()
+    reconciler = FormReconciler(surface)
+    session = ReconcilerSession(pack, dossier)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.VALIDATION_BLOCKED
+    assert result.safe_to_retry is False and surface.mutation_count == 1
+    calls = list(surface.calls)
+    surface.blocked = False
+    assert (
+        reconciler.apply_human_resolution(
+            session,
+            HumanResolutionInput(
+                halt_id=result.halts[0].halt_id,
+                action=HumanDecisionAction.FIXED_ON_SCREEN,
+                actor_id="operator",
+                idempotency_key="cleared-banner",
+            ),
+        )
+        is result
+    )
+    assert reconciler.run_until_halt_or_done(session) is result
+    assert surface.calls == calls and surface.mutation_count == 1
