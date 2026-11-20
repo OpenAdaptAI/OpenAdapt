@@ -1526,6 +1526,24 @@ class FormReconciler:
             what_happened=msg,
         )
 
+    @staticmethod
+    def _observed_mutation_count(surface: FormSurfaceBackend) -> int:
+        """Read a valid request-counter observation, never a proof of effects."""
+        value = surface.mutation_count
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise _SurfaceOperationFailure("mutation_count", "InvalidCounter")
+        return value
+
+    def _observed_mutation_delta(self, surface: FormSurfaceBackend, before: int) -> int:
+        if not isinstance(before, int) or isinstance(before, bool) or before < 0:
+            raise _SurfaceOperationFailure("mutation_count", "InvalidBaseline")
+        after = self._observed_mutation_count(surface)
+        if after < before:
+            raise _SurfaceOperationFailure("mutation_count", "CounterRegressed")
+        # Nonzero request activity restricts retries. A zero observation never
+        # replaces the independent system-of-record read-back required to verify.
+        return after - before
+
     def _finalize_commit(
         self,
         surface: FormSurfaceBackend,
@@ -1534,7 +1552,7 @@ class FormReconciler:
         pre_commit_mutations: int,
     ) -> FormTxResult:
         pack = session.pack
-        delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
+        delta_mutations = self._observed_mutation_delta(surface, pre_commit_mutations)
         if delta_mutations > pack.max_commit_mutations:
             sig = f"commit_budget|{pack.pack_id}"
             halt_id = _deterministic_halt_id(
@@ -1776,25 +1794,30 @@ class FormReconciler:
             # Resume completion if a commit-triggered modal was just confirmed.
             if session._commit_in_progress:
                 pre_muts = session._pre_commit_mutations
+                delta = self._observed_mutation_delta(active_surface, pre_muts)
                 errors = _collect_surface_errors(snapshot)
                 if errors:
                     session._commit_in_progress = False
-                    delta = active_surface.mutation_count - pre_muts
                     return self._emit_validation_blocked(
                         session,
                         snapshot,
                         errors,
                         safe_to_retry=(delta == 0),
                     )
-                if (
-                    active_surface.mutation_count > pre_muts
-                    or not self._is_still_on_uncommitted_commit_screen(snapshot, pack)
+                if delta > 0 or not self._is_still_on_uncommitted_commit_screen(
+                    snapshot, pack
                 ):
                     session._commit_in_progress = False
                     return self._finalize_commit(
                         active_surface, session, snapshot, pre_muts
                     )
                 session._commit_in_progress = False
+                return self._effect_failure(
+                    session,
+                    _SurfaceOperationFailure(
+                        "commit continuation", "UnresolvedDelivery"
+                    ),
+                )
 
             # 4. Entity Table Prefill Conflict Check
             entity_halt = self._check_entity_table_conflicts(session, snapshot)
@@ -2000,7 +2023,7 @@ class FormReconciler:
                         safe_to_retry=True,
                     )
 
-                pre_commit_mutations = active_surface.mutation_count
+                pre_commit_mutations = self._observed_mutation_count(active_surface)
                 session._pre_commit_mutations = pre_commit_mutations
                 session._commit_in_progress = True
                 active_surface.click(commit_ctrl.dom_selector)
@@ -2017,7 +2040,9 @@ class FormReconciler:
                 session._commit_in_progress = False
                 post_errors = _collect_surface_errors(post_snap)
                 if post_errors:
-                    delta = active_surface.mutation_count - pre_commit_mutations
+                    delta = self._observed_mutation_delta(
+                        active_surface, pre_commit_mutations
+                    )
                     return self._emit_validation_blocked(
                         session,
                         post_snap,
@@ -2081,12 +2106,29 @@ class FormReconciler:
                     snapshot.url_origin_and_path,
                     snapshot.title,
                 )
+                pre_transition_mutations = self._observed_mutation_count(active_surface)
                 active_surface.click(next_ctrl.dom_selector)
                 post_snap = active_surface.snapshot(
                     entity_tables=pack.entity_tables,
                     modal_rules=pack.modal_rules,
                     screens=pack.screens,
                 )
+                delta = self._observed_mutation_delta(
+                    active_surface, pre_transition_mutations
+                )
+                auth_blocked = post_snap.auth_wall_present or (
+                    active_surface.ui_profile.authenticated_landmark_selectors
+                    and not post_snap.authenticated_landmark_present
+                )
+                if delta and (post_snap.active_modals or auth_blocked):
+                    # Next has no pending-commit continuation that could safely
+                    # consume this interruption without repeating its write.
+                    return self._effect_failure(
+                        session,
+                        _SurfaceOperationFailure(
+                            "wizard transition", "UnresolvedDelivery"
+                        ),
+                    )
                 if post_snap.active_modals:
                     continue
 
@@ -2101,7 +2143,7 @@ class FormReconciler:
                         session,
                         post_snap,
                         post_errors,
-                        safe_to_retry=True,
+                        safe_to_retry=(delta == 0),
                     )
                 if after_sig == before_sig:
                     return self._emit_validation_blocked(
@@ -2111,13 +2153,16 @@ class FormReconciler:
                         or [
                             f"Screen {current_screen.screen_id!r} did not advance after clicking Next"
                         ],
-                        safe_to_retry=True,
+                        safe_to_retry=(delta == 0),
                     )
                 continue
 
             # Single-screen pack with no WizardScreenSpec transition buttons
             return self._finalize_commit(
-                active_surface, session, snapshot, active_surface.mutation_count
+                active_surface,
+                session,
+                snapshot,
+                self._observed_mutation_count(active_surface),
             )
 
         sig = f"transition_budget|{pack.pack_id}"
