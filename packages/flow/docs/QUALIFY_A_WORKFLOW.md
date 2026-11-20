@@ -300,11 +300,28 @@ certified bundle once, as the runner would, into `runs/qual-1/certified-run/`.
 
 ## Limits
 
-- Web only today. The ambiguity, wrong-identity and stale-identity faults are
-  staged in the browser, on the save button the bundle's own selector finds.
-  A fault driver for pixel surfaces (Windows, RDP, Citrix) is the next piece;
-  until it exists, `qualify` refuses `app.target` other than `web`. The two
-  effect faults do not depend on the surface.
+- Browser campaigns stage screen faults on the save control's page. Native
+  Windows campaigns (`app.target: windows`) use an authenticated in-guest
+  agent started with `--allow-qualification-faults`, plus `app.session` to
+  return its backend. The save needs an AutomationId or exact role/name;
+  the native driver currently supports buttons. Its own temporary WinForms
+  overlays add real duplicate UIA targets, change the identity at the save,
+  or cover the surface after identity verification. Ordinary UIA and frame
+  reads must observe the change before the driver signs it. The overlays have
+  no save handlers, expire after three minutes and are removed after each run.
+  The routes are absent unless explicitly enabled and require authentication.
+  RDP, Citrix, macOS and Linux campaign screen faults remain unsupported.
+- A native campaign binds the observed executable digest and the exact
+  machine/OS environment. A fresh Windows installation or an OS update needs
+  another qualification; this does not grant an admission to arbitrary EC2
+  workers. For an app hosted by a script interpreter or shared runtime, the
+  executable digest covers the host. The declared application version must
+  be updated and qualified again when the application's own code changes.
+- Independent record snapshots cover inserts and declared field updates.
+  Inserts may add only the selected rows; updates may change only their named
+  fields on uniquely selected existing rows. All other rows, fields and row
+  multiplicities must remain identical. An unreadable after-snapshot is
+  indeterminate, including when the before-snapshot was empty.
 - A web workflow can't yet be qualified for a remote-display surface. With
   `app.surface: remote_display` the cases run with structure lookups off, and
   the browser delivers a click only through an action bound to the page

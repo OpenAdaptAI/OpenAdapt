@@ -512,6 +512,7 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         port: int = 5000,
         wait_s: float = 40.0,
         server_path: Optional[Path] = None,
+        allow_qualification_faults: bool = False,
     ):
         """Deploy and start ``win_agent`` on the desktop with a pinned TLS cert.
 
@@ -529,7 +530,9 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         from openadapt_flow.backends.parallels_vm import (  # noqa: PLC0415
             AgentEndpoint,
         )
-        from openadapt_flow.backends.win_agent import server as agent_server  # noqa: PLC0415
+        from openadapt_flow.backends.win_agent import (
+            server as agent_server,  # noqa: PLC0415
+        )
         from openadapt_flow.backends.win_agent.tls import (  # noqa: PLC0415
             generate_self_signed_cert,
         )
@@ -549,6 +552,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             Path(server_path or agent_server.__file__),
             rf"{guest_dir}\win_agent_server.py",
         )
+        if allow_qualification_faults:
+            helper = Path(server_path or agent_server.__file__).with_name(
+                "qualification_faults.py"
+            )
+            self.push_file(helper, rf"{guest_dir}\win_agent_qualification_faults.py")
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{guest_dir}\agent-cert.pem")
@@ -558,7 +566,8 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         self.launch_interactive(
             f'"{python}" "{guest_dir}\\win_agent_server.py" --host 0.0.0.0 '
             f"--port {port} --token {token} "
-            f'--certfile "{guest_dir}\\agent-cert.pem" --keyfile "{guest_dir}\\agent-key.pem"',
+            f'--certfile "{guest_dir}\\agent-cert.pem" --keyfile "{guest_dir}\\agent-key.pem"'
+            + (" --allow-qualification-faults" if allow_qualification_faults else ""),
             name="OAFlowAgent",
         )
         endpoint = AgentEndpoint(

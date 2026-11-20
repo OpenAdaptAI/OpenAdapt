@@ -1279,6 +1279,63 @@ class WindowsBackend:
             window_name=value.get("window_name"),
         )
 
+    def stage_qualification_fault(self, kind: str, locator: StructuralLocator) -> str:
+        """Stage one opt-in native test fault; absence never counts as success."""
+        if not isinstance(kind, str) or kind not in {
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+        }:
+            raise ValueError("unknown Windows qualification fault")
+        payload = {
+            "kind": kind,
+            "locator": {
+                key: getattr(locator, key)
+                for key in ("automation_id", "role", "name", "window_name")
+            },
+        }
+        result = self._qualification_request("/qualification/fault", payload)
+        token = result.get("mutation_id")
+        if (
+            set(result) != {"status", "mutation_id", "kind"}
+            or result.get("kind") != kind
+            or not isinstance(token, str)
+            or re.fullmatch(r"[a-f0-9]{32}", token) is None
+        ):
+            raise RuntimeError("Windows qualification fault receipt is invalid")
+        return token
+
+    def clear_qualification_fault(self, mutation_id: str) -> None:
+        """Remove only the overlay named by this campaign's staging receipt."""
+        if (
+            not isinstance(mutation_id, str)
+            or re.fullmatch(r"[a-f0-9]{32}", mutation_id) is None
+        ):
+            raise ValueError("invalid Windows qualification mutation id")
+        result = self._qualification_request(
+            "/qualification/clear", {"mutation_id": mutation_id}
+        )
+        if result != {"status": "ok", "cleared": True}:
+            raise RuntimeError("Windows qualification cleanup receipt is invalid")
+
+    def _qualification_request(self, path: str, payload: dict) -> dict:
+        try:
+            response = self._session.post(
+                f"{self.server_url}{path}", json=payload, **self._request_kwargs()
+            )
+            data = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise RuntimeError(
+                "Windows qualification operation is unavailable"
+            ) from exc
+        if (
+            response.status_code != 200
+            or not isinstance(data, dict)
+            or data.get("status") != "ok"
+        ):
+            raise RuntimeError("Windows qualification operation was refused")
+        return data
+
     def locate_structural(
         self, locator: StructuralLocator
     ) -> Optional[StructuralHandle]:

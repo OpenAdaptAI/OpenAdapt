@@ -281,6 +281,7 @@ def build_result(
     verifier_identity: str,
     fault_driver_version: str,
     cases: list[dict[str, Any]],
+    fault_driver_kind: str = FAULT_DRIVER_KIND,
     verifier_model_calls: int = 0,
 ) -> dict[str, Any]:
     """``openadapt.qualification-result/v1`` from the project's report."""
@@ -318,7 +319,7 @@ def build_result(
         "passed": passed,
         "verify_config_sha256": verify_sha256,
         "verifier_identity": verifier_identity,
-        "fault_driver": {"kind": FAULT_DRIVER_KIND, "version": fault_driver_version},
+        "fault_driver": {"kind": fault_driver_kind, "version": fault_driver_version},
         "cases": cases,
         "silent_incorrect_success_count": silent,
         "over_halt_count": over_halt,
