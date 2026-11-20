@@ -134,7 +134,10 @@ jobs:
           import json
           import pathlib
           import sys
-          import tomllib
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
 
           spec = sys.argv[1]
           project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
