@@ -491,6 +491,18 @@ class CheckpointStore:
         # None => plaintext (unchanged default). A non-empty passphrase turns on
         # AEAD sealing for writes and decryption for reads.
         self.key = key
+        # One salt for every container this store seals, so the passphrase
+        # is stretched once per store (and once per process for reads; see
+        # crypto._derive), not once per checkpoint. Each container still
+        # records the salt and gets its own random nonce.
+        self._salt: Optional[bytes] = None
+
+    def _container_salt(self) -> bytes:
+        if self._salt is None:
+            from openadapt_flow import crypto as _crypto
+
+            self._salt = _crypto.new_salt()
+        return self._salt
 
     # -- (de)serialization seam ---------------------------------------------
 
@@ -505,7 +517,12 @@ class CheckpointStore:
             target = path.with_name(path.name + ENC_SUFFIX)
             self._atomic_write_bytes(
                 target,
-                _crypto.encrypt_bytes(data, self.key, aad=_crypto.CHECKPOINT_AAD),
+                _crypto.encrypt_bytes(
+                    data,
+                    self.key,
+                    aad=_crypto.CHECKPOINT_AAD,
+                    salt=self._container_salt(),
+                ),
             )
             if path.exists():
                 path.unlink()

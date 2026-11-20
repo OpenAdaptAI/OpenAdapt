@@ -31,7 +31,7 @@ RUN set -eu; \
     version="$(cat /tmp/release/VERSION)"; \
     python -m venv /opt/openadapt-flow/venv; \
     /opt/openadapt-flow/venv/bin/pip install --no-index --only-binary=:all: \
-        --find-links /tmp/release/wheels "openadapt-flow[privacy]==${version}"; \
+        --find-links /tmp/release/wheels "openadapt-flow[privacy,vision]==${version}"; \
     /opt/openadapt-flow/venv/bin/pip check; \
     printf '%s\n' "$version" > /opt/openadapt-flow/VERSION; \
     rm -rf /tmp/release

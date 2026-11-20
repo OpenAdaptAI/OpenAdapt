@@ -1,0 +1,83 @@
+{
+ "id": "DO-WV2",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The email's domain changes.",
+ "agent_s": 97.9,
+ "cost_usd": 0.253289,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Tariq Rahman\" (ID not visible; page URL not visible in this browser)",
+  "note": "RESULT: DONE Contact \"Tariq Rahman\" (ID not visible; page URL not visible in this browser)",
+  "claim_line": true,
+  "final_text": "I created the contact Tariq Rahman, not linked to any third party. His job position is Fleet coordinator, professional phone 555-0194 and email t.rahman@example.invalid.\n\nThe first save stored the email as t.rahman@example.org, so I edited the contact and corrected it. The contact page now shows the right email. It displays the phone as 5550194, as it does for the other contacts, though the edit form holds 555-0194. I didn't change any other fields. I couldn't see the contact's ID or page URL, so I'm giving the name in the result line.\n\nRESULT: DONE Contact \"Tariq Rahman\" (ID not visible; page URL not visible in this browser)",
+  "model_calls": 24,
+  "actions": 111,
+  "tokens_in": 579798,
+  "tokens_out": 4020,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=71"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "71"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427422.469,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794427450.697,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "email"
+   ],
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794427492.06,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794427518.017,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 12
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.9,
+  "end": 9.8,
+  "waited_s": 0
+ }
+}

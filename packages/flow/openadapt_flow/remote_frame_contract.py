@@ -6,7 +6,6 @@ import hashlib
 import io
 from typing import Literal
 
-from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Region = tuple[int, int, int, int]
@@ -59,6 +58,10 @@ class RemoteFrameContract(BaseModel):
 
     def comparison_digest(self, png: bytes) -> bytes:
         """Hash a derived masked copy. Raw evidence and leases stay unmasked."""
+        # Pillow is the `vision` extra. The deployment config, and with it the
+        # record-check verifier, loads this model without decoding any frame.
+        from PIL import Image, ImageDraw
+
         image = Image.open(io.BytesIO(png)).convert("RGB")
         self.require_geometry(image.size)
         derived = image.copy()

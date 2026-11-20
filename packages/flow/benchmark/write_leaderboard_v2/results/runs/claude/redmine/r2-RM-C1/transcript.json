@@ -1,0 +1,316 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Tracker is already Bug. Fill in fields.",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      211
+     ]
+    },
+    {
+     "text": "Printer drops scan jobs"
+    },
+    {
+     "coordinate": [
+      700,
+      340
+     ]
+    },
+    {
+     "text": "Scans over 20 pages vanish."
+    },
+    {
+     "coordinate": [
+      855,
+      549
+     ]
+    },
+    {
+     "text": "2.5"
+    },
+    {
+     "coordinate": [
+      845,
+      516
+     ]
+    },
+    {
+     "text": "12042026"
+    },
+    {
+     "coordinate": [
+      333,
+      482
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      842,
+      522
+     ]
+    },
+    {
+     "text": "20261204"
+    },
+    {
+     "region": [
+      640,
+      430,
+      1280,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Date is correct. Now priority.",
+   "actions": [
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "High"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #59 in the Synthetic Helpdesk project, and its page shows every requested value.\n\n- **Tracker:** Bug\n- **Subject:** Printer drops scan jobs\n- **Description:** Scans over 20 pages vanish.\n- **Priority:** High\n- **Due date:** 12/04/2026\n- **Estimated time:** 2:30 h (2.5 hours)\n\nStatus, assignee and start date stayed at their defaults.\n\nThe Return key I pressed to confirm the priority choice also submitted the form. The issue was created with High priority, so nothing needed fixing.\n\nThe issue page lists Redmine Admin as a watcher. I didn't add it, so Redmine appears to have added it automatically.\n\nRESULT: DONE #59",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 211,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Printer drops scan jobs"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Scans over 20 pages vanish."
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 549,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2.5"
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 516,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12042026"
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 482,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 842,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261204"
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "High"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6162,
+   "out": 92,
+   "usd": 0.016323,
+   "cached": 0
+  },
+  {
+   "in": 7658,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6158
+  },
+  {
+   "in": 9154,
+   "out": 292,
+   "usd": 0.008195,
+   "cached": 7656
+  },
+  {
+   "in": 10940,
+   "out": 213,
+   "usd": 0.008429,
+   "cached": 9152
+  },
+  {
+   "in": 12549,
+   "out": 118,
+   "usd": 0.007394,
+   "cached": 10938
+  },
+  {
+   "in": 14057,
+   "out": 145,
+   "usd": 0.007733,
+   "cached": 12547
+  },
+  {
+   "in": 15601,
+   "out": 288,
+   "usd": 0.009555,
+   "cached": 14055
+  }
+ ]
+}

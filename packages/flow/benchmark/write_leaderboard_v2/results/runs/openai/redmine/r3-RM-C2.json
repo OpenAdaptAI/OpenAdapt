@@ -1,0 +1,77 @@
+{
+ "id": "RM-C2",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 26.4,
+ "cost_usd": 0.036222,
+ "claim": {
+  "status": "done",
+  "id": "87",
+  "note": "RESULT: DONE 87",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 87",
+  "model_calls": 10,
+  "actions": 21,
+  "tokens_in": 79124,
+  "tokens_out": 419,
+  "end_url": "http://127.0.0.1:9861/issues/87"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "87"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427620.474,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794427633.785,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 22
+  },
+  {
+   "t": 1794427633.789,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 200,
+   "ms": 44
+  },
+  {
+   "t": 1794427643.36,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 9.0,
+  "end": 9.7,
+  "waited_s": 0
+ }
+}

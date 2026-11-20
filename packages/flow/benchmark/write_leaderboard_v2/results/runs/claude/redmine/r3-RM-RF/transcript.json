@@ -1,0 +1,575 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      242,
+      179
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted; dropdown not visibly open. Try again.",
+   "actions": [
+    {
+     "coordinate": [
+      242,
+      183
+     ]
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Su"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      216
+     ]
+    },
+    {
+     "text": "Order toner for floor 3"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Two black cartridges."
+    },
+    {
+     "coordinate": [
+      333,
+      487
+     ]
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Low"
+    },
+    {
+     "coordinate": [
+      855,
+      521
+     ]
+    },
+    {
+     "text": "02122026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "0.5"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      842,
+      521
+     ]
+    },
+    {
+     "text": "20261202"
+    },
+    {
+     "region": [
+      640,
+      440,
+      1000,
+      600
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      43,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "ctrl+c"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't confirm the issue was created, so I'm reporting it as not done. I filled in the new issue form as asked, with tracker Support, the subject, the description, priority Low, due date 2026-12-02 and estimated time 0.5. When I clicked Create, the server returned \"Service Unavailable\". I then reloaded the page several times over about a minute and still got the same error.\n\nI couldn't reach the Redmine issue list or any other page to check whether the submission went through before the error. There's no address bar or other way to navigate in this view, and going back didn't work. I didn't resubmit the form, to avoid creating a duplicate.\n\nRESULT: NOT DONE Redmine returned \"Service Unavailable\" after clicking Create, so I couldn't confirm the issue was saved.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 179,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Su"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Order toner for floor 3"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two black cartridges."
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 487,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Low"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "02122026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 842,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261202"
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "c"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6156,
+   "out": 92,
+   "usd": 0.016308,
+   "cached": 0
+  },
+  {
+   "in": 7652,
+   "out": 98,
+   "usd": 0.005959,
+   "cached": 6152
+  },
+  {
+   "in": 9148,
+   "out": 109,
+   "usd": 0.006364,
+   "cached": 7650
+  },
+  {
+   "in": 10635,
+   "out": 108,
+   "usd": 0.006631,
+   "cached": 9146
+  },
+  {
+   "in": 12129,
+   "out": 151,
+   "usd": 0.007376,
+   "cached": 10633
+  },
+  {
+   "in": 13679,
+   "out": 343,
+   "usd": 0.009734,
+   "cached": 12127
+  },
+  {
+   "in": 15538,
+   "out": 187,
+   "usd": 0.009257,
+   "cached": 13677
+  },
+  {
+   "in": 17121,
+   "out": 106,
+   "usd": 0.008129,
+   "cached": 15536
+  },
+  {
+   "in": 18617,
+   "out": 241,
+   "usd": 0.009578,
+   "cached": 17119
+  },
+  {
+   "in": 20258,
+   "out": 136,
+   "usd": 0.009189,
+   "cached": 18615
+  },
+  {
+   "in": 21802,
+   "out": 279,
+   "usd": 0.010705,
+   "cached": 20256
+  },
+  {
+   "in": 23488,
+   "out": 239,
+   "usd": 0.010969,
+   "cached": 21800
+  },
+  {
+   "in": 25123,
+   "out": 134,
+   "usd": 0.010129,
+   "cached": 23486
+  },
+  {
+   "in": 26665,
+   "out": 254,
+   "usd": 0.011423,
+   "cached": 25121
+  }
+ ]
+}

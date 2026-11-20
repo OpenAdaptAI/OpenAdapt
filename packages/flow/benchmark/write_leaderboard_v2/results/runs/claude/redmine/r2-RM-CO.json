@@ -1,0 +1,77 @@
+{
+ "id": "RM-CO",
+ "app": "redmine",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 29.5,
+ "cost_usd": 0.076904,
+ "claim": {
+  "status": "done",
+  "id": "#71",
+  "note": "RESULT: DONE #71",
+  "claim_line": true,
+  "final_text": "I created issue #71 in Synthetic Helpdesk. It is a Feature titled \"Room booking reminders by email\", with the description \"A reminder an hour before.\", priority Normal, due date 12/12/2026 and estimated time 6:00 h. I left every other field at its default, including the start date of 11/11/2026.\n\nRESULT: DONE #71",
+  "model_calls": 9,
+  "actions": 22,
+  "tokens_in": 110479,
+  "tokens_out": 1219,
+  "end_url": "http://127.0.0.1:9861/issues/71"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['56']"
+  ],
+  "new": [
+   "71"
+  ],
+  "deleted": [],
+  "changed": [
+   "56"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427076.273,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794427091.277,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 72
+  },
+  {
+   "t": 1794427103.995,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 234
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.8,
+  "end": 6.0,
+  "waited_s": 0
+ }
+}

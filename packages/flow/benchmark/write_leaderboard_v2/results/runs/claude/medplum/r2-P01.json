@@ -1,0 +1,237 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "agent_s": 295.6,
+ "cost_usd": 0.771574,
+ "claim": {
+  "status": "done",
+  "id": "Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7",
+  "note": "RESULT: DONE Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7",
+  "claim_line": true,
+  "final_text": "Lena Okafor now has exactly one Patient record, `Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7`, and I created it. Searching \"Okafor\" returns only this record.\n\nMy first duplicate check was unreliable. The Patient list showed \"No results\", but it was slow to load and still showed nothing after my own record existed. I only got a trustworthy search result after the final search had finished loading.\n\nMy first attempt also created a blank Patient with that same ID. I then edited that record in place instead of creating another. The saved record has:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA, 01103\n- **Home phone:** 413-555-0187\n- **Email:** lena.okafor@example.org\n\nThe History tab will show the empty first version followed by the edits.\n\nRESULT: DONE Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7",
+  "model_calls": 50,
+  "actions": 762,
+  "tokens_in": 2313491,
+  "tokens_out": 11026,
+  "end_url": "http://localhost:9841/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated"
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it, and a version in between was not the person"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "5c895287-71f9-41c8-9ebe-a5f865676210",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "4b26f461-81bb-4848-b614-ada89a237c39",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "c77c8633-9e20-48b0-9040-e813be033402",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:43:59+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "5c895287-71f9-41c8-9ebe-a5f865676210",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "4b26f461-81bb-4848-b614-ada89a237c39",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "c77c8633-9e20-48b0-9040-e813be033402",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:44:03+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.8,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/94d647c0-47c4-40a6-b883-992ea8bc5ad7": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.4,
+  "end": 19.2,
+  "waited_s": 0
+ }
+}

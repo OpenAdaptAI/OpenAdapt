@@ -1,0 +1,785 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c453878487d29708335aa1e30371",
+     "call_id": "call_EM3YPlRTY07ASvs0rXwD86bG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c457eef887d2acd486810941bfcb",
+     "call_id": "call_HNc8KtWhfxPPPhSJooTBg6Ju",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c45aa0f087d296baab600dc9fcf8",
+     "call_id": "call_fx0g9ZmHi5sC5SqaUXdFwnUE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c45e768087d2afe90704506c078d",
+     "call_id": "call_nbTPUoDTU3dfJJXwRrJU4PFC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1194,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c461cb4487d2bfd4d77860c7f551",
+     "call_id": "call_VYw0ceH5oRoKrPsITv828ZG0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c4656d9c87d2ac3b8dbc2d4b9cad",
+     "call_id": "call_S0C2KqOe64c7JYG5xpAPsZmC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 210,
+       "y": 231
+      },
+      {
+       "text": "Granite Roofing",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 587,
+       "y": 234
+      },
+      {
+       "text": "granite.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 212,
+       "y": 695
+      },
+      {
+       "text": "Flat roofs and repairs.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 283,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c469b82887d294dd5365a1081319",
+     "call_id": "call_x1nEV30I7vAUJDbqiV3KWePx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c46d271487d2b3e492d70956c627",
+     "call_id": "call_Z8JHQsLqsCaCez2EFAsPUZW3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c46fbb1c87d2b6d042103b5bf5a4",
+     "call_id": "call_6C4YdJeQSd5sh3fT2PSOfmhj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 137,
+       "y": 681
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 824,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c472231487d2affdfe160225b128",
+     "call_id": "call_8YKSD0hQBuIZPifXA97tO4fR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 824,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c47465d487d2b5c5e46e9460a033",
+     "call_id": "call_HcoT9PiEWae7kTY584jTvGIs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 183,
+       "type": "scroll",
+       "x": 681,
+       "y": 529
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c477b9c487d28fc4ce0a715d1cdd",
+     "call_id": "call_fbl936zpi0kkHqCRb1bYtIzd",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 535,
+       "y": 506
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c47a05cc87d29875ef7808bebc1c",
+     "call_id": "call_IAixZJDFEonBEcZBIJZ35nCT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 111
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c47cadec87d2a12a77b2d2118551",
+     "call_id": "call_Y6EZ5KD4AGPWYx3cimff2Ilw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c47ed54087d2bf5974867474f9a5",
+     "call_id": "call_iV6AEimM0RyrdZC848Y7xKjR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c481c5d887d2bdc0c5340db61a7c",
+     "call_id": "call_wqbLSTt6XPkACPmXbaDixxlR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c486314487d2b3719f26cf772348",
+     "call_id": "call_fsTteB3JZg9mGmXruWAUX8O2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c489342887d28cac1d101f549786",
+     "call_id": "call_Gb1ogGBc62A8g9pi23i71kb8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c48f8e0487d2ba580d720fff9ec7",
+     "call_id": "call_FD2DDeqZf3hvhMXp5LzAxGQW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 355,
+       "y": 113
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 124,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c492746487d2a54eb6f91f243df7",
+     "call_id": "call_P11QGd0sJtm83oypofwLCKh6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c49584a887d29dcdc9cdfa7a9682",
+     "call_id": "call_lwlHLDroEHr8kSFXkcwa1qfW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 146,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00a831fbdc13a25d016af4c49898d887d2a0f9ea1172a668f8",
+     "call_id": "call_Y4MpxONeRVf4JyR26yX2Q3VW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 146,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Granite Roofing with the five specified values and left all other fields unchanged. The interface did not expose its record ID or page URL.\n\nRESULT: DONE Granite Roofing",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 22,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 210,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Granite Roofing"
+  },
+  {
+   "a": "click",
+   "x": 587,
+   "y": 234,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "granite.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 212,
+   "y": 695,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Flat roofs and repairs."
+  },
+  {
+   "a": "click",
+   "x": 283,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 137,
+   "y": 681,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 824,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 824,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 681,
+   "y": 529,
+   "dx": 0,
+   "dy": 183
+  },
+  {
+   "a": "click",
+   "x": 535,
+   "y": 506,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 355,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "move",
+   "x": 146,
+   "y": 250
+  },
+  {
+   "a": "click",
+   "x": 146,
+   "y": 250,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2202,
+   "out": 18,
+   "usd": 0.004584,
+   "cached": 0
+  },
+  {
+   "in": 3419,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2199
+  },
+  {
+   "in": 4675,
+   "out": 31,
+   "usd": 0.003511,
+   "cached": 3416
+  },
+  {
+   "in": 5931,
+   "out": 32,
+   "usd": 0.003772,
+   "cached": 4672
+  },
+  {
+   "in": 7188,
+   "out": 18,
+   "usd": 0.003886,
+   "cached": 5928
+  },
+  {
+   "in": 8416,
+   "out": 112,
+   "usd": 0.005019,
+   "cached": 7185
+  },
+  {
+   "in": 9788,
+   "out": 31,
+   "usd": 0.004743,
+   "cached": 8413
+  },
+  {
+   "in": 11044,
+   "out": 31,
+   "usd": 0.004785,
+   "cached": 9785
+  },
+  {
+   "in": 12300,
+   "out": 47,
+   "usd": 0.005196,
+   "cached": 11041
+  },
+  {
+   "in": 13580,
+   "out": 31,
+   "usd": 0.005335,
+   "cached": 12297
+  },
+  {
+   "in": 14836,
+   "out": 37,
+   "usd": 0.005603,
+   "cached": 13577
+  },
+  {
+   "in": 16098,
+   "out": 31,
+   "usd": 0.005807,
+   "cached": 14833
+  },
+  {
+   "in": 17354,
+   "out": 31,
+   "usd": 0.006047,
+   "cached": 16095
+  },
+  {
+   "in": 18610,
+   "out": 15,
+   "usd": 0.006138,
+   "cached": 17351
+  },
+  {
+   "in": 19838,
+   "out": 19,
+   "usd": 0.006373,
+   "cached": 18607
+  },
+  {
+   "in": 21078,
+   "out": 26,
+   "usd": 0.006713,
+   "cached": 19835
+  },
+  {
+   "in": 22325,
+   "out": 65,
+   "usd": 0.007365,
+   "cached": 21075
+  },
+  {
+   "in": 23611,
+   "out": 43,
+   "usd": 0.007472,
+   "cached": 22322
+  },
+  {
+   "in": 24879,
+   "out": 158,
+   "usd": 0.008844,
+   "cached": 23608
+  },
+  {
+   "in": 26270,
+   "out": 19,
+   "usd": 0.007953,
+   "cached": 24876
+  },
+  {
+   "in": 27510,
+   "out": 27,
+   "usd": 0.008009,
+   "cached": 26267
+  },
+  {
+   "in": 28762,
+   "out": 31,
+   "usd": 0.008321,
+   "cached": 27507
+  },
+  {
+   "in": 30018,
+   "out": 36,
+   "usd": 0.00863,
+   "cached": 28759
+  }
+ ]
+}

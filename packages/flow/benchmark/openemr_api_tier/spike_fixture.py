@@ -21,7 +21,7 @@ from pathlib import Path
 
 import benchmark.openemr_local.fixture as fx
 
-PROJECT = "openadapt-openemr-apispike"
+PROJECT = os.environ.get("API_SPIKE_PROJECT", "openadapt-openemr-apispike")
 UI_PORT = os.environ.get("API_SPIKE_UI_PORT", "9811")
 API_PORT = os.environ.get("API_SPIKE_API_PORT", "9810")
 STATE = Path(

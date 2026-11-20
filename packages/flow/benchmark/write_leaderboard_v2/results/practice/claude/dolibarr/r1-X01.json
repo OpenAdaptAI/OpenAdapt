@@ -1,0 +1,61 @@
+{
+ "id": "X01",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "",
+ "agent_s": 39.0,
+ "cost_usd": 0.064448,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Thandi Mbeki\" created (id not shown; find it under Third-parties > Contacts/Addresses > List)",
+  "note": "RESULT: DONE Contact \"Thandi Mbeki\" created (id not shown; find it under Third-parties > Contacts/Addresses > List)",
+  "claim_line": true,
+  "final_text": "I added the contact Thandi Mbeki (job position Warehouse lead, professional phone 555-0151, email t.mbeki@example.invalid), and it is not linked to any third party. Dolibarr displays the phone as 5550151, with the dash removed. The existing contact Owen Pratt shows its phone the same way. I didn't see the record's id or URL, because the browser shows no address bar.\n\nRESULT: DONE Contact \"Thandi Mbeki\" created (id not shown; find it under Third-parties > Contacts/Addresses > List)",
+  "model_calls": 7,
+  "actions": 23,
+  "tokens_in": 75804,
+  "tokens_out": 1336,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=16"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "16"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794423189.232,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 17
+  },
+  {
+   "t": 1794423224.803,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "practice",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 24.8,
+  "end": 29.3,
+  "waited_s": 0
+ }
+}

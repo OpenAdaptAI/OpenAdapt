@@ -10,8 +10,8 @@ The stages are the tutorial's own (:mod:`openadapt_flow.tutorial`): record
 against MockMed's database-backed server, compile with mined record checks,
 certify under ``clinical-write``, and run under the Standard profile through
 the unchanged fail-closed run gate. The quickstart adds two things: the
-program runs five times with a new note each time, and the record checks read
-that run's note (``bind_effect_params``) so a new note can be checked.
+program runs on a new note (the demonstration typed another), and the record
+checks read that run's note (``bind_effect_params``) so a new note can be checked.
 """
 
 from __future__ import annotations
@@ -354,8 +354,10 @@ def _sha256(path: Path) -> Optional[str]:
 class FlowEngine:
     """The bundled tutorial, one stage per call, inside one browser process."""
 
-    #: Act 2's inputs: one new note per run.
-    inputs = RUN_NOTES
+    #: Act 2's inputs: one new note per run. One run keeps the quickstart as
+    #: fast as the engine's own tutorial; Act 2's worker processes start only
+    #: for more than one.
+    inputs = RUN_NOTES[:1]
     scene = MOCKMED
 
     def __init__(self, root: Path, *, visible: bool, pace_s: float = 0.0) -> None:
@@ -436,6 +438,16 @@ class FlowEngine:
     def program_name(self) -> str:
         return str(getattr(self.workflow, "name", "") or "")
 
+    def readback_fields(self) -> list[tuple[str, Optional[str], Optional[str]]]:
+        """The fields each run's record check reads back, from the compiled bundle.
+
+        One ``(field, literal, param)`` per field the save's ``record_written``
+        check matches: a fixed value, or the run input it is bound to. Empty
+        when the bundle has no such check or can't be read.
+        """
+
+        return readback_fields(self.bundle_dir / "workflow.json")
+
     def note_param(self) -> bool:
         """True when the engine can give each run its own note."""
 
@@ -472,7 +484,7 @@ class FlowEngine:
             worker_count,
         )
 
-        count = worker_count()
+        count = min(worker_count(), len(self.inputs))
         if count <= 1 or self._starter is not None:
             return
 
@@ -764,6 +776,35 @@ def return_focus_to_terminal(
     return True
 
 
+def readback_fields(
+    workflow_json: Path,
+) -> list[tuple[str, Optional[str], Optional[str]]]:
+    """``(field, literal, param)`` for the first ``record_written`` check in a bundle."""
+
+    try:
+        workflow = json.loads(workflow_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    for step in workflow.get("steps") or []:
+        for effect in step.get("effects") or []:
+            if effect.get("kind") != "record_written":
+                continue
+            fields = []
+            for name, binding in (effect.get("match") or {}).items():
+                binding = binding if isinstance(binding, dict) else {}
+                literal = binding.get("literal")
+                param = binding.get("param")
+                fields.append(
+                    (
+                        str(name),
+                        None if literal is None else str(literal),
+                        None if param is None else str(param),
+                    )
+                )
+            return fields
+    return []
+
+
 def display_available(
     *, platform: Optional[str] = None, environ=None, isatty=None
 ) -> bool:
@@ -806,5 +847,6 @@ __all__ = [
     "display_available",
     "open_page",
     "read_screen_text",
+    "readback_fields",
     "return_focus_to_terminal",
 ]

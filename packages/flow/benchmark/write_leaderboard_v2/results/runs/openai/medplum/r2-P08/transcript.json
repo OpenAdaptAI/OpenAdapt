@@ -1,0 +1,554 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db5eb2a887d28fe47a346eb35e62",
+     "call_id": "call_M0z8ISErpvnhbgzTpUjh10pz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db621e3c87d2a21a31b8df344bbd",
+     "call_id": "call_HSWU1WD9MMKaTxxpDZjJVLUp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1146,
+       "y": 168
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db651e5087d284a2badb2289e6ea",
+     "call_id": "call_RQdO2qD3m9YwsReZdSTE2pqc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1234,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db68142487d2b3f5fb0fe782b2bd",
+     "call_id": "call_BICWmVdMZXvDF8ykeOd0DQHN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 101,
+       "y": 132
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db6b57d087d28bab47177a032c31",
+     "call_id": "call_UGTNxTrMtOCnf8Uw1W5BNEA5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 450,
+       "y": 308
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"given\": [\"Lena\"], \"family\": \"Okafor\"}],\n  \"birthDate\": \"1988-04-22\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"14 Birch Lane\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01103\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0187\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"lena.okafor@example.org\"}\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db7306f087d2871108cfe627f4ec",
+     "call_id": "call_Axp1qvDMkHlBb9JVNx62uqMs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db75b6e087d2831bf3c31d422df3",
+     "call_id": "call_PEUunJkcBG0H1syvazCYCEmX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db7951a487d29b512858fbde1976",
+     "call_id": "call_50hTRDP1vEN5GrYgxOCpYA0O",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CMD",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db7cd9f487d2aa6f5e5987995a2f",
+     "call_id": "call_uB0tMhcNODTohlUDiSMTLhls",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"given\": [\"Lena\"], \"family\": \"Okafor\"}],\n  \"birthDate\": \"1988-04-22\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"14 Birch Lane\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01103\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0187\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"lena.okafor@example.org\"}\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db835f9c87d28a2a6b5c3061ed79",
+     "call_id": "call_Ln51lKEYwf0yaf1TPLVrthWq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1056,
+       "y": 719
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db86a3e087d290b97d06bcf3bda5",
+     "call_id": "call_v8SEBTKrEarduzpSxML4ufbR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db89c3bc87d2a4bb3b077fd645fb",
+     "call_id": "call_K1PY5TSDApHTiMCmrWbLzG58",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 557,
+       "type": "scroll",
+       "x": 1140,
+       "y": 677
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db8e3df887d29450526d4d04fc05",
+     "call_id": "call_8fuslZiQTqPFMAv1JRySpqaf",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1056,
+       "y": 735
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db91686487d2aa07fb60a539b9c2",
+     "call_id": "call_0de3yA5SqiEz2XLDDC8comHD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db95a87887d281292a3191b9aac0",
+     "call_id": "call_2swRr33xQsYRCfpoefr3a5ls",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": -685,
+       "type": "scroll",
+       "x": 1154,
+       "y": 300
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 32,
+       "y": 131
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db9927bc87d2a0e18eacf68232f0",
+     "call_id": "call_tclUKl9xFOOHpo5aCtSU10IH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0be5ca4fd3daf124016af4db9c470c87d28d0037318c30f05b",
+     "call_id": "call_JVNqqyejTFUxe0HTUSUlD20s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Patient/fdd1ee02-9962-428d-b5e0-9c480a276f95",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 1146,
+   "y": 168,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1234,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 101,
+   "y": 132,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 450,
+   "y": 308,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"given\": [\"Lena\"], \"family\": \"Okafor\"}],\n  \"birthDate\": \"1988-04-22\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"14 Birch Lane\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01103\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0187\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"lena.okafor@example.org\"}\n  ]\n}"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CMD",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"given\": [\"Lena\"], \"family\": \"Okafor\"}],\n  \"birthDate\": \"1988-04-22\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"14 Birch Lane\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01103\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0187\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"lena.okafor@example.org\"}\n  ]\n}"
+  },
+  {
+   "a": "click",
+   "x": 1056,
+   "y": 719,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1140,
+   "y": 677,
+   "dx": 0,
+   "dy": 557
+  },
+  {
+   "a": "click",
+   "x": 1056,
+   "y": 735,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1154,
+   "y": 300,
+   "dx": 0,
+   "dy": -685
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 15,
+   "usd": 0.000619,
+   "cached": 2313
+  },
+  {
+   "in": 3533,
+   "out": 32,
+   "usd": 0.001032,
+   "cached": 3530
+  },
+  {
+   "in": 4790,
+   "out": 32,
+   "usd": 0.003546,
+   "cached": 3530
+  },
+  {
+   "in": 6047,
+   "out": 31,
+   "usd": 0.003787,
+   "cached": 4787
+  },
+  {
+   "in": 7303,
+   "out": 209,
+   "usd": 0.005817,
+   "cached": 6044
+  },
+  {
+   "in": 8745,
+   "out": 60,
+   "usd": 0.00495,
+   "cached": 7300
+  },
+  {
+   "in": 10026,
+   "out": 26,
+   "usd": 0.004576,
+   "cached": 8742
+  },
+  {
+   "in": 11273,
+   "out": 51,
+   "usd": 0.005015,
+   "cached": 10023
+  },
+  {
+   "in": 12545,
+   "out": 182,
+   "usd": 0.006624,
+   "cached": 11270
+  },
+  {
+   "in": 13948,
+   "out": 32,
+   "usd": 0.00564,
+   "cached": 12542
+  },
+  {
+   "in": 15205,
+   "out": 18,
+   "usd": 0.005489,
+   "cached": 13945
+  },
+  {
+   "in": 16433,
+   "out": 38,
+   "usd": 0.005882,
+   "cached": 15202
+  },
+  {
+   "in": 17696,
+   "out": 32,
+   "usd": 0.006138,
+   "cached": 16430
+  },
+  {
+   "in": 18953,
+   "out": 15,
+   "usd": 0.006209,
+   "cached": 17693
+  },
+  {
+   "in": 20181,
+   "out": 70,
+   "usd": 0.006952,
+   "cached": 18950
+  },
+  {
+   "in": 21484,
+   "out": 15,
+   "usd": 0.006798,
+   "cached": 20178
+  },
+  {
+   "in": 22712,
+   "out": 15,
+   "usd": 0.006908,
+   "cached": 21481
+  },
+  {
+   "in": 23940,
+   "out": 31,
+   "usd": 0.007314,
+   "cached": 22709
+  }
+ ]
+}

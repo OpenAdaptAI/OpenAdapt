@@ -60,6 +60,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.ir import (
     ActionKind,
     Guard,
@@ -571,5 +572,12 @@ def apply_answers(
             result.defaulted.append(q.id)
 
     # Re-attach the (possibly mutated) workflow.
-    result.workflow = resolved
+    result.workflow = derive_authored_workflow(
+        workflow,
+        update={
+            "steps": resolved.steps,
+            "params": resolved.params,
+            "param_specs": resolved.param_specs,
+        },
+    )
     return result

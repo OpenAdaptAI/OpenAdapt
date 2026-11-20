@@ -1,0 +1,61 @@
+{
+ "id": "ES-CO",
+ "app": "espocrm",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 79.8,
+ "cost_usd": 0.157114,
+ "claim": {
+  "status": "not_done",
+  "id": "Could not retrieve the record ID or page URL required for confirmation.",
+  "note": "RESULT: NOT DONE Could not retrieve the record ID or page URL required for confirmation.",
+  "claim_line": true,
+  "final_text": "Created Juniper Florists with all five requested values, leaving other fields unchanged.\nRESULT: NOT DONE Could not retrieve the record ID or page URL required for confirmation.",
+  "model_calls": 25,
+  "actions": 30,
+  "tokens_in": 433255,
+  "tokens_out": 1158,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c5e3899f2cb3f"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['fbe68c33c89e747d']"
+  ],
+  "new": [
+   "6af4c5e3899f2cb3f"
+  ],
+  "deleted": [],
+  "changed": [
+   "fbe68c33c89e747d"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426339.416,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 200,
+   "side_write": "done",
+   "ms": 197
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.6,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

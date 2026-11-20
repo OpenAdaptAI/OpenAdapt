@@ -1,0 +1,67 @@
+{
+ "id": "ES-WV2",
+ "app": "espocrm",
+ "class": "wrong_value",
+ "note": "The type changes.",
+ "agent_s": 72.8,
+ "cost_usd": 0.189815,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Foxglove Pharmacy\" created in EspoCRM (Accounts list); record id/URL not visible in the kiosk browser",
+  "note": "RESULT: DONE Account \"Foxglove Pharmacy\" created in EspoCRM (Accounts list); record id/URL not visible in the kiosk browser",
+  "claim_line": true,
+  "final_text": "The Foxglove Pharmacy account now exists with the values you asked for. After a page reload it shows name Foxglove Pharmacy, website foxglove.example.invalid, type Customer, industry Healthcare and description \"Late hours on weekdays.\" I left every other field empty.\n\nThe first save went through with Type set to \"Investor\" instead of Customer, probably from my scrolling in the industry dropdown. I opened the record, changed Type back to Customer and saved again. A search before I started found no existing Foxglove account.\n\nThe browser has no visible address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Account \"Foxglove Pharmacy\" created in EspoCRM (Accounts list); record id/URL not visible in the kiosk browser",
+  "model_calls": 20,
+  "actions": 46,
+  "tokens_in": 411981,
+  "tokens_out": 2653,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4d557801bd3c4b"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4d557801bd3c4b"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794430295.452,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "type"
+   ],
+   "status": 200,
+   "ms": 100
+  },
+  {
+   "t": 1794430314.396,
+   "method": "PUT",
+   "path": "/api/v1/Account/6af4d557801bd3c4b",
+   "save": false,
+   "status": 200,
+   "ms": 84
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.3,
+  "end": 8.1,
+  "waited_s": 0
+ }
+}

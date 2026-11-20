@@ -1,0 +1,602 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6bc8e9487d28e28827aa47a89e2",
+     "call_id": "call_euXLWXAah5WuaORzW8lPh4od",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6bf9e4487d292fded36d02f5fb0",
+     "call_id": "call_A3YZJjMhCqTiMQg9zBEbQbpr",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6c201bc87d2b8fc8040799a1220",
+     "call_id": "call_NQs7LlFnx9z0RaF96p9K3Cyh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6c47ce087d28c2715edd3e315d7",
+     "call_id": "call_YL8EsZ1A5IzGfZKJ4OJhlHrB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1199,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6c6f77087d292d366f36570a2cc",
+     "call_id": "call_I4O356y8GJcxgj8KOrk0OSXE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6c95a4487d2bc138888c0976e34",
+     "call_id": "call_JX5Isb8DMnOFQUiN6oglDNAT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 226,
+       "y": 233
+      },
+      {
+       "text": "Heron Print Works",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 571,
+       "y": 230
+      },
+      {
+       "text": "heron.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 267,
+       "y": 699
+      },
+      {
+       "text": "Labels and packaging.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 297,
+       "y": 622
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6cce9d487d28eb461fb46372d14",
+     "call_id": "call_ml5no7YkJXEXBko60b1OEYBa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6cfa27887d2a16127e318b9a357",
+     "call_id": "call_sxVUqtVS5qo5Jwq0ddUluVZY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6d4163087d29e1abe80f7e2eae1",
+     "call_id": "call_5yImh6p6VNulz4bQdrQz9omx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "SPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6d6eda887d2aa2e90f25d0b3f9a",
+     "call_id": "call_JZcz9xd9bGcn5NORdLP5FTLV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 240,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6d99bf487d28d2f1913e4f7fa50",
+     "call_id": "call_7qrnkhPDV3n3bMWAs5H9aTHD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 140,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 628,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6dc3a3487d2804ec88b95a46796",
+     "call_id": "call_iJjbVnEwufhlxkDBJ4wAvnQQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 628,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6deb4a087d2b84a1b5b2b99b291",
+     "call_id": "call_zvYckzX1RFvORai3bTXWVOiv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 443,
+       "type": "scroll",
+       "x": 657,
+       "y": 512
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6e24b3087d2b747f1a3ba590e18",
+     "call_id": "call_ieUsH2J4unKLfAL87xA7Ac6I",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 259,
+       "type": "scroll",
+       "x": 651,
+       "y": 519
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6e63d9487d2bbb20b09a453cb5f",
+     "call_id": "call_1tx0HGbrM65v6XAacjkgprVb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 541,
+       "y": 445
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6e9034c87d2b28c2b5aa7cbc519",
+     "call_id": "call_nM4kryLTH9ScxUyAydJcbx8B",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 110
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01e87ca758de8459016af4d6ec30d887d2a6f47bc5f520c20b",
+     "call_id": "call_iC7hBLxh0JQwRVmTbb1Q8X5K",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Saving returned Error 504; the account's creation could not be confirmed.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1199,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 226,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron Print Works"
+  },
+  {
+   "a": "click",
+   "x": 571,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "heron.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 267,
+   "y": 699,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Labels and packaging."
+  },
+  {
+   "a": "click",
+   "x": 297,
+   "y": 622,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "SPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 240,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 140,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 628,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 628,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 657,
+   "y": 512,
+   "dx": 0,
+   "dy": 443
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 519,
+   "dx": 0,
+   "dy": 259
+  },
+  {
+   "a": "click",
+   "x": 541,
+   "y": 445,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 110,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 22,
+   "usd": 0.004628,
+   "cached": 0
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 19,
+   "usd": 0.003392,
+   "cached": 3418
+  },
+  {
+   "in": 5905,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4674
+  },
+  {
+   "in": 7162,
+   "out": 18,
+   "usd": 0.00388,
+   "cached": 5902
+  },
+  {
+   "in": 8390,
+   "out": 112,
+   "usd": 0.005014,
+   "cached": 7159
+  },
+  {
+   "in": 9762,
+   "out": 31,
+   "usd": 0.004737,
+   "cached": 8387
+  },
+  {
+   "in": 11018,
+   "out": 15,
+   "usd": 0.00462,
+   "cached": 9759
+  },
+  {
+   "in": 12246,
+   "out": 24,
+   "usd": 0.004905,
+   "cached": 11015
+  },
+  {
+   "in": 13491,
+   "out": 31,
+   "usd": 0.005255,
+   "cached": 12243
+  },
+  {
+   "in": 14747,
+   "out": 47,
+   "usd": 0.005686,
+   "cached": 13488
+  },
+  {
+   "in": 16027,
+   "out": 31,
+   "usd": 0.005825,
+   "cached": 14744
+  },
+  {
+   "in": 17283,
+   "out": 37,
+   "usd": 0.006093,
+   "cached": 16024
+  },
+  {
+   "in": 18545,
+   "out": 37,
+   "usd": 0.006356,
+   "cached": 17280
+  },
+  {
+   "in": 19807,
+   "out": 31,
+   "usd": 0.006548,
+   "cached": 18542
+  },
+  {
+   "in": 21063,
+   "out": 31,
+   "usd": 0.006789,
+   "cached": 19804
+  },
+  {
+   "in": 22319,
+   "out": 15,
+   "usd": 0.00688,
+   "cached": 21060
+  },
+  {
+   "in": 23547,
+   "out": 47,
+   "usd": 0.007395,
+   "cached": 22316
+  }
+ ]
+}

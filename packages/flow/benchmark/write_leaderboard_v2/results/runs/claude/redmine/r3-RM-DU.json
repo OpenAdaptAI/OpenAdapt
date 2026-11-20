@@ -1,0 +1,75 @@
+{
+ "id": "RM-DU",
+ "app": "redmine",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 36.5,
+ "cost_usd": 0.087579,
+ "claim": {
+  "status": "done",
+  "id": "#92",
+  "note": "RESULT: DONE #92",
+  "claim_line": true,
+  "final_text": "I created issue #92 in Synthetic Helpdesk, and its page shows every value as requested:\n- Tracker: Support\n- Subject: \"Reset the meeting room display\"\n- Description: \"Room 2 display shows the wrong day.\"\n- Priority: Normal\n- Due date: 2026-12-03 (shown as 12/03/2026)\n- Estimated time: 0.25 hours (shown as 0:15 h)\n\nAll other fields kept their defaults. Redmine added the admin as a watcher on its own.\n\nRESULT: DONE #92",
+  "model_calls": 10,
+  "actions": 28,
+  "tokens_in": 131019,
+  "tokens_out": 1497,
+  "end_url": "http://127.0.0.1:9861/issues/92"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "92",
+   "93"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427870.195,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794427887.809,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 21
+  },
+  {
+   "t": 1794427904.131,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 58
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.5,
+  "end": 8.2,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,69 @@
+{
+ "id": "DO-C2",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 49.6,
+ "cost_usd": 0.088532,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Kwame Osei\" created (id not shown on page)",
+  "note": "RESULT: DONE Contact \"Kwame Osei\" created (id not shown on page)",
+  "claim_line": true,
+  "final_text": "I created the contact Kwame Osei, not linked to any third party. The first name, last name, job position (Purchasing lead), professional phone (555-0192) and email (k.osei@example.invalid) are set, and I left every other field alone.\n\nI didn't read the contact's id from the page. The page header shows the phone as 5550192, but the edit form shows 555-0192 as I typed it. I closed the edit form without saving.\n\nRESULT: DONE Contact \"Kwame Osei\" created (id not shown on page)",
+  "model_calls": 10,
+  "actions": 29,
+  "tokens_in": 131916,
+  "tokens_out": 1558,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=39"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "39"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425349.943,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794425381.565,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794425397.047,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 19.5,
+  "end": 13.7,
+  "waited_s": 0
+ }
+}

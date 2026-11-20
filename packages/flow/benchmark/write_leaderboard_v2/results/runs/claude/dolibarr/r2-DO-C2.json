@@ -1,0 +1,61 @@
+{
+ "id": "DO-C2",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 26.7,
+ "cost_usd": 0.062606,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Kwame Osei\" created (id not visible; contact card page shown after saving)",
+  "note": "RESULT: DONE Contact \"Kwame Osei\" created (id not visible; contact card page shown after saving)",
+  "claim_line": true,
+  "final_text": "I created the contact Kwame Osei, not linked to any third party. His job position is Purchasing lead, his professional phone is 555-0192, and his email is k.osei@example.invalid. I left every other field as it was.\n\nThe contact page shows the phone as 5550192, without the hyphen. The three existing contacts display their numbers the same way, so I treated it as Dolibarr's display format. The browser's address bar isn't visible here, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Kwame Osei\" created (id not visible; contact card page shown after saving)",
+  "model_calls": 7,
+  "actions": 19,
+  "tokens_in": 75932,
+  "tokens_out": 1169,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=67"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "67"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427173.455,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794427197.571,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 11
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.4,
+  "end": 6.9,
+  "waited_s": 0
+ }
+}

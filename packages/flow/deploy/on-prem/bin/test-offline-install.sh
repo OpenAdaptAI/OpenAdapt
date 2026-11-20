@@ -4,7 +4,7 @@
 # machine with no network.
 #
 # Unlike test-update.sh, which fakes the venv build, this installs the real
-# openadapt-flow[privacy] wheels pinned by uv.lock, so it proves the offline
+# openadapt-flow[privacy,vision] wheels pinned by uv.lock, so it proves the offline
 # release archive is complete: pip gets no index and the machine has no route
 # out, so any missing wheel fails the install.
 #

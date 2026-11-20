@@ -1,0 +1,67 @@
+{
+ "id": "DO-DU",
+ "app": "dolibarr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 48.8,
+ "cost_usd": 0.07134,
+ "claim": {
+  "status": "done",
+  "id": "/contact/list.php?search_lastname=Moreau&search_firstname=Claire",
+  "note": "RESULT: DONE /contact/list.php?search_lastname=Moreau&search_firstname=Claire",
+  "claim_line": true,
+  "final_text": "RESULT: DONE /contact/list.php?search_lastname=Moreau&search_firstname=Claire",
+  "model_calls": 15,
+  "actions": 23,
+  "tokens_in": 167240,
+  "tokens_out": 776,
+  "end_url": "http://127.0.0.1:9851/contact/list.php?restore_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "104",
+   "105"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429576.546,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794429590.373,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 28
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.1,
+  "end": 11.2,
+  "waited_s": 0
+ }
+}

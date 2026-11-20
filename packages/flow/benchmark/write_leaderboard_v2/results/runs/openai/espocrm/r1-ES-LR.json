@@ -1,0 +1,56 @@
+{
+ "id": "ES-LR",
+ "app": "espocrm",
+ "class": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "agent_s": 40.3,
+ "cost_usd": 0.067912,
+ "claim": {
+  "status": "not_done",
+  "id": "Saving the account returned Error 504, so creation could not be confirmed.",
+  "note": "RESULT: NOT DONE Saving the account returned Error 504, so creation could not be confirmed.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE Saving the account returned Error 504, so creation could not be confirmed.",
+  "model_calls": 14,
+  "actions": 20,
+  "tokens_in": 145124,
+  "tokens_out": 536,
+  "end_url": "http://127.0.0.1:9856/#Account/create"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c50a80d4a052a"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426122.395,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "drop_response"
+   ],
+   "status": "200->504",
+   "ms": 76
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.2,
+  "end": 6.5,
+  "waited_s": 0
+ }
+}

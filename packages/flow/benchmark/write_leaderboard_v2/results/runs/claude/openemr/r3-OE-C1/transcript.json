@@ -1,0 +1,790 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      1050,
+      31
+     ]
+    },
+    {
+     "text": "Achebe\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      260,
+      191
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Desmond"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Achebe"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1990-07-18"
+    },
+    {
+     "text": "Escape"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Datepicker still open; click on blank area to close, then set selects.",
+   "actions": [
+    {
+     "coordinate": [
+      900,
+      230
+     ]
+    },
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "region": [
+      640,
+      400,
+      1280,
+      560
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      120,
+      227
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "region": [
+      640,
+      400,
+      1280,
+      640
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "region": [
+      640,
+      400,
+      1280,
+      520
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Open Contact section.",
+   "actions": [
+    {
+     "coordinate": [
+      132,
+      355
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      411
+     ]
+    },
+    {
+     "text": "41 Elm Street"
+    },
+    {
+     "coordinate": [
+      444,
+      445
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      484
+     ]
+    },
+    {
+     "text": "01105"
+    },
+    {
+     "coordinate": [
+      461,
+      597
+     ]
+    },
+    {
+     "text": "413-555-0172"
+    },
+    {
+     "coordinate": [
+      1035,
+      632
+     ]
+    },
+    {
+     "text": "d.achebe@example.invalid"
+    },
+    {
+     "coordinate": [
+      1016,
+      446
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 15
+    },
+    {
+     "region": [
+      0,
+      150,
+      1280,
+      600
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "region": [
+      0,
+      500,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I registered Desmond Achebe as a new patient. His record is patient ID 4, and the dashboard shows DOB 1990-07-18. A search for \"Achebe\" found no existing patient first.\n\nI filled in the first and last name, date of birth, sex, street, city, state (Massachusetts), postal code, home phone, and email (in Contact Email). I left all other fields as they were.\n\n- **Sex:** The form has two separate fields, Birth Sex (required) and Sex. I set both to Male.\n- **Address text:** The form displays the street and city in capitals (41 ELM STREET, SPRINGFIELD). I didn't change that.\n- **Registration pop-up:** I dismissed the OpenEMR Product Registration pop-up with \"Ask again later\" and entered nothing in it.\n\nI did not reopen the saved record's Demographics tab to check the stored address, phone and email.\n\nRESULT: DONE patient ID 4 (Desmond Achebe)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1050,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Achebe\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 260,
+   "y": 191,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Desmond"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Achebe"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1990-07-18"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 900,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 120,
+   "y": 227,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 132,
+   "y": 355,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 411,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "41 Elm Street"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 445,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 484,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01105"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 597,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0172"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 632,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "d.achebe@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1016,
+   "y": 446,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -1800
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6194,
+   "out": 210,
+   "usd": 0.017583,
+   "cached": 0
+  },
+  {
+   "in": 7852,
+   "out": 140,
+   "usd": 0.006792,
+   "cached": 6190
+  },
+  {
+   "in": 9390,
+   "out": 75,
+   "usd": 0.006169,
+   "cached": 7850
+  },
+  {
+   "in": 10850,
+   "out": 527,
+   "usd": 0.010802,
+   "cached": 9388
+  },
+  {
+   "in": 12825,
+   "out": 143,
+   "usd": 0.008541,
+   "cached": 10848
+  },
+  {
+   "in": 14367,
+   "out": 140,
+   "usd": 0.007824,
+   "cached": 12823
+  },
+  {
+   "in": 15897,
+   "out": 98,
+   "usd": 0.007682,
+   "cached": 14365
+  },
+  {
+   "in": 17381,
+   "out": 138,
+   "usd": 0.008273,
+   "cached": 15895
+  },
+  {
+   "in": 18892,
+   "out": 135,
+   "usd": 0.008607,
+   "cached": 17379
+  },
+  {
+   "in": 20422,
+   "out": 191,
+   "usd": 0.009517,
+   "cached": 18890
+  },
+  {
+   "in": 22034,
+   "out": 106,
+   "usd": 0.009178,
+   "cached": 20420
+  },
+  {
+   "in": 23538,
+   "out": 375,
+   "usd": 0.01192,
+   "cached": 22032
+  },
+  {
+   "in": 25441,
+   "out": 156,
+   "usd": 0.011029,
+   "cached": 23536
+  },
+  {
+   "in": 26983,
+   "out": 119,
+   "usd": 0.010137,
+   "cached": 25439
+  },
+  {
+   "in": 28488,
+   "out": 98,
+   "usd": 0.010143,
+   "cached": 26981
+  },
+  {
+   "in": 29984,
+   "out": 75,
+   "usd": 0.010191,
+   "cached": 28486
+  },
+  {
+   "in": 31444,
+   "out": 114,
+   "usd": 0.01079,
+   "cached": 29982
+  },
+  {
+   "in": 32956,
+   "out": 316,
+   "usd": 0.013232,
+   "cached": 31442
+  }
+ ]
+}

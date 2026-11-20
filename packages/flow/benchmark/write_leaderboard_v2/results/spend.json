@@ -1,0 +1,13 @@
+{
+ "total_usd": 62.88381,
+ "by_agent": {
+  "openai": 20.459422,
+  "claude": 42.424388
+ },
+ "by_phase": {
+  "openai:practice": 0.583623,
+  "claude:practice": 1.193274,
+  "claude:scored": 41.231118,
+  "openai:scored": 19.875799
+ }
+}

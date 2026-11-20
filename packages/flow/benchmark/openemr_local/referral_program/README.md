@@ -9,7 +9,7 @@ Every patient, address, phone number (555-01xx) and email
 
 | File | What it is |
 | --- | --- |
-| `program/` | The compiled bundle, unchanged: 29 steps, content digest `ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6` |
+| `program/` | The compiled bundle: 29 steps, content digest `10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c`. It is the October bundle (`ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6`, behind the site's Seals) with one change: step_009's date-picker check is compiled against the run's clock (`{Month}-{YYYY}-`) instead of the literal `October-2026-`, which halted every referral from 1 November. Qualified and certified again on 19 November 2026 ([evidence](../../scoreboard/raw/openemr_referral/requalified/2026-11-19/)) |
 | `demonstration.jsonl` | The recorded actions it was compiled from: one line per action, with its time, kind, field and typed value |
 
 ## How it was made
@@ -23,7 +23,8 @@ Every patient, address, phone number (555-01xx) and email
    shared duplicate rule (`apply_referral_rules`): Create New Patient must
    show OpenEMR's duplicate check with "No matches were found." before the
    program confirms a new chart.
-3. **Qualified** with `openadapt-flow qualify --verify
+3. **Qualified** (20 October 2026; again on 19 November after the clock
+   pass, `python -m openadapt_flow.compiler.clock_pass`) with `openadapt-flow qualify --verify
    benchmark/openemr_local/verify.yaml --certify clinical-write`: 6 of 6
    cases, 3 trials each (representative VERIFIED; ambiguity, wrong identity,
    stale identity, weak effect and missing effect each halted with no write),

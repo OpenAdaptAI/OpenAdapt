@@ -1,0 +1,53 @@
+{
+ "id": "ES-C1",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 80.7,
+ "cost_usd": 0.174082,
+ "claim": {
+  "status": "not_done",
+  "id": "Unable to retrieve the record ID or page URL for the required confirmation.",
+  "note": "RESULT: NOT DONE Unable to retrieve the record ID or page URL for the required confirmation.",
+  "claim_line": true,
+  "final_text": "Created Copperleaf Dental with all five requested values; other fields were left unchanged.\nRESULT: NOT DONE Unable to retrieve the record ID or page URL for the required confirmation.",
+  "model_calls": 27,
+  "actions": 30,
+  "tokens_in": 501092,
+  "tokens_out": 1072,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4d3899ae0caa88"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4d3899ae0caa88"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429833.573,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 93
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.3,
+  "end": 13.2,
+  "waited_s": 0
+ }
+}

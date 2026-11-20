@@ -1,0 +1,1630 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c47cb3f087d289ccb01cbfe51c12",
+     "call_id": "call_8EUnQHcXMXYeSz3zXkE4qYf5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c47f33e487d2828002dabfad6480",
+     "call_id": "call_bNla8SYXesxoIQacjQKd2erK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 23,
+       "y": 94
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4816b0487d28eeca02404527630",
+     "call_id": "call_nyy42d8yXyDiqV5YCFmo9H39",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 53,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4859d5887d282a70a14a56bbe85",
+     "call_id": "call_f5VTOmBs3l2Se6IwMnS4ZXqA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 242,
+       "y": 180
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4884e7087d2b379aa1d77e194a9",
+     "call_id": "call_LA207k9DUlZkXRzJcTxtoHUk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 362,
+       "y": 216
+      },
+      {
+       "text": "Room booking reminders by email",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 348,
+       "y": 325
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 848,
+       "y": 554
+      },
+      {
+       "text": "6",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 849,
+       "y": 522
+      },
+      {
+       "keys": [
+        "ARROWLEFT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c48cfe2c87d2834126affce2a7a3",
+     "call_id": "call_XYOqcwKztAeA1hmSfwxWLyj6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 360,
+       "y": 390
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 875,
+       "y": 526
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 560
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 850,
+       "y": 628
+      },
+      {
+       "text": "6",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 593
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c492bf9087d2815e83e9762a0eb6",
+     "call_id": "call_p0ayDnGnkZPvVh15lM0Eu1Oh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 400,
+       "y": 350
+      },
+      {
+       "keys": [
+        "Control_L",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      }
+     ]
+    }
+   ],
+   "error": "Keyboard.press: Unknown key: \"Control_L\""
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c496de3487d2bfb47be024081c7f",
+     "call_id": "call_flD0pvITrPGnzp4LgIAMDGZr",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 400,
+       "y": 350
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c49a183887d2a298e46d75c92559",
+     "call_id": "call_n3IUWG2AIy9uSOeCOziNKzzX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL+A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ],
+   "error": "Keyboard.press: Unknown key: \"CTRL\""
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c49d692c87d2b8587907ad7ad5b5",
+     "call_id": "call_awJaPW308BaWttGTY6N2xfiH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c49fd99087d2946bda908977e265",
+     "call_id": "call_UovRh6pJVvmdRJKVycNNXcub",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 400,
+       "y": 350
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4a3478c87d2b16a2a4cf96563dc",
+     "call_id": "call_be8YGolkTYWh8DcotTHlrTVW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4a708a487d2aa6f17b20bce564d",
+     "call_id": "call_o0UcUobyBLetZknfGnWgy4Sv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 400,
+       "y": 350
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4aa7cf487d28905dfc2f5324cdd",
+     "call_id": "call_gOSmm82yYcgOhSdCyabl7Cmt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "path": [
+        {
+         "x": 727,
+         "y": 309
+        },
+        {
+         "x": 500,
+         "y": 309
+        },
+        {
+         "x": 208,
+         "y": 309
+        }
+       ],
+       "type": "drag"
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4ae338487d2b2ea2c91e4f99013",
+     "call_id": "call_gUsF3COwZqAIbxUoHz5svcvz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 875,
+       "y": 478
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4b2856087d2a3c4dc08a63786b7",
+     "call_id": "call_lZ6tbOrPCLtbmN8jzBbt7alR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 875,
+       "y": 478
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4b7b2f487d2950aaea410a3bd2a",
+     "call_id": "call_3TQJzrmjs0zykI3SLiWaW6Hq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4bb91b087d2ab925d6695f391f6",
+     "call_id": "call_Wtj071o3m5Gn0P7UHQkD9zrC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Ctrl",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4beb03087d2b91623e93ba4eb20",
+     "call_id": "call_f98AceSlmXs4ak9LID5a0k1M",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 77,
+       "y": 47
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4c1cfb487d299a602cc3b95929e",
+     "call_id": "call_h5cvAqRDg18Bxa5cJk65uVb2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 23,
+       "y": 94
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4c45bd087d29a90c6cc6408a368",
+     "call_id": "call_7Pm8LkorT90C1I38pFjGBg0m",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 53,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4c7997487d2b497fb3cd0c6b465",
+     "call_id": "call_oOfmV9jXCmIT8sUWmkCyGPtx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 243,
+       "y": 177
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4cb8a2887d29f5c130040de99c5",
+     "call_id": "call_3G1lqzms9nKugpDmZR1p70ts",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 183
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4cec34087d29a2d70dce85d5c3f",
+     "call_id": "call_OOXf3iZveKCN6jezlXp4K26B",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4d21a0087d2835c3dffc3744910",
+     "call_id": "call_RyExx3kURyWkpa6zDhsKZRjE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 244,
+       "y": 183
+      },
+      {
+       "keys": [
+        "DOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4d5426487d2ad449c8891ce929c",
+     "call_id": "call_vpdxTPUFiGr1D0YPv7dfekhj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 242,
+       "y": 183
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4d8830887d2adc2af7641aad543",
+     "call_id": "call_2i9PsKUy8u1rprvTAt4NOoYL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4dced0c87d2a38f641a73909a6e",
+     "call_id": "call_4WK4Dk8Co1VdPNEFCgLUnCzz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 350,
+       "y": 216
+      },
+      {
+       "text": "Room booking reminders by email",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 350,
+       "y": 330
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 852,
+       "y": 555
+      },
+      {
+       "text": "6",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 520
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4e11b7087d28eab9436e571e8e4",
+     "call_id": "call_UrjJnH7nxobHI7l7uhqo6xIF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4e3bd3c87d2b2da8aa4c43ca88e",
+     "call_id": "call_ybUM5by2RAIZiCp0mEvTasEY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 42,
+       "y": 721
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4e7fb1487d2ac9ef5b89c88a2dc",
+     "call_id": "call_1PEHhvvIncMMPvm9wRdx4JmV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065e78183532f0be016af4c4ebc2f487d2a4665f561ab3d2d6",
+     "call_id": "call_PHsW8seC8x7UV4SdlCsMirP8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 47",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "move",
+   "x": 23,
+   "y": 94
+  },
+  {
+   "a": "click",
+   "x": 53,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 180,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 362,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room booking reminders by email"
+  },
+  {
+   "a": "click",
+   "x": 348,
+   "y": 325,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 848,
+   "y": 554,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "click",
+   "x": 849,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWLEFT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "click",
+   "x": 360,
+   "y": 390,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 875,
+   "y": 526,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 560,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 628,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 593,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "click",
+   "x": 400,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control_L",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 400,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL+A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 400,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 400,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     727,
+     309
+    ],
+    [
+     500,
+     309
+    ],
+    [
+     208,
+     309
+    ]
+   ]
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 875,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 875,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 77,
+   "y": 47,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 23,
+   "y": 94
+  },
+  {
+   "a": "click",
+   "x": 53,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 244,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "DOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 350,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room booking reminders by email"
+  },
+  {
+   "a": "click",
+   "x": 350,
+   "y": 330,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 852,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 520,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "click",
+   "x": 42,
+   "y": 721,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2215,
+   "out": 21,
+   "usd": 0.00464,
+   "cached": 0
+  },
+  {
+   "in": 3432,
+   "out": 27,
+   "usd": 0.003152,
+   "cached": 2212
+  },
+  {
+   "in": 4684,
+   "out": 31,
+   "usd": 0.003506,
+   "cached": 3429
+  },
+  {
+   "in": 5940,
+   "out": 49,
+   "usd": 0.003944,
+   "cached": 4681
+  },
+  {
+   "in": 7222,
+   "out": 172,
+   "usd": 0.005477,
+   "cached": 5937
+  },
+  {
+   "in": 8678,
+   "out": 215,
+   "usd": 0.006512,
+   "cached": 7219
+  },
+  {
+   "in": 10193,
+   "out": 94,
+   "usd": 0.005711,
+   "cached": 8675
+  },
+  {
+   "in": 11519,
+   "out": 84,
+   "usd": 0.005536,
+   "cached": 10190
+  },
+  {
+   "in": 12835,
+   "out": 42,
+   "usd": 0.005361,
+   "cached": 11516
+  },
+  {
+   "in": 14098,
+   "out": 39,
+   "usd": 0.005488,
+   "cached": 12832
+  },
+  {
+   "in": 15358,
+   "out": 55,
+   "usd": 0.005895,
+   "cached": 14095
+  },
+  {
+   "in": 16642,
+   "out": 45,
+   "usd": 0.006095,
+   "cached": 15355
+  },
+  {
+   "in": 17908,
+   "out": 67,
+   "usd": 0.006536,
+   "cached": 16639
+  },
+  {
+   "in": 19204,
+   "out": 77,
+   "usd": 0.006949,
+   "cached": 17905
+  },
+  {
+   "in": 20509,
+   "out": 52,
+   "usd": 0.006976,
+   "cached": 19201
+  },
+  {
+   "in": 21794,
+   "out": 104,
+   "usd": 0.007717,
+   "cached": 20506
+  },
+  {
+   "in": 23131,
+   "out": 75,
+   "usd": 0.007788,
+   "cached": 21791
+  },
+  {
+   "in": 24427,
+   "out": 58,
+   "usd": 0.007804,
+   "cached": 23128
+  },
+  {
+   "in": 25706,
+   "out": 41,
+   "usd": 0.007859,
+   "cached": 24424
+  },
+  {
+   "in": 26972,
+   "out": 27,
+   "usd": 0.007949,
+   "cached": 25703
+  },
+  {
+   "in": 28224,
+   "out": 31,
+   "usd": 0.008214,
+   "cached": 26969
+  },
+  {
+   "in": 29480,
+   "out": 31,
+   "usd": 0.008472,
+   "cached": 28221
+  },
+  {
+   "in": 30736,
+   "out": 31,
+   "usd": 0.008723,
+   "cached": 29477
+  },
+  {
+   "in": 31992,
+   "out": 61,
+   "usd": 0.009275,
+   "cached": 30733
+  },
+  {
+   "in": 33278,
+   "out": 64,
+   "usd": 0.009616,
+   "cached": 31989
+  },
+  {
+   "in": 34575,
+   "out": 64,
+   "usd": 0.009895,
+   "cached": 33275
+  },
+  {
+   "in": 35872,
+   "out": 19,
+   "usd": 0.009704,
+   "cached": 34572
+  },
+  {
+   "in": 37112,
+   "out": 121,
+   "usd": 0.01087,
+   "cached": 35869
+  },
+  {
+   "in": 38497,
+   "out": 31,
+   "usd": 0.010508,
+   "cached": 37109
+  },
+  {
+   "in": 39753,
+   "out": 31,
+   "usd": 0.010527,
+   "cached": 38494
+  },
+  {
+   "in": 41009,
+   "out": 19,
+   "usd": 0.010658,
+   "cached": 39750
+  },
+  {
+   "in": 42249,
+   "out": 18,
+   "usd": 0.010867,
+   "cached": 41006
+  },
+  {
+   "in": 43477,
+   "out": 9,
+   "usd": 0.011001,
+   "cached": 42246
+  }
+ ]
+}

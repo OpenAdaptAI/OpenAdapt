@@ -1,0 +1,403 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c23e1c9487d28bff3770eeeecf87",
+     "call_id": "call_rVALmwj1C9F97HmlLMJUd1Wx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c2422e0c87d286df30bc194a032f",
+     "call_id": "call_KVPzjMI8oD61HxThHo5XBqc9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 114,
+       "y": 29
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c2447f7887d29a283c27d5359a31",
+     "call_id": "call_BJA3f9YaQp0PWTmdPaSzLZtR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 107,
+       "y": 370
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c246f26487d2aaf96e49c337f694",
+     "call_id": "call_ih6gJLpZCjckyT8aVTEaiCyp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Osei",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 647,
+       "y": 197
+      },
+      {
+       "text": "Kwame",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 647,
+       "y": 295
+      },
+      {
+       "text": "Purchasing lead",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 675,
+       "y": 479
+      },
+      {
+       "text": "555-0192",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 678,
+       "y": 547
+      },
+      {
+       "text": "k.osei@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 482,
+       "type": "scroll",
+       "x": 1170,
+       "y": 682
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c24aa5b087d2854ddd5b285a7706",
+     "call_id": "call_x6G8hOLZ3eUYN89mNNmpKTF3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 722,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c24de47487d2ba2bffbd2b88ece1",
+     "call_id": "call_NjOxYR10jiJDQVqvS5ZRgLCD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c251a28c87d2bf283f10fb4eba66",
+     "call_id": "call_CYCjpfKf4fTAZ8e77L3pQmfK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1126,
+       "y": 156
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c254f79c87d2849f729b67ae5412",
+     "call_id": "call_F7I0aZ6DPgYtrQrhPYchRTxt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 449,
+       "y": 393
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c54327bca2c0e8f016af4c2593c8087d2b3b41aa97465b050",
+     "call_id": "call_XtiSto4FYbWZsuXtd8AVDDG5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 448,
+       "y": 393
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Kwame Osei",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 114,
+   "y": 29,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 107,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Osei"
+  },
+  {
+   "a": "click",
+   "x": 647,
+   "y": 197,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kwame"
+  },
+  {
+   "a": "click",
+   "x": 647,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Purchasing lead"
+  },
+  {
+   "a": "click",
+   "x": 675,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0192"
+  },
+  {
+   "a": "click",
+   "x": 678,
+   "y": 547,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "k.osei@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1170,
+   "y": 682,
+   "dx": 0,
+   "dy": 482
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1126,
+   "y": 156,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 449,
+   "y": 393
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 448,
+   "y": 393,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2220,
+   "out": 24,
+   "usd": 0.00468,
+   "cached": 0
+  },
+  {
+   "in": 3437,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2217
+  },
+  {
+   "in": 4693,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3434
+  },
+  {
+   "in": 5949,
+   "out": 154,
+   "usd": 0.004996,
+   "cached": 4690
+  },
+  {
+   "in": 7380,
+   "out": 31,
+   "usd": 0.004367,
+   "cached": 5946
+  },
+  {
+   "in": 8636,
+   "out": 26,
+   "usd": 0.004253,
+   "cached": 7377
+  },
+  {
+   "in": 9883,
+   "out": 70,
+   "usd": 0.004927,
+   "cached": 8633
+  },
+  {
+   "in": 11178,
+   "out": 31,
+   "usd": 0.004882,
+   "cached": 9880
+  },
+  {
+   "in": 12438,
+   "out": 65,
+   "usd": 0.005411,
+   "cached": 11175
+  },
+  {
+   "in": 13728,
+   "out": 11,
+   "usd": 0.005183,
+   "cached": 12435
+  }
+ ]
+}

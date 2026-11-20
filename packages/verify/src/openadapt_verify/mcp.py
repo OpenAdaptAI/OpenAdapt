@@ -3,8 +3,12 @@
 from pathlib import Path
 from typing import Any
 
+from openadapt_verify._ledger_config import require_protected_default_support
+
 
 def build_server(contracts_dir: Path, state_dir: Path) -> Any:
+    require_protected_default_support()
+
     from openadapt_flow.agent.mcp import build_server as canonical_server
     from openadapt_flow.agent.verify_tools import VerifyBridge
 
@@ -12,6 +16,8 @@ def build_server(contracts_dir: Path, state_dir: Path) -> Any:
 
 
 def serve(contracts_dir: Path, state_dir: Path) -> None:
+    require_protected_default_support()
+
     from openadapt_flow.agent.mcp import serve as canonical_serve
     from openadapt_flow.agent.verify_tools import VerifyBridge
 

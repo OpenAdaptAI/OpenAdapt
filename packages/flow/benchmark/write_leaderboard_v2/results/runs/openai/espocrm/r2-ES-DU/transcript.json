@@ -1,0 +1,976 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd221b6487d2ae5de7884ea4a525",
+     "call_id": "call_dMBApu6A98DcXBl4s5T80PWv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd24346087d2811ed3f66aa8361e",
+     "call_id": "call_tBlXRBVY1J4pDgZPoFgaEgsO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd261f0087d2aea8f6abfe75bba0",
+     "call_id": "call_ykOsHdg8V75lnPU1pwJdRtfy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd281b7c87d2acc0280340f018ff",
+     "call_id": "call_QBuWg90XFWhrA2i8ybNzi9FQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1184,
+       "y": 64
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd2b464887d29150d458712ac644",
+     "call_id": "call_8HDHXKqfKqptikzEoRgkJYnK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd2cff6087d2abc073d8e0ea2384",
+     "call_id": "call_d79Xq7TqqceztbAzCNqdh12T",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 196,
+       "y": 232
+      },
+      {
+       "text": "Granite Roofing",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 589,
+       "y": 232
+      },
+      {
+       "text": "granite.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 214,
+       "y": 695
+      },
+      {
+       "text": "Flat roofs and repairs.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 268,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd302a0c87d2a0d7a17ef9f110cb",
+     "call_id": "call_piasyTy0Sipn9hJkgOhjBi2V",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd31df4087d2bc750558dc59e260",
+     "call_id": "call_m7zM8qRBp3h6cHksWD1ixJTB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd34b38087d28a04ed6f0f0796ab",
+     "call_id": "call_ft7MsaERaZnQ0M8bSiNvJrPn",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 252,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd37b5b087d28964a9da00cb507a",
+     "call_id": "call_xq8i48rCZYmsv2XFxaqDr9RW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 139,
+       "y": 681
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 647,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd3b9aa887d29eef7fe6344e63e1",
+     "call_id": "call_2rcFktyx7B8CpMMYLuPknzLW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 647,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd3d6d9887d2848442d3287173b7",
+     "call_id": "call_Oo7YyV5etJ7IySCNRPDktsBd",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 203,
+       "type": "scroll",
+       "x": 655,
+       "y": 522
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd40032087d284921a30e2078073",
+     "call_id": "call_fVkXcOGhWWikAKEl12FaiuUv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 535,
+       "y": 486
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd43b55087d2a9a67c8f69537fd8",
+     "call_id": "call_ph08dngkl6XnH4aIVM0sooyU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 96,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd45fed487d2ac97edb98850f960",
+     "call_id": "call_WOdN3oKJDWJFCwsxYfWYmuG5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd48786487d28d66a48d205792e6",
+     "call_id": "call_1WQk1IfAGDVOBwkJ6RLCITcA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd4aef2087d2afe046e5088b7d85",
+     "call_id": "call_QtR1QDFr31EZBZzfmLqbEtfI",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd4e4e8087d2b0daa4916cd05cec",
+     "call_id": "call_15ddWtox52HqH3f9m5w0kZnE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 123,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd507ac487d2ba88c520482f8e0a",
+     "call_id": "call_XvY1PZMt1VdmfUoHttJw2nYf",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd52f51087d283c0bd26514e975b",
+     "call_id": "call_rEStsEnj4KOGm6s03PIKhWjY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 148,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd553f5c87d29dbd5b3b926ba634",
+     "call_id": "call_RiOHSST3Sf9qDnWy8PXRgNw6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 148,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd583a3487d298843c04848e5ae3",
+     "call_id": "call_ezSJDmp3eM6sxQTuGBKXhdyq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 148,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd5ca29487d28e61a6b2c89fbe4b",
+     "call_id": "call_uwYAP3DmaGPPGoZ3i6GIcpEs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd5f670c87d28ec8a25c25d548f2",
+     "call_id": "call_Y5W01UGZCoti0AFKxD9rCZUE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ESC"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "Control",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd63868487d2882a97829b5936fa",
+     "call_id": "call_iQuXe6rUdcBkRQBjBZXmzYf3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 113
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 146,
+       "y": 231
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd6784e087d2bc18d680ee2a5680",
+     "call_id": "call_Sn3o4rkuNUut451ekApmdelx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd6a846c87d293bec3f3a663afc9",
+     "call_id": "call_6u9UtB5633UOMlysitpWC4Eq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04d94493c54ac209016af4cd6cd17c87d28db07e1390b67838",
+     "call_id": "call_kjOyRbCx28t9odDcwFfVp4NJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 143,
+       "y": 231
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Granite Roofing with the five requested values; all other fields were left unchanged.\n\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1184,
+   "y": 64,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 196,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Granite Roofing"
+  },
+  {
+   "a": "click",
+   "x": 589,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "granite.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 214,
+   "y": 695,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Flat roofs and repairs."
+  },
+  {
+   "a": "click",
+   "x": 268,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 252,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 139,
+   "y": 681,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 647,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 647,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 655,
+   "y": 522,
+   "dx": 0,
+   "dy": 203
+  },
+  {
+   "a": "click",
+   "x": 535,
+   "y": 486,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 96,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 123,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 148,
+   "y": 250
+  },
+  {
+   "a": "click",
+   "x": 148,
+   "y": 250,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 148,
+   "y": 250,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ESC"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "l"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 146,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 143,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2202,
+   "out": 16,
+   "usd": 0.004564,
+   "cached": 0
+  },
+  {
+   "in": 3419,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2199
+  },
+  {
+   "in": 4675,
+   "out": 18,
+   "usd": 0.003381,
+   "cached": 3416
+  },
+  {
+   "in": 5903,
+   "out": 32,
+   "usd": 0.003716,
+   "cached": 4672
+  },
+  {
+   "in": 7160,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5900
+  },
+  {
+   "in": 8388,
+   "out": 112,
+   "usd": 0.005013,
+   "cached": 7157
+  },
+  {
+   "in": 9760,
+   "out": 31,
+   "usd": 0.004737,
+   "cached": 8385
+  },
+  {
+   "in": 11016,
+   "out": 15,
+   "usd": 0.004619,
+   "cached": 9757
+  },
+  {
+   "in": 12244,
+   "out": 62,
+   "usd": 0.005285,
+   "cached": 11013
+  },
+  {
+   "in": 13531,
+   "out": 47,
+   "usd": 0.005498,
+   "cached": 12241
+  },
+  {
+   "in": 14811,
+   "out": 31,
+   "usd": 0.005582,
+   "cached": 13528
+  },
+  {
+   "in": 16067,
+   "out": 37,
+   "usd": 0.00585,
+   "cached": 14808
+  },
+  {
+   "in": 17329,
+   "out": 31,
+   "usd": 0.006053,
+   "cached": 16064
+  },
+  {
+   "in": 18585,
+   "out": 31,
+   "usd": 0.006293,
+   "cached": 17326
+  },
+  {
+   "in": 19841,
+   "out": 15,
+   "usd": 0.006384,
+   "cached": 18582
+  },
+  {
+   "in": 21069,
+   "out": 26,
+   "usd": 0.00669,
+   "cached": 19838
+  },
+  {
+   "in": 22316,
+   "out": 39,
+   "usd": 0.007103,
+   "cached": 21066
+  },
+  {
+   "in": 23576,
+   "out": 76,
+   "usd": 0.007749,
+   "cached": 22313
+  },
+  {
+   "in": 24877,
+   "out": 15,
+   "usd": 0.007473,
+   "cached": 23573
+  },
+  {
+   "in": 26105,
+   "out": 27,
+   "usd": 0.007707,
+   "cached": 24874
+  },
+  {
+   "in": 27357,
+   "out": 31,
+   "usd": 0.00804,
+   "cached": 26102
+  },
+  {
+   "in": 28613,
+   "out": 71,
+   "usd": 0.008699,
+   "cached": 27354
+  },
+  {
+   "in": 29909,
+   "out": 31,
+   "usd": 0.00863,
+   "cached": 28610
+  },
+  {
+   "in": 31165,
+   "out": 57,
+   "usd": 0.009069,
+   "cached": 29906
+  },
+  {
+   "in": 32447,
+   "out": 106,
+   "usd": 0.009862,
+   "cached": 31162
+  },
+  {
+   "in": 33786,
+   "out": 83,
+   "usd": 0.010003,
+   "cached": 32444
+  },
+  {
+   "in": 35094,
+   "out": 53,
+   "usd": 0.009909,
+   "cached": 33783
+  },
+  {
+   "in": 36372,
+   "out": 31,
+   "usd": 0.00989,
+   "cached": 35091
+  },
+  {
+   "in": 37628,
+   "out": 36,
+   "usd": 0.010152,
+   "cached": 36369
+  }
+ ]
+}

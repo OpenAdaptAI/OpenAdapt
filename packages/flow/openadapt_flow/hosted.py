@@ -1260,8 +1260,15 @@ def push(
     sanitized_out: Optional[Any] = None,
     auto_approve: Optional[bool] = None,
     validation_attestation: Optional[Any] = None,
+    route: Optional[tuple[str, str]] = None,
 ) -> dict[str, Any]:
     """Sanitize, approve, and upload an exact immutable artifact archive.
+
+    ``route`` is ``(method, path)`` for the upload. The default is
+    ``("POST", "/api/ingest")`` (ingest token). ``openadapt wrap publish``
+    passes an organization's API-key workflow route instead: ``POST
+    /api/v1/org/{org}/workflow`` or ``PUT .../workflow/{id}/definition``. The
+    body and every acknowledgment check are the same.
 
     Deployment lane and destination trust are separate.  ``byoc`` and
     ``regulated`` artifacts may upload after complete sanitization to either the
@@ -1278,6 +1285,13 @@ def push(
     """
     if kind not in ("recording", "bundle"):
         raise HostedError(f"--kind must be 'recording' or 'bundle', got {kind!r}")
+    upload_method, upload_path = route or ("POST", "/api/ingest")
+    if (
+        upload_method not in ("POST", "PUT")
+        or not upload_path.startswith("/")
+        or any(part in upload_path for part in ("//", "?", "#", ".."))
+    ):
+        raise HostedError("Upload route is invalid")
     requested_kind = kind
     normalized_workflow_id: Optional[str] = None
     if workflow_id is not None:
@@ -1542,8 +1556,9 @@ def push(
         ) from exc
     try:
         with archive_snapshot as fh:
-            resp = httpx.post(
-                f"{resolved_host}/api/ingest",
+            send = httpx.put if upload_method == "PUT" else httpx.post
+            resp = send(
+                f"{resolved_host}{upload_path}",
                 headers=_auth_headers(resolved_token),
                 files={
                     "file": (
@@ -1558,12 +1573,12 @@ def push(
             )
     except httpx.HTTPError as exc:
         raise HostedDeliveryUncertain(
-            f"Upload to {resolved_host}/api/ingest failed: {exc}",
+            f"Upload to {resolved_host}{upload_path} failed: {exc}",
             context=local_result,
         ) from exc
     except OSError as exc:
         raise HostedDeliveryUncertain(
-            f"Upload to {resolved_host}/api/ingest failed during dispatch",
+            f"Upload to {resolved_host}{upload_path} failed during dispatch",
             context=local_result,
         ) from exc
     if resp.status_code == 401:

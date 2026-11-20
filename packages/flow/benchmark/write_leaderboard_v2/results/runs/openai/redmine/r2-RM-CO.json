@@ -1,0 +1,85 @@
+{
+ "id": "RM-CO",
+ "app": "redmine",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 21.6,
+ "cost_usd": 0.026055,
+ "claim": {
+  "status": "done",
+  "id": "72",
+  "note": "RESULT: DONE 72",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 72",
+  "model_calls": 8,
+  "actions": 19,
+  "tokens_in": 53100,
+  "tokens_out": 374,
+  "end_url": "http://127.0.0.1:9861/issues/72"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['56']"
+  ],
+  "new": [
+   "72"
+  ],
+  "deleted": [],
+  "changed": [
+   "56"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427112.603,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 11
+  },
+  {
+   "t": 1794427122.897,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 29
+  },
+  {
+   "t": 1794427122.905,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 200,
+   "side_write": "done",
+   "ms": 225
+  },
+  {
+   "t": 1794427131.929,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.0,
+  "end": 6.6,
+  "waited_s": 0
+ }
+}

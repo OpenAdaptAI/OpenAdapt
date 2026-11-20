@@ -28,16 +28,16 @@ with hard, fail-closed gates between the states:
   (:func:`openadapt_flow.repair.lifecycle.assert_not_model_actor`).
 
 See ``docs/REPAIR_LIFECYCLE.md`` for the state machine and CLI reference.
+
+The replay and fault campaigns draw faults with Pillow, which is Flow's
+``vision`` extra. Their names load on first access, so the lifecycle and the
+CLI parser import on the base install.
 """
 
-from openadapt_flow.repair.campaign import (  # noqa: F401
-    FAULT_BATTERY_KINDS,
-    FaultCase,
-    FaultKind,
-    fault_battery,
-    run_fault_campaign,
-    run_replay_campaign,
-)
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 from openadapt_flow.repair.candidate import (  # noqa: F401
     Actor,
     ApprovalRecord,
@@ -72,6 +72,38 @@ from openadapt_flow.repair.registration import (  # noqa: F401
     detached_candidate_path,
     register_bundle_candidate,
 )
+
+if TYPE_CHECKING:
+    from openadapt_flow.repair.campaign import (  # noqa: F401
+        FAULT_BATTERY_KINDS,
+        FaultCase,
+        FaultKind,
+        fault_battery,
+        run_fault_campaign,
+        run_replay_campaign,
+    )
+
+#: Names re-exported from the Pillow-backed campaign module on access.
+_CAMPAIGN_NAMES = frozenset(
+    {
+        "FAULT_BATTERY_KINDS",
+        "FaultCase",
+        "FaultKind",
+        "fault_battery",
+        "run_fault_campaign",
+        "run_replay_campaign",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy re-exports (PEP 562): the harness loads with Pillow on first use."""
+    if name in _CAMPAIGN_NAMES:
+        from openadapt_flow.repair import campaign
+
+        return getattr(campaign, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # candidate

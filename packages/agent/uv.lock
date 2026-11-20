@@ -1308,7 +1308,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-agent"
-version = "2.2.1"
+version = "2.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -1338,8 +1338,8 @@ requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mcp", specifier = ">=1.28,<3" },
-    { name = "openadapt-flow", specifier = ">=2.2.0,<3" },
-    { name = "openadapt-flow", extras = ["browser", "macos"], marker = "extra == 'tutorial'", specifier = ">=2.2.0,<3" },
+    { name = "openadapt-flow", extras = ["browser", "macos", "vision"], marker = "extra == 'tutorial'", specifier = ">=2.2.0,<4" },
+    { name = "openadapt-flow", extras = ["vision"], specifier = ">=2.2.0,<4" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'repair-screens'", specifier = ">=1.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },

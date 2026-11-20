@@ -380,11 +380,13 @@ PENDING_PUBLIC_ARTIFACT_INVENTORY_PATHS = frozenset(
 PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
     "benchmark/auto_repair/",
     "benchmark/fhir_medplum/leaderboard/results/",
+    "benchmark/grader_soundness/results/",
     "benchmark/openemr_api_tier/",
     "benchmark/run_player/",
     "benchmark/scoreboard/",
     "benchmark/silent_saves/",
     "benchmark/verifier_baselines/results/",
+    "benchmark/write_leaderboard_v2/results/",
     "docs/showcase-encounter-loop/",
     "docs/showcase-loop/",
     "docs/showcase-openemr/",

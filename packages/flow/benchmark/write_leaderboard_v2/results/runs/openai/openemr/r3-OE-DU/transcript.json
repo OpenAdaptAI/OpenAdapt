@@ -1,0 +1,1182 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d576c4d087d2b4301564556811f4",
+     "call_id": "call_JfMoYYaPtXKZScbu6vfwMUjr",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d579d59487d2b73179eb3cfc30c9",
+     "call_id": "call_0VhCRoEdaH2Xh1dkqqPZkcEb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 808,
+       "y": 702
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 404,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d57c837087d288c96ab1b7d140f5",
+     "call_id": "call_9PxJupHql4JTa94b9Uzvw3uP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 808,
+       "y": 702
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d57f34d087d2a1e1c4ab9e8765e8",
+     "call_id": "call_EbFzntx57oul2KiVCq6sY1o4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 404,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d584e3e487d28c47922ee3334ef5",
+     "call_id": "call_ADSI3wMosCoYmeUUXGNi7wIV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1028,
+       "y": 13
+      },
+      {
+       "type": "move",
+       "x": 405,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d588413487d2ae863cb1d3ff0901",
+     "call_id": "call_ZaGZk1kRul6okKaDX8qLvr9O",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 435,
+       "y": 65
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d58b934c87d2a658652fa6698835",
+     "call_id": "call_WiwZfrPWrivICVWY6QYjTDyj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 428,
+       "y": 318
+      },
+      {
+       "text": "Henrik",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 653,
+       "y": 318
+      },
+      {
+       "text": "Dahl",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 421,
+       "y": 430
+      },
+      {
+       "text": "1966-01-27",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1004,
+       "y": 466
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d58ee43487d2ac541c4a8cf688a6",
+     "call_id": "call_X1G8txDNMJVHJ67TxeSYbLzM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 502,
+       "type": "scroll",
+       "x": 1189,
+       "y": 691
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d591d17c87d295c3a42449421fb3",
+     "call_id": "call_SQUwdEcwWeLaPvdbvEoTcUL8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 232,
+       "y": 464
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d595079087d2835d029f349890ce",
+     "call_id": "call_wScTNGNerqZNnF1rlXAIIhcP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5994fd887d295692e457aab7fe1",
+     "call_id": "call_hAbMF40vCrMn87Pj8Py88FiS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 450,
+       "y": 519
+      },
+      {
+       "text": "64 Maple Drive",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 441,
+       "y": 555
+      },
+      {
+       "text": "Springfield",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 418,
+       "y": 594
+      },
+      {
+       "text": "01109",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 992,
+       "y": 555
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d59c86f487d2bed04b8fbbfd1ebd",
+     "call_id": "call_Frcbq9EJqj6QrtIzzQmroeUN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 441,
+       "y": 709
+      },
+      {
+       "text": "413-555-0176",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1010,
+       "y": 742
+      },
+      {
+       "text": "h.dahl@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5a0ad3487d293759e9b91cc675e",
+     "call_id": "call_T5rpg2sJ89aECxZBlRRhwcmR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1015,
+       "y": 476
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5a589dc87d2a8f16ad8c6ff6a74",
+     "call_id": "call_4gvwLH2P2rgD46i27ZR6axXo",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1014,
+       "y": 475
+      },
+      {
+       "keys": [
+        "UP"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1007,
+       "y": 661
+      },
+      {
+       "text": "h.dahl@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5a8e3fc87d2bd6a161e5fee90c1",
+     "call_id": "call_LzdLVPUgz26pAAxZFKNCWaGc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1108,
+       "y": 475
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5ab81e887d2911162b1142ab961",
+     "call_id": "call_8HihYAelQTcyzRC6Bkqa3dWt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5af157487d28f20e6e37b2ff944",
+     "call_id": "call_b1pMtwFO8vHlfDs8AcgabDZq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "M"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5b3149c87d2b7f9520a08487e1b",
+     "call_id": "call_j4OkiJ9Z7E2hBOGco8sHE2sZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 570,
+       "type": "scroll",
+       "x": 1192,
+       "y": 697
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5b70fb487d2b88d83bbf22f88bb",
+     "call_id": "call_DCGSARIoUPeuiNbHeWDzSzwl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 287,
+       "y": 775
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5bac58887d29a82e8382cf54cee",
+     "call_id": "call_ocqKud6xtaSByRK7yImGp3jE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5be330487d294312e83798c873f",
+     "call_id": "call_hGTljjqODQRFBHDvDdX4uEEc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5c0b98887d2809c6fec8cf821dd",
+     "call_id": "call_fvm2iz8xUN9EG3F00tnlizTF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 283,
+       "y": 775
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5c38da887d2ae6cd517c53f8bdd",
+     "call_id": "call_xC7eXIBN7IUmrbVuB3IDjSL3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_00ca1a47c71e95b9016af4d5c7825887d2a7ffd7cfea9d9f85",
+     "call_id": "call_g4oSiEuZRdfwmQ8LLhW4VfQu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": -1800,
+       "type": "scroll",
+       "x": 1192,
+       "y": 300
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Birth Sex is required to create the patient, but the task requires leaving that additional field unchanged.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 808,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 808,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1028,
+   "y": 13,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 405,
+   "y": 30
+  },
+  {
+   "a": "click",
+   "x": 435,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 428,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Henrik"
+  },
+  {
+   "a": "click",
+   "x": 653,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Dahl"
+  },
+  {
+   "a": "click",
+   "x": 421,
+   "y": 430,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1966-01-27"
+  },
+  {
+   "a": "click",
+   "x": 1004,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 1189,
+   "y": 691,
+   "dx": 0,
+   "dy": 502
+  },
+  {
+   "a": "click",
+   "x": 232,
+   "y": 464,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 450,
+   "y": 519,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "64 Maple Drive"
+  },
+  {
+   "a": "click",
+   "x": 441,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 418,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01109"
+  },
+  {
+   "a": "click",
+   "x": 992,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 441,
+   "y": 709,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0176"
+  },
+  {
+   "a": "click",
+   "x": 1010,
+   "y": 742,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "h.dahl@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1015,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1014,
+   "y": 475,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "UP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1007,
+   "y": 661,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "h.dahl@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1108,
+   "y": 475,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 1192,
+   "y": 697,
+   "dx": 0,
+   "dy": 570
+  },
+  {
+   "a": "click",
+   "x": 287,
+   "y": 775,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 283,
+   "y": 775,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 1192,
+   "y": 300,
+   "dx": 0,
+   "dy": -1800
+  }
+ ],
+ "usage": [
+  {
+   "in": 2246,
+   "out": 22,
+   "usd": 0.004712,
+   "cached": 0
+  },
+  {
+   "in": 3463,
+   "out": 47,
+   "usd": 0.003359,
+   "cached": 2243
+  },
+  {
+   "in": 4743,
+   "out": 31,
+   "usd": 0.003568,
+   "cached": 3460
+  },
+  {
+   "in": 5999,
+   "out": 31,
+   "usd": 0.003776,
+   "cached": 4740
+  },
+  {
+   "in": 7255,
+   "out": 65,
+   "usd": 0.004367,
+   "cached": 5996
+  },
+  {
+   "in": 8553,
+   "out": 31,
+   "usd": 0.004362,
+   "cached": 7252
+  },
+  {
+   "in": 9809,
+   "out": 129,
+   "usd": 0.005518,
+   "cached": 8550
+  },
+  {
+   "in": 11207,
+   "out": 38,
+   "usd": 0.005143,
+   "cached": 9806
+  },
+  {
+   "in": 12470,
+   "out": 31,
+   "usd": 0.005083,
+   "cached": 11204
+  },
+  {
+   "in": 13726,
+   "out": 15,
+   "usd": 0.005161,
+   "cached": 12467
+  },
+  {
+   "in": 14954,
+   "out": 116,
+   "usd": 0.006367,
+   "cached": 13723
+  },
+  {
+   "in": 16335,
+   "out": 106,
+   "usd": 0.006818,
+   "cached": 14951
+  },
+  {
+   "in": 17694,
+   "out": 94,
+   "usd": 0.00693,
+   "cached": 16332
+  },
+  {
+   "in": 19029,
+   "out": 106,
+   "usd": 0.007274,
+   "cached": 17691
+  },
+  {
+   "in": 20380,
+   "out": 43,
+   "usd": 0.006943,
+   "cached": 19026
+  },
+  {
+   "in": 21648,
+   "out": 15,
+   "usd": 0.006767,
+   "cached": 20377
+  },
+  {
+   "in": 22876,
+   "out": 107,
+   "usd": 0.007861,
+   "cached": 21645
+  },
+  {
+   "in": 24232,
+   "out": 38,
+   "usd": 0.007673,
+   "cached": 22873
+  },
+  {
+   "in": 25495,
+   "out": 31,
+   "usd": 0.007688,
+   "cached": 24229
+  },
+  {
+   "in": 26751,
+   "out": 15,
+   "usd": 0.007766,
+   "cached": 25492
+  },
+  {
+   "in": 27979,
+   "out": 15,
+   "usd": 0.007962,
+   "cached": 26748
+  },
+  {
+   "in": 29207,
+   "out": 31,
+   "usd": 0.008367,
+   "cached": 27976
+  },
+  {
+   "in": 30463,
+   "out": 19,
+   "usd": 0.008549,
+   "cached": 29204
+  },
+  {
+   "in": 31703,
+   "out": 53,
+   "usd": 0.009108,
+   "cached": 30460
+  },
+  {
+   "in": 32981,
+   "out": 27,
+   "usd": 0.009172,
+   "cached": 31700
+  }
+ ]
+}

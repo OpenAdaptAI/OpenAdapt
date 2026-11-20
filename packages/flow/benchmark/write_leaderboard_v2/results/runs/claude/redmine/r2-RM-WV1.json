@@ -1,0 +1,75 @@
+{
+ "id": "RM-WV1",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The estimated time changes from 0.5 to 5.",
+ "agent_s": 35.4,
+ "cost_usd": 0.073343,
+ "claim": {
+  "status": "done",
+  "id": "63",
+  "note": "RESULT: DONE 63",
+  "claim_line": true,
+  "final_text": "Issue #63 now exists in Synthetic Helpdesk with the values you asked for:\n\n- **Tracker:** Bug\n- **Subject:** Door chime rings twice\n- **Description:** The front door chime repeats.\n- **Priority:** Low\n- **Due date:** 2026-12-09\n- **Estimated time:** 0:30 h\n\nThe estimated time was wrong at first. The issue was created showing 5:00 h, so I edited it to 0.5, and the record now shows 0:30 h. The issue's history therefore has one extra entry recording that change from 5:00 h to 0:30 h. I left every other field as it was.\n\nRESULT: DONE 63",
+  "model_calls": 8,
+  "actions": 25,
+  "tokens_in": 93544,
+  "tokens_out": 1480,
+  "end_url": "http://127.0.0.1:9861/issues/63?issue_count=4&issue_position=1&next_issue_id=58"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "63"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426584.051,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794426606.588,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[estimated_hours]"
+   ],
+   "status": 302,
+   "ms": 52
+  },
+  {
+   "t": 1794426616.783,
+   "method": "POST",
+   "path": "/issues/63",
+   "save": false,
+   "status": 302,
+   "ms": 29
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.3,
+  "end": 7.4,
+  "waited_s": 0
+ }
+}

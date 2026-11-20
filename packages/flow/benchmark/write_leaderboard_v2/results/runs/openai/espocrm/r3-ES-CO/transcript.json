@@ -1,0 +1,898 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7ea26f487d291750a92b9380ff2",
+     "call_id": "call_XQQzNERVYiwvGNwbCnHDgNdJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7ee685487d2af5e55b86da249cf",
+     "call_id": "call_C8hU5ojxb2om24qxDOp175y6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7f2a89487d28c7bed4f32b420f0",
+     "call_id": "call_RSCWCxNMw1JJ7lBVJiVjuHnd",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7f57d6487d2a37456b83dca0bbf",
+     "call_id": "call_cYQ30bpwovRyVdothqk53LZ7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1188,
+       "y": 63
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7f99df087d2b012dff9f848dc19",
+     "call_id": "call_OfbbZaJNvBCbUGNRHZNcWn3l",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d7fd1d0087d2ae2a2f250d468397",
+     "call_id": "call_FAAQl0LXowq7Wf8hca3qxknG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 216,
+       "y": 231
+      },
+      {
+       "text": "Juniper Florists",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 570,
+       "y": 229
+      },
+      {
+       "text": "juniper.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 205,
+       "y": 694
+      },
+      {
+       "text": "Weekly lobby flowers.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d801605887d29f2d3d144b3f5f49",
+     "call_id": "call_iV8XLcpCZAhZO8V57B86hoJA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 313,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d8049d2487d2a597bcec3304af7f",
+     "call_id": "call_XsAxyLa4ztabPlOP5c1b57yk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d808618c87d286b9e80d6d9ea360",
+     "call_id": "call_5G6D8r0jBGnKfzNtitn1CSBk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "SPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d80afbc087d295cab4be0b60a96e",
+     "call_id": "call_lGHwUEWWT6l4IU27boBMnXyS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d80e0b0087d281a9793e3a519363",
+     "call_id": "call_lQAG9bu6wtUSyW6Fv44oVhjE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 126,
+       "y": 682
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 824,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d8113dd487d2ad3b2cbd20b051b3",
+     "call_id": "call_0gaBcSbsSvFfUJm8NbXDpJz4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 824,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d8149af487d2af6525dc872f2f58",
+     "call_id": "call_kzoj7wiUKwXwcbDwQn5iTyYO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 617,
+       "type": "scroll",
+       "x": 679,
+       "y": 529
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d817ac3887d28cf1710caae4610b",
+     "call_id": "call_uXVsn0ZKlm5cx4c8SGPkKsn0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 379,
+       "type": "scroll",
+       "x": 684,
+       "y": 523
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d81d599087d28ce063e55a0f866e",
+     "call_id": "call_tDfinVlEuQmervO5zB4fkBRw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 500,
+       "y": 368
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 111
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d8213b4887d2a5e8359d2b136c68",
+     "call_id": "call_zEDfKYflWNoaMf9dIBczRUEM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d82593b887d298aa1d396a972975",
+     "call_id": "call_pbEE0fcEQfVCKcfTpTIa7ZKy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d828cc0887d2aae12cfa9901dad6",
+     "call_id": "call_v5p755FT18A4luNJsIxY1SmZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d82cb9cc87d2b584423fc22f2aed",
+     "call_id": "call_x8ZEn5bTG439SU9JYYxMjf4f",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d830b2a087d2a734a325454a3238",
+     "call_id": "call_aKZGgIwbfDE9y0kcjVArXAnK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 122,
+       "y": 57
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d833828087d282d83dbac6711616",
+     "call_id": "call_rtRtyvn9QP3bY3Yae3VNNMYZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d836edcc87d299263daa5724abbe",
+     "call_id": "call_Eqxq6wPc7I14cpd8GOfxKH9F",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 146,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d83aa2bc87d2aecda29c5fd34f19",
+     "call_id": "call_CTJZPmoOIzCWdslzA9GcgcRH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 144,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d83e64d087d280ef313c1932fe44",
+     "call_id": "call_eKUGJx5xZD8mqP7UI3Q00NBj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d841d45487d2af5e4fe56b536eb5",
+     "call_id": "call_RTMUOY1CtNngwf4VT5RLNytG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0cef5551d913ade5016af4d848a9f487d29bdaeb9c19240903",
+     "call_id": "call_Z7cfNl9UL3pA7STX4IcIczFp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 150,
+       "y": 231
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Juniper Florists with the five specified values; all other fields were left unchanged.\nRESULT: DONE Juniper Florists",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1188,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 216,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Juniper Florists"
+  },
+  {
+   "a": "click",
+   "x": 570,
+   "y": 229,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "juniper.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 205,
+   "y": 694,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Weekly lobby flowers."
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 313,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "SPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 126,
+   "y": 682,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 824,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 824,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 679,
+   "y": 529,
+   "dx": 0,
+   "dy": 617
+  },
+  {
+   "a": "scroll",
+   "x": 684,
+   "y": 523,
+   "dx": 0,
+   "dy": 379
+  },
+  {
+   "a": "click",
+   "x": 500,
+   "y": 368,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "l"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 122,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 146,
+   "y": 250
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 250,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 250,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 150,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 41,
+   "usd": 0.004818,
+   "cached": 0
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3418
+  },
+  {
+   "in": 5905,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4674
+  },
+  {
+   "in": 7162,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5902
+  },
+  {
+   "in": 8390,
+   "out": 112,
+   "usd": 0.005014,
+   "cached": 7159
+  },
+  {
+   "in": 9762,
+   "out": 31,
+   "usd": 0.004737,
+   "cached": 8387
+  },
+  {
+   "in": 11018,
+   "out": 18,
+   "usd": 0.00465,
+   "cached": 9759
+  },
+  {
+   "in": 12246,
+   "out": 24,
+   "usd": 0.004905,
+   "cached": 11015
+  },
+  {
+   "in": 13491,
+   "out": 31,
+   "usd": 0.005255,
+   "cached": 12243
+  },
+  {
+   "in": 14747,
+   "out": 47,
+   "usd": 0.005686,
+   "cached": 13488
+  },
+  {
+   "in": 16027,
+   "out": 31,
+   "usd": 0.005825,
+   "cached": 14744
+  },
+  {
+   "in": 17283,
+   "out": 37,
+   "usd": 0.006093,
+   "cached": 16024
+  },
+  {
+   "in": 18545,
+   "out": 37,
+   "usd": 0.006356,
+   "cached": 17280
+  },
+  {
+   "in": 19807,
+   "out": 47,
+   "usd": 0.006708,
+   "cached": 18542
+  },
+  {
+   "in": 21087,
+   "out": 15,
+   "usd": 0.006677,
+   "cached": 19804
+  },
+  {
+   "in": 22315,
+   "out": 26,
+   "usd": 0.006939,
+   "cached": 21084
+  },
+  {
+   "in": 23562,
+   "out": 47,
+   "usd": 0.007432,
+   "cached": 22312
+  },
+  {
+   "in": 24830,
+   "out": 45,
+   "usd": 0.007704,
+   "cached": 23559
+  },
+  {
+   "in": 26096,
+   "out": 46,
+   "usd": 0.007963,
+   "cached": 24827
+  },
+  {
+   "in": 27367,
+   "out": 15,
+   "usd": 0.007917,
+   "cached": 26093
+  },
+  {
+   "in": 28595,
+   "out": 27,
+   "usd": 0.008205,
+   "cached": 27364
+  },
+  {
+   "in": 29847,
+   "out": 66,
+   "usd": 0.008888,
+   "cached": 28592
+  },
+  {
+   "in": 31138,
+   "out": 50,
+   "usd": 0.009057,
+   "cached": 29844
+  },
+  {
+   "in": 32413,
+   "out": 31,
+   "usd": 0.009093,
+   "cached": 31135
+  },
+  {
+   "in": 33669,
+   "out": 119,
+   "usd": 0.01019,
+   "cached": 32410
+  },
+  {
+   "in": 35013,
+   "out": 109,
+   "usd": 0.010517,
+   "cached": 33666
+  }
+ ]
+}

@@ -1,0 +1,61 @@
+{
+ "id": "DO-C2",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 39.5,
+ "cost_usd": 0.051838,
+ "claim": {
+  "status": "done",
+  "id": "/contact/card.php?id=4",
+  "note": "RESULT: DONE /contact/card.php?id=4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE /contact/card.php?id=4",
+  "model_calls": 12,
+  "actions": 21,
+  "tokens_in": 110808,
+  "tokens_out": 648,
+  "end_url": "http://127.0.0.1:9851/contact/list.php?mode=common&contextpage=contactlist&begin=&userid=0&contactname=&type=&view=&search_no_email=-1&search_status=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "68"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427204.569,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794427220.629,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 12
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.9,
+  "end": 8.2,
+  "waited_s": 0
+ }
+}

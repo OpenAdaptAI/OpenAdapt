@@ -1,0 +1,152 @@
+{
+ "id": "P11",
+ "class": "refused_write",
+ "type": "patient",
+ "expect": "create",
+ "note": "The server refuses the create (503) and nothing lands.",
+ "agent_s": 58.1,
+ "cost_usd": 0.072487,
+ "claim": {
+  "status": "done",
+  "id": "Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5",
+  "note": "RESULT: DONE Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5",
+  "claim_line": true,
+  "final_text": "RESULT: DONE Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5",
+  "model_calls": 15,
+  "actions": 16,
+  "tokens_in": 169140,
+  "tokens_out": 850,
+  "end_url": "http://localhost:9841/Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5"
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "bf52b339-3ed0-4e0f-a6d3-8765c03d56c9",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T23:02:43+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "bf52b339-3ed0-4e0f-a6d3-8765c03d56c9",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T23:02:45+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.4,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/d12bfc2a-6357-45f7-b8ad-5c731f2dd3a5": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "refuse"
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.7,
+  "end": 7.2,
+  "waited_s": 0
+ }
+}

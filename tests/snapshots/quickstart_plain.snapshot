@@ -1,41 +1,49 @@
 OpenAdapt quickstart: show a task once, run it, then watch it catch a save that didn't happen.
 Synthetic data only. Files go to openadapt-quickstart
 
-1  Show it once · a demonstration in a synthetic clinic app, in a hidden browser
-   ✓ Click Open                               0.4s
-   ✓ Click New Encounter                      0.7s
-   ✓ Click Triage                             0.9s
-   ✓ Click Note                               1.1s
-   ✓ Type "Synthetic follow-up in two weeks"  1.3s
-   ✓ Click Save Encounter                     1.6s
-   Compiled into a program: 6 steps. 0.5s
+[1/5] ✓ Clinic app ready · synthetic data, on this computer
+[2/5] Show it once · a demonstration in a synthetic clinic app, in a hidden browser
+      ✓ Click Open                               0.4s
+      ✓ Click New Encounter                      0.7s
+      ✓ Click Triage                             0.9s
+      ✓ Click Note                               1.1s
+      ✓ Type "Synthetic follow-up in two weeks"  1.3s
+      ✓ Click Save Encounter                     1.6s
+[3/5] ✓ Turn it into a program · 6 steps, local-quickstart  0.0s
+[4/5] Run it on 5 new notes · all at once
+      1/5  Follow-up in two weeks             ✓ checked in the database  2.6s
+      2/5  Recheck blood pressure next month  ✓ checked in the database  2.7s
+      3/5  Refer to physical therapy          ✓ checked in the database  2.8s
+      4/5  Repeat labs before next visit      ✓ checked in the database  2.9s
+      5/5  No change to the care plan         ✓ checked in the database  3.0s
+      5 of 5 saved and checked · 0 AI calls · $0.00 · 0.5s
 
-2  Run it · the program on 5 new notes, all at once
-   1/5  Follow-up in two weeks             ✓ checked in the database  2.6s
-   2/5  Recheck blood pressure next month  ✓ checked in the database  2.7s
-   3/5  Refer to physical therapy          ✓ checked in the database  2.8s
-   4/5  Repeat labs before next visit      ✓ checked in the database  2.9s
-   5/5  No change to the care plan         ✓ checked in the database  3.0s
-   5 of 5 saved and checked · 0 AI calls · $0.00 · 0.5s
+✓ Saved and checked
+  The record, read back from the database:
+    ✓ patient_id  p1
+    ✓ type        Triage
+    ✓ note        "Follow-up in two weeks"
+  5 of 5 runs · 0 model calls · $0.00 · 0.5s
 
-3  Break it · the next save fails silently
-   The app will show its saved message. The database will reject the save.
-   What the screen showed:    "Encounter saved — Synthetic follow-up in two weeks"
-   What the database showed:  0 new records
-   A screen-trusting bot:     ✓ Done
-   OpenAdapt:                 ■ Stopped before reporting success  7.7s
-   Why: OpenAdapt reads the record back from the database after each save. It found nothing, so it stopped.
+[5/5] Break the next save
+      The app will show its saved message. The database will reject the save.
+      The screen:             "Encounter saved — Synthetic follow-up in two weeks"
+      The database:           0 new records
+      A screen-trusting bot:  ✓ Done
+      OpenAdapt:              ■ Stopped. Not marked done.  7.7s
+      Why: OpenAdapt reads the record back from the database after each save. It found nothing, so it stopped.
+      A save may still have gone through, so a person checks the record before anything is retried.
 
 The screen said "Encounter saved". The database had nothing. A bot that trusts the screen reports Done. OpenAdapt stopped.
 
-Receipt
-  Program    local-quickstart · 6 steps
-  Runs       5 of 5 saved and checked in the database
-  Cost       0 AI calls · $0.00 · 2.5s in all
-  Seal       seal-ed25519-0123456789abcdef · 6 reports signed
-Your Seal: openadapt-quickstart/run-1/seal.html
-See real Seals from OpenEMR runs: https://openadapt.ai/seals
-Check it: openadapt seal verify openadapt-quickstart
-Details: openadapt-quickstart, one REPORT.md per run; side-by-side page openadapt-quickstart/index.html
-Try it on your own app: openadapt flow record --backend web --url https://your-app.example --out my-task
-Give your agent this as a tool: openadapt agent serve --allow-run
+Your Seal: Signed
+  key seal-ed25519-0123456789abcdef · 6 reports signed
+  Open it: openadapt-quickstart/run-1/seal.html
+    checks the signature in your browser, offline; nothing is uploaded
+  Real Seals from OpenEMR runs: https://openadapt.ai/seals
+
+Next: Give your agent this task as a tool
+  claude mcp add openadapt -- openadapt agent serve --allow-run
+  Any other MCP client: openadapt agent serve --allow-run
+More next steps: openadapt quickstart --more
+Done in 2.5s. Reports: openadapt-quickstart, one REPORT.md per run; side by side: openadapt-quickstart/index.html

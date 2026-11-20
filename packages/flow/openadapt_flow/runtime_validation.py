@@ -58,6 +58,8 @@ SCHEMA = "openadapt.runtime-validation/v3"
 V2_SCHEMA = "openadapt.runtime-validation/v2"
 LEGACY_SCHEMA = "openadapt.runtime-validation/v1"
 TARGET_KINDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
+#: Remote-display targets, replayed from pixels only.
+PIXEL_TARGET_KINDS = ("rdp", "citrix")
 RISK_CLASSES = ("low", "consequential")
 _DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _NON_PUBLIC_SUFFIXES = (
@@ -310,8 +312,16 @@ def request_validation_challenge(
     token: Optional[str] = None,
     destination_kind: Optional[str] = None,
     trusted_hosts: Optional[list[str]] = None,
+    path: str = "/api/validation-challenges",
 ) -> dict[str, str]:
-    """Acquire a one-time, expiring validation challenge from Cloud."""
+    """Acquire a one-time, expiring validation challenge from Cloud.
+
+    ``path`` is the challenge route: the ingest-token route by default, or an
+    organization's API-key route (``/api/v1/org/{org}/validation-challenges``)
+    whose challenge is answered with an attestation MAC'd with that API key.
+    """
+    if not path.startswith("/") or "//" in path or "?" in path or "#" in path:
+        raise RuntimeValidationError("Validation challenge route is invalid")
     resolved_host = resolve_host(host)
     resolve_destination_policy(
         resolved_host,
@@ -321,7 +331,7 @@ def request_validation_challenge(
     resolved_token = resolve_token(token, host=resolved_host)
     try:
         response = httpx.post(
-            f"{resolved_host}/api/validation-challenges",
+            f"{resolved_host}{path}",
             headers=_auth_headers(resolved_token),
             timeout=_API_TIMEOUT,
             follow_redirects=False,
@@ -387,7 +397,9 @@ def create_runtime_validation_attestation(
 
     ``recording_derivative`` and ``bundle_derivative`` must both be reviewed,
     approved sanitized artifacts. The bundle scrub must preserve its
-    load-bearing bytes. Strict lint means zero findings; certification must
+    load-bearing bytes. Strict lint means no warn or error finding (info is
+    advice, as in ``openadapt-flow lint --strict``, except that
+    ``missing_identifier_crop`` blocks on an RDP or Citrix target); certification must
     pass the named policy; and ``run_dir/report.json`` must record a successful,
     non-halted replay of the same workflow.
     """
@@ -485,12 +497,56 @@ def create_runtime_validation_attestation(
             raise RuntimeValidationError(
                 "Compiler config does not match the bundle provenance"
             )
+    return _replay_attestation(
+        workflow=workflow,
+        policy=policy,
+        risk_class=risk_class,
+        run_dir=run_dir,
+        provenance=provenance,
+        source_recording_sha256=recording_approval["approved_derivative_sha256"],
+        bundle_sha256=bundle_approval["approved_derivative_sha256"],
+        target_kind=target_kind,
+        target_url=target_url,
+        allowed_hosts=allowed_hosts,
+        challenge=challenge,
+        environment=environment,
+        token=resolved_token,
+        template_required=True,
+    )
+
+
+def _replay_attestation(
+    *,
+    workflow: Workflow,
+    policy: Policy,
+    risk_class: str,
+    run_dir: Path,
+    provenance: Any,
+    source_recording_sha256: str,
+    bundle_sha256: str,
+    target_kind: Optional[str],
+    target_url: Optional[str],
+    allowed_hosts: Optional[list[str]],
+    challenge: dict[str, str],
+    environment: str,
+    token: str,
+    template_required: bool,
+) -> dict[str, Any]:
+    """Strict lint, certification and the replay report, signed for Cloud.
+
+    Shared by both attestation sources. ``template_required`` keeps the
+    production rule of :func:`create_runtime_validation_attestation`: a
+    standard or regulated replay needs a governed authorization template.
+    With ``template_required=False`` only a Standard replay without one is
+    attested as v2, and Cloud's own legacy policy decides whether it accepts
+    that; a Regulated replay is always refused without its template.
+    """
     lint_report = lint_workflow(
         workflow,
         require_current_risk_certification=True,
         certifying_policy=policy,
     )
-    if lint_report.findings:
+    if lint_report.blocking_findings(strict=True):
         counts = lint_report.counts()
         raise RuntimeValidationError(
             "Strict lint failed: "
@@ -581,6 +637,15 @@ def create_runtime_validation_attestation(
             f"run report target kind {report_target_kind!r}"
         )
     target_kind = report_target_kind
+    if target_kind in PIXEL_TARGET_KINDS and lint_report.blocking_findings(
+        strict=True, pixel_replay=True
+    ):
+        # On a remote display the identifier crop is the only pixel identity
+        # evidence, so its absence blocks even where it is advice elsewhere.
+        raise RuntimeValidationError(
+            "Strict lint failed: an identity-armed step has no pixel identifier "
+            f"crop, which a {target_kind} target needs (missing_identifier_crop)"
+        )
     execution = normalize_target_execution(target_kind, target_url, allowed_hosts)
     if target_kind == "web":
         if report.execution_origin != execution["target_origin"]:
@@ -599,12 +664,17 @@ def create_runtime_validation_attestation(
     # A production hosted activation must bind the sealed, independently
     # reproducible qualification authority.  ``Workflow.load`` already rejects
     # a template that does not reproduce from the exact sealed certification.
-    # Demo validation remains v2 so existing local tutorial workflows retain a
-    # compatible, explicitly non-production path.
+    # Without a template the attestation is v2: a demo replay, or (only when
+    # ``template_required`` is False, the admitted-program path) a Standard
+    # replay. A Regulated replay always needs the template. v2 does not state
+    # the execution profile (Cloud's v2 contract admits no extra field); the
+    # profile is in the replay report that ``replay.report_sha256`` binds.
     execution_profile = report.execution_profile
     template = provenance.governed_authorization_template
     governed_template_sha256: Optional[str] = None
-    if execution_profile in ("standard", "regulated"):
+    if execution_profile in ("standard", "regulated") and (
+        template is not None or template_required or execution_profile == "regulated"
+    ):
         if template is None:
             raise RuntimeValidationError(
                 "Standard and Regulated hosted activation requires an exact "
@@ -625,8 +695,8 @@ def create_runtime_validation_attestation(
         "target_kind": target_kind,
         "challenge_id": challenge["challenge_id"],
         "nonce": challenge["nonce"],
-        "source_recording_sha256": recording_approval["approved_derivative_sha256"],
-        "bundle_sha256": bundle_approval["approved_derivative_sha256"],
+        "source_recording_sha256": source_recording_sha256,
+        "bundle_sha256": bundle_sha256,
         "compiler": {
             "name": "openadapt-flow",
             "version": compiler_version or __version__,
@@ -655,8 +725,123 @@ def create_runtime_validation_attestation(
     }
     if governed_template_sha256 is not None:
         payload["governed_authorization_template_sha256"] = governed_template_sha256
-    payload["signature"] = _signature(payload, resolved_token)
+    payload["signature"] = _signature(payload, token)
     return payload
+
+
+def create_admitted_program_attestation(
+    *,
+    recording_source: Path,
+    recording_derivative: Path,
+    bundle_derivative: Path,
+    run_dir: Path,
+    policy_source: str,
+    environment: str,
+    target_url: Optional[str] = None,
+    host: Optional[str] = None,
+    token: Optional[str] = None,
+    challenge: Optional[dict[str, str]] = None,
+    destination_kind: Optional[str] = None,
+    trusted_hosts: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    """Attest an admitted program compiled from a local, unsanitized recording.
+
+    ``openadapt wrap`` compiles from the agent's own recording, so its bundle
+    carries no approved-recording provenance. Instead of that provenance this
+    binds the approved derivative of ``recording_source``, the recording the
+    program was compiled from: the derivative's source-tree hash must match
+    that recording. ``run_dir`` is the program's attended canary. Strict lint,
+    certification, and the VERIFIED, non-halted replay are checked exactly as
+    :func:`create_runtime_validation_attestation` checks them. The risk class
+    is derived from the program, never supplied.
+    """
+    from openadapt_flow.sanitized_artifact import source_tree_sha256
+
+    recording_source = Path(recording_source)
+    recording_derivative = Path(recording_derivative)
+    bundle_derivative = Path(bundle_derivative)
+    run_dir = Path(run_dir)
+    environment = environment.strip()
+    if not environment or len(environment) > 200:
+        raise RuntimeValidationError(
+            "Environment identifier must be non-empty and at most 200 characters"
+        )
+    resolved_host = resolve_host(host)
+    resolve_destination_policy(
+        resolved_host,
+        destination_kind=destination_kind,
+        trusted_hosts=trusted_hosts,
+    )
+    resolved_token = resolve_token(token, host=resolved_host)
+    try:
+        recording_manifest = load_and_verify_derivative(recording_derivative)
+        recording_approval = load_valid_approval(recording_derivative)
+    except SanitizationError as exc:
+        raise RuntimeValidationError(f"sanitized recording: {exc}") from exc
+    try:
+        bundle_manifest = load_and_verify_derivative(bundle_derivative)
+        bundle_approval = load_valid_approval(bundle_derivative)
+    except SanitizationError as exc:
+        raise RuntimeValidationError(f"sanitized bundle: {exc}") from exc
+    if recording_manifest.get("kind") != "recording":
+        raise RuntimeValidationError("Validation source must be a recording derivative")
+    if bundle_manifest.get("kind") != "bundle":
+        raise RuntimeValidationError("Validation target must be a bundle derivative")
+    if bundle_manifest.get("execution_semantics") != "preserved":
+        raise RuntimeValidationError(
+            "Bundle sanitization changed load-bearing bytes, so the uploaded "
+            "program would not be the one that was admitted"
+        )
+    if recording_manifest.get("source_tree_sha256") != source_tree_sha256(
+        recording_source
+    ):
+        raise RuntimeValidationError(
+            "The sanitized recording is not a copy of the recording this program "
+            "was compiled from"
+        )
+    workflow = Workflow.load(bundle_derivative)
+    try:
+        policy = load_policy(policy_source)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RuntimeValidationError(str(exc)) from exc
+    provenance = workflow.manifest.provenance if workflow.manifest else None
+    if provenance is None or not provenance.compiler_config_sha256:
+        raise RuntimeValidationError("Bundle has no compiler-configuration provenance")
+    if provenance.source_recording_sha256:
+        raise RuntimeValidationError(
+            "Bundle was compiled from an approved recording; attest it with "
+            "`openadapt-flow validate-hosted`"
+        )
+    try:
+        report_kind = RunReport.model_validate_json(
+            (run_dir / "report.json").read_bytes()
+        ).execution_target_kind
+    except (OSError, ValueError) as exc:
+        raise RuntimeValidationError(f"Cannot read a valid run report: {exc}") from exc
+    if challenge is None:
+        challenge = request_validation_challenge(
+            host=resolved_host,
+            token=resolved_token,
+            destination_kind=destination_kind,
+            trusted_hosts=trusted_hosts,
+        )
+    challenge = _validate_challenge(challenge)
+    return _replay_attestation(
+        workflow=workflow,
+        policy=policy,
+        risk_class=workflow_risk_class(workflow, certifying_policy=policy),
+        run_dir=run_dir,
+        provenance=provenance,
+        source_recording_sha256=recording_approval["approved_derivative_sha256"],
+        bundle_sha256=bundle_approval["approved_derivative_sha256"],
+        target_kind=None,
+        target_url=target_url if report_kind == "web" else None,
+        allowed_hosts=None,
+        challenge=challenge,
+        environment=environment,
+        token=resolved_token,
+        template_required=False,
+    )
 
 
 def verify_runtime_validation_attestation(

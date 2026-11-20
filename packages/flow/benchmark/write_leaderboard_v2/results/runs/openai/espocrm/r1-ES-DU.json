@@ -1,0 +1,60 @@
+{
+ "id": "ES-DU",
+ "app": "espocrm",
+ "class": "duplicate",
+ "note": "The save is delivered twice (the second without the app's duplicate check).",
+ "agent_s": 76.0,
+ "cost_usd": 0.137298,
+ "claim": {
+  "status": "done",
+  "id": "Granite Roofing",
+  "note": "RESULT: DONE Granite Roofing",
+  "claim_line": true,
+  "final_text": "Created Granite Roofing with the five specified values and left all other fields unchanged. The interface did not expose its record ID or page URL.\n\nRESULT: DONE Granite Roofing",
+  "model_calls": 23,
+  "actions": 27,
+  "tokens_in": 369732,
+  "tokens_out": 920,
+  "end_url": "http://127.0.0.1:9856/#Account"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "6af4c47ab4da601a3",
+   "6af4c47ac5174ee60"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425978.611,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "duplicate",
+    "replay_headers"
+   ],
+   "status": "200+200",
+   "ms": 140
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 14.5,
+  "end": 8.3,
+  "waited_s": 0
+ }
+}

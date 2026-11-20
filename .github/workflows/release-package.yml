@@ -1,5 +1,5 @@
 # Publish the packages under packages/ to PyPI: types, flow, agent, capture,
-# privacy and tray. Each publishes through its own GitHub environment and PyPI
+# privacy, tray and verify. Each publishes through its own GitHub environment and PyPI
 # Trusted Publisher:
 #
 #   package  PyPI project       environment
@@ -9,6 +9,7 @@
 #   capture  openadapt-capture  pypi-capture
 #   privacy  openadapt-privacy  pypi-privacy
 #   tray     openadapt-tray     pypi-tray
+#   verify   openadapt-verify   pypi-verify
 #
 # One release pattern, Desktop's (desktop-release.yml): merging a reviewed
 # version bump is the authorization. A run starts after each Packages run on
@@ -17,7 +18,8 @@
 # when the newest commit on main that changed it has a green push run with the
 # package's jobs run and passed, its version is new on PyPI and higher than
 # every version there, no tag names it yet, and its CHANGELOG.md starts with
-# exactly that version. Each package's environment protection still gates its
+# exactly that version, and PyPI already serves the lower bound of every
+# package here it depends on (verify waits for flow 3). Each package's environment protection still gates its
 # upload. The release builds main's tip, where the package is unchanged since
 # that commit. openadapt-desktop is not here: desktop-release.yml publishes its
 # wheel, sdist and native installers as one release.
@@ -58,7 +60,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, flow, types, agent, capture, privacy, tray]
+        options: [all, flow, types, agent, capture, privacy, tray, verify]
       resume:
         description: "Publish the GitHub release of a version PyPI serves and a tag names"
         required: false
@@ -174,6 +176,13 @@ jobs:
             # that carry only the public source boundary.
             python packages/capture/scripts/check_changelog.py --skip-tags
             python packages/capture/scripts/verify_distribution.py dist/*
+          fi
+          if [ "$PACKAGE" = verify ]; then
+            # The distribution and source-boundary checks packages.yml runs on
+            # a uv build, here on the archives the publish job uploads.
+            (cd packages/verify \
+              && python scripts/check_distribution.py --dist ../../dist \
+              && python ../../scripts/check_source_boundary.py --repo OpenAdapt --root ../.. --dist ../../dist)
           fi
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

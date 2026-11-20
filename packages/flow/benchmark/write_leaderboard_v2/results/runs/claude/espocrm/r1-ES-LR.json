@@ -1,0 +1,56 @@
+{
+ "id": "ES-LR",
+ "app": "espocrm",
+ "class": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "agent_s": 66.6,
+ "cost_usd": 0.177034,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Heron Print Works\" exists in Accounts (record id not visible in this browser)",
+  "note": "RESULT: DONE Account \"Heron Print Works\" exists in Accounts (record id not visible in this browser)",
+  "claim_line": true,
+  "final_text": "The account Heron Print Works now exists with the requested values: website heron.example.invalid, type Customer, industry Manufacturing, and description \"Labels and packaging.\" All other fields are empty. The first save showed a 504 error, but the record had been created anyway. I checked the list before retrying, so there is only one Heron Print Works. The browser shows no address bar, so I couldn't read the record's id or URL. It is the first row in the Accounts list.\n\nRESULT: DONE Account \"Heron Print Works\" exists in Accounts (record id not visible in this browser)",
+  "model_calls": 19,
+  "actions": 41,
+  "tokens_in": 377191,
+  "tokens_out": 2446,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c4c6e5cca08e3"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c4c6e5cca08e3"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426054.807,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "drop_response"
+   ],
+   "status": "200->504",
+   "ms": 76
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.3,
+  "end": 6.2,
+  "waited_s": 0
+ }
+}

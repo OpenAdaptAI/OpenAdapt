@@ -1,1 +1,1 @@
-Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles.
+Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles, public cards.

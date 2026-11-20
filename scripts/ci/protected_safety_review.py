@@ -619,7 +619,16 @@ def _workflow_provenance_errors(
     event_name: str | None,
     workflow_attempt: str | None,
     workflow_sha: str | None,
+    run_head_sha: str | None,
 ) -> list[str]:
+    """Bind a workflow run record to the execution that names it.
+
+    ``run_head_sha`` is the commit GitHub must have recorded as the run's
+    ``head_sha``. For ``issue_comment`` and ``merge_group`` that is
+    ``GITHUB_SHA``. For ``pull_request_target`` GitHub records the pull request
+    head there, while ``GITHUB_SHA`` is a base-branch commit, so the caller
+    passes the event's pull request head instead.
+    """
     if workflow_run is None:
         return []
     errors: list[str] = []
@@ -640,7 +649,11 @@ def _workflow_provenance_errors(
             expected_attempt = -1
         if workflow_run.get("run_attempt") != expected_attempt:
             errors.append("workflow run attempt does not match this execution")
-    if workflow_sha and workflow_run.get("head_sha") != workflow_sha:
+    if not isinstance(run_head_sha, str) or not SHA.fullmatch(run_head_sha):
+        errors.append(
+            "triggering event SHA for the workflow run is missing or malformed"
+        )
+    elif workflow_run.get("head_sha") != run_head_sha:
         errors.append("workflow run SHA does not match the triggering event SHA")
     return errors
 
@@ -793,6 +806,7 @@ def _passed_pr_head_verdict(
         event_name=event_name,
         workflow_attempt=attempt,
         workflow_sha=source_sha if isinstance(source_sha, str) else None,
+        run_head_sha=source_sha if isinstance(source_sha, str) else None,
     )
     if isinstance(source_sha, str) and isinstance(main_sha, str):
         errors.extend(
@@ -855,6 +869,11 @@ def run(
                     event_name=event_name,
                     workflow_attempt=workflow_attempt,
                     workflow_sha=workflow_sha,
+                    run_head_sha=(
+                        head_sha
+                        if event_name == "pull_request_target"
+                        else workflow_sha
+                    ),
                 )
             )
         if event.get("repository", {}).get("full_name", REPOSITORY) != REPOSITORY:

@@ -1,0 +1,352 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4ccd6da1487d285125a843bb82d22",
+     "call_id": "call_gMOiuU9V8Pqk8cxjdkcl4ieE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4ccda1f0c87d29557bf842b9a55f7",
+     "call_id": "call_PKvbj7MNyQBiRD5Ubfc7nKwL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4ccdc3ce887d2a1aca7d4fddc4595",
+     "call_id": "call_TYZh22JJN3Y0IwybWEcmnQnp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 54,
+       "y": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4ccde577887d293e94befae692df2",
+     "call_id": "call_V5KU5Jl7JiS7VMCi6THnSxpj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 244,
+       "y": 177
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4cce09c5c87d29f8c4bb10b8dd81c",
+     "call_id": "call_5FgRvGhEwRoizSlNQQDjn0HN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 182
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4cce3130887d2bfbd1362060e3acc",
+     "call_id": "call_SnEinnpaU0ohKLgEIJ65fsHD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 334,
+       "y": 216
+      },
+      {
+       "text": "Order toner for floor 3",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 340,
+       "y": 325
+      },
+      {
+       "text": "Two black cartridges.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 310,
+       "y": 488
+      },
+      {
+       "keys": [
+        "l"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 851,
+       "y": 557
+      },
+      {
+       "text": "0.5",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c0815d28d30ace9016af4cce67d7887d2bae9ccfd35b12de6",
+     "call_id": "call_JMjGDMGj2Vly3RPyG1DjFcaP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Redmine returned \u201cService Unavailable\u201d; the issue could not be created.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 54,
+   "y": 120,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 244,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 182,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 334,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Order toner for floor 3"
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 325,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two black cartridges."
+  },
+  {
+   "a": "click",
+   "x": 310,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 851,
+   "y": 557,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2216,
+   "out": 22,
+   "usd": 0.000669,
+   "cached": 2213
+  },
+  {
+   "in": 3433,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3430
+  },
+  {
+   "in": 4689,
+   "out": 31,
+   "usd": 0.001253,
+   "cached": 4686
+  },
+  {
+   "in": 5945,
+   "out": 31,
+   "usd": 0.003765,
+   "cached": 4686
+  },
+  {
+   "in": 7201,
+   "out": 49,
+   "usd": 0.004196,
+   "cached": 5942
+  },
+  {
+   "in": 8483,
+   "out": 131,
+   "usd": 0.00532,
+   "cached": 7198
+  },
+  {
+   "in": 9882,
+   "out": 26,
+   "usd": 0.00476,
+   "cached": 8480
+  },
+  {
+   "in": 11129,
+   "out": 33,
+   "usd": 0.004806,
+   "cached": 9879
+  }
+ ]
+}

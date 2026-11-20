@@ -1,0 +1,61 @@
+{
+ "id": "RM-C1",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 19.3,
+ "cost_usd": 0.028257,
+ "claim": {
+  "status": "done",
+  "id": "85",
+  "note": "RESULT: DONE 85",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 85",
+  "model_calls": 8,
+  "actions": 20,
+  "tokens_in": 53212,
+  "tokens_out": 363,
+  "end_url": "http://127.0.0.1:9861/issues/85"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "85"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427558.897,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 11
+  },
+  {
+   "t": 1794427576.843,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 38
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 10.1,
+  "end": 11.0,
+  "waited_s": 0
+ }
+}

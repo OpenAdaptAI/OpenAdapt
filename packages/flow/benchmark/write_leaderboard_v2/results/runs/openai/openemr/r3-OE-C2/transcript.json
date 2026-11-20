@@ -1,0 +1,724 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3adc79487d28356c00b8714a670",
+     "call_id": "call_3KsbpyYiHjMXnIQ7pNQjVOSc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 806,
+       "y": 701
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 405,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3b070b487d28bca7a1d7ead31ad",
+     "call_id": "call_3DnTgFoP1xeiz6V5eUzqAxTK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3b306fc87d28455c666c991c6ca",
+     "call_id": "call_C767zc9lcCvea3kMzlgHnGKw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 429,
+       "y": 67
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3b6fb7487d28563733ab33d7314",
+     "call_id": "call_706yfxaDtFXKj66TzFJT9nZ2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 439,
+       "y": 317
+      },
+      {
+       "text": "Lucia",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 662,
+       "y": 317
+      },
+      {
+       "text": "Ferreira",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 417,
+       "y": 431
+      },
+      {
+       "text": "1984-11-03",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1024,
+       "y": 467
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3b9a84087d286e2f97c5a9d1e26",
+     "call_id": "call_ssvFOL7aZM1QivWOi6XKgM2Z",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 548,
+       "type": "scroll",
+       "x": 1185,
+       "y": 695
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3bd37fc87d2ac0b821a1548cf00",
+     "call_id": "call_Iw2FpVZlY2phOj6BUI3sYFef",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 191,
+       "y": 463
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3bf75f887d28d854dd33cf9e3ee",
+     "call_id": "call_szUbQQouwlqT2RoH05umOjF8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3c1e1c487d2b51cc45b01a2bb76",
+     "call_id": "call_s3EYG57KdLYvj4hBcJ2El587",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 468,
+       "y": 521
+      },
+      {
+       "text": "18 Pine Avenue",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 449,
+       "y": 553
+      },
+      {
+       "text": "Springfield",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 418,
+       "y": 593
+      },
+      {
+       "text": "01108",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1006,
+       "y": 555
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3c4dd0087d29b38bcc7b973fbbc",
+     "call_id": "call_Y53N4MdmqKXhHZOTKfWyPsJG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 460,
+       "y": 707
+      },
+      {
+       "text": "413-555-0173",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1018,
+       "y": 742
+      },
+      {
+       "text": "l.ferreira@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3c8ab3487d2bae26a09b0970693",
+     "call_id": "call_44JIiOQ0x1aSWj8i0wcrU33c",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 563,
+       "type": "scroll",
+       "x": 1193,
+       "y": 695
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3cb606087d29b366eb007703961",
+     "call_id": "call_hNZjyHnp1bpZGUTmn9x9raaW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 281,
+       "y": 773
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3ce679487d28daeda8624bfdccd",
+     "call_id": "call_h6gFFLTHSOWawH9fUcQtqicT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3d10fa887d2a865254a926d08f2",
+     "call_id": "call_scAukk4vweinOqafxaDHKMv7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3d57c7087d2b2d48c0f4d041a19",
+     "call_id": "call_rW9G3CkzXJcelnvS5KiLl5FY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 284,
+       "y": 771
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_097f2e1145a16604016af4d3d933f887d2ba7c20ffe60fccbc",
+     "call_id": "call_SmXDT78Q6XhLYGfQk7lvL4sN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": -1298,
+       "type": "scroll",
+       "x": 1188,
+       "y": 350
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE OpenEMR requires Birth Sex to create the patient; that field was not supplied and must remain unchanged.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 701,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 405,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 429,
+   "y": 67,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 439,
+   "y": 317,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Lucia"
+  },
+  {
+   "a": "click",
+   "x": 662,
+   "y": 317,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Ferreira"
+  },
+  {
+   "a": "click",
+   "x": 417,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1984-11-03"
+  },
+  {
+   "a": "click",
+   "x": 1024,
+   "y": 467,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 1185,
+   "y": 695,
+   "dx": 0,
+   "dy": 548
+  },
+  {
+   "a": "click",
+   "x": 191,
+   "y": 463,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 468,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "18 Pine Avenue"
+  },
+  {
+   "a": "click",
+   "x": 449,
+   "y": 553,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 418,
+   "y": 593,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01108"
+  },
+  {
+   "a": "click",
+   "x": 1006,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 460,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0173"
+  },
+  {
+   "a": "click",
+   "x": 1018,
+   "y": 742,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "l.ferreira@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1193,
+   "y": 695,
+   "dx": 0,
+   "dy": 563
+  },
+  {
+   "a": "click",
+   "x": 281,
+   "y": 773,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 771,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 1188,
+   "y": 350,
+   "dx": 0,
+   "dy": -1298
+  }
+ ],
+ "usage": [
+  {
+   "in": 2247,
+   "out": 47,
+   "usd": 0.004964,
+   "cached": 0
+  },
+  {
+   "in": 3527,
+   "out": 18,
+   "usd": 0.003195,
+   "cached": 2244
+  },
+  {
+   "in": 4755,
+   "out": 31,
+   "usd": 0.003477,
+   "cached": 3524
+  },
+  {
+   "in": 6011,
+   "out": 129,
+   "usd": 0.004758,
+   "cached": 4752
+  },
+  {
+   "in": 7409,
+   "out": 38,
+   "usd": 0.004384,
+   "cached": 6008
+  },
+  {
+   "in": 8672,
+   "out": 31,
+   "usd": 0.004323,
+   "cached": 7406
+  },
+  {
+   "in": 9928,
+   "out": 15,
+   "usd": 0.004402,
+   "cached": 8669
+  },
+  {
+   "in": 11156,
+   "out": 117,
+   "usd": 0.005617,
+   "cached": 9925
+  },
+  {
+   "in": 12538,
+   "out": 101,
+   "usd": 0.006011,
+   "cached": 11153
+  },
+  {
+   "in": 13892,
+   "out": 38,
+   "usd": 0.005601,
+   "cached": 12535
+  },
+  {
+   "in": 15155,
+   "out": 31,
+   "usd": 0.00562,
+   "cached": 13889
+  },
+  {
+   "in": 16411,
+   "out": 15,
+   "usd": 0.005698,
+   "cached": 15152
+  },
+  {
+   "in": 17639,
+   "out": 15,
+   "usd": 0.005894,
+   "cached": 16408
+  },
+  {
+   "in": 18867,
+   "out": 51,
+   "usd": 0.006499,
+   "cached": 17636
+  },
+  {
+   "in": 20147,
+   "out": 40,
+   "usd": 0.006739,
+   "cached": 18864
+  },
+  {
+   "in": 21412,
+   "out": 44,
+   "usd": 0.007005,
+   "cached": 20144
+  }
+ ]
+}

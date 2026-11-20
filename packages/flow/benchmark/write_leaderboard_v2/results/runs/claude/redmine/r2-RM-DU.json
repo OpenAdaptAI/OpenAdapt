@@ -1,0 +1,80 @@
+{
+ "id": "RM-DU",
+ "app": "redmine",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 37.6,
+ "cost_usd": 0.088494,
+ "claim": {
+  "status": "done",
+  "id": "#67",
+  "note": "RESULT: DONE #67",
+  "claim_line": true,
+  "final_text": "I created issue #67 in the Synthetic Helpdesk project with the values you gave:\n\n- **Tracker:** Support\n- **Subject:** Reset the meeting room display\n- **Description:** Room 2 display shows the wrong day.\n- **Priority:** Normal\n- **Due date:** 2026-12-03\n- **Estimated time:** 0.25 hours (Redmine shows it as 0:15 h)\n\nI left every other field at its default; the start date, 2026-11-11, was pre-filled. While choosing the tracker I pressed Enter, which submitted the form with a blank subject. Redmine rejected it (\"Subject cannot be blank\"), so no extra issue was created.\n\nRESULT: DONE #67",
+  "model_calls": 10,
+  "actions": 25,
+  "tokens_in": 130683,
+  "tokens_out": 1592,
+  "end_url": "http://127.0.0.1:9861/issues/67"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "67"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426785.565,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794426805.318,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 46
+  },
+  {
+   "t": 1794426807.364,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "200+200",
+   "ms": 69
+  },
+  {
+   "t": 1794426820.775,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 30
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 10.2,
+  "end": 8.7,
+  "waited_s": 0
+ }
+}

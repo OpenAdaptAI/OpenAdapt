@@ -1,0 +1,458 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c73deb9487d28f7b37dbfa744ce6",
+     "call_id": "call_aUrrdz3NHakBorZZqMLODx0q",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c740916c87d294867e960946d82c",
+     "call_id": "call_ZR3lv57hN4OizykW1RyywKmJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 114,
+       "y": 29
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c7432a7c87d2802e1665f70ba2f3",
+     "call_id": "call_CuLtuoLMgks0dcMDsxSCHsr4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 105,
+       "y": 372
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c7459dd487d2a92e8cc3225131bb",
+     "call_id": "call_EMlrrABQSC8XBEnICUWhIR9A",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Kim",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 198
+      },
+      {
+       "text": "Jiwoo",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 656,
+       "y": 298
+      },
+      {
+       "text": "Logistics planner",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 675,
+       "y": 475
+      },
+      {
+       "text": "555-0198",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 671,
+       "y": 543
+      },
+      {
+       "text": "j.kim@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 463,
+       "type": "scroll",
+       "x": 1173,
+       "y": 658
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c749be6c87d2ab0f077d1e38cff5",
+     "call_id": "call_jxKDGBpi6K8L4zHsx4fBbm02",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 721,
+       "y": 760
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c74d1b8c87d290f6364f7a4c9dd8",
+     "call_id": "call_kCse32GTkQKXfxspYpFSSniX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c74fa54c87d2b7e63faca633f280",
+     "call_id": "call_DSq9kaXmOPWjaz61njGTEnRw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 406,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c7533c7487d2808d3c111e9ceb04",
+     "call_id": "call_rbPQatcf3LuzzMqJypdbaCAp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 406,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c75729c087d2956d035972c92862",
+     "call_id": "call_lU8MnzThDeccjM2NVPA3lrQJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 546,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c759f59487d2a62148e0c20b783c",
+     "call_id": "call_QAAJUuPjkbLjkN0iWhyYxI7C",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 546,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_065c452987b71d90016af4c75d4a9887d292012a2d97946f78",
+     "call_id": "call_Wd5nlH8vEWSzzlSmU8wG0oDc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 546,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE /contact/card.php",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 114,
+   "y": 29,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 105,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kim"
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Jiwoo"
+  },
+  {
+   "a": "click",
+   "x": 656,
+   "y": 298,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Logistics planner"
+  },
+  {
+   "a": "click",
+   "x": 675,
+   "y": 475,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0198"
+  },
+  {
+   "a": "click",
+   "x": 671,
+   "y": 543,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "j.kim@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1173,
+   "y": 658,
+   "dx": 0,
+   "dy": 463
+  },
+  {
+   "a": "click",
+   "x": 721,
+   "y": 760,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 406,
+   "y": 100
+  },
+  {
+   "a": "click",
+   "x": 406,
+   "y": 100,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 546,
+   "y": 158
+  },
+  {
+   "a": "click",
+   "x": 546,
+   "y": 158,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 546,
+   "y": 158,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 22,
+   "usd": 0.004656,
+   "cached": 0
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2215
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 152,
+   "usd": 0.004976,
+   "cached": 4688
+  },
+  {
+   "in": 7376,
+   "out": 31,
+   "usd": 0.004363,
+   "cached": 5944
+  },
+  {
+   "in": 8632,
+   "out": 38,
+   "usd": 0.004373,
+   "cached": 7373
+  },
+  {
+   "in": 9891,
+   "out": 39,
+   "usd": 0.00464,
+   "cached": 8629
+  },
+  {
+   "in": 11155,
+   "out": 60,
+   "usd": 0.005112,
+   "cached": 9888
+  },
+  {
+   "in": 12440,
+   "out": 61,
+   "usd": 0.005416,
+   "cached": 11152
+  },
+  {
+   "in": 13726,
+   "out": 43,
+   "usd": 0.005495,
+   "cached": 12437
+  },
+  {
+   "in": 14994,
+   "out": 45,
+   "usd": 0.005737,
+   "cached": 13723
+  },
+  {
+   "in": 16264,
+   "out": 91,
+   "usd": 0.006454,
+   "cached": 14991
+  }
+ ]
+}

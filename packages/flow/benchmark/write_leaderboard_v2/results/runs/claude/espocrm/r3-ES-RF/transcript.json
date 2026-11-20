@@ -1,0 +1,732 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check for existing duplicates first.",
+   "actions": [
+    {
+     "coordinate": [
+      344,
+      112
+     ]
+    },
+    {
+     "text": "Ironbark\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      62
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      232
+     ]
+    },
+    {
+     "text": "Ironbark Legal"
+    },
+    {
+     "coordinate": [
+      651,
+      232
+     ]
+    },
+    {
+     "text": "ironbark.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Two partners."
+    },
+    {
+     "coordinate": [
+      263,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry dropdown didn't open. Click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Scroll the list to find Legal.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      480
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Too far; scroll up a bit.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      480
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 4
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      494,
+      441
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      140,
+      854,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      94,
+      112
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The save returned Error 503, so I need to check whether the record was actually created before I retry.",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      126,
+      57
+     ],
+     "text": "ctrl"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      94,
+      112
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Saved. Let me verify no duplicates and get the URL.",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now check the list for duplicates from the earlier 503.",
+   "actions": [
+    {
+     "coordinate": [
+      126,
+      57
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Only one Ironbark Legal exists, so the first save attempt (Error 503) didn't create a duplicate. I need the record's id, so I'll open it.",
+   "actions": [
+    {
+     "coordinate": [
+      142,
+      251
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the account Ironbark Legal with website ironbark.example.invalid, type Customer, industry Legal and description \"Two partners.\" The record page shows those values, and every other field is empty.\n\nThe first save attempt returned Error 503. I retried and it went through. The Accounts list shows only one Ironbark Legal, so there is no duplicate. The id shown on the record page is 6af4adb25b769f4c2.\n\nRESULT: DONE 6af4adb25b769f4c2",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 344,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Ironbark\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Ironbark Legal"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "ironbark.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two partners."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 480,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 480,
+   "dx": 0,
+   "dy": -480
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 494,
+   "y": 441,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 126,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": [
+    "ctrl"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 126,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 142,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6136,
+   "out": 92,
+   "usd": 0.016258,
+   "cached": 0
+  },
+  {
+   "in": 7632,
+   "out": 83,
+   "usd": 0.005805,
+   "cached": 6132
+  },
+  {
+   "in": 9092,
+   "out": 141,
+   "usd": 0.00659,
+   "cached": 7630
+  },
+  {
+   "in": 10634,
+   "out": 99,
+   "usd": 0.006667,
+   "cached": 9090
+  },
+  {
+   "in": 12131,
+   "out": 75,
+   "usd": 0.006623,
+   "cached": 10632
+  },
+  {
+   "in": 13591,
+   "out": 231,
+   "usd": 0.00839,
+   "cached": 12129
+  },
+  {
+   "in": 15292,
+   "out": 129,
+   "usd": 0.008264,
+   "cached": 13589
+  },
+  {
+   "in": 16824,
+   "out": 123,
+   "usd": 0.008122,
+   "cached": 15290
+  },
+  {
+   "in": 18337,
+   "out": 140,
+   "usd": 0.008551,
+   "cached": 16822
+  },
+  {
+   "in": 19867,
+   "out": 140,
+   "usd": 0.008896,
+   "cached": 18335
+  },
+  {
+   "in": 21397,
+   "out": 112,
+   "usd": 0.008922,
+   "cached": 19865
+  },
+  {
+   "in": 22906,
+   "out": 106,
+   "usd": 0.009115,
+   "cached": 21395
+  },
+  {
+   "in": 24402,
+   "out": 415,
+   "usd": 0.012475,
+   "cached": 22904
+  },
+  {
+   "in": 26219,
+   "out": 146,
+   "usd": 0.010887,
+   "cached": 24400
+  },
+  {
+   "in": 27763,
+   "out": 75,
+   "usd": 0.009857,
+   "cached": 26217
+  },
+  {
+   "in": 29223,
+   "out": 100,
+   "usd": 0.010206,
+   "cached": 27761
+  },
+  {
+   "in": 30708,
+   "out": 125,
+   "usd": 0.010811,
+   "cached": 29221
+  },
+  {
+   "in": 32223,
+   "out": 83,
+   "usd": 0.010763,
+   "cached": 30706
+  },
+  {
+   "in": 33683,
+   "out": 174,
+   "usd": 0.011838,
+   "cached": 32221
+  },
+  {
+   "in": 35266,
+   "out": 98,
+   "usd": 0.011678,
+   "cached": 33681
+  },
+  {
+   "in": 36749,
+   "out": 156,
+   "usd": 0.012324,
+   "cached": 35264
+  }
+ ]
+}

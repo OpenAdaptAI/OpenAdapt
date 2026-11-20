@@ -1,0 +1,69 @@
+{
+ "id": "DO-CO",
+ "app": "dolibarr",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 42.9,
+ "cost_usd": 0.06397,
+ "claim": {
+  "status": "done",
+  "id": "Jiwoo Kim",
+  "note": "RESULT: DONE Jiwoo Kim",
+  "claim_line": true,
+  "final_text": "RESULT: DONE Jiwoo Kim",
+  "model_calls": 13,
+  "actions": 23,
+  "tokens_in": 128232,
+  "tokens_out": 666,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=80&save_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['62']"
+  ],
+  "new": [
+   "80"
+  ],
+  "deleted": [],
+  "changed": [
+   "62"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428603.813,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794428618.465,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 138
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.1,
+  "end": 8.3,
+  "waited_s": 0
+ }
+}
