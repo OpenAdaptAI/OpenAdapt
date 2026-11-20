@@ -35,12 +35,14 @@ def _load_stub():
     return module
 
 
-def _write_config(config_dir: Path, url: str, **extra: object) -> None:
+def _write_config(
+    config_dir: Path, url: str, *, token: str = TOKEN, **extra: object
+) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     lines = [
         "[connector]",
         f'control_plane_url = "{url}"',
-        f'token = "{TOKEN}"',
+        f'token = "{token}"',
         'org_id = "org_stub"',
         "poll_wait_s = 1",
     ]
@@ -316,10 +318,12 @@ def test_log_redacts_tokens_in_exception_and_stack_text(tmp_path):
     assert "RuntimeError: server echoed <redacted>" in text
 
 
+@pytest.mark.parametrize("token_length", [1, 64, 301, 1024])
 def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, token_length
 ):
     monkeypatch.setattr(ws, "_RETRY_START_S", 0.001)
+    token = "Q" * token_length
     stop = threading.Event()
     requests = []
 
@@ -327,10 +331,10 @@ def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
         requests.append(request.url.path)
         if len(requests) == 2:
             stop.set()
-        return httpx.Response(401, text=TOKEN)
+        return httpx.Response(401, json={"error": "Bearer " + token})
 
     config = tmp_path / "connector"
-    _write_config(config, "https://cp.example")
+    _write_config(config, "https://cp.example", token=token)
     logger, redactor = ws.build_logger(config, name="test.ws.revoked")
     assert (
         ws.serve(
@@ -344,7 +348,10 @@ def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
         == 0
     )
     assert requests == ["/api/connector/poll", "/api/connector/poll"]
-    assert TOKEN not in ws.log_path(config).read_text()
+    text = ws.log_path(config).read_text()
+    assert token not in text
+    assert token[:24] not in text
+    assert "ConnectorClientError" in text
 
 
 def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
