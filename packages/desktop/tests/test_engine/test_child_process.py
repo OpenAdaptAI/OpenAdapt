@@ -12,6 +12,10 @@ import pytest
 
 from openadapt_desktop import child_process
 
+# These tests check what the engine does with Python's real defaults, so they
+# opt out of the test session's own no-fork setup (see tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("python_subprocess_defaults")
+
 ENGINE = Path(child_process.__file__).resolve().parent
 STARTERS = {"run", "Popen", "call", "check_call", "check_output", "getoutput", "getstatusoutput"}
 OS_STARTERS = {"system", "popen", "fork", "forkpty", "posix_spawn", "posix_spawnp"}
@@ -76,7 +80,7 @@ def test_run_starts_a_child_without_forking(fork_refused: None) -> None:
     )
     assert done.returncode == 0 and done.stdout.strip() == "ready"
     with pytest.raises(AssertionError, match="would fork the engine"):
-        subprocess.run([sys.executable, "-c", "pass"])
+        subprocess.run([sys.executable, "-c", "pass"], close_fds=True)
 
 
 def test_popen_with_pipes_starts_a_child_without_forking(fork_refused: None) -> None:

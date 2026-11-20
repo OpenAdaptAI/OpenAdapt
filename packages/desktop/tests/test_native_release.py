@@ -49,9 +49,6 @@ from scripts.verify_native_release_download import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-# These tests run in the same pytest process as the release-intent tests, so
-# their git calls must not fork it either; see conftest.py.
-pytestmark = pytest.mark.usefixtures("no_subprocess_fork")
 # Desktop's workflows run from the OpenAdapt monorepo root.
 MONOREPO_WORKFLOWS = ROOT.parents[1] / ".github" / "workflows"
 WORKFLOW_FILES = {
