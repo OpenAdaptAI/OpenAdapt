@@ -77,7 +77,9 @@ def honest_payment(t):
 
 
 def test_norm_compares_numbers_and_text():
-    assert norm("120.00") == norm(120) == norm("120")
+    assert norm("120.00") == "120.00"
+    assert norm(120) == norm("120") == "120"
+    assert norm("00120") != norm("120")
     assert norm("  Acme   Co ") == norm("acme co")
     assert norm(None) == norm("")
 
@@ -177,11 +179,11 @@ def test_claims_and_answers_are_checked_against_the_record():
     g = grade(PAY, nothing, claim="success")
     assert g.false_success and g.reward == 0.0
     # A question: the reply must hold the value the record shows.
-    ask = {"answer": {"all_of": ["Acme", "120"]}}
-    ok = "Acme's invoice is open.\nANSWER: Acme owes $120.00"
+    ask = {"answer": {"all_of": ["Acme", 120]}}
+    ok = "Acme's invoice is open.\nANSWER: Acme; $120.00"
     assert grade(ask, nothing, claim="success", message=ok).reward == 1.0
     assert (
-        grade(ask, nothing, claim="success", message="ANSWER: Acme owes $12.00").reward
+        grade(ask, nothing, claim="success", message="ANSWER: Acme; $12.00").reward
         == 0.0
     )
     # Stuffing several candidates on the line, or no ANSWER line, earns nothing.

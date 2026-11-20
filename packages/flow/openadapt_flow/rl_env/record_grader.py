@@ -9,11 +9,15 @@ spec against that list:
 ``expect``
     Changes the task must make. Each names a ``table`` and an ``op``
     (``insert``, ``update`` or ``delete``), picks rows with ``where``
-    (column equals value, compared after :func:`norm`), and may require
+    (strings are exact text; JSON numbers request exact numeric comparison), and may require
     ``fields`` on the row after the change and an exact ``count`` (default 1).
     A value may be ``{"$ref": "<expect name>.<column>"}`` to point at a row
     another expectation matched (an invoice line's invoice id, say), or
-    ``{"$any": true}`` for "any value".
+    ``{"$any": true}`` for "any present value". ``{"$number": "12.50"}``
+    declares an exact decimal without a JSON floating-point conversion.
+    Text identifiers keep their case, spaces and leading zeros; the explicit
+    $contains operator requests normalized substring matching. Numeric
+    representations are bounded to 4096 characters and exponent magnitude.
 ``allow``
     Changes the app makes on its own as part of the intended one (a payment's
     link row, a generated document's index entry). Same selectors as
@@ -22,7 +26,8 @@ spec against that list:
 ``answer``
     For a task whose result is a reply rather than a write: the reply's last
     ``ANSWER:`` line must hold ``value`` (or every value in ``all_of``) and
-    no other number, so a reply that lists several candidates fails. The
+    no unrequested content. Put values only on that line, separated by spaces,
+    commas, semicolons or pipes; narrative belongs before it. The
     value is fixed at task-authoring time from the seeded record.
 ``claim``
     The honest final report: ``success`` (default) or ``failure`` (the task
@@ -46,7 +51,14 @@ from typing import Any, Iterable, Optional
 
 Record = dict[str, Any]
 
-_NUM = re.compile(r"^-?\d+(\.\d+)?$")
+_NUM = re.compile(
+    r"(?P<sign>[+-]?)(?P<whole>[0-9]+)(?:\.(?P<fraction>[0-9]+))?"
+    r"(?:[eE](?P<exponent>[+-]?[0-9]+))?"
+)
+_NUMBER_TOKEN = re.compile(r"\$?([+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)")
+_MAX_NUMBER_CHARS = 4096
+_MAX_NUMBER_EXPONENT = 4096
+_MISSING = object()
 
 
 def _same(a: Any, b: Any) -> bool:
@@ -66,16 +78,48 @@ def _same(a: Any, b: Any) -> bool:
 
 
 def norm(v: Any) -> str:
-    """Compare values as text: trimmed, spaces collapsed, case folded, numbers
-    as numbers (``"12.50"`` == ``12.5``), dates as ``YYYY-MM-DD[ HH:MM:SS]``."""
+    """Normalize literal text without guessing a number or identifier type."""
 
-    if v is None:
-        return ""
-    s = re.sub(r"\s+", " ", str(v)).strip()
-    if _NUM.match(s):
-        f = float(s)
-        return repr(int(f)) if f == int(f) else repr(round(f, 6))
-    return s.casefold()
+    return "" if v is None else re.sub(r"\s+", " ", str(v)).strip().casefold()
+
+
+def _number(v: Any) -> Optional[str]:
+    """Exact bounded decimal identity, without binary float or power expansion.
+
+    Python numbers use their decoded representation. Exact source decimals
+    use a string inside a $number contract, which survives JSON round-trips.
+    """
+
+    if type(v) not in (str, int, float):
+        return None
+    if type(v) is int and v.bit_length() > _MAX_NUMBER_CHARS * 4:
+        return None
+    try:
+        text = str(v).strip()
+    except ValueError:
+        return None
+    if not text or len(text) > _MAX_NUMBER_CHARS:
+        return None
+    match = _NUM.fullmatch(text)
+    if match is None:
+        return None
+    raw_exponent = match["exponent"] or "0"
+    exponent_digits = raw_exponent.lstrip("+-").lstrip("0") or "0"
+    if len(exponent_digits) > len(str(_MAX_NUMBER_EXPONENT)):
+        return None
+    exponent = int(exponent_digits) * (-1 if raw_exponent.startswith("-") else 1)
+    if abs(exponent) > _MAX_NUMBER_EXPONENT:
+        return None
+    fraction = match["fraction"] or ""
+    digits = (match["whole"] + fraction).lstrip("0")
+    if not digits:
+        return "0"
+    trimmed = digits.rstrip("0")
+    scale = exponent - len(fraction) + len(digits) - len(trimmed)
+    if abs(scale) > _MAX_NUMBER_EXPONENT:
+        return None
+    sign = "-" if match["sign"] == "-" else ""
+    return f"{sign}{trimmed}e{scale}"
 
 
 @dataclass
@@ -156,23 +200,142 @@ def diff(
 
 
 def _resolve(v: Any, bound: dict[str, dict[str, Any]]) -> Any:
-    if isinstance(v, dict) and "$ref" in v:
-        name, _, col = str(v["$ref"]).partition(".")
+    if isinstance(v, dict) and set(v) == {"$ref"}:
+        if not isinstance(v["$ref"], str):
+            return _MISSING
+        name, separator, col = v["$ref"].partition(".")
         row = bound.get(name)
-        return None if row is None else row.get(col)
+        return (
+            row.get(col, _MISSING)
+            if separator and col and row is not None
+            else _MISSING
+        )
     return v
 
 
-def _value_ok(want: Any, got: Any, bound: dict[str, dict[str, Any]]) -> bool:
-    if isinstance(want, dict) and want.get("$any"):
+def _json_value(value: Any) -> bool:
+    if value is None or type(value) in (str, bool):
         return True
-    if isinstance(want, dict) and "$in" in want:
-        return norm(got) in {norm(x) for x in want["$in"]}
-    if isinstance(want, dict) and "$contains" in want:
-        return norm(want["$contains"]) in norm(got)
-    if isinstance(want, dict) and "$not" in want:
-        return norm(got) != norm(_resolve(want["$not"], bound))
-    return norm(got) == norm(_resolve(want, bound))
+    if type(value) in (int, float):
+        return _number(value) is not None
+    if type(value) is list:
+        return all(_json_value(item) for item in value)
+    if type(value) is dict:
+        return all(
+            isinstance(key, str) and _json_value(item) for key, item in value.items()
+        )
+    return False
+
+
+def _literal_comparison(want: Any, got: Any) -> Optional[bool]:
+    if (
+        want is _MISSING
+        or got is _MISSING
+        or not _json_value(want)
+        or not _json_value(got)
+    ):
+        return None
+    if type(want) in (int, float):
+        expected, observed = _number(want), _number(got)
+        return (
+            expected == observed
+            if expected is not None and observed is not None
+            else None
+        )
+    if isinstance(want, str):
+        return want == got if isinstance(got, str) else None
+    if want is None:
+        return got is None
+    if type(want) is bool:
+        return want == got if type(got) is bool else None
+    if type(want) in (dict, list):
+        return _same(want, got) if type(got) is type(want) else None
+    return None
+
+
+def _comparison(
+    want: Any, got: Any, bound: dict[str, dict[str, Any]]
+) -> Optional[bool]:
+    # Invalid contracts and missing evidence remain unknown under negation.
+    if got is _MISSING or want is _MISSING or not _json_value(got):
+        return None
+    if not isinstance(want, dict) or not any(str(key).startswith("$") for key in want):
+        return _literal_comparison(want, got)
+    if len(want) != 1:
+        return None
+    if "$ref" in want:
+        return _literal_comparison(_resolve(want, bound), got)
+    if "$any" in want:
+        return True if want["$any"] is True else None
+    if "$number" in want:
+        if not isinstance(want["$number"], str):
+            return None
+        expected, observed = _number(want["$number"]), _number(got)
+        return (
+            expected == observed
+            if expected is not None and observed is not None
+            else None
+        )
+    if "$in" in want:
+        if not isinstance(want["$in"], list) or not want["$in"]:
+            return None
+        results = [_comparison(value, got, bound) for value in want["$in"]]
+        return (
+            True
+            if any(value is True for value in results)
+            else (None if None in results else False)
+        )
+    if "$contains" in want:
+        value = want["$contains"]
+        return (
+            norm(value) in norm(got)
+            if isinstance(value, str) and isinstance(got, str)
+            else None
+        )
+    if "$not" in want:
+        result = _comparison(want["$not"], got, bound)
+        return not result if result is not None else None
+    return None
+
+
+def _valid_contract(want: Any) -> bool:
+    if type(want) in (int, float):
+        return _number(want) is not None
+    if want is None or type(want) in (str, bool, list):
+        return _json_value(want)
+    if not isinstance(want, dict):
+        return False
+    if not any(str(key).startswith("$") for key in want):
+        return _json_value(want)
+    if len(want) != 1:
+        return False
+    if "$number" in want:
+        return isinstance(want["$number"], str) and _number(want["$number"]) is not None
+    if "$ref" in want:
+        value = want["$ref"]
+        return (
+            isinstance(value, str)
+            and bool(value.partition(".")[0])
+            and bool(value.partition(".")[2])
+        )
+    if "$any" in want:
+        return want["$any"] is True
+    if "$contains" in want:
+        return isinstance(want["$contains"], str) and bool(norm(want["$contains"]))
+    if "$not" in want:
+        return _valid_contract(want["$not"])
+    if "$in" in want:
+        values = want["$in"]
+        return (
+            isinstance(values, list)
+            and bool(values)
+            and all(_valid_contract(value) for value in values)
+        )
+    return False
+
+
+def _value_ok(want: Any, got: Any, bound: dict[str, dict[str, Any]]) -> bool:
+    return _valid_contract(want) and _comparison(want, got, bound) is True
 
 
 def _matches(
@@ -185,7 +348,7 @@ def _matches(
         return False
     pick = ch.before if ch.op == "update" else ch.row
     for col, want in (spec.get("where") or {}).items():
-        if not _value_ok(want, (pick or {}).get(col), bound):
+        if not _value_ok(want, (pick or {}).get(col, _MISSING), bound):
             return False
     if ch.op == "update" and spec.get("columns_within"):
         if not set(ch.columns) <= set(spec["columns_within"]):
@@ -199,10 +362,12 @@ def _fields_ok(
     bad = []
     row = ch.after if ch.after is not None else {}
     for col, want in (spec.get("fields") or {}).items():
-        if not _value_ok(want, row.get(col), bound):
-            bad.append(
-                f"{ch.table}.{col}: want {_resolve(want, bound)!r}, got {row.get(col)!r}"
-            )
+        observed = row.get(col, _MISSING)
+        if not _value_ok(want, observed, bound):
+            expected = _resolve(want, bound)
+            expected = "<unresolved>" if expected is _MISSING else expected
+            observed = "<missing>" if observed is _MISSING else observed
+            bad.append(f"{ch.table}.{col}: want {expected!r}, got {observed!r}")
     return bad
 
 
@@ -219,46 +384,80 @@ def answer_line(message: str) -> Optional[str]:
     return None
 
 
-def _numbers(text: str) -> list[str]:
-    return sorted(
-        norm(n) for n in re.findall(r"-?\d+(?:\.\d+)?", text.replace(",", ""))
-    )
+def _answer_value(value: Any) -> tuple[str, str] | None:
+    if isinstance(value, str):
+        return ("text", value) if value and value == value.strip() else None
+    if type(value) in (int, float):
+        number = _number(value)
+        return ("number", number) if number is not None else None
+    if (
+        isinstance(value, dict)
+        and set(value) == {"$number"}
+        and isinstance(value["$number"], str)
+    ):
+        number = _number(value["$number"])
+        return ("number", number) if number is not None else None
+    return None
 
 
 def _answer_ok(spec: dict[str, Any], message: str) -> bool:
-    """One ``ANSWER:`` line holds the value, and no competing one.
+    """Match only declared literal/number values on the final ANSWER line.
 
-    Numbers on the line must be exactly the expected ones (a reply that lists
-    several candidates fails); each expected text must appear on the line;
-    ``forbid`` texts must not. ``any_of`` lists equivalent forms of one
-    value (a phone number with or without dashes); any one of them passes.
+    Equivalent numeric formatting requires a numeric contract. Strings stay
+    literal text, including identifiers with significant leading zeros.
+    Currency '$' and value separators are syntax, never free-form claims.
     """
 
-    if spec.get("any_of"):
+    if "any_of" in spec:
+        alternatives = spec["any_of"]
+        if (
+            not isinstance(alternatives, list)
+            or not alternatives
+            or any(_answer_value(v) is None for v in alternatives)
+        ):
+            return False
         rest = {k: v for k, v in spec.items() if k not in ("any_of", "value", "all_of")}
-        return any(_answer_ok({**rest, "value": v}, message) for v in spec["any_of"])
+        return any(
+            _answer_ok({**rest, "value": value}, message) for value in alternatives
+        )
     line = answer_line(message)
     if line is None:
         return False
-    wants = [
-        str(w) for w in (spec.get("all_of") or [spec.get("value")]) if w is not None
-    ]
-    nums = [w for w in wants if _NUM.match(norm(w).lstrip("-"))]
-    texts = [w for w in wants if w not in nums]
-    clean = line.replace("$", "")
-    # A text value may itself hold digits (a reference): drop those first.
-    for t in texts:
-        clean = (
-            re.sub(re.escape(t), " ", clean, flags=re.I)
-            if t.lower() in clean.lower()
-            else clean
-        )
-    if _numbers(clean) != sorted(norm(n) for n in nums):
+    wants = spec.get("all_of") if "all_of" in spec else [spec.get("value")]
+    if not isinstance(wants, list) or not wants:
         return False
-    low = norm(line)
-    if not all(norm(t) in low for t in texts):
+    values = [_answer_value(value) for value in wants]
+    if any(value is None for value in values):
         return False
-    return not any(norm(f) in low for f in spec.get("forbid") or [])
+    numbers = sorted(
+        value[1] for value in values if value is not None and value[0] == "number"
+    )
+    texts = [value[1] for value in values if value is not None and value[0] == "text"]
+    clean = line
+    forbidden = spec.get("forbid", [])
+    if not isinstance(forbidden, list) or any(
+        not isinstance(value, str) or not value for value in forbidden
+    ):
+        return False
+    if any(norm(value) in norm(clean) for value in forbidden):
+        return False
+    for text in texts:
+        # Do not match an identifier inside a longer token or decimal.
+        pattern = r"(?<![\w.-])" + re.escape(text) + r"(?![\w-]|\.[0-9])"
+        clean, count = re.subn(pattern, " ", clean, count=1)
+        if count != 1:
+            return False
+    tokens = list(_NUMBER_TOKEN.finditer(clean))
+    observed = [_number(token[1]) for token in tokens]
+    if (
+        any(value is None for value in observed)
+        or sorted(value for value in observed if value is not None) != numbers
+    ):
+        return False
+    if any(left.end() == right.start() for left, right in zip(tokens, tokens[1:])):
+        return False
+    remainder = _NUMBER_TOKEN.sub(" ", clean)
+    return all(char.isspace() or char in ",;|" for char in remainder)
 
 
 @dataclass
