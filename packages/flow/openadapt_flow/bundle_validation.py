@@ -602,6 +602,14 @@ def derive_verified_workflow(
         if source._loaded_seal.encrypted
         else None,
     )
+    target = _updated_workflow(source, update)
+    transfer_verified_load_capability(source, target)
+    if _authored_contract_changed(source, target):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def _updated_workflow(source: "Workflow", update: dict[str, Any]) -> "Workflow":
     if type(update) is not dict or any(
         type(name) is not str
         or name not in type(source).model_fields
@@ -610,14 +618,52 @@ def derive_verified_workflow(
     ):
         raise BundleIntegrityError("derivation cannot replace source authority fields")
     payload = source.model_dump(mode="python")
-    payload.update(update)
-    target = type(source).model_validate(payload)
-    transfer_verified_load_capability(source, target)
+    payload.update(copy.deepcopy(update))
+    return type(source).model_validate(payload)
+
+
+def derive_authored_workflow(
+    source: "Workflow", *, update: dict[str, Any]
+) -> "Workflow":
+    """Author fresh content or a verified derivative without inheriting a decision.
+
+    A genuine new workflow needs no persisted source. Any loaded state or
+    persisted manifest requires the verified derivation path, including its asset and
+    capability checks. An unchecked load cannot become fresh by dropping its
+    manifest. Contract changes expire the previous certification and governed
+    authorization template; saving creates integrity, not qualification.
+    """
+    if (
+        (source.manifest is not None and source.manifest.content_digest)
+        or source._loaded_seal is not None
+        or source._unverified_load
+        or has_verified_load_capability(source)
+    ):
+        return derive_verified_workflow(source, update=update)
+    target = _updated_workflow(source, update)
+    if _authored_contract_changed(source, target):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def _authored_contract_changed(source: "Workflow", target: "Workflow") -> bool:
     if target.model_dump(exclude={"manifest"}) != source.model_dump(
         exclude={"manifest"}
     ):
-        invalidate_derivative_certification(target)
-    return target
+        return True
+    qualification = target.qualification
+    if qualification is not None and qualification.last_certification is not None:
+        from openadapt_flow.qualification import workflow_contract_digest
+
+        # Parsing an older source into today's explicit fields can change its
+        # certification contract even when the rendered model values compare
+        # equal. The existing contract projection decides; no fallback or old
+        # signature is attached to the new representation.
+        return (
+            workflow_contract_digest(target)[0]
+            != qualification.last_certification.workflow_contract_sha256
+        )
+    return False
 
 
 def invalidate_derivative_certification(workflow: "Workflow") -> None:

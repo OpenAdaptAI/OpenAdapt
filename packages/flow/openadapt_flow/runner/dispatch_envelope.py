@@ -11,7 +11,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -20,6 +20,34 @@ from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.runner.verify import VerifiedDispatch
+
+
+#: The run-authorization fields a managed dispatch must agree on with the
+#: authorization this runner builds for the same bundle and inputs.
+MANAGED_SAFETY_FIELDS = (
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "admitted_policy_name",
+    "admitted_policy_contract_sha256",
+    "execution_profile",
+    "minimum_effect_tier",
+    "qualified_effect_requirements",
+    "required_identity_step_ids",
+    "unverified_write_approvals",
+)
+
+
+def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
+    """Whether Cloud's run authorization disagrees with the local one.
+
+    Cloud may admit only API steps the bundle itself admits. An API step Cloud
+    doesn't name runs on the GUI, so naming fewer is allowed.
+    """
+
+    return any(
+        getattr(authorization, field) != getattr(local, field)
+        for field in MANAGED_SAFETY_FIELDS
+    ) or any(row not in local.api_steps for row in authorization.api_steps)
 
 
 class ManagedDispatchEnvelopeError(ValueError):
@@ -32,7 +60,12 @@ _BINDING_FACTORY = object()
 class ManagedDispatchBinding:
     """Opaque capability produced only after strict envelope validation."""
 
-    __slots__ = ("run_id", "authorization", "binding_sha256")
+    __slots__ = (
+        "run_id",
+        "authorization",
+        "binding_sha256",
+        "program_admission_authority",
+    )
 
     def __setattr__(self, name: str, value: object) -> None:
         if hasattr(self, name):
@@ -46,6 +79,7 @@ class ManagedDispatchBinding:
         run_id: str,
         authorization: GovernedRunAuthorization,
         binding_sha256: str,
+        program_admission_authority: object = None,
     ) -> None:
         if factory is not _BINDING_FACTORY:
             raise ManagedDispatchEnvelopeError("managed dispatch binding is internal")
@@ -56,6 +90,7 @@ class ManagedDispatchBinding:
         self.run_id = run_id
         self.authorization = authorization
         self.binding_sha256 = binding_sha256
+        self.program_admission_authority = program_admission_authority
 
 
 def with_runner_local_authorization(
@@ -90,7 +125,69 @@ def with_runner_local_authorization(
         run_id=binding.run_id,
         authorization=authorization,
         binding_sha256=binding.binding_sha256,
+        # A runner-local safety change needs a new verification, too. Never
+        # transfer an old program authority to a different authorization.
+        program_admission_authority=(
+            binding.program_admission_authority
+            if authorization == binding.authorization
+            else None
+        ),
     )
+
+
+def _refuse_dropped_authorization_fields(raw: Any, parsed: Any) -> None:
+    """Keep unknown restrictions from disappearing at the managed boundary.
+
+    Historical models retain their existing extra-field policy. Only this
+    live dispatch boundary is closed, including structured child models.
+    """
+    if isinstance(parsed, BaseModel) and isinstance(raw, dict):
+        config = dict(type(parsed).model_config)
+        by_name = config.get("validate_by_name", config.get("populate_by_name", False))
+        by_alias = config.get("validate_by_alias", True)
+        accepted: dict[str, str] = {}
+        field_keys: dict[str, list[str]] = {}
+        for name, field in type(parsed).model_fields.items():
+            alias = (
+                field.validation_alias
+                if field.validation_alias is not None
+                else field.alias
+            )
+            keys: list[str] = []
+            if alias is None or by_name:
+                keys.append(name)
+            if alias is not None:
+                if not isinstance(alias, str):
+                    raise ValueError(
+                        "managed authorization has an unsupported field alias"
+                    )
+                if by_alias:
+                    keys.append(alias)
+            field_keys[name] = list(dict.fromkeys(keys))
+            for key in keys:
+                if key in accepted and accepted[key] != name:
+                    raise ValueError(
+                        "managed authorization has ambiguous field aliases"
+                    )
+                accepted[key] = name
+        if set(raw).difference(accepted):
+            raise ValueError("managed dispatch authorization contains unknown fields")
+        for name, keys in field_keys.items():
+            present = [key for key in keys if key in raw]
+            if len(present) > 1:
+                raise ValueError(
+                    "managed authorization repeats a field through aliases"
+                )
+            if present:
+                _refuse_dropped_authorization_fields(
+                    raw[present[0]], getattr(parsed, name)
+                )
+    elif isinstance(parsed, (tuple, list)) and isinstance(raw, (tuple, list)):
+        for raw_item, parsed_item in zip(raw, parsed):
+            _refuse_dropped_authorization_fields(raw_item, parsed_item)
+    elif isinstance(parsed, dict) and isinstance(raw, dict):
+        for key in raw.keys() & parsed.keys():
+            _refuse_dropped_authorization_fields(raw[key], parsed[key])
 
 
 class ManagedDispatchEnvelope(BaseModel):
@@ -108,6 +205,18 @@ class ManagedDispatchEnvelope(BaseModel):
     runtime_inputs_digest: str = Field(pattern="^[a-f0-9]{64}$")
     authorization: GovernedRunAuthorization
     dispatch_binding_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _authorization_cannot_drop_restrictions(cls, value: Any) -> Any:
+        if isinstance(value, dict) and isinstance(value.get("authorization"), dict):
+            raw = value["authorization"]
+            # Retain the original tree for the closed-key check before the
+            # normalized model can enter the binding digest or runtime.
+            parsed = GovernedRunAuthorization.model_validate(raw)
+            _refuse_dropped_authorization_fields(raw, parsed)
+            return {**value, "authorization": parsed}
+        return value
 
     @model_validator(mode="after")
     def _binding_commits_to_exact_dispatch(self) -> "ManagedDispatchEnvelope":

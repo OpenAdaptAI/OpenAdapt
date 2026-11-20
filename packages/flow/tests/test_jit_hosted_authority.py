@@ -336,9 +336,17 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     def replay(args: argparse.Namespace) -> int:
         seen["authorization"] = getattr(args, "_governed_run_authorization", None)
+        seen["binding"] = getattr(args, "_managed_dispatch_binding", None)
         seen["effects"] = cli._deployment_sections(args)[1]
         return 0
 
+    monkeypatch.setenv(
+        "OPENADAPT_DURABLE_DISPATCH_SESSION_ID", "30000000-0000-4000-8000-000000000001"
+    )
+    monkeypatch.setenv(
+        "OPENADAPT_DURABLE_AUTHORITY_URL",
+        "https://cloud.test/api/internal/managed-delivery-permit",
+    )
     monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
     monkeypatch.setattr(cli, "_cmd_replay", replay)
     monkeypatch.setattr(cli, "_attach_cloud_seal", lambda _args: None)
@@ -389,6 +397,13 @@ def test_cli_admits_the_published_shape_through_the_managed_gate(
     assert _matches(program["shape"], authorization)
     # The replay reads back through the bundled verify.yaml.
     assert runner["effects"].kind == "rest"
+    # The runtime receives a verified capability for this exact dispatch;
+    # there is no process-global admission allow-list.
+    from openadapt_flow.jit.dispatch_authority import ProgramDispatchAuthority
+
+    assert isinstance(
+        runner["binding"].program_admission_authority, ProgramDispatchAuthority
+    )
 
 
 @pytest.mark.parametrize(

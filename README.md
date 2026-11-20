@@ -317,7 +317,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Runs locally**: no calls to a hosted AI model on healthy runs, patient data redacted, signed receipts.
+- **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 
