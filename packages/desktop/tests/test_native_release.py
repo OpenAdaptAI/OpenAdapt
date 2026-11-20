@@ -234,7 +234,7 @@ def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> N
     # cached, mirror-fallback apt action rather than `playwright install-deps`.
     assert libraries["uses"] == (
         "OpenAdaptAI/OpenAdapt/.github/actions/apt-install@"
-        "960b2513030ecb751d38ea7b6012bae86cfbd00b"
+        "1194087e1409c89a19970d0675bd15a631690316"
     )
     assert libraries["with"] == {
         "playwright-deps": "chromium",

@@ -220,7 +220,7 @@ def test_root_ci_runs_the_linux_atspi_qualification() -> None:
     assert job.index(
         (
             "uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@"
-            "960b2513030ecb751d38ea7b6012bae86cfbd00b"
+            "1194087e1409c89a19970d0675bd15a631690316"
         )
     ) < job.index("scripts/qualify_linux_atspi.py")
     assert "xvfb-run -a" in job and "dbus-run-session --" in job

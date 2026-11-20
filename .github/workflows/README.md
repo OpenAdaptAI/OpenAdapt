@@ -131,7 +131,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
 
 Ubuntu package callers use the composite at the immutable
-`OpenAdaptAI/OpenAdapt/.github/actions/apt-install@960b2513030ecb751d38ea7b6012bae86cfbd00b`.
+`OpenAdaptAI/OpenAdapt/.github/actions/apt-install@1194087e1409c89a19970d0675bd15a631690316`.
 This keeps infrastructure helper bytes available when a workflow checks out an
 older PR or release tag. The helper resolves its own script through
 `GITHUB_ACTION_PATH`; the subject checkout still supplies the requested
