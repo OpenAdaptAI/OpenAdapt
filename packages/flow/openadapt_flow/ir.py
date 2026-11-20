@@ -43,6 +43,14 @@ from pydantic import (
 )
 
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
+from openadapt_flow.job_authoring import (
+    JobAuthoringBinding,
+    JobAuthoringError,
+    check_workflow_input,
+    dump_schema3_json,
+    parse_authoring_json,
+    require_supported_workflow,
+)
 from openadapt_flow.qualification_faults import FaultMutationReceipt
 from openadapt_flow.records.schema import (
     FieldRead,
@@ -3335,6 +3343,11 @@ class BundleManifest(BaseModel):
         description="mirrors Workflow.encrypted (workflow.json sealed at rest)",
     )
 
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        return dump_schema3_json(self, **kwargs)
+
 
 class BackendHints(BaseModel):
     """Trusted local execution target captured with a remote-display demo.
@@ -3474,8 +3487,25 @@ class Workflow(BaseModel):
     same identity, risk, resolution, postcondition, and effect contracts.
     """
 
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     schema_version: int = SCHEMA_VERSION
     name: str
+    job_authoring: Optional[JobAuthoringBinding] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _supported_authoring_input(cls, value: Any) -> Any:
+        check_workflow_input(
+            value, default_version=SCHEMA_VERSION, allowed_fields=cls.model_fields
+        )
+        return value
+
+    @model_validator(mode="after")
+    def _supported_authoring_model(self) -> "Workflow":
+        require_supported_workflow(self)
+        return self
+
     recording_id: Optional[str] = None
     # -- PHI governance manifest (PHI audit REM-1) --------------------------
     # A compiled bundle is a HIPAA-designated record; these fields let an
@@ -3638,6 +3668,25 @@ class Workflow(BaseModel):
     # fresh, empty manifest by hand.
     _unverified_load: bool = PrivateAttr(default=False)
 
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "Workflow":
+        try:
+            parse_authoring_json(json_data)
+        except JobAuthoringError:
+            raise
+        except (ValueError, TypeError):
+            # Preserve the existing parser's legacy error semantics.
+            pass
+        return super().model_validate_json(json_data, **kwargs)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        require_supported_workflow(self)
+        return dump_schema3_json(self, **kwargs)
+
     def model_copy(self, *, update: Any = None, deep: bool = False) -> "Workflow":
         clone = super().model_copy(update=update, deep=deep)
         from openadapt_flow.bundle_validation import transfer_verified_load_capability
@@ -3655,7 +3704,10 @@ class Workflow(BaseModel):
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Omit empty additive execution hints from legacy bundle bytes."""
+        require_supported_workflow(self)
         data: dict[str, Any] = handler(self)
+        if self.job_authoring is None:
+            data.pop("job_authoring", None)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
         if self.locale_invariants is None:
@@ -3898,7 +3950,7 @@ class Workflow(BaseModel):
             # workflow and every crop in memory.
             reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
             bundle_encrypted = True
-            raw = json.loads(reader.read_bytes("workflow.json"))
+            raw = _bv.parse_bundle_json(reader.read_bytes("workflow.json"))
             sealed_assets = {
                 rel: reader.read_bytes(rel) for rel in reader.files("templates/")
             }
@@ -3908,21 +3960,36 @@ class Workflow(BaseModel):
             decrypted = _crypto.decrypt_bytes(
                 encrypted_path.read_bytes(), key, aad=_crypto.BUNDLE_AAD
             )
-            raw = json.loads(decrypted)
+            raw = _bv.parse_bundle_json(decrypted)
         else:
-            raw = json.loads(plaintext_path.read_bytes())
+            raw = _bv.parse_bundle_json(plaintext_path.read_bytes())
         _bv.bundle_schema_version(raw)
+        try:
+            check_workflow_input(
+                raw, default_version=1, allowed_fields=cls.model_fields
+            )
+        except ValueError:
+            raise _bv.BundleSchemaError(
+                "unsupported workflow authoring contract"
+            ) from None
         # Verify the original canonical representation before upgrading or
         # constructing today's model. Embedded manifest precedence is unchanged.
         persisted = raw.get("manifest")
         if persisted is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                persisted = json.loads(sidecar.read_text(encoding="utf-8"))
+                persisted = _bv.parse_bundle_json(sidecar.read_text(encoding="utf-8"))
         stored = None
         original_payload = None
         if persisted is not None:
             _bv.bundle_schema_version(persisted)
+            if 3 in (
+                raw.get("schema_version", 1),
+                persisted.get("schema_version", 1),
+            ) and raw.get("schema_version", 1) != persisted.get("schema_version", 1):
+                raise _bv.BundleSchemaError(
+                    "workflow and manifest schema versions differ"
+                )
             stored = BundleManifest.model_validate(persisted)
             if stored.content_digest:
                 original_payload = (
@@ -4015,7 +4082,9 @@ class Workflow(BaseModel):
         Persisted on the next :meth:`save`. Returns the manifest for convenience.
         """
         if self.manifest is None:
-            self.manifest = BundleManifest()
+            self.manifest = BundleManifest(
+                schema_version=3 if self.schema_version == 3 else SCHEMA_VERSION
+            )
         prov = self.manifest.provenance
         prov.policy_name = policy_name
         prov.certified = passed

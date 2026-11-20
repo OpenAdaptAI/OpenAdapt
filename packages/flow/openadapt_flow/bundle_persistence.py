@@ -384,6 +384,9 @@ def save_workflow(
     """
     from openadapt_flow import bundle_validation as _bv
     from openadapt_flow import ir as _ir
+    from openadapt_flow.job_authoring import require_supported_workflow
+
+    require_supported_workflow(workflow)
 
     _bv.bundle_schema_version({"schema_version": workflow.schema_version})
     template_replacements = {
@@ -525,6 +528,9 @@ def save_sealed_set(
     """
     from openadapt_flow import bundle_validation as _bv
     from openadapt_flow import ir as _ir
+    from openadapt_flow.job_authoring import require_supported_workflow
+
+    require_supported_workflow(workflow)
     from openadapt_flow import sealed_set as _sealed
 
     _ensure_output_layout(workflow, bundle, "sealed", template_replacements or {})

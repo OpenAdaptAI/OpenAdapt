@@ -131,6 +131,9 @@ def run_with_output(
     **kwargs: Any,
 ) -> RunReport:
     """Keep an owned local leg fenced through its sealed output finalization."""
+    from openadapt_flow.job_authoring import require_supported_workflow
+
+    require_supported_workflow(workflow, for_execution=True, bundle_dir=bundle_dir)
     from openadapt_flow import at_rest
     from openadapt_flow.runtime.preparation import validate_dry_run_entry
 
