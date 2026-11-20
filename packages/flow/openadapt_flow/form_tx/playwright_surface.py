@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
+import hashlib
 import re
 import time
 from collections.abc import Iterator, Sequence
@@ -42,6 +43,10 @@ _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 class SurfaceSettleTimeoutError(TimeoutError):
     """Raised when a form surface remains busy past ``ui_profile.max_settle_ms``."""
+
+
+class SurfaceContextError(RuntimeError):
+    """The selected browser document is closed, detached, ambiguous or stale."""
 
 
 class PopupContractError(RuntimeError):
@@ -77,6 +82,21 @@ def _strip_url_to_origin_and_path(raw_url: str) -> str:
     netloc = f"{host}:{parts.port}" if parts.port else host
     path = parts.path or "/"
     return f"{parts.scheme}://{netloc}{path}"
+
+
+_DOCUMENT_CONTEXT_JS = r"""
+() => {
+    const key = '__openadaptFormDocumentId';
+    if (!Object.prototype.hasOwnProperty.call(document, key)) {
+        Object.defineProperty(document, key, {
+            value: (typeof crypto.randomUUID === 'function')
+                ? crypto.randomUUID()
+                : `${performance.timeOrigin}:${Math.random()}:${Math.random()}`,
+        });
+    }
+    return `${document[key]}:${location.href}`;
+}
+"""
 
 
 _CHECK_BUSY_AND_DOM_JS = r"""
@@ -920,7 +940,14 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
 
 
 class PlaywrightFormSurface:
-    """Playwright-backed ``FormSurfaceBackend`` with DOM/network quiescence barriers."""
+    """Form backend for a Page, a native Frame, or a bounded frame route.
+
+    ``frame_path_patterns`` are ordered regular expressions, full-matched against
+    observed frame URL paths. The first matching pattern must identify exactly
+    one attached frame on ``base_origin`` (or the Page's initial HTTP origin).
+    Unknown, cross-origin and ambiguous contexts are refused. Paths are pack
+    data; no application routing rules live in this backend.
+    """
 
     def __init__(
         self,
@@ -931,8 +958,19 @@ class PlaywrightFormSurface:
         keepalive_mutation_guard: bool = True,
         ignored_mutation_paths: tuple[str, ...] = (),
         _scoped_to_page_only: bool = False,
+        frame_path_patterns: tuple[str, ...] = (),
     ) -> None:
         self._page = page
+        self._owner_page = getattr(page, "page", None) or page
+        self._is_frame = self._owner_page is not page
+        self._frame_path_patterns = tuple(re.compile(p) for p in frame_path_patterns)
+        origin_url = base_origin or str(self._owner_page.url or "")
+        self._frame_origin = self._url_origin(origin_url)
+        if self._frame_path_patterns and self._frame_origin is None:
+            raise ValueError(
+                "Frame routing requires an explicit or loaded HTTP(S) origin"
+            )
+        self._last_snapshot_context_id: Optional[str] = None
         self._ui_profile = ui_profile
         self._base_origin = base_origin.rstrip("/") if base_origin else None
         self._keepalive_mutation_guard = keepalive_mutation_guard
@@ -946,19 +984,78 @@ class PlaywrightFormSurface:
         self._mutation_history: list[tuple[str, str]] = []
         self._detached = False
 
-        self._quiescence = PageQuiescence(page)
+        self._quiescence = PageQuiescence(
+            self._owner_page, root_frame=page if self._is_frame else None
+        )
         try:
-            page.evaluate(QUIESCENCE_INSTALL_JS)
+            self._owner_page.evaluate(QUIESCENCE_INSTALL_JS)
+            if self._is_frame:
+                page.evaluate(QUIESCENCE_INSTALL_JS)
         except Exception:
             pass
 
-        self._event_target: Any = getattr(page, "context", None) or page
+        self._event_target: Any = (
+            self._owner_page
+            if self._is_frame or self._frame_path_patterns
+            else getattr(page, "context", None) or page
+        )
         try:
             self._event_target.on("request", self._on_request)
             self._event_target.on("requestfinished", self._on_request_done)
             self._event_target.on("requestfailed", self._on_request_done)
         except Exception:
             pass
+
+    @staticmethod
+    def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return None
+        return (
+            parts.scheme,
+            parts.hostname,
+            parts.port or (443 if parts.scheme == "https" else 80),
+        )
+
+    def _refresh_target(self) -> None:
+        """Select one allowed same-origin document; never fall back to a shell."""
+        self._assert_available(check_frame=False)
+        if self._frame_path_patterns:
+            for pattern in self._frame_path_patterns:
+                matches = [
+                    frame
+                    for frame in self._owner_page.frames
+                    if not frame.is_detached()
+                    and self._url_origin(frame.url) == self._frame_origin
+                    and pattern.fullmatch(urlsplit(frame.url).path or "/")
+                ]
+                if len(matches) > 1:
+                    raise SurfaceContextError("Allowed frame path is ambiguous")
+                if matches:
+                    self._page = matches[0]
+                    self._is_frame = True
+                    self._quiescence.set_root_frame(self._page)
+                    break
+            else:
+                raise SurfaceContextError(
+                    "No attached frame matches the allowed origin and paths"
+                )
+        self._assert_available()
+
+    def _assert_available(self, *, check_frame: bool = True) -> None:
+        if self._detached or self._owner_page.is_closed():
+            raise SurfaceContextError("Form surface Page is closed or released")
+        if check_frame and self._is_frame and self._page.is_detached():
+            raise SurfaceContextError(
+                "Form surface Frame is detached; observe a fresh context"
+            )
+
+    def _document_context_id(self) -> str:
+        self._assert_available()
+        raw = self._page.evaluate(_DOCUMENT_CONTEXT_JS)
+        # Full location is bound, including query/hash record identity, but never
+        # copied into the structural snapshot or human-facing halt.
+        return hashlib.sha256(str(raw).encode("utf-8")).hexdigest()
 
     @property
     def ui_profile(self) -> UIProfileSpec:
@@ -990,6 +1087,7 @@ class PlaywrightFormSurface:
         if self._detached:
             return
         self._detached = True
+        self._quiescence.detach()
         for ev_name, cb in (
             ("request", self._on_request),
             ("requestfinished", self._on_request_done),
@@ -1001,11 +1099,13 @@ class PlaywrightFormSurface:
                 pass
 
     def _request_belongs_to_surface(self, request: Any) -> bool:
-        if not self._scoped_to_page_only:
+        if not (
+            self._scoped_to_page_only or self._is_frame or self._frame_path_patterns
+        ):
             return True
         try:
             frame = request.frame
-            return frame is not None and frame.page == self._page
+            return frame is not None and frame.page == self._owner_page
         except Exception:
             return False
 
@@ -1039,7 +1139,7 @@ class PlaywrightFormSurface:
 
     def _is_page_closed(self) -> bool:
         try:
-            return bool(self._page.is_closed())
+            return bool(self._owner_page.is_closed())
         except Exception:
             return True
 
@@ -1048,16 +1148,32 @@ class PlaywrightFormSurface:
         if ms <= 0.0 or self._is_page_closed():
             return
         try:
-            self._page.wait_for_timeout(ms)
+            self._owner_page.wait_for_timeout(ms)
         except Exception as exc:
             if _is_target_closed_error(exc) or self._is_page_closed():
                 return
             time.sleep(ms / 1000.0)
 
+    def _read_dom_state(self, busy_selectors: list[str]) -> dict[str, Any]:
+        frames = self._quiescence._live_frames()
+        if not frames:
+            raise SurfaceContextError("Form document subtree is unavailable")
+        states = [
+            frame.evaluate(_CHECK_BUSY_AND_DOM_JS, busy_selectors) for frame in frames
+        ]
+        return {
+            "readyState": "complete"
+            if all(s.get("readyState") == "complete" for s in states)
+            else "loading",
+            "busySelector": next(
+                (s.get("busySelector") for s in states if s.get("busySelector")), ""
+            ),
+            "domSig": repr([s.get("domSig") for s in states]),
+        }
+
     def wait_for_quiescence(self) -> None:
         """Block until debounce grace elapses, busy selectors clear, and DOM+network settle."""
-        if self._is_page_closed():
-            return
+        self._refresh_target()
 
         max_settle_s = self._ui_profile.max_settle_ms / 1000.0
         deadline = time.monotonic() + max_settle_s
@@ -1073,14 +1189,15 @@ class PlaywrightFormSurface:
         fallback_since: float = 0.0
 
         while time.monotonic() < deadline:
-            if self._is_page_closed():
-                return
+            self._refresh_target()
 
             try:
-                dom_state = self._page.evaluate(_CHECK_BUSY_AND_DOM_JS, busy_selectors)
+                dom_state = self._read_dom_state(busy_selectors)
             except Exception as exc:
                 if _is_target_closed_error(exc) or self._is_page_closed():
-                    return
+                    raise SurfaceContextError(
+                        "Form surface closed while settling"
+                    ) from exc
                 last_reason = f"busy:eval_error:{type(exc).__name__}"
                 fallback_sig = None
                 self._sleep_ms(
@@ -1119,12 +1236,12 @@ class PlaywrightFormSurface:
             probe_verdict = self._quiescence.probe(window_s=window_s)
             if probe_verdict is True:
                 try:
-                    recheck = self._page.evaluate(
-                        _CHECK_BUSY_AND_DOM_JS, busy_selectors
-                    )
+                    recheck = self._read_dom_state(busy_selectors)
                 except Exception as exc:
                     if _is_target_closed_error(exc) or self._is_page_closed():
-                        return
+                        raise SurfaceContextError(
+                            "Form surface closed while settling"
+                        ) from exc
                     last_reason = "busy:post_probe_eval"
                     self._sleep_ms(20.0)
                     continue
@@ -1174,8 +1291,7 @@ class PlaywrightFormSurface:
                 min(step_ms, max(1.0, (deadline - time.monotonic()) * 1000.0))
             )
 
-        if self._is_page_closed():
-            return
+        self._assert_available()
         raise SurfaceSettleTimeoutError(
             f"Form surface failed to reach quiescence within {self._ui_profile.max_settle_ms}ms "
             f"(last_reason={last_reason!r})"
@@ -1265,7 +1381,11 @@ class PlaywrightFormSurface:
             ],
         }
 
+        context_id = self._document_context_id()
         raw = self._page.evaluate(_SNAPSHOT_WALKER_JS, walker_cfg)
+        if self._document_context_id() != context_id:
+            raise SurfaceContextError("Form document changed while taking a snapshot")
+        self._last_snapshot_context_id = context_id
         url_clean = _strip_url_to_origin_and_path(str(self._page.url or ""))
         title = str(raw.get("title") or "")
 
@@ -1335,6 +1455,7 @@ class PlaywrightFormSurface:
 
         return FormSnapshot(
             url_origin_and_path=url_clean,
+            context_id=context_id,
             title=title,
             screen_id=screen_id,
             auth_wall_present=bool(raw.get("auth_wall_present")),
@@ -1349,6 +1470,14 @@ class PlaywrightFormSurface:
         )
 
     def _resolve_live_locator(self, dom_selector: str) -> Any:
+        self._refresh_target()
+        if (
+            self._last_snapshot_context_id is not None
+            and self._document_context_id() != self._last_snapshot_context_id
+        ):
+            raise SurfaceContextError(
+                "Form document changed; take a fresh snapshot before acting"
+            )
         if not dom_selector or not dom_selector.strip():
             raise MissingAnchorError("Empty dom_selector")
         loc = self._page.locator(dom_selector)
@@ -1389,6 +1518,7 @@ class PlaywrightFormSurface:
 
     def goto(self, url_or_path: str) -> None:
         """Navigate to ``url_or_path`` and wait for quiescence."""
+        self._refresh_target()
         target = self._resolve_navigation_url(url_or_path)
         self._page.goto(
             target,
@@ -1487,9 +1617,18 @@ class PlaywrightFormSurface:
         try:
             loc.click(timeout=self._ui_profile.max_settle_ms)
         except Exception as exc:
-            if _is_target_closed_error(exc) and self._is_page_closed():
+            if (
+                self._scoped_to_page_only
+                and not self._is_frame
+                and _is_target_closed_error(exc)
+                and self._is_page_closed()
+            ):
                 return
             raise
+        # A child popup may deliberately close itself after posting its result.
+        # Its parent context manager still settles/read-backs the owning surface.
+        if self._scoped_to_page_only and not self._is_frame and self._is_page_closed():
+            return
         self.wait_for_quiescence()
 
     def _read_portal_listbox_state(self, dom_selector: str) -> dict[str, Any]:
@@ -1603,8 +1742,9 @@ class PlaywrightFormSurface:
         child_surface: Optional[PlaywrightFormSurface] = None
 
         try:
-            with self._page.context.expect_page(
-                timeout=self._ui_profile.max_settle_ms
+            with self._owner_page.context.expect_page(
+                predicate=lambda child: child.opener() == self._owner_page,
+                timeout=self._ui_profile.max_settle_ms,
             ) as popup_info:
                 loc.click(timeout=self._ui_profile.max_settle_ms)
             popup_page = popup_info.value
@@ -1658,6 +1798,7 @@ class PlaywrightFormSurface:
 
     def ping_keepalive(self, path: str) -> int:
         """Issue an in-page GET ``fetch(path)`` and enforce zero state-changing requests."""
+        self._refresh_target()
         if not path or not path.strip():
             raise ValueError("Keepalive path must be non-empty")
 
@@ -1704,5 +1845,6 @@ __all__ = [
     "KeepaliveMutationError",
     "PlaywrightFormSurface",
     "PopupContractError",
+    "SurfaceContextError",
     "SurfaceSettleTimeoutError",
 ]

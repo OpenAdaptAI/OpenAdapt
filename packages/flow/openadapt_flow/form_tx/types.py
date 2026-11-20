@@ -471,6 +471,8 @@ class FormSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     url_origin_and_path: str
+    # Optional for non-browser backends; opaque document/record identity, not a URL.
+    context_id: Optional[str] = None
     title: str = ""
     screen_id: Optional[str] = None
     auth_wall_present: bool = False

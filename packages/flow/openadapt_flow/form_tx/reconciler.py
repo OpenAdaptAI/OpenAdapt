@@ -172,7 +172,7 @@ class ReconcilerSession:
         self._idempotent_results: dict[str, FormTxResult] = {}
         self._idempotent_decisions: dict[str, str] = {}
         self._last_observation: Optional[FormSnapshot] = None
-        self._halt_contexts: dict[str, tuple[str, Optional[str]]] = {}
+        self._halt_contexts: dict[str, tuple[str, Optional[str], Optional[str]]] = {}
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
         self._pre_commit_mutations: int = 0
@@ -493,6 +493,7 @@ class FormReconciler:
                 session._halt_contexts[halt.halt_id] = (
                     session._last_observation.url_origin_and_path,
                     session._last_observation.screen_id,
+                    session._last_observation.context_id,
                 )
         result = FormTxResult(
             run_id=session.run_id,
@@ -1981,6 +1982,7 @@ class FormReconciler:
         if expected_context is None or expected_context != (
             snapshot.url_origin_and_path,
             snapshot.screen_id,
+            snapshot.context_id,
         ):
             raise ValueError("Human decision context changed; observe and review again")
         if snapshot.auth_wall_present or snapshot.inflight_mutations:
