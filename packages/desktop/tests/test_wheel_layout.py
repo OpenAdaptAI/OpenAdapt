@@ -39,8 +39,9 @@ def built_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("uv is required to build the wheel")
     out_dir = tmp_path_factory.mktemp("wheel")
     subprocess.run(
-        [uv, "build", "--wheel", "--out-dir", str(out_dir)],
-        cwd=ROOT,
+        # The project is named as an argument, not through cwd, so Python can
+        # start uv without forking pytest (see conftest.py).
+        [uv, "build", "--wheel", "--out-dir", str(out_dir), str(ROOT)],
         check=True,
         capture_output=True,
         text=True,
@@ -57,9 +58,7 @@ def test_wheel_installs_only_the_namespaced_package(built_wheel: Path) -> None:
     assert top_level == {IMPORT_PACKAGE, f"openadapt_desktop-{_version()}.dist-info"}
 
 
-def test_console_script_runs_from_the_installed_wheel(
-    built_wheel: Path, tmp_path: Path
-) -> None:
+def test_console_script_runs_from_the_installed_wheel(built_wheel: Path, tmp_path: Path) -> None:
     with zipfile.ZipFile(built_wheel) as wheel:
         entry_points = next(
             wheel.read(name).decode("utf-8")
@@ -69,20 +68,19 @@ def test_console_script_runs_from_the_installed_wheel(
         site = tmp_path / "site-packages"
         wheel.extractall(site)
 
-    scripts = dict(
-        line.split(" = ", 1)
-        for line in entry_points.splitlines()
-        if " = " in line
-    )
+    scripts = dict(line.split(" = ", 1) for line in entry_points.splitlines() if " = " in line)
     assert scripts == {"openadapt-desktop": f"{IMPORT_PACKAGE}.cli:main"}
 
     module, function = scripts["openadapt-desktop"].split(":")
     # Put the extracted wheel first so the run proves the installed files work,
-    # not the editable checkout. ``-I`` keeps PYTHONPATH and the cwd out.
+    # not the editable checkout. ``-I`` keeps PYTHONPATH and the cwd out. The
+    # probe changes directory itself, because passing cwd would make Python
+    # fork pytest to start it (see conftest.py).
     probe = textwrap.dedent(
         f"""
-        import importlib, sys
+        import importlib, os, sys
         site = sys.argv[1]
+        os.chdir(os.path.dirname(site))
         sys.path.insert(0, site)
         module = importlib.import_module({module!r})
         assert module.__file__.startswith(site), module.__file__
@@ -92,7 +90,6 @@ def test_console_script_runs_from_the_installed_wheel(
     )
     result = subprocess.run(
         [sys.executable, "-I", "-c", probe, str(site)],
-        cwd=tmp_path,
         capture_output=True,
         text=True,
         timeout=120,

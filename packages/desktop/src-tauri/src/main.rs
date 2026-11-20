@@ -14,6 +14,7 @@ mod ffmpeg;
 mod pairing;
 mod sidecar;
 mod tray;
+mod window;
 
 use std::sync::Arc;
 
@@ -49,9 +50,8 @@ fn main() {
         // Must be first: on Windows/Linux it forwards a second process's
         // statically configured deep link into the deep-link plugin event.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-            }
+            // A second launch brings the running app's window to the front.
+            window::show_main(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
@@ -60,6 +60,8 @@ fn main() {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
     builder
+        // Closing the main window hides it; see window.rs.
+        .on_window_event(window::on_window_event)
         .manage(SidecarHandle(engine.clone()))
         .manage(commands::UpdaterAvailable(updater_configured))
         .setup(move |app| {
@@ -124,9 +126,13 @@ fn main() {
         ])
         .build(context)
         .expect("error while building openadapt-desktop")
-        .run(move |_app, event| {
-            if let tauri::RunEvent::Exit = event {
-                sidecar::shutdown(&engine_for_exit);
+        .run(move |app, event| match event {
+            tauri::RunEvent::Exit => sidecar::shutdown(&engine_for_exit),
+            // A click on the Dock icon while the app is running.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => window::show_main(app),
+            _ => {
+                let _ = app;
             }
         });
 }

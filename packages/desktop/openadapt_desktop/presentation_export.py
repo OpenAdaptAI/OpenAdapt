@@ -30,6 +30,8 @@ from openadapt_types import (
 )
 from PIL import Image, ImageDraw, ImageFont
 
+from openadapt_desktop import child_process
+
 TIMELINE_SCHEMA = "openadapt.control-overlay-timeline/v2"
 MAX_TIMELINE_BYTES = 8 * 1024 * 1024
 MAX_FRAME_PIXELS = 33_177_600  # 8K UHD
@@ -129,7 +131,7 @@ def presentation_export_status(capture_dir: Path) -> dict[str, object]:
 
 
 def _probe_video(ffprobe: Path, media: Path) -> tuple[int, int]:
-    completed = subprocess.run(
+    completed = child_process.run(
         [
             str(ffprobe),
             "-v",
@@ -161,7 +163,7 @@ def _probe_video(ffprobe: Path, media: Path) -> tuple[int, int]:
 
 
 def _runtime_supports_rawvideo(ffmpeg: Path) -> bool:
-    completed = subprocess.run(
+    completed = child_process.run(
         [str(ffmpeg), "-hide_banner", "-encoders"],
         check=False,
         capture_output=True,
@@ -561,7 +563,7 @@ def export_presentation_video(capture_dir: Path) -> dict[str, object]:
     remuxed = presentation_dir / f".{token}.complete.mp4"
     output = presentation_dir / f"{plan.media_path.stem}-openadapt-{token[:8]}.mp4"
 
-    decoder = subprocess.Popen(
+    decoder = child_process.popen(
         [
             str(ffmpeg),
             "-hide_banner",
@@ -585,7 +587,7 @@ def export_presentation_video(capture_dir: Path) -> dict[str, object]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    encoder = subprocess.Popen(
+    encoder = child_process.popen(
         [
             str(ffmpeg),
             "-hide_banner",
@@ -657,7 +659,7 @@ def export_presentation_video(capture_dir: Path) -> dict[str, object]:
 
         # Preserve a compatible source audio stream without decoding it. The
         # optional map also succeeds for silent recordings.
-        completed = subprocess.run(
+        completed = child_process.run(
             [
                 str(ffmpeg),
                 "-hide_banner",
