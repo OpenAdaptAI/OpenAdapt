@@ -43,7 +43,7 @@ def context(*children, hwnd=7, pid=10, cleanup_error=False):
 
 def operation(desktop, auto, hwnd=7, pid=10):
     return server._window_form_fields_operation(
-        {"hwnd": hwnd, "pid": pid, "value_contract": server.VALUE_READ_CONTRACT},
+        {"hwnd": hwnd, "pid": pid, "value_contract": server.SERVER_VALUE_READ_CONTRACT},
         desktop,
         lambda: auto,
     )
@@ -177,7 +177,7 @@ def test_frame_unavailable_has_no_unverified_window_echo_or_uia_reads():
     _, desktop, _ = context()
     desktop.windows = {}
     answer = server._window_form_fields_operation(
-        {"hwnd": 7, "pid": 10, "value_contract": server.VALUE_READ_CONTRACT},
+        {"hwnd": 7, "pid": 10, "value_contract": server.SERVER_VALUE_READ_CONTRACT},
         desktop,
         lambda: pytest.fail("UIA read after frame unavailable"),
     )
@@ -191,7 +191,7 @@ def test_owned_window_refusal_does_not_load_uia():
     _, desktop, _ = context()
     desktop.windows[8] = (10, (20, 20, 200, 100), True, False)
     answer = server._window_form_fields_operation(
-        {"hwnd": 7, "pid": 10, "value_contract": server.VALUE_READ_CONTRACT},
+        {"hwnd": 7, "pid": 10, "value_contract": server.SERVER_VALUE_READ_CONTRACT},
         desktop,
         lambda: pytest.fail("UIA read after owned-window refusal"),
     )
@@ -202,7 +202,7 @@ def test_owned_window_refusal_does_not_load_uia():
 def test_uia_setup_failure_is_closed_and_non_content():
     _, desktop, _ = context()
     answer = server._window_form_fields_operation(
-        {"hwnd": 7, "pid": 10, "value_contract": server.VALUE_READ_CONTRACT},
+        {"hwnd": 7, "pid": 10, "value_contract": server.SERVER_VALUE_READ_CONTRACT},
         desktop,
         lambda: (_ for _ in ()).throw(RuntimeError(MARKER)),
     )

@@ -34,8 +34,10 @@ from openadapt_flow.backends.win_agent.native_value import (
     NativeRead,
     valid_value_proof,
 )
-from openadapt_flow.backends.win_agent.server import VALUE_READ_CONTRACT
-from openadapt_flow.backends.windows_backend import WindowsBackend
+from openadapt_flow.backends.windows_backend import (
+    CLIENT_VALUE_READ_CONTRACT,
+    WindowsBackend,
+)
 
 
 def _proof(text, hwnd=100, pid=10):
@@ -354,7 +356,7 @@ def test_the_windows_backend_reads_the_fields_of_its_one_window():
     assert sent == [
         (
             "/window/form-fields",
-            {"hwnd": 7, "pid": 10, "value_contract": VALUE_READ_CONTRACT},
+            {"hwnd": 7, "pid": 10, "value_contract": CLIENT_VALUE_READ_CONTRACT},
         )
     ]
     assert answer is not None
@@ -611,7 +613,7 @@ def _agent(monkeypatch, window, desktop=None):
 
     def perform(operation, payload):
         if operation in {"read", "window-form-fields"}:
-            payload = {"value_contract": VALUE_READ_CONTRACT, **payload}
+            payload = {"value_contract": CLIENT_VALUE_READ_CONTRACT, **payload}
         return agent_server._perform_uia(operation, payload)
 
     return perform

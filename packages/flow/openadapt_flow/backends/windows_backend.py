@@ -48,7 +48,6 @@ import requests
 from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.backends.win_agent.server import (
-    VALUE_READ_CONTRACT,
     valid_form_projection_refusal,
 )
 from openadapt_flow.backends.win_agent.value_protocol import (
@@ -63,6 +62,9 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.step_timing import timed_span
 
 DEFAULT_SERVER_URL = "http://localhost:5001"
+# The client advertises only the wire semantics implemented by THIS module.
+# Never import a version from a possibly newer local server/helper module.
+CLIENT_VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
 
 # Hosts treated as loopback: plaintext HTTP to these never leaves the machine,
 # so it is permitted in dev (with a warning) even when TLS is not required.
@@ -1092,7 +1094,11 @@ class WindowsBackend:
             hwnd, pid = found
             typed = self._post_typed_read(
                 "/window/form-fields",
-                {"hwnd": hwnd, "pid": pid, "value_contract": VALUE_READ_CONTRACT},
+                {
+                    "hwnd": hwnd,
+                    "pid": pid,
+                    "value_contract": CLIENT_VALUE_READ_CONTRACT,
+                },
             )
             payload = typed.payload
             if (
@@ -1578,7 +1584,7 @@ class WindowsBackend:
             "/uia/read",
             {
                 "locator": scope,
-                "value_contract": VALUE_READ_CONTRACT,
+                "value_contract": CLIENT_VALUE_READ_CONTRACT,
                 **({"rows": True} if rows else {}),
             },
         )

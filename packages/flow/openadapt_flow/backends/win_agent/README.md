@@ -111,3 +111,9 @@ process ID and traversal ordinal when known. It contains no names, values,
 provider exception text or control representation. No diagnostic source read
 runs after refusal, and reasons never select a fallback or retry. This receipt
 is request-local observation metadata, not write permission or qualification.
+
+The host client and guest server declare their understood read contract
+independently. The historical server export `VALUE_READ_CONTRACT` is removed:
+an older backend module mixed with a newer local server module fails import
+before reading a control. Update the package coherently; server metadata never
+upgrades the response parser of an older client.

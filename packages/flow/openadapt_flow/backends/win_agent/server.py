@@ -1427,15 +1427,18 @@ def _read_control_value(control: object, name: str, default: Any) -> Any:
 
 
 # This contract belongs to the SERVER consumer semantics, not to the helper.
+# Deliberately do not export the historical VALUE_READ_CONTRACT name: old
+# backend modules imported it and could falsely advertise a newer parser when
+# only this local server module was replaced. Mixed old modules must fail import.
 # Updating a helper beside an older server cannot advertise a new read policy.
-VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
+SERVER_VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
 _EXPECTED_VALUE_PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
 
 
 def _require_value_contract(value: object) -> None:
     if (
         not isinstance(value, str)
-        or value != VALUE_READ_CONTRACT
+        or value != SERVER_VALUE_READ_CONTRACT
         or _native_value_api().PROOF_SCHEMA != _EXPECTED_VALUE_PROOF_SCHEMA
     ):
         raise AgentRequestError(

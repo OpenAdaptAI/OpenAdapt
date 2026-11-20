@@ -6,7 +6,10 @@ import pytest
 
 from openadapt_flow.backends.win_agent import server
 from openadapt_flow.backends.win_agent.native_value import PROOF_SCHEMA
-from openadapt_flow.backends.windows_backend import WindowsBackend
+from openadapt_flow.backends.windows_backend import (
+    CLIENT_VALUE_READ_CONTRACT,
+    WindowsBackend,
+)
 from openadapt_flow.ir import StructuralLocator
 from tests.test_approval_form_fields import _agent, _Control, _window
 
@@ -209,7 +212,7 @@ def test_new_client_old_closed_server_refuses_before_any_getter(operation):
     calls = []
 
     def legacy_route(path, payload):
-        assert payload["value_contract"] == server.VALUE_READ_CONTRACT
+        assert payload["value_contract"] == CLIENT_VALUE_READ_CONTRACT
         required = {"locator"} if operation == "read" else {"hwnd", "pid"}
         try:
             server._exact_object(
@@ -415,7 +418,7 @@ def test_new_server_old_helper_refuses_before_provider_access(
         if operation == "read"
         else {"hwnd": 7, "pid": 10}
     )
-    payload["value_contract"] = server.VALUE_READ_CONTRACT
+    payload["value_contract"] = server.SERVER_VALUE_READ_CONTRACT
     with pytest.raises(
         server.AgentRequestError, match="incompatible native value contract"
     ):
@@ -431,11 +434,11 @@ def test_changing_only_helper_cannot_make_old_server_advertise_new_consumer_poli
     # sends a server-consumer namespace, deliberately different from ANY
     # supported helper proof version, so helper-only replacement cannot turn
     # the old read/probe/preview semantics into the new protocol.
-    assert server.VALUE_READ_CONTRACT.startswith("openadapt.native-value-read/")
-    assert server.VALUE_READ_CONTRACT != PROOF_SCHEMA
+    assert server.SERVER_VALUE_READ_CONTRACT.startswith("openadapt.native-value-read/")
+    assert server.SERVER_VALUE_READ_CONTRACT != PROOF_SCHEMA
     for version in ("v1", "v2", "v3"):
         old_server_helper_contract = "openadapt.native-value-completeness/" + version
-        assert server.VALUE_READ_CONTRACT != old_server_helper_contract
+        assert server.SERVER_VALUE_READ_CONTRACT != old_server_helper_contract
 
 
 @pytest.mark.parametrize("state_kind", ["toggle", "selection"])
@@ -639,3 +642,58 @@ def test_any_capability_true_generic_value_retains_unmasked_complete_obligation(
     target.native_override = "full generic value with omitted suffix"
     refused = invoke(monkeypatch, target, "form")
     assert refused["window"] is None and refused["fields"] == []
+
+
+@pytest.mark.parametrize("historical_head", ["93347ab1", "b1b6cbdf"])
+def test_historical_client_import_cannot_advertise_new_local_server_contract(
+    historical_head,
+):
+    # This exact historical import precedes every backend read in both public
+    # modules. The independent reviewer also loads each full immutable module.
+    source = (
+        "from openadapt_flow.backends.win_agent.server import VALUE_READ_CONTRACT\n"
+        "raise AssertionError('legacy backend must never reach its body')\n"
+    )
+    assert "VALUE_READ_CONTRACT" not in vars(server)
+    with pytest.raises(ImportError, match="VALUE_READ_CONTRACT"):
+        exec(
+            compile(
+                source, f"historical-{historical_head}-windows_backend-import", "exec"
+            ),
+            {},
+        )
+
+
+def test_client_contract_does_not_follow_local_server_metadata(monkeypatch):
+    monkeypatch.setattr(
+        server, "SERVER_VALUE_READ_CONTRACT", "openadapt.native-value-read/future"
+    )
+    calls = []
+    content_reads = []
+
+    class NoProvider:
+        def __getattr__(self, name):
+            content_reads.append(name)
+            raise AssertionError("incompatible client must refuse before source access")
+
+    backend = object.__new__(WindowsBackend)
+    backend._approval_window = lambda *_args: (7, 10)
+
+    def post(path, payload):
+        calls.append(payload["value_contract"])
+        with pytest.raises(
+            server.AgentRequestError, match="incompatible native value contract"
+        ):
+            if path == "/uia/read":
+                server._perform_uia_initialized(NoProvider(), "read", payload)
+            else:
+                server._window_form_fields_operation(
+                    payload, NoProvider(), NoProvider()
+                )
+        return SimpleNamespace(available=False, payload=None)
+
+    backend._post_typed_read = post
+    assert backend.read_structural(StructuralLocator(automation_id="field")) is None
+    assert backend.approval_form_fields() is None
+    assert calls == [CLIENT_VALUE_READ_CONTRACT, CLIENT_VALUE_READ_CONTRACT]
+    assert content_reads == []
