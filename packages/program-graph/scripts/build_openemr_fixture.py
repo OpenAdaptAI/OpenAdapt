@@ -42,6 +42,7 @@ Run from the repository root with a Python that has openadapt-flow installed:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import shutil
@@ -150,7 +151,7 @@ def recorded_media(spec: dict) -> dict:
     return out
 
 
-def trace(spec: dict, runs: Path, digest: str) -> dict:
+def trace(spec: dict, runs: Path, digest: str, display_derivation: dict | None = None) -> dict:
     """The certified runs, played in order as loop iterations.
 
     ``runs`` holds summary.json and one directory per referral
@@ -282,10 +283,14 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
             "bundle_content_digest": digest,
             "profile": "standard",
             "model_calls": 0,
+            "evidence_kind": "independent_certified_body_runs",
+            "display_derivation": display_derivation,
             "runs": sources,
             "note": (
-                "Each iteration is one certified engine run of the referral body, in run order. "
-                "The trace ends with the referral that stopped."
+                "The display combines four independent certified runs of the source body, "
+                "with the fixture reset before each run. The authored loop is a display "
+                "wrapper; it was neither qualified nor executed as a loop. The trace ends "
+                "with the body run that stopped."
             ),
         },
     }
@@ -325,6 +330,27 @@ def main() -> int:
     OUT = out
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     OUT.mkdir(parents=True, exist_ok=True)
+    worklist_reports = []
+    if args.runs:
+        runs_root = args.runs.expanduser().resolve()
+        summary = json.loads((runs_root / "summary.json").read_text())
+        with (OUT / "worklist.csv").open(newline="") as stream:
+            fields = csv.DictReader(stream).fieldnames
+        assert fields, "the display worklist needs declared columns"
+        rows = []
+        for row in sorted(summary["runs"], key=lambda item: item["n"]):
+            report_path = runs_root / f"{row['n']}-{row['ref']}" / "engine/report.json"
+            assert sha256(report_path) == row["report_sha256"], "worklist report differs from its signed digest"
+            report = json.loads(report_path.read_text())
+            assert report["bundle_content_digest"] == manifest["content_digest"], "worklist report belongs to another body"
+            params = report.get("params") or {}
+            assert all(isinstance(params.get(field), str) for field in fields), "worklist report has a missing declared input"
+            rows.append({field: params[field] for field in fields})
+            worklist_reports.append(row["report_sha256"])
+        with (OUT / "worklist.csv").open("w", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
     with tempfile.TemporaryDirectory() as tmp:
         body = BUNDLE
         if args.ui_structure:
@@ -347,6 +373,21 @@ def main() -> int:
         flow("visualize", str(loop_dir), "--format", "json", "-o", str(local))
         spec = json.loads(public.read_text())
         folds = fold(json.loads(local.read_text()))
+        loop_manifest = json.loads((loop_dir / "manifest.json").read_text())
+        display_derivation = {
+            "kind": "authored_for_each_visualization",
+            "source_body_content_digest": manifest["content_digest"],
+            "display_bundle_content_digest": loop_manifest["content_digest"],
+            "executed": False,
+            "qualified": False,
+            "worklist_source": "signed body-run params in summary order",
+            "worklist_report_sha256": worklist_reports,
+            "record_count": len(worklist_reports),
+            "node_to_body_step": {
+                node["id"]: node["id"].split("::s::", 1)[1]
+                for node in spec["nodes"] if node["kind"] == "action"
+            },
+        }
     (OUT / "spec.json").write_text(json.dumps(spec, indent=2) + "\n")
     folds["source"] = {
         # A bundle outside the repository is named by what it is; its content
@@ -357,6 +398,7 @@ def main() -> int:
             else "openemr/new-referral, certified for clinical-write"
         ),
         "body_content_digest": manifest["content_digest"],
+        "display_derivation": display_derivation,
         "source_recording_sha256": manifest["provenance"]["source_recording_sha256"],
         "sections": (
             "compiled by Flow (openadapt-flow sections"
@@ -369,7 +411,7 @@ def main() -> int:
     shutil.rmtree(OUT / "media", ignore_errors=True)
     (OUT / "media.json").write_text(json.dumps(recorded_media(spec), indent=2) + "\n")
     if args.runs:
-        (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"]), indent=2) + "\n")
+        (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"], display_derivation), indent=2) + "\n")
     print(f"Wrote {OUT}: spec, folds, media{', trace' if args.runs else ''}")
     return 0
 
