@@ -11,7 +11,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -20,6 +20,34 @@ from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.runner.verify import VerifiedDispatch
+
+
+#: The run-authorization fields a managed dispatch must agree on with the
+#: authorization this runner builds for the same bundle and inputs.
+MANAGED_SAFETY_FIELDS = (
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "admitted_policy_name",
+    "admitted_policy_contract_sha256",
+    "execution_profile",
+    "minimum_effect_tier",
+    "qualified_effect_requirements",
+    "required_identity_step_ids",
+    "unverified_write_approvals",
+)
+
+
+def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
+    """Whether Cloud's run authorization disagrees with the local one.
+
+    Cloud may admit only API steps the bundle itself admits. An API step Cloud
+    doesn't name runs on the GUI, so naming fewer is allowed.
+    """
+
+    return any(
+        getattr(authorization, field) != getattr(local, field)
+        for field in MANAGED_SAFETY_FIELDS
+    ) or any(row not in local.api_steps for row in authorization.api_steps)
 
 
 class ManagedDispatchEnvelopeError(ValueError):
@@ -32,7 +60,12 @@ _BINDING_FACTORY = object()
 class ManagedDispatchBinding:
     """Opaque capability produced only after strict envelope validation."""
 
-    __slots__ = ("run_id", "authorization", "binding_sha256")
+    __slots__ = (
+        "run_id",
+        "authorization",
+        "binding_sha256",
+        "program_admission_authority",
+    )
 
     def __setattr__(self, name: str, value: object) -> None:
         if hasattr(self, name):
@@ -46,6 +79,7 @@ class ManagedDispatchBinding:
         run_id: str,
         authorization: GovernedRunAuthorization,
         binding_sha256: str,
+        program_admission_authority: object = None,
     ) -> None:
         if factory is not _BINDING_FACTORY:
             raise ManagedDispatchEnvelopeError("managed dispatch binding is internal")
@@ -56,6 +90,7 @@ class ManagedDispatchBinding:
         self.run_id = run_id
         self.authorization = authorization
         self.binding_sha256 = binding_sha256
+        self.program_admission_authority = program_admission_authority
 
 
 def with_runner_local_authorization(
@@ -90,6 +125,13 @@ def with_runner_local_authorization(
         run_id=binding.run_id,
         authorization=authorization,
         binding_sha256=binding.binding_sha256,
+        # A runner-local safety change needs a new verification, too. Never
+        # transfer an old program authority to a different authorization.
+        program_admission_authority=(
+            binding.program_admission_authority
+            if authorization == binding.authorization
+            else None
+        ),
     )
 
 

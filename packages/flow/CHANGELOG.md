@@ -15,6 +15,32 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-11-19)
+
+### Fixes
+
+- Managed runs of an admitted program carry verification for that exact
+  dispatch through the CLI, public `Replayer` and deployment API. The proof
+  binds the admission, bundle, inputs, policy, run, dispatch session and
+  current trust registry. It is used once; resume verifies a fresh proof.
+  Missing or changed authority refuses before input.
+- Managed input requires a signed v3 permit with an exclusive input-start
+  deadline. The receiver checks it after preparation, immediately before each
+  desktop input or API request. Each API request retains its acknowledgment
+  before another request starts. A delayed permit, expired deadline or missing
+  receipt halts the run. Late completion evidence is retained as a separate
+  nonauthorizing uncertainty observation and cannot produce VERIFIED.
+
+### Features
+
+- `openadapt wrap publish` refuses, before anything is uploaded, a program
+  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
+  Hosted runs verify a person's admission or one made with a CI admitter key.
+- For an admitter-key admission, publish checks that the organization has
+  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
+  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
+  and public key an owner or admin must register.
+
 ## v3.3.0 (2026-11-19)
 
 ### Fixes

@@ -52,9 +52,9 @@ from openadapt_flow.runtime.durable.checkpoint import (
 )
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.terminal_verification_v2 import (
-    ProductionDeliveryPermitPayload,
+    ProductionDeliveryPermitV3Payload,
     ProductionDeliveryReceiptPayload,
-    sign_production_delivery_permit,
+    sign_production_delivery_permit_v3,
     sign_production_delivery_receipt,
 )
 
@@ -77,6 +77,15 @@ def _isolated_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv(
         AUTHORITY_DB_ENV,
         str(tmp_path / "external-authority" / "authority.sqlite3"),
+    )
+    # The signed fixture issues its three possible edges at 00:00:20,
+    # 00:00:40 and 00:01:00. Keep the trusted receiver clock in that same
+    # synthetic chronology; wall-clock and delayed-HTTPS checks live in
+    # test_delivery_permit_receiver_freshness.py.
+    monkeypatch.setattr(
+        durable_authority_module,
+        "_permit_receiver_now",
+        lambda: datetime(2026, 8, 20, 0, 1, tzinfo=timezone.utc),
     )
 
 
@@ -326,7 +335,7 @@ def _issued_permit_transport(
             return json.dumps(
                 {
                     "schema_version": (
-                        "openadapt.production-delivery-acknowledgment-result/v2"
+                        "openadapt.production-delivery-acknowledgment-result/v3"
                     ),
                     "status": "acknowledged",
                     "receipt_artifact_bytes_base64": b64encode(receipt_bytes).decode(
@@ -347,8 +356,8 @@ def _issued_permit_transport(
         permit_uuid = f"20000000-0000-4000-8000-{sequence + 1:012d}"
         session_id = "30000000-0000-4000-8000-000000000001"
         claim_id = f"40000000-0000-4000-8000-{sequence + 1:012d}"
-        artifact = sign_production_delivery_permit(
-            ProductionDeliveryPermitPayload(
+        artifact = sign_production_delivery_permit_v3(
+            ProductionDeliveryPermitV3Payload(
                 execution_authority_id="22222222-2222-4222-8222-222222222222",
                 execution_authority_sha256="1" * 64,
                 permit_id=permit_uuid,
@@ -368,6 +377,7 @@ def _issued_permit_transport(
                 input_edge_sequence=sequence + 1,
                 authority_sequence=sequence,
                 issued_at=issued_at,
+                delivery_not_after="2026-08-20T01:00:00Z",
             ),
             key,
         )
@@ -377,7 +387,7 @@ def _issued_permit_transport(
         retained[claim_id] = (artifact, permit_bytes)
         return json.dumps(
             {
-                "schema_version": "openadapt.production-delivery-permit-issue/v2",
+                "schema_version": "openadapt.production-delivery-permit-issue/v3",
                 "status": "issued",
                 "execution_authority_id": ("22222222-2222-4222-8222-222222222222"),
                 "permit_id": permit_uuid,
@@ -676,6 +686,7 @@ def test_backend_success_requires_delivery_acknowledgment_before_return() -> Non
             events.append("acknowledged")
 
     replayer = object.__new__(Replayer)
+    replayer.managed_dispatch_binding = None  # this unit probes the local ACK handoff
     replayer._active_delivery_acknowledgers = (Guard(),)
     result = StepResult(step_id="edge", intent="deliver edge", ok=False)
 
@@ -695,6 +706,7 @@ def test_backend_acknowledgment_failure_is_an_uncertain_delivery() -> None:
             raise DurableAuthorityBusy("receipt unavailable")
 
     replayer = object.__new__(Replayer)
+    replayer.managed_dispatch_binding = None  # this unit probes the local ACK handoff
     replayer._active_delivery_acknowledgers = (Guard(),)
     result = StepResult(step_id="edge", intent="deliver edge", ok=False)
 

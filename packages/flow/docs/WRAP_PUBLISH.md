@@ -155,13 +155,37 @@ run before any action unless all of these hold:
 - the admission verifies against the admission key registered with the
   organization. The runner stages only that key, at
   `<key_dir>/keys/ed25519.pub`, because it trusts whatever key is there;
+- the admission was made by a person (`--person`) or with a CI admitter key
+  (`--admit-key`). For an admitter key, the runner also stages that one key,
+  under the principal id the admission names, from the admitter keys an owner
+  or admin registered with the organization. An admission an agent made under
+  a signed policy, or a repair, cannot run hosted, and `publish` refuses it;
 - the authorization names that exact admission;
 - the bundled `verify.yaml` has the SHA-256 the admission binds;
 - the run shape matches what the runner derives itself;
 - the profile is Standard. Regulated needs the qualification campaign.
 
+Each dispatch carries one verified authority bound to its exact admission,
+bundle, inputs, policy, run, dispatch session and trust registry. The CLI,
+public `Replayer` and deployment API use this same authority. It is used once;
+resume verifies a fresh one against the retained inputs and current keys.
+Every input checks the scope again after preparation.
+
+Each input also requires a signed v3 delivery permit. Immediately before the
+input, the receiver checks the signed `delivery_not_after` deadline, registry
+expiry and registry-check age. These limits have no grace period. An issued
+permit authorizes one input start until its deadline; revocation can refuse a
+new grant but does not retroactively revoke an already issued grant. API
+sequences obtain and acknowledge a separate permit for every request.
+
 Only then does the run read back through the bundled `verify.yaml`, and it is
-VERIFIED only when that read-back confirms the write. A run that rests on a
+VERIFIED only when that read-back confirms the write and every attempted
+input has its valid delivery receipt. A completion outside the signed timing
+limits retains raw uncertainty evidence, halts further input and requires
+reconciliation. A timely signed receipt remains valid historical evidence if
+its HTTPS response arrives later. Historical v2 artifacts remain readable,
+but cannot authorize live input. See [Managed authority lifetime](design/MANAGED_AUTHORITY_LIFETIME.md).
+ A run that rests on a
 qualification admission or a production authority file ignores the bundled
 file and reads back through its own deployment config.
 
@@ -193,6 +217,7 @@ The scrubber replaces any other principal it finds in these files with
 | --- | --- |
 | Organization | `GET /api/v1/whoami` (skipped with `--org` or `OPENADAPT_ORG_ID`) |
 | Admission key | `GET`, then if missing `POST /api/v1/org/{org}/admission-keys` |
+| Admitter key (admitter-key admissions only) | `GET /api/v1/org/{org}/admitter-keys`; registering one is for an owner or admin, in the dashboard |
 | Challenge | `POST /api/v1/org/{org}/validation-challenges` |
 | Upload | `POST /api/v1/org/{org}/workflow`, or `PUT /api/v1/org/{org}/workflow/{id}/definition` |
 | Check | `GET /api/v1/org/{org}/workflow/{id}/definition?qualification_id=...` |
@@ -231,6 +256,8 @@ uploaded.
 | `WORKFLOW_API_UNAVAILABLE` | The workflow API is not enabled for the organization. |
 | `ADMISSION_KEY_UNREGISTERED` | The cloud did not list or register the admission key. |
 | `ADMISSION_KEY_REVOKED` | The organization revoked this admission key. Admit the program again with a new `--key-dir`. |
+| `ADMISSION_MODE_UNSUPPORTED` | The program was admitted in a mode a hosted run cannot verify (an agent under a policy, or a repair). Admit it with `--person` or `--admit-key`. |
+| `ADMITTER_KEY_UNREGISTERED` | The program was admitted with a CI admitter key the organization has not registered. An owner or admin registers the named principal id and public key in the dashboard (Settings, Admitter keys) or with `POST /api/admitter-keys`. |
 | `NOT_ADMITTED` | The task has no admitted program yet. Run step 4. |
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
 | `ADMISSION_INVALID` | The admission signature does not verify with the local key, `keys/ed25519.pub` or `keys/ed25519.pem` is missing, or the cloud copy of the admission cannot be written (see "What the cloud learns about people"). |

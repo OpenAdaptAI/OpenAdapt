@@ -531,7 +531,10 @@ class GovernedRunAuthorization(BaseModel):
     def admitted_api_step(self, step: Any, workflow: Any) -> Optional[str]:
         """Why ``step``'s API step can't run under this authorization, or None."""
 
-        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+        from openadapt_flow.runtime.actuators.web_form import (
+            folded_checks_digest,
+            web_form_effects,
+        )
 
         binding = step.api_binding
         row = next((item for item in self.api_steps if item.step_id == step.id), None)
@@ -548,8 +551,12 @@ class GovernedRunAuthorization(BaseModel):
             or row.folded_checks_digest != binding.web_form.folded_checks_digest
             or row.folded_checks_digest
             != folded_checks_digest(workflow.steps[start : end + 1])
+            or list(binding.effects) != web_form_effects(workflow.steps, step)
             or list(row.effect_contract_hashes)
-            != [effect.contract_hash() for effect in step.effects]
+            != [
+                effect.contract_hash()
+                for effect in web_form_effects(workflow.steps, step)
+            ]
         ):
             return (
                 "the API step, its folded checks or its record check differ from "
