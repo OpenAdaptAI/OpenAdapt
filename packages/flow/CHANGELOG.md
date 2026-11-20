@@ -85,6 +85,13 @@
   before another request starts. A delayed permit, expired deadline or missing
   receipt halts the run. Late completion evidence is retained as a separate
   nonauthorizing uncertainty observation and cannot produce VERIFIED.
+- A governed MCP tool call no longer accepts an old or copied run report as a
+  new successful run. Each call binds its report to a fresh challenge and the
+  deployment that actually ran, and a missing or invalid completion after
+  launch is reported as uncertain, never as success (#2335).
+- Passphrase-derived keys, attended run keys and opened sealed sets are no
+  longer cached for the whole process. Each independent operation
+  authenticates again; caller-owned handles still reuse their key (#2341).
 
 ## v3.3.0 (2026-11-19)
 
