@@ -102,12 +102,12 @@ def _with_secret_env(
     """
     import os
 
-    from openadapt_flow.runtime.replayer import secret_env_var
+    from openadapt_flow.runtime.replayer import secret_env_vars
 
     out = dict(values)
-    for name in parameters:
+    for name, key in secret_env_vars(list(parameters)).items():
         if name not in out:
-            value = os.environ.get(secret_env_var(name))
+            value = os.environ.get(key)
             if value:
                 out[name] = value
     return out

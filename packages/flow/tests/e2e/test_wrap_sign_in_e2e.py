@@ -291,6 +291,9 @@ def test_a_sign_in_becomes_secret_parameters_and_never_persists(
     assert staged.manifest["secret_parameters"] == ["password", "username"]
     assert staged.manifest["input_schema"]["required"] == ["note"]
     assert _leaks(staged.staged, [USERNAME, PASSWORD]) == []
+    # The local, person-signed teach statement stays local. The independently
+    # checked hosted admission is the authority exported with the program.
+    assert not (staged.staged / "teach-authorization").exists()
 
     # A cached run: no model, the values only in memory, read back VERIFIED.
     # mcp 1.x runs the emitted server's sync tool on its event loop, where
@@ -318,6 +321,11 @@ def _assert_nothing_holds_a_credential(
 ) -> None:
     out, err = capfd.readouterr()
     assert USERNAME not in out + err and PASSWORD not in out + err
+    from PIL import Image
+
+    for path in tmp_path.rglob("steps/*.png"):
+        with Image.open(path) as frame:
+            assert frame.convert("RGB").getextrema() == ((0, 0), (0, 0), (0, 0)), path
     # What may hold a credential: the operator's own task file (its canary
     # values), and the person-signed teach authorization, which names the
     # sign-in inputs by digest and never leaves this machine.

@@ -18,7 +18,7 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.compiler.compile import _form_submit_steps
-from openadapt_flow.ir import ActionKind, Step
+from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.recorder import CredentialFieldError, Recorder
 from openadapt_flow.secret_inputs import public_values, secret_environment
 
@@ -327,3 +327,50 @@ def test_a_field_that_cannot_be_read_takes_no_declared_input(tmp_path: Path) -> 
         rec.type_text(PASSWORD)
     rec.type_text("free text")  # not a declared input: typed as before
     assert backend.typed == ["free text"]
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ["password", "Password"],
+        ["api-token", "api_token"],
+        ["password", "OPENADAPT_FLOW_SECRET_PASSWORD"],
+    ],
+)
+def test_secret_names_cannot_alias_one_environment_slot(monkeypatch, names) -> None:
+    from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
+
+    key = secret_env_var(names[0])
+    monkeypatch.setenv(key, "existing-secret")
+    with pytest.raises(ValueError, match="collide"):
+        secret_env_vars(names)
+    with pytest.raises(ValueError, match="collide"):
+        with secret_environment(dict.fromkeys(names, "synthetic-input"), names):
+            pytest.fail("colliding secret names were exposed")
+    assert os.environ[key] == "existing-secret"
+
+
+def test_runtime_secret_names_use_the_same_ascii_mapping_as_cloud() -> None:
+    from openadapt_flow.runtime.replayer import secret_env_var
+
+    assert secret_env_var("api-token") == "OPENADAPT_FLOW_SECRET_API_TOKEN"
+    assert secret_env_var("naïve") == "OPENADAPT_FLOW_SECRET_NA_VE"
+
+
+def test_secret_runs_persist_no_page_pixels_even_after_the_field_disappears(
+    tmp_path,
+) -> None:
+    from openadapt_flow.runtime.replayer import Replayer
+
+    workflow = Workflow(name="secret-run", steps=[], secret_params=["username"])
+    player = object.__new__(Replayer)
+    player._execution_workflow_snapshot = workflow
+    out = io.BytesIO()
+    Image.new("RGB", (320, 200), (255, 50, 50)).save(out, format="PNG")
+    before = out.getvalue()
+    (tmp_path / "steps").mkdir()
+    for suffix in ("before", "after", "attended-after"):
+        path = player._save_step_png(tmp_path, "step", suffix, before)
+        assert _black((tmp_path / path).read_bytes(), (0, 0, 320, 200))
+    # Internal observation bytes remain available for checks, unmodified.
+    assert not _black(before, (0, 0, 320, 200))

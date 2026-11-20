@@ -183,7 +183,15 @@ def _secret_parameters(bundle: Path, parameters: Sequence[str]) -> list[str]:
         raise PublishError(
             "BUNDLE_UNREADABLE", "the admitted bundle cannot be loaded"
         ) from None
-    return sorted(names & set(parameters))
+    from openadapt_flow.runtime.replayer import secret_env_vars
+
+    try:
+        secret_env_vars(sorted(names))
+        if not names.issubset(parameters):
+            raise ValueError("secret parameter is not a declared task input")
+    except ValueError as exc:
+        raise PublishError("SECRET_PARAMETER_NAMES", str(exc)) from None
+    return sorted(names)
 
 
 def _run_shape(staged: Path, policy: str) -> dict[str, Any]:

@@ -1562,11 +1562,18 @@ _EDITABLE_VALUE_JS = r"""(el) => {
 #: Whether the focused element takes a sign-in credential. See
 #: :meth:`PlaywrightBackend.focused_field_credential` for the rules.
 _FIELD_CREDENTIAL_JS = r"""(el) => {
-    // A focused control inside an open shadow root shows as its host.
     while (el && el.shadowRoot && el.shadowRoot.activeElement) {
         el = el.shadowRoot.activeElement;
     }
-    if (!el || el.tagName !== 'INPUT') return 'none';
+    if (!el) return 'unknown';
+    if (el.tagName !== 'INPUT') {
+        // Closed shadow roots expose only their focused host. An opaque
+        // focused host is not evidence that the control is non-sensitive.
+        if (!el.matches('textarea, select, button') && el.matches(':focus')) {
+            return 'unknown';
+        }
+        return 'none';
+    }
     const kind = (i) => (i.getAttribute('type') || 'text').toLowerCase();
     const tokens = (i) =>
         (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
@@ -1578,29 +1585,38 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
     if (tokens(el).includes('username')) return 'username';
     const texty = (i) => ['text', 'email', 'tel', 'search'].includes(kind(i));
     if (!texty(el)) return 'none';
-    // Rendered for a person: a box on the page, not hidden, not transparent.
-    // A decoy password (an autofill trap) is none of these.
-    const visible = (i) => {
-        const r = i.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.right <= 0) {
-            return false;
+    const parent = (n) => n.parentElement || n.getRootNode().host || null;
+    const form = (n) => {
+        if (n.form) return n.form;
+        for (let p = parent(n); p; p = parent(p)) {
+            if (p.tagName === 'FORM') return p;
         }
-        const style = i.ownerDocument.defaultView.getComputedStyle(i);
-        return style.visibility !== 'hidden' && style.display !== 'none' &&
-            parseFloat(style.opacity || '1') > 0;
+        return null;
     };
-    const scope = el.form || el.ownerDocument;
-    const inputs = Array.from(scope.querySelectorAll('input'))
-        .filter((i) => el.form ? true : !i.form);
-    const first = inputs.findIndex((i) => secret(i) && visible(i));
-    if (first < 0) return 'none';
-    for (let j = first - 1; j >= 0; j--) {
-        const candidate = inputs[j];
-        if (texty(candidate) && visible(candidate)) {
-            return candidate === el ? 'username' : 'none';
+    const scope = form(el);
+    const inputs = [];
+    const visit = (root) => {
+        for (const child of root.children || []) {
+            if (child.tagName === 'INPUT' && form(child) === scope) inputs.push(child);
+            visit(child);
+            if (child.shadowRoot) visit(child.shadowRoot);
         }
+    };
+    visit(scope || el.ownerDocument);
+    const passwords = inputs.filter(secret);
+    if (!passwords.length) return 'none';
+    // Consider every password candidate, including hidden autofill traps.
+    // CSS visibility cannot prove which field the site really authenticates.
+    // A uniquely paired text control is withheld; ambiguous controls refuse
+    // declared inputs instead of falling through to plaintext recording.
+    const candidates = new Set();
+    for (const password of passwords) {
+        const preceding = inputs.slice(0, inputs.indexOf(password)).reverse();
+        const candidate = preceding.find(texty);
+        if (candidate) candidates.add(candidate);
     }
-    return 'none';
+    if (candidates.size === 1 && candidates.has(el)) return 'username';
+    return 'unknown';
 }"""
 
 _CREDENTIAL_AT_JS = (
@@ -3395,8 +3411,10 @@ class PlaywrightBackend:
           ``autocomplete`` names ``current-password`` (``new-password`` when
           it names that: a password change or sign-up);
         * ``username``: an input whose ``autocomplete`` names ``username``,
-          or the last visible text, email or phone input before the first
-          password input of the same form (the document when it has no form).
+          or the uniquely paired text, email or phone input across all
+          password candidates in the composed form (the document when it has
+          no form). Ambiguous controls return ``unknown``; CSS visibility is
+          not used as evidence that a password candidate is irrelevant.
 
         ``box`` is in top-document viewport pixels, or None when the
         element's box could not be read. Read-only and never raises. None
@@ -3440,7 +3458,7 @@ class PlaywrightBackend:
             return "unknown"
         return (
             found
-            if found in ("password", "new-password", "username", "frame")
+            if found in ("password", "new-password", "username", "frame", "unknown")
             else None
         )
 

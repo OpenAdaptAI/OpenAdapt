@@ -208,23 +208,33 @@ field the agent types into, using only the page's markup:
 
 - a password field: `type="password"`, or `autocomplete` naming
   `current-password` or `new-password`;
-- the username field paired with it: `autocomplete="username"`, or the last
-  visible text, email or phone field before the first password field of the
-  same form.
+- the username field paired with it: `autocomplete="username"`, or a unique
+  text, email or phone candidate paired across the form's password controls.
+  Open shadow roots are included. Hidden password controls are still
+  candidates; ambiguous or unreadable controls refuse declared inputs before
+  typing.
 
 Their inputs become **secret parameters** of the program (`ir.Step.secret`).
 The recording, the program, the run records and the receipts keep the input's
 name and never its value. Each field is blacked out in every saved frame that
 shows it after it was typed into. A credential field that receives text
 matching none of the task's inputs is refused before anything is typed. The
-submit button of a form where only secrets were typed is a sign-in, not a
-save, so it needs no record check.
+submit of a form containing exactly a username and a current password is
+classified as sign-in. Password changes and sign-ups keep the form-save
+escalation, and a button's independent write-risk classification still applies.
+
+Replay screenshots for any program with secret parameters are stored as
+black frames. The runtime keeps the original pixels in memory for its checks,
+but never writes those page pixels to the run report. This also covers a
+username echoed outside its original field after sign-in.
 
 The program types each secret from `OPENADAPT_FLOW_SECRET_<NAME>`, for
 example `OPENADAPT_FLOW_SECRET_PASSWORD`. The canary and later local runs set
 that variable from the value you passed, for that run only. To keep a value
 off the command line, export the variable instead of passing
-`--param password=...`.
+`--param password=...`. Distinct secret names must have distinct normalized
+environment keys; case or punctuation collisions are refused. Managed runs
+also refuse secret values in a params file, even if the dispatch digest matches.
 
 The values still sit in two places on your machine, and both stay there:
 

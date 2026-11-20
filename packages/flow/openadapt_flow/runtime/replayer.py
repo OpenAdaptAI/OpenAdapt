@@ -463,8 +463,26 @@ SECRET_ENV_PREFIX = "OPENADAPT_FLOW_SECRET_"
 
 def secret_env_var(param: str) -> str:
     """Environment variable a secret parameter's value is read from."""
-    key = "".join(ch if ch.isalnum() else "_" for ch in param).upper()
+    key = "".join(ch if ch.isascii() and ch.isalnum() else "_" for ch in param).upper()
     return f"{SECRET_ENV_PREFIX}{key}"
+
+
+def secret_env_vars(params: Sequence[str]) -> dict[str, str]:
+    """Require an injective mapping from secret names to environment keys.
+
+    Case and punctuation normalization is lossy. Distinct parameters must
+    never silently share a credential slot, even when values happen to match.
+    """
+    keys: dict[str, str] = {}
+    owners: dict[str, str] = {}
+    for name in sorted(set(params)):
+        key = secret_env_var(name)
+        for alias in (name, key):
+            if alias in owners and owners[alias] != name:
+                raise ValueError("secret parameter names collide in the environment")
+            owners[alias] = name
+        keys[name] = key
+    return keys
 
 
 # Bounds for the Phase-2 program interpreter -- deterministic termination
@@ -1786,6 +1804,9 @@ class Replayer:
             aborts at the first failed step; a program run ends at a terminal
             state (or an unhandled failure). ``success`` reflects that outcome.
         """
+        secret_env_vars(workflow.secret_params)
+        if set(params or {}) & set(workflow.secret_params):
+            raise ValueError("secret parameters must come from their secret source")
         managed_refusal = self._managed_dispatch_refusal()
         if managed_refusal is not None:
             raise ValueError(managed_refusal)
@@ -20078,17 +20099,32 @@ class Replayer:
             candidate = f"{safe}__{occurrence:04d}"
         return candidate
 
-    @staticmethod
     @timed_span("artifact_write")
-    def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:
+    def _save_step_png(
+        self, run_dir: Path, step_id: str, suffix: str, png: bytes
+    ) -> str:
         """Save a per-step screenshot; return its run-dir-relative path.
 
         These frames are embedded by relative path into the shareable
         ``REPORT.md``. When opt-in image redaction is enabled
         (``OPENADAPT_FLOW_SCRUB_IMAGES=1``), PII/PHI regions are burned out
-        before the frame is written to disk; otherwise the raw frame is saved
+        before the frame is written to disk; otherwise the raw frame is saved.
+        A workflow with secret parameters always stores black frames instead
         (see openadapt_flow.privacy and docs/PRIVACY.md).
         """
         rel = f"steps/{step_id}_{suffix}.png"
+        workflow = self._execution_workflow_snapshot
+        if workflow is not None and workflow.secret_params:
+            # A username can be echoed anywhere after sign-in, and the field
+            # can move. Keep pixels for in-memory checks, but persist no page
+            # pixels for a run that handles secrets. This does not depend on
+            # optional OCR or on the page continuing to label the value.
+            from PIL import Image
+
+            with Image.open(io.BytesIO(png)) as frame:
+                blank = Image.new("RGB", frame.size, (0, 0, 0))
+                out = io.BytesIO()
+                blank.save(out, format="PNG")
+                png = out.getvalue()
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel

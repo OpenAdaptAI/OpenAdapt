@@ -39,12 +39,12 @@ def secret_environment(values: Mapping[str, Any], secret_params: Any) -> Iterato
     never logged or returned.
     """
 
-    from openadapt_flow.runtime.replayer import secret_env_var
+    from openadapt_flow.runtime.replayer import secret_env_vars
 
-    names = sorted(set(secret_params or ()))
+    slots = secret_env_vars(list(secret_params or ()))
     supplied = {
-        secret_env_var(name): str(values[name])
-        for name in names
+        key: str(values[name])
+        for name, key in slots.items()
         if values.get(name) not in (None, "")
     }
     if not supplied:

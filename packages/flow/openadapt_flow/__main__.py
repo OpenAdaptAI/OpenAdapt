@@ -4562,6 +4562,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 2
     runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+    if dispatch_file and set(runtime_params) & set(workflow.secret_params):
+        print(
+            "run REFUSED: secret parameters must come from the runner's vault "
+            "environment, never the params file. Nothing was executed."
+        )
+        return 2
     runtime_worklists = (
         qualification_case["worklists"]
         if qualification_case is not None

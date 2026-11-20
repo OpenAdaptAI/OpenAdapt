@@ -784,8 +784,27 @@ def test_cli_admits_a_signed_in_program_with_secrets_only_in_the_environment(
     assert runner["authorization"] is not None
     assert "synthetic-password" not in out and "synthetic-user" not in out
 
-    # A call that carries a secret is a different run: the dispatch refuses.
-    params.write_text(json.dumps({**values, "password": "synthetic-password"}))
+    # Even an otherwise matching dispatch cannot authorize a secret in the
+    # params file. Refusal is about provenance, not only a digest mismatch.
+    contaminated = {**values, "password": "synthetic-password"}
+    contaminated_digest = runtime_inputs_digest(workflow, contaminated, {})
+    contaminated_authorization = _authorization(
+        shape, runtime_inputs_digest=contaminated_digest
+    )
+    dispatch = write_managed_dispatch_envelope_value(
+        tmp_path / "contaminated-dispatch.json",
+        ManagedDispatchEnvelope(
+            run_id=run_id,
+            bundle_content_digest=shape["bundle_content_digest"],
+            runtime_inputs_digest=contaminated_digest,
+            authorization=contaminated_authorization,
+            dispatch_binding_sha256=dispatch_binding_sha256(
+                run_id, contaminated_authorization
+            ),
+        ),
+    )
+    params.write_text(json.dumps(contaminated))
+    runner["authorization"] = None
     rc = cli.main(
         [
             "run",
@@ -805,4 +824,8 @@ def test_cli_admits_a_signed_in_program_with_secrets_only_in_the_environment(
             "https://app.example.com/",
         ]
     )
+    out = capsys.readouterr().out
     assert rc == 2
+    assert "never the params file" in out
+    assert runner["authorization"] is None
+    assert "synthetic-password" not in out
