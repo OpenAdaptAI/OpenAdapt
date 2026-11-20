@@ -3504,7 +3504,10 @@ class InteractiveRecorder:
         kind = event.get("kind")
         if kind == "privacy_refusal":
             self._listener_error = BrowserAttachError(
-                "a shadow input did not have a declared secret host boundary; "
+                "a dropdown or browser dialog would retain declared secret text; "
+                "recording stopped before retaining that text or another frame"
+                if event.get("reason") == "captured-text"
+                else "a shadow input did not have a declared secret host boundary; "
                 "recording stopped before accepting its value or retaining "
                 "another frame"
             )

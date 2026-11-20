@@ -53,6 +53,18 @@ CHOICE_CAPTURE_JS = r"""
   } catch (e) {}
   const OPTION_ROLES = ['option', 'treeitem'];
   const choiceNorm = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  function choiceTextIsSafe(payload) {
+    // Choice metadata and dialog text obey the same capture-time rule as
+    // identity text: retain it exactly, or refuse before it reaches Python.
+    const strings = (value) => typeof value === 'string' ? [value]
+      : (value && typeof value === 'object' ? Object.values(value).flatMap(strings) : []);
+    if (opaqueSecretActive || strings(payload).some(
+        value => secretValueIn(value, identityMatchValues()) !== null)) {
+      emit({kind: 'privacy_refusal', reason: 'captured-text'});
+      return false;
+    }
+    return true;
+  }
   function popupLike(node) {
     try {
       const role = node.getAttribute('role');
@@ -104,7 +116,7 @@ CHOICE_CAPTURE_JS = r"""
   }
   function optionEvidence(target) {
     try {
-      if (!target || !target.closest || opaqueSecretActive) return null;
+      if (!target || !target.closest) return null;
       let el = target.closest(OPTION_ROLES.map((r) => '[role="' + r + '"]').join(','));
       let shape = null;
       if (el) {
@@ -125,8 +137,8 @@ CHOICE_CAPTURE_JS = r"""
       if (!el || !shape || !appearedThisAction(el)) return null;
       const label = choiceNorm(el.innerText || el.textContent);
       if (!label || label.length > 512) return null;
-      if (secretValueIn(label, identityMatchValues()) !== null) return null;
       const rawValue = el.getAttribute('data-value') ?? el.getAttribute('value');
+      if (!choiceTextIsSafe({label: label, value: rawValue, shape: shape})) return null;
       return {
         el: el,
         shape: shape,
@@ -208,8 +220,9 @@ CHOICE_CAPTURE_JS = r"""
     // (a search box beside the field that also changed).
     const named = changedAll.filter((key) => key.startsWith('name:'));
     const changed = (named.length ? named : changedAll).map((key) => key.slice(key.indexOf(':') + 1));
-    return {readback: readback, shows: shown,
-            field: changed.length === 1 ? changed[0] : null};
+    const committed = {readback: readback, shows: shown,
+                       field: changed.length === 1 ? changed[0] : null};
+    return choiceTextIsSafe(committed) ? committed : null;
   }
   function choicePointerEvent(down) {
     const token = SESSION_ID + ':choice:' + String(++choiceSerial);
@@ -253,9 +266,11 @@ CHOICE_CAPTURE_JS = r"""
           // A dialog from an iframe carries no coordinates, but its frame
           // must still be one the recording can place.
           if (frameSpace() === null) { refuseFrame(); return answer; }
+          const text = String(message === undefined ? '' : message);
+          if (!choiceTextIsSafe(text)) return answer;
           emitInFrameSpace({
             kind: 'dialog', type: kind,
-            message: String(message === undefined ? '' : message).slice(0, 2000),
+            message: text.slice(0, 2000),
             response: kind === 'alert' ? 'accept'
               : (kind === 'confirm' ? (answer ? 'accept' : 'dismiss')
                  : (answer === null ? 'dismiss' : 'prompt')),
@@ -285,10 +300,13 @@ NATIVE_CHOICE_JS = r"""
       if (!shown) return;
       const option = el.selectedOptions[0];
       const label = option ? choiceNorm(option.label || option.text) : '';
-      if (!label || secretValueIn(label, identityMatchValues()) !== null) {
+      if (!label) {
         emit({kind: 'control_refusal', control: 'select'});
         return;
       }
+      const value = String(el.value);
+      const field = el.name || el.id || null;
+      if (!choiceTextIsSafe({label: label, value: value, field: field})) return;
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
       const rowIdentity = structuredIdentityEvidence(cx, cy, el);
@@ -299,8 +317,8 @@ NATIVE_CHOICE_JS = r"""
         structural: frameStructural(fs, structuralTarget(cx, cy, el)),
         idr: composeRect(fs, identifierRect()),
         choice: {
-          label: label, value: String(el.value).slice(0, 512),
-          field: el.name || el.id || null,
+          label: label, value: value.slice(0, 512),
+          field: field,
         },
       };
       if (rowIdentity.withheld) out.sid_withheld = rowIdentity.withheld;

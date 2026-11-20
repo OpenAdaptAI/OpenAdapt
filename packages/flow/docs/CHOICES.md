@@ -40,7 +40,10 @@ contract (`openadapt_flow/ir.py`):
 
 When the control belongs to a named form field you passed to `--param`, the
 choice becomes that parameter, with the demonstrated label as its default.
-The label is then never asserted in any postcondition.
+The label is then never asserted in any postcondition. Choice metadata and
+browser-dialog messages follow the recorder's capture-time secret boundary:
+text that matches a declared secret, or cannot be checked because that
+boundary is opaque, stops recording before it is retained.
 
 ## At run time
 
@@ -68,6 +71,7 @@ Otherwise the step halts with a code and nothing after it runs:
 | `choice_missing` | No option shows the wanted value |
 | `choice_ambiguous` | More than one option shows it |
 | `choice_disabled` | The only match, its option group, or the select (including a disabled fieldset) is disabled |
+| `choice_unsettled` | The option census is still changing at its deadline; no option is chosen |
 | `choice_changed` | The unique enabled option disappeared, duplicated, or became disabled after the list settled |
 | `choice_search_missing` | The person searched, but no search box took focus |
 | `choice_control_missing` | No control at the resolved point |
@@ -126,7 +130,8 @@ screen and the run halts before any input; sign in again and rerun.
 
 - Governed and qualified runs that require a typed delivery receipt for
   every action refuse choice steps for now: a choice is proven by its
-  read-back, not by a receipt.
+  read-back, not by a receipt. The runtime refuses these contexts before
+  delivering any part of the choice action.
 - Reading the selected label proves the input, not the absence of an
   auto-save or another business effect. Choice steps keep the existing
   option-commit risk policy: consequential context is irreversible, and an

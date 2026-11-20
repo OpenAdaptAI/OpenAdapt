@@ -11349,6 +11349,15 @@ class Replayer:
         if step.action is not ActionKind.SELECT_OPTION:
             return None
         if step.choice is not None:
+            if (
+                self._typed_remote_receipt_required()
+                or self.production_qualification_guard is not None
+                or self.qualification_environment_observer is not None
+            ):
+                return (
+                    f"Step '{step.id}' chooses a dropdown option without a typed "
+                    "delivery receipt; refusing before input"
+                )
             kind, _mode = self._active_surface_binding(workflow)
             if (
                 kind not in (None, "web")

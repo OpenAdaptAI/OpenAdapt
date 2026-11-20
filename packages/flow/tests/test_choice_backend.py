@@ -437,3 +437,125 @@ def test_choice_contract_validation() -> None:
         {"id": "s2", "intent": "type", "action": "type", "text": "x"}
     )
     assert "choice" not in plain.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("kind", ["native", "aria_listbox"])
+def test_a_changing_option_census_is_never_accepted_at_its_deadline(
+    server: Server, browser: Any, kind: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    selector, fields = WIDGETS[kind]
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(server.base + "/w/" + kind)
+        page.evaluate(
+            """kind => {
+          window.choiceEffects = 0;
+          document.querySelector('[name=department]').addEventListener('change', () => window.choiceEffects++);
+              document.addEventListener('pointerdown', event => {
+                if (event.target.closest('[role=option]')) window.choiceEffects++;
+              }, true);
+          let n = 0;
+          window.changingOptions = setInterval(() => {
+            const options = document.querySelectorAll(kind === 'native' ? 'select option' : '[role=option]');
+            for (const option of options) {
+              if (option.textContent.startsWith('Dermatology')) option.textContent = 'Dermatology ' + (++n);
+            }
+          }, 35);
+        }""",
+            kind,
+        )
+        box = page.locator(selector).first.bounding_box()
+        point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+        backend = PlaywrightBackend(page)
+        with pytest.raises(ChoiceRefused) as error:
+            backend.choose_option(
+                OptionChoice(label="Cardiology", settle_s=0.6, **fields),
+                "Cardiology",
+                point=point,
+            )
+        assert error.value.code == "choice_unsettled"
+        assert page.locator("[name=department]").input_value() == ""
+        assert page.evaluate("window.choiceEffects") == 0
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("kind", ["native", "aria_listbox"])
+@pytest.mark.parametrize(
+    "context", ["ordinary", "governed", "fault", "production", "environment"]
+)
+def test_receipt_bound_choices_refuse_before_real_browser_input(
+    server: Server, browser: Any, kind: str, context: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import (
+        Anchor,
+        Resolution,
+        StepResult,
+        StructuralLocator,
+        Workflow,
+    )
+    from openadapt_flow.runtime import Replayer
+
+    selector, fields = WIDGETS[kind]
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(server.base + "/w/" + kind)
+        page.evaluate("""() => {
+          window.choiceEffects = 0;
+          document.querySelector('[name=department]').addEventListener('change', () => window.choiceEffects++);
+              document.addEventListener('pointerdown', event => {
+                if (event.target.closest('[role=option]')) window.choiceEffects++;
+              }, true);
+        }""")
+        box = page.locator(selector).first.bounding_box()
+        point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+        step = Step(
+            id="select",
+            intent="choose department",
+            action="select_option",
+            text="Cardiology",
+            anchor=Anchor(
+                template="t.png",
+                region=(0, 0, 1280, 800),
+                click_point=point,
+                structural=StructuralLocator(
+                    selector=selector, tag="select" if kind == "native" else "button"
+                ),
+            ),
+            choice=OptionChoice(label="Cardiology", **fields),
+        )
+        workflow = Workflow(name="choice", steps=[step])
+        replay = Replayer(PlaywrightBackend(page))
+        attribute = {
+            "governed": "governed_authorization",
+            "fault": "qualification_fault_driver",
+            "production": "production_qualification_guard",
+            "environment": "qualification_environment_observer",
+        }.get(context)
+        if attribute is not None:
+            # An unsupported action must refuse before consulting authority
+            # or environment capabilities, let alone invoking the backend.
+            setattr(replay, attribute, object())
+        result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+        error = replay._act_choice(
+            step,
+            Resolution(rung="structural", point=point, confidence=1.0, elapsed_ms=0),
+            {},
+            workflow,
+            result,
+        )
+        if context == "ordinary":
+            assert error is None
+            assert page.locator("[name=department]").input_value() == "CARD"
+            assert page.evaluate("window.choiceEffects") == 1
+        else:
+            assert error is not None and "refusing before input" in error
+            assert page.locator("[name=department]").input_value() == ""
+            assert page.evaluate("window.choiceEffects") == 0
+            assert result.delivery_attempted in (None, False)
+            assert result.safety_halt
+    finally:
+        page.close()

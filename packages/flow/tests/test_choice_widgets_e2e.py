@@ -179,3 +179,91 @@ def test_calendar_effects_need_explicit_fixture_risk_review(
     assert all(
         "operator-qualified override" in step.risk_explanation for step in choices
     )
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "declared_select",
+        "reflected_native_value",
+        "reflected_custom_value",
+        "reflected_dialog",
+    ],
+)
+def test_choice_and_dialog_metadata_never_persists_declared_secrets(
+    server: Server, tmp_path: Path, mode: str
+) -> None:
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        record_interactive,
+    )
+
+    secret = "synthetic-private-sentinel-539d8c"
+
+    def drive(page: Any, pump: Any) -> None:
+        page.wait_for_selector("#patient_name")
+        if mode == "declared_select":
+            page.evaluate(
+                "s => document.querySelector('#department option[value=CARD]').value = s",
+                secret,
+            )
+        else:
+            page.evaluate(
+                """s => {
+              const field = document.createElement('input'); field.type = 'password';
+              field.name = 'auth'; field.value = s; document.body.appendChild(field);
+            }""",
+                secret,
+            )
+            if mode == "reflected_native_value":
+                page.evaluate(
+                    "s => document.querySelector('#department option[value=CARD]').value = s",
+                    secret,
+                )
+        for _ in range(15):
+            pump()
+        if mode == "reflected_custom_value":
+            page.locator(".dd").click()
+            for _ in range(15):
+                pump()
+            page.evaluate(
+                """s => Array.from(document.querySelectorAll('.dd-item'))
+              .find(el => el.textContent === 'Cardiology').setAttribute('data-value', s)""",
+                secret,
+            )
+            page.locator(".dd-item", has_text="Cardiology").click()
+        elif mode == "reflected_dialog":
+            page.context.on("dialog", lambda dialog: dialog.accept())
+            page.evaluate(
+                """s => {
+              const button = document.createElement('button'); button.id = 'warn';
+              button.textContent = 'Show warning'; button.onclick = () => confirm(s);
+              document.body.appendChild(button);
+            }""",
+                secret,
+            )
+            page.locator("#warn").click()
+        else:
+            # Native change capture follows a person's trusted keyboard
+            # selection; programmatic select_option events are ignored.
+            page.locator("#department").click()
+            for _ in range(10):
+                pump()
+            page.keyboard.type("Cardiology")
+            page.keyboard.press("Enter")
+        for _ in range(30):
+            pump()
+
+    kind = "div_dropdown" if mode == "reflected_custom_value" else "native"
+    with pytest.raises(BrowserAttachError, match="secret") as error:
+        record_interactive(
+            server.base + "/w/" + kind,
+            tmp_path / "rec",
+            headless=True,
+            secret_fields=("department",) if mode == "declared_select" else (),
+            script=drive,
+        )
+    assert secret not in str(error.value)
+    for artifact in (tmp_path / "rec").rglob("*"):
+        if artifact.suffix in (".json", ".jsonl"):
+            assert secret not in artifact.read_text()

@@ -50,6 +50,9 @@
 
 ### Fixes
 
+- Choice labels, values, shape metadata and browser-dialog messages are
+  checked against declared secrets before capture. A matching or opaque
+  secret boundary stops recording before that text reaches its artifacts.
 - A screenshot interrupted by a navigation inside an iframe or by an open
   browser dialog is retried instead of failing the recording or run.
 - A click on a `<label>` and the click the browser forwards to its control

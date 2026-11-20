@@ -310,6 +310,10 @@ class BrowserChoice:
             if settled and matches:
                 break
             if now >= deadline:
+                if now - stable_since < _STABLE_S:
+                    raise ChoiceRefused(
+                        "choice_unsettled", "the option list did not stop changing"
+                    )
                 break
             time.sleep(_POLL_S)
         assert census is not None
@@ -415,8 +419,10 @@ class BrowserChoice:
                         "choice_search_missing", "no search box took focus"
                     )
                 self._page.keyboard.type(search_text(contract, wanted))
-            matches = self._settled_matches(scope, shape, mark, want, wanted, contract)
             try:
+                matches = self._settled_matches(
+                    scope, shape, mark, want, wanted, contract
+                )
                 self._decide(matches)
             except ChoiceRefused:
                 self._close()
@@ -490,6 +496,10 @@ class BrowserChoice:
             if now - stable_since >= _STABLE_S and candidates and matches:
                 break
             if now >= deadline:
+                if now - stable_since < _STABLE_S:
+                    raise ChoiceRefused(
+                        "choice_unsettled", "the option list did not stop changing"
+                    )
                 break
             time.sleep(_POLL_S)
         return matches
