@@ -47,7 +47,10 @@ import requests
 
 from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
-from openadapt_flow.backends.win_agent.server import VALUE_READ_CONTRACT
+from openadapt_flow.backends.win_agent.server import (
+    VALUE_READ_CONTRACT,
+    valid_form_projection_refusal,
+)
 from openadapt_flow.backends.win_agent.value_protocol import (
     locator_scope,
     valid_structural_response,
@@ -1092,7 +1095,23 @@ class WindowsBackend:
                 {"hwnd": hwnd, "pid": pid, "value_contract": VALUE_READ_CONTRACT},
             )
             payload = typed.payload
-            if payload is None or set(payload) != {"status", "window", "fields"}:
+            if (
+                payload is None
+                or set(payload) != {"status", "window", "fields", "refusal"}
+                or payload["status"] != "ok"
+            ):
+                return None
+            if payload["refusal"] is not None:
+                # A closed reason is diagnosis only, never permission or retry.
+                # Do not retain it as mutable backend/last-error state.
+                if (
+                    payload["window"] is not None
+                    or payload["fields"] != []
+                    or not valid_form_projection_refusal(
+                        payload["refusal"], window=(hwnd, pid)
+                    )
+                ):
+                    return None
                 return None
             bounds = _window_frame(payload["window"], hwnd, pid)
             fields = payload["fields"]

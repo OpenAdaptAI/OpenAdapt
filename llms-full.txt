@@ -2247,7 +2247,10 @@ What is not:
   source is qualified. Structural uniqueness is checked at both observation
   endpoints, with fresh fixed-control identity during reads, not continuously
   or as authority for a later write. Current complete-value Flow/save and
-  held-out application qualification remain pending.
+  held-out application qualification remain pending. Unavailable form reads
+  carry a closed request-local refusal receipt with fixed non-content codes;
+  it does not establish a specific provider cause beyond the observed channel,
+  does not collect extra source data after refusal and never permits retry.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

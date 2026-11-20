@@ -30,6 +30,10 @@
   current sensitivity guard protects values, previews and capability probes.
   Failed/unknown capability probes cannot become caption masks. Structural
   previews and unqualified row inventories do not authorize effect checks.
+- Unavailable native form projections return a closed request-local refusal
+  receipt with stage/channel/reason and already-known numeric metadata only.
+  Partial fields, names, values and provider exceptions are excluded. No
+  additional source read, global last-error state, fallback or retry is added.
 - Approval form state reads proven values separately from the remaining OCR
   pixels, so caret/title-bar display noise need not alter an unchanged field's
   value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).

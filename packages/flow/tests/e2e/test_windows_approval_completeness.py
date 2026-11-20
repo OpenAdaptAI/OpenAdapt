@@ -246,6 +246,13 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
                 )
             assert backend.record_verified_window("probe", *point)
             fields = backend.approval_form_fields("save")
+            # Already retained response only: never run another source getter
+            # to identify a refused control/channel after this request.
+            projection_response = next(
+                entry["response"]
+                for entry in reversed(evidence["transport"])
+                if entry["path"] == "/window/form-fields"
+            )
             phase = {
                 "name": name,
                 "managed_before": managed,
@@ -261,6 +268,7 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
                 "direct_complete": observed.complete,
                 "direct_reason": observed.reason,
                 "fields": fields,
+                "projection_refusal": projection_response.get("refusal"),
             }
             evidence["phases"].append(phase)
             if name == "long":

@@ -150,6 +150,7 @@ def test_bad_value_proof_refuses_before_digest_or_mask_at_both_consumers(kind, f
         "status": "ok",
         "window": {"hwnd": 7, "pid": 10, "bounds": list(fields["bounds"])},
         "fields": fields["fields"],
+        "refusal": None,
     }
     backend = _through_wire(wire)
     assert backend.approval_form_fields("save") is None
@@ -221,6 +222,7 @@ def test_actual_gate_refuses_incomplete_native_value_before_the_save(tmp_path, p
         "status": "ok",
         "window": {"hwnd": 7, "pid": 10, "bounds": list(fields["bounds"])},
         "fields": fields["fields"],
+        "refusal": None,
     }
     backend = _through_wire(wire)
     store = ItemApprovalStore(tmp_path / "run")

@@ -173,6 +173,7 @@ def test_known_nonsensitive_controls_keep_qualified_values_and_explicit_previews
         "openadapt.native-value-completeness/v1",
         "openadapt.native-value-completeness/v2",
         "openadapt.native-value-completeness/v3",
+        "openadapt.native-value-read/v1",
         True,
     ],
 )

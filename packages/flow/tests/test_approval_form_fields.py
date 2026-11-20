@@ -54,6 +54,8 @@ def _proof(text, hwnd=100, pid=10):
 
 
 def _proved_fields(answer):
+    if "status" in answer:
+        answer.setdefault("refusal", None)
     for field in answer["fields"]:
         field["value_identity"] = (
             "a" * 64 if field["kind"] in {"edit", "value"} else None

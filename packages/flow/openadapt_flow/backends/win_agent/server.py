@@ -1428,7 +1428,7 @@ def _read_control_value(control: object, name: str, default: Any) -> Any:
 
 # This contract belongs to the SERVER consumer semantics, not to the helper.
 # Updating a helper beside an older server cannot advertise a new read policy.
-VALUE_READ_CONTRACT = "openadapt.native-value-read/v1"
+VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
 _EXPECTED_VALUE_PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
 
 
@@ -2661,9 +2661,175 @@ def _rect(bounds: list[int]) -> list[int]:
     return [bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]]
 
 
+FORM_REFUSAL_SCHEMA = "openadapt.native-form-projection-refusal/v1"
+_FORM_VALUE_REFUSAL_REASONS = frozenset(
+    {
+        "value_unavailable",
+        "value_proof_unavailable",
+        "required_value_unavailable",
+        "native_api_unavailable",
+        "native_window_unavailable_or_not_unicode",
+        "native_owner_unavailable",
+        "native_text_timeout_or_failure",
+        "value_exceeds_limit",
+        "native_owner_changed",
+        "native_extent_or_copy_incomplete",
+        "bound_identity_unavailable",
+        "native_identity_unavailable",
+        "native_owner_disagreement",
+        "value_observation_deadline",
+        "password_or_password_status_unavailable",
+        "not_editable_value_control",
+        "read_only_or_read_only_status_unavailable",
+        "value_pattern_unavailable",
+        "value_readability_changed",
+        "value_observation_changed",
+        "provider_native_value_disagreement",
+        "value_observation_unavailable",
+        "value_identity_changed",
+    }
+)
+# One closed model binds reason to its stage/channel. No free-text diagnostic
+# slot or provider exception can cross this boundary.
+_FORM_REFUSAL_MODEL = {
+    ("frame", "window"): frozenset({"window_unavailable"}),
+    ("owned_windows", "window"): frozenset(
+        {"owned_window_present", "owned_window_inventory_unavailable"}
+    ),
+    ("uia_setup", "uia"): frozenset({"uia_unavailable", "root_unavailable"}),
+    ("traversal", "children"): frozenset({"children_unavailable"}),
+    ("traversal", "limits"): frozenset({"node_limit", "field_limit", "depth_limit"}),
+    ("observation", "visibility"): frozenset({"visibility_unknown"}),
+    ("observation", "geometry"): frozenset({"geometry_unavailable"}),
+    ("observation", "control_type"): frozenset({"control_type_unavailable"}),
+    ("observation", "state"): frozenset(
+        {
+            "state_capability_unknown",
+            "composite_state_unrepresented",
+            "toggle_state_unavailable",
+            "selection_state_unavailable",
+            "state_capability_changed",
+            "state_observation_unavailable",
+        }
+    ),
+    ("observation", "value_capability"): frozenset({"value_capability_unknown"}),
+    ("observation", "value"): _FORM_VALUE_REFUSAL_REASONS,
+    ("observation", "value_identity"): frozenset(
+        {"value_identity_unavailable", "value_identity_changed"}
+    ),
+    ("observation", "caption"): frozenset(
+        {"caption_unavailable", "caption_capability_changed"}
+    ),
+    ("final_scope", "window"): frozenset({"final_window_unavailable"}),
+}
+_FORM_REFUSAL_MODEL = {
+    key: reasons | {"projection_unavailable"}
+    for key, reasons in _FORM_REFUSAL_MODEL.items()
+}
+_FORM_REFUSAL_REASONS = frozenset().union(*_FORM_REFUSAL_MODEL.values())
+
+
+def valid_form_projection_refusal(
+    payload: object, *, window: Optional[tuple[int, int]] = None
+) -> bool:
+    """Closed non-content receipt. It cannot authorize a projection or retry."""
+    if type(payload) is not dict or set(payload) != {
+        "schema",
+        "stage",
+        "channel",
+        "reason",
+        "ordinal",
+        "window",
+    }:
+        return False
+    if type(payload["schema"]) is not str or payload["schema"] != FORM_REFUSAL_SCHEMA:
+        return False
+    if any(type(payload[key]) is not str for key in ("stage", "channel", "reason")):
+        return False
+    allowed = _FORM_REFUSAL_MODEL.get((payload["stage"], payload["channel"]))
+    if allowed is None or payload["reason"] not in allowed:
+        return False
+    ordinal = payload["ordinal"]
+    if ordinal is not None and (
+        type(ordinal) is not int or not 0 <= ordinal <= _MAX_UIA_NODES + 1
+    ):
+        return False
+    framed = payload["window"]
+    if framed is not None:
+        if (
+            type(framed) is not dict
+            or set(framed) != {"hwnd", "pid"}
+            or any(
+                type(framed[key]) is not int or framed[key] <= 0
+                for key in ("hwnd", "pid")
+            )
+        ):
+            return False
+        if window is not None and (framed["hwnd"], framed["pid"]) != window:
+            return False
+    return True
+
+
+@dataclass(frozen=True)
+class _FormProjectionRefusal:
+    stage: str
+    channel: str
+    reason: str
+    ordinal: Optional[int] = None
+
+    def payload(self, window: Optional[tuple[int, int]] = None) -> dict[str, Any]:
+        # Never serialize controls, provider errors, names or partial fields.
+        value = {
+            "schema": FORM_REFUSAL_SCHEMA,
+            "stage": self.stage,
+            "channel": self.channel,
+            "reason": self.reason,
+            "ordinal": self.ordinal,
+            "window": {"hwnd": window[0], "pid": window[1]}
+            if window is not None
+            else None,
+        }
+        if not valid_form_projection_refusal(value):
+            raise ValueError("invalid non-content projection refusal")
+        return value
+
+
+@dataclass(frozen=True)
+class _FormProjectionObservation:
+    fields: Optional[list[dict[str, Any]]]
+    refusal: Optional[_FormProjectionRefusal] = None
+
+
+def _form_refused(
+    stage: str, channel: str, reason: object, ordinal: Optional[int] = None
+) -> _FormProjectionObservation:
+    # Only enum values cross the wire. Do not str/repr an unknown reason, even
+    # if a provider injected its exception into an incomplete observation.
+    fixed = (
+        reason
+        if type(reason) is str
+        and reason in _FORM_REFUSAL_MODEL.get((stage, channel), ())
+        else "projection_unavailable"
+    )
+    return _FormProjectionObservation(
+        None, _FormProjectionRefusal(stage, channel, fixed, ordinal)
+    )
+
+
+def _form_unavailable(
+    refusal: _FormProjectionRefusal, window: Optional[tuple[int, int]] = None
+) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "window": None,
+        "fields": [],
+        "refusal": refusal.payload(window),
+    }
+
+
 def _window_form_fields(
     auto: Any, hwnd: int, scope: Callable[[], bool]
-) -> tuple[Optional[list[dict[str, Any]]], bool]:
+) -> _FormProjectionObservation:
     """The window's controls whose text UIA reads, in tree order.
 
     Each entry is ``{"kind", "rect": [x, y, w, h], "text", "state"}``:
@@ -2680,25 +2846,25 @@ def _window_form_fields(
     Value-backed entries include independent complete-value proof, including
     empty values. Missing proof refuses the entire projection; OCR is not an
     alternative for a hidden suffix. Off-screen controls are left out.
-    ``(None, False)`` when any required observation is unavailable;
-    ``truncated`` when the walk hit its bounds.
+    An unavailable observation carries only a request-local closed refusal;
+    partial fields are discarded. No diagnostic getter runs after refusal.
     """
     from_handle = getattr(auto, "ControlFromHandle", None)
     if not callable(from_handle):
-        return None, False
+        return _form_refused("uia_setup", "uia", "root_unavailable")
     try:
         window = from_handle(hwnd)
     except Exception:  # noqa: BLE001 - provider failure is no answer
-        return None, False
+        return _form_refused("uia_setup", "uia", "root_unavailable")
     if window is None:
-        return None, False
+        return _form_refused("uia_setup", "uia", "root_unavailable")
     guard = _native_value_api().require_non_sensitive_value
     try:
         guard(window)
         title = " ".join(str(_control_value(window, "Name", "") or "").split())
         guard(window)
     except Exception:  # noqa: BLE001 - no sensitive/unknown name preview
-        return None, False
+        return _form_refused("observation", "caption", "caption_unavailable", 0)
     fields: list[dict[str, Any]] = []
 
     def children_of(control: Any) -> list[Any]:
@@ -2710,37 +2876,54 @@ def _window_form_fields(
     try:
         stack: list[tuple[Any, int]] = [(c, 1) for c in reversed(children_of(window))]
     except Exception:  # noqa: BLE001 - incomplete UIA is no projection
-        return None, False
+        return _form_refused("traversal", "children", "children_unavailable", 0)
     visited = 0
     while stack:
         control, depth = stack.pop()
         visited += 1
-        if visited > _MAX_UIA_NODES or len(fields) > _MAX_FORM_FIELDS:
-            return fields, True
+        if visited > _MAX_UIA_NODES:
+            return _form_refused("traversal", "limits", "node_limit", visited)
+        if len(fields) > _MAX_FORM_FIELDS:
+            return _form_refused("traversal", "limits", "field_limit", visited)
         control_type = _control_value(control, "ControlTypeName", None)
         bounds = _bounds(control)
         offscreen = _form_boolean_property(control, 30022)
         if offscreen is None:
-            return None, False
+            return _form_refused(
+                "observation", "visibility", "visibility_unknown", visited
+            )
         on_screen = not offscreen
-        if on_screen and (
-            bounds is None or not isinstance(control_type, str) or not control_type
-        ):
-            return None, False
+        if on_screen and bounds is None:
+            return _form_refused(
+                "observation", "geometry", "geometry_unavailable", visited
+            )
+        if on_screen and (not isinstance(control_type, str) or not control_type):
+            return _form_refused(
+                "observation", "control_type", "control_type_unavailable", visited
+            )
         try:
             children = children_of(control)
         except Exception:  # noqa: BLE001 - an unknown subtree is not a leaf
-            return None, False
+            return _form_refused(
+                "traversal", "children", "children_unavailable", visited
+            )
         state = None
         exposes = False
         if on_screen:
             observed_state = _form_field_state(control)
             if not observed_state.complete:
-                return None, False
+                return _form_refused(
+                    "observation", "state", observed_state.reason, visited
+                )
             state = observed_state.state
             capability = _form_exposes_value(control)
             if capability is None:
-                return None, False
+                return _form_refused(
+                    "observation",
+                    "value_capability",
+                    "value_capability_unknown",
+                    visited,
+                )
             exposes = capability
 
         def identity(c: object = control) -> Optional[str]:
@@ -2765,13 +2948,29 @@ def _window_form_fields(
             # no Edit/Document or nominal label type may hide an unread value.
             value_identity = identity()
             observed = _form_field_value(control, identity)
-            if (
-                not observed.complete
-                or observed.proof is None
-                or value_identity is None
-                or identity() != value_identity
-            ):
-                return None, False
+            if not observed.complete:
+                reason = (
+                    observed.reason
+                    if type(observed.reason) is str
+                    and observed.reason in _FORM_REFUSAL_REASONS
+                    else "value_unavailable"
+                )
+                return _form_refused("observation", "value", reason, visited)
+            if observed.proof is None:
+                return _form_refused(
+                    "observation", "value", "value_proof_unavailable", visited
+                )
+            if value_identity is None:
+                return _form_refused(
+                    "observation",
+                    "value_identity",
+                    "value_identity_unavailable",
+                    visited,
+                )
+            if identity() != value_identity:
+                return _form_refused(
+                    "observation", "value_identity", "value_identity_changed", visited
+                )
             if (
                 children
                 or control_type
@@ -2800,7 +2999,9 @@ def _window_form_fields(
         ):
             # A required field with no supported value source is unavailable;
             # pattern absence does not establish absence of business data.
-            return None, False
+            return _form_refused(
+                "observation", "value", "required_value_unavailable", visited
+            )
         elif control_type == "TitleBarControl":
             if bounds is not None and on_screen and title:
                 fields.append(
@@ -2824,9 +3025,16 @@ def _window_form_fields(
                     )
                     guard(control)
                     if _form_exposes_value(control) is not False:
-                        return None, False
+                        return _form_refused(
+                            "observation",
+                            "caption",
+                            "caption_capability_changed",
+                            visited,
+                        )
                 except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
-                    return None, False
+                    return _form_refused(
+                        "observation", "caption", "caption_unavailable", visited
+                    )
                 if name:
                     fields.append(
                         {
@@ -2845,22 +3053,17 @@ def _window_form_fields(
             append_state()
         if children:
             if depth >= _MAX_UIA_DEPTH:
-                return fields, True
+                return _form_refused("traversal", "limits", "depth_limit", visited)
             stack.extend((c, depth + 1) for c in reversed(children))
-    return fields, len(fields) > _MAX_FORM_FIELDS
+    if len(fields) > _MAX_FORM_FIELDS:
+        return _form_refused("traversal", "limits", "field_limit", visited)
+    return _FormProjectionObservation(fields)
 
 
 def _window_form_fields_operation(
     payload: dict[str, Any], user32: Any, auto_loader: Callable[[], Any]
 ) -> dict[str, Any]:
-    """``window-form-fields``: the window's frame (as ``window-bounds``) and
-    its text fields' values, for an approval's form state.
-
-    Answers ``window: None`` whenever the read could hide something on the
-    screen: the window is not one ``window-bounds`` names, the app shows any
-    other window (it could sit over a field whose pixels the caller leaves
-    out), or UIA cannot read the window completely.
-    """
+    """One complete projection or its request-local non-content refusal."""
     data = _exact_object(
         payload,
         required=frozenset({"hwnd", "pid", "value_contract"}),
@@ -2871,16 +3074,32 @@ def _window_form_fields_operation(
     framed = _window_operation("window-bounds", frame_payload, user32)
     window = framed.get("window")
     if window is None:
-        return {"status": "ok", "window": None, "fields": []}
+        return _form_unavailable(
+            _FormProjectionRefusal("frame", "window", "window_unavailable")
+        )
     hwnd, pid = window["hwnd"], window["pid"]
-    for candidate in user32.top_level_windows():
-        if candidate == hwnd or user32.pid_of(candidate) != pid:
-            continue
-        if not user32.is_visible(candidate):
-            continue
-        cloaked = user32.is_cloaked(candidate)
-        if cloaked is None or not cloaked:
-            return {"status": "ok", "window": None, "fields": []}
+    known_window = (hwnd, pid)
+    try:
+        for candidate in user32.top_level_windows():
+            if candidate == hwnd or user32.pid_of(candidate) != pid:
+                continue
+            if not user32.is_visible(candidate):
+                continue
+            cloaked = user32.is_cloaked(candidate)
+            if cloaked is None or not cloaked:
+                return _form_unavailable(
+                    _FormProjectionRefusal(
+                        "owned_windows", "window", "owned_window_present"
+                    ),
+                    known_window,
+                )
+    except Exception:  # noqa: BLE001 - no provider error text in diagnostics
+        return _form_unavailable(
+            _FormProjectionRefusal(
+                "owned_windows", "window", "owned_window_inventory_unavailable"
+            ),
+            known_window,
+        )
 
     def unchanged() -> bool:
         fresh = _window_operation("window-bounds", frame_payload, user32).get("window")
@@ -2894,12 +3113,35 @@ def _window_form_fields_operation(
             for candidate in user32.top_level_windows()
         )
 
-    auto = auto_loader()
-    with auto.UIAutomationInitializerInThread():
-        fields, truncated = _window_form_fields(auto, hwnd, unchanged)
-    if fields is None or truncated or not unchanged():
-        return {"status": "ok", "window": None, "fields": []}
-    return {"status": "ok", "window": window, "fields": fields}
+    result: Optional[_FormProjectionObservation] = None
+    try:
+        auto = auto_loader()
+        with auto.UIAutomationInitializerInThread():
+            result = _window_form_fields(auto, hwnd, unchanged)
+    except Exception:  # noqa: BLE001 - a cleanup error never overwrites first refusal
+        if result is not None and result.refusal is not None:
+            return _form_unavailable(result.refusal, known_window)
+        return _form_unavailable(
+            _FormProjectionRefusal("uia_setup", "uia", "uia_unavailable"), known_window
+        )
+    if result.refusal is not None:
+        # No unchanged(), tree query or extra getter after the first refusal.
+        return _form_unavailable(result.refusal, known_window)
+    if result.fields is None:
+        return _form_unavailable(
+            _FormProjectionRefusal("uia_setup", "uia", "projection_unavailable"),
+            known_window,
+        )
+    try:
+        current = unchanged()
+    except Exception:  # noqa: BLE001 - no extra source query to diagnose this
+        current = False
+    if not current:
+        return _form_unavailable(
+            _FormProjectionRefusal("final_scope", "window", "final_window_unavailable"),
+            known_window,
+        )
+    return {"status": "ok", "window": window, "fields": result.fields, "refusal": None}
 
 
 def _load_uiautomation() -> Any:
@@ -2927,10 +3169,10 @@ def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
             )
         except AgentRequestError:
             raise
-        except Exception as exc:  # noqa: BLE001 - bounded, never a crash
-            raise AgentRequestError(
-                503, "uia_unavailable", "window state is unavailable"
-            ) from exc
+        except Exception:  # noqa: BLE001 - no provider exception text in receipt
+            return _form_unavailable(
+                _FormProjectionRefusal("uia_setup", "uia", "uia_unavailable")
+            )
     if operation in _WINDOW_OPERATIONS:
         if os.name != "nt":
             raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
