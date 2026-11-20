@@ -426,6 +426,8 @@ exclude = [
 # recipes/raw rows are absent from the current public tree. Public mechanisms,
 # fake-patient synthetic fixtures, and bounded aggregate evidence remain.
 exclude = [
+    # Uncompiled capability source candidates are repository-only.
+    "/prototypes",
     # Registry bundles are fetched by `openadapt-flow pull`, not shipped.
     "/registry",
     "/.hypothesis",
