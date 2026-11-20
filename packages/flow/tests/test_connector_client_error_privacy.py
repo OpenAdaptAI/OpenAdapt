@@ -10,6 +10,16 @@ from openadapt_flow.connector.client import ConnectorClient, ConnectorClientErro
 from openadapt_flow.connector.config import ConnectorSettings
 
 
+def _callback(status):
+    # The smallest body the closed callback allow-list accepts.
+    return {
+        "run_id": "own-run",
+        "org_id": "own-org",
+        "workflow_id": "own-wf",
+        "status": status,
+    }
+
+
 class BodyMustNotBeRendered(httpx.Response):
     @property
     def text(self):
@@ -58,7 +68,7 @@ class ClientErrorPrivacyTests(unittest.TestCase):
                                     client.ack("own-job", "failed")
                                 else:
                                     client.run_callback(
-                                        {"status": "failed"}, run_token=secret
+                                        _callback("failed"), run_token=secret
                                     )
                         message = str(failure.exception)
                         self.assertEqual(message, f"{label}: HTTP {status}")
@@ -96,7 +106,9 @@ class ClientErrorPrivacyTests(unittest.TestCase):
             self.assertIsNone(client.poll(1))
             self.assertEqual(client.poll(1), {"id": "own-job"})
             self.assertEqual(client.ack("own-job", "done"), {"already_released": True})
-            self.assertIsNone(client.run_callback({"status": "done"}, run_token=secret))
+            self.assertIsNone(
+                client.run_callback(_callback("success"), run_token=secret)
+            )
         self.assertEqual(
             requests,
             [

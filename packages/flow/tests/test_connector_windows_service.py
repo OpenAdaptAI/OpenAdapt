@@ -287,7 +287,8 @@ def test_serve_refuses_the_stub_job_then_stops_on_the_event(tmp_path: Path) -> N
     ack = next(r for r in records if r["path"] == "/api/connector/ack")
     assert ack["body"]["job_id"] == stub.JOB_ID
     assert ack["body"]["status"] == "failed"
-    assert "safety" in (ack["body"]["error"] or "")
+    assert ack["body"]["error_code"] == "governance_refused"
+    assert "error" not in ack["body"]
     assert TOKEN not in log.read_text("utf-8")
     text = ws.log_path(config_dir).read_text("utf-8")
     assert TOKEN not in text and "service stopped" in text
@@ -411,14 +412,17 @@ def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
     assert "ConnectorClientError" in text
 
 
-def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
+def test_stop_during_an_existing_job_reports_and_acks_before_exit(
+    tmp_path, monkeypatch
+):
     import hashlib
     import zipfile
 
     from openadapt_flow.connector.executor import RunOutcome
 
     config = tmp_path / "connector"
-    _write_config(config, "https://cp.example")
+    # One worker: the service must not lease a second job while the first runs.
+    _write_config(config, "https://cp.example", max_workers=1)
     bundle = config / "storage/bundles/wf_stub/bundle.zip"
     bundle.parent.mkdir(parents=True)
     with zipfile.ZipFile(bundle, "w") as archive:
@@ -448,6 +452,26 @@ def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
             0, {"execution_target_kind": "web", "success": True, "model_calls": 0}
         )
 
+    from openadapt_flow.connector import daemon
+
+    def handle_job(client, settings, job, *, runner, **_kwargs):
+        # Managed authority is covered by the connector contract tests; this
+        # control is about the service stop: the in-flight job still reports
+        # and acknowledges before serve() returns.
+        runner()
+        client.run_callback(
+            {
+                "run_id": job.run_id,
+                "org_id": job.org_id,
+                "workflow_id": job.workflow_id,
+                "status": "success",
+            },
+            run_token=job.run_token,
+        )
+        client.ack(job.lease_job_id, "done")
+        return {}
+
+    monkeypatch.setattr(daemon, "handle_job", handle_job)
     logger, redactor = ws.build_logger(config, name="test.ws.finish")
     assert (
         ws.serve(
