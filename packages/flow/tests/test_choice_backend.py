@@ -285,6 +285,98 @@ def test_native_select_respects_inherited_disabled_state(
     assert not confirmed
 
 
+@pytest.mark.parametrize(
+    "fault", ["reorder", "relabel", "duplicate", "disabled", "removed", "shared_value"]
+)
+def test_native_semantics_are_rechecked_before_dispatching_change(
+    server: Server, browser: Any, monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    original = BrowserChoice._commit_native
+
+    def mutate(handle: Any, chosen: Any, want: str, wanted: str) -> bool:
+        handle.evaluate(
+            """(el, fault) => {
+              const select = el.closest('select');
+              const target = Array.from(select.options).find(o => o.text === 'Cardiology');
+              window.nativeEffects = [];
+              select.addEventListener('change', () =>
+                window.nativeEffects.push(select.selectedOptions[0].text));
+              if (fault === 'reorder') {
+                for (const option of Array.from(select.options).reverse()) select.appendChild(option);
+              } else if (fault === 'relabel') {
+                target.text = 'Wrong department';
+              } else if (fault === 'duplicate') {
+                select.appendChild(target.cloneNode(true));
+              } else if (fault === 'disabled') {
+                const group = document.createElement('optgroup');
+                group.disabled = true; select.appendChild(group); group.appendChild(target);
+              } else if (fault === 'shared_value') {
+                const other = target.cloneNode(true); other.text = 'Different label';
+                select.insertBefore(other, target);
+              } else {
+                target.remove();
+              }
+            }""",
+            fault,
+        )
+        return original(handle, chosen, want, wanted)
+
+    monkeypatch.setattr(BrowserChoice, "_commit_native", staticmethod(mutate))
+    effects: list[list[str]] = []
+    outcome, value, confirmed = _choose(
+        server,
+        browser,
+        "native",
+        "Cardiology",
+        check=lambda page: effects.append(page.evaluate("window.nativeEffects")),
+    )
+    if fault in ("reorder", "shared_value"):
+        assert isinstance(outcome, dict), outcome
+        assert effects == [["Cardiology"]]
+        assert value == "CARD"
+        assert confirmed
+    else:
+        assert isinstance(outcome, ChoiceRefused), outcome
+        assert outcome.code == "choice_changed"
+        assert effects == [[]]
+        assert value in ("", None)
+        assert not confirmed
+
+
+@pytest.mark.parametrize("kind", ["alert", "confirm", "beforeunload"])
+def test_all_unexpected_browser_dialogs_are_dismissed_and_retained(
+    server: Server, browser: Any, kind: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    page = browser.new_page()
+    try:
+        page.goto(server.base + "/w/native")
+        page.locator("#patient_name").click()
+        page.keyboard.type("Synthetic unsaved edits")
+        backend = PlaywrightBackend(page)
+        backend.watch_dialogs()
+        if kind == "beforeunload":
+            page.evaluate("""() => window.addEventListener('beforeunload', e => {
+              e.preventDefault(); e.returnValue = '';
+            })""")
+            with pytest.raises(sync_api.Error, match="ERR_ABORTED"):
+                page.goto(server.base + "/w/chosen")
+            assert page.url.endswith("/w/native")
+            assert (
+                page.locator("#patient_name").input_value() == "Synthetic unsaved edits"
+            )
+        else:
+            page.evaluate("kind => window[kind]('Synthetic warning')", kind)
+        seen = backend.take_unexpected_dialogs()
+        assert len(seen) == 1
+        assert seen[0]["type"] == kind
+        assert seen[0]["response"] == "dismiss"
+        assert seen[0]["matched"] is False
+    finally:
+        page.close()
+
+
 def test_a_choice_the_page_reverts_is_not_confirmed(
     server: Server, browser: Any
 ) -> None:

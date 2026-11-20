@@ -318,16 +318,7 @@ class BrowserChoice:
         self._decide(matches)
         chosen = matches[0]
         try:
-            handle.evaluate(
-                """(el, value) => {
-                  const sel = el.closest('select');
-                  sel.focus();
-                  sel.value = value;
-                  sel.dispatchEvent(new Event('input', {bubbles: true}));
-                  sel.dispatchEvent(new Event('change', {bubbles: true}));
-                }""",
-                chosen["value"],
-            )
+            delivered = self._commit_native(handle, chosen, want, wanted)
         except Exception as exc:
             raise ActionDeliveryUncertain(
                 operation="choice_select",
@@ -335,6 +326,10 @@ class BrowserChoice:
                 target_fingerprint=None,
                 cause_type=type(exc).__name__,
             ) from exc
+        if not delivered:
+            raise ChoiceRefused(
+                "choice_changed", "the option changed after the list settled"
+            )
         observed = handle.evaluate(_NATIVE_READ_JS)
         if (
             not isinstance(observed, dict)
@@ -351,6 +346,39 @@ class BrowserChoice:
             chosen["value"],
         )
         return {"label": chosen["label"], "value": chosen["value"]}
+
+    @staticmethod
+    def _commit_native(
+        handle: Any, chosen: dict[str, Any], want: str, wanted: str
+    ) -> bool:
+        # Recheck and select in one page-side operation. No input/change
+        # event may be dispatched from a stale census. Selecting the exact
+        # semantic option also handles different labels sharing one value.
+        return bool(
+            handle.evaluate(
+                "(el, args) => {"
+                + _HELPERS
+                + r"""
+                  const [label, value, want, wanted] = args;
+                  const sel = el.closest('select');
+                  if (!sel || sel.multiple || sel.matches(':disabled')) return false;
+                  const matches = Array.from(sel.options).filter(o => o.value !== ''
+                    && (norm(o.label || o.text) === want || o.value === wanted));
+                  if (matches.length !== 1) return false;
+                  const option = matches[0];
+                  if (option.disabled || option.closest('optgroup[disabled]')
+                      || option.value !== value || norm(option.label || option.text) !== label) {
+                    return false;
+                  }
+                  sel.focus();
+                  option.selected = true;
+                  sel.dispatchEvent(new Event('input', {bubbles: true}));
+                  sel.dispatchEvent(new Event('change', {bubbles: true}));
+                  return true;
+                }""",
+                [chosen["label"], chosen["value"], want, wanted],
+            )
+        )
 
     # -- listed options ------------------------------------------------------
 

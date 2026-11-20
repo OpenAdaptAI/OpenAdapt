@@ -32,8 +32,10 @@
   choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
   `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
   resolved again by label or value before actuation, so a reordered list cannot
-  redirect a saved position. Native selects respect disabled option groups
-  and fieldsets. A choice on a field passed to
+  redirect a saved position. Native selection revalidates the semantic
+  option atomically before emitting change events and selects that exact
+  option even when different labels share a value. Native selects respect
+  disabled option groups and fieldsets. A choice on a field passed to
   `--param` becomes that parameter. Interactive and attached recording no
   longer refuse a native `<select>`, and lists that choose on press or on
   release (where the browser sends no click to the option) are no longer
@@ -43,7 +45,8 @@
   that raised them, including a dialog the next page raises after a save.
   A headed recording leaves the dialog for the person instead of letting
   Playwright dismiss it. A program recorded this way stops on a dialog no
-  step expects (`dialog_unexpected`).
+  step expects (`dialog_unexpected`), including a before-unload warning
+  that would otherwise discard unsaved edits.
 
 ### Fixes
 

@@ -5945,14 +5945,6 @@ class PlaywrightBackend:
             kind = str(dialog.type)
         except Exception:
             kind = ""
-        if kind == "beforeunload" and self._dialog_armed is None:
-            # Leaving a page with unsaved edits: keep Playwright's default
-            # (stay on course and let the navigation the step caused happen).
-            try:
-                dialog.accept()
-            except Exception:
-                pass
-            return
         armed, self._dialog_armed = self._dialog_armed, None
         matched = False
         if armed is not None:

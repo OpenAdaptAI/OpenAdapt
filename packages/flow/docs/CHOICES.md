@@ -94,8 +94,9 @@ A program compiled from such a recording (`dialogs_recorded` in
 `workflow.json`) has the backend answer every dialog from the first action
 on. A dialog that no step expects is dismissed, never accepted, and the run
 stops with `dialog_unexpected`, checked after each step and before the next.
-A `beforeunload` prompt keeps the browser's default. Programs compiled before
-this keep their previous behaviour. A `prompt()` that needs typed text stops
+An unexpected `beforeunload` warning is dismissed as well: unsaved edits
+stay on the original page and the run stops. Programs compiled before this
+keep their previous behaviour. A `prompt()` that needs typed text stops
 the recording; it is not a recordable action. A screenshot taken while a
 dialog is open waits for it to be answered (up to 2 minutes for a person in
 a headed recording).

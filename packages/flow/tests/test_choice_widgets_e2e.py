@@ -159,3 +159,23 @@ def test_the_persons_own_dialog_answer_is_recorded(
     assert dialogs == [{"response": "dismiss", "message": "Register this patient?"}]
     assert json.loads((rec / "meta.json").read_text())["dialogs_captured"] is True
     assert server.app.records[before:] == []
+
+
+def test_calendar_effects_need_explicit_fixture_risk_review(
+    server: Server, tmp_path: Path
+) -> None:
+    from openadapt_flow.ir import Workflow
+
+    refused, detail = _record(server, "datepicker", tmp_path / "unreviewed")
+    assert refused is None
+    assert detail.startswith("compile_refused: SectionsError:")
+    bundle, detail = _record(
+        server, "datepicker", tmp_path / "reviewed", review_fixture_choices=True
+    )
+    assert bundle is not None, detail
+    choices = [step for step in Workflow.load(bundle).steps if step.choice is not None]
+    assert choices
+    assert all(not step.risk_review_required for step in choices)
+    assert all(
+        "operator-qualified override" in step.risk_explanation for step in choices
+    )

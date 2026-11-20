@@ -258,7 +258,13 @@ def _path(kind: str) -> str:
     return "/register" if kind == "register" else f"/w/{kind}"
 
 
-def _record(server: Server, kind: str, root: Path) -> tuple[Optional[Path], str]:
+def _record(
+    server: Server,
+    kind: str,
+    root: Path,
+    *,
+    review_fixture_choices: bool = False,
+) -> tuple[Optional[Path], str]:
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.interactive_recorder import record_interactive
 
@@ -279,7 +285,24 @@ def _record(server: Server, kind: str, root: Path) -> tuple[Optional[Path], str]
     except Exception as exc:  # noqa: BLE001 - scored, not raised
         return None, f"record_refused: {type(exc).__name__}: {str(exc)[:300]}"
     try:
-        compile_recording(rec, root / "bundle", name=f"register_{kind}")
+        risk_overrides = None
+        if review_fixture_choices:
+            # An explicit review of this synthetic app: dropdowns only edit
+            # the local form; its Save handler alone persists registration.
+            # Keep that decision in compile_recording's existing operator
+            # override data instead of teaching the engine an app shortcut.
+            events = [
+                json.loads(line)
+                for line in (rec / "events.jsonl").read_text().splitlines()
+            ]
+            risk_overrides = {
+                f"step_{int(event['i']):03d}": "reversible"
+                for event in events
+                if isinstance(event.get("choice"), dict)
+            }
+        compile_recording(
+            rec, root / "bundle", name=f"register_{kind}", risk_overrides=risk_overrides
+        )
     except Exception as exc:  # noqa: BLE001
         return None, f"compile_refused: {type(exc).__name__}: {str(exc)[:300]}"
     return root / "bundle", "ok"
@@ -327,12 +350,20 @@ def _replay(
     return bool(report.success), detail
 
 
-def measure_kind(server: Server, kind: str, work: Path) -> dict[str, Any]:
+def measure_kind(
+    server: Server, kind: str, work: Path, *, review_fixture_choices: bool = False
+) -> dict[str, Any]:
     from openadapt_flow.ir import Workflow
 
     field, demo_value, held_label, held_value = EXPECT[kind]
-    out: dict[str, Any] = {"kind": kind, "cases": {}}
-    bundle, status = _record(server, kind, work / kind)
+    out: dict[str, Any] = {
+        "kind": kind,
+        "cases": {},
+        "fixture_choices_reviewed": review_fixture_choices,
+    }
+    bundle, status = _record(
+        server, kind, work / kind, review_fixture_choices=review_fixture_choices
+    )
     out["pipeline"] = status
     if bundle is None:
         category = status.split(":", 1)[0]
@@ -482,6 +513,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--kinds", default="")
     parser.add_argument("--label", default="")
+    parser.add_argument(
+        "--review-fixture-choices",
+        action="store_true",
+        help="record an explicit local-form-effect risk review for this synthetic fixture's choices",
+    )
     args = parser.parse_args(argv)
     from benchmark.choice_widgets.app import WIDGETS
 
@@ -492,7 +528,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         with tempfile.TemporaryDirectory(prefix="choice-widgets-") as tmp:
             for kind in kinds:
                 try:
-                    results.append(measure_kind(server, kind, Path(tmp)))
+                    results.append(
+                        measure_kind(
+                            server,
+                            kind,
+                            Path(tmp),
+                            review_fixture_choices=args.review_fixture_choices,
+                        )
+                    )
                 except Exception:  # noqa: BLE001
                     results.append(
                         {

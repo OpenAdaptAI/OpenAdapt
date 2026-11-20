@@ -61,7 +61,17 @@ helpers into `choice_capture.py` and the final semantic-lookup safety fixes. Loa
 | select2 | safe_halt → verified | unbindable → verified | safe_halt → verified | safe_halt → safe_halt | safe_halt → safe_halt | safe_halt → safe_halt | safe_halt → safe_halt | safe_halt → safe_halt |
 | tom_select | record_refused → verified | record_refused → verified | record_refused → verified | record_refused → safe_halt | record_refused → safe_halt | record_refused → safe_halt | record_refused → safe_halt | record_refused → safe_halt |
 
-No case stored a wrong record, before or after.
+No case stored a wrong record in the retained before/after runs.
+
+A later unreviewed run at `c3801377e` kept the conservative option-commit risk
+policy and produced 24 verified cases, 40 safe stops and 16 compilation
+refusals: the calendar and full-registration tasks were refused because a
+potential save also filled a field. Input read-back does not establish that a
+control lacks an auto-save. `--review-fixture-choices` records an explicit
+operator risk decision for this synthetic app's local form edits, through the
+compiler's existing `risk_overrides` data. It does not change the engine's
+risk policy or qualify any real application. The raw output marks this flag
+in each result.
 
 - The final synthetic run at `d32bb3113` has 30 verified cases, 46 safe
   stops and 4 inapplicable date-picker cases, out of 80. All nine applicable
@@ -89,7 +99,7 @@ dropdowns; they are fail-closed and stored nothing.
 From `packages/flow`, write fresh results outside the checkout:
 
 ```bash
-python -m benchmark.choice_widgets.measure --out /tmp/choice-results/fixture_after.json
+python -m benchmark.choice_widgets.measure --review-fixture-choices --out /tmp/choice-results/fixture_after.json
 podman compose -f benchmark/choice_widgets/openemr/compose.yml up -d
 python -m benchmark.choice_widgets.real_apps --app openemr --out /tmp/choice-results/openemr_after.json
 podman compose -f benchmark/choice_widgets/openmrs/compose.yml up -d
