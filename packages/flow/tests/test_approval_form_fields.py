@@ -485,6 +485,12 @@ class _Control:
         assert ignore_default == 1
         if property_id == 30019:
             return self.IsPassword
+        if property_id == 30022:
+            return self.IsOffscreen
+        if property_id == 30041:
+            return self._toggle is not None
+        if property_id == 30036:
+            return self._selected is not None
         assert property_id == 30043
         return self._value is not None
 
@@ -792,13 +798,19 @@ def test_every_masked_text_source_retains_an_edit_beyond_preview_length(
 @pytest.mark.parametrize(
     "control_type", ["CheckBoxControl", "RadioButtonControl", "TabItemControl"]
 )
-def test_a_stateful_control_with_unreadable_state_keeps_its_pixels(
+def test_a_stateful_control_with_unreadable_state_refuses_projection(
     monkeypatch, control_type
 ):
     control = _Control(control_type, name="Choice", bounds=(20, 44, 500, 70))
+    original_property = control.GetPropertyValueEx
+    control.GetPropertyValueEx = lambda property_id, ignore_default: (
+        None
+        if property_id in {30036, 30041}
+        else original_property(property_id, ignore_default)
+    )
     perform = _agent(monkeypatch, _window(control))
     answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
-    assert answer["window"] is not None
+    assert answer["window"] is None
     assert answer["fields"] == []
 
 

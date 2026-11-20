@@ -2499,8 +2499,8 @@ _TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 _UIA_IS_VALUE_PATTERN_AVAILABLE = 30043
 
 
-def _form_exposes_value(control: object) -> Optional[bool]:
-    """Known value capability, known absence, or unknown; never guess by text.
+def _form_boolean_property(control: object, property_id: int) -> Optional[bool]:
+    """An exact supported UIA boolean property, or unknown; never default.
 
     UIA's availability property is VT_BOOL. Ignore default values so a missing
     property yields the reserved unsupported object, not a default False that
@@ -2514,11 +2514,15 @@ def _form_exposes_value(control: object) -> Optional[bool]:
         guard(control)
         if not callable(method):
             return None
-        available = method(_UIA_IS_VALUE_PATTERN_AVAILABLE, 1)
+        available = method(property_id, 1)
         guard(control)
         return available if type(available) is bool else None
     except Exception:  # noqa: BLE001 - unknown capability is not absence
         return None
+
+
+def _form_exposes_value(control: object) -> Optional[bool]:
+    return _form_boolean_property(control, _UIA_IS_VALUE_PATTERN_AVAILABLE)
 
 
 def _form_field_value(control: object, identity: Callable[[], Optional[str]]) -> Any:
@@ -2589,26 +2593,68 @@ def _form_value_identity(
         return None
 
 
-def _form_field_state(control: object, control_type: str) -> Optional[str]:
-    """A check box's toggle state, or whether an item is selected; else None."""
-    if control_type in ("CheckBoxControl", "RadioButtonControl"):
-        method = _control_value(control, "GetTogglePattern", None)
-        if callable(method):
-            try:
-                state = getattr(method(), "ToggleState", None)
-            except Exception:  # noqa: BLE001 - pattern not supported
-                state = None
-            if state in _TOGGLE_STATES:
-                return _TOGGLE_STATES[state]
-    method = _control_value(control, "GetSelectionItemPattern", None)
-    if callable(method):
-        try:
-            selected = getattr(method(), "IsSelected", None)
-        except Exception:  # noqa: BLE001 - pattern not supported
-            selected = None
-        if isinstance(selected, bool):
-            return "selected" if selected else "unselected"
-    return None
+@dataclass(frozen=True)
+class _FormStateObservation:
+    complete: bool
+    state: Optional[str]
+    reason: Optional[str] = None
+
+
+def _form_field_state(control: object) -> _FormStateObservation:
+    """Distinguish known absent state patterns from unknown observations.
+
+    This describes the two state patterns in the declared form projection;
+    it does not establish element absence, record identity or a business value.
+    Composite toggle+selection state has no wire representation and refuses.
+    """
+    guard = _native_value_api().require_non_sensitive_value
+
+    def read(capability: str, attribute: str) -> Any:
+        guard(control)
+        method = _control_value(control, capability, None)
+        guard(control)
+        if not callable(method):
+            raise ValueError("state pattern unavailable")
+        pattern = method()
+        guard(control)
+        value = getattr(pattern, attribute, None)
+        guard(control)
+        return value
+
+    try:
+        toggle = _form_boolean_property(control, 30041)
+        selection = _form_boolean_property(control, 30036)
+        if toggle is None or selection is None:
+            return _FormStateObservation(False, None, "state_capability_unknown")
+        if toggle and selection:
+            return _FormStateObservation(False, None, "composite_state_unrepresented")
+
+        def unchanged() -> bool:
+            return (
+                _form_boolean_property(control, 30041),
+                _form_boolean_property(control, 30036),
+            ) == (toggle, selection)
+
+        if toggle:
+            value = read("GetTogglePattern", "ToggleState")
+            if type(value) is not int or value not in _TOGGLE_STATES:
+                return _FormStateObservation(False, None, "toggle_state_unavailable")
+            if not unchanged():
+                return _FormStateObservation(False, None, "state_capability_changed")
+            return _FormStateObservation(True, _TOGGLE_STATES[value])
+        if selection:
+            value = read("GetSelectionItemPattern", "IsSelected")
+            if type(value) is not bool:
+                return _FormStateObservation(False, None, "selection_state_unavailable")
+            if not unchanged():
+                return _FormStateObservation(False, None, "state_capability_changed")
+            return _FormStateObservation(True, "selected" if value else "unselected")
+        complete = unchanged()
+        return _FormStateObservation(
+            complete, None, None if complete else "state_capability_changed"
+        )
+    except Exception:  # noqa: BLE001 - no sensitive/unknown state fallback
+        return _FormStateObservation(False, None, "state_observation_unavailable")
 
 
 def _rect(bounds: list[int]) -> list[int]:
@@ -2671,14 +2717,91 @@ def _window_form_fields(
         visited += 1
         if visited > _MAX_UIA_NODES or len(fields) > _MAX_FORM_FIELDS:
             return fields, True
-        control_type = str(_control_value(control, "ControlTypeName", ""))
+        control_type = _control_value(control, "ControlTypeName", None)
         bounds = _bounds(control)
-        on_screen = _control_value(control, "IsOffscreen", True) is False
+        offscreen = _form_boolean_property(control, 30022)
+        if offscreen is None:
+            return None, False
+        on_screen = not offscreen
+        if on_screen and (
+            bounds is None or not isinstance(control_type, str) or not control_type
+        ):
+            return None, False
         try:
             children = children_of(control)
         except Exception:  # noqa: BLE001 - an unknown subtree is not a leaf
             return None, False
-        if control_type == "TitleBarControl":
+        state = None
+        exposes = False
+        if on_screen:
+            observed_state = _form_field_state(control)
+            if not observed_state.complete:
+                return None, False
+            state = observed_state.state
+            capability = _form_exposes_value(control)
+            if capability is None:
+                return None, False
+            exposes = capability
+
+        def identity(c: object = control) -> Optional[str]:
+            return _form_value_identity(c, window, hwnd, scope, auto)
+
+        def append_state() -> None:
+            if state is not None and bounds is not None and on_screen:
+                fields.append(
+                    {
+                        "kind": "state",
+                        "rect": _rect(bounds),
+                        "text": "",
+                        "state": state,
+                        "value_proof": None,
+                        "value_identity": None,
+                    }
+                )
+
+        if on_screen and exposes and bounds is not None:
+            # A real value capability owns a complete-value obligation on ANY
+            # control type. Containers and generic value controls stay unmasked;
+            # no Edit/Document or nominal label type may hide an unread value.
+            value_identity = identity()
+            observed = _form_field_value(control, identity)
+            if (
+                not observed.complete
+                or observed.proof is None
+                or value_identity is None
+                or identity() != value_identity
+            ):
+                return None, False
+            if (
+                children
+                or control_type
+                not in _FORM_VALUE_TYPES | _FORM_NAMED_TYPES | _FORM_ITEM_TYPES
+            ):
+                kind = "value"
+            else:
+                kind = "edit" if control_type in _FORM_VALUE_TYPES else "text"
+            fields.append(
+                {
+                    "kind": kind,
+                    "rect": _rect(bounds),
+                    "text": observed.value,
+                    "state": state if kind == "text" else None,
+                    "value_proof": observed.proof.payload(),
+                    "value_identity": value_identity,
+                }
+            )
+            if kind != "text":
+                append_state()
+            if not children:
+                continue
+        elif on_screen and (
+            control_type in _FORM_VALUE_TYPES
+            or (not children and control_type in _FORM_ITEM_TYPES)
+        ):
+            # A required field with no supported value source is unavailable;
+            # pattern absence does not establish absence of business data.
+            return None, False
+        elif control_type == "TitleBarControl":
             if bounds is not None and on_screen and title:
                 fields.append(
                     {
@@ -2690,99 +2813,41 @@ def _window_form_fields(
                         "value_identity": None,
                     }
                 )
+            append_state()
             continue
-
-        def identity(c: object = control) -> Optional[str]:
-            return _form_value_identity(c, window, hwnd, scope, auto)
-
-        if control_type in _FORM_VALUE_TYPES:
+        elif not children and control_type in _FORM_NAMED_TYPES:
             if bounds is not None and on_screen:
-                value_identity = identity()
-                observed = _form_field_value(control, identity)
-                if (
-                    not observed.complete
-                    or observed.proof is None
-                    or value_identity is None
-                    or identity() != value_identity
-                ):
-                    return None, False
-                fields.append(
-                    {
-                        # Container values are evidence too, but must never
-                        # hide descendants that have their own obligations.
-                        "kind": "value" if children else "edit",
-                        "rect": _rect(bounds),
-                        "text": observed.value,
-                        "state": None,
-                        "value_proof": observed.proof.payload(),
-                        "value_identity": value_identity,
-                    }
-                )
-            if not children:
-                continue
-        state = _form_field_state(control, control_type)
-        if control_type in {"CheckBoxControl", "RadioButtonControl", "TabItemControl"}:
-            if state is None:
-                # The label alone does not account for the control's state.
-                # Keep these pixels in the OCR read when UIA cannot name it.
-                continue
-        if not children and control_type in _FORM_NAMED_TYPES | _FORM_ITEM_TYPES:
-            text, proof, value_identity = None, None, None
-            if bounds is not None and on_screen:
-                exposes = _form_exposes_value(control)
-                if exposes is None:
-                    return None, False
-                if control_type in _FORM_ITEM_TYPES or exposes:
-                    value_identity = identity()
-                    observed = _form_field_value(control, identity)
-                    if (
-                        not observed.complete
-                        or observed.proof is None
-                        or value_identity is None
-                        or identity() != value_identity
-                    ):
+                try:
+                    guard(control)
+                    name = " ".join(
+                        str(_control_value(control, "Name", "") or "").split()
+                    )
+                    guard(control)
+                    if _form_exposes_value(control) is not False:
                         return None, False
-                    text, proof = observed.value, observed.proof.payload()
-                else:
-                    try:
-                        guard(control)
-                        name = " ".join(
-                            str(_control_value(control, "Name", "") or "").split()
-                        )
-                        guard(control)
-                        if _form_exposes_value(control) is not False:
-                            return None, False
-                    except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
-                        return None, False
-                    text = name or None
-                if text is not None:
+                except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
+                    return None, False
+                if name:
                     fields.append(
                         {
                             "kind": "text",
                             "rect": _rect(bounds),
-                            "text": text,
+                            "text": name,
                             "state": state,
-                            "value_proof": proof,
-                            "value_identity": value_identity,
+                            "value_proof": None,
+                            "value_identity": None,
                         }
                     )
+                elif state is not None:
+                    append_state()
             continue
-        if state is not None and bounds is not None and on_screen:
-            fields.append(
-                {
-                    "kind": "state",
-                    "rect": _rect(bounds),
-                    "text": "",
-                    "state": state,
-                    "value_proof": None,
-                    "value_identity": None,
-                }
-            )
+        else:
+            append_state()
         if children:
             if depth >= _MAX_UIA_DEPTH:
                 return fields, True
             stack.extend((c, depth + 1) for c in reversed(children))
-    return fields, False
+    return fields, len(fields) > _MAX_FORM_FIELDS
 
 
 def _window_form_fields_operation(

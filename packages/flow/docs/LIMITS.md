@@ -950,7 +950,13 @@ What is not:
   between exact UI Automation values and independent native extent/full reads.
   Missing, sensitive, incomplete or disagreeing values, unknown subtrees and
   another visible owned window refuse the advertised native projection; the
-  whole window is not downgraded to OCR. Empty complete values remain covered.
+  whole window is not downgraded to OCR. Visibility is an exact supported raw
+  property; unknown visibility or required visible bounds/type refuses the
+  projection. Relevant toggle/selection state has a separate complete/state
+  observation: unknown, failed or unrepresented composite state refuses before
+  masking. Known absent state patterns do not establish absent business state.
+  Empty complete values remain covered. A value-capable control carries its
+  full-value obligation regardless of type; generic containers stay unmasked.
   Password status and value-pattern availability use raw UIA properties with
   default values ignored; an unsupported default False is unknown. A named
   control is a separate caption channel only when its value-pattern

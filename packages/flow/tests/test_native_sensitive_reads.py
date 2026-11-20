@@ -276,7 +276,10 @@ def test_unknown_value_capability_never_becomes_a_caption_or_mask(monkeypatch, f
                 assert ignore_default == 1
                 if property_id == 30019:
                     return self.IsPassword
-                assert property_id == 30043
+                if property_id != 30043:
+                    return _Control.GetPropertyValueEx(
+                        self, property_id, ignore_default
+                    )
                 if fault == "call":
                     raise RuntimeError("availability query failed")
                 return {"none": None, "object": object(), "integer": 0}[fault]
@@ -432,3 +435,206 @@ def test_changing_only_helper_cannot_make_old_server_advertise_new_consumer_poli
     for version in ("v1", "v2", "v3"):
         old_server_helper_contract = "openadapt.native-value-completeness/" + version
         assert server.VALUE_READ_CONTRACT != old_server_helper_contract
+
+
+@pytest.mark.parametrize("state_kind", ["toggle", "selection"])
+@pytest.mark.parametrize("status", [True, None, "error", 0])
+def test_state_sources_share_the_raw_sensitive_no_getter_guard(state_kind, status):
+    target = CountedControl(status=status)
+    target.GetTogglePattern = lambda: pytest.fail("sensitive toggle capability called")
+    target.GetSelectionItemPattern = lambda: pytest.fail(
+        "sensitive selection capability called"
+    )
+    observed = server._form_field_state(target)
+    assert not observed.complete and observed.state is None
+    assert target.calls == []
+
+
+@pytest.mark.parametrize("state_kind", ["toggle", "selection"])
+@pytest.mark.parametrize("stage", ["factory", "state"])
+@pytest.mark.parametrize("status", [True, None])
+def test_state_source_metadata_changes_do_not_expose_or_retain_state(
+    state_kind, stage, status
+):
+    target = CountedControl()
+    accesses = []
+    target._toggle = 0 if state_kind == "toggle" else None
+    target._selected = False if state_kind == "selection" else None
+
+    def factory():
+        if stage == "factory":
+            target._status = status
+
+        class Pattern:
+            def __getattribute__(self, attribute):
+                if attribute in {"ToggleState", "IsSelected"}:
+                    accesses.append(attribute)
+                    target._status = status
+                    return 0 if attribute == "ToggleState" else False
+                return super().__getattribute__(attribute)
+
+        return Pattern()
+
+    if state_kind == "toggle":
+        target.GetTogglePattern = factory
+    else:
+        target.GetSelectionItemPattern = factory
+    observed = server._form_field_state(target)
+    assert not observed.complete and observed.state is None
+    if stage == "factory":
+        assert accesses == []
+
+
+@pytest.mark.parametrize(
+    "raw_state,expected",
+    [(0, "off"), (1, "on"), (2, "indeterminate"), (True, None), (None, None)],
+)
+def test_qualified_toggle_states_preserve_exact_typed_results(raw_state, expected):
+    target = _Control("CheckBoxControl", toggle=raw_state)
+    observed = server._form_field_state(target)
+    assert observed.state == expected
+    assert observed.complete is (raw_state is None or type(raw_state) is int)
+
+
+@pytest.mark.parametrize(
+    "raw_state,expected",
+    [(False, "unselected"), (True, "selected"), (0, None), (None, None)],
+)
+def test_qualified_selection_states_do_not_coerce_unknown_to_false(raw_state, expected):
+    target = _Control("TabItemControl", selected=raw_state)
+    observed = server._form_field_state(target)
+    assert observed.state == expected
+    assert observed.complete is (raw_state is None or type(raw_state) is bool)
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        "EditControl",
+        "DocumentControl",
+        "TextControl",
+        "ButtonControl",
+        "ListItemControl",
+        "CustomControl",
+        "PaneControl",
+        "TitleBarControl",
+    ],
+)
+@pytest.mark.parametrize("fault", ["unknown", "nonbool", "error"])
+def test_unknown_state_scope_refuses_before_any_value_or_caption_mask(
+    monkeypatch, role, fault
+):
+    target = CountedControl()
+    target.ControlTypeName = role
+    original = target.GetPropertyValueEx
+
+    def query(property_id, ignore_default):
+        if property_id == 30036:
+            if fault == "error":
+                raise RuntimeError("selection availability unreadable")
+            return None if fault == "unknown" else 0
+        return original(property_id, ignore_default)
+
+    target.GetPropertyValueEx = query
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is None and result["fields"] == []
+    assert target.calls == []
+
+
+def test_supported_absent_state_and_unrepresentable_composite_stay_distinct():
+    absent = server._form_field_state(_Control("CustomControl"))
+    assert absent.complete and absent.state is None and absent.reason is None
+    both = _Control("CustomControl", toggle=0, selected=False)
+    refused = server._form_field_state(both)
+    assert not refused.complete and refused.state is None
+    assert refused.reason == "composite_state_unrepresented"
+
+
+def test_complete_leaf_value_retains_its_independent_state_without_hiding_it(
+    monkeypatch,
+):
+    target = _Control("EditControl", value="value", selected=False)
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is not None
+    assert [entry["kind"] for entry in result["fields"]] == ["edit", "state"]
+    assert result["fields"][1]["state"] == "unselected"
+
+
+@pytest.mark.parametrize("pattern", ["toggle", "selection"])
+def test_state_capability_change_during_getter_is_not_known_absence_or_state(pattern):
+    target = _Control(
+        "CustomControl",
+        toggle=0 if pattern == "toggle" else None,
+        selected=False if pattern == "selection" else None,
+    )
+
+    class Pattern:
+        @property
+        def ToggleState(self):
+            target._toggle = None
+            return 0
+
+        @property
+        def IsSelected(self):
+            target._selected = None
+            return False
+
+    if pattern == "toggle":
+        target.GetTogglePattern = Pattern
+    else:
+        target.GetSelectionItemPattern = Pattern
+    observed = server._form_field_state(target)
+    assert not observed.complete and observed.state is None
+    assert observed.reason == "state_capability_changed"
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "visibility_unknown",
+        "visibility_nonbool",
+        "visibility_error",
+        "bounds_unknown",
+        "type_unknown",
+        "type_nonstring",
+    ],
+)
+def test_unreadable_visible_scope_never_omits_a_required_value(monkeypatch, fault):
+    target = _Control("EditControl", value="required value")
+    original = target.GetPropertyValueEx
+    if fault.startswith("visibility"):
+
+        def query(property_id, ignore_default):
+            if property_id == 30022:
+                if fault == "visibility_error":
+                    raise RuntimeError("visibility unavailable")
+                return None if fault == "visibility_unknown" else 0
+            return original(property_id, ignore_default)
+
+        target.GetPropertyValueEx = query
+    elif fault == "bounds_unknown":
+        target.BoundingRectangle = None
+    else:
+        target.ControlTypeName = None if fault == "type_unknown" else 42
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is None and result["fields"] == []
+
+
+@pytest.mark.parametrize("role", ["PaneControl", "GroupControl", "UnknownValueControl"])
+@pytest.mark.parametrize("children", [False, True])
+def test_any_capability_true_generic_value_retains_unmasked_complete_obligation(
+    monkeypatch, role, children
+):
+    target = _Control(
+        role,
+        value="full generic value",
+        children=[_Control("EditControl", value="child")] if children else [],
+    )
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is not None
+    assert result["fields"][0]["kind"] == "value"
+    assert result["fields"][0]["text"] == "full generic value"
+    assert result["fields"][0]["value_proof"] is not None
+    target.native_override = "full generic value with omitted suffix"
+    refused = invoke(monkeypatch, target, "form")
+    assert refused["window"] is None and refused["fields"] == []
