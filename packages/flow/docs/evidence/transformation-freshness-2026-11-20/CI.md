@@ -57,3 +57,22 @@ python -m pytest -q tests/test_sanitization_policy_freshness.py \
 ```
 
 The separate earlier `e760` native sign-in CI failure remains an actual bounded failure with cause unproved. Its single local pass did not establish flakiness or clear CI. Open #2326 is separate and was not imported by this integration. Required source CI and actual different-vendor review of the new head remain necessary; local results supply neither. No new application, customer-data, hosted, Windows or release qualification is claimed.
+
+
+## Review correction: fresh content at identity boundaries
+
+The independent review at `90f5e927aa7f99cdee38f7fe18f602b0fd27e256` ([comment](https://github.com/OpenAdaptAI/OpenAdapt/pull/2312#issuecomment-7038054007)) found that an engine-source digest cached by filesystem metadata can remain stale after a same-size rewrite. The earlier passing aggregate did not establish this property.
+
+The correction removes that cache and the confirmed sibling cache in the image-file digest helper. Both read current complete file bytes on each identity request. Metadata remains a concurrent-change check, not permission to reuse an earlier content hash. The image file-size, unavailable-file and change checks, process-start checks, host/file scope and callers remain unchanged. AuthRef, hosted/wrap publication and provider production files are byte-identical to the reviewed parent.
+
+One shared deterministic test model covers the engine package file, a future nested engine helper and the pure image-file digest. It freezes stat observations, rewrites equal-length bytes, requires a different identity, restores the original bytes and requires the original identity, then verifies missing-source refusal. Direct, wrap and hosted generation/approval controls also exercise the equal-stat rewrite. The image adapter exports only the two production function ASTs and constants; it imports no Windows module and reads only an owned ordinary synthetic file. These controls do not claim an observed NTFS timestamp collision, a Windows bypass, loaded-memory/DLL identity or application closure.
+
+The shared controls against exact parent production bytes gave **six expected failures and three positive passes**. The failures covered both engine positions, image content and the three approval paths. With both caches removed, the focused freshness module and the two artifact-reader inventory checks gave **24 passes, no skips and one existing deprecated-verifier warning**. The earlier 538/9 and intermediate engine-only results are historical overlapping cohorts, not rerun totals for this correction. No timing tolerance, sleep, new cache or identity-version flag was added.
+
+```sh
+python -m pytest -q tests/test_sanitization_policy_freshness.py \
+  tests/test_artifact_reads.py::test_converted_commands_read_artifacts_through_the_reader \
+  tests/test_artifact_reads.py::test_allowlist_has_no_stale_entries -rs --durations=5
+```
+
+Ruff check/format passed for the three changed Python files, mypy passed for `sanitization_policy.py`, and engine-generality, artifact/release consistency, source-boundary and diff checks passed. AST checks separately preserve the image caller/process-start/size/change/error boundaries. The original review remains unchanged; actual review of this descendant and its required CI remain necessary. No native, provider, hosted, real-data or release qualification follows from these source/synthetic checks.

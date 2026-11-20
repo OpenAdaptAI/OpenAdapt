@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
+import os
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -305,6 +309,115 @@ def test_concurrent_generation_install_never_changes_existing_evidence(
     }
 
 
+def _freeze_source_file_stats(engine, monkeypatch):
+    """Model a filesystem tick without depending on the host's clock."""
+    stats = {path: path.stat() for path in engine.rglob("*.py")}
+    real_stat = Path.stat
+
+    def frozen_stat(path, *args, **kwargs):
+        if path in stats:
+            return stats[path]
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", frozen_stat)
+    return sanitization_policy._source_inventory(engine)
+
+
+def _content_identity_adapter(kind, engine, source, monkeypatch):
+    if kind == "engine":
+        monkeypatch.setattr(sanitization_policy, "_engine_source_root", lambda: engine)
+        _freeze_source_file_stats(engine, monkeypatch)
+        return (
+            sanitization_policy._engine_source_sha256,
+            lambda: sanitization_policy._source_inventory(engine),
+        )
+
+    # Export only the two pure production definitions and their constants.
+    # No Windows module, process, provider or real executable is loaded.
+    path = Path(__file__).parents[1] / "openadapt_flow/backends/win_agent/server.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    names = {"_IMAGE_DIGESTS", "_IMAGE_DIGEST_CACHE_SIZE", "_IMAGE_DIGEST_MAX_BYTES"}
+    functions = {"_file_key", "_image_file_digest"}
+    selected = [
+        node
+        for node in tree.body
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "__future__"
+            or isinstance(node, ast.FunctionDef)
+            and node.name in functions
+            or isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id in names
+            or isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id in names for t in node.targets)
+        )
+    ]
+    assert {n.name for n in selected if isinstance(n, ast.FunctionDef)} == functions
+    frozen = source.stat()
+
+    def observed_stat(path):
+        assert Path(path) == source
+        return frozen
+
+    def read_owned(path, mode):
+        assert Path(path) == source and mode == "rb"
+        return source.open(mode)
+
+    scope = {
+        "__name__": "owned_content_identity_export",
+        "os": SimpleNamespace(stat=observed_stat, path=os.path),
+        "hashlib": hashlib,
+        "open": read_owned,
+    }
+    module = ast.fix_missing_locations(ast.Module(body=selected, type_ignores=[]))
+    exec(compile(module, str(path), "exec", dont_inherit=True), scope)
+    return (
+        lambda: scope["_image_file_digest"](str(source)),
+        lambda: scope["_file_key"](str(source)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "relative"),
+    [
+        ("engine", "__init__.py"),
+        ("engine", "runtime/future_policy_helper.py"),
+        ("image", "ordinary.bin"),
+    ],
+)
+def test_content_identity_reads_current_bytes_with_identical_stats(
+    tmp_path, monkeypatch, kind, relative
+):
+    """One fresh-content model across both confirmed metadata-cache callers."""
+    engine = tmp_path / "engine"
+    source = engine / relative
+    source.parent.mkdir(parents=True)
+    original, changed = b"POLICY = 1\n", b"POLICY = 2\n"
+    assert len(original) == len(changed)
+    source.write_bytes(original)
+    identity, metadata = _content_identity_adapter(kind, engine, source, monkeypatch)
+    before = metadata()
+    first = identity()
+    assert first is not None
+
+    source.write_bytes(changed)
+    assert source.read_bytes() == changed
+    assert metadata() == before
+    assert identity() != first
+
+    source.write_bytes(original)
+    assert metadata() == before
+    assert identity() == first
+
+    source.unlink()
+    if kind == "engine":
+        with pytest.raises(ValueError, match="source is unavailable"):
+            identity()
+    else:
+        assert identity() is None
+
+
 def test_engine_source_closure_binds_future_helpers_and_is_location_independent(
     tmp_path,
     monkeypatch,
@@ -329,23 +442,33 @@ def test_engine_source_closure_binds_future_helpers_and_is_location_independent(
 
 
 @pytest.mark.parametrize("entrypoint", ["sanitize", "wrap", "hosted"])
-def test_new_engine_helper_invalidates_all_reuse_and_approval_paths(
+@pytest.mark.parametrize("change", ["new_helper", "same_stat_rewrite"])
+def test_engine_source_change_invalidates_all_reuse_and_approval_paths(
     tmp_path,
     monkeypatch,
     entrypoint,
+    change,
 ):
     engine = tmp_path / "engine"
     engine.mkdir()
-    (engine / "__init__.py").write_text("POLICY = 1\n")
+    policy = engine / "__init__.py"
+    policy.write_bytes(b"POLICY = 1\n")
     monkeypatch.setattr(sanitization_policy, "_engine_source_root", lambda: engine)
+    if change == "same_stat_rewrite":
+        inventory = _freeze_source_file_stats(engine, monkeypatch)
     source = source_tree(tmp_path)
     base = tmp_path / "derivative"
     old, before = derive(entrypoint, source, base, "recording")
     sa.approve_derivative(old, source=source, reviewer="synthetic reviewer")
     preserved = snapshot(old)
-    helper = engine / "runtime" / "new_capture_policy.py"
-    helper.parent.mkdir()
-    helper.write_text("PROTECTED_CAPTURE = True\n")
+    if change == "new_helper":
+        helper = engine / "runtime" / "new_capture_policy.py"
+        helper.parent.mkdir()
+        helper.write_text("PROTECTED_CAPTURE = True\n")
+    else:
+        policy.write_bytes(b"POLICY = 2\n")
+        assert policy.read_bytes() == b"POLICY = 2\n"
+        assert sanitization_policy._source_inventory(engine) == inventory
     with pytest.raises(sa.SanitizationError, match="identity changed"):
         sa.load_valid_approval(old)
     current, after = derive(entrypoint, source, base, "recording")

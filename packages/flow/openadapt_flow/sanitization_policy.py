@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -46,14 +45,13 @@ def _source_inventory(root: Path) -> tuple[tuple[str, int, int, int, int], ...]:
     return tuple(rows)
 
 
-@lru_cache(maxsize=16)
 def _source_snapshot_sha256(
     root: str,
     inventory: tuple[tuple[str, int, int, int, int], ...],
 ) -> str:
-    # Metadata only selects a cached content digest. It never becomes exported
-    # identity material. Paths inside the package, and every source byte, bind
-    # the digest equally across checkout locations and operating systems.
+    # Read current bytes at every identity boundary. Filesystem metadata can
+    # remain unchanged across rewrites, so it never authorizes digest reuse.
+    # Relative paths and all source bytes bind identity across checkout locations.
     return identity_sha256(
         [
             (rel, hashlib.sha256((Path(root) / rel).read_bytes()).hexdigest())
