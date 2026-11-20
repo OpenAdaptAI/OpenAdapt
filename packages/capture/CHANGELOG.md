@@ -2,16 +2,71 @@
 
 <!-- version list -->
 
-## Unreleased
+## v1.4.0 (2026-11-19)
+
+_This release uses the MIT License._
+
+### Features
+
+- A plain `pip install openadapt-capture` no longer installs Matplotlib,
+  sounddevice, soundfile or Pympler, and alembic is removed. They move to
+  opt-in extras: `plot` (PLOT_PERFORMANCE, `CaptureStats.plot`,
+  `plot_comparison`), `audio` (`capture record --audio`, with
+  faster-whisper) and `profile` (LOG_MEMORY). Each feature names its extra
+  when it is missing. Importing the recorder no longer imports Pympler, so
+  it no longer loads tkinter and Tcl into the recording process
+  ([`a0d1733d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a0d1733d1)).
+- Anything sent off the machine is scrubbed by default. `capture share send`
+  builds a scrubbed copy and sends only that; `--unscrubbed --reason` sends
+  the raw recording and records that it did. `send_profile` sends numbers
+  and flags only. The `privacy` extra installs `openadapt-privacy[presidio]`
+  ([`a16a20252`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a16a20252)).
+- Narration is scrubbed before it is stored, and is stored as timed
+  sentences on the recording clock. Recording refuses before the microphone
+  opens when no scrubber is installed ([`8f90a167e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8f90a167e)).
+- Window-scoped recording pins its window by identity (window id, process
+  id and process start time) instead of matching the title on every frame,
+  so a recording survives a title change such as a browser navigation. It
+  still follows moves and resizes and stops when the window closes or its
+  process exits ([`5beea8dc8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5beea8dc8)).
+- A capture records the machine's locale, date order and keyboard layout,
+  read from the operating system; a fact that cannot be read is recorded as
+  unknown ([#1979](https://github.com/OpenAdaptAI/OpenAdapt/pull/1979)).
 
 ### Fixes
 
-- Full-screen video startup sizes the stream from Quartz display-mode
-  pixel metadata instead of taking a screenshot, so a slow framebuffer
-  read in a macOS VM guest no longer blows the writer startup budget.
-  Darwin screen-dimension and pixel-ratio probes prefer the same Quartz
-  path and only fall back to a grab when metadata is unavailable
-  ([#1883](https://github.com/OpenAdaptAI/OpenAdapt/issues/1883)).
+- Window-scoped recording keeps only input the recorded window received.
+  A key press needs keyboard focus on the target window itself, not just
+  its process, and a click, scroll or move needs the target to be the
+  topmost window at that point
+  ([`19b3cdc52`](https://github.com/OpenAdaptAI/OpenAdapt/commit/19b3cdc52), [#1531](https://github.com/OpenAdaptAI/OpenAdapt/pull/1531)).
+- Input dropped by that policy no longer leaves a hole in the sealed
+  journal that made verification refuse the whole recording. Each drop is
+  recorded with its reason in a sealed `source-ordinal-skips.json`. On
+  macOS, full-screen Dock and Notification Center windows no longer count
+  as the window under the pointer unless Accessibility says they take the
+  click ([#1984](https://github.com/OpenAdaptAI/OpenAdapt/pull/1984)).
+- The Windows and X11 window resolvers refuse when more than one window
+  matches instead of picking the largest, and the Windows resolver skips
+  minimized and cloaked windows
+  ([`8cb19693f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8cb19693f), [`94cec2a87`](https://github.com/OpenAdaptAI/OpenAdapt/commit/94cec2a87)).
+- The space bar is kept as typed text. A recording with a space in it could
+  not be converted before ([#1963](https://github.com/OpenAdaptAI/OpenAdapt/pull/1963)).
+- The recording's video start time is the time of its first frame, so
+  frame lookups no longer land past the end of the video when the first
+  frame arrives late ([#1965](https://github.com/OpenAdaptAI/OpenAdapt/pull/1965)).
+- Full-screen video startup sizes the stream from the validated first
+  frame and Quartz display metadata instead of taking a screenshot, so a
+  slow framebuffer read in a macOS VM guest no longer exceeds the writer's
+  startup budget
+  ([#1883](https://github.com/OpenAdaptAI/OpenAdapt/issues/1883), [#1957](https://github.com/OpenAdaptAI/OpenAdapt/pull/1957)).
+- `record(log_memory=True)` without the `profile` extra, and `--audio` on a
+  host without the PortAudio library, refuse before the capture database or
+  any worker exists ([`8a15835f7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8a15835f7)).
+
+---
+
+**Detailed Changes**: [v1.3.0...v1.4.0](https://github.com/OpenAdaptAI/openadapt-capture/compare/v1.3.0...v1.4.0)
 
 
 ## v1.3.0 (2026-10-17)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import importlib.util
 import json
+import os
 import re
 import shutil
 import signal
@@ -115,26 +116,6 @@ def _test_deadline():
         signal.signal(signal.SIGALRM, previous)
 
 
-@pytest.fixture(autouse=True)
-def _no_fork(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fail any subprocess in this module that would fork pytest.
-
-    By the time these tests run, earlier tests have loaded macOS system
-    frameworks into the pytest process. On the hosted macOS runners a forked
-    copy of that process sometimes never reached exec, and the parent waited
-    inside Popen until the job was cancelled. With this guard a call that
-    brings the fork back fails at once, on Linux as well as macOS.
-    """
-
-    if not getattr(subprocess, "_USE_POSIX_SPAWN", False):
-        return
-
-    def refuse(args, *_rest, **_named):
-        raise AssertionError(f"{args!r} would fork pytest; run git through prepare_release.run_git")
-
-    monkeypatch.setattr(subprocess, "_fork_exec", refuse)
-
-
 def _run_git(root: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess[bytes]:
     return prepare_release.run_git(root, *args, check=check)
 
@@ -169,6 +150,22 @@ def test_a_subprocess_that_would_fork_pytest_fails(tmp_path: Path) -> None:
     assert prepare_release.run_git(tmp_path, "--version").stdout.startswith(b"git version")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
+def test_git_does_not_fork_when_standard_input_is_closed(tmp_path: Path) -> None:
+    """With descriptor 0 closed, git's pipes would be numbered low and Python would fork."""
+
+    saved = os.dup(0)
+    try:
+        os.close(0)
+        result = prepare_release.run_git(tmp_path, "--version")
+        with pytest.raises(OSError):
+            os.fstat(0)  # the call leaves the descriptor closed, as it found it
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+    assert result.stdout.startswith(b"git version")
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="the stand-in git is a shell script")
 def test_a_stuck_git_command_fails_with_its_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -178,7 +175,7 @@ def test_a_stuck_git_command_fails_with_its_name(
     stand_in.write_text("#!/bin/sh\nexec /bin/sleep 30\n", encoding="utf-8")
     stand_in.chmod(0o755)
     monkeypatch.setenv("PATH", str(stand_in.parent))
-    monkeypatch.setattr(prepare_release, "GIT_TIMEOUT", 0.5)
+    monkeypatch.setattr(prepare_release.native_release, "GIT_TIMEOUT", 0.5)
     with pytest.raises(prepare_release.GitTimeout, match="git rev-parse HEAD did not finish"):
         prepare_release.run_git(tmp_path, "rev-parse", "HEAD")
 

@@ -484,7 +484,7 @@ def test_stopping_the_console_kills_the_whole_process_tree_on_windows(
     calls: list = []
     monkeypatch.setattr(service_mod, "_WINDOWS", True)
     monkeypatch.setattr(
-        service_mod.subprocess,
+        service_mod.child_process,
         "run",
         lambda command, **kwargs: calls.append(command),
     )

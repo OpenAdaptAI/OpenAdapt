@@ -24,6 +24,7 @@ from scripts.native_release import (
     native_version_at_ref,
     native_versions,
     python_distribution_names,
+    run_git,
     set_native_version,
     stage_artifacts,
     sync_native_version_from_engine,
@@ -557,14 +558,7 @@ def test_set_native_version_rejects_non_semver_input(tmp_path: Path) -> None:
 
 
 def _git(tmp_path: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    return run_git(tmp_path, *args).stdout.decode("utf-8").strip()
 
 
 def test_git_version_transform_requires_the_exact_reconstructed_tree(tmp_path: Path) -> None:
@@ -1416,13 +1410,7 @@ def test_git_helpers_refuse_an_option_shaped_ref(tmp_path: Path) -> None:
 
 
 def test_native_version_at_ref_reads_git_objects_not_the_working_tree() -> None:
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    head = _git(ROOT, "rev-parse", "HEAD")
 
     assert native_version_at_ref(head) == native_version()
     assert native_version_at_ref("HEAD") == native_version()
