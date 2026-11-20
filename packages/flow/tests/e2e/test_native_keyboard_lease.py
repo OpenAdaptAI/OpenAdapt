@@ -8,6 +8,7 @@ acknowledgement to test the uncertainty boundary.
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
@@ -109,13 +110,18 @@ class _Transport:
         self.last_input: dict[str, Any] | None = None
         self.drop_next_ack = False
         self.inputs = 0
+        self.before_keyboard_input = None
+        self.lease_evidence_dir: Path | None = None
         self.events = evidence["transport"] = []
 
         def post(url, **kwargs):
             started = time.monotonic()
-            response = original(url, **kwargs)
             path = url.removeprefix(backend.server_url)
-            if path in {"/keyboard/lease", "/keyboard/input"}:
+            planted = None
+            if path == "/keyboard/input" and self.before_keyboard_input is not None:
+                planted = self.before_keyboard_input(copy.deepcopy(kwargs["json"]))
+            response = original(url, **kwargs)
+            if path in {"/keyboard/lease", "/keyboard/input", "/uia/editable-value"}:
                 request = kwargs["json"]
                 event = {
                     "path": path,
@@ -124,6 +130,21 @@ class _Transport:
                     "elapsed_ms": int((time.monotonic() - started) * 1000),
                     "response": _redacted(response.json()),
                 }
+                if planted is not None:
+                    event["planted_fixture_change"] = planted
+                if (
+                    path == "/keyboard/lease"
+                    and response.status_code == 200
+                    and self.lease_evidence_dir is not None
+                ):
+                    self.lease_evidence_dir.mkdir(parents=True, exist_ok=True)
+                    destination = (
+                        self.lease_evidence_dir / f"lease-{len(self.events):04d}.png"
+                    )
+                    png = base64.b64decode(response.json()["frame_png"], validate=True)
+                    destination.write_bytes(png)
+                    event["retained_frame"] = str(destination)
+                    event["retained_frame_sha256"] = _sha(png)
                 self.events.append(event)
                 if path == "/keyboard/input":
                     self.inputs += 1
@@ -614,6 +635,392 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
                 tmp_path / "evidence.json",
                 Path(
                     os.environ.get(EVIDENCE_ENV, tmp_path / "published-evidence.json")
+                ),
+            ):
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(json.dumps(evidence, indent=2) + "\n")
+
+
+# Additional controls and repaint commands exist only in this proof's copied
+# synthetic app. None carries a save handler or changes the SQLite record.
+OBSERVATION_HOOK = r"""
+$form.Size = New-Object System.Drawing.Size(960, 560)
+$leaseFields = @{}
+function Add-LeaseField($id, $y, $text, $password, $readOnly) {
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.Name = $id
+    $box.AccessibleName = $id
+    $box.Location = New-Object System.Drawing.Point(650, $y)
+    $box.Size = New-Object System.Drawing.Size(180, 24)
+    $box.MaxLength = 100000
+    $box.UseSystemPasswordChar = $password
+    $box.ReadOnly = $readOnly
+    $box.Text = $text
+    $form.Controls.Add($box)
+    $script:leaseFields[$id + '-' + $y] = $box
+}
+Add-LeaseField "leasePassword" 100 "synthetic password fixture" $true $false
+Add-LeaseField "leaseLong" 140 (('x' * 8192) + '-END') $false $false
+Add-LeaseField "leaseOversized" 180 ('x' * 65537) $false $false
+Add-LeaseField "leaseReadOnly" 220 "read only synthetic fixture" $false $true
+Add-LeaseField "leaseDuplicate" 260 "first duplicate" $false $false
+Add-LeaseField "leaseDuplicate" 300 "second duplicate" $false $false
+$leaseButton = New-Object System.Windows.Forms.Button
+$leaseButton.Name = "leaseNotEditable"
+$leaseButton.AccessibleName = "Display name must not become a value"
+$leaseButton.Text = "Display name must not become a value"
+$leaseButton.Location = New-Object System.Drawing.Point(650, 340)
+$leaseButton.Size = New-Object System.Drawing.Size(250, 30)
+$form.Controls.Add($leaseButton)
+$leaseFields['button'] = $leaseButton
+$form.Add_Shown({
+    $points = @{}
+    foreach ($key in $script:leaseFields.Keys) {
+        $control = $script:leaseFields[$key]
+        $p = $control.PointToScreen((New-Object System.Drawing.Point([int]($control.Width / 2), [int]($control.Height / 2))))
+        $points[$key] = @($p.X, $p.Y)
+    }
+    $temporary = Join-Path $PSScriptRoot 'lease-observation-points.tmp'
+    [IO.File]::WriteAllText($temporary, ($points | ConvertTo-Json))
+    [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'lease-observation-points.json'))
+})
+$leaseObservationTimer = New-Object System.Windows.Forms.Timer
+$leaseObservationTimer.Interval = 40
+$leaseObservationTimer.Add_Tick({
+    $commandPath = Join-Path $PSScriptRoot 'lease-observation-command'
+    if (-not (Test-Path $commandPath)) { return }
+    $command = [IO.File]::ReadAllText($commandPath)
+    Remove-Item $commandPath
+    switch ($command) {
+        'clear-note' { $script:noteBox.Text = ''; [void]$script:noteBox.Focus(); $script:noteBox.SelectionStart = 0 }
+        'paint-success' { $script:status.Text = 'Synthetic lease repaint success' }
+        'paint-uncertain' { $script:status.Text = 'Synthetic lease repaint uncertain' }
+        default { throw 'Unknown observation fixture command' }
+    }
+    $ack = @{ command=$command; note_value=$script:noteBox.Text; status=$script:status.Text;
+              form_handle=$form.Handle.ToInt64(); note_handle=$script:noteBox.Handle.ToInt64() }
+    $temporary = Join-Path $PSScriptRoot 'lease-observation-ack.tmp'
+    [IO.File]::WriteAllText($temporary, ($ack | ConvertTo-Json))
+    [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'lease-observation-ack.json'))
+})
+$leaseObservationTimer.Start()
+"""
+
+
+def _fixture_command(root: Path, command: str) -> dict[str, Any]:
+    acknowledgement = root / "lease-observation-ack.json"
+    acknowledgement.unlink(missing_ok=True)
+    temporary = root / "lease-observation-command.tmp"
+    temporary.write_text(command)
+    temporary.replace(root / "lease-observation-command")
+    deadline = time.monotonic() + 10
+    while not acknowledgement.is_file():
+        assert time.monotonic() < deadline, f"fixture command {command} timed out"
+        time.sleep(0.05)
+    result = json.loads(acknowledgement.read_text(encoding="utf-8-sig"))
+    assert result["command"] == command
+    return result
+
+
+def _editable_positive(backend, transport, aid, point, expected):
+    backend.click(*point)
+    handle = backend.locate_structural(StructuralLocator(automation_id=aid))
+    assert handle is not None and handle.candidate_count == 1
+    observed = backend.editable_value_observation(*point)
+    assert observed is not None
+    assert observed == {
+        "status": "ok",
+        "schema": "openadapt.native-editable-value/v1",
+        "complete": True,
+        "value": expected,
+        "target_fingerprint": handle.target_fingerprint,
+        "bounds": [
+            handle.region[0],
+            handle.region[1],
+            handle.region[0] + handle.region[2],
+            handle.region[1] + handle.region[3],
+        ],
+        "point": list(handle.point),
+    }
+    assert backend.text_value_at(*point) == expected
+    assert backend.focused_text_value() == expected
+    wire = [
+        event for event in transport.events if event["path"] == "/uia/editable-value"
+    ][-3:]
+    assert len(wire) == 3 and all(event["response"] == observed for event in wire)
+    return {
+        "case": aid,
+        "length": len(expected),
+        "value_sha256": _sha(expected.encode()),
+        "observation": observed,
+    }
+
+
+def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
+    """Exact values enable only a fully revalidated, zero-input TYPE retry."""
+    from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.recorder import Recorder
+    from openadapt_flow.runtime import Replayer
+
+    evidence: dict[str, Any] = {
+        "schema": "openadapt.native-editable-runtime-proof/v1",
+        "head": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPOSITORY, text=True
+        ).strip(),
+        "tree": subprocess.check_output(
+            ["git", "rev-parse", "HEAD^{tree}"], cwd=REPOSITORY, text=True
+        ).strip(),
+        "run_id": os.environ.get("GITHUB_RUN_ID"),
+        "observations": [],
+        "runtime": [],
+    }
+    host = _Host(tmp_path)
+    app = tmp_path / "patient_notes.ps1"
+    source = app.read_text()
+    assert source.count("[void]$form.ShowDialog()") == 1
+    app.write_text(
+        source.replace(
+            "[void]$form.ShowDialog()", OBSERVATION_HOOK + "\n[void]$form.ShowDialog()"
+        )
+    )
+    evidence["fixture_sha256"] = _sha(app.read_bytes())
+    try:
+        backend = host.start_agent()
+        evidence["capabilities"] = sorted(backend.agent_capabilities())
+        assert "native_editable_value_v1" in evidence["capabilities"]
+        transport = _Transport(backend, monkeypatch, evidence)
+        transport.lease_evidence_dir = tmp_path / "runtime-lease-frames"
+        host.launch_app()
+        points = _points(backend)
+        positions = tmp_path / "lease-observation-points.json"
+        deadline = time.monotonic() + 15
+        while not positions.is_file():
+            assert time.monotonic() < deadline, "observation fixture did not start"
+            time.sleep(0.05)
+        extras = json.loads(positions.read_text(encoding="utf-8-sig"))
+        baseline = evidence["rows_before"] = host.rows()
+        target = next(row for row in baseline if row["id"] == 1)
+        header = f"Patient: {target['first']} {target['last']} ({target['dob']})"
+        backend.click(*points["searchBox"])
+        backend.type_text(target["first"])
+        backend.press("enter")
+        _wait_value(backend, "patientHeader", header)
+        evidence["observations"].append(
+            _editable_positive(backend, transport, "noteBox", points["noteBox"], "")
+        )
+        exact = "  exact café value  "
+        backend.type_text(exact)
+        _wait_value(backend, "noteBox", exact)
+        evidence["observations"].append(
+            _editable_positive(backend, transport, "noteBox", points["noteBox"], exact)
+        )
+        evidence["observations"].append(
+            _editable_positive(
+                backend,
+                transport,
+                "leaseLong",
+                extras["leaseLong-140"],
+                "x" * 8192 + "-END",
+            )
+        )
+
+        unavailable_reasons = {
+            "leasePassword-100": "password_or_password_status_unavailable",
+            "leaseOversized-180": "value_exceeds_limit",
+            "leaseReadOnly-220": "read_only_or_read_only_status_unavailable",
+            "leaseDuplicate-260": "focused_target_unavailable_or_ambiguous",
+            "button": "not_editable_value_control",
+        }
+        for name, reason in unavailable_reasons.items():
+            point = extras[name]
+            backend.click(*point)
+            assert backend.editable_value_observation(*point) is None
+            assert backend.text_value_at(*point) is None
+            assert backend.focused_text_value() is None
+            wire = [
+                event
+                for event in transport.events
+                if event["path"] == "/uia/editable-value"
+            ][-3:]
+            assert len(wire) == 3
+            for event in wire:
+                raw = event["response"]
+                assert event["http_status"] == 200
+                assert set(raw) == {"status", "complete", "reason"}
+                assert raw["status"] == "unavailable" and raw["complete"] is False
+                assert raw["reason"] == reason
+            evidence["observations"].append({"case": name, "unavailable": wire})
+        assert host.rows() == baseline
+
+        # This is a real observed demonstration. The operator-selected record
+        # header comes from its actual UIA bounds on the captured before frame.
+        _fixture_command(tmp_path, "clear-note")
+        header_handle = backend.locate_structural(
+            StructuralLocator(automation_id="patientHeader")
+        )
+        assert header_handle is not None
+        assert _read(backend, "patientHeader") == header
+        text = "lease runtime"
+        recorder = Recorder(backend, tmp_path / "runtime-recording")
+        before_png = backend.screenshot()
+        before_focus = backend.focus_identity()
+        assert before_focus is not None
+        backend.type_text(text)
+        _wait_value(backend, "noteBox", text)
+        after_focus = backend.focus_identity()
+        recorder.record_observed(
+            {
+                "kind": "type",
+                "text": text,
+                "focus_before": before_focus,
+                "focus_after": after_focus,
+                "identifier_region": list(header_handle.region),
+            },
+            before_png=before_png,
+            after_png=backend.screenshot(),
+            structural_before={},
+        )
+        recording = recorder.finish()
+        bundle = tmp_path / "runtime-bundle"
+        workflow = compile_recording(recording, bundle, name="native-editable-runtime")
+        assert len(workflow.steps) == 1
+        step = workflow.steps[0]
+        assert step.action.value == "type" and step.risk == "reversible"
+        assert (
+            step.anchor is not None
+            and step.identity_armed
+            and step.anchor.identifier_crop
+        )
+        assert step.anchor.structural.automation_id == "noteBox"
+        assert not step.effects and step.api_binding is None
+
+        for outcome in ("success", "uncertain"):
+            _fixture_command(tmp_path, "clear-note")
+            assert backend.text_value_at(*points["noteBox"]) == ""
+            assert backend.focused_text_value() == ""
+            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            case: dict[str, Any] = {"case": outcome, "planted": []}
+            evidence["runtime"].append(case)
+            start = len(transport.events)
+
+            def repaint_once(request):
+                if case["planted"]:
+                    return None
+                expected = request["expected_frame_sha256"]
+                ack = _fixture_command(tmp_path, "paint-" + outcome)
+                assert ack["note_value"] == ""
+                planted_png = backend.screenshot()
+                assert _sha(planted_png) != expected
+                destination = tmp_path / f"runtime-{outcome}-planted.png"
+                destination.write_bytes(planted_png)
+                planted = {
+                    "ack": ack,
+                    "frame_sha256": _sha(planted_png),
+                    "frame": str(destination),
+                }
+                case["planted"].append(planted)
+                return planted
+
+            transport.before_keyboard_input = repaint_once
+            transport.drop_next_ack = outcome == "uncertain"
+            run_dir = tmp_path / f"runtime-{outcome}"
+            report = Replayer(backend, use_structural=True).run(
+                Workflow.load(bundle),
+                bundle_dir=bundle,
+                run_dir=run_dir,
+            )
+            transport.before_keyboard_input = None
+            case["report"] = report.model_dump(mode="json")
+            assert len(report.results) == 1
+            result = report.results[0]
+            events = transport.events[start:]
+            inputs = [event for event in events if event["path"] == "/keyboard/input"]
+            case["input_attempts"] = inputs
+            assert 2 <= len(inputs) <= 3
+            assert inputs[0]["http_status"] == 409
+            assert inputs[0]["response"]["reason"] == "stale_frame"
+            assert inputs[0]["response"]["no_keyboard_input_delivered"] is True
+            assert inputs[0]["planted_fixture_change"] == case["planted"][0]
+            accepted = [event for event in inputs if event["http_status"] == 200]
+            assert len(accepted) == 1 and inputs[-1] is accepted[0]
+            for refused in inputs[:-1]:
+                assert refused["response"]["no_keyboard_input_delivered"] is True
+            assert result.fresh_actuation_events
+            assert all(
+                event.phase == "keyboard" and event.retried
+                for event in result.fresh_actuation_events
+            )
+            actual = accepted[0]
+            receipt = ActionDeliveryReceipt.model_validate(
+                actual["response"]["receipt"]
+            )
+            assert receipt.operation == "physical_type_text" and receipt.native is False
+            assert backend.text_value_at(*points["noteBox"]) == text
+            assert backend.focused_text_value() == text
+            assert _read(backend, "patientHeader") == header and host.rows() == baseline
+            assert result.before_png is not None
+            retained = run_dir / result.before_png
+            assert retained.is_file()
+            assert (
+                _sha(retained.read_bytes())
+                == actual["request"]["expected_frame_sha256"]
+            )
+            frames = [
+                event
+                for event in transport.events
+                if event["path"] == "/keyboard/lease"
+                and event.get("retained_frame_sha256")
+                == actual["request"]["expected_frame_sha256"]
+            ]
+            assert (
+                frames
+                and Path(frames[-1]["retained_frame"]).read_bytes()
+                == retained.read_bytes()
+            )
+            rejected_sha = inputs[0]["request"]["expected_frame_sha256"]
+            assert any(
+                event.get("retained_frame_sha256") == rejected_sha
+                and Path(event["retained_frame"]).is_file()
+                for event in events
+                if event["path"] == "/keyboard/lease"
+            )
+            case["retained_attempt_frame_sha256"] = _sha(retained.read_bytes())
+            case["before_png"] = str(retained)
+            case["rows_after"] = host.rows()
+            if outcome == "success":
+                assert report.success is True, result.error
+                assert result.delivery_receipt == receipt
+                assert result.delivery_uncertainty is None
+            else:
+                assert report.success is False
+                assert result.delivery_uncertainty is not None
+                assert actual["injected_fault"] == "discard_actual_acknowledgement"
+        evidence["passed"] = True
+    finally:
+        try:
+            evidence["rows_after"] = (
+                host.rows() if (tmp_path / "patients.db").exists() else None
+            )
+        except Exception as exc:
+            evidence["final_oracle_error"] = type(exc).__name__
+        fixture_process = host.app
+        try:
+            host.close()
+        finally:
+            evidence["agent_terminated"] = (
+                host.agent is None or host.agent.poll() is not None
+            )
+            evidence["fixture_terminated"] = (
+                fixture_process is None or fixture_process.poll() is not None
+            )
+            for destination in (
+                tmp_path / "editable-value-evidence.json",
+                Path(
+                    os.environ.get(
+                        "OAFLOW_NATIVE_EDITABLE_VALUE_EVIDENCE",
+                        tmp_path / "published-editable-evidence.json",
+                    )
                 ),
             ):
                 destination.parent.mkdir(parents=True, exist_ok=True)

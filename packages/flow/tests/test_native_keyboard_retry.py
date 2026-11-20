@@ -194,3 +194,93 @@ def test_runtime_revalidates_only_keyboard_phase_without_repeating_focus(
     event = report.results[0].fresh_actuation_events[0]
     assert event.phase == "keyboard" and event.retried is True
     assert event.lease_sha256 == "a" * 64
+
+
+@pytest.mark.parametrize("action", ["type", "key", "hotkey"])
+@pytest.mark.parametrize("stale", [False, True])
+@pytest.mark.parametrize("lost_ack", [False, True])
+def test_report_retains_actual_keyboard_attempt_frame_even_with_lost_ack(
+    tmp_path, action, stale, lost_ack
+):
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeBackend, FakeVision, Match, click_step, make_png
+
+    class Native(FakeBackend):
+        attempts = 0
+        delivered_frames = []
+
+        def native_keyboard_lease_available(self):
+            return True
+
+        def guarded_keyboard_target_fingerprint(self):
+            return "b" * 64 if self._guarded_keyboard_point is not None else None
+
+        def click(self, *args, **kwargs):
+            super().click(*args, **kwargs)
+            self._frame = make_png(color=(220, 230, 240))
+
+        def guarded_keyboard_frame(self):
+            if action != "type" and self.attempts == 0:
+                self._frame = make_png(color=(220, 230, 240))
+            return self._frame
+
+        def deliver(self, call):
+            self.attempts += 1
+            if stale and self.attempts == 1:
+                self._guarded_keyboard_point = None
+                self._frame = make_png(color=(200, 210, 220))
+                raise changed(
+                    "physical_type_text" if action == "type" else "physical_press"
+                )
+            self.delivered_frames.append(self._frame)
+            receipt = call()
+            if lost_ack:
+                raise ActionDeliveryUncertain(
+                    operation=receipt.operation,
+                    native=False,
+                    cause_type="SyntheticLostAcknowledgement",
+                )
+            return receipt
+
+        def type_text_guarded(self, text, **kwargs):
+            return self.deliver(
+                lambda: super(Native, self).type_text_guarded(text, **kwargs)
+            )
+
+        def press_guarded(self, key, **kwargs):
+            return self.deliver(
+                lambda: super(Native, self).press_guarded(key, **kwargs)
+            )
+
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates/btn.png").write_bytes(make_png((50, 20)))
+    backend, vision = Native(), FakeVision()
+    backend.delivered_frames = []
+    vision.template_results = [Match((110, 105), (100, 100, 50, 20)) for _ in range(8)]
+    step = Step(
+        id="keyboard",
+        intent="edit transient field",
+        action=ActionKind(action),
+        anchor=click_step(ocr_text="Field").anchor,
+        text="example" if action == "type" else None,
+        key="a" if action != "type" else None,
+        modifiers=["ctrl"] if action == "hotkey" else [],
+    )
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="source", steps=[step]),
+        bundle_dir=bundle,
+        run_dir=tmp_path / "run",
+    )
+    result = report.results[0]
+    assert report.success is (not lost_ack), result.error
+    assert len(backend.delivered_frames) == 1
+    assert (
+        tmp_path / "run" / result.before_png
+    ).read_bytes() == backend.delivered_frames[0]
+    assert backend.delivered_frames[0] != make_png()
+    assert bool(result.delivery_uncertainty) is lost_ack
+    assert len(result.fresh_actuation_events) == int(stale)
+    assert backend.attempts == 1 + int(stale)
+    assert len([x for x in backend.actions if x[0] == "click"]) == int(action == "type")

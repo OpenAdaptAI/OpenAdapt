@@ -1756,6 +1756,31 @@ class WindowsBackend:
         )
         return self._guarded_receipt(response, "physical_drag")
 
+    def editable_value_observation(
+        self, x: int | None = None, y: int | None = None
+    ) -> dict[str, Any] | None:
+        """Exact non-password editable value from the bound actual native focus.
+
+        Empty is observed. Missing/ambiguous/unreadable/changed values are None;
+        this never substitutes an accessible Name or a truncated prefix.
+        """
+        if (x is None) != (y is None):
+            return None
+        leases = self._focused_keyboard_leases()
+        if leases is None:
+            return None
+        return leases.editable_value_observation(
+            (int(x), int(y)) if x is not None and y is not None else None
+        )
+
+    def text_value_at(self, x: int, y: int) -> Optional[str]:
+        observed = self.editable_value_observation(x, y)
+        return observed["value"] if observed is not None else None
+
+    def focused_text_value(self) -> Optional[str]:
+        observed = self.editable_value_observation()
+        return observed["value"] if observed is not None else None
+
     def native_keyboard_lease_available(self) -> bool:
         return self._focused_keyboard_leases() is not None
 

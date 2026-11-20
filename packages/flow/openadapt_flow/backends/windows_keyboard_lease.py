@@ -31,12 +31,71 @@ class NativeKeyboardLeaseClient:
         self._post, self._before_input = post, before_input
         self._observed: dict[str, Any] | None = None
         self._armed: dict[str, Any] | None = None
+        self._last_target_fingerprint: str | None = None
 
     def target_fingerprint(self) -> str | None:
         return self._armed["target"]["fingerprint"] if self._armed else None
 
+    def editable_value_observation(
+        self, point: tuple[int, int] | None = None
+    ) -> dict[str, Any] | None:
+        expected = (
+            self.target_fingerprint()
+            or (self._observed["target"]["fingerprint"] if self._observed else None)
+            or self._last_target_fingerprint
+        )
+        payload: dict[str, Any] = (
+            {"expected_fingerprint": expected} if expected is not None else {}
+        )
+        if point is not None:
+            payload.update(x=point[0], y=point[1])
+        try:
+            response = self._post("/uia/editable-value", payload)
+            data = response.json()
+            if (
+                response.status_code != 200
+                or not isinstance(data, dict)
+                or set(data)
+                != {
+                    "status",
+                    "schema",
+                    "complete",
+                    "value",
+                    "target_fingerprint",
+                    "bounds",
+                    "point",
+                }
+                or data["status"] != "ok"
+                or data["schema"] != "openadapt.native-editable-value/v1"
+                or data["complete"] is not True
+                or not isinstance(data["value"], str)
+                or len(data["value"]) > 65536
+            ):
+                return None
+            target = _target(
+                {
+                    "status": "ok",
+                    "target": {
+                        "fingerprint": data["target_fingerprint"],
+                        "bounds": data["bounds"],
+                        "point": data["point"],
+                    },
+                }
+            )
+            if expected is not None and target["fingerprint"] != expected:
+                return None
+            left, top, right, bottom = target["bounds"]
+            if point is not None and not (
+                left <= point[0] < right and top <= point[1] < bottom
+            ):
+                return None
+            return data
+        except Exception:
+            return None
+
     def cancel(self) -> None:
         self._observed = self._armed = None
+        self._last_target_fingerprint = None
 
     def frame(self) -> bytes:
         self.cancel()
@@ -104,6 +163,7 @@ class NativeKeyboardLeaseClient:
                 "native keyboard input has no armed lease"
             )
         operation = keyboard_operation(payload)
+        self._last_target_fingerprint = lease["target"]["fingerprint"]
         self._before_input()
         try:
             response = self._post(

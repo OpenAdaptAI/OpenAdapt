@@ -135,14 +135,6 @@ def native_keyboard_delivery(
             )
         resolution, frame = fresh, png
         result.resolution = fresh
-        evidence_step_id = (
-            Path(result.before_png).name.removesuffix("_before.png")
-            if result.before_png
-            else step.id
-        )
-        result.before_png = replay._save_step_png(
-            run_dir, evidence_step_id, "before", png
-        )
         return True
 
     def deliver() -> ActionDeliveryReceipt:
@@ -153,6 +145,16 @@ def native_keyboard_delivery(
         if refusal is not None:
             raise StructuralResolutionRefused(refusal)
         replay._require_qualification_environment_current()
+        # This frame authorizes this keyboard attempt, including an uncertain
+        # acknowledgement. A focusing click may have changed the earlier frame.
+        evidence_step_id = (
+            Path(result.before_png).name.removesuffix("_before.png")
+            if result.before_png
+            else step.id
+        )
+        result.before_png = replay._save_step_png(
+            run_dir, evidence_step_id, "before", frame
+        )
         return replay._deliver_backend_call(
             result, lambda: call(hashlib.sha256(frame).hexdigest())
         )

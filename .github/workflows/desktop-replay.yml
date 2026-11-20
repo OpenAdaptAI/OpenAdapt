@@ -110,7 +110,7 @@ jobs:
           } | tee "$RUNNER_TEMP/nkl/source.log"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/nkl/cases" \
-            tests/e2e/test_native_keyboard_lease.py \
+            tests/e2e/test_native_keyboard_lease.py::test_native_keyboard_lease_actual_delivery_and_refusal \
             --junitxml="$RUNNER_TEMP/nkl/junit.xml" 2>&1 | tee "$RUNNER_TEMP/nkl/pytest.log"
           python - <<'PYTHON'
           import json
@@ -130,6 +130,45 @@ jobs:
           assert proof["head"] == os.environ["EXPECTED_SOURCE_SHA"]
           assert proof["rows_before"] == proof["rows_after"]
           print(json.dumps({"native_lease_cases": len(expected), "skipped": 0, "rows_unchanged": True}))
+          PYTHON
+      - name: Exact editable values and bounded runtime TYPE retry
+        timeout-minutes: 6
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_NATIVE_EDITABLE_VALUE_EVIDENCE: ${{ runner.temp }}/nkl-editable/evidence.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nkl-editable"
+          {
+            git rev-parse HEAD
+            git rev-parse "HEAD^{tree}"
+            printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } | tee "$RUNNER_TEMP/nkl-editable/source.log"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/nkl-editable/cases" \
+            tests/e2e/test_native_keyboard_lease.py::test_native_editable_values_and_runtime_type_retry \
+            --junitxml="$RUNNER_TEMP/nkl-editable/junit.xml" 2>&1 | tee "$RUNNER_TEMP/nkl-editable/pytest.log"
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path(os.environ["RUNNER_TEMP"]) / "nkl-editable"
+          cases = list(ET.parse(root / "junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1
+          assert cases[0].get("name") == "test_native_editable_values_and_runtime_type_retry"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          proof = json.loads((root / "evidence.json").read_text())
+          assert proof["head"] == os.environ["EXPECTED_SOURCE_SHA"]
+          assert proof["passed"] is True and proof["agent_terminated"] is True and proof["fixture_terminated"] is True
+          assert proof["rows_before"] == proof["rows_after"]
+          assert len(proof["observations"]) == 8
+          assert len(proof["runtime"]) == 2 and {case["case"] for case in proof["runtime"]} == {"success", "uncertain"}
+          for case in proof["runtime"]:
+              assert case["planted"] and case["input_attempts"][0]["response"]["no_keyboard_input_delivered"] is True
+              assert case["retained_attempt_frame_sha256"] == case["input_attempts"][-1]["request"]["expected_frame_sha256"]
+              assert case["rows_after"] == proof["rows_before"]
+          print(json.dumps({"editable_observation_cases": 8, "runtime_type_cases": 2, "skipped": 0, "rows_unchanged": True}))
           PYTHON
       - name: Record, compile and replay, judged from the record
         env:
@@ -186,6 +225,18 @@ jobs:
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/nkl-editable/*.json
+            ${{ runner.temp }}/nkl-editable/*.xml
+            ${{ runner.temp }}/nkl-editable/*.log
+            ${{ runner.temp }}/nkl-editable/cases/**/*.png
+            ${{ runner.temp }}/nkl-editable/cases/**/editable-value-evidence.json
+            ${{ runner.temp }}/nkl-editable/cases/**/agent.log
+            ${{ runner.temp }}/nkl-editable/cases/**/patient_notes.ps1
+            ${{ runner.temp }}/nkl-editable/cases/**/patients.db
+            ${{ runner.temp }}/nkl-editable/cases/**/report.json
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-recording/*.json
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-recording/*.jsonl
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-bundle/workflow.json
             ${{ runner.temp }}/nkl/*.json
             ${{ runner.temp }}/nkl/*.xml
             ${{ runner.temp }}/nkl/*.log

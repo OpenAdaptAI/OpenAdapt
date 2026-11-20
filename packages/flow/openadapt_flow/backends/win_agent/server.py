@@ -991,9 +991,9 @@ def _uia_field_label(control: object) -> Optional[str]:
     return name or None
 
 
-def _focused_target(
+def _focused_target_control(
     auto: Any, *, verify_locator_uniqueness: bool = True
-) -> Optional[dict[str, Any]]:
+) -> Optional[tuple[object, dict[str, Any]]]:
     """Read actual focus; census at observation/handoff, runtime identity at edges.
 
     A lease already names one exact native runtime element. Per-edge checks
@@ -1051,7 +1051,118 @@ def _focused_target(
         latest["fingerprint"], candidate["fingerprint"]
     ):
         return None
-    return candidate
+    return target, candidate
+
+
+def _focused_target(
+    auto: Any, *, verify_locator_uniqueness: bool = True
+) -> Optional[dict[str, Any]]:
+    observed = _focused_target_control(
+        auto, verify_locator_uniqueness=verify_locator_uniqueness
+    )
+    return observed[1] if observed is not None else None
+
+
+def _complete_editable_value(control: object) -> tuple[Optional[str], Optional[str]]:
+    """Full ValuePattern observation; empty is readable, never Name/MSAA.
+
+    This shares #2291's full exact ValuePattern/empty-vs-unavailable contract.
+    Editable input additionally requires observed non-password/non-read-only.
+    """
+    if _control_value(control, "IsPassword", None) is not False:
+        return None, "password_or_password_status_unavailable"
+    if _control_value(control, "ControlTypeName", None) != "EditControl":
+        return None, "not_editable_value_control"
+    method = _control_value(control, "GetValuePattern", None)
+    if not callable(method):
+        return None, "value_pattern_unavailable"
+    try:
+        pattern = method()
+        if getattr(pattern, "IsReadOnly", None) is not False:
+            return None, "read_only_or_read_only_status_unavailable"
+        value = getattr(pattern, "Value", None)
+    except Exception:
+        return None, "value_unavailable"
+    if _control_value(control, "IsPassword", None) is not False:
+        return None, "password_or_password_status_unavailable"
+    try:
+        still_editable = getattr(pattern, "IsReadOnly", None) is False
+    except Exception:
+        still_editable = False
+    if not still_editable:
+        return None, "read_only_or_read_only_status_unavailable"
+    if not isinstance(value, str):
+        return None, "value_unavailable"
+    if len(value) > _MAX_TEXT_CHARS:
+        return None, "value_exceeds_limit"
+    return value, None
+
+
+def _editable_value_observation(auto: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    data = _exact_object(
+        payload,
+        optional=frozenset({"x", "y", "expected_fingerprint"}),
+        label="editable-value",
+    )
+    if ("x" in data) != ("y" in data):
+        raise AgentRequestError(
+            400, "invalid_schema", "editable value point requires x and y"
+        )
+    point = (
+        (_bounded_int(data["x"], "x"), _bounded_int(data["y"], "y"))
+        if "x" in data
+        else None
+    )
+    expected = data.get("expected_fingerprint")
+    if expected is not None and (
+        not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected)
+    ):
+        raise AgentRequestError(
+            400, "invalid_schema", "editable value binding requires exact fingerprint"
+        )
+
+    def unavailable(reason: str) -> dict[str, Any]:
+        return {"status": "unavailable", "complete": False, "reason": reason}
+
+    observed = _focused_target_control(auto)
+    if observed is None:
+        return unavailable("focused_target_unavailable_or_ambiguous")
+    control, candidate = observed
+    fingerprint = candidate["fingerprint"]
+    if expected is not None and not hmac.compare_digest(expected, fingerprint):
+        return unavailable("bound_target_changed")
+    left, top, right, bottom = candidate["bounds"]
+    if point is not None and not (
+        left <= point[0] < right and top <= point[1] < bottom
+    ):
+        return unavailable("point_outside_focused_target")
+    value, reason = _complete_editable_value(control)
+    if reason is not None:
+        return unavailable(reason)
+    # Do not re-resolve a locator into another object. Re-read actual focus,
+    # runtime identity, geometry/hit-test and the same full value.
+    after = _focused_target_control(auto, verify_locator_uniqueness=False)
+    if after is None or not hmac.compare_digest(after[1]["fingerprint"], fingerprint):
+        return unavailable("observation_changed")
+    after_value, reason = _complete_editable_value(after[0])
+    if reason is not None:
+        return unavailable(reason)
+    final = _focused_target_control(auto, verify_locator_uniqueness=False)
+    if (
+        after_value != value
+        or final is None
+        or not hmac.compare_digest(final[1]["fingerprint"], fingerprint)
+    ):
+        return unavailable("observation_changed")
+    return {
+        "status": "ok",
+        "schema": "openadapt.native-editable-value/v1",
+        "complete": True,
+        "value": value,
+        "target_fingerprint": fingerprint,
+        "bounds": candidate["bounds"],
+        "point": candidate["point"],
+    }
 
 
 def _focused_field_label(auto: Any) -> Optional[str]:
@@ -1554,6 +1665,8 @@ def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
+    if operation == "editable-value":
+        return _editable_value_observation(auto, payload)
     if operation == "authoring-tree":
         _exact_object(payload, label=operation)
         return _authoring_tree(auto)
@@ -3089,6 +3202,7 @@ def make_handler_class(
                 "/window/bounds": ("uia", "window-bounds"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/focused-field-label": ("uia", "focused-field-label"),
+                "/uia/editable-value": ("uia", "editable-value"),
                 "/uia/focused-target": ("uia", "focused-target"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),

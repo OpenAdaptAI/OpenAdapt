@@ -37,6 +37,10 @@ field baseline for text. Effectful, API-bound and irreversible actions do not
 use this retry. The earlier focusing click is never repeated. Exact PNG equality
 still gates delivery; no caret or focus pixels are ignored. Reports retain the
 refused lease hash, geometry and keyboard phase through checkpoint/resume.
+The report before-frame is saved from the actual authorized keyboard frame
+immediately before each input attempt, including the first attempt and an
+uncertain acknowledgement after partial delivery. Earlier focusing observations
+do not stand in for that later input boundary.
 
 ## Evidence and limits
 
@@ -53,3 +57,19 @@ is temporal attribution of keyboard input across all native entry points.
 Same-form replacement, replay and lost acknowledgement are held-out cases beyond
 the unreceipted Enter/stale-frame campaign failures that motivated the work.
 This advances independently verifiable action receipts and refusal evidence.
+
+## Exact editable-value observation
+
+`text_value_at` and `focused_text_value` use one complete ValuePattern contract
+at `/uia/editable-value`. A readable empty string is a value. Password or unknown
+password state, read-only or unknown editability, missing/ambiguous focus,
+replacement, changed value and oversized values refuse. No accessible Name,
+MSAA value, normalized text or truncated prefix substitutes for the exact
+value. Both value reads are bounded by actual focus/runtime fingerprint and
+geometry/hit-test observations. Current observed, armed and consumed keyboard
+bindings remain authoritative for the read-back. This supplies the unchanged
+baseline required by bounded zero-input retries; unknown stays a refusal.
+
+The full-value/empty semantics match the separately reviewed approval projection
+in #2291. Its helper is not on this branch's base; merge integration should reuse
+a shared helper without importing that whole held approval change here.
