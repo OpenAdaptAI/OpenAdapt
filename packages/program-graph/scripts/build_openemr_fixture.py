@@ -178,6 +178,12 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
         report = json.loads(report_path.read_text())
         result = json.loads(result_path.read_text())
         seal = json.loads(seal_path.read_text())
+        for filename in ("report.json", "seal.json"):
+            published = subprocess.run(
+                ["git", "show", f"{CERTIFIED_COMMIT}:{CERTIFIED_PATH}/{row['n']}-{row['ref']}/engine/{filename}"],
+                cwd=REPO, check=True, capture_output=True,
+            ).stdout
+            assert published == (run / "engine" / filename).read_bytes(), f"{row['ref']}: {filename} differs from the linked source commit"
         assert report["bundle_content_digest"] == digest, f"{row['ref']} ran a different bundle"
         assert report["execution_outcome"] == row["execution_outcome"]
         assert report["model_calls"] == 0
@@ -286,9 +292,11 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
 
 
 def main() -> int:
-    global BUNDLE, OUT
-    ap = argparse.ArgumentParser()
+    global BUNDLE, OUT, CERTIFIED_PATH, CERTIFIED_COMMIT, CERTIFIED_URL
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--runs", type=Path, help="the certified runs (summary.json and one directory per referral)")
+    ap.add_argument("--source-commit", default=CERTIFIED_COMMIT, help="commit containing the published, sealed run reports")
+    ap.add_argument("--source-path", default=CERTIFIED_PATH, help="repository path of the published, sealed run reports")
     ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
     ap.add_argument("--out", type=Path, default=OUT, help="fixture directory (default: fixtures/openemr-referral)")
     ap.add_argument(
@@ -301,6 +309,14 @@ def main() -> int:
         ),
     )
     args = ap.parse_args()
+    if Path(args.source_path).is_absolute() or ".." in Path(args.source_path).parts:
+        ap.error("--source-path must stay within the source repository")
+    CERTIFIED_COMMIT = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{args.source_commit}^{{commit}}"],
+        cwd=REPO, check=True, text=True, capture_output=True,
+    ).stdout.strip()
+    CERTIFIED_PATH = args.source_path
+    CERTIFIED_URL = f"https://github.com/OpenAdaptAI/OpenAdapt/blob/{CERTIFIED_COMMIT}/{CERTIFIED_PATH}"
     BUNDLE = args.bundle.expanduser().resolve()
     out = args.out.expanduser().resolve()
     if out != OUT and not (out / "worklist.csv").exists():

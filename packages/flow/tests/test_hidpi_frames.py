@@ -34,13 +34,14 @@ def page():
         browser.close()
 
 
-def test_copy_is_2x_and_page_sees_nothing(page, tmp_path):
+@pytest.mark.parametrize("method", ["screenshot", "guarded_keyboard_frame"])
+def test_copy_is_2x_and_page_sees_nothing(page, tmp_path, method):
     backend = PlaywrightBackend(page)
-    plain = backend.screenshot()
+    plain = getattr(backend, method)()
     page.evaluate("window.events.length = 0")  # the load's own resize
     hidpi_frames.attach(backend, tmp_path / "copies")
-    frame = backend.screenshot()
-    again = backend.screenshot()
+    frame = getattr(backend, method)()
+    again = getattr(backend, method)()
 
     assert frame == plain == again  # the engine's frame is unchanged
     assert Image.open(io.BytesIO(frame)).size == (640, 400)
@@ -123,3 +124,25 @@ def test_runner_accepts_only_the_landing_demo_outcomes():
         stop, "Identity check failed for step 'step_039' (click 'Create New Patient')"
     )
     assert mismatches(stop, None)
+
+
+def test_transient_capture_failure_retries_the_same_frame(page, tmp_path, monkeypatch):
+    backend = PlaywrightBackend(page)
+    capture = hidpi_frames.capture_scaled
+    attempts = []
+
+    def flaky(page, scale):
+        attempts.append(scale)
+        if len(attempts) == 1:
+            raise RuntimeError("injected transient capture fault")
+        return capture(page, scale)
+
+    monkeypatch.setattr(hidpi_frames, "capture_scaled", flaky)
+    hidpi_frames.attach(backend, tmp_path / "copies")
+    first = backend.screenshot()
+    assert list((tmp_path / "copies").glob("*.error"))
+    second = backend.screenshot()
+    assert first == second
+    assert attempts == [2, 2]
+    assert not list((tmp_path / "copies").glob("*.error"))
+    assert len(list((tmp_path / "copies").glob("*.png"))) == 1

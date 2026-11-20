@@ -6,7 +6,7 @@ qualification environment are all 1280x800, and the frames it saves under
 on a high-density screen wants a sharper copy. This module takes one beside
 each frame without changing what the engine sees:
 
-- :func:`attach` wraps a Playwright backend's ``screenshot``. Each time it
+- :func:`attach` wraps a Playwright backend's screenshot and guarded-frame methods. Each time it
   returns a frame whose bytes differ from the last one, the same viewport is
   captured once more through the Chrome DevTools protocol with
   ``clip.scale``, which renders the page at that density (no resize, no
@@ -70,23 +70,31 @@ def attach(backend: Any, out: Path, scale: int = 2) -> None:
     """Store a ``scale``-density copy of each new frame ``backend`` returns."""
 
     out.mkdir(parents=True, exist_ok=True)
-    original = backend.screenshot
-    last: dict[str, str] = {}
 
-    def screenshot() -> bytes:
-        png = original()
-        digest = hashlib.sha256(png).hexdigest()
-        if last.get("digest") != digest:
-            last["digest"] = digest
+    def wrap(name: str) -> None:
+        original = getattr(backend, name, None)
+        if not callable(original):
+            return
+
+        def frame(*args: Any, **kwargs: Any) -> bytes:
+            png = original(*args, **kwargs)
+            digest = hashlib.sha256(png).hexdigest()
             target = out / f"{digest}.png"
+            error_path = out / f"{digest}.error"
             if not target.exists():
                 try:
                     target.write_bytes(capture_scaled(backend.page, scale))
+                    error_path.unlink(missing_ok=True)
                 except Exception as error:  # display only: never fail the run
-                    (out / f"{digest}.error").write_text(f"{error!r}\n")
-        return png
+                    error_path.write_text(f"{type(error).__name__}\n")
+            return png
 
-    backend.screenshot = screenshot
+        setattr(backend, name, frame)
+
+    # A guarded actuation frame can be saved as a step's before frame without
+    # passing through screenshot(). Both entry points retain their exact bytes.
+    for name in ("screenshot", "guarded_keyboard_frame"):
+        wrap(name)
 
 
 def _tile_diff(frame: bytes, copy: bytes) -> float:
@@ -130,7 +138,13 @@ def pair(
         digest = hashlib.sha256(frame).hexdigest()
         source = copies / f"{digest}.png"
         if not source.exists():
-            missing.append({"frame": frame_path.name, "reason": "no copy"})
+            error = copies / f"{digest}.error"
+            reason = (
+                f"capture failed: {error.read_text().strip()}"
+                if error.exists()
+                else "no copy"
+            )
+            missing.append({"frame": frame_path.name, "reason": reason})
             continue
         copy = source.read_bytes()
         size = Image.open(io.BytesIO(frame)).size
