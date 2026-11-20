@@ -57,6 +57,7 @@ MIRRORS_TXT = "mirror://mirrors.ubuntu.com/mirrors.txt"
 UPDATE_TIMEOUT = 150
 DOWNLOAD_TIMEOUT = 420
 PLAYWRIGHT_TIMEOUT = 300
+SYSTEM_TIMEOUT = "/usr/bin/timeout"
 
 NETWORK_FAILURE = re.compile(
     r"Could not connect|Unable to connect|Connection timed out|"
@@ -242,7 +243,13 @@ def _deadline_command(command: list[str], timeout: float) -> list[str]:
     """
     if timeout <= 0:
         raise ValueError("the command deadline must be positive")
-    timer = shutil.which("timeout")
+    privileged = os.geteuid() == 0 or command[:2] == ["sudo", "-n"]
+    if sys.platform == "linux" or privileged:
+        # The subject's PATH must not choose a program executed as root.
+        timer = SYSTEM_TIMEOUT if os.access(SYSTEM_TIMEOUT, os.X_OK) else None
+    else:
+        # Portable, nonprivileged local controls can use installed coreutils.
+        timer = shutil.which("timeout")
     if timer is None:
         raise SystemExit(
             "::error title=CI command deadline::GNU timeout is required on this runner"

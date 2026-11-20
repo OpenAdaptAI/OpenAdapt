@@ -19,7 +19,8 @@ PROBE = Path(__file__).parent / "ci" / "apt_deadline_probe.py"
 def test_deadline_sits_inside_the_command_privilege_boundary(monkeypatch, uid):
     apt = _module()
     monkeypatch.setattr(apt.os, "geteuid", lambda: uid)
-    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/usr/bin/timeout")
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
     command = apt._deadline_command(apt._sudo(["apt-get", "update"]), 7)
     prefix = ["sudo", "-n"] if uid else []
     assert command == [
@@ -42,6 +43,8 @@ def test_invalid_deadline_cannot_disable_the_timer(deadline):
 
 def test_missing_timer_is_a_setup_refusal(monkeypatch):
     apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 501)
     monkeypatch.setattr(apt.shutil, "which", lambda _name: None)
     with pytest.raises(SystemExit, match="GNU timeout is required"):
         apt._deadline_command(["synthetic"], 1)
@@ -247,3 +250,26 @@ def test_requested_refresh_failure_does_not_claim_available_packages_are_missing
     output = capsys.readouterr().out
     assert "Requested packages available: synthetic; index refresh failed." in output
     assert "Packages not installed:" not in output
+
+
+@pytest.mark.parametrize("with_sudo", [False, True])
+def test_linux_timer_identity_is_independent_of_subject_path(monkeypatch, with_sudo):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    command = ["sudo", "-n", "synthetic"] if with_sudo else ["synthetic"]
+    bounded = apt._deadline_command(command, 1)
+    assert bounded[2 if with_sudo else 0] == "/usr/bin/timeout"
+    assert "/subject/timeout" not in bounded
+
+
+def test_absent_system_timer_never_falls_back_to_subject_path(monkeypatch):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(apt.os, "access", lambda *_args: False)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    with pytest.raises(SystemExit, match="GNU timeout is required"):
+        apt._deadline_command(["sudo", "-n", "synthetic"], 1)
