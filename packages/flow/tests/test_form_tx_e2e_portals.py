@@ -270,7 +270,30 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
             assert result.outcome == FormTxOutcome.VERIFIED_DONE, result.what_happened
             assert result.summary_verdict is not None
             assert result.summary_verdict.passed is True
-            assert result.summary_verdict.checked_count >= len(pack.bindings)
+            # Explicit fixture specification: conditional roof/pool follow-ups
+            # are absent in this case. Every other intended field and the
+            # estimator return must appear in successful saved-state read-back.
+            expected_keys = {
+                "applicant.first_name",
+                "applicant.last_name",
+                "applicant.dob",
+                "applicant.phone",
+                "applicant.marital_status",
+                "applicant.prior_claims_count",
+                "dwelling.street_address",
+                "dwelling.year_built",
+                "dwelling.roof_year",
+                "dwelling.has_pool",
+                "coverage.deductible",
+                "coverage.liability_limit",
+                "estimated_replacement_cost_cents",
+            }
+            checked_keys = {
+                verdict.dossier_key
+                for verdict in result.summary_verdict.field_verdicts
+                if verdict.passed
+            }
+            assert expected_keys == checked_keys
             assert result.receipt is not None
             assert verify_form_tx_receipt(result.receipt)
         finally:

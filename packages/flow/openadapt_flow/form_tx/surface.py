@@ -148,13 +148,12 @@ def match_anchor_in_snapshot(
             if anchor.name_or_id_patterns
             else True
         )
-        if anchor.label_patterns and anchor.name_or_id_patterns:
-            # Either exact strong label match or exact attribute match qualifies,
-            # preferring controls that satisfy all specified signals.
-            if label_ok or name_ok:
-                candidates.append(ctrl)
-        elif (anchor.label_patterns and label_ok) or (
-            anchor.name_or_id_patterns and name_ok
+        if not label_ok or not name_ok:
+            continue
+        if (
+            anchor.css_selector == ctrl.dom_selector
+            or anchor.label_patterns
+            or anchor.name_or_id_patterns
         ):
             candidates.append(ctrl)
 

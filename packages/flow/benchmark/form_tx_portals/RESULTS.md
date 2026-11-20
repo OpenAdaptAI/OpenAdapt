@@ -3,9 +3,9 @@
 > verification contract. The synthetic scenarios and scripted comparison arms
 > do not establish production or independently held-out application evidence.
 
-# Governed Form & Wizard Transaction Layer (`form_tx`) — Multi-Portal Realism Results
+# Historical synthetic fixture measurements (invalidated)
 
-Real headless Chromium execution across two stateful multi-screen portals:
+Historical headless Chromium execution across two purpose-built synthetic portals:
 - `underwriting_wizard` (7 cases: async PPR reloads, volatile DOM IDs, bureau prefill spouse & claims conflicts, conditional unmapped questions, child popup Replacement Cost Estimator, Quote Summary read-back)
 - `hospital_hms_held_out` (2 queue jobs + 2FA `WarmSessionLease` + zero-mutation heartbeat + body-portaled async Doctor combobox + duplicate-phone modal + UHID search read-back)
 

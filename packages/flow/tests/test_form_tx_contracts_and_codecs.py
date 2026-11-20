@@ -104,7 +104,8 @@ def test_currency_and_phone_codecs():
     )
     assert (
         format_for_text_entry(
-            "$485,000.00", FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
+            "$485,000.00",
+            FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"),
         )
         == "485000"
     )

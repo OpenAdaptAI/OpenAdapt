@@ -41,7 +41,9 @@ from openadapt_flow.form_tx.types import (
 )
 from openadapt_flow.report_redaction import redact_text
 
-COPILOT_STATE_SCHEMA: Literal["openadapt.copilot-state/v1"] = "openadapt.copilot-state/v1"
+COPILOT_STATE_SCHEMA: Literal["openadapt.copilot-state/v1"] = (
+    "openadapt.copilot-state/v1"
+)
 COPILOT_STATE_FILE = "copilot_state.json"
 COPILOT_DECISIONS_FILE = "copilot_decisions.jsonl"
 REDACTED_SECRET = "<secret>"

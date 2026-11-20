@@ -38,6 +38,7 @@ from openadapt_flow.form_tx.types import (
     DossierEntity,
     DossierFact,
     EntityTableSpec,
+    FieldAnchorSpec,
     FieldBindingSpec,
     FieldCodecSpec,
     FormCodecKind,
@@ -944,15 +945,15 @@ class FormReconciler:
                 and _control_matches_fact(ctrl, fact.value, binding)
             ):
                 continue
-            observed_value: Any = (
-                ctrl.checked
-                if ctrl.input_type.casefold() == "checkbox" and ctrl.checked is not None
-                else ctrl.current_value
+            accepted_binding = binding or FieldBindingSpec(
+                binding_id="human-current-field",
+                dossier_key="human-current-field",
+                anchor=FieldAnchorSpec(css_selector=ctrl.dom_selector),
             )
-            if ctrl_sig in session._human_accepted_values and values_equivalent(
+            if ctrl_sig in session._human_accepted_values and _control_matches_fact(
+                ctrl,
                 session._human_accepted_values[ctrl_sig],
-                observed_value,
-                binding.codec if binding is not None else FieldCodecSpec(),
+                accepted_binding,
             ):
                 continue
 

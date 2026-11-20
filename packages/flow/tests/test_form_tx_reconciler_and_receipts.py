@@ -1328,7 +1328,17 @@ def test_ppr_conditional_cascade_human_resume_popup_summary_and_receipt() -> Non
     )
 
     serialized_receipt = done.receipt.model_dump_json()
-    for pii_token in ("Elena", "Vance", "415", "0192", "CONF-10001", "operator_jane"):
+    # Complete phone representations are sensitive. Arbitrary 3/4-digit
+    # substrings can occur by chance in valid cryptographic hex output.
+    for pii_token in (
+        "Elena",
+        "Vance",
+        "+1 (415) 555-0192",
+        "14155550192",
+        "4155550192",
+        "CONF-10001",
+        "operator_jane",
+    ):
         assert pii_token not in serialized_receipt
 
 
