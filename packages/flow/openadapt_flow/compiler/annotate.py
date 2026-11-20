@@ -68,6 +68,7 @@ from typing import Any, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.ir import ActionKind, ParamKind, ParamSpec, Step, Workflow
 
 logger = logging.getLogger(__name__)
@@ -617,6 +618,9 @@ def apply_annotations(
         for p in sa.params:
             _apply_param(resolved, step, p, result)
 
+    result.workflow = derive_authored_workflow(
+        workflow, update={"steps": resolved.steps, "param_specs": resolved.param_specs}
+    )
     return result
 
 
