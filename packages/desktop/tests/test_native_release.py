@@ -232,7 +232,10 @@ def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> N
     assert libraries["if"] == "runner.os == 'Linux'"
     # The pinned Playwright's dependency list, installed through the shared
     # cached, mirror-fallback apt action rather than `playwright install-deps`.
-    assert libraries["uses"] == "./.github/actions/apt-install"
+    assert (
+        libraries["uses"]
+        == "OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653"
+    )
     assert libraries["with"] == {
         "playwright-deps": "chromium",
         "playwright-python": "uv run --locked python",

@@ -197,7 +197,7 @@ jobs:
 
       - name: Install Linux Chromium runtime libraries
         if: runner.os == 'Linux'
-        uses: ./.github/actions/apt-install
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653
         with:
           # The pinned Playwright's own list, installed through the cache and
           # mirror fallback instead of `playwright install-deps`.
@@ -245,7 +245,7 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        uses: ./.github/actions/apt-install
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653
         with:
           packages: >-
             libayatana-appindicator3-dev
