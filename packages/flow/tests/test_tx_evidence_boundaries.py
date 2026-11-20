@@ -1,19 +1,25 @@
 """Regression checks for qualification and commit evidence boundaries."""
 
+import json
 from pathlib import Path
 
 import pytest
 
-from openadapt_flow.tx.induce import DefaultFrameAndIntentJudge, infer_field_codec
+from openadapt_flow.tx.induce import (
+    DefaultFrameAndIntentJudge,
+    induce_lens_from_har,
+    infer_field_codec,
+)
 from openadapt_flow.tx.judge import (
     FrameAndIntentJudge,
     SafeNormalizedEntailmentOracle,
+    canonicalize_iso_date,
     iso_dates_match,
     strict_equal,
 )
 from openadapt_flow.tx.lens import TransactionalCommitEngine
 from openadapt_flow.tx.receipt import task_key_for
-from openadapt_flow.tx.types import CertifiedLensPack, TxTask
+from openadapt_flow.tx.types import CertifiedLensPack, FieldCodec, TxTask
 from tests import test_tx_lens as _lens_cases
 from tests.test_tx_lens import _make_replace_lens, _StubWireTap
 
@@ -31,6 +37,48 @@ def live_app(_source_fixture):
 )
 def test_an_observed_difference_does_not_certify_its_own_equivalence(intended, stored):
     assert infer_field_codec(intended, stored) is None
+
+
+def test_har_induction_does_not_learn_a_corrupted_write_result():
+    # The trace itself is the untrusted evidence: the server stored different
+    # values than were sent. Induction must not turn that into an accepting rule.
+    sent = {"full_name": "Alice", "dose": "10 mg", "code": "AB01"}
+    stored = {"pid": "ent-42", "full_name": "Bob", "dose": "100 mg", "code": "ABO1"}
+    har = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                {
+                    "request": {
+                        "method": "PUT",
+                        "url": "http://127.0.0.1:9999/v2/profiles/ent-42",
+                        "postData": {
+                            "mimeType": "application/json",
+                            "text": json.dumps(sent),
+                        },
+                    },
+                    "response": {
+                        "status": 200,
+                        "content": {
+                            "mimeType": "application/json",
+                            "text": json.dumps({"data": stored}),
+                        },
+                    },
+                }
+            ],
+        }
+    }
+    spec = induce_lens_from_har(har, intended_inputs=sent)
+    for field in sent:
+        codec = spec.field_codecs.get(field)
+        assert codec is None or codec.kind == "exact", (field, codec)
+    verdict = FrameAndIntentJudge().evaluate(
+        {k: "old" for k in sent},
+        {k: stored[k] for k in sent},
+        sent,
+        field_codecs=spec.field_codecs,
+    )
+    assert not verdict.passed
 
 
 @pytest.mark.parametrize(
@@ -55,6 +103,46 @@ def test_distinct_instants_and_scalar_types_remain_distinct():
     assert not SafeNormalizedEntailmentOracle().entails("account_id", "Georgia", "GA")[
         0
     ]
+
+
+@pytest.mark.parametrize(
+    "date_only,timestamp",
+    [
+        ("2026-01-01", "2026-01-01T00:00:00+14:00"),
+        ("2026-01-01", "2026-01-01T00:00:00-10:00"),
+        ("2026-01-01", "2026-01-01T00:00:00.000-05:00"),
+    ],
+)
+def test_a_calendar_date_does_not_match_midnight_at_a_nonzero_offset(
+    date_only, timestamp
+):
+    # Midnight +14:00 and midnight -10:00 are 24 hours apart. A bare date that
+    # matched both would make two different instants equal through the date.
+    assert not iso_dates_match(date_only, timestamp)
+    assert not iso_dates_match(timestamp, date_only)
+    assert canonicalize_iso_date(timestamp) != canonicalize_iso_date(date_only)
+    codecs = {"at": FieldCodec(kind="iso_date")}
+    judge = FrameAndIntentJudge()
+    assert not judge.evaluate(
+        {"at": "old"}, {"at": timestamp}, {"at": date_only}, field_codecs=codecs
+    ).passed
+    assert not judge.evaluate(
+        {"at": "old"}, {"at": date_only}, {"at": timestamp}, field_codecs=codecs
+    ).passed
+
+
+@pytest.mark.parametrize(
+    "timestamp", ["2026-01-01T00:00:00Z", "2026-01-01T00:00:00.000+00:00"]
+)
+def test_a_calendar_date_still_matches_utc_midnight(timestamp):
+    assert iso_dates_match("2026-01-01", timestamp)
+    assert canonicalize_iso_date(timestamp) == "2026-01-01"
+
+
+def test_date_match_agrees_with_date_canonicalization():
+    # The same UTC-midnight instant written at another offset names the date.
+    assert iso_dates_match("2026-01-01", "2026-01-01T05:00:00+05:00")
+    assert canonicalize_iso_date("2026-01-01T05:00:00+05:00") == "2026-01-01"
 
 
 def test_certified_boolean_without_the_complete_probe_record_is_refused(

@@ -96,6 +96,28 @@ class _ParsedIsoDate:
             and self.microsecond == 0
         )
 
+    @property
+    def is_calendar_date_midnight(self) -> bool:
+        """Midnight that names a calendar date, not one instant among many.
+
+        Only naive or UTC midnight stands for a bare date. Midnight at +14:00
+        and at -10:00 are 24 hours apart, so neither may equal the same date.
+        """
+        return self.is_midnight and (
+            self.tz_offset is None or self.tz_offset == datetime.timedelta(0)
+        )
+
+    def names_calendar_date(self, day: datetime.date) -> bool:
+        """True when this value denotes ``day`` itself: bare, naive or UTC midnight."""
+        if not self.has_time:
+            return self.date == day
+        if self.tz_offset is None:
+            return self.is_midnight and self.date == day
+        utc = self.as_utc_datetime()
+        return utc is not None and utc == datetime.datetime(
+            day.year, day.month, day.day, tzinfo=datetime.timezone.utc
+        )
+
     def as_utc_datetime(self) -> Optional[datetime.datetime]:
         if not self.has_time or self.tz_offset is None:
             return None
@@ -334,7 +356,7 @@ def canonicalize_iso_date(value: str) -> Optional[str]:
     parsed = _parse_iso_date(value)
     if parsed is None:
         return None
-    if not parsed.has_time or parsed.is_midnight:
+    if not parsed.has_time or parsed.is_calendar_date_midnight:
         return parsed.date.isoformat()
     utc_dt = parsed.as_utc_datetime()
     if utc_dt is not None:
@@ -362,9 +384,9 @@ def iso_dates_match(intended: str, stored: str) -> bool:
     if not p_int.has_time and not p_sto.has_time:
         return p_int.date == p_sto.date
     if not p_int.has_time and p_sto.has_time:
-        return p_sto.is_midnight and p_int.date == p_sto.date
+        return p_sto.names_calendar_date(p_int.date)
     if p_int.has_time and not p_sto.has_time:
-        return p_int.is_midnight and p_int.date == p_sto.date
+        return p_int.names_calendar_date(p_sto.date)
 
     # Both include explicit time components.
     utc_int = p_int.as_utc_datetime()

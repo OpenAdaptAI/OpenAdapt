@@ -5,12 +5,16 @@ third-party EHR, ERP or claims products, and it does not establish production
 readiness or independent held-out application generalization.
 
 The original runner could replace a failed qualifier with an empty successful
-certificate. That fallback has been removed. Historical measurements are
-unqualified and must not be used as certification or production evidence.
+certificate. That fallback has been removed, and so have the numbers it
+produced. The sandbox qualifier now returns a probe report that can never
+authorize execution, so the default `tx_acid` arm stops with
+`transaction benchmark qualification failed` on every server. Until an
+independent admission path exists, this harness produces no `tx_acid`
+measurement; pass your own `tx_arm_factory` to measure another backend.
 
 ## Systems of Record (`servers.py`)
 
-Each server runs `http.server.ThreadingHTTPServer` backed by SQLite in `WAL` mode (`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`), bulk-seeding `50,000` rows in `<0.2s` via `executemany`:
+Each server runs `http.server.ThreadingHTTPServer` backed by SQLite in `WAL` mode (`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`), bulk-seeding `50,000` rows via `executemany`:
 
 1. **`ClinicalChartServer` (EHR Archetype, `/api/patients`):**
    - Caps `GET /api/patients?_limit=200` at 200 rows without snapshot tokens, emitting `links.next` whenever `>200` rows exist.
