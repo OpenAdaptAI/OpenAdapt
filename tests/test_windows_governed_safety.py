@@ -300,3 +300,74 @@ def test_coverage_reports_a_halt_without_gating(tmp_path, monkeypatch) -> None:
     assert kept["coverage"]["outcomes"]["approved"]["halt"] == (
         "form_changed_after_approval"
     )
+
+
+PN_DB = ROOT / "packages" / "flow" / "scripts" / "desktop" / "pn_db.py"
+
+
+@pytest.mark.parametrize("phase", ["approved", "held", "resumed"])
+def test_a_sibling_note_changed_to_null_fails(phase) -> None:
+    evidence = _passing()
+    evidence[phase]["rows"][1]["note"] = None
+    assert check.check(evidence)
+
+
+def test_the_held_target_note_changed_to_null_fails() -> None:
+    evidence = _passing()
+    evidence["held"]["rows"][0]["note"] = None
+    assert check.check(evidence)
+
+
+def _read_all(db: Path) -> list[dict]:
+    import os
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, str(PN_DB), "all"],
+        env={**os.environ, "PN_DB": str(db)},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(out.stdout)
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "fails"),
+    [("note", None, True), ("first", "Changed", True), (None, None, False)],
+)
+def test_a_held_run_is_checked_through_the_real_reader(
+    tmp_path, column, value, fails
+) -> None:
+    """Seed the SQLite fixture, change row 2 the way a held run might, and
+    read it back with ``pn_db.py all`` as the Windows test does."""
+
+    import os
+    import sqlite3
+    import subprocess
+    import sys
+
+    db = tmp_path / "patients.db"
+    env = {**os.environ, "PN_DB": str(db)}
+    subprocess.run([sys.executable, str(PN_DB), "seed"], env=env, check=True,
+                   capture_output=True)
+    seed_rows = _read_all(db)
+    if column is not None:
+        con = sqlite3.connect(db)
+        con.execute(f"UPDATE patients SET {column} = ? WHERE id = 2", (value,))
+        con.commit()
+        con.close()
+    evidence = {
+        "target_id": seed_rows[0]["id"],
+        "expected_note": NOTE,
+        "phases": ["held"],
+        "seed_rows": seed_rows,
+        "held": {
+            "exit": 1,
+            "rows": _read_all(db),
+            "outcome": "HALTED_BEFORE_EFFECT",
+            "approval_decision": "approval_required",
+        },
+    }
+    assert bool(check.check(evidence)) is fails

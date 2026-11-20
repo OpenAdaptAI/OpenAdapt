@@ -38,8 +38,11 @@ from pathlib import Path
 from typing import Any
 
 PHASES = ("approved", "held", "resumed")
-# Every column of a record row; only the target's note may change.
-COLUMNS = ("first", "last", "dob")
+# Every column of a record row. Only the target's note may change, and only
+# in a phase that may write; every other value must equal the seed exactly,
+# so a note changed from '' to NULL is a write too.
+COLUMNS = ("first", "last", "dob", "note")
+WRITING_PHASES = ("approved", "resumed")
 
 
 def _approved(phase: str, record: dict[str, Any], evidence: dict[str, Any]) -> bool:
@@ -53,8 +56,12 @@ def _approved(phase: str, record: dict[str, Any], evidence: dict[str, Any]) -> b
     return False
 
 
-def _diff_from_seed(phase: str, rows: list[Any], seed: list[Any]) -> list[str]:
-    """The ways ``rows`` differ from ``seed`` other than through notes."""
+def _diff_from_seed(
+    phase: str, rows: list[Any], seed: list[Any], target: Any
+) -> list[str]:
+    """The ways ``rows`` differ from ``seed``, other than the target's note in
+    a phase that may write it (its value is checked against the expected
+    note separately)."""
 
     problems: list[str] = []
     by_id = {r.get("id"): r for r in rows if isinstance(r, dict)}
@@ -69,7 +76,12 @@ def _diff_from_seed(phase: str, rows: list[Any], seed: list[Any]) -> list[str]:
         seeded = seed_by_id.get(row_id)
         if seeded is None:
             continue
-        changed = [c for c in COLUMNS if row.get(c) != seeded.get(c)]
+        changed = [
+            c
+            for c in COLUMNS
+            if row.get(c) != seeded.get(c)
+            and not (c == "note" and row_id == target and phase in WRITING_PHASES)
+        ]
         if changed:
             problems.append(f"{phase}: row {row_id} changed {changed}")
     return problems
@@ -101,7 +113,7 @@ def check(evidence: Any) -> list[str]:
             continue
         assert isinstance(record, dict)
         if seed is not None:
-            problems.extend(_diff_from_seed(phase, rows, seed))
+            problems.extend(_diff_from_seed(phase, rows, seed, target))
         written = [r for r in rows if r.get("note")]
         siblings = [r["id"] for r in written if r.get("id") != target]
         if siblings:
