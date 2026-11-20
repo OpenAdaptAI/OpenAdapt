@@ -89,7 +89,7 @@ def episode(env: Any, task: Any, policy: Callable[..., Any]) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m benchmark.dolibarr_erp.run")
+    ap = argparse.ArgumentParser(prog="python -m benchmark.dolibarr_erp.run", allow_abbrev=False)
     ap.add_argument("--policy", required=True, choices=["scripted", "noop-success", "noop-failure", "claude"])
     ap.add_argument("--model", default="claude-sonnet-5-5")
     ap.add_argument("--effort", default="medium")

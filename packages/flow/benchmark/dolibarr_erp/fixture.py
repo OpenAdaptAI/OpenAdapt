@@ -305,7 +305,7 @@ def bootstrap() -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m benchmark.dolibarr_erp.fixture")
+    ap = argparse.ArgumentParser(prog="python -m benchmark.dolibarr_erp.fixture", allow_abbrev=False)
     ap.add_argument("command", choices=["up", "bootstrap", "snapshot", "reset", "down", "digest", "time-reset"])
     ap.add_argument("--n", type=int, default=5)
     a = ap.parse_args(argv)

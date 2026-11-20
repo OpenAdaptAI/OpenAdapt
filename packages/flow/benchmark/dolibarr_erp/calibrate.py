@@ -42,7 +42,7 @@ def session(n_pages: list[str]) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--n", type=int, default=3)
     a = ap.parse_args()
     seen: Counter[str] = Counter()
