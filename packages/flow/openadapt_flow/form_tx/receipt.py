@@ -151,7 +151,9 @@ def issue_form_tx_receipt(
     """Issue a value-scrubbed, Ed25519-signed ``SignedFormTxReceipt``."""
     priv_key = _coerce_private_key(signing_key)
 
-    resolved_request_id = request_id or (dossier.request_id if dossier is not None else None)
+    resolved_request_id = request_id or (
+        dossier.request_id if dossier is not None else None
+    )
     resolved_pack_id = pack_id or (pack.pack_id if pack is not None else None)
     resolved_pack_digest = pack_digest or (pack.digest() if pack is not None else None)
     resolved_dossier_digest = dossier_digest or (
@@ -174,7 +176,9 @@ def issue_form_tx_receipt(
     try:
         salt_bytes = bytes.fromhex(actual_salt)
     except ValueError as exc:
-        raise ValueError(f"salt_hex must be valid hexadecimal: {actual_salt!r}") from exc
+        raise ValueError(
+            f"salt_hex must be valid hexadecimal: {actual_salt!r}"
+        ) from exc
     if len(salt_bytes) < 8:
         raise ValueError("salt_hex must represent at least 8 random bytes")
 
@@ -194,8 +198,24 @@ def issue_form_tx_receipt(
     resolved_readback_passed = (
         readback_passed
         if readback_passed is not None
-        else (summary_verdict.passed if summary_verdict is not None else True)
+        else (summary_verdict.passed if summary_verdict is not None else False)
     )
+
+    if outcome == FormTxOutcome.VERIFIED_DONE and (
+        not resolved_readback_passed
+        or resolved_checked_count < 1
+        or (
+            summary_verdict is not None
+            and (
+                not summary_verdict.passed
+                or summary_verdict.failed_keys
+                or summary_verdict.missing_required_outputs
+            )
+        )
+    ):
+        raise ValueError(
+            "Verified receipt requires successful nonempty read-back evidence"
+        )
 
     hr_digests = tuple(salted_sha256(rec, actual_salt) for rec in human_resolutions)
     salted_outputs = {

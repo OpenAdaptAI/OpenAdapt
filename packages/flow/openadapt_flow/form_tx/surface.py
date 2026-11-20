@@ -68,7 +68,9 @@ class FormSurfaceBackend(Protocol):
         """Set a checkbox or radio control and wait for settle."""
         ...
 
-    def open_portal_combobox_options(self, dom_selector: str) -> tuple[ObservedOption, ...]:
+    def open_portal_combobox_options(
+        self, dom_selector: str
+    ) -> tuple[ObservedOption, ...]:
         """Open a detached/portal combobox and read its rendered options."""
         ...
 
@@ -121,12 +123,9 @@ def match_anchor_in_snapshot(
     """
     candidates: list[ObservedControl] = []
     for ctrl in snapshot.controls:
-        if not ctrl.visible:
+        if not ctrl.visible or ctrl.is_secret:
             continue
         if not include_readonly and (ctrl.disabled or ctrl.readonly):
-            continue
-        if anchor.css_selector and ctrl.dom_selector == anchor.css_selector:
-            candidates.append(ctrl)
             continue
         if anchor.css_selector and anchor.css_selector != ctrl.dom_selector:
             # When an explicit css_selector is the sole signal, require exact match
@@ -172,7 +171,9 @@ def match_anchor_in_snapshot(
             return both[0]
 
     if len(candidates) > 1:
-        labels = [f"{c.label_text or c.dom_selector} ({c.dom_selector})" for c in candidates]
+        labels = [
+            f"{c.label_text or c.dom_selector} ({c.dom_selector})" for c in candidates
+        ]
         raise AmbiguousAnchorError(
             f"Anchor {anchor.model_dump(exclude_none=True)} matched {len(candidates)} controls: {labels}"
         )

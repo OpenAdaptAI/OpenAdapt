@@ -1,4 +1,4 @@
-"""Full-stack end-to-end tests across ``form_tx``, ``CopilotSessionBridge``, and real portals."""
+"""Full-stack end-to-end tests across ``form_tx``, ``CopilotSessionBridge``, and synthetic browser portals."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ from form_tx_portals.servers import (  # noqa: E402
 
 
 def test_full_three_arm_multi_portal_benchmark():
-    """End-to-end 3-arm realism benchmark across underwriting wizard and held-out HMS."""
+    """End-to-end 3-arm synthetic fixture benchmark across underwriting wizard and second synthetic portal."""
     pytest.importorskip("playwright.sync_api")
     report = run_portal_benchmark(ppr_delay_ms=40)
     by_arm = {s.arm: s for s in report.summaries}
@@ -61,8 +61,8 @@ def test_full_three_arm_multi_portal_benchmark():
     assert tx_summary.failed_or_aborted == 0
     assert tx_summary.receipts_verified == 9
 
-    # RuleAccumulator promoted trampoline binding after uw_04 & uw_05 so uw_06 had 0 halts!
-    assert report.learned_candidates_admitted >= 1
+    # Repetition alone cannot admit a policy: proposals remain unqualified.
+    assert report.learned_candidates_admitted == 0
     uw_06_tx = next(
         c
         for c in report.cases
@@ -71,9 +71,9 @@ def test_full_three_arm_multi_portal_benchmark():
     )
     assert uw_06_tx.completed is True
     assert uw_06_tx.ground_truth_accurate is True
-    assert uw_06_tx.human_decisions == 0
+    assert uw_06_tx.human_decisions == 1
 
-    # Zero-mutation keepalive & request_id idempotency on held-out HMS
+    # Zero-mutation keepalive & request_id idempotency on second synthetic portal
     assert report.hms_keepalive_pings >= 1
     assert report.hms_idempotent_dedupes == 2
 
@@ -83,7 +83,9 @@ def test_full_three_arm_multi_portal_benchmark():
 
     # Rigid step replay fails on conditional cascades and HMS async combobox/modals
     rigid = by_arm["rigid_step_replay"]
-    assert rigid.verified_accurate_completions < tx_summary.verified_accurate_completions
+    assert (
+        rigid.verified_accurate_completions < tx_summary.verified_accurate_completions
+    )
 
     md = format_markdown_report(report)
     assert "openadapt_form_tx" in md
@@ -94,7 +96,9 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
     """Proves CopilotSessionBridge integration AND SummaryJudge catching server read-back corruption."""
     sync_pw = pytest.importorskip("playwright.sync_api")
     scenario = next(
-        s for s in build_underwriting_scenarios() if s.scenario_id == "uw_03_unlisted_spouse_prefill"
+        s
+        for s in build_underwriting_scenarios()
+        if s.scenario_id == "uw_03_unlisted_spouse_prefill"
     )
     pack = build_underwriting_wizard_pack()
     profile = load_ui_profile("server_ppr_wizard")
@@ -125,7 +129,9 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
             )
             surf.goto(f"{origin}/wizard/applicant")
             reconciler = FormReconciler(signing_key=signing_key)
-            sess = reconciler.start_session(surface=surf, pack=pack, dossier=scenario.dossier)
+            sess = reconciler.start_session(
+                surface=surf, pack=pack, dossier=scenario.dossier
+            )
             res = reconciler.run_until_halt_or_done(sess)
             assert res.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
             assert res.halts[0].kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
@@ -140,7 +146,8 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
                     halts=res.halts,
                     field_highlights=(
                         CopilotFieldHighlight(
-                            dom_selector=res.halts[0].dom_selector or "#household-table",
+                            dom_selector=res.halts[0].dom_selector
+                            or "#household-table",
                             badge_state="conflict",
                             caption="Unlisted Spouse",
                         ),
@@ -210,7 +217,9 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
             ctx3 = browser.new_context()
             origin3 = hms.attach_to_playwright_context(ctx3)
             page3 = ctx3.new_page()
-            surf3 = PlaywrightFormSurface(page3, load_ui_profile("legacy_postback_portal"))
+            surf3 = PlaywrightFormSurface(
+                page3, load_ui_profile("legacy_postback_portal")
+            )
             surf3.goto(f"{origin3}/hms/register")
             live_snap = surf3.snapshot()
             induction = induce_form_pack(
@@ -228,5 +237,41 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
             assert "consulting_provider" in induction.matched_keys
             assert induction.unmapped_portal_required_labels == ()
             ctx3.close()
+        finally:
+            browser.close()
+
+
+def test_six_second_server_rerender_preserves_declared_readback() -> None:
+    """A delayed synthetic server render exercises the actual browser wait path."""
+    sync_pw = pytest.importorskip("playwright.sync_api")
+    scenario = build_underwriting_scenarios()[0]
+    pack = build_underwriting_wizard_pack()
+    with sync_pw.sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chromium", headless=True)
+        try:
+            context = browser.new_context()
+            portal = StatefulUnderwritingPortal(ppr_delay_ms=6000)
+            origin = portal.attach_to_playwright_context(context)
+            page = context.new_page()
+            surface = PlaywrightFormSurface(
+                page,
+                load_ui_profile("server_ppr_wizard"),
+                ignored_mutation_paths=(
+                    "/api/applicant/save",
+                    "/api/property/ppr",
+                    "/api/property/next",
+                    "/api/estimator/calculate",
+                ),
+            )
+            surface.goto(f"{origin}/wizard/applicant")
+            reconciler = FormReconciler(surface)
+            session = reconciler.create_session(pack, scenario.dossier)
+            result = reconciler.run_until_halt_or_done(session)
+            assert result.outcome == FormTxOutcome.VERIFIED_DONE, result.what_happened
+            assert result.summary_verdict is not None
+            assert result.summary_verdict.passed is True
+            assert result.summary_verdict.checked_count >= len(pack.bindings)
+            assert result.receipt is not None
+            assert verify_form_tx_receipt(result.receipt)
         finally:
             browser.close()

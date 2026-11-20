@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -165,9 +165,13 @@ class ReconcilerSession:
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
         self._human_accepted_control_signatures: set[str] = set()
+        self._human_accepted_values: dict[str, Any] = {}
         self._accepted_entity_rows: list[tuple[str, dict[str, str]]] = []
         self._halt_metadata: dict[str, dict[str, Any]] = {}
         self._idempotent_results: dict[str, FormTxResult] = {}
+        self._idempotent_decisions: dict[str, str] = {}
+        self._last_observation: Optional[FormSnapshot] = None
+        self._halt_contexts: dict[str, tuple[str, Optional[str]]] = {}
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
         self._pre_commit_mutations: int = 0
@@ -255,9 +259,7 @@ def _is_truthy_flag(value: Any) -> bool:
     try:
         return normalize_boolean_yes_no(value) == "yes"
     except CodecValueError:
-        if isinstance(value, str):
-            return bool(value.strip())
-        return bool(value)
+        return False
 
 
 def _deterministic_halt_id(
@@ -427,7 +429,9 @@ class FormReconciler:
         self._default_signing_key = signing_key
         self.max_screen_transitions = max_screen_transitions
         self.max_passes_per_screen = max_passes_per_screen
-        self._summary_judge = summary_judge if summary_judge is not None else SummaryJudge()
+        self._summary_judge = (
+            summary_judge if summary_judge is not None else SummaryJudge()
+        )
 
     def create_session(
         self,
@@ -443,7 +447,9 @@ class FormReconciler:
             run_id=run_id,
             pack=pack,
             dossier=dossier,
-            signing_key=signing_key if signing_key is not None else self._default_signing_key,
+            signing_key=signing_key
+            if signing_key is not None
+            else self._default_signing_key,
         )
         sess._bound_surface = surface
         return sess
@@ -481,6 +487,12 @@ class FormReconciler:
         what_happened: str = "",
     ) -> FormTxResult:
         session.active_halts = list(halts)
+        if session._last_observation is not None:
+            for halt in halts:
+                session._halt_contexts[halt.halt_id] = (
+                    session._last_observation.url_origin_and_path,
+                    session._last_observation.screen_id,
+                )
         result = FormTxResult(
             run_id=session.run_id,
             request_id=session.dossier.request_id,
@@ -524,7 +536,10 @@ class FormReconciler:
                 dossier.entities_of_kind(spec.entity_kind)
             )
             for ent in dossier.entities:
-                if ent.entity_kind in _PRIMARY_ENTITY_KINDS and ent not in expected_entities:
+                if (
+                    ent.entity_kind in _PRIMARY_ENTITY_KINDS
+                    and ent not in expected_entities
+                ):
                     if all(kf in ent.fields for kf in spec.key_fields):
                         expected_entities.append(ent)
 
@@ -893,15 +908,15 @@ class FormReconciler:
         in_popup_subroutine: Optional[str] = None,
     ) -> list[FormHaltItem]:
         matched_by_selector: dict[str, FieldBindingSpec] = {}
-        for binding in bindings:
+        for candidate_binding in bindings:
             try:
                 matched = match_anchor_in_snapshot(
-                    binding.anchor, snapshot, include_readonly=False
+                    candidate_binding.anchor, snapshot, include_readonly=False
                 )
             except AmbiguousAnchorError:
                 continue
             if matched is not None:
-                matched_by_selector[matched.dom_selector] = binding
+                matched_by_selector[matched.dom_selector] = candidate_binding
 
         halts: list[FormHaltItem] = []
         for ctrl in snapshot.controls:
@@ -917,27 +932,27 @@ class FormReconciler:
             if not is_required:
                 continue
 
-            placeholders = (
-                binding.placeholder_values
-                if binding is not None
-                else _DEFAULT_PLACEHOLDERS
-            )
-            if not _is_control_empty(ctrl, placeholders):
-                continue
-
             ctrl_sig = compute_field_signature(ctrl)
-            filled_key = (
-                f"popup:{in_popup_subroutine}:{ctrl.dom_selector}"
-                if in_popup_subroutine
-                else ctrl.dom_selector
+            fact = (
+                session.effective_facts.get(binding.dossier_key)
+                if binding is not None
+                else None
             )
-            # If checkbox was intentionally set to False by grounded dossier/human, it is not ungrounded.
             if (
-                ctrl.input_type.casefold() == "checkbox"
-                or ctrl.role.casefold() == "checkbox"
-            ) and (
-                filled_key in session._filled_selectors
-                or ctrl_sig in session._human_accepted_control_signatures
+                fact is not None
+                and binding is not None
+                and _control_matches_fact(ctrl, fact.value, binding)
+            ):
+                continue
+            observed_value: Any = (
+                ctrl.checked
+                if ctrl.input_type.casefold() == "checkbox" and ctrl.checked is not None
+                else ctrl.current_value
+            )
+            if ctrl_sig in session._human_accepted_values and values_equivalent(
+                session._human_accepted_values[ctrl_sig],
+                observed_value,
+                binding.codec if binding is not None else FieldCodecSpec(),
             ):
                 continue
 
@@ -1375,32 +1390,27 @@ class FormReconciler:
                 what_happened=msg,
             )
 
-        verdict = None
-        extracted_outputs: dict[str, Any] = {}
-        if pack.summary_check is not None:
-            verdict = self._summary_judge.evaluate(
-                surface=surface,
-                pack=pack,
-                dossier=session.dossier,
-                human_resolutions=session.human_resolutions,
-                supplemental_facts=session.effective_facts,
+        verdict = self._summary_judge.evaluate(
+            surface=surface,
+            pack=pack,
+            dossier=session.dossier,
+            human_resolutions=session.human_resolutions,
+            supplemental_facts=session.effective_facts,
+        )
+        extracted_outputs = dict(verdict.extracted_outputs)
+        if not verdict.passed or verdict.missing_required_outputs:
+            reasons = list(verdict.failed_keys) + [
+                f"missing_output:{k}" for k in verdict.missing_required_outputs
+            ]
+            return self._build_result(
+                session,
+                outcome=FormTxOutcome.READBACK_REFUTED,
+                safe_to_retry=False,
+                outputs=extracted_outputs,
+                summary_verdict=verdict,
+                receipt=None,
+                what_happened=f"Independent read-back did not verify commit: {reasons}",
             )
-            extracted_outputs = dict(verdict.extracted_outputs)
-            if not verdict.passed or verdict.missing_required_outputs:
-                reasons = list(verdict.failed_keys) + [
-                    f"missing_output:{k}" for k in verdict.missing_required_outputs
-                ]
-                return self._build_result(
-                    session,
-                    outcome=FormTxOutcome.READBACK_REFUTED,
-                    safe_to_retry=False,
-                    outputs=extracted_outputs,
-                    summary_verdict=verdict,
-                    receipt=None,
-                    what_happened=(
-                        f"Independent summary read-back refuted commit: {reasons}"
-                    ),
-                )
 
         receipt = issue_form_tx_receipt(
             run_id=session.run_id,
@@ -1462,10 +1472,19 @@ class FormReconciler:
                 screens=pack.screens,
             )
 
+            session._last_observation = snapshot
+
             # 2. Auth Wall Check
-            if snapshot.auth_wall_present or (
-                active_surface.ui_profile.authenticated_landmark_selectors
-                and not snapshot.authenticated_landmark_present
+            if (
+                snapshot.auth_wall_present
+                or any(
+                    control.visible and control.is_secret and not control.readonly
+                    for control in snapshot.controls
+                )
+                or (
+                    active_surface.ui_profile.authenticated_landmark_selectors
+                    and not snapshot.authenticated_landmark_present
+                )
             ):
                 sig = f"auth_wall|{snapshot.url_origin_and_path}"
                 halt_id = _deterministic_halt_id(
@@ -1690,7 +1709,9 @@ class FormReconciler:
                 continue
 
             if not settled:
-                sig = f"pass_budget|{snapshot.screen_id or snapshot.url_origin_and_path}"
+                sig = (
+                    f"pass_budget|{snapshot.screen_id or snapshot.url_origin_and_path}"
+                )
                 halt_id = _deterministic_halt_id(
                     session.run_id,
                     FormHaltKind.MUTATION_BUDGET_EXCEEDED,
@@ -1861,9 +1882,7 @@ class FormReconciler:
                     return self._emit_validation_blocked(
                         session,
                         snapshot,
-                        [
-                            f"Next button missing on screen {current_screen.screen_id!r}"
-                        ],
+                        [f"Next button missing on screen {current_screen.screen_id!r}"],
                         safe_to_retry=True,
                     )
 
@@ -1938,6 +1957,83 @@ class FormReconciler:
             what_happened=msg,
         )
 
+    def _check_live_resolution_context(
+        self,
+        session: ReconcilerSession,
+        surface: FormSurfaceBackend,
+        halt: FormHaltItem,
+        metadata: Mapping[str, Any],
+        action: HumanDecisionAction,
+    ) -> None:
+        """A decision authorizes the displayed target, never a replacement at its selector."""
+        snapshot = surface.snapshot(
+            entity_tables=session.pack.entity_tables,
+            modal_rules=session.pack.modal_rules,
+            screens=session.pack.screens,
+        )
+        if (
+            halt.kind == FormHaltKind.AUTH_WALL_DETECTED
+            and action == HumanDecisionAction.FIXED_ON_SCREEN
+        ):
+            return
+        expected_context = session._halt_contexts.get(halt.halt_id)
+        if expected_context is None or expected_context != (
+            snapshot.url_origin_and_path,
+            snapshot.screen_id,
+        ):
+            raise ValueError("Human decision context changed; observe and review again")
+        if snapshot.auth_wall_present or snapshot.inflight_mutations:
+            raise ValueError("Human decision target is not settled and authenticated")
+
+        previous_control: Optional[ObservedControl] = metadata.get("control")
+        if previous_control is not None and not metadata.get("in_popup_subroutine"):
+            live = [
+                control
+                for control in snapshot.controls
+                if control.visible
+                and control.dom_selector == previous_control.dom_selector
+            ]
+            if len(live) != 1 or compute_field_signature(
+                live[0]
+            ) != compute_field_signature(previous_control):
+                raise ValueError(
+                    "Human decision control changed; observe and review again"
+                )
+            control = live[0]
+            if control.is_secret or control.disabled:
+                raise ValueError(
+                    "Human decision cannot actuate a secret or disabled control"
+                )
+            if action != HumanDecisionAction.FIXED_ON_SCREEN and (
+                control.current_value != previous_control.current_value
+                or control.checked != previous_control.checked
+                or control.options != previous_control.options
+            ):
+                raise ValueError(
+                    "Human decision field value changed; observe and review again"
+                )
+
+        previous_row: Optional[ObservedEntityRow] = metadata.get("entity_row")
+        if previous_row is not None:
+            live_rows = [
+                row
+                for row in snapshot.entity_rows
+                if row.table_id == previous_row.table_id
+                and row.row_selector == previous_row.row_selector
+                and row.values == previous_row.values
+            ]
+            if len(live_rows) != 1:
+                raise ValueError(
+                    "Human decision entity row changed; observe and review again"
+                )
+
+        previous_modal: Optional[ObservedModal] = metadata.get("modal")
+        if (
+            previous_modal is not None
+            and snapshot.active_modals.count(previous_modal) != 1
+        ):
+            raise ValueError("Human decision modal changed; observe and review again")
+
     def apply_human_resolution(
         self,
         session: ReconcilerSession,
@@ -1946,7 +2042,13 @@ class FormReconciler:
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
         """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable."""
+        decision_digest = canonical_sha256(resolution)
         if resolution.idempotency_key in session.seen_idempotency_keys:
+            if (
+                session._idempotent_decisions.get(resolution.idempotency_key)
+                != decision_digest
+            ):
+                raise ValueError("Conflicting human decision reused an idempotency_key")
             cached = session._idempotent_results.get(resolution.idempotency_key)
             if cached is not None:
                 return cached
@@ -1983,9 +2085,17 @@ class FormReconciler:
         effective_dossier_key = resolution.mapped_dossier_key or active_halt.dossier_key
         now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         action = resolution.action
+        if action not in (
+            HumanDecisionAction.ABORT_RUN,
+            HumanDecisionAction.ESCALATE_TO_OWNER,
+        ):
+            self._check_live_resolution_context(
+                session, active_surface, active_halt, meta, action
+            )
 
         def _cache_and_return(res: FormTxResult) -> FormTxResult:
             session.seen_idempotency_keys.add(resolution.idempotency_key)
+            session._idempotent_decisions[resolution.idempotency_key] = decision_digest
             session._idempotent_results[resolution.idempotency_key] = res
             return res
 
@@ -2013,7 +2123,8 @@ class FormReconciler:
                 outcome=FormTxOutcome.ESCALATED_TO_OWNER,
                 safe_to_retry=not session._commit_in_progress,
                 halts=(),
-                what_happened=resolution.note or f"Escalated halt {active_halt.halt_id} to owner",
+                what_happened=resolution.note
+                or f"Escalated halt {active_halt.halt_id} to owner",
             )
             return _cache_and_return(res)
 
@@ -2061,7 +2172,7 @@ class FormReconciler:
                         for c in snap.controls
                         if c.visible and c.dom_selector == active_halt.dom_selector
                     ),
-                    meta.get("control"),
+                    None,
                 )
                 if live_ctrl is not None and (
                     binding is None
@@ -2078,9 +2189,7 @@ class FormReconciler:
                         if binding is not None
                         else self._infer_unmapped_control_kind(live_ctrl)
                     )
-                    codec = (
-                        binding.codec if binding is not None else FieldCodecSpec()
-                    )
+                    codec = binding.codec if binding is not None else FieldCodecSpec()
                     placeholders = (
                         binding.placeholder_values
                         if binding is not None
@@ -2118,6 +2227,7 @@ class FormReconciler:
                     )
 
             session._human_accepted_control_signatures.add(field_sig)
+            session._human_accepted_values[field_sig] = val
             _append_record(val)
             res = self.run_until_halt_or_done(session, surface=active_surface)
             return _cache_and_return(res)
@@ -2131,9 +2241,7 @@ class FormReconciler:
                     raise ValueError(
                         "Missing entity row metadata for ACCEPT_PORTAL_PREFILL"
                     )
-                session._accepted_entity_rows.append(
-                    (spec.table_id, dict(row.values))
-                )
+                session._accepted_entity_rows.append((spec.table_id, dict(row.values)))
             else:
                 if effective_dossier_key and portal_val is not None:
                     session.effective_facts[effective_dossier_key] = DossierFact(
@@ -2146,6 +2254,7 @@ class FormReconciler:
                 if active_halt.dom_selector:
                     session._filled_selectors.add(active_halt.dom_selector)
                 session._human_accepted_control_signatures.add(field_sig)
+                session._human_accepted_values[field_sig] = portal_val
 
             _append_record(portal_val)
             res = self.run_until_halt_or_done(session, surface=active_surface)
@@ -2183,7 +2292,7 @@ class FormReconciler:
                 if r.table_id == spec.table_id
                 and _entity_row_matches_values_map(r, row.values, spec)
             )
-            if before_matches > 0 and after_matches >= before_matches:
+            if before_matches != 1 or after_matches != 0:
                 refusal_msg = (
                     f"Refused DISMISS_PORTAL_ENTITY: row in {spec.table_id!r} "
                     f"remained present after clicking {dismiss_sel!r}"
@@ -2219,7 +2328,9 @@ class FormReconciler:
                 modal_rules=session.pack.modal_rules,
                 screens=session.pack.screens,
             )
-            modal_id = obs_modal.modal_id if obs_modal is not None else active_halt.field_label
+            modal_id = (
+                obs_modal.modal_id if obs_modal is not None else active_halt.field_label
+            )
             if any(m.modal_id == modal_id for m in post_snap.active_modals):
                 refusal_msg = (
                     f"Refused CONFIRM_MODAL_ACTION: modal {modal_id!r} remained open"
@@ -2356,6 +2467,7 @@ class FormReconciler:
                 compute_field_signature(live_ctrl)
             )
             session._human_accepted_control_signatures.add(field_sig)
+            session._human_accepted_values[field_sig] = live_val
             _append_record(live_val)
             res = self.run_until_halt_or_done(session, surface=active_surface)
             return _cache_and_return(res)

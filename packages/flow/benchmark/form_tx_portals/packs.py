@@ -190,7 +190,9 @@ def build_underwriting_wizard_pack() -> FormPack:
                     name_or_id_patterns=(r"\bdeductible\b",),
                 ),
                 control_kind=ControlKind.SELECT,
-                codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                codec=FieldCodecSpec(
+                    kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                ),
                 required_in_pack=True,
             ),
             FieldBindingSpec(
@@ -201,7 +203,9 @@ def build_underwriting_wizard_pack() -> FormPack:
                     name_or_id_patterns=(r"\bliability_limit\b",),
                 ),
                 control_kind=ControlKind.SELECT,
-                codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                codec=FieldCodecSpec(
+                    kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                ),
                 required_in_pack=True,
             ),
         ),
@@ -289,7 +293,9 @@ def build_underwriting_wizard_pack() -> FormPack:
                     label_patterns=(r"^Estimated Replacement Cost",),
                 ),
                 return_output_key="estimated_replacement_cost_cents",
-                return_codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                return_codec=FieldCodecSpec(
+                    kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                ),
             ),
         ),
         screens=(
@@ -322,6 +328,74 @@ def build_underwriting_wizard_pack() -> FormPack:
         summary_check=SummaryCheckSpec(
             summary_landmark_selector="body[data-screen-id='quote_summary']",
             field_readbacks=(
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_marital",
+                    dossier_key="applicant.marital_status",
+                    anchor=FieldAnchorSpec(css_selector="#sum_marital"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.WHITESPACE_COLLAPSE),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_year_built",
+                    dossier_key="dwelling.year_built",
+                    anchor=FieldAnchorSpec(css_selector="#sum_year_built"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.INTEGER),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_roof_year",
+                    dossier_key="dwelling.roof_year",
+                    anchor=FieldAnchorSpec(css_selector="#sum_roof_year"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.INTEGER),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_roof_update",
+                    dossier_key="dwelling.roof_update_type",
+                    anchor=FieldAnchorSpec(css_selector="#sum_roof_update"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.WHITESPACE_COLLAPSE),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_pool_fenced",
+                    dossier_key="dwelling.pool_fenced",
+                    anchor=FieldAnchorSpec(css_selector="#sum_pool_fenced"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_trampoline",
+                    dossier_key="dwelling.has_trampoline",
+                    anchor=FieldAnchorSpec(css_selector="#sum_trampoline"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_liability",
+                    dossier_key="coverage.liability_limit",
+                    anchor=FieldAnchorSpec(css_selector="#sum_liability"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(
+                        kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                    ),
+                    placeholder_values=("", "N/A"),
+                ),
+                FieldBindingSpec(
+                    binding_id="rb_complete_sum_rc",
+                    dossier_key="estimated_replacement_cost_cents",
+                    anchor=FieldAnchorSpec(css_selector="#sum_rc"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                    codec=FieldCodecSpec(
+                        kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                    ),
+                    placeholder_values=("", "N/A"),
+                ),
                 FieldBindingSpec(
                     binding_id="rb_fname",
                     dossier_key="applicant.first_name",
@@ -376,7 +450,9 @@ def build_underwriting_wizard_pack() -> FormPack:
                     dossier_key="coverage.deductible",
                     anchor=FieldAnchorSpec(css_selector="#sum_ded"),
                     control_kind=ControlKind.READONLY_OUTPUT,
-                    codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                    codec=FieldCodecSpec(
+                        kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                    ),
                 ),
             ),
             outputs=(
@@ -388,12 +464,16 @@ def build_underwriting_wizard_pack() -> FormPack:
                 OutputExtractionSpec(
                     output_key="annual_premium_cents",
                     anchor=FieldAnchorSpec(css_selector="#sum_premium"),
-                    codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                    codec=FieldCodecSpec(
+                        kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                    ),
                 ),
                 OutputExtractionSpec(
                     output_key="replacement_cost_cents",
                     anchor=FieldAnchorSpec(css_selector="#sum_rc"),
-                    codec=FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS),
+                    codec=FieldCodecSpec(
+                        kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"
+                    ),
                 ),
             ),
         ),
@@ -511,6 +591,12 @@ def build_hospital_hms_pack() -> FormPack:
             summary_landmark_selector="body[data-screen-id='hms_search']",
             field_readbacks=(
                 FieldBindingSpec(
+                    binding_id="rb_visit_type",
+                    dossier_key="visit.visit_type",
+                    anchor=FieldAnchorSpec(css_selector="#rd_visit_type"),
+                    control_kind=ControlKind.READONLY_OUTPUT,
+                ),
+                FieldBindingSpec(
                     binding_id="hms_rb_name",
                     dossier_key="patient.full_name",
                     anchor=FieldAnchorSpec(css_selector="#rd_name"),
@@ -608,7 +694,9 @@ def build_underwriting_scenarios() -> tuple[UnderwritingScenario, ...]:
             "applicant.dob": _fact("applicant.dob", dob),
             "applicant.phone": _fact("applicant.phone", phone),
             "applicant.marital_status": _fact("applicant.marital_status", marital),
-            "applicant.prior_claims_count": _fact("applicant.prior_claims_count", claims),
+            "applicant.prior_claims_count": _fact(
+                "applicant.prior_claims_count", claims
+            ),
             "dwelling.street_address": _fact("dwelling.street_address", street),
             "dwelling.year_built": _fact("dwelling.year_built", yr_built),
             "dwelling.roof_year": _fact("dwelling.roof_year", roof_yr),
@@ -620,11 +708,15 @@ def build_underwriting_scenarios() -> tuple[UnderwritingScenario, ...]:
             "coverage.liability_limit": _fact("coverage.liability_limit", liab),
         }
         if roof_upd is not None:
-            facts["dwelling.roof_update_type"] = _fact("dwelling.roof_update_type", roof_upd)
+            facts["dwelling.roof_update_type"] = _fact(
+                "dwelling.roof_update_type", roof_upd
+            )
         if pool_fenced is not None:
             facts["dwelling.pool_fenced"] = _fact("dwelling.pool_fenced", pool_fenced)
         if trampoline is not None:
-            facts["dwelling.has_trampoline"] = _fact("dwelling.has_trampoline", trampoline)
+            facts["dwelling.has_trampoline"] = _fact(
+                "dwelling.has_trampoline", trampoline
+            )
 
         primary_entity = DossierEntity(
             entity_kind="household_member",

@@ -797,11 +797,20 @@ class FakeStatefulFormSurface:
                 ("phone_number", "#sum-phone", "Contact Phone"),
                 ("state_code", "#sum-state", "Property State"),
                 ("occupancy_kind", "#sum-occupancy", "Occupancy Classification"),
-                ("prior_claims_count", "#sum-prior-claims", "Prior Claims (Last 5 Years)"),
+                (
+                    "prior_claims_count",
+                    "#sum-prior-claims",
+                    "Prior Claims (Last 5 Years)",
+                ),
                 ("has_pool", "#sum-has-pool", "Swimming Pool on Premises"),
                 ("pool_fenced", "#sum-pool-fenced", "Self-Latching Perimeter Fence"),
                 ("has_trampoline", "#sum-has-trampoline", "Trampoline on Premises"),
-                ("replacement_cost", "#sum-replacement-cost", "Estimated Replacement Cost"),
+                (
+                    "replacement_cost",
+                    "#sum-replacement-cost",
+                    "Estimated Replacement Cost",
+                ),
+                ("terms_accepted", "#sum-terms", "Attestation Accepted"),
             ]
             for key, sel, label in summary_items:
                 if key in self.drop_summary_fields:
@@ -897,7 +906,7 @@ def _build_pack(
     phone_codec = FieldCodecSpec(kind=FormCodecKind.PHONE_DIGITS)
     date_codec = FieldCodecSpec(kind=FormCodecKind.ISO_DATE, date_order="MDY")
     int_codec = FieldCodecSpec(kind=FormCodecKind.INTEGER)
-    cents_codec = FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
+    cents_codec = FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$")
 
     summary_check = SummaryCheckSpec(
         summary_url_path="/lookup" if use_lookup_search else "/summary",
@@ -913,6 +922,12 @@ def _build_pack(
             else None
         ),
         field_readbacks=(
+            FieldBindingSpec(
+                binding_id="rb_terms",
+                dossier_key="terms_accepted",
+                anchor=FieldAnchorSpec(label_patterns=("^Attestation Accepted$",)),
+                codec=bool_codec,
+            ),
             FieldBindingSpec(
                 binding_id="rb_first_name",
                 dossier_key="first_name",
@@ -1289,7 +1304,7 @@ def test_ppr_conditional_cascade_human_resume_popup_summary_and_receipt() -> Non
     }
     assert done.summary_verdict is not None
     assert done.summary_verdict.passed is True
-    assert done.summary_verdict.checked_count == 11
+    assert done.summary_verdict.checked_count == 12
 
     verdict_by_key = {v.dossier_key: v for v in done.summary_verdict.field_verdicts}
     assert verdict_by_key["has_trampoline"].provenance == ProvenanceKind.HUMAN_OPERATOR
@@ -1322,9 +1337,7 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
     unlisted_spouse = {"first_name": "Marcus", "last_name": "Vance"}
 
     # Path A: DISMISS_PORTAL_ENTITY
-    surface_a = FakeStatefulFormSurface(
-        entity_rows=[grounded_row, unlisted_spouse]
-    )
+    surface_a = FakeStatefulFormSurface(entity_rows=[grounded_row, unlisted_spouse])
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     reconciler_a = FormReconciler(surface_a)
@@ -1357,9 +1370,7 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
     assert len(session_a.dismissed_entities) == 1
 
     # Path B: ACCEPT_PORTAL_PREFILL
-    surface_b = FakeStatefulFormSurface(
-        entity_rows=[grounded_row, unlisted_spouse]
-    )
+    surface_b = FakeStatefulFormSurface(entity_rows=[grounded_row, unlisted_spouse])
     reconciler_b = FormReconciler(surface_b)
     session_b = reconciler_b.create_session(pack, dossier)
     halted_b = reconciler_b.run_until_halt_or_done(session_b)
@@ -1398,7 +1409,9 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
     assert "Refused DISMISS_PORTAL_ENTITY" in refused_c.what_happened
 
 
-def test_prefill_value_conflict_halt_accept_override_ungrounded_and_overwrite_policy() -> None:
+def test_prefill_value_conflict_halt_accept_override_ungrounded_and_overwrite_policy() -> (
+    None
+):
     dossier = _build_dossier(has_pool="No")
 
     # 1. Portal prefills prior_claims_count = "2" vs dossier 0 -> halts PREFILL_VALUE_CONFLICT
@@ -1679,7 +1692,9 @@ def test_auth_wall_popup_failures_ambiguous_anchor_and_mutation_budget() -> None
             idempotency_key="idem_popup_garage",
         ),
     )
-    assert done_pop_ug.outcome == FormTxOutcome.VERIFIED_DONE
+    # The unknown popup answer has no final read-back binding: do not issue proof.
+    assert done_pop_ug.outcome == FormTxOutcome.READBACK_REFUTED
+    assert done_pop_ug.receipt is None
 
     # 5. Ambiguous anchor match -> AMBIGUOUS_OPTION_OR_TARGET
     surface_amb = FakeStatefulFormSurface(duplicate_ambiguous_first_name=True)
@@ -1700,7 +1715,9 @@ def test_auth_wall_popup_failures_ambiguous_anchor_and_mutation_budget() -> None
     assert res_mut.receipt is None
 
 
-def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup_search() -> None:
+def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup_search() -> (
+    None
+):
     dossier = _build_dossier(has_pool="No")
     pack = _build_pack()
 
@@ -1790,6 +1807,8 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     dossier = _build_dossier(has_pool="No")
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
+        readback_passed=True,
+        readback_checked_count=10,
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
@@ -1811,8 +1830,8 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
 
     # Tamper 2: mutate payload_sha256 alone
     flipped_digest = (
-        ("0" if receipt.payload_sha256[0] != "0" else "1") + receipt.payload_sha256[1:]
-    )
+        "0" if receipt.payload_sha256[0] != "0" else "1"
+    ) + receipt.payload_sha256[1:]
     assert (
         verify_form_tx_receipt(
             receipt.model_copy(update={"payload_sha256": flipped_digest})
@@ -1848,14 +1867,18 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     )
 
 
-def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_refusal() -> None:
+def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_refusal() -> (
+    None
+):
     accumulator = RuleAccumulator()
     base_pack = _build_pack()
 
     # Run 1: human resolves unmapped trampoline field mapped to dossier_key="has_trampoline"
     surface_1 = FakeStatefulFormSurface()
     rec_1 = FormReconciler(surface_1)
-    sess_1 = rec_1.create_session(base_pack, _build_dossier(has_pool="Yes"), run_id="r1")
+    sess_1 = rec_1.create_session(
+        base_pack, _build_dossier(has_pool="Yes"), run_id="r1"
+    )
     h1 = rec_1.run_until_halt_or_done(sess_1)
     done_1 = rec_1.apply_human_resolution(
         sess_1,
@@ -1871,17 +1894,29 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
     )
     assert done_1.outcome == FormTxOutcome.VERIFIED_DONE
 
-    accumulator.record_run_resolutions(base_pack.pack_id, done_1.human_resolutions)
+    accumulator.record_run_resolutions(
+        base_pack.pack_id,
+        done_1.human_resolutions,
+        run_id=done_1.run_id,
+        pack_digest=base_pack.digest(),
+    )
     # Only 1 supporting run so far -> zero candidates
     assert accumulator.induce_candidates(base_pack.pack_id, min_support=2) == ()
     # Replaying the exact same run's records cannot inflate support count
-    accumulator.record_run_resolutions(base_pack.pack_id, done_1.human_resolutions)
+    accumulator.record_run_resolutions(
+        base_pack.pack_id,
+        done_1.human_resolutions,
+        run_id=done_1.run_id,
+        pack_digest=base_pack.digest(),
+    )
     assert accumulator.induce_candidates(base_pack.pack_id, min_support=2) == ()
 
     # Run 2: distinct run resolves same field_signature mapped to same dossier_key="has_trampoline"
     surface_2 = FakeStatefulFormSurface()
     rec_2 = FormReconciler(surface_2)
-    sess_2 = rec_2.create_session(base_pack, _build_dossier(has_pool="Yes"), run_id="r2")
+    sess_2 = rec_2.create_session(
+        base_pack, _build_dossier(has_pool="Yes"), run_id="r2"
+    )
     h2 = rec_2.run_until_halt_or_done(sess_2)
     done_2 = rec_2.apply_human_resolution(
         sess_2,
@@ -1897,7 +1932,12 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
     )
     assert done_2.outcome == FormTxOutcome.VERIFIED_DONE
 
-    accumulator.record_run_resolutions(base_pack.pack_id, done_2.human_resolutions)
+    accumulator.record_run_resolutions(
+        base_pack.pack_id,
+        done_2.human_resolutions,
+        run_id=done_2.run_id,
+        pack_digest=base_pack.digest(),
+    )
     candidates = accumulator.induce_candidates(base_pack.pack_id, min_support=2)
     assert len(candidates) == 1
     cand = candidates[0]
@@ -1912,6 +1952,8 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
         cand,
         anchor=FieldAnchorSpec(label_patterns=("Trampoline on Premises",)),
         codec=FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
+        approval_id="synthetic-test-approval",
+        qualification_check=lambda _: True,
     )
     assert len(base_pack.bindings) == 10
     assert len(upgraded_pack.bindings) == 11
@@ -1920,9 +1962,7 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
 
     surface_3 = FakeStatefulFormSurface()
     rec_3 = FormReconciler(surface_3)
-    dossier_3 = _build_dossier(
-        has_pool="Yes", extra_facts={"has_trampoline": "No"}
-    )
+    dossier_3 = _build_dossier(has_pool="Yes", extra_facts={"has_trampoline": "No"})
     done_3 = rec_3.run_until_halt_or_done(
         rec_3.create_session(upgraded_pack, dossier_3, run_id="r3")
     )
@@ -1949,6 +1989,8 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
                 idempotency_key="conflict_r1",
             ),
         ),
+        run_id="synthetic-support-4",
+        pack_digest=base_pack.digest(),
     )
     disagree_acc.record_run_resolutions(
         "pack_conflict",
@@ -1967,6 +2009,8 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
                 idempotency_key="conflict_r2",
             ),
         ),
+        run_id="synthetic-support-5",
+        pack_digest=base_pack.digest(),
     )
     assert disagree_acc.induce_candidates("pack_conflict", min_support=2) == ()
 
@@ -2000,6 +2044,8 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
                     idempotency_key=f"esc_run_{idx}",
                 ),
             ),
+            run_id=f"synthetic-support-7-{idx}",
+            pack_digest=base_pack.digest(),
         )
     induced_policies = {
         c.proposed_kind: c
@@ -2020,6 +2066,8 @@ def test_rule_accumulator_consensus_induction_pack_admission_and_disagreement_re
         base_pack,
         cand,
         anchor=FieldAnchorSpec(label_patterns=("Trampoline on Premises",)),
+        approval_id="synthetic-test-approval",
+        qualification_check=lambda _: True,
     )
     assert len(re_admitted.bindings) == 11
 
@@ -2063,11 +2111,11 @@ def test_generality_gate_zero_banned_vendor_or_customer_names() -> None:
     banned_tokens = _decoded_banned_tokens()
     assert len(banned_tokens) >= 10
 
-    form_tx_dir = (
-        Path(__file__).resolve().parent.parent / "openadapt_flow" / "form_tx"
-    )
+    form_tx_dir = Path(__file__).resolve().parent.parent / "openadapt_flow" / "form_tx"
     py_files = sorted(form_tx_dir.rglob("*.py"))
-    assert len(py_files) >= 7  # __init__, types, codecs, surface, receipt, judge, learning, reconciler
+    assert (
+        len(py_files) >= 7
+    )  # __init__, types, codecs, surface, receipt, judge, learning, reconciler
 
     # Scan every engine module in openadapt_flow/form_tx/ AND this test module itself!
     targets = [*py_files, Path(__file__).resolve()]
@@ -2115,6 +2163,8 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     # Passing (priv, pub) keypair tuple directly
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
+        readback_passed=True,
+        readback_checked_count=1,
         pack=pack,
         dossier=dossier,
         signing_key=(priv, pub),
@@ -2146,7 +2196,8 @@ def test_summary_judge_edge_cases_ungrounded_surprise_and_constructor_binding() 
     verdict_none = SummaryJudge(surface, pack_no_summary, dossier).verify(
         known_outputs={"seed": 42}
     )
-    assert verdict_none.passed is True
+    assert verdict_none.passed is False
+    assert verdict_none.failed_keys == ("missing_readback_contract",)
     assert verdict_none.extracted_outputs == {"seed": 42}
 
     # Surprise non-empty value on summary screen for an ungrounded optional key -> fail-closed!
@@ -2207,6 +2258,8 @@ def test_learning_prefill_policy_admission_and_intra_run_contradiction() -> None
                 idempotency_key="ik_intra_2",
             ),
         ),
+        run_id="synthetic-support-6",
+        pack_digest=base_pack.digest(),
     )
     assert acc.induce_candidates(base_pack.pack_id, min_support=2) == ()
 
@@ -2229,6 +2282,8 @@ def test_learning_prefill_policy_admission_and_intra_run_contradiction() -> None
                     idempotency_key=f"ik_prefill_ov_{idx}",
                 ),
             ),
+            run_id=f"synthetic-support-8-{idx}",
+            pack_digest=base_pack.digest(),
         )
     cands = acc.induce_candidates(base_pack.pack_id, min_support=2)
     assert len(cands) == 1
@@ -2238,6 +2293,8 @@ def test_learning_prefill_policy_admission_and_intra_run_contradiction() -> None
         base_pack,
         cands[0],
         anchor=FieldAnchorSpec(label_patterns=("Prior Claims",)),
+        approval_id="synthetic-test-approval",
+        qualification_check=lambda _: True,
     )
     claims_binding = next(
         b for b in patched.bindings if b.dossier_key == "prior_claims_count"
@@ -2248,7 +2305,9 @@ def test_learning_prefill_policy_admission_and_intra_run_contradiction() -> None
         acc.induce_candidates(base_pack.pack_id, min_support=1)
 
 
-def test_reconciler_resolution_validation_auth_and_banner_recovery_and_budgets() -> None:
+def test_reconciler_resolution_validation_auth_and_banner_recovery_and_budgets() -> (
+    None
+):
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
 
@@ -2399,3 +2458,44 @@ def test_reconciler_resolution_validation_auth_and_banner_recovery_and_budgets()
     assert res_budget.outcome == FormTxOutcome.DELIVERY_UNCERTAIN
     assert res_budget.safe_to_retry is False
     assert res_budget.halts[0].kind == FormHaltKind.MUTATION_BUDGET_EXCEEDED
+
+
+@pytest.mark.parametrize("contract", ["missing", "empty", "partial"])
+def test_readback_contract_cannot_verify_an_unchecked_commit(contract: str) -> None:
+    pack = _build_pack()
+    check = pack.summary_check
+    assert check is not None
+    if contract == "missing":
+        check = None
+    elif contract == "empty":
+        check = check.model_copy(update={"field_readbacks": ()})
+    else:
+        check = check.model_copy(update={"field_readbacks": check.field_readbacks[:1]})
+    pack = pack.model_copy(update={"summary_check": check})
+    result = FormReconciler(FakeStatefulFormSurface()).run_until_halt_or_done(
+        ReconcilerSession(
+            f"run_incomplete_{contract}", pack, _build_dossier(has_pool="No")
+        )
+    )
+    assert result.outcome == FormTxOutcome.READBACK_REFUTED
+    assert result.safe_to_retry is False
+    assert result.receipt is None
+    assert result.summary_verdict is not None
+    assert result.summary_verdict.passed is False
+
+
+def test_verified_receipt_requires_positive_readback_evidence() -> None:
+    private, _ = generate_ed25519_keypair()
+    for evidence in (
+        {},
+        {"readback_passed": True},
+        {"readback_passed": False, "readback_checked_count": 3},
+    ):
+        with pytest.raises(ValueError, match="read-back evidence"):
+            issue_form_tx_receipt(
+                run_id="run_no_evidence",
+                pack=_build_pack(),
+                dossier=_build_dossier(has_pool="No"),
+                signing_key=private,
+                **evidence,
+            )

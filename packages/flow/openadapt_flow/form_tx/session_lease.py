@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -278,12 +279,7 @@ class WarmSessionLease:
     def _is_snapshot_authenticated(self, snapshot: FormSnapshot) -> bool:
         if snapshot.auth_wall_present:
             return False
-        if (
-            self._surface.ui_profile.authenticated_landmark_selectors
-            and not snapshot.authenticated_landmark_present
-        ):
-            return False
-        return True
+        return snapshot.authenticated_landmark_present
 
     def preflight_auth(self) -> LeaseState:
         """Verify surface authentication state prior to running a job.
@@ -483,6 +479,17 @@ class WarmSessionLease:
                 raise HeartbeatMutationError(
                     f"Keepalive check returned unexpected HTTP status {status_code}"
                 )
+            # A login page may also return 200. HTTP liveness is not proof
+            # that the authenticated session survived the heartbeat.
+            snap = self._surface.snapshot()
+            if self._surface.mutation_count != before:
+                self._state = LeaseState.FAULTED
+                raise HeartbeatMutationError(
+                    "Heartbeat read-back observed a mutating request"
+                )
+            if not self._is_snapshot_authenticated(snap):
+                self._state = LeaseState.AUTH_REQUIRED
+                return False
             return True
 
         snap = self._surface.snapshot()
@@ -534,9 +541,15 @@ class QueueJobSpec(BaseModel):
     pack_id: str = Field(min_length=1)
     dossier: InputDossier
 
+    @model_validator(mode="after")
+    def _matching_request_identity(self) -> "QueueJobSpec":
+        if self.request_id != self.dossier.request_id:
+            raise ValueError("Queue job and dossier request_id must match")
+        return self
+
 
 class _IdempotencyLedgerRecord(BaseModel):
-    """Value-scrubbed persisted idempotency record keyed by ``request_id``."""
+    """Local sensitive execution record keyed by ``request_id``."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -570,6 +583,7 @@ class FormTxQueueRunner:
         self._ledger_dir = ledger_dir
         self._clock_fn = clock_fn
         self._records: dict[str, _IdempotencyLedgerRecord] = {}
+        self._execution_lock = threading.Lock()
         if self._ledger_dir is not None:
             self._ledger_dir.mkdir(parents=True, exist_ok=True)
             self._load_existing_ledger()
@@ -600,8 +614,6 @@ class FormTxQueueRunner:
             self._records[record.request_id] = record
 
     def _lookup_record(self, request_id: str) -> Optional[_IdempotencyLedgerRecord]:
-        if request_id in self._records:
-            return self._records[request_id]
         if self._ledger_dir is not None:
             path = self._record_path(request_id)
             if path.is_file():
@@ -609,7 +621,7 @@ class FormTxQueueRunner:
                 record = _IdempotencyLedgerRecord.model_validate(raw)
                 self._records[request_id] = record
                 return record
-        return None
+        return self._records.get(request_id)
 
     def _store_record(self, record: _IdempotencyLedgerRecord) -> None:
         self._records[record.request_id] = record
@@ -643,6 +655,20 @@ class FormTxQueueRunner:
         retry_safe_failures: bool = False,
     ) -> FormTxResult:
         """Execute ``job`` idempotently over the warm session lease."""
+        # Serialize the shared browser lease within this worker. An exclusive
+        # durable claim below covers workers sharing the same ledger directory.
+        with self._execution_lock:
+            return self._run_claimed_job(
+                job, pack=pack, retry_safe_failures=retry_safe_failures
+            )
+
+    def _run_claimed_job(
+        self,
+        job: QueueJobSpec,
+        *,
+        pack: Optional[FormPack],
+        retry_safe_failures: bool,
+    ) -> FormTxResult:
         target_pack = self._resolve_pack(job.pack_id, pack)
         pack_digest = target_pack.digest()
         dossier_digest = job.dossier.digest()
@@ -696,24 +722,79 @@ class FormTxQueueRunner:
             )
             return held_result
 
-        with self._lease.acquire_job_execution() as surface:
-            result = self._executor_fn(surface, target_pack, job.dossier)
-
-        if result.outcome == FormTxOutcome.AUTH_REQUIRED:
-            self._lease.mark_auth_required()
-
-        self._store_record(
-            _IdempotencyLedgerRecord(
-                request_id=job.request_id,
-                job_id=job.job_id,
-                pack_id=target_pack.pack_id,
-                pack_digest=pack_digest,
-                dossier_digest=dossier_digest,
-                recorded_at_utc=_utc_now_iso(self._clock_fn),
-                result=result,
-            )
+        pending = FormTxResult(
+            run_id=f"run-pending-{uuid.uuid4().hex[:12]}",
+            request_id=job.request_id,
+            outcome=FormTxOutcome.DELIVERY_UNCERTAIN,
+            safe_to_retry=False,
+            what_happened="Execution claimed; reconcile the system of record before retrying",
         )
-        return result
+        claim_path: Optional[Path] = None
+        if self._ledger_dir is not None:
+            claim_path = self._record_path(job.request_id).with_suffix(".claim")
+            try:
+                claim_fd = os.open(
+                    claim_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                )
+            except FileExistsError:
+                # An owner may have died before it could persist its pending
+                # record. A surviving claim is never permission to resend.
+                return pending
+            else:
+                os.fsync(claim_fd)
+                os.close(claim_fd)
+
+        try:
+            # Re-read after claiming: another worker may have finished between
+            # the first lookup and the exclusive claim.
+            latest = self._lookup_record(job.request_id)
+            if latest is not None:
+                if (
+                    latest.pack_digest != pack_digest
+                    or latest.dossier_digest != dossier_digest
+                ):
+                    raise RequestIdConflictError(
+                        "Conflicting payload after queue execution claim"
+                    )
+                if not (latest.result.safe_to_retry and retry_safe_failures):
+                    return latest.result
+
+            self._store_record(
+                _IdempotencyLedgerRecord(
+                    request_id=job.request_id,
+                    job_id=job.job_id,
+                    pack_id=target_pack.pack_id,
+                    pack_digest=pack_digest,
+                    dossier_digest=dossier_digest,
+                    recorded_at_utc=_utc_now_iso(self._clock_fn),
+                    result=pending,
+                )
+            )
+            with self._lease.acquire_job_execution() as surface:
+                result = self._executor_fn(surface, target_pack, job.dossier)
+
+            if result.request_id != job.request_id:
+                raise RequestIdConflictError(
+                    "Executor result request_id does not match the claimed job"
+                )
+            if result.outcome == FormTxOutcome.AUTH_REQUIRED:
+                self._lease.mark_auth_required()
+
+            self._store_record(
+                _IdempotencyLedgerRecord(
+                    request_id=job.request_id,
+                    job_id=job.job_id,
+                    pack_id=target_pack.pack_id,
+                    pack_digest=pack_digest,
+                    dossier_digest=dossier_digest,
+                    recorded_at_utc=_utc_now_iso(self._clock_fn),
+                    result=result,
+                )
+            )
+            return result
+        finally:
+            if claim_path is not None:
+                claim_path.unlink(missing_ok=True)
 
     def run_batch(
         self,

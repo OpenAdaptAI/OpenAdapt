@@ -108,7 +108,9 @@ class BasePortalApp:
                     f"{k}={v}" for k, v in cookie_jar.items()
                 )
             post_body = req.post_data or ""
-            resp = self.handle_request(req.method.upper(), path_q, req_headers, post_body)
+            resp = self.handle_request(
+                req.method.upper(), path_q, req_headers, post_body
+            )
             out_headers = dict(resp.headers)
             set_cookie = out_headers.get("Set-Cookie") or out_headers.get("set-cookie")
             if set_cookie:
@@ -206,7 +208,9 @@ class StatefulUnderwritingPortal(BasePortalApp):
             "phone": "",
             "marital_status": "",
             "prior_claims_count": (
-                self.prefill_prior_claims if self.prefill_prior_claims is not None else ""
+                self.prefill_prior_claims
+                if self.prefill_prior_claims is not None
+                else ""
             ),
             "household_members": household,
             "street_address": "",
@@ -240,7 +244,10 @@ class StatefulUnderwritingPortal(BasePortalApp):
         path = parsed.path
 
         with self._lock:
-            if method in {"POST", "PUT", "PATCH", "DELETE"} and path == "/api/quotes/commit":
+            if (
+                method in {"POST", "PUT", "PATCH", "DELETE"}
+                and path == "/api/quotes/commit"
+            ):
                 self.mutation_log.append((method, path))
 
             if path in {"/", "/wizard/applicant"} and method == "GET":
@@ -248,7 +255,14 @@ class StatefulUnderwritingPortal(BasePortalApp):
 
             if path == "/api/applicant/save" and method == "POST":
                 data = _parse_form_or_json(body)
-                for k in ("first_name", "last_name", "dob", "phone", "marital_status", "prior_claims_count"):
+                for k in (
+                    "first_name",
+                    "last_name",
+                    "dob",
+                    "phone",
+                    "marital_status",
+                    "prior_claims_count",
+                ):
                     if k in data:
                         self.draft[k] = str(data[k]).strip()
                 missing = [
@@ -264,14 +278,20 @@ class StatefulUnderwritingPortal(BasePortalApp):
                     if not self.draft.get(key)
                 ]
                 if missing:
-                    self._banner_error = f"Missing required applicant fields: {', '.join(missing)}"
+                    self._banner_error = (
+                        f"Missing required applicant fields: {', '.join(missing)}"
+                    )
                     return PortalResponse(
                         content_type="application/json",
                         body=json.dumps({"ok": False, "error": self._banner_error}),
                     )
                 # Ensure primary applicant is in household table if absent
-                primary_name = f"{self.draft['first_name']} {self.draft['last_name']}".strip()
-                if not any(m["row_id"] == "hh_primary" for m in self.draft["household_members"]):
+                primary_name = (
+                    f"{self.draft['first_name']} {self.draft['last_name']}".strip()
+                )
+                if not any(
+                    m["row_id"] == "hh_primary" for m in self.draft["household_members"]
+                ):
                     self.draft["household_members"].insert(
                         0,
                         {
@@ -295,7 +315,9 @@ class StatefulUnderwritingPortal(BasePortalApp):
                 ]
                 return PortalResponse(
                     content_type="application/json",
-                    body=json.dumps({"ok": True, "remaining": len(self.draft["household_members"])}),
+                    body=json.dumps(
+                        {"ok": True, "remaining": len(self.draft["household_members"])}
+                    ),
                 )
 
             if path == "/wizard/property" and method == "GET":
@@ -352,18 +374,28 @@ class StatefulUnderwritingPortal(BasePortalApp):
                     if not self.draft.get(req_k):
                         errors.append(f"{label} is required")
                 try:
-                    ry = int(self.draft["roof_year"]) if self.draft["roof_year"] else 9999
+                    ry = (
+                        int(self.draft["roof_year"])
+                        if self.draft["roof_year"]
+                        else 9999
+                    )
                 except ValueError:
                     ry = 9999
                 if ry < 2010 and not self.draft.get("roof_update_type"):
-                    errors.append("Roof Update Type is required for roofs installed before 2010")
+                    errors.append(
+                        "Roof Update Type is required for roofs installed before 2010"
+                    )
                 if self.draft.get("has_pool", "").lower() == "yes":
                     if not self.draft.get("pool_fenced"):
                         errors.append("Pool Fenced with Self-Latching Gate is required")
                     if not self.draft.get("has_trampoline"):
-                        errors.append("Trampoline or Diving Apparatus disclosure is required")
+                        errors.append(
+                            "Trampoline or Diving Apparatus disclosure is required"
+                        )
                 if int(self.draft.get("replacement_cost_dollars") or 0) <= 0:
-                    errors.append("Replacement Cost Estimator must be completed before continuing")
+                    errors.append(
+                        "Replacement Cost Estimator must be completed before continuing"
+                    )
                 if errors:
                     self._banner_error = "; ".join(errors)
                     return PortalResponse(
@@ -381,16 +413,25 @@ class StatefulUnderwritingPortal(BasePortalApp):
 
             if path == "/api/estimator/calculate" and method == "POST":
                 data = _parse_form_or_json(body)
-                sqft = int(str(data.get("living_area_sqft", "0") or "0").replace(",", ""))
+                sqft = int(
+                    str(data.get("living_area_sqft", "0") or "0").replace(",", "")
+                )
                 stories = str(data.get("stories", "1") or "1")
                 grade = str(data.get("finish_grade", "Standard") or "Standard")
                 if sqft <= 0 or not grade:
                     return PortalResponse(
                         status=400,
                         content_type="application/json",
-                        body=json.dumps({"ok": False, "error": "Living area and finish grade required"}),
+                        body=json.dumps(
+                            {
+                                "ok": False,
+                                "error": "Living area and finish grade required",
+                            }
+                        ),
                     )
-                mult = {"standard": 210, "custom": 265, "luxury": 340}.get(grade.lower(), 210)
+                mult = {"standard": 210, "custom": 265, "luxury": 340}.get(
+                    grade.lower(), 210
+                )
                 story_bonus = 15000 if stories in {"2", "2 Stories"} else 0
                 rc = sqft * mult + story_bonus
                 self.draft["living_area_sqft"] = str(sqft)
@@ -419,10 +460,17 @@ class StatefulUnderwritingPortal(BasePortalApp):
                 if not self.draft["deductible"] or not self.draft["liability_limit"]:
                     return PortalResponse(
                         content_type="application/json",
-                        body=json.dumps({"ok": False, "error": "Deductible and Liability Limit are required"}),
+                        body=json.dumps(
+                            {
+                                "ok": False,
+                                "error": "Deductible and Liability Limit are required",
+                            }
+                        ),
                     )
                 rc = int(self.draft["replacement_cost_dollars"])
-                ded = int(str(self.draft["deductible"]).replace("$", "").replace(",", ""))
+                ded = int(
+                    str(self.draft["deductible"]).replace("$", "").replace(",", "")
+                )
                 if ded > rc * 0.05:
                     return PortalResponse(
                         content_type="application/json",
@@ -438,7 +486,9 @@ class StatefulUnderwritingPortal(BasePortalApp):
                 pool_surcharge = 185 if self.draft["has_pool"].lower() == "yes" else 0
                 claims_surcharge = 240 * int(self.draft["prior_claims_count"] or "0")
                 ded_discount = -120 if ded >= 2500 else 0
-                annual_premium = max(450, base_prem + pool_surcharge + claims_surcharge + ded_discount)
+                annual_premium = max(
+                    450, base_prem + pool_surcharge + claims_surcharge + ded_discount
+                )
                 saved = dict(self.draft)
                 saved["quote_number"] = quote_no
                 saved["annual_premium_dollars"] = annual_premium
@@ -476,7 +526,7 @@ class StatefulUnderwritingPortal(BasePortalApp):
             rid = html.escape(member["row_id"])
             dismiss_btn = (
                 f'<button type="button" class="dismiss-hh" data-dismiss-row="{rid}" '
-                f'onclick="dismissMember(\'{rid}\')">Remove</button>'
+                f"onclick=\"dismissMember('{rid}')\">Remove</button>"
                 if rid != "hh_primary"
                 else ""
             )
@@ -845,6 +895,18 @@ class StatefulUnderwritingPortal(BasePortalApp):
       <input id="sum_claims" readonly value="{html.escape(str(saved['prior_claims_count']))}"></div>
     <div><label for="sum_ded">All-Peril Deductible</label>
       <input id="sum_ded" readonly value="{html.escape(_format_usd(int(saved['deductible'])))}"></div>
+    <div><label for="sum_marital">Marital Status</label>
+      <input id="sum_marital" readonly value="{html.escape(str(saved['marital_status']))}"></div>
+    <div><label for="sum_year_built">Year Built</label>
+      <input id="sum_year_built" readonly value="{html.escape(str(saved['year_built']))}"></div>
+    <div><label for="sum_roof_year">Roof Year</label>
+      <input id="sum_roof_year" readonly value="{html.escape(str(saved['roof_year']))}"></div>
+    <div><label for="sum_roof_update">Roof Update Type</label>
+      <input id="sum_roof_update" readonly value="{html.escape(str(saved['roof_update_type']))}"></div>
+    <div><label for="sum_pool_fenced">Pool Fenced</label>
+      <input id="sum_pool_fenced" readonly value="{html.escape(str(saved['pool_fenced']))}"></div>
+    <div><label for="sum_liability">Liability Limit</label>
+      <input id="sum_liability" readonly value="{html.escape(str(saved['liability_limit']))}"></div>
     <div><label for="sum_hh">Household Members</label>
       <input id="sum_hh" readonly value="{html.escape(hh_names)}"></div>
   </fieldset>
@@ -937,7 +999,9 @@ class LegacyHospitalQueuePortal(BasePortalApp):
                 return PortalResponse(
                     status=401,
                     content_type="application/json",
-                    body=json.dumps({"ok": False, "error": "Invalid credentials or 2FA OTP"}),
+                    body=json.dumps(
+                        {"ok": False, "error": "Invalid credentials or 2FA OTP"}
+                    ),
                 )
 
             if not self._is_authed(headers):
@@ -984,12 +1048,18 @@ class LegacyHospitalQueuePortal(BasePortalApp):
                     return PortalResponse(
                         content_type="application/json",
                         body=json.dumps(
-                            {"ok": False, "error": f"Required HMS fields missing: {', '.join(missing)}"}
+                            {
+                                "ok": False,
+                                "error": f"Required HMS fields missing: {', '.join(missing)}",
+                            }
                         ),
                     )
                 digits = "".join(ch for ch in str(data["mobile"]) if ch.isdigit())[-10:]
                 existing_match = self.phone_index.get(digits)
-                if existing_match and str(data.get("confirm_family_override", "")).lower() != "true":
+                if (
+                    existing_match
+                    and str(data.get("confirm_family_override", "")).lower() != "true"
+                ):
                     return PortalResponse(
                         content_type="application/json",
                         body=json.dumps(
@@ -1204,6 +1274,8 @@ class LegacyHospitalQueuePortal(BasePortalApp):
                 <input id="rd_mobile" readonly value="{html.escape(rec['mobile'])}"></div>
               <div><label for="rd_dept">Clinical Department</label>
                 <input id="rd_dept" readonly value="{html.escape(rec['department'])}"></div>
+              <div><label for="rd_visit_type">Visit Type</label>
+                <input id="rd_visit_type" readonly value="{html.escape(rec['visit_type'])}"></div>
               <div><label for="rd_doc">Consulting Doctor</label>
                 <input id="rd_doc" readonly value="{html.escape(rec['consulting_doctor'])}"></div>
             </fieldset>"""

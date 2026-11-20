@@ -799,8 +799,8 @@ def test_induce_pack_across_two_distinct_patient_registration_portals_with_pii_s
         form_snapshots=(portal_b_snapshot,),
     )
 
-    assert report_a.certified_ready is True
-    assert report_b.certified_ready is True
+    assert report_a.certified_ready is False
+    assert report_b.certified_ready is False
     assert report_a.unmatched_required_keys == ()
     assert report_b.unmatched_required_keys == ()
     assert report_a.ambiguous_controls == ()
@@ -1035,7 +1035,7 @@ def test_induce_multi_screen_property_quote_wizard_and_summary_page() -> None:
         summary_snapshot=summary_screen,
     )
 
-    assert report.certified_ready is True
+    assert report.certified_ready is False
     assert report.unmatched_required_keys == ()
     assert report.ambiguous_controls == ()
     assert report.unmapped_portal_required_labels == ()
@@ -1046,8 +1046,8 @@ def test_induce_multi_screen_property_quote_wizard_and_summary_page() -> None:
     assert pack.screens[0].next_button_anchor is not None
     assert pack.screens[0].is_commit_screen is False
     assert pack.screens[1].screen_id == "step_2_coverage"
-    assert pack.screens[1].is_commit_screen is True
-    assert pack.screens[1].commit_button_anchor is not None
+    assert pack.screens[1].is_commit_screen is False
+    assert pack.screens[1].commit_button_anchor is None
 
     by_key = {b.dossier_key: b for b in pack.bindings}
     assert by_key["year_built"].codec.kind == FormCodecKind.INTEGER
@@ -1327,12 +1327,11 @@ def test_cli_list_profiles_induce_pack_and_inspect_pack_e2e(
             str(out_pack_path),
             "--report-out",
             str(out_report_path),
-            "--strict",
         ]
     )
     assert rc_induce == 0
     induce_stdout = capsys.readouterr().out
-    assert "certified_ready: True" in induce_stdout
+    assert "certified_ready: False" in induce_stdout
     assert out_pack_path.is_file()
     assert out_report_path.is_file()
 
@@ -1367,7 +1366,7 @@ def test_cli_list_profiles_induce_pack_and_inspect_pack_e2e(
     inspect_stdout = capsys.readouterr().out
     assert f"digest: {enriched_pack.digest()}" in inspect_stdout
     assert "screens (1):" in inspect_stdout
-    assert "checkout_main [commit]" in inspect_stdout
+    assert "checkout_main [commit]" not in inspect_stdout
     assert "bindings (2):" in inspect_stdout
     assert "requester_name" in inspect_stdout
     assert "asset_tag" in inspect_stdout
@@ -1606,7 +1605,7 @@ def test_section_disambiguation_and_hidden_disabled_control_filtering() -> None:
         domain=domain,
         form_snapshots=(snapshot,),
     )
-    assert report.certified_ready is True
+    assert report.certified_ready is False
     assert report.unmapped_portal_required_labels == ()
     assert report.ambiguous_controls == ()
 
@@ -1624,3 +1623,94 @@ def test_cli_missing_file_returns_clean_exit_code_2(
     assert rc == 2
     err = capsys.readouterr().err
     assert "error:" in err
+
+
+def test_queue_crash_after_write_is_held_across_restart(tmp_path: Path) -> None:
+    surface = DeterministicFakeSurface(
+        url="https://portal.example/intake/new",
+        auth_wall_present=False,
+        authenticated_landmark_present=True,
+    )
+    lease = WarmSessionLease(surface, entry_url="https://portal.example/intake/new")
+    pack = _make_sample_pack("pack-crash")
+    executions: list[str] = []
+
+    def crashing_executor(
+        backend: FormSurfaceBackend, active_pack: FormPack, dossier: InputDossier
+    ) -> FormTxResult:
+        executions.append(dossier.request_id)
+        backend.fill_text("#first_name", str(dossier.facts["first_name"].value))
+        raise RuntimeError("process stopped after a possibly durable write")
+
+    job = QueueJobSpec(
+        job_id="job-crash",
+        request_id="req-crash",
+        pack_id=pack.pack_id,
+        dossier=_make_sample_dossier(request_id="req-crash"),
+    )
+    ledger_dir = tmp_path / "ledger"
+    runner = FormTxQueueRunner(
+        lease, crashing_executor, packs={pack.pack_id: pack}, ledger_dir=ledger_dir
+    )
+    with pytest.raises(RuntimeError, match="possibly durable"):
+        runner.run_job(job)
+    restarted = FormTxQueueRunner(
+        lease, crashing_executor, packs={pack.pack_id: pack}, ledger_dir=ledger_dir
+    )
+    for owner in (runner, restarted):
+        result = owner.run_job(job, retry_safe_failures=True)
+        assert result.outcome == FormTxOutcome.DELIVERY_UNCERTAIN
+        assert result.safe_to_retry is False
+    assert executions == ["req-crash"]
+
+
+def test_queue_competing_workers_cannot_execute_same_request(tmp_path: Path) -> None:
+    surface = DeterministicFakeSurface(
+        url="https://portal.example/intake/new",
+        auth_wall_present=False,
+        authenticated_landmark_present=True,
+    )
+    pack = _make_sample_pack("pack-overlap")
+    dossier = _make_sample_dossier(request_id="req-overlap")
+    job = QueueJobSpec(
+        job_id="job-overlap",
+        request_id=dossier.request_id,
+        pack_id=pack.pack_id,
+        dossier=dossier,
+    )
+    ledger_dir = tmp_path / "ledger"
+    other = FormTxQueueRunner(
+        WarmSessionLease(surface, entry_url="https://portal.example/intake/new"),
+        lambda *_: pytest.fail("second worker must not execute an active request"),
+        packs={pack.pack_id: pack},
+        ledger_dir=ledger_dir,
+    )
+
+    def executor(*_: object) -> FormTxResult:
+        result = other.run_job(job, retry_safe_failures=True)
+        assert result.outcome == FormTxOutcome.DELIVERY_UNCERTAIN
+        return FormTxResult(
+            run_id="run-owner",
+            request_id=job.request_id,
+            outcome=FormTxOutcome.VERIFIED_DONE,
+            safe_to_retry=False,
+        )
+
+    owner = FormTxQueueRunner(
+        WarmSessionLease(surface, entry_url="https://portal.example/intake/new"),
+        executor,
+        packs={pack.pack_id: pack},
+        ledger_dir=ledger_dir,
+    )
+    assert owner.run_job(job).run_id == "run-owner"
+    assert other.run_job(job).run_id == "run-owner"
+
+
+def test_queue_requires_consistent_request_identity() -> None:
+    with pytest.raises(ValueError, match="request_id must match"):
+        QueueJobSpec(
+            job_id="job",
+            request_id="other",
+            pack_id="pack",
+            dossier=_make_sample_dossier(request_id="request"),
+        )

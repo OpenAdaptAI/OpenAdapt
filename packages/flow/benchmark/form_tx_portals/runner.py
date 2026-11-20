@@ -40,10 +40,6 @@ from form_tx_portals.servers import (  # noqa: E402
 )
 from openadapt_flow.form_tx.codecs import normalize_phone_digits  # noqa: E402
 from openadapt_flow.form_tx.types import (  # noqa: E402
-    ControlKind,
-    FieldAnchorSpec,
-    FieldCodecSpec,
-    FormCodecKind,
     FormHaltKind,
     FormTxOutcome,
     HumanDecisionAction,
@@ -96,17 +92,30 @@ def _verify_underwriting_ground_truth(
     if not saved:
         return False, "no_quote_persisted"
     d = scenario.dossier
-    if saved["first_name"].strip().casefold() != str(d.facts["applicant.first_name"].value).casefold():
+    if (
+        saved["first_name"].strip().casefold()
+        != str(d.facts["applicant.first_name"].value).casefold()
+    ):
         return False, "wrong_first_name"
-    if str(saved["prior_claims_count"]).strip() != str(d.facts["applicant.prior_claims_count"].value):
+    if str(saved["prior_claims_count"]).strip() != str(
+        d.facts["applicant.prior_claims_count"].value
+    ):
         return False, f"corrupt_prior_claims:{saved['prior_claims_count']}"
     has_unlisted_spouse = any(
-        m.get("row_id") == "hh_prefill_spouse" for m in saved.get("household_members", [])
+        m.get("row_id") == "hh_prefill_spouse"
+        for m in saved.get("household_members", [])
     )
-    if scenario.inject_unlisted_spouse and not scenario.ground_truth_spouse_valid and has_unlisted_spouse:
+    if (
+        scenario.inject_unlisted_spouse
+        and not scenario.ground_truth_spouse_valid
+        and has_unlisted_spouse
+    ):
         return False, "unlisted_prefill_spouse_bound"
     if scenario.ground_truth_trampoline is not None:
-        if saved.get("has_trampoline", "").casefold() != scenario.ground_truth_trampoline.casefold():
+        if (
+            saved.get("has_trampoline", "").casefold()
+            != scenario.ground_truth_trampoline.casefold()
+        ):
             return (
                 False,
                 f"hallucinated_trampoline:{saved.get('has_trampoline')}!=expected:{scenario.ground_truth_trampoline}",
@@ -121,18 +130,29 @@ def _verify_hms_ground_truth(
 ) -> tuple[bool, str]:
     if not saved:
         return False, "no_patient_persisted"
-    if saved["patient_name"].casefold() != str(dossier.facts["patient.full_name"].value).casefold():
+    if (
+        saved["patient_name"].casefold()
+        != str(dossier.facts["patient.full_name"].value).casefold()
+    ):
         return False, "wrong_patient_name"
-    expected_digits = normalize_phone_digits(dossier.facts["patient.mobile"].value)[-10:]
+    expected_digits = normalize_phone_digits(dossier.facts["patient.mobile"].value)[
+        -10:
+    ]
     if saved["mobile"] != expected_digits:
         return False, "wrong_mobile"
-    if saved["consulting_doctor"].casefold() != str(dossier.facts["visit.consulting_doctor"].value).casefold():
+    if (
+        saved["consulting_doctor"].casefold()
+        != str(dossier.facts["visit.consulting_doctor"].value).casefold()
+    ):
         return False, "wrong_doctor"
     return True, "accurate"
 
 
 def _run_ungoverned_underwriting(
-    page: Any, base_url: str, portal: StatefulUnderwritingPortal, scenario: UnderwritingScenario
+    page: Any,
+    base_url: str,
+    portal: StatefulUnderwritingPortal,
+    scenario: UnderwritingScenario,
 ) -> CaseScore:
     """Baseline 1: Fills matched labels, guesses 'No' on unknown required fields, ignores prefills."""
     t0 = time.perf_counter()
@@ -163,7 +183,9 @@ def _run_ungoverned_underwriting(
     page.fill("input[name='year_built']", f["dwelling.year_built"])
     page.fill("input[name='roof_year']", f["dwelling.roof_year"])
     page.locator("input[name='roof_year']").dispatch_event("change")
-    page.wait_for_function("document.getElementById('ppr-busy').getAttribute('data-busy') === 'false'")
+    page.wait_for_function(
+        "document.getElementById('ppr-busy').getAttribute('data-busy') === 'false'"
+    )
     if page.locator("select[name='roof_update_type']").count() > 0:
         page.select_option(
             "select[name='roof_update_type']",
@@ -171,7 +193,9 @@ def _run_ungoverned_underwriting(
         )
     page.select_option("select[name='has_pool']", f["dwelling.has_pool"])
     page.locator("select[name='has_pool']").dispatch_event("change")
-    page.wait_for_function("document.getElementById('ppr-busy').getAttribute('data-busy') === 'false'")
+    page.wait_for_function(
+        "document.getElementById('ppr-busy').getAttribute('data-busy') === 'false'"
+    )
 
     # For any remaining empty required select on screen (like unmapped trampoline), guesses "No"!
     for sel in page.locator("#ppr-container select[required]").all():
@@ -192,7 +216,9 @@ def _run_ungoverned_underwriting(
     pop.click("#est_grade_btn")
     pop.locator(f"li[data-option-value='{f['estimator.finish_grade']}']").click()
     pop.click("#btn-calc-apply")
-    page.wait_for_function("document.getElementById('replacement_cost_display').value !== ''")
+    page.wait_for_function(
+        "document.getElementById('replacement_cost_display').value !== ''"
+    )
 
     page.click("#btn-property-next")
     page.wait_for_url("**/wizard/coverage")
@@ -222,7 +248,10 @@ def _run_ungoverned_underwriting(
 
 
 def _run_rigid_step_underwriting(
-    page: Any, base_url: str, portal: StatefulUnderwritingPortal, scenario: UnderwritingScenario
+    page: Any,
+    base_url: str,
+    portal: StatefulUnderwritingPortal,
+    scenario: UnderwritingScenario,
 ) -> CaseScore:
     """Baseline 2: Linear recorded step script from happy-path uw_01."""
     t0 = time.perf_counter()
@@ -233,10 +262,14 @@ def _run_rigid_step_underwriting(
         page.fill("input[name='last_name']", f["applicant.last_name"])
         page.fill("input[name='dob']", f["applicant.dob"])
         page.fill("input[name='phone']", f["applicant.phone"])
-        page.select_option("select[name='marital_status']", f["applicant.marital_status"])
+        page.select_option(
+            "select[name='marital_status']", f["applicant.marital_status"]
+        )
         # Rigid macro blindly overwrites or leaves household table unchecked
         if not page.locator("input[name='prior_claims_count']").input_value():
-            page.fill("input[name='prior_claims_count']", f["applicant.prior_claims_count"])
+            page.fill(
+                "input[name='prior_claims_count']", f["applicant.prior_claims_count"]
+            )
         page.click("#btn-applicant-next")
         page.wait_for_url("**/wizard/property", timeout=1500)
 
@@ -310,7 +343,6 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
 
     from openadapt_flow.form_tx.learning import (
         RuleAccumulator,
-        admit_candidate_into_pack,
     )
     from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
     from openadapt_flow.form_tx.profiles import load_ui_profile
@@ -351,7 +383,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 ctx1 = browser.new_context()
                 origin1 = p1.attach_to_playwright_context(ctx1)
                 pg1 = ctx1.new_page()
-                report.cases.append(_run_ungoverned_underwriting(pg1, origin1, p1, scenario))
+                report.cases.append(
+                    _run_ungoverned_underwriting(pg1, origin1, p1, scenario)
+                )
                 ctx1.close()
 
                 # Arm 2: Rigid step replay
@@ -363,7 +397,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 ctx2 = browser.new_context()
                 origin2 = p2.attach_to_playwright_context(ctx2)
                 pg2 = ctx2.new_page()
-                report.cases.append(_run_rigid_step_underwriting(pg2, origin2, p2, scenario))
+                report.cases.append(
+                    _run_rigid_step_underwriting(pg2, origin2, p2, scenario)
+                )
                 ctx2.close()
 
                 # Arm 3: Governed openadapt_form_tx + Co-Pilot resolution + RuleAccumulator
@@ -397,7 +433,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 res = reconciler.run_until_halt_or_done(session)
                 human_steps = 0
                 safety_guard = 0
-                while res.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN and safety_guard < 8:
+                while (
+                    res.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN and safety_guard < 8
+                ):
                     safety_guard += 1
                     halt = res.halts[0]
                     human_steps += 1
@@ -418,7 +456,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                                 halt_id=halt.halt_id,
                                 action=HumanDecisionAction.PROVIDE_VALUE,
                                 actor_id="va_operator_01",
-                                provided_value=scenario.dossier.facts[halt.dossier_key].value
+                                provided_value=scenario.dossier.facts[
+                                    halt.dossier_key
+                                ].value
                                 if halt.dossier_key
                                 else "0",
                                 mapped_dossier_key=halt.dossier_key,
@@ -444,27 +484,17 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 if res.human_resolutions:
                     accumulator.record_run_resolutions(
-                        active_uw_pack.pack_id, res.human_resolutions
+                        active_uw_pack.pack_id,
+                        res.human_resolutions,
+                        run_id=session.run_id,
+                        pack_digest=session.pack.digest(),
                     )
                     candidates = accumulator.induce_candidates(
                         active_uw_pack.pack_id, min_support=2
                     )
-                    for cand in candidates:
-                        if cand.proposed_dossier_key == "dwelling.has_trampoline" and not any(
-                            b.dossier_key == "dwelling.has_trampoline"
-                            for b in active_uw_pack.bindings
-                        ):
-                            active_uw_pack = admit_candidate_into_pack(
-                                active_uw_pack,
-                                cand,
-                                anchor=FieldAnchorSpec(
-                                    label_patterns=(r"^Trampoline or Diving Apparatus",),
-                                    name_or_id_patterns=(r"\bhas_trampoline\b",),
-                                ),
-                                codec=FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
-                                control_kind=ControlKind.SELECT,
-                            )
-                            report.learned_candidates_admitted += 1
+                    # Repeated resolutions produce proposals only. This fixture
+                    # has no independent qualification authority to promote them.
+                    assert all(not candidate.admitted for candidate in candidates)
 
                 qno = str(res.outputs.get("quote_number", ""))
                 saved = p3.committed_quotes.get(qno)
@@ -512,12 +542,16 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 pg_h1.select_option("#visit_type", f["visit.visit_type"])
                 pg_h1.select_option("#dept_sel", f["visit.department"])
                 pg_h1.click("#doc_combo_btn")
-                pg_h1.locator(f"li[data-option-value='{f['visit.consulting_doctor']}']").click()
+                pg_h1.locator(
+                    f"li[data-option-value='{f['visit.consulting_doctor']}']"
+                ).click()
                 pg_h1.click("#btn-hms-submit")
                 pg_h1.wait_for_timeout(120)
                 # If duplicate modal popped up, ungoverned agent fails to reach search or clicks blindly
                 completed_h1 = "/hms/search" in pg_h1.url
-                uhid_h1 = pg_h1.locator("#rd_uhid").input_value() if completed_h1 else ""
+                uhid_h1 = (
+                    pg_h1.locator("#rd_uhid").input_value() if completed_h1 else ""
+                )
                 acc_h1, note_h1 = _verify_hms_ground_truth(
                     ph1.patients_by_uhid.get(uhid_h1), hms_dossier
                 )
@@ -533,7 +567,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                         fields_filled_auto=7,
                         receipt_verified=False,
                         elapsed_ms=(time.perf_counter() - t0) * 1000.0,
-                        outcome="done_unverified" if completed_h1 else "stalled_on_modal",
+                        outcome="done_unverified"
+                        if completed_h1
+                        else "stalled_on_modal",
                         notes=note_h1,
                     )
                 )
@@ -631,14 +667,19 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 # Re-submitting exact same request_id must dedupe with 0 extra mutations!
                 mut_before = len(ph3.mutation_log)
                 dedup_res = q_runner.run_job(job)
-                if len(ph3.mutation_log) == mut_before and dedup_res.outputs == res_h3.outputs:
+                if (
+                    len(ph3.mutation_log) == mut_before
+                    and dedup_res.outputs == res_h3.outputs
+                ):
                     report.hms_idempotent_dedupes += 1
 
                 uhid = str(res_h3.outputs.get("uhid", ""))
                 acc_h3, note_h3 = _verify_hms_ground_truth(
                     ph3.patients_by_uhid.get(uhid), hms_dossier
                 )
-                rcpt_h3_ok = bool(res_h3.receipt and verify_form_tx_receipt(res_h3.receipt))
+                rcpt_h3_ok = bool(
+                    res_h3.receipt and verify_form_tx_receipt(res_h3.receipt)
+                )
                 report.cases.append(
                     CaseScore(
                         portal="hospital_hms_held_out",
@@ -649,7 +690,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                         silent_corrupt_commit=(
                             res_h3.outcome == FormTxOutcome.VERIFIED_DONE and not acc_h3
                         ),
-                        human_decisions=human_modal_counts.get(hms_dossier.dossier_id, 0),
+                        human_decisions=human_modal_counts.get(
+                            hms_dossier.dossier_id, 0
+                        ),
                         fields_filled_auto=res_h3.fields_filled_auto,
                         receipt_verified=rcpt_h3_ok,
                         elapsed_ms=elapsed_h3,
@@ -671,7 +714,9 @@ def run_portal_benchmark(*, ppr_delay_ms: int = 80) -> PortalBenchmarkReport:
                 verified_accurate_completions=sum(
                     1 for c in arm_cases if c.completed and c.ground_truth_accurate
                 ),
-                silent_corrupt_commits=sum(1 for c in arm_cases if c.silent_corrupt_commit),
+                silent_corrupt_commits=sum(
+                    1 for c in arm_cases if c.silent_corrupt_commit
+                ),
                 failed_or_aborted=sum(1 for c in arm_cases if not c.completed),
                 total_human_decisions=sum(c.human_decisions for c in arm_cases),
                 total_fields_filled_auto=sum(c.fields_filled_auto for c in arm_cases),

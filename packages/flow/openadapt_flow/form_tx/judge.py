@@ -26,6 +26,8 @@ from openadapt_flow.form_tx.types import (
     ControlKind,
     DossierFact,
     FieldBindingSpec,
+    FormCodecKind,
+    FormHaltKind,
     FormPack,
     FormSnapshot,
     HumanDecisionAction,
@@ -36,6 +38,7 @@ from openadapt_flow.form_tx.types import (
     ProvenanceKind,
     ReadbackFieldVerdict,
     SummaryVerdict,
+    WizardScreenSpec,
 )
 
 __all__ = [
@@ -209,9 +212,9 @@ class SummaryJudge:
         summary_check = active_pack.summary_check
         if summary_check is None:
             return SummaryVerdict(
-                passed=True,
+                passed=False,
                 checked_count=0,
-                failed_keys=(),
+                failed_keys=("missing_readback_contract",),
                 field_verdicts=(),
                 extracted_outputs=dict(known_outputs or {}),
                 missing_required_outputs=(),
@@ -223,7 +226,17 @@ class SummaryJudge:
             supplemental_facts=supplemental_facts,
         )
 
-        snapshot = active_surface.snapshot(screens=active_pack.screens)
+        summary_screen_id = "__form_tx_readback__"
+        observation_screens = active_pack.screens
+        if summary_check.summary_landmark_selector:
+            observation_screens = (
+                WizardScreenSpec(
+                    screen_id=summary_screen_id,
+                    landmark_selector=summary_check.summary_landmark_selector,
+                ),
+                *observation_screens,
+            )
+        snapshot = active_surface.snapshot(screens=observation_screens)
         seeded_outputs: dict[str, Any] = dict(known_outputs or {})
         pre_outputs, _ = _extract_present_outputs(snapshot, summary_check.outputs)
         seeded_outputs.update(pre_outputs)
@@ -233,7 +246,7 @@ class SummaryJudge:
             snapshot.url_origin_and_path, summary_check.summary_url_path
         ):
             active_surface.goto(summary_check.summary_url_path)
-            snapshot = active_surface.snapshot(screens=active_pack.screens)
+            snapshot = active_surface.snapshot(screens=observation_screens)
 
         # Execute search-by-key lookup when configured.
         search_failure_reason: Optional[str] = None
@@ -250,9 +263,7 @@ class SummaryJudge:
             if lookup_val is None or (
                 isinstance(lookup_val, str) and not lookup_val.strip()
             ):
-                search_failure_reason = (
-                    f"Missing search key value for {lookup_key!r} prior to summary lookup"
-                )
+                search_failure_reason = f"Missing search key value for {lookup_key!r} prior to summary lookup"
             else:
                 try:
                     input_ctrl = match_anchor_in_snapshot(
@@ -269,17 +280,57 @@ class SummaryJudge:
                     search_failure_reason = f"Ambiguous summary search anchor: {exc}"
                 else:
                     if input_ctrl is None or submit_ctrl is None:
-                        search_failure_reason = (
-                            "Summary search input or submit control not found on surface"
-                        )
+                        search_failure_reason = "Summary search input or submit control not found on surface"
                     else:
                         active_surface.fill_text(
                             input_ctrl.dom_selector, str(lookup_val)
                         )
                         active_surface.click(submit_ctrl.dom_selector)
-                        snapshot = active_surface.snapshot(screens=active_pack.screens)
+                        snapshot = active_surface.snapshot(screens=observation_screens)
 
         verdicts: list[ReadbackFieldVerdict] = []
+        # A matching subset does not establish that the intended write landed.
+        # Cover every grounded bound fact, including conditional fields and
+        # human-added bindings, before a transaction may be called verified.
+        declared_keys = {
+            binding.dossier_key for binding in summary_check.field_readbacks
+        }
+        expected_keys = {
+            binding.dossier_key
+            for binding in active_pack.bindings
+            if binding.dossier_key in expected_facts
+        }
+        for resolution in active_resolutions:
+            if resolution.dossier_key and resolution.dossier_key in expected_facts:
+                expected_keys.add(resolution.dossier_key)
+        unbound_human_fact = any(
+            resolution.halt_kind == FormHaltKind.UNGROUNDED_REQUIRED_FIELD
+            and resolution.action in _OVERRIDE_PROVENANCE
+            and not resolution.dossier_key
+            for resolution in active_resolutions
+        )
+        for subroutine in active_pack.popup_subroutines:
+            if subroutine.return_output_key in expected_facts:
+                expected_keys.add(subroutine.return_output_key)
+        for key in sorted(expected_keys - declared_keys):
+            verdicts.append(
+                ReadbackFieldVerdict(
+                    dossier_key=key,
+                    codec_kind=next(
+                        (
+                            binding.codec.kind
+                            for binding in active_pack.bindings
+                            if binding.dossier_key == key
+                        ),
+                        next(iter(summary_check.field_readbacks)).codec.kind
+                        if summary_check.field_readbacks
+                        else FormCodecKind.WHITESPACE_COLLAPSE,
+                    ),
+                    passed=False,
+                    provenance=expected_facts[key].provenance,
+                    reason="Grounded bound fact is missing from the read-back contract",
+                )
+            )
         for binding in summary_check.field_readbacks:
             fact = expected_facts.get(binding.dossier_key)
             if search_failure_reason is not None:
@@ -321,8 +372,11 @@ class SummaryJudge:
                 continue
 
             if fact is None:
-                has_ungrounded_screen_val = observed_ctrl is not None and not _is_placeholder_or_empty(
-                    observed_ctrl.current_value, binding.placeholder_values
+                has_ungrounded_screen_val = (
+                    observed_ctrl is not None
+                    and not _is_placeholder_or_empty(
+                        observed_ctrl.current_value, binding.placeholder_values
+                    )
                 )
                 if binding.required_in_pack:
                     verdicts.append(
@@ -421,6 +475,16 @@ class SummaryJudge:
         failed_keys = tuple(v.dossier_key for v in verdicts if not v.passed)
         passed = (
             search_failure_reason is None
+            and bool(verdicts)
+            and not unbound_human_fact
+            and not snapshot.auth_wall_present
+            and not snapshot.active_modals
+            and not snapshot.banner_errors
+            and snapshot.inflight_mutations == 0
+            and (
+                not summary_check.summary_landmark_selector
+                or snapshot.screen_id == summary_screen_id
+            )
             and len(failed_keys) == 0
             and len(missing_required) == 0
         )

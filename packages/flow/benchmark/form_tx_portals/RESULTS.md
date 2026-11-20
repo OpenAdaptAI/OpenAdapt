@@ -1,3 +1,8 @@
+> Historical result with incomplete read-back coverage. This measurement was
+> invalidated during review: several entered fields were absent from the
+> verification contract. The synthetic scenarios and scripted comparison arms
+> do not establish production or independently held-out application evidence.
+
 # Governed Form & Wizard Transaction Layer (`form_tx`) — Multi-Portal Realism Results
 
 Real headless Chromium execution across two stateful multi-screen portals:

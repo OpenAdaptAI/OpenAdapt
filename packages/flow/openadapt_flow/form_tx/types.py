@@ -19,8 +19,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
 FORM_PACK_SCHEMA: Literal["openadapt.form-pack/v1"] = "openadapt.form-pack/v1"
-FORM_RECEIPT_SCHEMA: Literal["openadapt.form-tx-receipt/v1"] = "openadapt.form-tx-receipt/v1"
-PACK_PATCH_SCHEMA: Literal["openadapt.form-pack-patch/v1"] = "openadapt.form-pack-patch/v1"
+FORM_RECEIPT_SCHEMA: Literal["openadapt.form-tx-receipt/v1"] = (
+    "openadapt.form-tx-receipt/v1"
+)
+PACK_PATCH_SCHEMA: Literal["openadapt.form-pack-patch/v1"] = (
+    "openadapt.form-pack-patch/v1"
+)
 
 
 def canonical_json_bytes(payload: Any) -> bytes:

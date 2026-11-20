@@ -98,16 +98,23 @@ def test_currency_and_phone_codecs():
     assert normalize_currency_cents("₹1,250.50") == 125050
     assert normalize_currency_cents(2500) == 250000
     assert values_equivalent(
-        "2500", "$2,500.00", FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
+        "2500",
+        "$2,500.00",
+        FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$"),
     )
-    assert format_for_text_entry(
-        "$485,000.00", FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
-    ) == "485000"
+    assert (
+        format_for_text_entry(
+            "$485,000.00", FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
+        )
+        == "485000"
+    )
 
     assert normalize_phone_digits("+1 (614) 555-0148") == "6145550148"
     assert normalize_phone_digits("98765 43210") == "9876543210"
     assert values_equivalent(
-        "614-555-0148", "(614) 555-0148", FieldCodecSpec(kind=FormCodecKind.PHONE_DIGITS)
+        "614-555-0148",
+        "(614) 555-0148",
+        FieldCodecSpec(kind=FormCodecKind.PHONE_DIGITS),
     )
 
 
@@ -149,11 +156,15 @@ def test_anchor_matching_and_volatile_id_stripping():
     )
     assert compute_field_signature(c1) == compute_field_signature(c2)
 
-    snap_single = FormSnapshot(url_origin_and_path="http://portal.local/w", controls=(c1,))
+    snap_single = FormSnapshot(
+        url_origin_and_path="http://portal.local/w", controls=(c1,)
+    )
     anchor = FieldAnchorSpec(label_patterns=(r"^Applicant First Name",))
     assert match_anchor_in_snapshot(anchor, snap_single) == c1
 
-    snap_dup = FormSnapshot(url_origin_and_path="http://portal.local/w", controls=(c1, c2))
+    snap_dup = FormSnapshot(
+        url_origin_and_path="http://portal.local/w", controls=(c1, c2)
+    )
     with pytest.raises(AmbiguousAnchorError):
         match_anchor_in_snapshot(anchor, snap_dup)
 

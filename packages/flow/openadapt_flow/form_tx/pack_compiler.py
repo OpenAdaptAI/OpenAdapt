@@ -129,7 +129,7 @@ class CanonicalDomainSchema(BaseModel):
 
 
 class PackInductionReport(BaseModel):
-    """Deterministic compilation verdict and induced ``FormPack``."""
+    """Static compilation report and draft pack; not live qualification evidence."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -1196,7 +1196,7 @@ def induce_form_pack(
     domain: CanonicalDomainSchema,
     form_snapshots: Sequence[FormSnapshot],
     summary_snapshot: Optional[FormSnapshot] = None,
-    commit_button_pattern: str = r"submit|register|generate.*quote|issue|save",
+    commit_button_pattern: Optional[str] = None,
     next_button_pattern: str = r"next|continue",
 ) -> PackInductionReport:
     """Deterministically induce a ``FormPack`` from scrubbed structural snapshots."""
@@ -1392,7 +1392,7 @@ def induce_form_pack(
 
     screens = _induce_wizard_screens(
         scrubbed_forms,
-        commit_button_pattern=commit_button_pattern,
+        commit_button_pattern=commit_button_pattern or r"(?!)",
         next_button_pattern=next_button_pattern,
     )
 
@@ -1421,6 +1421,12 @@ def induce_form_pack(
         and not unmatched_required
         and not ambiguous_controls
         and not unmapped_portal_required
+        and commit_button_pattern is not None
+        and any(screen.is_commit_screen for screen in screens)
+        and summary_check is not None
+        and bool(summary_check.field_readbacks)
+        and {binding.dossier_key for binding in ordered_bindings}
+        <= {binding.dossier_key for binding in summary_check.field_readbacks}
     )
 
     return PackInductionReport(
