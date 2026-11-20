@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from openadapt_flow.backends.win_agent.native_value import valid_value_proof
+from openadapt_flow.backends.win_agent.value_protocol import valid_value_observation
 
 FIELD_KEYS = frozenset(
     {"kind", "rect", "text", "state", "value_proof", "value_identity"}
@@ -45,11 +44,6 @@ def valid_form_field(field: Any, *, pid: int | None = None) -> bool:
         identity = field["value_identity"]
         if proof is None:
             return identity is None
-        return (
-            isinstance(identity, str)
-            and re.fullmatch(r"[0-9a-f]{64}", identity) is not None
-            and valid_value_proof(text, proof)
-            and (pid is None or proof["pid"] == pid)
-        )
+        return valid_value_observation(text, proof, identity, pid=pid)
     except (KeyError, TypeError, ValueError):
         return False

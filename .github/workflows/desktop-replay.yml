@@ -40,6 +40,8 @@ on:
       - packages/flow/tests/test_approval_value_completeness.py
       - packages/flow/tests/test_native_value_completeness.py
       - packages/flow/tests/test_native_value_deployment.py
+      - packages/flow/tests/test_structural_value_completeness.py
+      - packages/flow/tests/test_desktop_readback.py
       - packages/flow/tests/test_binary_file_descriptors.py
       - packages/flow/tests/_binary_descriptor_contract.py
       - packages/flow/benchmark/rdp_pool/**
@@ -98,11 +100,13 @@ jobs:
             tests/test_approval_form_window.py tests/test_approval_form_fields.py \
             tests/test_binary_file_descriptors.py tests/test_native_value_completeness.py \
             tests/test_approval_value_completeness.py tests/test_native_value_deployment.py \
+            tests/test_structural_value_completeness.py tests/test_desktop_readback.py \
             --junitxml=runs/windows-guards-junit.xml
       - name: Native approval complete values and no-write refusal
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
           OAFLOW_NATIVE_APPROVAL_EVIDENCE: ${{ runner.temp }}/native-approval-evidence.json
+          OAFLOW_NATIVE_APPROVAL_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/ac" \
             tests/e2e/test_windows_approval_completeness.py --junitxml=runs/native-approval-junit.xml

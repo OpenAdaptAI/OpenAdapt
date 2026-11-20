@@ -4,8 +4,9 @@ touches the screen.
 Two ways to read, chosen per control:
 
 - :class:`UiaReadSurface` reads Windows UI Automation through the in-guest
-  agent's read-only ``/uia/read`` route: a control's value (edit boxes, grid
-  cells) or name (labels, buttons), and the rows of a list or grid.
+  agent's read-only ``/uia/read`` route. Semantic values require independent
+  native extent/full-read agreement. Names, MSAA and clipped strings remain
+  explicit previews; row inventories are unavailable until qualified.
 - :class:`PixelReadSurface` reads the screen pixels with OCR. It is the path
   for RDP, Citrix, and any application without an accessibility tree. A value
   is the text on the same line right of its label, or on the next line below
@@ -27,6 +28,10 @@ import time
 from contextlib import AbstractContextManager
 from typing import Any, Callable, Mapping, Optional
 
+from openadapt_flow.backends.win_agent.value_protocol import (
+    locator_scope,
+    valid_structural_value,
+)
 from openadapt_flow.runtime.effects.desktop_readback import (
     ControlRef,
     DesktopReadbackDriver,
@@ -383,7 +388,9 @@ class UiaReadSurface(PixelReadSurface):
         return self._backend.read_structural(locator, rows=rows)
 
     @staticmethod
-    def _located(payload: Optional[dict], *, need_text: bool) -> Located:
+    def _located(
+        payload: Optional[dict], *, need_text: bool, scope: Mapping[str, Any]
+    ) -> Located:
         if payload is None:
             return Located("unavailable")
         match = payload.get("match")
@@ -392,45 +399,49 @@ class UiaReadSurface(PixelReadSurface):
         if match != "unique":
             return Located("ambiguous")
         text = payload.get("text")
-        if text is None and need_text:
+        if need_text and not valid_structural_value(payload, scope):
             # The control is there but exposes no value or name: unreadable,
             # never an empty value.
             return Located("unavailable")
-        point = payload.get("point") or [0, 0]
+        point = payload.get("point")
+        if (
+            not isinstance(point, list)
+            or len(point) != 2
+            or any(type(v) is not int for v in point)
+        ):
+            return Located("unavailable")
         return Located(
             "ok",
-            Seen(text=_collapse(text or ""), point=(int(point[0]), int(point[1]))),
+            Seen(
+                text=text if isinstance(text, str) else "",
+                point=(int(point[0]), int(point[1])),
+            ),
         )
 
     def locate(self, ref: ControlRef) -> Located:
         if not ref.structured:
             return super().locate(ref)
-        return self._located(self._read_structural(ref), need_text=False)
+        return self._located(
+            self._read_structural(ref),
+            need_text=False,
+            scope=locator_scope(ref.model_dump()),
+        )
 
     def read(self, ref: ControlRef) -> Located:
         if not ref.structured:
             return super().read(ref)
-        return self._located(self._read_structural(ref), need_text=True)
+        return self._located(
+            self._read_structural(ref),
+            need_text=True,
+            scope=locator_scope(ref.model_dump()),
+        )
 
     def rows(self, ref: ControlRef) -> Optional[list[Seen]]:
         if not ref.structured:
             return super().rows(ref)
-        payload = self._read_structural(ref, rows=True)
-        if payload is None or payload.get("match") != "unique":
-            return None
-        if payload.get("rows_truncated"):
-            return None
-        return [
-            Seen(
-                text=_collapse(item["text"]),
-                point=(item["point"][0], item["point"][1]),
-                parts=tuple(
-                    (_collapse(cell["text"]), (cell["point"][0], cell["point"][1]))
-                    for cell in item.get("cells") or []
-                ),
-            )
-            for item in payload.get("rows") or []
-        ]
+        # Declared structural rows have no qualified native leaf/composite
+        # inventory source yet. Never downgrade them to preview strings/OCR.
+        return None
 
 
 class BackendSessionDriver:

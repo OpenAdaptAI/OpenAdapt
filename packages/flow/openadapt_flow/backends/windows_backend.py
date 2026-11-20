@@ -47,6 +47,10 @@ import requests
 
 from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
+from openadapt_flow.backends.win_agent.value_protocol import (
+    locator_scope,
+    valid_structural_response,
+)
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     StructuralHandle,
@@ -1543,51 +1547,25 @@ class WindowsBackend:
     ) -> Optional[dict]:
         """Read one control's text (and, with ``rows``, its rows) via UIA.
 
-        Read-only: the agent returns the control's value or name and never
-        acts on it. Returns the agent's payload (``match`` is ``unique``,
-        ``ambiguous`` or ``not_found``), or None when the read is unavailable
-        (older agent, transport error, malformed answer).
+        Read-only. Normal text requires an exact complete native-value proof;
+        visible labels/MSAA/clipped strings are preview_text only. Missing or
+        malformed proof never becomes a field value. Unsupported values return
+        text=None; legacy responses or unqualified row inventories return None.
         """
+        scope = locator_scope(locator.model_dump(mode="json", exclude_none=True))
         typed = self._post_typed_read(
             "/uia/read",
-            {
-                "locator": locator.model_dump(mode="json", exclude_none=True),
-                **({"rows": True} if rows else {}),
-            },
+            {"locator": scope, **({"rows": True} if rows else {})},
         )
         payload = typed.payload
-        if not typed.available or payload is None:
+        if not typed.available or not valid_structural_response(
+            payload, scope, rows=rows
+        ):
             return None
-        if payload.get("match") not in ("unique", "ambiguous", "not_found"):
+        if rows:
+            # Explicit preview rows cannot authorize semantic record counts,
+            # field values or absence. A qualified inventory is still required.
             return None
-        text = payload.get("text")
-        if text is not None and not isinstance(text, str):
-            return None
-        if rows and payload.get("match") == "unique":
-            items = payload.get("rows")
-            if not isinstance(items, list) or not all(
-                isinstance(item, dict)
-                and isinstance(item.get("text"), str)
-                and isinstance(item.get("point"), list)
-                and len(item["point"]) == 2
-                and all(
-                    isinstance(v, int) and not isinstance(v, bool)
-                    for v in item["point"]
-                )
-                and all(
-                    isinstance(cell, dict)
-                    and isinstance(cell.get("text"), str)
-                    and isinstance(cell.get("point"), list)
-                    and len(cell["point"]) == 2
-                    and all(
-                        isinstance(v, int) and not isinstance(v, bool)
-                        for v in cell["point"]
-                    )
-                    for cell in item.get("cells") or []
-                )
-                for item in items
-            ):
-                return None
         return payload
 
     def window_tree(

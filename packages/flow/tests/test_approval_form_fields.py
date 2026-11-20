@@ -451,6 +451,8 @@ class _Control:
         self.NativeWindowHandle = _Control.next_hwnd
         _Control.next_hwnd += 1
         self.ProcessId = 10
+        self.AutomationId = ""
+        self.ClassName = "SyntheticNativeControl"
         self.parent = None
         self.native_override = None
         self.IsPassword = password

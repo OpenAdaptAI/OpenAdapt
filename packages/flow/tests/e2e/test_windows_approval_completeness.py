@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -24,7 +25,12 @@ from openadapt_flow.approval_mode.gate import ApprovalGate, StepContext
 from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 from openadapt_flow.backends.win_agent import server
 from openadapt_flow.backends.win_agent.native_value import valid_value_proof
-from openadapt_flow.ir import ActionKind, Step, StepResult, Workflow
+from openadapt_flow.ir import ActionKind, Step, StepResult, StructuralLocator, Workflow
+from openadapt_flow.runtime.effects.desktop_readback import (
+    ControlRef,
+    DesktopSessionFacts,
+)
+from openadapt_flow.runtime.effects.desktop_readback_sessions import UiaReadSurface
 from tests.e2e.test_windows_hosted_replay import RUN_E2E, _Host
 
 pytestmark = [
@@ -123,6 +129,31 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
         "phases": [],
         "transport": [],
     }
+    repository = Path(__file__).resolve().parents[4]
+    evidence["actual_checkout_commit"] = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repository, text=True
+    ).strip()
+    evidence["actual_checkout_tree"] = subprocess.check_output(
+        ["git", "rev-parse", "HEAD^{tree}"], cwd=repository, text=True
+    ).strip()
+    evidence["declared_pr_or_dispatch_head"] = os.environ.get(
+        "OAFLOW_NATIVE_APPROVAL_SOURCE_HEAD"
+    )
+    critical = (
+        "packages/flow/openadapt_flow/backends/win_agent/native_value.py",
+        "packages/flow/openadapt_flow/backends/win_agent/value_protocol.py",
+        "packages/flow/openadapt_flow/backends/win_agent/server.py",
+        "packages/flow/openadapt_flow/backends/windows_backend.py",
+        "packages/flow/openadapt_flow/approval_mode/form_state.py",
+        "packages/flow/openadapt_flow/approval_mode/window_fields.py",
+        "packages/flow/openadapt_flow/runtime/effects/desktop_readback_sessions.py",
+        "packages/flow/openadapt_flow/runtime/effects/desktop_readback.py",
+        ".github/workflows/desktop-replay.yml",
+    )
+    evidence["source_sha256"] = {
+        name: hashlib.sha256((repository / name).read_bytes()).hexdigest()
+        for name in critical
+    }
     host = _Host(tmp_path)
     fixture = tmp_path / "patient_notes.ps1"
     fixture.write_text(
@@ -141,7 +172,7 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
             if path in {"/input", "/input/guarded", "/uia/act", "/execute_windows"}:
                 writes.append(path)
             response = original_post(url, **kwargs)
-            if path == "/window/form-fields":
+            if path in {"/window/form-fields", "/uia/read"}:
                 evidence["transport"].append(
                     {
                         "path": path,
@@ -235,6 +266,26 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
                     )
                     assert field["value_proof"]["utf16_units"] == stored["utf16_units"]
                     assert field["value_proof"]["pid"] == stored["pid"]
+            semantic = backend.read_structural(
+                StructuralLocator(automation_id="approvalProbe")
+            )
+            phase["structural"] = semantic
+            surface = UiaReadSurface(
+                backend,
+                facts=DesktopSessionFacts(True, False, False, "uia"),
+                settle_s=0,
+            )
+            located = surface.read(ControlRef(automation_id="approvalProbe"))
+            phase["structural_located"] = located.status
+            assert semantic is not None
+            if name == "long":
+                assert semantic["complete"] is False and semantic["text"] is None
+                assert semantic["reason"] == "provider_native_value_disagreement"
+                assert located.status == "unavailable" and located.item is None
+            else:
+                assert semantic["complete"] is True and semantic["text"] == expected
+                assert located.status == "ok" and located.item is not None
+                assert located.item.text == expected
             frame = backend.screenshot()
             store = ItemApprovalStore(tmp_path / ("run-" + name))
             gate = ApprovalGate("each_item", approval_store=store, approval_wait_s=0)

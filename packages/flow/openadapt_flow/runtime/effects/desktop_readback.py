@@ -62,6 +62,7 @@ import threading
 import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable, Literal, Mapping, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -797,23 +798,25 @@ def _identity_piece(row: Seen, identity: str) -> Seen:
     return row
 
 
-def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
-    """Whether a marker is on screen, shows some text, and (when set) shows
-    ``ref.shows``."""
+def _present(surface: DesktopReadSurface, ref: ControlRef) -> Optional[bool]:
+    """Three-valued marker predicate, never an inference of element absence.
 
+    Missing/unavailable observations have no qualified absence inventory.
+    Complete empty values without an explicit text predicate are unknown,
+    too. Only a complete native value can disprove an explicit value marker;
+    an OCR mismatch may simply have missed its text.
+    """
     seen = surface.read(ref)
-    if ref.structured and ref.shows is None and seen.status == "unavailable":
-        # A UI Automation control that exposes no text at all (a panel):
-        # present when it is there. A control that reads as empty is absent.
-        return surface.locate(ref).status == "ok"
-    if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
-        return False
+    if seen.status != "ok" or seen.item is None:
+        return None
+    text = seen.item.text.strip()
     if ref.shows is None:
-        return True
+        return True if text else None
     from openadapt_flow.runtime.effects.readback_values import token_occurrences
 
-    # Whole tokens: a marker "Saved" is not shown by "Unsaved".
-    return token_occurrences(_norm(seen.item.text), _norm(ref.shows)) >= 1
+    if token_occurrences(_norm(text), _norm(ref.shows)) >= 1:
+        return True
+    return None if seen.item.ocr else False
 
 
 def _view(surface: DesktopReadSurface, spec: DesktopReadbackSpec) -> tuple[Any, ...]:
@@ -861,7 +864,12 @@ def look_up(
     # -- sign in (the application's own form) --------------------------------
     if spec.sign_in is not None:
         sign_in = spec.sign_in
-        if _present(surface, sign_in.signed_in):
+        initial_signed_in = _present(surface, sign_in.signed_in)
+        if initial_signed_in is None:
+            return fail(
+                "the signed-in marker state is unknown; not inferring signed out"
+            )
+        if initial_signed_in is True:
             # Someone is already signed in here. The check must sign in with
             # its own account, or it is not a separately signed-in session.
             return fail(
@@ -885,7 +893,7 @@ def look_up(
         signed = _wait_for(
             surface,
             guard,
-            lambda: True if _present(surface, sign_in.signed_in) else None,
+            lambda: True if _present(surface, sign_in.signed_in) is True else None,
             timeout,
         )
         guard.phase = "look_up"
@@ -917,12 +925,18 @@ def look_up(
     # What a session that persists between look-ups may still show from an
     # earlier one. A view (or a not-found message) that was up before the
     # search counts only once it changes or goes away and comes back.
-    stale_view = _view(surface, spec) if _present(surface, spec.ready) else None
-    stale_not_found = spec.not_found is not None and _present(surface, spec.not_found)
-    # A marker counts as gone only after two polls in a row without it, so
-    # one OCR miss or a brief overlay can't pass a stale screen.
-    seen_gone = {"view": stale_view is None, "not_found": not stale_not_found}
-    absent = {"view": 0, "not_found": 0}
+    initial_ready = _present(surface, spec.ready)
+    stale_view = _view(surface, spec) if initial_ready is True else None
+    stale_not_found = (
+        _present(surface, spec.not_found) if spec.not_found is not None else None
+    )
+    # Only a qualified negative value-predicate observation contributes to
+    # freshness. Missing/unknown is not element absence or a negative poll.
+    observed_negative = {
+        "view": initial_ready is False,
+        "not_found": stale_not_found is False,
+    }
+    negative_streak = {"view": 0, "not_found": 0}
     if spec.search.submit is None:
         guard.press_enter(surface, box_ref)
     else:
@@ -932,22 +946,38 @@ def look_up(
         guard.click(surface, spec.search.submit, button.item)
     surface.settle()
 
-    def gone(name: str, shown: bool) -> None:
-        absent[name] = 0 if shown else absent[name] + 1
-        if absent[name] >= 2:
-            seen_gone[name] = True
+    def gone(name: str, shown: Optional[bool]) -> None:
+        # Unknown is neither a negative observation nor a gap we can bridge
+        # in the required consecutive negative sequence.
+        negative_streak[name] = negative_streak[name] + 1 if shown is False else 0
+        if negative_streak[name] >= 2:
+            observed_negative[name] = True
 
     def not_found_shown() -> bool:
-        shown = spec.not_found is not None and _present(surface, spec.not_found)
+        if spec.not_found is None:
+            return False  # no negative predicate exists in this contract
+        shown = _present(surface, spec.not_found)
         gone("not_found", shown)
-        return shown and seen_gone["not_found"]
+        return shown is True and observed_negative["not_found"]
 
     def fresh_view() -> bool:
         shown = _present(surface, spec.ready)
         gone("view", shown)
-        if not shown:
+        if shown is not True:
             return False
-        return seen_gone["view"] or _view(surface, spec) != stale_view
+        if observed_negative["view"]:
+            return True
+        current = _view(surface, spec)
+        complete_before = stale_view is not None and all(
+            status == "ok" for status, _ in stale_view
+        )
+        complete_after = all(status == "ok" for status, _ in current)
+        return (
+            initial_ready is True
+            and complete_before
+            and complete_after
+            and current != stale_view
+        )
 
     # -- open the one matching result -------------------------------------------
     if spec.open is not None:
@@ -993,7 +1023,7 @@ def look_up(
     if state == "not_found":
         return RawRecordView(ok=True, not_found=True, inputs=list(guard.inputs))
     if state is None:
-        if stale_view is not None and _present(surface, spec.ready):
+        if stale_view is not None and _present(surface, spec.ready) is True:
             return fail(
                 "the record view still shows what it showed before the search; "
                 "it may not have refreshed, so it can't be read as this save"
@@ -1064,6 +1094,49 @@ def _collapse_spaces_for(effect: Effect, fields: set[str]) -> Effect:
     match = {k: collapse(k, v) or v for k, v in effect.match.items()}
     value = collapse(effect.field, effect.value) if effect.field else effect.value
     return effect.model_copy(update={"match": match, "value": value}, deep=True)
+
+
+def _exact_value(
+    text: str, reader: DesktopFieldReader, *, expected: bool = False
+) -> tuple[str, bool]:
+    """Preserve structural values; only explicit field transforms may alter them."""
+    if reader.date_format:
+        formats = (
+            ("%Y-%m-%d", reader.date_format) if expected else (reader.date_format,)
+        )
+        for layout in formats:
+            try:
+                text = datetime.strptime(text, layout).date().isoformat()
+                break
+            except ValueError:
+                continue
+        else:
+            return text, False
+    return (text.casefold() if reader.casefold else text), True
+
+
+def _desktop_effect(
+    effect: Effect, readers: Mapping[str, DesktopFieldReader], ocr_fields: set[str]
+) -> Effect:
+    """Apply the same explicit transforms to expected and observed native values."""
+    display = normalized_effect(
+        effect, {name: reader for name, reader in readers.items() if name in ocr_fields}
+    )
+
+    def norm(name: str, expr: Optional[ValueExpr]) -> Optional[ValueExpr]:
+        if (
+            expr is None
+            or expr.literal is None
+            or name not in readers
+            or name in ocr_fields
+        ):
+            return expr
+        text, _ = _exact_value(expr.literal, readers[name], expected=True)
+        return ValueExpr(literal=text)
+
+    match = {name: norm(name, expr) or expr for name, expr in display.match.items()}
+    value = norm(display.field, display.value) if display.field else display.value
+    return display.model_copy(update={"match": match, "value": value}, deep=True)
 
 
 class DesktopReadbackVerifier(VerifierAdapterBase):
@@ -1257,7 +1330,10 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                 m and stripped.endswith(m) for m in spec.truncation_markers
             ):
                 uncertain.add((0, name))
-            normalized, parsed = normalize_value(text, reader)  # type: ignore[arg-type]
+            if seen.ocr:
+                normalized, parsed = normalize_value(text, reader)  # type: ignore[arg-type]
+            else:
+                normalized, parsed = _exact_value(text, reader)
             spaced[name] = (
                 " ".join(normalized.split())
                 if seen.ocr and isinstance(normalized, str)
@@ -1347,7 +1423,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             return problem
         spec = self._target.spec
         normalized = _without_spaces_for(
-            normalized_effect(effect, spec.fields), read.ocr_fields
+            _desktop_effect(effect, spec.fields, read.ocr_fields), read.ocr_fields
         )
         blocking = blocking_uncertain_fields(normalized, read.records, read.uncertain)
         if blocking:
@@ -1382,7 +1458,8 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             # once its spaces are removed is not proof.
             spaced = judge_records(
                 _collapse_spaces_for(
-                    normalized_effect(effect, spec.fields), read.ocr_fields
+                    _desktop_effect(effect, spec.fields, read.ocr_fields),
+                    read.ocr_fields,
                 ),
                 before,
                 read.spaced,

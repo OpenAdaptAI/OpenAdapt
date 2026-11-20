@@ -19,8 +19,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
     POST /uia/act           -> unique native UIA action + delivery receipt
-    POST /uia/read          -> read-only text of one unique control (value or
-                               name) and, on request, the text of its rows
+    POST /uia/read          -> complete native value of one unique control,
+                               with non-authorizing text/row previews separate
     POST /execute_windows   -> legacy WAA-shaped input commands, DISABLED by
                                default (``--allow-legacy-commands``). Commands
                                are parsed into an allow-listed set of
@@ -973,7 +973,7 @@ def _candidate(control: object) -> Optional[dict[str, Any]]:
 
 
 def _find_candidates(
-    locator: dict[str, Any], auto: Any
+    locator: dict[str, Any], auto: Any, *, strict_walk: bool = False
 ) -> tuple[list[tuple[Any, dict[str, Any]]], bool]:
     try:
         root = auto.GetRootControl()
@@ -991,7 +991,47 @@ def _find_candidates(
         if visited > _MAX_UIA_NODES:
             truncated = True
             break
+        possible = False
+        if strict_walk:
+            # A failed selector/bounds read cannot hide a second match and
+            # turn a partial query into unique value authority.
+            try:
+                facts = {
+                    key: getattr(control, key)
+                    for key in ("AutomationId", "Name", "ControlTypeName")
+                }
+                if any(not isinstance(value, str) for value in facts.values()):
+                    return found, True
+                possible = all(
+                    expected is None or actual == expected
+                    for expected, actual in (
+                        (locator.get("automation_id"), facts["AutomationId"] or None),
+                        (locator.get("name"), " ".join(facts["Name"].split()) or None),
+                        (
+                            locator.get("role"),
+                            "button"
+                            if facts["ControlTypeName"] == "SplitButtonControl"
+                            else _CONTROL_TO_ROLE.get(facts["ControlTypeName"]),
+                        ),
+                    )
+                )
+                if possible:
+                    node = control
+                    for _ in range(_MAX_UIA_DEPTH + 1):
+                        if node is None:
+                            break
+                        if node.ControlTypeName == "WindowControl":
+                            if not isinstance(node.Name, str):
+                                return found, True
+                            break
+                        node = node.GetParentControl()
+                    else:
+                        return found, True
+            except Exception:  # noqa: BLE001 - unknown query scope is incomplete
+                return found, True
         candidate = _candidate(control)
+        if strict_walk and possible and candidate is None:
+            return found, True
         if candidate is not None:
             matches = True
             for key in ("automation_id", "role", "name", "window_name"):
@@ -1004,13 +1044,21 @@ def _find_candidates(
                 if len(found) >= _MAX_UIA_CANDIDATES:
                     truncated = True
                     break
-        if depth >= _MAX_UIA_DEPTH:
+        if depth >= _MAX_UIA_DEPTH and not strict_walk:
             continue
         children = _control_value(control, "GetChildren", None)
         try:
+            if strict_walk and not callable(children):
+                return found, True
             values = list(children()) if callable(children) else []
         except Exception:  # noqa: BLE001
+            if strict_walk:
+                return found, True
             values = []
+        if depth >= _MAX_UIA_DEPTH:
+            if values:
+                return found, True
+            continue
         stack.extend((child, depth + 1) for child in reversed(values))
     return found, truncated
 
@@ -1563,27 +1611,76 @@ def _perform_uia_initialized(
         )
         if not isinstance(data.get("rows", False), bool):
             raise AgentRequestError(400, "invalid_schema", "rows must be a boolean")
-        locator = _locator_payload(data["locator"])
-        found, truncated = _find_candidates(locator, auto)
-        if len(found) != 1 or truncated:
-            return {
-                "status": "ok",
-                "match": "ambiguous" if found or truncated else "not_found",
-                "candidate_count": len(found),
-                "text": None,
-            }
-        control, candidate = found[0]
+        read_locator = _locator_payload(data["locator"])
+        found, truncated = _find_candidates(read_locator, auto, strict_walk=True)
+        unique = len(found) == 1 and not truncated
         result: dict[str, Any] = {
             "status": "ok",
-            "match": "unique",
-            "candidate_count": 1,
-            "text": _value_text(control),
-            "point": candidate["point"],
+            "match": "unique"
+            if unique
+            else "ambiguous"
+            if found or truncated
+            else "not_found",
+            "candidate_count": len(found),
+            "text": None,
+            "point": None,
+            "complete": False,
+            "value_proof": None,
+            "value_identity": None,
+            "read_scope": read_locator,
+            "preview_text": None,
+            "reason": "not_unique",
         }
+        if unique:
+            control, candidate = found[0]
+            result["point"] = candidate["point"]
+            # Existing display previews remain explicit non-authorizing data.
+            # A legacy client sees text=None for every unavailable value.
+            result["preview_text"] = _value_text(control)
+
+            def identity() -> Optional[str]:
+                fresh, cut = _find_candidates(read_locator, auto, strict_walk=True)
+                if (
+                    cut
+                    or len(fresh) != 1
+                    or fresh[0][1]["fingerprint"] != candidate["fingerprint"]
+                ):
+                    return None
+                return hashlib.sha256(
+                    json.dumps(
+                        [read_locator, fresh[0][1]["fingerprint"]],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                ).hexdigest()
+
+            binding = identity()
+            observed = _form_field_value(control, identity)
+            result["reason"] = observed.reason or "value_identity_changed"
+            if (
+                observed.complete
+                and observed.proof is not None
+                and binding is not None
+                and identity() == binding
+            ):
+                result.update(
+                    text=observed.value,
+                    complete=True,
+                    reason=None,
+                    value_proof=observed.proof.payload(),
+                    value_identity=binding,
+                )
         if data.get("rows"):
-            rows, rows_truncated = _read_rows(control)
-            result["rows"] = rows
-            result["rows_truncated"] = rows_truncated
+            # Row/cell concatenation and a bounded preview walk do not prove
+            # full text or inventory. No composite row source is qualified.
+            preview_rows, _ = _read_rows(found[0][0]) if unique else ([], True)
+            result.update(
+                rows=None,
+                rows_truncated=True,
+                rows_complete=False,
+                preview_rows=preview_rows,
+            )
         return result
 
     data = _exact_object(
