@@ -271,7 +271,7 @@ export function Settings({
           />
         </Field>
         {cfg.deployment_lane === "byoc" && (
-          <Callout tone="info" title="Patient data stays in your environment">
+          <Callout tone="info" title="Protected data stays in your environment">
             OpenAdapt doesn't upload recordings, workflows, or fixes. When a stopped
             run is reported, only a short note about it, with no PHI, goes to
             your dashboard. Backup, sync, and security software on this
@@ -311,7 +311,7 @@ export function Settings({
       <Card>
         <CardHead
           title="On-screen controls"
-          sub="A small status panel stays on top while OpenAdapt records or runs. It never shows screenshots, typed values, or patient details."
+          sub="A small status panel stays on top while OpenAdapt records or runs. It never shows screenshots, typed values, or record details."
         />
         <label className="check-row">
           <input

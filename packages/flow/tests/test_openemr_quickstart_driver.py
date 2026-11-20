@@ -16,8 +16,10 @@ from benchmark.openemr_local import fixture as fx
 from benchmark.openemr_local import quickstart as q
 from openadapt_flow.ir import PostconditionKind, Workflow
 
-#: The certified bundle's content digest (README, site Seals, #1409).
-DIGEST = "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6"
+#: The certified bundle's content digest (README). The October bundle behind
+#: the site's Seals (#1409) was ``ec096afa...``; this is the same program with
+#: its date-picker check compiled against the run's clock, qualified again.
+DIGEST = "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c"
 RECORDING = "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894"
 
 
@@ -292,3 +294,25 @@ def test_checked_needs_the_engine_and_the_database_to_agree():
         {"effects_required": 0, "effects_confirmed": 0},
     ):
         assert not q.checked({**facts, **change}), change
+
+
+def test_hooks_point_at_a_fixture_whose_state_folder_is_new(tmp_path, monkeypatch):
+    """A first quickstart on a new machine has no state folder yet."""
+    for name in (
+        "OPENEMR_FIXTURE_STATE",
+        "OPENEMR_FIXTURE_LOCK",
+        "OPENEMR_UI_URL",
+        "OPENEMR_API_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    from types import SimpleNamespace
+
+    state = tmp_path / "cache" / "quickstart-openemr"
+    fixture = SimpleNamespace(
+        state_dir=state,
+        lock={"project": "p"},
+        ui_base_url="http://127.0.0.1:1",
+        api_base_url="https://127.0.0.1:2",
+    )
+    q.point_qualify_hooks_here(fixture)
+    assert (state / "environment.lock.json").is_file()

@@ -14,6 +14,7 @@ names its predecessor's channel by hash.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -353,6 +354,78 @@ def _require_existing_file(path: Path, *, label: str) -> Path:
     return path
 
 
+# Every git call here is a local read of history. The slowest takes well under a
+# second, so one that runs this long is stuck.
+GIT_TIMEOUT = 120
+
+
+class GitTimeout(RuntimeError):
+    """A git command did not finish in time."""
+
+
+@functools.lru_cache(maxsize=None)
+def _git_executable(search_path: str | None) -> str:
+    found = shutil.which("git", path=search_path)
+    if found is None:
+        raise FileNotFoundError("git is not on PATH")
+    return os.path.abspath(found)
+
+
+def _hold_standard_descriptors() -> list[int]:
+    """Occupy any of descriptors 0, 1 and 2 that are closed; return the ones opened."""
+
+    held: list[int] = []
+    if os.name != "posix":
+        return held
+    while True:
+        descriptor = os.open(os.devnull, os.O_RDWR)
+        if descriptor > 2:
+            os.close(descriptor)
+            return held
+        held.append(descriptor)
+
+
+def run_git(
+    root: Path, *args: str, check: bool = True, input: bytes | None = None
+) -> subprocess.CompletedProcess[bytes]:
+    """Run one git command in ``root`` without forking this process.
+
+    On macOS a forked copy of a Python process that has loaded system
+    frameworks can stop before it ever runs git, and the parent then waits
+    inside Popen where no timeout applies. Python starts the child with
+    posix_spawn instead of fork when the program path is absolute, no working
+    directory is passed and inherited descriptors are left alone, so git gets
+    its directory from ``-C``. Python opens its own descriptors close-on-exec,
+    so git still inherits only its three pipes. The timeout then covers the
+    whole call, and a stuck command fails with its name.
+
+    Python also falls back to fork when one of git's pipes is numbered 0, 1 or
+    2, which happens when this process was started with a standard descriptor
+    closed. Those numbers are held open on the null device for the length of
+    the call so the pipes always get higher ones.
+    """
+
+    command = [_git_executable(os.environ.get("PATH")), "-C", str(root), *args]
+    held = _hold_standard_descriptors()
+    try:
+        return subprocess.run(
+            command,
+            check=check,
+            capture_output=True,
+            input=input,
+            stdin=subprocess.DEVNULL if input is None else None,
+            close_fds=os.name != "posix",
+            timeout=GIT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitTimeout(
+            f"git {' '.join(args)} did not finish within {GIT_TIMEOUT}s in {root}"
+        ) from exc
+    finally:
+        for descriptor in held:
+            os.close(descriptor)
+
+
 def _resolve_commit(root: Path, ref: str) -> str:
     """Resolve one caller ref to its 40-character commit id.
 
@@ -363,14 +436,8 @@ def _resolve_commit(root: Path, ref: str) -> str:
 
     if not isinstance(ref, str) or not ref or ref.startswith("-"):
         raise ValueError(f"invalid Git ref: {ref!r}")
-    result = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    commit = result.stdout.strip()
+    result = run_git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", check=False)
+    commit = result.stdout.decode("utf-8", "replace").strip()
     if result.returncode != 0 or not GIT_COMMIT_PATTERN.fullmatch(commit):
         raise ValueError(f"Git ref {ref!r} does not name exactly one commit")
     return commit
@@ -379,14 +446,9 @@ def _resolve_commit(root: Path, ref: str) -> str:
 def _git_bytes(root: Path, commit: str, relative_path: str) -> bytes:
     if not GIT_COMMIT_PATTERN.fullmatch(commit):
         raise ValueError(f"expected a resolved commit id, got {commit!r}")
-    result = subprocess.run(
-        # "./" resolves the path from cwd=root, so this works whether root is
-        # the repository root or packages/desktop inside the OpenAdapt monorepo.
-        ["git", "show", f"{commit}:./{relative_path}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-    )
+    # "./" resolves the path from root, so this works whether root is the
+    # repository root or packages/desktop inside the OpenAdapt monorepo.
+    result = run_git(root, "show", f"{commit}:./{relative_path}", check=False)
     if result.returncode != 0:
         raise ValueError(f"Git commit {commit!r} does not contain {relative_path!r}")
     return result.stdout
@@ -436,17 +498,20 @@ def validate_git_version_transform(
         raise ValueError(f"native version must be X.Y.Z, got {version!r}")
     base_commit = _resolve_commit(root, base_ref)
     candidate_commit = _resolve_commit(root, candidate_ref)
-    changed = subprocess.run(
-        # --relative: paths from root, limited to it (packages/desktop in the monorepo).
-        ["git", "diff", "--relative", "--name-only", f"{base_commit}..{candidate_commit}", "--"],
-        cwd=root,
+    # --relative: paths from root, limited to it (packages/desktop in the monorepo).
+    changed = run_git(
+        root,
+        "diff",
+        "--relative",
+        "--name-only",
+        f"{base_commit}..{candidate_commit}",
+        "--",
         check=False,
-        capture_output=True,
-        text=True,
     )
     if changed.returncode != 0:
         raise ValueError("could not compare engine and native tag trees")
-    changed_paths = {line for line in changed.stdout.splitlines() if line}
+    listing = changed.stdout.decode("utf-8", "replace")
+    changed_paths = {line for line in listing.splitlines() if line}
     unexpected = changed_paths.difference(VERSION_TRANSFORM_PATHS)
     if unexpected:
         raise ValueError(

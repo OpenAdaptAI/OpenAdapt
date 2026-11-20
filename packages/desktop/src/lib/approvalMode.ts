@@ -101,7 +101,7 @@ const DEFAULT_NEXT: Record<RequirementResult["code"], string> = {
   E1: "Check this task and approve this version, then admit it in OpenAdapt Cloud.",
   E2: "Set up a record check that reads back every value from your records system.",
   E3: "Make sure every save has a record check and nothing deletes, sends, signs or orders.",
-  E4: "Run the readiness test on this computer, then a person at the clinic signs it off.",
+  E4: "Run the readiness test on this computer, then a person at your organization signs it off.",
   E5: "Run recent items with a person approving each one.",
   E6: "Your IT sets up this computer as a runner with a dedicated OpenAdapt user.",
   E7: "Record in OpenAdapt Cloud where the values in your lists come from.",
@@ -123,9 +123,9 @@ const NEXT: Record<string, string> = {
   irreversible_write:
     "The task deletes, sends, signs or orders something. That always needs a person.",
   production_write_authorization_missing:
-    "Record the clinic's written permission for test writes in the application.",
+    "Record your organization's written permission for test writes in the application.",
   runner_setup_not_current: "Your IT sets up this computer as a runner with a dedicated OpenAdapt user.",
-  privacy_contact_not_named: "Name the clinic's privacy contact in OpenAdapt Cloud.",
+  privacy_contact_not_named: "Name your organization's privacy contact in OpenAdapt Cloud.",
 };
 
 export function requirementTitle(code: RequirementResult["code"]): string {

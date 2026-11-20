@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -35,13 +34,7 @@ CHANGELOG_HEADER = re.compile(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", re.MULTILI
 
 
 def version_at(root: Path, ref: str) -> str:
-    text = subprocess.run(
-        ["git", "show", f"{ref}:./pyproject.toml"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+    text = prepare_release.run_git(root, "show", f"{ref}:./pyproject.toml").stdout.decode("utf-8")
     match = PYPROJECT_VERSION.search(text)
     if match is None:
         raise ValueError(f"could not read the version at {ref}")

@@ -23,9 +23,14 @@ from pathlib import Path
 from typing import IO, Any, Iterator, Mapping, Optional, Sequence
 
 from openadapt.quickstart.engine import BreakFacts, DemoStep, RunFacts
-from openadapt.quickstart.notices import Notices, collect_notices, plaintext_line
+from openadapt.quickstart.notices import (
+    Notices,
+    collect_notices,
+    key_line,
+    plaintext_line,
+)
 from openadapt.quickstart.scene import MOCKMED, Scene
-from openadapt.quickstart.seal_link import SealCard, read_card, seal_view_url
+from openadapt.quickstart.seal_link import SealCard, read_card
 from openadapt.quickstart.story import (
     REAL_SEALS_URL,
     NextSteps,
@@ -313,15 +318,13 @@ def seal_page_note(outcome: Outcome) -> str:
     return note
 
 
-def online_link(card: Optional[SealCard]) -> Optional[str]:
-    """The online Seal link, only when a deployed page reads its fragment."""
+def publish_run(outcome: Outcome) -> Optional[Path]:
+    """The run whose Seal the finale offers to publish: the first checked run."""
 
-    if card is None:
+    page = outcome.seal_pages.verified
+    if outcome.seal is None or page is None:
         return None
-    try:
-        return seal_view_url(card.receipt, card.seal)
-    except ValueError:
-        return None
+    return page.parent
 
 
 def next_step(steps: NextSteps) -> tuple[str, str, str]:
@@ -416,9 +419,12 @@ class _Base:
             self._notices = notices
             yield
 
-    def _plaintext(self, root: Path) -> Optional[str]:
+    def _plaintext(self, root: Path) -> list[str]:
+        """The finale's at-rest lines: an unencrypted folder, a new key."""
         paths = self._notices.paths if self._notices else []
-        return plaintext_line(paths, display_path(root))
+        created = self._notices.key_created if self._notices else None
+        lines = (plaintext_line(paths, display_path(root)), key_line(created))
+        return [line for line in lines if line]
 
     def expect_runs(self, inputs: Sequence[str]) -> None:
         self._expected = list(inputs)
@@ -563,6 +569,18 @@ class PlainView(_Base):
     def break_setup(self) -> None:
         self._say(f"      {self.scene.break_setup}")
 
+    def _ask(self, prompt: str) -> str:
+        self.stream.write(f"  {prompt}")
+        self.stream.flush()
+        return input()
+
+    def _publish(self, outcome: Outcome, steps: NextSteps) -> None:
+        run = publish_run(outcome)
+        if run is None:
+            return
+        if steps.offer_publish is not None:
+            steps.offer_publish(run, lambda line: self._say(f"  {line}"), self._ask)
+
     def confirm(self, prompt: str) -> None:
         self.stream.write(f"      {prompt} ")
         self.stream.flush()
@@ -613,10 +631,8 @@ class PlainView(_Base):
             if page is not None:
                 self._say(f"  Open it: {display_path(page)}")
                 self._say(f"    {seal_page_note(outcome)}")
-            link = online_link(card)
-            if link:
-                self._say(f"  Online: {link}")
             self._say(f"  Real Seals from OpenEMR runs: {REAL_SEALS_URL}")
+            self._publish(outcome, steps)
             self._say()
         if all_clear(outcome):
             title, command, other = next_step(steps)
@@ -629,8 +645,7 @@ class PlainView(_Base):
             self._say(f"  {path}")
         self._say(f"More next steps: {more_hint(steps)}")
         self._say(details_line(outcome))
-        notice = self._plaintext(outcome.root)
-        if notice:
+        for notice in self._plaintext(outcome.root):
             self._say(notice)
         if steps.shadow:
             self._say(steps.shadow)
@@ -1028,6 +1043,9 @@ class RichView(_Base):
             self.scene.break_setup,
         )
 
+    def _ask(self, prompt: str) -> str:
+        return self.console.input(f"[bold]{_escape(prompt)}[/]")
+
     def confirm(self, prompt: str) -> None:
         try:
             self.console.input(f"   [bold]{prompt}[/] [dim](Enter)[/] ")
@@ -1205,11 +1223,6 @@ class RichView(_Base):
                 f"[bold cyan]{self._link(page, str(display_path(page)))}[/]",
             )
             links.add_row("", f"[dim]{_escape(seal_page_note(outcome))}[/]")
-        link = online_link(card)
-        if link:
-            links.add_row(
-                "[bold]Online[/]", f"[cyan][link={link}]view your Seal[/link][/]"
-            )
         links.add_row(
             "[dim]Real Seals[/]",
             f"[cyan][link={REAL_SEALS_URL}]{REAL_SEALS_URL}[/link][/]",
@@ -1224,6 +1237,18 @@ class RichView(_Base):
         self.console.print()
         if outcome.seal is not None:
             self._seal(outcome, seal_card(outcome))
+            run = publish_run(outcome)
+            if run is not None and steps.offer_publish is not None:
+                spoken: list[bool] = []
+
+                def say(line: str) -> None:
+                    # A blank line before the offer, only if there is one.
+                    if not spoken:
+                        spoken.append(True)
+                        self.console.print()
+                    self.console.print(_escape(line), soft_wrap=True)
+
+                steps.offer_publish(run, say, self._ask)
             self.console.print()
         self.console.print(Rule(style="cyan"))
         if all_clear(outcome):
@@ -1255,8 +1280,7 @@ class RichView(_Base):
         )
         self.console.print()
         self.console.print(f"[dim]{_escape(details_line(outcome))}[/]")
-        notice = self._plaintext(outcome.root)
-        if notice:
+        for notice in self._plaintext(outcome.root):
             self.console.print(f"[dim]{_escape(notice)}[/]")
         if steps.shadow:
             self.console.print(f"[yellow]{_escape(steps.shadow)}[/]")

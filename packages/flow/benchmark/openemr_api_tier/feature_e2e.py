@@ -37,6 +37,7 @@ from typing import Any
 from benchmark.openemr_api_tier.common import (
     REFERRALS,
     load_demo,
+    owned_fixture_oracle,
     record_check,
     reset_and_seed,
     spec_for,
@@ -266,7 +267,6 @@ COLS = [
 def run_one(
     env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path
 ) -> dict[str, Any]:
-    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
@@ -275,7 +275,7 @@ def run_one(
     spec = spec_for(ref)
     out.mkdir(parents=True)
     before_ids = {r["id"] for r in sql_patients(f)}
-    oracle = OpenEMRPatientOracle(f.api_base_url, f.token_session("oracle"), spec)
+    oracle = owned_fixture_oracle(f, spec)
     res: dict[str, Any] = {
         "arm": arm,
         "ref": ref.key,
@@ -341,8 +341,9 @@ def run_one(
 
 
 def cmd_matrix(a: argparse.Namespace) -> None:
-    import openadapt_flow.vision.ocr  # noqa: F401
     from playwright.sync_api import sync_playwright
+
+    import openadapt_flow.vision.ocr  # noqa: F401
 
     ocr = sys.modules["openadapt_flow.vision.ocr"]
     out, bundle = Path(a.out), Path(a.bundle)

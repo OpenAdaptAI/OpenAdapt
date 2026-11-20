@@ -146,6 +146,6 @@ it("shows its evidence: the binding, the switch log and the requirements", () =>
   expect(screen.getByText(/Intact on this computer, 41 events. 36 items saved without a person./)).toBeTruthy();
   expect(screen.getByText("Met")).toBeTruthy();
   expect(screen.getByText("Not confirmed here")).toBeTruthy();
-  expect(screen.getByText(/A person at the clinic decides this/)).toBeTruthy();
+  expect(screen.getByText(/A person at your organization decides this/)).toBeTruthy();
   expect(screen.getByText(/OpenAdapt checks the record against the values it was given/)).toBeTruthy();
 });

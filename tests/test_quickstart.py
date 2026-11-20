@@ -863,9 +863,41 @@ def test_engine_plaintext_notices_collapse_to_one_line(root, monkeypatch):
         run_story(Noisy(root), view, next_steps=_steps, clock=_clock())
     assert err.getvalue() == "something else\n"
     assert (
-        "openadapt-quickstart is written unencrypted (synthetic data only)"
+        "The recording, program and run reports in openadapt-quickstart are "
+        "unencrypted (synthetic data only)" in stream.getvalue()
+    )
+
+
+def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
+    from openadapt_flow import at_rest
+
+    monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "home"))
+    err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", err)
+    stream = io.StringIO()
+    view = PlainView(stream)
+    with view.collect_notices():
+        # Created before the story starts, so workers find it.
+        assert at_rest.local_key_path().exists()
+        run_story(FakeEngine(root), view, next_steps=_steps, clock=_clock())
+    assert err.getvalue() == ""
+    assert (
+        f"Created a local encryption key at {at_rest.local_key_path()}"
         in stream.getvalue()
     )
+
+
+def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):
+    from openadapt_flow import at_rest
+
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "home"))
+    stream = io.StringIO()
+    view = PlainView(stream)
+    with view.collect_notices():
+        run_story(FakeEngine(root), view, next_steps=_steps, clock=_clock())
+    assert not at_rest.local_key_path().exists()
+    assert "encryption key" not in stream.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -1075,10 +1107,13 @@ def test_seal_verify_names_a_folder_with_no_sealed_run(tmp_path):
     os.environ.get("OPENADAPT_REAL_QUICKSTART") != "1",
     reason="set OPENADAPT_REAL_QUICKSTART=1 to drive a real browser (~30 s)",
 )
-def test_real_quickstart(tmp_path, monkeypatch):
+def test_real_quickstart(tmp_path, monkeypatch, capfd):
     from openadapt.quickstart.engine import FlowEngine
 
     monkeypatch.chdir(tmp_path)
+    # Flow's default: checkpoints encrypted under a new local key.
+    monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "at-rest"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     root = tmp_path / "openadapt-quickstart"
     stream = io.StringIO()
@@ -1104,6 +1139,14 @@ def test_real_quickstart(tmp_path, monkeypatch):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"
         assert report["params"]["note"] in output
+    checkpoints = root / "run-1" / "checkpoints"
+    assert list(checkpoints.glob("*.enc"))
+    assert not list(checkpoints.glob("*.json"))
+    assert "Created a local encryption key at" in output
+    # Neither the key notice nor a plaintext notice reached the terminal.
+    err = capfd.readouterr().err
+    assert "Created a local encryption key" not in err
+    assert "in plaintext at" not in err
 
 
 def test_the_seal_pages_are_run_ones_and_the_stopped_runs(tmp_path, monkeypatch):
@@ -1166,41 +1209,40 @@ def test_sealing_the_stopped_run_signs_its_report(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Review fixes: the at-rest opt-out, recorded compile time, the Seal page
+# Review fixes: encryption at rest, recorded compile time, the Seal page
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("environ", "applied"),
+    "environ",
     [
-        ({}, True),
-        ({"OPENADAPT_BUNDLE_KEY": "k"}, False),
-        ({"OPENADAPT_RECORDING_KEY": "k"}, False),
-        ({"OPENADAPT_FLOW_AT_REST": "strict"}, False),
-        ({"OPENADAPT_FLOW_AT_REST": " Strict "}, False),
-        ({"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"}, False),
+        {},
+        {"OPENADAPT_BUNDLE_KEY": "k"},
+        {"OPENADAPT_FLOW_AT_REST": "strict"},
+        {"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"},
     ],
 )
-def test_the_plaintext_opt_out_applies_only_when_nothing_is_configured(
-    monkeypatch, environ, applied
-):
-    for name in (
+def test_the_quickstart_keeps_flows_encryption_at_rest(monkeypatch, environ):
+    """Checkpoints are encrypted by Flow's default; the quickstart sets no opt-out."""
+    names = (
         "OPENADAPT_BUNDLE_KEY",
         "OPENADAPT_RECORDING_KEY",
         "OPENADAPT_FLOW_AT_REST",
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST",
-    ):
+        "OPENADAPT_FLOW_SCRUB",
+    )
+    for name in names:
         monkeypatch.delenv(name, raising=False)
     for name, value in environ.items():
         monkeypatch.setenv(name, value)
-    before = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    before = {name: os.environ.get(name) for name in names}
     with cli._synthetic_scrub_off():
-        inside = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
-    assert (inside == "synthetic quickstart data") is applied
-    if not applied:
-        assert inside == before
-    # Restored afterwards: it never outlives the quickstart.
-    assert os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST") == before
+        inside = {name: os.environ.get(name) for name in names}
+    assert inside.pop("OPENADAPT_FLOW_SCRUB") == "off"
+    before_scrub = before.pop("OPENADAPT_FLOW_SCRUB")
+    assert inside == before
+    # Restored afterwards: the scrub-off never outlives the quickstart.
+    assert os.environ.get("OPENADAPT_FLOW_SCRUB") == before_scrub
 
 
 def test_a_recorded_demonstration_times_the_compile_alone():

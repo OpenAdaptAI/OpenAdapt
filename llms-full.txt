@@ -1,4 +1,4 @@
-# OpenAdapt: review brief for openadapt-flow 3.1.0
+# OpenAdapt: review brief for openadapt-flow 3.3.0
 
 This file describes the current OpenAdapt release. It is generated from the repository (scripts/build_llms_full.py) and refreshed with every release. Pages, posts and repositories that describe earlier versions are outdated; where they disagree with this file, this file is current.
 
@@ -707,7 +707,11 @@ improvising or retrying when something is off.
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Read a paged REST or FHIR record list whole (FHIR `next` links and `total`, REST `records_next_path`), or not at all: a page elsewhere, a failed page, a redirect or a count that doesn't match the total is unreadable | Released ([#1538](https://github.com/OpenAdaptAI/OpenAdapt/pull/1538)) | Synthetic (local FHIR and REST servers) | `effects: kind: rest` `records_next_path`, `kind: fhir`; [EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md) |
+| Read a REST list whose last page leaves the next link out (`records_next_absent_is_last` with `records_next_path`): the page is the whole read only when the link's parent object is there without it; a page with a next link still needs snapshot semantics | On main | Real app (local OpenEMR 8.0.0.3, synthetic patients: one 200-row page read complete; a 2-row page with a next link refused) and unit tests | `effects: kind: rest` `records_next_absent_is_last`; `benchmark/openemr_local/verify.yaml` |
+| Check screen text read from the clock (a date picker's month, a pre-filled date) against the run's clock instead of the recorded literal; another date still fails (a whole OCR line, field for field) | On main | Real app (the OpenEMR referral program, recorded in October, qualified in November) and a headless browser test that records today and replays next month and next January | `Postcondition.text_clock`, `openadapt_flow/clock_text.py`, `python -m openadapt_flow.compiler.clock_pass` |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
+| Fewer browser calls per screen step: one call per frame boundary in every DOM proof | On main | Real app (local OpenEMR 8.0.0.3, synthetic referrals): median 23.2 s to 20.1 s per referral, N = 14 each, interleaved, same checks at every step; about 3,970 to 2,390 Playwright calls per run | [screen_path_speed](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/screen_path_speed/README.md) |
+| Derive the at-rest key once per checkpoint store instead of once per checkpoint, with the container format unchanged | On main | Real app (local OpenEMR 8.0.0.3, synthetic referrals, encrypted durable run to the save): 2,667 to 2 scrypt runs, about 520 s to 14 s; synthetic (MockMed tutorial): 131 to 1, 40.8 s to 14.7 s median (N = 10 each) | [screen_path_speed](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/screen_path_speed/README.md#mockmed-tutorial-the-at-rest-key-fix) |
 | Record where each step's time goes in every run report | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Real app and synthetic | `timings` in `report.json` |
 
 ## When the app changes
@@ -779,6 +783,7 @@ improvising or retrying when something is off.
 | Anchor an offline Seal in the public Sigstore Rekor transparency log (opt-in; sends one digest and the public key), and verify the anchor offline from the stored inclusion proof | Released ([#1394](https://github.com/OpenAdaptAI/OpenAdapt/pull/1394)) | Unit tests against a simulated Rekor log; real public Rekor entries and Sigstore TSA tokens for the landing demo's referral runs, verified offline in tests; Ed25519ph matches the RFC 8032 test vector | `openadapt-flow local-seal anchor`, `local-seal verify --require-anchor`; [OFFLINE_SEALS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/OFFLINE_SEALS.md#optional-anchor-a-seal-in-a-public-transparency-log) |
 | Signed write receipts: a verifier verdict with its scope (stores read, window, strength) and a plain not-checked list, signed as a COSE_Sign1 (IETF SCITT shape) and logged in a local Merkle transparency log; checked offline against pinned keys; a receipt that claims more than its scope is neither issued nor accepted; optional Rekor anchor | On main | Unit tests on the real verifier (SQLite) and shadow proxy; COSE checked through python-cwt | `openadapt-flow receipt verify`, `receipt keys export`, `receipt anchor`; `verify_write(..., write_receipt=True)`; `shadow --receipts`; [WRITE_RECEIPTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/WRITE_RECEIPTS.md) |
 | See a run's Seal offline: one HTML page that checks the Ed25519 signature over the run's exact report in the browser, draws the Seal from it, replays the run over its program map, and lets the reader tamper with a copy; no network requests; the quickstart ends on the person's own | On main ([#1566](https://github.com/OpenAdaptAI/OpenAdapt/pull/1566)) | A real quickstart run's Seal opened from `file://` in Chromium (valid, tampered, no requests); RFC 8032 test vectors; a published OpenEMR Seal's Rekor entry and timestamp | `openadapt seal view RUN_DIR`; `openadapt quickstart`; [`@openadapt/seal-view`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/seal-view/README.md) |
+| Publish a run's Seal online: a signed public card (counts, outcomes, each step's check, digests; the program name only with `--names` or for the tutorial; never inputs, intents, screenshots, URLs or halt text) shown in full and uploaded only after a yes, with a delete token; check a hosted link here | On main ([#2266](https://github.com/OpenAdaptAI/OpenAdapt/pull/2266)) | Unit tests with synthetic reports: planted values absent from the file, 64-step card within 4,096 bytes, stopped runs, mock uploads with real sockets blocked; 29 golden vectors shared with Cloud's verifier | `openadapt-flow local-seal public`; `openadapt seal publish`, `unpublish`, `seal verify <link>`; [OFFLINE_SEALS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/OFFLINE_SEALS.md#public-seals-a-summary-you-can-post) |
 | Run authorizations signed with the authorizer's GitHub SSH key (`ssh-keygen -Y sign`, after a summary of what it allows), naming the signing key and bound to the bundle digest, items, profile and Seal keys, and referenced by each Seal; the identity checked against github.com (`--live`) or pinned allowed signers; a pseudonymous operator profile counted from anchored Seals only | Released ([#1401](https://github.com/OpenAdaptAI/OpenAdapt/pull/1401)) | Unit tests with synthetic data; signatures checked against OpenSSH's `ssh-keygen` both ways | `openadapt-flow local-seal authorize`, `local-seal run --authorization`, `local-seal profile`; [OFFLINE_SEALS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/OFFLINE_SEALS.md#run-authorizations-who-authorized-the-runs) |
 | Run reports redacted before they are sealed: session and CSRF tokens, OAuth grants and credential headers become `<redacted>` and are listed in `redactions`; a Seal refuses a report that still holds one; per-app policy | Released ([#1407](https://github.com/OpenAdaptAI/OpenAdapt/pull/1407)) | Unit tests with generated tokens; 7,773 local reports scanned, only OpenEMR `token_main` matched | `openadapt-flow redact-report`, `local-seal run --allow-unredacted`; [REPORT_REDACTION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REPORT_REDACTION.md) |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ON_PREM.md) |
@@ -870,7 +875,7 @@ A test fails when a command has no file or this list is out of date.
 
 - `attach-seal`
 - `countersign`
-- `local-seal`: Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles.
+- `local-seal`: Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles, public cards.
 - `receipt`: Signed write receipts (COSE, SCITT shape): check one offline against pinned keys and print what it did not check; export the public keys; anchor in Rekor.
 - `redact-report`: Strip session tokens from an existing run's report so it can be sealed again; the original stays local
 - `seal`
@@ -2361,64 +2366,52 @@ automation into an independently certified transaction system.
 
 ---
 
-<!-- Changelog: openadapt-flow 3.1.0 -->
+<!-- Changelog: openadapt-flow 3.3.0 -->
 
-## What changed in openadapt-flow 3.1.0
+## What changed in openadapt-flow 3.3.0
 
-### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
+### Fixes
 
-- The outbound scrubber no longer rewrites the generated files of a wrap
-  program. `admission.json`, `openadapt-wrap-publish.json`,
-  `readback/verify.yaml`, `sections.json`, `templates/layout_fingerprint.json`
-  and `jit_draft.json` declare each field as content (always scrubbed) or
-  structural (kept only with its declared machine shape); undeclared fields
-  are scrubbed. `workflow.json` keeps identity signal slots, the punctuation
-  policy and the compiler's identifier-crop reasons. Before, the NER scrub
-  turned `v1` and `step_002` into placeholders, and every wrap publish was
-  refused with `SANITIZATION_CHANGED_PROGRAM`.
-- Strict lint for hosted validation now fails on `warn` and `error` findings,
-  as `openadapt-flow lint --strict` does. An `info` finding such as
-  `missing_identifier_crop` on a step whose structured identity owns the check
-  no longer refuses every web program with `VALIDATION_FAILED`.
-
-### A hosted Standard run of an admitted program rests on its admission
-
-- `openadapt-flow run --managed-dispatch-file` under the Standard profile now
-  accepts a dispatch without a qualification admission for an admitted
-  agent-compiled program (`openadapt wrap`, `jit`). Its bundle must carry an
-  `admission.json` that verifies against the trusted admission key directory,
-  plus a valid `readback/verify.yaml`. The authorization's `approval_source`
-  must name that exact admission (`hosted:program-admission:<sha256>`). The
-  run reads back through the bundled `verify.yaml`. Regulated is refused.
-  See `openadapt_flow/jit/hosted_authority.py`.
-- `openadapt wrap publish` writes the program's value-free Standard run shape
-  into `openadapt-wrap-publish.json` (`run_authorization`). The new refusal
-  `RUN_SHAPE_UNAVAILABLE` covers an unknown policy.
-- `openadapt wrap publish` now finds the confirmed read-back checks where
-  the first run writes them (`compiled/verify.yaml`). Before, every real
-  task was refused with `NO_READ_BACK`. The person-signed teach
-  authorization stays local and is no longer staged for upload; the
-  sanitizer refused its `.sig` file.
-
-### Wrap publish: review fixes for hosted admitted-program runs
-
-- The bundled `readback/verify.yaml` replaces the deployment's effects
-  verifier only after the run's authority is decided: a managed dispatch
-  that rests on the program's own admission, with no production authority
-  file and no qualification admission. Before, any managed run of a bundle
-  with an `admission.json` and a `verify.yaml` used the bundled file, signed
-  or not.
-- The uploaded admission binds the SHA-256 of the bundled `verify.yaml`
-  (`hosted.readback_sha256`). The runner refuses a different file.
-- Person and record identifiers no longer reach the cloud. In the uploaded
-  `admission.json` and `verify.yaml`, a principal stays in plaintext only as
-  a `ci:`, `agent:` or `service:` handle or a key fingerprint. Anything else
-  becomes `hmac:<hex>`, keyed with a per-install key in
-  `<key_dir>/keys/principal-hmac.key`. The sanitizer replaces any other
-  principal with `<PRINCIPAL>`.
-- A run receipt, and its signed production projection, carry
-  `authority_basis: customer-attested-program-admission` when the run rested
-  on a program admission. Other receipts are unchanged.
-- Hosted strict lint keeps `missing_identifier_crop` blocking on an RDP or
-  Citrix target, where the crop is the only pixel identity evidence.
-- Removed the unused `shape_matches_authorization`.
+- Screen text read from the clock is checked against the run's clock. A
+  text check whose dates all equal the recording date, at the precision the
+  text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
+  "Tuesday, Oct 20" header), compiles to a clock template
+  (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
+  renders it from its own clock and checks that date: one confidently read
+  OCR line must carry exactly its fields (runs of letters and digits, so
+  "11/3/2026" never matches "1/13/2026" or "Nov 03, 1990"), never the fuzzy
+  match or the DOM's substring proof, so "October 2025" or another month
+  still fails. Around midnight the local date and the UTC date are both the
+  run's clock, a one-day window. Before,
+  the certified OpenEMR referral program checked the literal
+  "October-2026-" and halted every referral from 1 November. OCR-joined
+  month dates ("October-2026-", "Oct/2026") now classify as dates too.
+  `python -m openadapt_flow.compiler.clock_pass BUNDLE OUT --recorded-on
+  DATE` applies the same rule to a bundle compiled before this; the result
+  must be qualified again.
+- A REST read can declare that its endpoint leaves the next link out of a
+  still-present parent object on the last page
+  (`records_next_absent_is_last: true`, with `records_next_path`). A body
+  without that parent object, or a page that has a next link and no
+  snapshot semantics, stays indeterminate. The OpenEMR recipes use it with
+  `_limit=200` (OpenEMR's page cap), so their read-back is complete again
+  since #2041 instead of "REST read completeness was not established".
+- The first-local delivery fence (#2209) counts the qualification
+  project's operator-confirmed risk decisions in a qualification case bound
+  to the bundle's own project, as the outcome classifier already did. Before,
+  a campaign could not qualify a program whose write-shaped but reversible
+  step the operator had classified. A certified run now checks the
+  operator's decisions against the policy it was admitted under; without
+  that digest no certification reproduced, so the OpenEMR quickstart's
+  certified runs stopped at "Create New Patient" too.
+- `qualify --certify` with business rules saves the certified bundle while
+  the rule trials' copy still exists. A save moves a loaded workflow's
+  verified source to where it saved (#1993), so the final save found the
+  removed copy's assets missing and every such campaign failed after its
+  rule trials passed.
+- The certified OpenEMR referral program behind `openadapt quickstart --app
+  openemr` was qualified again with its date-picker check on the run's
+  clock (content digest `10e45945…`; evidence in
+  `benchmark/scoreboard/raw/openemr_referral/requalified/2026-11-19/`), and
+  a first OpenEMR quickstart on a new machine creates its state folder
+  instead of stopping on the missing lock file.

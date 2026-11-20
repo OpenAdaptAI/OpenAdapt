@@ -1,0 +1,43 @@
+{
+  "capabilities_used": [
+    "structure"
+  ],
+  "pixels_only": {
+    "cases": [
+      "representative",
+      "fault-ambiguity",
+      "fault-wrong-identity",
+      "fault-stale-identity",
+      "fault-weak-effect",
+      "fault-missing-effect"
+    ],
+    "failures": [
+      "representative trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "representative trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "representative trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-ambiguity trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-ambiguity trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-ambiguity trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-wrong-identity trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-wrong-identity trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-wrong-identity trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-stale-identity trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-stale-identity trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-stale-identity trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-weak-effect trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-weak-effect trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-weak-effect trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-missing-effect trial 1: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-missing-effect trial 2: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path",
+      "fault-missing-effect trial 3: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"
+    ],
+    "role": "informational",
+    "trials_passed": 0,
+    "trials_run": 18
+  },
+  "pixels_only_pass_rate": 0.0,
+  "schema_version": "openadapt.qualified-lookup/v1",
+  "structure_offered": true,
+  "surface": "local",
+  "target_kind": "web"
+}
