@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Literal, Optional, Sequence, TypeVar
 
 from openadapt_flow.backends.rdp_backend import Framebuffer
+from openadapt_flow.private_file import open_binary
 
 _SCALES = (100, 140, 180)
 _DISPLAY_LOCK = threading.Lock()
@@ -269,7 +270,9 @@ def _claim_display() -> int:
             if n in _CLAIMED or not _display_free(n):
                 continue
             try:
-                fd = os.open(_marker(n), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                fd = open_binary(
+                    _marker(n), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+                )
             except FileExistsError:
                 continue
             os.write(fd, str(os.getpid()).encode())

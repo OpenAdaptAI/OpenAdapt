@@ -38,6 +38,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import BaseModel, ConfigDict
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.durable.approval import (
     StateDiverged,
     approval_pause_digest,
@@ -454,7 +455,7 @@ class DurableAuthority:
             os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
         )
         try:
-            descriptor = os.open(self.db_path.parent, flags)
+            descriptor = open_binary(self.db_path.parent, flags)
         except OSError as exc:
             raise DurableAuthorityBusy(
                 "the external durable authority directory is unavailable"
@@ -487,7 +488,7 @@ class DurableAuthority:
         name = f".delivery-fence-{self.path_key}-{authority_revision}"
         flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 name,
                 flags,
                 0o600,
@@ -674,7 +675,7 @@ class DurableAuthority:
             # later, so a second durable run starting at the same moment (two
             # workers, two processes) saw a world-readable file and refused.
             try:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self.db_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
                     0o600,
@@ -998,7 +999,7 @@ class DurableAuthority:
         key_path = self.db_path.with_name(self.db_path.name + ".journal-key")
         descriptor: Optional[int] = None
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 key_path,
                 os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             )
@@ -1009,7 +1010,7 @@ class DurableAuthority:
                 ) from None
             key = secrets.token_bytes(32)
             try:
-                descriptor = os.open(
+                descriptor = open_binary(
                     key_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                     0o600,
@@ -1021,7 +1022,7 @@ class DurableAuthority:
                 handle.flush()
                 os.fsync(handle.fileno())
             try:
-                directory = os.open(key_path.parent, os.O_RDONLY)
+                directory = open_binary(key_path.parent, os.O_RDONLY)
             except OSError:
                 directory = -1
             if directory >= 0:
@@ -1031,7 +1032,7 @@ class DurableAuthority:
                     pass
                 finally:
                     os.close(directory)
-            descriptor = os.open(
+            descriptor = open_binary(
                 key_path,
                 os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             )
