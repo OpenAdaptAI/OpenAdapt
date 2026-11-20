@@ -134,8 +134,16 @@ def test_install_refuses_a_venv_interpreter() -> None:
 def test_children_inherit_the_protected_acl_and_only_logs_get_write_access() -> None:
     config = Path("C:/cfg")
     commands = ws.acl_commands(config)
-    assert commands[0] == ["icacls", str(config / "*"), "/reset", "/T", "/C", "/Q"]
-    assert commands[1] == [
+    assert commands[0] == [
+        "icacls",
+        str(config / "*"),
+        "/setowner",
+        "*S-1-5-32-544",
+        "/T",
+        "/Q",
+    ]
+    assert commands[1] == ["icacls", str(config / "*"), "/reset", "/T", "/C", "/Q"]
+    assert commands[2] == [
         "icacls",
         str(config / "logs"),
         "/grant",

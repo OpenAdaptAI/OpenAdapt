@@ -32,6 +32,7 @@ import argparse
 import logging
 import logging.handlers
 import os
+import stat
 import subprocess
 import sys
 import threading
@@ -308,13 +309,57 @@ def service_command_line(python: str, config_dir: Path) -> str:
     return f'"{python}" -m {SERVICE_MODULE} {HOST_FLAG} --config-dir "{config_dir}"'
 
 
+def _config_paths(config_dir: Path) -> list[Path]:
+    """Enumerate the owned tree without following links or hiding read errors."""
+    pending = [config_dir]
+    paths = []
+    while pending:
+        path = pending.pop()
+        info = path.lstat()
+        if stat.S_ISLNK(info.st_mode) or (
+            getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            raise RuntimeError("connector config contains a link or reparse point")
+        paths.append(path)
+        if stat.S_ISDIR(info.st_mode):
+            with os.scandir(path) as entries:
+                pending.extend(Path(entry.path) for entry in entries)
+        elif not stat.S_ISREG(info.st_mode):
+            raise RuntimeError("connector config contains a non-file object")
+    return paths
+
+
+def _require_config_owner(path: Path) -> None:
+    import win32security
+
+    descriptor = win32security.GetNamedSecurityInfo(
+        str(path),
+        win32security.SE_FILE_OBJECT,
+        win32security.OWNER_SECURITY_INFORMATION,
+    )
+    owner = descriptor.GetSecurityDescriptorOwner()
+    if (
+        owner is None
+        or win32security.ConvertSidToStringSid(owner) != _SID_ADMINISTRATORS[1:]
+    ):
+        raise RuntimeError("connector config ownership was not established")
+
+
+def verify_config_ownership(config_dir: Path) -> None:
+    """Refuse success if any existing config object retains another owner."""
+    for path in _config_paths(config_dir):
+        _require_config_owner(path)
+
+
 def protect_config_directory(config_dir: Path) -> None:  # pragma: no cover - Windows CI
-    """Replace the DACL, including any pre-existing explicit broad grants.
+    """Replace the owner and DACL, including pre-existing explicit broad grants.
 
     ``icacls /grant:r`` replaces entries only for the named principals; it
     leaves other explicit grants behind. Build the complete protected DACL
-    before attaching it, so no permissive reset is exposed in between.
+    before attaching it, so no permissive reset is exposed in between. An
+    owner has implicit WRITE_DAC, so a protected DACL alone is insufficient.
     """
+    _config_paths(config_dir)
     import ntsecuritycon
     import win32con
     import win32security
@@ -322,13 +367,14 @@ def protect_config_directory(config_dir: Path) -> None:  # pragma: no cover - Wi
     acl = win32security.ACL()
     inherited = win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE
     service_sid = win32security.LookupAccountName(None, SERVICE_ACCOUNT)[0]
+    owner_sid = win32security.ConvertStringSidToSid(_SID_ADMINISTRATORS[1:])
     entries = (
         (
             win32security.ConvertStringSidToSid(_SID_SYSTEM[1:]),
             ntsecuritycon.FILE_ALL_ACCESS,
         ),
         (
-            win32security.ConvertStringSidToSid(_SID_ADMINISTRATORS[1:]),
+            owner_sid,
             ntsecuritycon.FILE_ALL_ACCESS,
         ),
         (
@@ -341,22 +387,26 @@ def protect_config_directory(config_dir: Path) -> None:  # pragma: no cover - Wi
     win32security.SetNamedSecurityInfo(
         str(config_dir),
         win32security.SE_FILE_OBJECT,
-        win32security.DACL_SECURITY_INFORMATION
+        win32security.OWNER_SECURITY_INFORMATION
+        | win32security.DACL_SECURITY_INFORMATION
         | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
-        None,
+        owner_sid,
         None,
         acl,
         None,
     )
+    _require_config_owner(config_dir)
 
 
 def acl_commands(config_dir: Path) -> list[list[str]]:
     """Make existing children inherit the exact directory ACL, then allow logs.
 
-    The parent DACL has already been replaced by protect_config_directory.
+    The parent owner and DACL were replaced by protect_config_directory.
+    Resetting child ACLs leaves their owners unchanged, so replace those too.
     The service account gets read on connector.toml and modify on logs only.
     """
     return [
+        ["icacls", str(config_dir / "*"), "/setowner", _SID_ADMINISTRATORS, "/T", "/Q"],
         ["icacls", str(config_dir / "*"), "/reset", "/T", "/C", "/Q"],
         ["icacls", str(log_dir(config_dir)), "/grant", f"{SERVICE_ACCOUNT}:(OI)(CI)M"],
     ]
@@ -484,7 +534,8 @@ def install_service(config_dir: Path) -> None:  # pragma: no cover - Windows
             SERVICE_DISPLAY_NAME,
             win32service.SERVICE_ALL_ACCESS,
             win32service.SERVICE_WIN32_OWN_PROCESS,
-            win32service.SERVICE_AUTO_START,
+            # A failed ownership/ACL setup must not leave an auto-start service.
+            win32service.SERVICE_DISABLED,
             win32service.SERVICE_ERROR_NORMAL,
             service_command_line(python, config_dir),
             None,
@@ -497,21 +548,36 @@ def install_service(config_dir: Path) -> None:  # pragma: no cover - Windows
             win32service.ChangeServiceConfig2(
                 handle, win32service.SERVICE_CONFIG_DESCRIPTION, SERVICE_DESCRIPTION
             )
+            for command in recovery_commands():
+                _run(command)
+            # The service SID exists now. Establish the whole config boundary
+            # while this newly created service is still disabled.
+            protect_config_directory(config_dir)
+            for command in acl_commands(config_dir):
+                _run(command)
+            verify_config_ownership(config_dir)
+            # Delayed-start metadata may be set while disabled; it takes effect
+            # only once the final transition enables automatic startup.
             win32service.ChangeServiceConfig2(
                 handle, win32service.SERVICE_CONFIG_DELAYED_AUTO_START_INFO, True
+            )
+            win32service.ChangeServiceConfig(
+                handle,
+                win32service.SERVICE_NO_CHANGE,
+                win32service.SERVICE_AUTO_START,
+                win32service.SERVICE_NO_CHANGE,
+                None,
+                None,
+                0,
+                None,
+                None,
+                None,
+                None,
             )
         finally:
             win32service.CloseServiceHandle(handle)
     finally:
         win32service.CloseServiceHandle(scm)
-
-    for command in recovery_commands():
-        _run(command)
-    # The service SID exists now. Replace the whole parent DACL rather than
-    # leaving any explicit Users/Everyone entries from an earlier install.
-    protect_config_directory(config_dir)
-    for command in acl_commands(config_dir):
-        _run(command)
 
 
 def _wait_for(state: int, timeout_s: float) -> bool:  # pragma: no cover - Windows
