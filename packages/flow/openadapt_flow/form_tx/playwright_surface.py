@@ -1493,11 +1493,17 @@ class PlaywrightFormSurface:
             inflight_mutations=self.inflight_mutations,
         )
 
-    def _resolve_live_locator(self, dom_selector: str) -> Any:
+    def _assert_document_context(self, expected: str) -> None:
+        if self._document_context_id() != expected:
+            raise SurfaceContextError("Form document changed during bound actuation")
+
+    @contextlib.contextmanager
+    def _resolve_live_locator(self, dom_selector: str) -> Iterator[tuple[Any, str]]:
         self._refresh_target()
+        expected = self._document_context_id()
         if (
             self._last_snapshot_context_id is not None
-            and self._document_context_id() != self._last_snapshot_context_id
+            and expected != self._last_snapshot_context_id
         ):
             raise SurfaceContextError(
                 "Form document changed; take a fresh snapshot before acting"
@@ -1510,12 +1516,6 @@ class PlaywrightFormSurface:
             raise MissingAnchorError(
                 f"Selector {dom_selector!r} matched 0 elements in live DOM"
             )
-        if total == 1:
-            if not loc.is_visible():
-                raise MissingAnchorError(
-                    f"Selector {dom_selector!r} matched 1 element, but it is not visible"
-                )
-            return loc
         visible_indices = [i for i in range(total) if loc.nth(i).is_visible()]
         if not visible_indices:
             raise MissingAnchorError(
@@ -1525,7 +1525,34 @@ class PlaywrightFormSurface:
             raise AmbiguousAnchorError(
                 f"Selector {dom_selector!r} matched {len(visible_indices)} visible elements"
             )
-        return loc.nth(visible_indices[0])
+        # A Locator intentionally re-resolves after navigation. Writes must instead
+        # stay on the observed element: its handle dies with its document. The
+        # handle is disposed after this action, including timeout/detach paths.
+        handle = loc.nth(visible_indices[0]).element_handle(
+            timeout=self._ui_profile.max_settle_ms
+        )
+        if handle is None:
+            raise MissingAnchorError("Observed form element disappeared before binding")
+        try:
+            for state in ("visible", "stable", "enabled"):
+                handle.wait_for_element_state(
+                    state, timeout=self._ui_profile.max_settle_ms
+                )
+            self._assert_document_context(expected)
+            yield handle, expected
+        except Exception as exc:
+            try:
+                changed = self._document_context_id() != expected
+            except Exception:
+                changed = True
+            if changed:
+                raise SurfaceContextError(
+                    "Form document changed during bound actuation"
+                ) from exc
+            raise
+        finally:
+            with contextlib.suppress(Exception):
+                handle.dispose()
 
     def _resolve_navigation_url(self, url_or_path: str) -> str:
         parsed = urlsplit(url_or_path)
@@ -1553,107 +1580,115 @@ class PlaywrightFormSurface:
 
     def fill_text(self, dom_selector: str, value: str) -> None:
         """Focus, clear, enter ``value`` into ``dom_selector``, blur, and wait for settle."""
-        loc = self._resolve_live_locator(dom_selector)
-        loc.click(timeout=self._ui_profile.max_settle_ms)
-        loc.fill(str(value), timeout=self._ui_profile.max_settle_ms)
-        try:
-            loc.blur(timeout=500)
-        except Exception:
-            # An onchange handler may have already detached/re-rendered the input.
-            pass
-        self.wait_for_quiescence()
+        with self._resolve_live_locator(dom_selector) as (loc, context_id):
+            loc.click(timeout=self._ui_profile.max_settle_ms)
+            self._assert_document_context(context_id)
+            loc.fill(str(value), timeout=self._ui_profile.max_settle_ms)
+            try:
+                loc.evaluate("(el) => el.blur()")
+            except Exception:
+                # An onchange handler may have already detached/re-rendered the input.
+                pass
+            self.wait_for_quiescence()
 
     def select_native_option(self, dom_selector: str, option_value: str) -> None:
         """Select ``option_value`` in a native ``<select>`` and wait for settle."""
-        loc = self._resolve_live_locator(dom_selector)
-        has_exact_value = bool(
-            loc.evaluate(
-                "(el, val) => el.tagName === 'SELECT' && Array.from(el.options).some((o) => o.value === val)",
-                option_value,
-            )
-        )
-        if has_exact_value:
-            loc.select_option(
-                value=option_value, timeout=self._ui_profile.max_settle_ms
-            )
-        else:
-            has_label = bool(
+        with self._resolve_live_locator(dom_selector) as (loc, context_id):
+            has_exact_value = bool(
                 loc.evaluate(
-                    "(el, val) => el.tagName === 'SELECT' && Array.from(el.options).some((o) => (o.textContent || '').replace(/\\s+/g, ' ').trim() === val)",
-                    collapse_whitespace(option_value),
+                    "(el, val) => el.tagName === 'SELECT' && Array.from(el.options).some((o) => o.value === val)",
+                    option_value,
                 )
             )
-            if not has_label:
-                raise MissingAnchorError(
-                    f"Option {option_value!r} not found in <select> {dom_selector!r}"
+            if has_exact_value:
+                self._assert_document_context(context_id)
+                loc.select_option(
+                    value=option_value, timeout=self._ui_profile.max_settle_ms
                 )
-            loc.select_option(
-                label=collapse_whitespace(option_value),
-                timeout=self._ui_profile.max_settle_ms,
-            )
-        try:
-            loc.blur(timeout=500)
-        except Exception:
-            pass
-        self.wait_for_quiescence()
+            else:
+                has_label = bool(
+                    loc.evaluate(
+                        "(el, val) => el.tagName === 'SELECT' && Array.from(el.options).some((o) => (o.textContent || '').replace(/\\s+/g, ' ').trim() === val)",
+                        collapse_whitespace(option_value),
+                    )
+                )
+                if not has_label:
+                    raise MissingAnchorError(
+                        f"Option {option_value!r} not found in <select> {dom_selector!r}"
+                    )
+                self._assert_document_context(context_id)
+                loc.select_option(
+                    label=collapse_whitespace(option_value),
+                    timeout=self._ui_profile.max_settle_ms,
+                )
+            try:
+                loc.evaluate("(el) => el.blur()")
+            except Exception:
+                pass
+            self.wait_for_quiescence()
 
     def set_checkbox_or_radio(self, dom_selector: str, checked: bool = True) -> None:
         """Set a checkbox or radio control and wait for settle."""
-        loc = self._resolve_live_locator(dom_selector)
-        meta = loc.evaluate(
-            "(el) => ({ tag: el.tagName.toLowerCase(), type: (el.getAttribute('type') || '').toLowerCase(), role: (el.getAttribute('role') || '').toLowerCase(), ariaChecked: el.getAttribute('aria-checked'), propChecked: Boolean(el.checked) })"
-        )
-        tag = meta.get("tag")
-        inp_type = meta.get("type")
-        role = meta.get("role")
-
-        if tag == "input" and inp_type == "radio":
-            if not checked:
-                if meta.get("propChecked"):
-                    raise ValueError(
-                        f"Cannot uncheck native radio {dom_selector!r} directly"
-                    )
-            else:
-                loc.check(timeout=self._ui_profile.max_settle_ms)
-        elif tag == "input" and inp_type == "checkbox":
-            if checked:
-                loc.check(timeout=self._ui_profile.max_settle_ms)
-            else:
-                loc.uncheck(timeout=self._ui_profile.max_settle_ms)
-        elif role in ("checkbox", "radio"):
-            currently_checked = meta.get("ariaChecked") == "true"
-            if currently_checked != checked:
-                loc.click(timeout=self._ui_profile.max_settle_ms)
-        else:
-            raise ValueError(
-                f"Element {dom_selector!r} is not a checkbox or radio control"
+        with self._resolve_live_locator(dom_selector) as (loc, context_id):
+            meta = loc.evaluate(
+                "(el) => ({ tag: el.tagName.toLowerCase(), type: (el.getAttribute('type') || '').toLowerCase(), role: (el.getAttribute('role') || '').toLowerCase(), ariaChecked: el.getAttribute('aria-checked'), propChecked: Boolean(el.checked) })"
             )
+            tag = meta.get("tag")
+            inp_type = meta.get("type")
+            role = meta.get("role")
 
-        try:
-            loc.blur(timeout=500)
-        except Exception:
-            pass
-        self.wait_for_quiescence()
+            self._assert_document_context(context_id)
+            if tag == "input" and inp_type == "radio":
+                if not checked:
+                    if meta.get("propChecked"):
+                        raise ValueError(
+                            f"Cannot uncheck native radio {dom_selector!r} directly"
+                        )
+                else:
+                    loc.check(timeout=self._ui_profile.max_settle_ms)
+            elif tag == "input" and inp_type == "checkbox":
+                if checked:
+                    loc.check(timeout=self._ui_profile.max_settle_ms)
+                else:
+                    loc.uncheck(timeout=self._ui_profile.max_settle_ms)
+            elif role in ("checkbox", "radio"):
+                currently_checked = meta.get("ariaChecked") == "true"
+                if currently_checked != checked:
+                    loc.click(timeout=self._ui_profile.max_settle_ms)
+            else:
+                raise ValueError(
+                    f"Element {dom_selector!r} is not a checkbox or radio control"
+                )
+
+            try:
+                loc.evaluate("(el) => el.blur()")
+            except Exception:
+                pass
+            self.wait_for_quiescence()
 
     def click(self, dom_selector: str) -> None:
         """Click ``dom_selector`` and wait for settle."""
-        loc = self._resolve_live_locator(dom_selector)
-        try:
-            loc.click(timeout=self._ui_profile.max_settle_ms)
-        except Exception as exc:
+        with self._resolve_live_locator(dom_selector) as (loc, context_id):
+            try:
+                loc.click(timeout=self._ui_profile.max_settle_ms)
+            except Exception as exc:
+                if (
+                    self._scoped_to_page_only
+                    and not self._is_frame
+                    and _is_target_closed_error(exc)
+                    and self._is_page_closed()
+                ):
+                    return
+                raise
+            # A child popup may deliberately close itself after posting its result.
+            # Its parent context manager still settles/read-backs the owning surface.
             if (
                 self._scoped_to_page_only
                 and not self._is_frame
-                and _is_target_closed_error(exc)
                 and self._is_page_closed()
             ):
                 return
-            raise
-        # A child popup may deliberately close itself after posting its result.
-        # Its parent context manager still settles/read-backs the owning surface.
-        if self._scoped_to_page_only and not self._is_frame and self._is_page_closed():
-            return
-        self.wait_for_quiescence()
+            self.wait_for_quiescence()
 
     def _read_portal_listbox_state(self, dom_selector: str) -> dict[str, Any]:
         return dict(
@@ -1671,37 +1706,40 @@ class PlaywrightFormSurface:
         self, dom_selector: str
     ) -> tuple[ObservedOption, ...]:
         """Open a detached/portal combobox and read its rendered options."""
-        loc = self._resolve_live_locator(dom_selector)
-        aria_expanded = (loc.get_attribute("aria-expanded") or "").strip().lower()
-        existing = self._read_portal_listbox_state(dom_selector)
-        if aria_expanded != "true" or existing.get("status") != "ok":
-            loc.click(timeout=self._ui_profile.max_settle_ms)
-            self.wait_for_quiescence()
+        with self._resolve_live_locator(dom_selector) as (loc, context_id):
+            aria_expanded = (loc.get_attribute("aria-expanded") or "").strip().lower()
+            existing = self._read_portal_listbox_state(dom_selector)
+            if aria_expanded != "true" or existing.get("status") != "ok":
+                self._assert_document_context(context_id)
+                loc.click(timeout=self._ui_profile.max_settle_ms)
+                self.wait_for_quiescence()
 
-        deadline = time.monotonic() + (self._ui_profile.max_settle_ms / 1000.0)
-        state = self._read_portal_listbox_state(dom_selector)
-        while state.get("status") == "missing_listbox" and time.monotonic() < deadline:
-            self._sleep_ms(25.0)
+            deadline = time.monotonic() + (self._ui_profile.max_settle_ms / 1000.0)
             state = self._read_portal_listbox_state(dom_selector)
+            while (
+                state.get("status") == "missing_listbox" and time.monotonic() < deadline
+            ):
+                self._sleep_ms(25.0)
+                state = self._read_portal_listbox_state(dom_selector)
 
-        status = state.get("status")
-        if status == "ambiguous_listbox":
-            raise AmbiguousAnchorError(
-                f"Multiple visible portal listboxes ({state.get('count')}) open for {dom_selector!r}"
-            )
-        if status != "ok":
-            raise MissingAnchorError(
-                f"No visible portal listbox matched {self._ui_profile.portal_listbox_selectors} "
-                f"after opening {dom_selector!r}"
-            )
+            status = state.get("status")
+            if status == "ambiguous_listbox":
+                raise AmbiguousAnchorError(
+                    f"Multiple visible portal listboxes ({state.get('count')}) open for {dom_selector!r}"
+                )
+            if status != "ok":
+                raise MissingAnchorError(
+                    f"No visible portal listbox matched {self._ui_profile.portal_listbox_selectors} "
+                    f"after opening {dom_selector!r}"
+                )
 
-        return tuple(
-            ObservedOption(
-                value=str(o.get("value") or ""),
-                label=str(o.get("label") or ""),
+            return tuple(
+                ObservedOption(
+                    value=str(o.get("value") or ""),
+                    label=str(o.get("label") or ""),
+                )
+                for o in (state.get("options") or ())
             )
-            for o in (state.get("options") or ())
-        )
 
     def choose_portal_combobox_option(
         self, dom_selector: str, option: ObservedOption
@@ -1748,9 +1786,9 @@ class PlaywrightFormSurface:
             )
 
         opt_selector = str(exact_matches[0]["selector"])
-        opt_loc = self._resolve_live_locator(opt_selector)
-        opt_loc.click(timeout=self._ui_profile.max_settle_ms)
-        self.wait_for_quiescence()
+        with self._resolve_live_locator(opt_selector) as (opt_loc, context_id):
+            opt_loc.click(timeout=self._ui_profile.max_settle_ms)
+            self.wait_for_quiescence()
 
     @contextlib.contextmanager
     def open_popup_surface(
@@ -1761,64 +1799,66 @@ class PlaywrightFormSurface:
         title_pattern: Optional[str] = None,
     ) -> Iterator[PlaywrightFormSurface]:
         """Click ``trigger_selector``, verify popup contract, yield child surface, settle parent on exit."""
-        loc = self._resolve_live_locator(trigger_selector)
-        popup_page: Any = None
-        child_surface: Optional[PlaywrightFormSurface] = None
+        with self._resolve_live_locator(trigger_selector) as (loc, context_id):
+            popup_page: Any = None
+            child_surface: Optional[PlaywrightFormSurface] = None
 
-        try:
-            with self._owner_page.context.expect_page(
-                predicate=lambda child: child.opener() == self._owner_page,
-                timeout=self._ui_profile.max_settle_ms,
-            ) as popup_info:
-                loc.click(timeout=self._ui_profile.max_settle_ms)
-            popup_page = popup_info.value
-        except Exception as exc:
-            raise PopupContractError(
-                f"Failed to open child popup window from {trigger_selector!r}: {exc}"
-            ) from exc
-
-        try:
-            child_surface = PlaywrightFormSurface(
-                popup_page,
-                self._ui_profile,
-                base_origin=self._base_origin,
-                keepalive_mutation_guard=self._keepalive_mutation_guard,
-                ignored_mutation_paths=self._ignored_mutation_paths,
-                _scoped_to_page_only=True,
-            )
-            popup_page.wait_for_load_state(
-                "domcontentloaded", timeout=self._ui_profile.max_settle_ms
-            )
-            child_surface.wait_for_quiescence()
-
-            popup_clean_url = _strip_url_to_origin_and_path(str(popup_page.url or ""))
-            if url_pattern is not None and not re.search(
-                url_pattern, popup_clean_url, flags=re.IGNORECASE
-            ):
+            try:
+                with self._owner_page.context.expect_page(
+                    predicate=lambda child: child.opener() == self._owner_page,
+                    timeout=self._ui_profile.max_settle_ms,
+                ) as popup_info:
+                    loc.click(timeout=self._ui_profile.max_settle_ms)
+                popup_page = popup_info.value
+            except Exception as exc:
                 raise PopupContractError(
-                    f"Popup URL {popup_clean_url!r} failed url_pattern {url_pattern!r}"
-                )
+                    f"Failed to open child popup window from {trigger_selector!r}: {exc}"
+                ) from exc
 
-            popup_title = collapse_whitespace(str(popup_page.title() or ""))
-            if title_pattern is not None and not re.search(
-                title_pattern, popup_title, flags=re.IGNORECASE
-            ):
-                raise PopupContractError(
-                    f"Popup title {popup_title!r} failed title_pattern {title_pattern!r}"
+            try:
+                child_surface = PlaywrightFormSurface(
+                    popup_page,
+                    self._ui_profile,
+                    base_origin=self._base_origin,
+                    keepalive_mutation_guard=self._keepalive_mutation_guard,
+                    ignored_mutation_paths=self._ignored_mutation_paths,
+                    _scoped_to_page_only=True,
                 )
+                popup_page.wait_for_load_state(
+                    "domcontentloaded", timeout=self._ui_profile.max_settle_ms
+                )
+                child_surface.wait_for_quiescence()
 
-            yield child_surface
-        finally:
-            if child_surface is not None:
-                child_surface._detach()
-            if popup_page is not None:
-                try:
-                    if not popup_page.is_closed():
-                        popup_page.close()
-                except Exception:
-                    pass
-            if not self._is_page_closed():
-                self.wait_for_quiescence()
+                popup_clean_url = _strip_url_to_origin_and_path(
+                    str(popup_page.url or "")
+                )
+                if url_pattern is not None and not re.search(
+                    url_pattern, popup_clean_url, flags=re.IGNORECASE
+                ):
+                    raise PopupContractError(
+                        f"Popup URL {popup_clean_url!r} failed url_pattern {url_pattern!r}"
+                    )
+
+                popup_title = collapse_whitespace(str(popup_page.title() or ""))
+                if title_pattern is not None and not re.search(
+                    title_pattern, popup_title, flags=re.IGNORECASE
+                ):
+                    raise PopupContractError(
+                        f"Popup title {popup_title!r} failed title_pattern {title_pattern!r}"
+                    )
+
+                yield child_surface
+            finally:
+                if child_surface is not None:
+                    child_surface._detach()
+                if popup_page is not None:
+                    try:
+                        if not popup_page.is_closed():
+                            popup_page.close()
+                    except Exception:
+                        pass
+                if not self._is_page_closed():
+                    self.wait_for_quiescence()
 
     def ping_keepalive(self, path: str) -> int:
         """Issue an in-page GET ``fetch(path)`` and enforce zero state-changing requests."""
