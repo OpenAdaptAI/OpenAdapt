@@ -190,7 +190,11 @@ def test_binary_open_preserves_directory_anchor_and_private_mode(
     tmp_path: Path, crt_files, opener: Callable
 ) -> None:
     if os.open not in os.supports_dir_fd and os.name == "nt":
-        pytest.skip("this platform has no descriptor-relative file open")
+        path = tmp_path / "anchored.bin"
+        with pytest.raises(NotImplementedError):
+            opener(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=0)
+        assert not path.exists()
+        return
     directory = opener(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         descriptor = opener(
