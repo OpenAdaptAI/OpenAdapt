@@ -453,25 +453,17 @@ def test_stop_during_an_existing_job_reports_and_acks_before_exit(
         )
 
     from openadapt_flow.connector import daemon
+    from openadapt_flow.connector.executor import ExecutionResult
 
-    def handle_job(client, settings, job, *, runner, **_kwargs):
-        # Managed authority is covered by the connector contract tests; this
-        # control is about the service stop: the in-flight job still reports
-        # and acknowledges before serve() returns.
+    def execute_job(job, settings, storage, *, runner, **_kwargs):
+        # Managed authority is covered by the connector contract tests. Only
+        # execution is stood in here: the production handle_job still builds
+        # the callback and ack, so the stop control runs through real
+        # report/ack code while a job is in flight.
         runner()
-        client.run_callback(
-            {
-                "run_id": job.run_id,
-                "org_id": job.org_id,
-                "workflow_id": job.workflow_id,
-                "status": "success",
-            },
-            run_token=job.run_token,
-        )
-        client.ack(job.lease_job_id, "done")
-        return {}
+        return ExecutionResult("success", {}, None, job.report_ref())
 
-    monkeypatch.setattr(daemon, "handle_job", handle_job)
+    monkeypatch.setattr(daemon, "execute_job", execute_job)
     logger, redactor = ws.build_logger(config, name="test.ws.finish")
     assert (
         ws.serve(
