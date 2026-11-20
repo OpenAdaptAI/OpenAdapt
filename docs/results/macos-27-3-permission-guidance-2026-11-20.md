@@ -33,7 +33,9 @@ lacked Flow cryptography; combining the packages collided on their separate
 `tests` namespaces; the Flow interpreter lacked Capture's fire dependency.
 Each package was then tested separately in its appropriate existing interpreter.
 A local path typo was corrected before final formatting/type validation. These
-setup failures are not test passes or source defects. The final Capture group
+setup failures are not test passes or source defects. The source-growth check
+first found dispatch one line over its existing budget; moving the pure guidance
+import to module scope removed the extra line without raising the budget. The final Capture group
 retains its existing SQLAlchemy deprecation warning; Vite retains its config
 loader warning.
 

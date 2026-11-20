@@ -45,6 +45,7 @@ from urllib.parse import urlsplit
 from loguru import logger
 
 from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.macos_permissions import control_permission_guidance
 from openadapt_desktop.private_fs import ensure_private_dir
 
 EmitFn = Callable[[str, dict], None]
@@ -6241,8 +6242,6 @@ class EngineDispatcher:
         screen = _mac_preflight_screen()
         access = _mac_preflight_accessibility()
         input_monitoring = _mac_preflight_input_monitoring()
-        from .macos_permissions import control_permission_guidance
-
         return {
             "screen_recording": screen,
             "accessibility": access,
