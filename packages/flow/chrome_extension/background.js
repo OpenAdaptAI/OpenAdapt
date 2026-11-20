@@ -17,18 +17,46 @@ const SCHEMA = 'openadapt.extension-evidence/1';
 let recording = false;
 let port = null;
 let queued = [];
+let copilotPort = null;
+let copilotQueue = [];
+let copilotHaltCount = 0;
+let lastCopilotHighlights = [];
+
+const scheduleTimer = typeof setTimeout === 'function' ? setTimeout : null;
+const cancelTimer = typeof clearTimeout === 'function' ? clearTimeout : null;
+
+if (
+  typeof chrome !== 'undefined' &&
+  chrome.sidePanel &&
+  typeof chrome.sidePanel.setPanelBehavior === 'function'
+) {
+  try {
+    const maybePromise = chrome.sidePanel.setPanelBehavior({
+      openPanelOnActionClick: true,
+    });
+    if (maybePromise && typeof maybePromise.catch === 'function') {
+      maybePromise.catch(() => {});
+    }
+  } catch (e) {}
+}
 
 function setBadge(active) {
-  const text = active ? 'REC' : '';
-  const color = active ? '#b00020' : '#00000000';
+  let text = '';
+  let color = '#00000000';
+  let title = 'OpenAdapt extension evidence (idle)';
+  if (active) {
+    text = 'REC';
+    color = '#b00020';
+    title = 'OpenAdapt extension evidence (recording)';
+  } else if (copilotHaltCount > 0) {
+    text = 'HALT';
+    color = '#d97706';
+    title = 'OpenAdapt Co-Pilot (action needed)';
+  }
   try {
     chrome.action.setBadgeText({ text });
     chrome.action.setBadgeBackgroundColor({ color });
-    chrome.action.setTitle({
-      title: active
-        ? 'OpenAdapt extension evidence (recording)'
-        : 'OpenAdapt extension evidence (idle)',
-    });
+    chrome.action.setTitle({ title });
   } catch (e) {}
 }
 
@@ -43,6 +71,162 @@ function ensurePort() {
     port = null;
   }
   return port;
+}
+
+function failCopilotQueue(errorMessage) {
+  const pending = copilotQueue.splice(0, copilotQueue.length);
+  for (const entry of pending) {
+    if (entry.timer && cancelTimer) cancelTimer(entry.timer);
+    entry.resolve({ ok: false, error: errorMessage });
+  }
+}
+
+function ensureCopilotPort() {
+  if (copilotPort) return copilotPort;
+  if (!chrome.runtime || typeof chrome.runtime.connectNative !== 'function') {
+    return null;
+  }
+  try {
+    const p = chrome.runtime.connectNative(NATIVE_HOST);
+    p.onMessage.addListener((reply) => {
+      const next = copilotQueue.shift();
+      if (next) {
+        if (next.timer && cancelTimer) cancelTimer(next.timer);
+        next.resolve(reply);
+      }
+    });
+    p.onDisconnect.addListener(() => {
+      const err =
+        chrome.runtime && chrome.runtime.lastError && chrome.runtime.lastError.message
+          ? chrome.runtime.lastError.message
+          : 'native_host_disconnected';
+      if (copilotPort === p) {
+        copilotPort = null;
+      }
+      failCopilotQueue(err);
+    });
+    copilotPort = p;
+    return p;
+  } catch (e) {
+    copilotPort = null;
+    return null;
+  }
+}
+
+function sendCopilotNative(payload) {
+  return new Promise((resolve) => {
+    const p = ensureCopilotPort();
+    if (!p) {
+      resolve({ ok: false, error: 'native_host_unavailable' });
+      return;
+    }
+    const entry = { resolve, timer: null };
+    if (scheduleTimer) {
+      entry.timer = scheduleTimer(() => {
+        const idx = copilotQueue.indexOf(entry);
+        if (idx !== -1) copilotQueue.splice(idx, 1);
+        resolve({ ok: false, error: 'native_host_timeout' });
+      }, 5000);
+    }
+    copilotQueue.push(entry);
+    try {
+      p.postMessage(payload);
+    } catch (e) {
+      const idx = copilotQueue.indexOf(entry);
+      if (idx !== -1) copilotQueue.splice(idx, 1);
+      if (entry.timer && cancelTimer) cancelTimer(entry.timer);
+      copilotPort = null;
+      resolve({
+        ok: false,
+        error: String((e && e.message) || e || 'native_post_failed'),
+      });
+    }
+  });
+}
+
+function collectCopilotHighlights(state) {
+  if (!state || typeof state !== 'object') return [];
+  const list = [];
+  const seen = new Set();
+  for (const item of Array.isArray(state.field_highlights) ? state.field_highlights : []) {
+    if (!item || typeof item !== 'object' || !item.dom_selector) continue;
+    list.push({
+      dom_selector: String(item.dom_selector),
+      badge_state: String(item.badge_state || 'halt'),
+      caption: String(item.caption || ''),
+    });
+    seen.add(String(item.dom_selector));
+  }
+  for (const halt of Array.isArray(state.halts) ? state.halts : []) {
+    if (!halt || typeof halt !== 'object' || !halt.dom_selector) continue;
+    const selector = String(halt.dom_selector);
+    if (seen.has(selector)) continue;
+    const isConflict =
+      halt.kind === 'prefill_entity_conflict' || halt.kind === 'prefill_value_conflict';
+    list.push({
+      dom_selector: selector,
+      badge_state: isConflict ? 'conflict' : 'halt',
+      caption: String(halt.message || halt.field_label || ''),
+    });
+    seen.add(selector);
+  }
+  return list;
+}
+
+function isHighlightableTab(tab) {
+  if (!tab || !Number.isInteger(tab.id)) return false;
+  if (typeof tab.url === 'string' && tab.url) {
+    return tab.url.startsWith('http://') || tab.url.startsWith('https://');
+  }
+  return true;
+}
+
+function broadcastCopilotHighlights(highlights, forceScroll) {
+  lastCopilotHighlights = Array.isArray(highlights) ? highlights.slice() : [];
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.query({}, (tabs) => {
+        const targets = (tabs || []).filter(isHighlightableTab);
+        if (!targets.length) {
+          resolve();
+          return;
+        }
+        let pending = targets.length;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const guard = scheduleTimer ? scheduleTimer(finish, 400) : null;
+        const onOneDone = () => {
+          void (chrome.runtime && chrome.runtime.lastError);
+          pending -= 1;
+          if (pending <= 0) {
+            if (guard && cancelTimer) cancelTimer(guard);
+            finish();
+          }
+        };
+        for (const tab of targets) {
+          try {
+            chrome.tabs.sendMessage(
+              tab.id,
+              {
+                type: 'COPILOT_APPLY_HIGHLIGHTS',
+                highlights: lastCopilotHighlights,
+                forceScroll: Boolean(forceScroll),
+              },
+              onOneDone
+            );
+          } catch (e) {
+            onOneDone();
+          }
+        }
+      });
+    } catch (e) {
+      resolve();
+    }
+  });
 }
 
 // Frame identity comes from Chrome (MessageSender), not from the page: a
@@ -106,6 +290,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'CONTENT_READY') {
+    if (
+      lastCopilotHighlights.length > 0 &&
+      sender &&
+      sender.tab &&
+      Number.isInteger(sender.tab.id)
+    ) {
+      try {
+        chrome.tabs.sendMessage(
+          sender.tab.id,
+          {
+            type: 'COPILOT_APPLY_HIGHLIGHTS',
+            highlights: lastCopilotHighlights,
+            forceScroll: false,
+          },
+          () => {
+            void (chrome.runtime && chrome.runtime.lastError);
+          }
+        );
+      } catch (e) {}
+    }
     sendResponse({ active: recording });
     return true;
   }
@@ -116,6 +320,47 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'GET_STATE') {
     sendResponse({ active: recording, queued: queued.length });
+    return true;
+  }
+  if (msg.type === 'COPILOT_SYNC_STATE') {
+    (async () => {
+      const reply = await sendCopilotNative({ type: 'COPILOT_GET_STATE' });
+      if (!reply || !reply.ok) {
+        sendResponse({
+          ok: false,
+          error: (reply && reply.error) || 'copilot_sync_failed',
+          state: null,
+        });
+        return;
+      }
+      const state = reply.state || null;
+      copilotHaltCount =
+        state && Array.isArray(state.halts) ? state.halts.length : 0;
+      setBadge(recording);
+      const highlights = collectCopilotHighlights(state);
+      await broadcastCopilotHighlights(highlights, Boolean(msg.forceScroll));
+      sendResponse({
+        ok: true,
+        type: 'COPILOT_STATE',
+        state,
+      });
+    })();
+    return true;
+  }
+  if (msg.type === 'COPILOT_DECISION') {
+    if (!msg.decision || typeof msg.decision !== 'object') {
+      sendResponse({ ok: false, error: 'decision object required' });
+      return true;
+    }
+    (async () => {
+      const reply = await sendCopilotNative({
+        type: 'COPILOT_SUBMIT_DECISION',
+        decision: msg.decision,
+      });
+      sendResponse(
+        reply || { ok: false, error: 'copilot_decision_failed' }
+      );
+    })();
     return true;
   }
 });
@@ -213,11 +458,23 @@ if (typeof globalThis !== 'undefined') {
     get pendingSaves() {
       return pendingSaves.size;
     },
+    get copilotHaltCount() {
+      return copilotHaltCount;
+    },
     _reset() {
       recording = false;
       queued = [];
       pendingSaves.clear();
       port = null;
+      copilotHaltCount = 0;
+      lastCopilotHighlights = [];
+      if (copilotPort) {
+        try {
+          copilotPort.disconnect();
+        } catch (e) {}
+      }
+      copilotPort = null;
+      failCopilotQueue('reset');
       setBadge(false);
     },
   };

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenAdapt Co-Pilot</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="copilot-shell">
+    <header class="copilot-header">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">OA</div>
+        <div class="brand-copy">
+          <h1 class="brand-title">OpenAdapt Co-Pilot</h1>
+          <span class="trust-subtitle">Local Native Channel &middot; Zero Cloud</span>
+        </div>
+      </div>
+      <div class="header-controls">
+        <span id="status-pill" class="status-pill" data-status="idle">Idle</span>
+        <button id="refresh-btn" class="refresh-btn" type="button" title="Sync co-pilot state">
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <section id="progress-panel" class="progress-panel" aria-label="Dossier progress">
+      <div class="progress-top">
+        <span class="progress-label">Auto-filled fields</span>
+        <span id="progress-counter" class="progress-counter">0 / 0</span>
+      </div>
+      <div
+        id="progress-track"
+        class="progress-track"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="0"
+        aria-valuenow="0"
+      >
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <p id="status-line" class="status-line">
+        Waiting for an active local form session.
+      </p>
+      <div id="run-meta" class="run-meta" hidden></div>
+    </section>
+
+    <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+    <main id="main-content" class="main-content">
+      <section id="receipt-container" class="receipt-container" hidden></section>
+      <section id="halts-container" class="halts-container" aria-label="Active halts"></section>
+      <section id="empty-state" class="empty-state">
+        <p class="empty-title">No operator action required</p>
+        <p class="empty-copy">
+          Grounded dossier fields run locally. Any prefill mismatch or ungrounded
+          required field will pause here for 1-click resolution.
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
