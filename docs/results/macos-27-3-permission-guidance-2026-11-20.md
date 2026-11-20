@@ -22,9 +22,9 @@ version, native entitlement or workflow is changed.
 | Desktop TypeScript | Passed, no emit |
 
 Python checks used CPython 3.12.13 with source paths bound to this checkout.
-Desktop test additions used task-local dependencies, including Pydantic2.14.4;
+Desktop test additions used task-local dependencies, including Pydantic 2.14.4;
 they are not a new locked-runtime qualification. Capture used its existing
-complete 3.12.13 test interpreter. UI used Node22.22.2 and the exact npm lock.
+complete 3.12.13 test interpreter. UI used Node 22.22.2 and the exact npm lock.
 All tests ran headlessly through the shared CPU-slot wrapper, sequential package
 processes for Python. No native permission API, desktop input or GUI was driven.
 
@@ -41,7 +41,7 @@ loader warning.
 
 ## Remaining beta checks
 
-No macOS27.3 machine was identified. Test the exact new-pane deep link, whether
+No macOS 27.3 machine was identified. Test the exact new-pane deep link, whether
 AX process trust reflects each override mode, UI reads versus posted input,
 Choose Apps with allowed/disallowed targets, Ask First cancellation, and old
 migrated grants on a beta machine before merging. The code does not invent a
@@ -50,3 +50,8 @@ trust as proof of all target-app grants. General-availability timing is unknown.
 
 Primary references and beta2 known-issue identifiers are in
 [the permission guide](../getting-started/permissions.md).
+
+The unchanged Desktop release-intent check exits 1 and requests at least a patch
+bump from 0.30.6 before eventual delivery. No version bump is included because
+this PR is explicitly review-only and must remain unmerged. The check is not
+waived; release preparation belongs to a later approved candidate.
