@@ -164,7 +164,7 @@ def test_expired_total_deadline_starts_nothing(tmp_path, monkeypatch):
         runner.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start")
     )
     result = runner.bounded(
-        ["synthetic"], tmp_path, tmp_path / "out" / "test.log", 1, time.monotonic() - 1
+        ["synthetic"], tmp_path, tmp_path / "out" / "test.log", 1, time.monotonic() - 1, None
     )
     assert not runner.completed_ok(result)
     assert result["timeout"] is True and result["started"] is False
