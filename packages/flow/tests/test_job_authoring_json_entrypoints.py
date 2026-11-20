@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, field_validator
 from pydantic_core import PydanticSerializationError
 
 from openadapt_flow.ir import ActionKind, ApiBinding, BundleManifest, Step, Workflow
-from openadapt_flow.job_authoring import JobAuthoringBinding
+from openadapt_flow.job_authoring import (
+    JobAuthoringBinding,
+    validate_authoring_model_json,
+)
 from tests.test_job_authoring_schema3 import BINDING, authored
 
 
@@ -135,3 +138,43 @@ def test_manifest_cannot_coerce_an_unchecked_raw_profile_to_schema3(version):
     ]:
         with pytest.raises(ValueError):
             parse(wire)
+
+
+def test_permissive_root_cannot_establish_a_checked_nested_json_scope():
+    class Envelope(BaseModel):
+        workflow: Workflow
+
+    wire = '{"workflow":' + _numeric_workflow().model_dump_json() + "}"
+    noncanonical = wire.replace("1e-07", "1e-7")
+    for raw in (wire, noncanonical):
+        with pytest.raises(ValueError, match="supported model parser"):
+            validate_authoring_model_json(Envelope, raw)
+    # Explicitly checking the entire raw document is sufficient for its nested
+    # models' encoding, but still supplies no source verification/admission.
+    checked = validate_authoring_model_json(Envelope, wire, strict_profile=True)
+    assert checked.workflow.name == _numeric_workflow().name
+    with pytest.raises(ValueError, match="not canonical"):
+        validate_authoring_model_json(Envelope, noncanonical, strict_profile=True)
+
+    class CheckedOuter(BaseModel):
+        schema_version: int
+        trigger: str
+        workflow: Workflow
+
+        @field_validator("trigger")
+        @classmethod
+        def check_nested_call(cls, value):
+            # This legacy-root invocation must temporarily clear the parent's
+            # checked scope, then restore it for the actual remaining fields.
+            with pytest.raises(ValueError, match="supported model parser"):
+                validate_authoring_model_json(Envelope, noncanonical)
+            return value
+
+    outer = (
+        '{"schema_version":3,"trigger":"synthetic","workflow":'
+        + _numeric_workflow().model_dump_json()
+        + "}"
+    )
+    assert (
+        validate_authoring_model_json(CheckedOuter, outer).workflow.schema_version == 3
+    )

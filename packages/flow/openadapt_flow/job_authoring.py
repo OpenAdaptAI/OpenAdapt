@@ -47,6 +47,14 @@ class JobAuthoringError(ValueError):
     """Closed attribution/schema refusal; messages contain no private values."""
 
 
+def _declares_authoring_json(pairs: Iterable[tuple[str, Any]]) -> bool:
+    return any(
+        (key == "schema_version" and type(value) is int and value == 3)
+        or (key == "job_authoring" and value is not None)
+        for key, value in pairs
+    )
+
+
 def validate_authoring_model_json(
     model: type[_ParsedModel],
     data: str | bytes | bytearray,
@@ -68,16 +76,21 @@ def validate_authoring_model_json(
     def validate() -> _ParsedModel:
         return cast(_ParsedModel, parse_model(model, data, **kwargs))
 
+    profile_checked = False
     try:
-        parse_authoring_json(data, strict=strict_profile)
+        parsed = parse_authoring_json(data, strict=strict_profile)
+        profile_checked = strict_profile or (
+            isinstance(parsed, dict) and _declares_authoring_json(parsed.items())
+        )
     except JobAuthoringError:
         raise
     except (ValueError, TypeError):
         if strict_profile:
             raise
         # Preserve the original Pydantic parser's legacy error semantics.
-        return validate()
-    token = _JSON_PARSE_CHECKED.set(True)
+    # A permissive legacy parse cannot bless a nested new-format model, even
+    # when this call occurs inside another checked parser invocation.
+    token = _JSON_PARSE_CHECKED.set(profile_checked)
     try:
         return validate()
     finally:
@@ -325,12 +338,7 @@ def parse_authoring_json(data: str | bytes | bytearray, *, strict: bool = False)
         data, object_pairs_hook=object_pairs, parse_int=integer, parse_float=floating
     )
     declared = strict or (
-        isinstance(parsed, dict)
-        and any(
-            (key == "schema_version" and type(value) is int and value == 3)
-            or (key == "job_authoring" and value is not None)
-            for key, value in root_pairs
-        )
+        isinstance(parsed, dict) and _declares_authoring_json(root_pairs)
     )
     if declared:
         if duplicate or noncanonical_number:
