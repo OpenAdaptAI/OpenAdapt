@@ -878,3 +878,319 @@ def test_unsafe_paused_validation_cannot_reopen_a_commit_after_a_write_was_obser
     )
     assert reconciler.run_until_halt_or_done(session) is result
     assert surface.calls == calls and surface.mutation_count == 1
+
+
+class NextSurface(Surface):
+    def __init__(self, writes=1, counter_fault=None):
+        self._counter = 3 if counter_fault == "regressed" else 0
+        self.counter_fault = None
+        self.draft_attempts = 0
+        super().__init__()
+        self._counter = 3 if counter_fault == "regressed" else 0
+        self.counter_fault = counter_fault
+        self.writes = writes
+        self.draft_writes = 0
+        self.blocked = True
+        self.phase = "form"
+        self.modal_after_next = False
+        self.auth_after_next = False
+
+    @property
+    def mutation_count(self):
+        if self.draft_attempts:
+            if self.counter_fault == "read_error":
+                raise RuntimeError("counter observation unavailable")
+            if self.counter_fault == "missing":
+                return None
+            if self.counter_fault == "boolean":
+                return True
+            if self.counter_fault == "negative":
+                return -1
+            if self.counter_fault == "regressed":
+                return 2
+        return self._counter
+
+    @mutation_count.setter
+    def mutation_count(self, value):
+        self._counter = value
+
+    def snapshot(self, **kwargs):
+        snap = super().snapshot(**kwargs)
+        controls = list(snap.controls)
+        if self.phase == "form":
+            controls[-1] = ObservedControl(
+                control_id="next", dom_selector="#next", tag="button", role="button"
+            )
+        updates = {"controls": tuple(controls), "screen_id": self.phase}
+        if self.draft_attempts and self.blocked:
+            updates["banner_errors"] = ("synthetic transition validation",)
+        if self.draft_attempts and self.auth_after_next:
+            updates["auth_wall_present"] = True
+        if self.draft_attempts and self.modal_after_next:
+            from openadapt_flow.form_tx.types import ObservedModal
+
+            updates["active_modals"] = (
+                ObservedModal(
+                    modal_id="next-modal",
+                    container_selector="#modal",
+                    message_text="Review",
+                ),
+            )
+        return snap.model_copy(update=updates)
+
+    def click(self, selector):
+        if selector != "#next":
+            return super().click(selector)
+        self.calls.append("next")
+        self.draft_attempts += 1
+        self.draft_writes += self.writes
+        self._counter += self.writes
+        if not self.blocked:
+            self.phase = "review"
+
+
+def next_inputs():
+    pack, dossier = inputs()
+    return pack.model_copy(
+        update={
+            "screens": (
+                WizardScreenSpec(
+                    screen_id="form",
+                    next_button_anchor=FieldAnchorSpec(css_selector="#next"),
+                ),
+                WizardScreenSpec(
+                    screen_id="review",
+                    is_commit_screen=True,
+                    commit_button_anchor=FieldAnchorSpec(css_selector="#save"),
+                ),
+            )
+        }
+    ), dossier
+
+
+def test_next_validation_after_an_observed_post_is_not_retryable():
+    surface = NextSurface(writes=1)
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.VALIDATION_BLOCKED
+    assert surface.draft_writes == 1 and surface.mutation_count == 1
+    assert result.safe_to_retry is False
+    calls = list(surface.calls)
+    surface.blocked = False
+    assert reconciler.run_until_halt_or_done(session) is result
+    assert (
+        reconciler.apply_human_resolution(
+            session,
+            HumanResolutionInput(
+                halt_id=result.halts[0].halt_id,
+                action=HumanDecisionAction.FIXED_ON_SCREEN,
+                actor_id="operator",
+                idempotency_key="new",
+            ),
+        )
+        is result
+    )
+    assert surface.calls == calls and surface.draft_writes == 1
+
+
+def test_zero_observed_request_validation_refusal_still_needs_and_accepts_human_resolution():
+    surface = NextSurface(writes=0)
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    paused = reconciler.run_until_halt_or_done(session)
+    assert paused.outcome == FormTxOutcome.VALIDATION_BLOCKED
+    assert paused.safe_to_retry is True and session._terminal_result is None
+    assert surface.draft_writes == 0
+    surface.blocked = False
+    done = reconciler.apply_human_resolution(
+        session,
+        HumanResolutionInput(
+            halt_id=paused.halts[0].halt_id,
+            action=HumanDecisionAction.FIXED_ON_SCREEN,
+            actor_id="operator",
+            idempotency_key="fixed",
+        ),
+    )
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+    assert surface.saved == "Yes" and surface.mutation_count == 1
+    assert reconciler.run_until_halt_or_done(session) is done
+
+
+@pytest.mark.parametrize(
+    "fault", ["read_error", "missing", "boolean", "negative", "regressed"]
+)
+def test_unknown_or_invalid_next_counter_observation_freezes_possible_delivery(fault):
+    surface = NextSurface(counter_fault=fault)
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert surface.draft_writes == 1
+    assert_frozen(reconciler, session, surface, result)
+
+
+@pytest.mark.parametrize("fault", ["missing", "boolean", "negative", "regressed"])
+def test_commit_budget_never_clamps_or_accepts_invalid_counter_observations(fault):
+    class InvalidCommitCounter(NextSurface):
+        def click(self, selector):
+            self.calls.append("click")
+            self.saved = self.value
+            self.draft_attempts += 1
+            self._counter += 1
+
+    surface = InvalidCommitCounter(counter_fault=fault)
+    surface.phase = "review"  # expose the commit control rather than Next
+    pack, dossier = inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert surface.saved == "Yes"
+    assert_frozen(reconciler, session, surface, result)
+
+
+def test_stalled_next_after_observed_write_is_not_retryable_without_a_validation_banner():
+    class NoBanner(NextSurface):
+        def snapshot(self, **kwargs):
+            return super().snapshot(**kwargs).model_copy(update={"banner_errors": ()})
+
+    surface = NoBanner()
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.VALIDATION_BLOCKED
+    assert result.safe_to_retry is False and surface.draft_writes == 1
+    surface.blocked = False
+    assert reconciler.run_until_halt_or_done(session) is result
+    assert surface.draft_writes == 1
+
+
+@pytest.mark.parametrize("interruption", ["modal", "auth"])
+@pytest.mark.parametrize("writes", [0, 1])
+def test_next_interruption_needs_a_qualified_continuation_after_observed_write(
+    interruption, writes
+):
+    surface = NextSurface(writes=writes)
+    surface.blocked = False
+    surface.modal_after_next = interruption == "modal"
+    surface.auth_after_next = interruption == "auth"
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    if writes:
+        assert surface.draft_writes == 1
+        assert_frozen(reconciler, session, surface, result)
+    else:
+        assert result.outcome == (
+            FormTxOutcome.AUTH_REQUIRED
+            if interruption == "auth"
+            else FormTxOutcome.HALTED_NEEDS_HUMAN
+        )
+        assert result.safe_to_retry and session._terminal_result is None
+        assert surface.draft_writes == 0
+
+
+def test_missing_pre_dispatch_counter_refuses_without_claiming_a_write():
+    class MissingBaseline(Surface):
+        broken = True
+
+        @property
+        def mutation_count(self):
+            return None if self.broken else self._count
+
+        @mutation_count.setter
+        def mutation_count(self, value):
+            self._count = value
+
+    surface = MissingBaseline()
+    surface.value = "Yes"  # no field actuator is needed before reading the counter
+    pack, dossier = inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.safe_to_retry and surface.saved is None
+    assert not any(c != "snapshot" for c in surface.calls)
+    surface.broken = False
+    assert (
+        reconciler.run_until_halt_or_done(session).outcome
+        == FormTxOutcome.VERIFIED_DONE
+    )
+
+
+def test_unresolved_pending_commit_never_reclicks_based_only_on_a_zero_counter():
+    from tests.test_form_tx_reconciler_and_receipts import (
+        FakeStatefulFormSurface,
+        _build_dossier,
+        _build_pack,
+    )
+
+    surface = FakeStatefulFormSurface(trigger_duplicate_modal_on_commit=True)
+    reconciler = FormReconciler(surface)
+    session = ReconcilerSession(_build_pack(), _build_dossier(has_pool="No"))
+    paused = reconciler.run_until_halt_or_done(session)
+    assert (
+        paused.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+        and session._commit_in_progress
+    )
+    surface.duplicate_modal_open = (
+        False  # interruption disappeared with no positive completion
+    )
+    surface.calls = []
+    original_click, original_snapshot = surface.click, surface.snapshot
+
+    def click(selector):
+        surface.calls.append("click")
+        original_click(selector)
+
+    def snapshot(**kwargs):
+        surface.calls.append("snapshot")
+        return original_snapshot(**kwargs)
+
+    surface.click, surface.snapshot = click, snapshot
+    result = reconciler.run_until_halt_or_done(session)
+    assert "click" not in surface.calls
+    assert_frozen(reconciler, session, surface, result)
+
+
+def test_real_headless_next_post_then_validation_refusal_cannot_post_again(request):
+    from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
+    from tests.test_form_tx_frames import load, profile
+
+    case = request.getfixturevalue("app")
+    frame = load(
+        case,
+        """<!doctype html><body data-authenticated>
+<label>Value<input id="value" value="Yes"></label>
+<button id="next" onclick="fetch('/draft', {method:'POST'}).then(() => {
+    const e = document.createElement('div'); e.setAttribute('role', 'alert');
+    e.textContent = 'Synthetic validation refusal'; document.body.appendChild(e);
+})">Next</button></body>""",
+    )
+    surface = PlaywrightFormSurface(frame, profile(1000))
+    pack, dossier = next_inputs()
+    session = ReconcilerSession(pack, dossier)
+    reconciler = FormReconciler(surface)
+    result = reconciler.run_until_halt_or_done(session)
+    assert result.outcome == FormTxOutcome.VALIDATION_BLOCKED
+    assert result.safe_to_retry is False and result.receipt is None
+    assert case.posts == ["/draft"]
+    for key in ("same", "same", "new"):
+        assert reconciler.run_until_halt_or_done(session) is result
+        assert (
+            reconciler.apply_human_resolution(
+                session,
+                HumanResolutionInput(
+                    halt_id=result.halts[0].halt_id,
+                    action=HumanDecisionAction.FIXED_ON_SCREEN,
+                    actor_id="operator",
+                    idempotency_key=key,
+                ),
+            )
+            is result
+        )
+    assert case.posts == ["/draft"]
