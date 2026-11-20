@@ -19,8 +19,7 @@ PROBE = Path(__file__).parent / "ci" / "apt_deadline_probe.py"
 def test_deadline_sits_inside_the_command_privilege_boundary(monkeypatch, uid):
     apt = _module()
     monkeypatch.setattr(apt.os, "geteuid", lambda: uid)
-    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
-    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
+    monkeypatch.setattr(apt, "_gnu_timeout", lambda _privileged: "/usr/bin/timeout")
     command = apt._deadline_command(apt._sudo(["apt-get", "update"]), 7)
     prefix = ["sudo", "-n"] if uid else []
     assert command == [
@@ -259,9 +258,18 @@ def test_linux_timer_identity_is_independent_of_subject_path(monkeypatch, with_s
     monkeypatch.setattr(apt.os, "geteuid", lambda: 1001)
     monkeypatch.setattr(apt.os, "access", lambda *_args: True)
     monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    monkeypatch.setattr(
+        apt,
+        "subprocess",
+        SimpleNamespace(
+            run=lambda *_args, **_kwargs: SimpleNamespace(
+                returncode=0, stdout="timeout (GNU coreutils) 9.7\n"
+            )
+        ),
+    )
     command = ["sudo", "-n", "synthetic"] if with_sudo else ["synthetic"]
     bounded = apt._deadline_command(command, 1)
-    assert bounded[2 if with_sudo else 0] == "/usr/bin/timeout"
+    assert bounded[2 if with_sudo else 0] == "/usr/bin/gnutimeout"
     assert "/subject/timeout" not in bounded
 
 
@@ -273,3 +281,59 @@ def test_absent_system_timer_never_falls_back_to_subject_path(monkeypatch):
     monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
     with pytest.raises(SystemExit, match="GNU timeout is required"):
         apt._deadline_command(["sudo", "-n", "synthetic"], 1)
+
+
+@pytest.mark.parametrize(
+    "versions,expected",
+    [
+        ({"/usr/bin/timeout": (0, "timeout (GNU coreutils) 9.4")}, "/usr/bin/timeout"),
+        (
+            {
+                "/usr/bin/gnutimeout": (0, "timeout (GNU coreutils) 9.7"),
+                "/usr/bin/timeout": (0, "timeout (uutils coreutils) 0.10"),
+            },
+            "/usr/bin/gnutimeout",
+        ),
+        (
+            {
+                "/usr/bin/gnutimeout": (1, "timeout (GNU coreutils) 9.7"),
+                "/usr/bin/timeout": (0, "timeout (GNU coreutils) 9.4"),
+            },
+            "/usr/bin/timeout",
+        ),
+        ({"/usr/bin/timeout": (0, "timeout (uutils coreutils) 0.10")}, None),
+        (
+            {
+                "/usr/bin/timeout": (
+                    0,
+                    "compatible timeout\nGNU coreutils documentation",
+                )
+            },
+            None,
+        ),
+        ({}, None),
+    ],
+)
+def test_provider_qualification_is_independent_of_utility_name(
+    monkeypatch, versions, expected
+):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "access", lambda path, _mode: path in versions)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    queried = []
+
+    def run(command, **kwargs):
+        assert command[1:] == ["--version"]
+        queried.append(command[0])
+        code, output = versions[command[0]]
+        return SimpleNamespace(returncode=code, stdout=output)
+
+    monkeypatch.setattr(apt, "subprocess", SimpleNamespace(run=run))
+    if expected is None:
+        with pytest.raises(SystemExit, match="verified GNU timeout"):
+            apt._gnu_timeout(privileged=True)
+    else:
+        assert apt._gnu_timeout(privileged=True) == expected
+    assert all(path in apt.SYSTEM_TIMEOUTS for path in queried)
+    assert "/subject/timeout" not in queried

@@ -55,7 +55,7 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         + ("signal.signal(signal.SIGTERM,signal.SIG_IGN); " if stubborn else "")
         + "f=open(sys.argv[1],'r+'); fcntl.flock(f,fcntl.LOCK_EX); "
         "pathlib.Path(sys.argv[2]).write_text(json.dumps("
-        "{'pid':os.getpid(),'uid':os.geteuid(),'nonce':sys.argv[3]})); time.sleep(3)"
+        "{'pid':os.getpid(),'uid':os.geteuid(),'nonce':sys.argv[3]})); time.sleep(6)"
     )
     wrapper = temporary / "wrapper.py"
     wrapper.write_text(
@@ -64,7 +64,7 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         "subprocess.Popen([sys.executable,'-c',child,*sys.argv[1:]])\n"
         "while not pathlib.Path(sys.argv[2]).stat().st_size: time.sleep(.01)\n"
         "print('synthetic lock holder ready',flush=True)\n"
-        "time.sleep(3)\n"
+        "time.sleep(6)\n"
     )
     command = [sys.executable, str(wrapper), str(lock), str(ready), nonce]
     if real_sudo:
@@ -78,8 +78,12 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         assert ready.stat().st_uid == os.geteuid()
         assert identity["uid"] == (0 if real_sudo else os.geteuid())
         available = lock_available(lock)
-        assert code == 137, (code, "the bounded process group must be terminated")
         assert available, "the owned descendant still holds the fixture lock"
+        assert elapsed < 3, (
+            elapsed,
+            "a descendant must not outlive the deadline budget",
+        )
+        assert code == 137, (code, "the bounded process group must be terminated")
         return {
             "code": code,
             "elapsed_seconds": round(elapsed, 3),
@@ -89,9 +93,9 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
             "lock_released_when_helper_returned": available,
         }
     finally:
-        # Even a regression self-terminates after three seconds. No arbitrary
+        # Even a regression self-terminates after six seconds. No arbitrary
         # PID or process-group kill is needed to clean a failed probe.
-        for _ in range(80):
+        for _ in range(160):
             if lock_available(lock):
                 break
             time.sleep(0.05)

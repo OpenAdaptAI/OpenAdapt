@@ -57,7 +57,7 @@ MIRRORS_TXT = "mirror://mirrors.ubuntu.com/mirrors.txt"
 UPDATE_TIMEOUT = 150
 DOWNLOAD_TIMEOUT = 420
 PLAYWRIGHT_TIMEOUT = 300
-SYSTEM_TIMEOUT = "/usr/bin/timeout"
+SYSTEM_TIMEOUTS = ("/usr/bin/gnutimeout", "/usr/bin/timeout")
 
 NETWORK_FAILURE = re.compile(
     r"Could not connect|Unable to connect|Connection timed out|"
@@ -233,6 +233,39 @@ def parse_shim_log(text: str) -> list[str]:
     return packages
 
 
+def _gnu_timeout(privileged: bool) -> str:
+    """Identify the installed provider without trusting a subject PATH.
+
+    A system pathname alone is not an implementation identity: compatible
+    utility replacements can differ in process-group and exit semantics.
+    Version queries are read-only local metadata, like dpkg-query below.
+    """
+    if sys.platform == "linux" or privileged:
+        candidates = SYSTEM_TIMEOUTS
+    else:
+        candidates = tuple(
+            path
+            for name in ("gtimeout", "gnutimeout", "timeout")
+            if (path := shutil.which(name)) is not None
+        )
+    for timer in candidates:
+        if not os.access(timer, os.X_OK):
+            continue
+        try:
+            version = subprocess.run(
+                [timer, "--version"], text=True, capture_output=True
+            )
+        except OSError:
+            continue
+        first_line = (version.stdout or "").partition("\n")[0]
+        if version.returncode == 0 and "(GNU coreutils)" in first_line:
+            return timer
+    raise SystemExit(
+        "::error title=CI command deadline::A verified GNU timeout is required "
+        "on this runner; compatible command names are not sufficient"
+    )
+
+
 def _deadline_command(command: list[str], timeout: float) -> list[str]:
     """Put the process-group deadline inside the command's privilege boundary.
 
@@ -244,16 +277,7 @@ def _deadline_command(command: list[str], timeout: float) -> list[str]:
     if timeout <= 0:
         raise ValueError("the command deadline must be positive")
     privileged = os.geteuid() == 0 or command[:2] == ["sudo", "-n"]
-    if sys.platform == "linux" or privileged:
-        # The subject's PATH must not choose a program executed as root.
-        timer = SYSTEM_TIMEOUT if os.access(SYSTEM_TIMEOUT, os.X_OK) else None
-    else:
-        # Portable, nonprivileged local controls can use installed coreutils.
-        timer = shutil.which("timeout")
-    if timer is None:
-        raise SystemExit(
-            "::error title=CI command deadline::GNU timeout is required on this runner"
-        )
+    timer = _gnu_timeout(privileged)
     deadline = [timer, "--signal=KILL", "--", f"{timeout:g}s"]
     if command[:2] == ["sudo", "-n"]:
         return [*command[:2], *deadline, *command[2:]]
