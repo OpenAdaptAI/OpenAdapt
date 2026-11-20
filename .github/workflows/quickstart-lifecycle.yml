@@ -56,7 +56,7 @@ jobs:
 
       - name: Preinstall Chromium system packages with mirror fallback
         timeout-minutes: 15
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@960b2513030ecb751d38ea7b6012bae86cfbd00b
         with:
           playwright-deps: chromium
           playwright-python: ${{ runner.temp }}/playwright-deps/bin/python

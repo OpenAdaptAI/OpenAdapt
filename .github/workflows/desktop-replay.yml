@@ -175,7 +175,7 @@ jobs:
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: freerdp-replay
       - name: Install the RDP client, shadow server and virtual display
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@960b2513030ecb751d38ea7b6012bae86cfbd00b
         with:
           packages: xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
       - name: Check the RDP and display tools are on PATH
@@ -244,7 +244,7 @@ jobs:
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: check-it-gtk
       - name: Install X11, D-Bus, GTK3 and AT-SPI
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@614e06c22a7951dbabeb695621e63c43699b5653
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@960b2513030ecb751d38ea7b6012bae86cfbd00b
         with:
           packages: >-
             at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
