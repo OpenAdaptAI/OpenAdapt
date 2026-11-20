@@ -28,8 +28,10 @@ Two read-first operator helpers live here.
 
     Candidate, proof, read-discovery, coverage, identity and TODO-draft files
     are one generation. A directory that already holds any of them is refused
-    before those files change. One command shares a single snapshot, so a
-    fresh refusal can still write its proof and TODO draft together.
+    before those files change. A directory or symbolic link at one of those
+    names occupies it too, and the link is not followed. One command shares a
+    single snapshot, so a fresh refusal can still write its proof and TODO
+    draft together.
 
 ``flow explain <run-dir>``
     Pure read-only plain-language outcome summary over a completed run's
@@ -621,13 +623,27 @@ def generation_filenames() -> tuple[str, ...]:
     )
 
 
+def generation_name_occupied(path: Path) -> bool:
+    """Whether ``path`` already occupies a reserved generation name.
+
+    A regular file, a directory, or a symbolic link counts, including a link
+    whose target is missing. The link is not followed, so publishing cannot
+    create that target. Inside a sealed set, a logical inventory file counts.
+    A sealed symlink still fails the set check before this falls through to
+    the directory entry.
+    """
+    if _sealed.is_sealed_path(path) and _sealed.is_file(path):
+        return True
+    return os.path.lexists(os.fspath(path))
+
+
 @dataclass(frozen=True)
 class VerifierGeneration:
     """Verifier outputs snapshotted before this command writes.
 
     The snapshot is not refreshed. Files this command adds stay in the same
-    generation. A directory that already had any of them is refused before
-    those bytes change.
+    generation. A directory that already had any reserved name, as a file,
+    directory or link, is refused before those entries change.
     """
 
     destination: Path
@@ -639,7 +655,7 @@ class VerifierGeneration:
         prior = tuple(
             name
             for name in generation_filenames()
-            if _sealed.is_file(destination / name)
+            if generation_name_occupied(destination / name)
         )
         return cls(destination=destination, prior=prior)
 
@@ -650,7 +666,7 @@ class VerifierGeneration:
         raise ScaffoldRefused(
             "scaffold-verifier REFUSED: the output directory already holds a "
             f"verifier generation ({listed}) in {self.destination}. Nothing "
-            "was written. Those files were kept unchanged. Use a new --out "
+            "was written. Those entries were kept unchanged. Use a new --out "
             "directory so a later result cannot replace only part of an "
             "earlier one."
         )
