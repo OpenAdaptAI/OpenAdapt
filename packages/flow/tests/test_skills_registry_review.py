@@ -343,7 +343,9 @@ def test_a_remote_index_attested_by_the_test_signer_is_refused(tmp_path, monkeyp
 
 def test_a_remote_index_without_an_attestation_is_refused(tmp_path, monkeypatch):
     url = _mirror(monkeypatch, _index(tmp_path))
-    with pytest.raises(registry.RegistryError, match="attestation .* can't be read"):
+    with pytest.raises(
+        registry.RegistryError, match="the index's attestation cannot be read"
+    ):
         registry.pull("openemr/new-referral", tmp_path / "s", index_url=url)
     assert not (tmp_path / "s").exists()
 

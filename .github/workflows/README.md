@@ -130,8 +130,19 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
 
-Ubuntu packages install through `.github/actions/apt-install`. It installs
-cached `.deb` files with no `apt-get update` and no network, and goes to a
+Ubuntu package callers use the composite at the immutable
+`OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68`.
+This keeps infrastructure helper bytes available when a workflow checks out an
+older PR or release tag. The helper resolves its own script through
+`GITHUB_ACTION_PATH`; the subject checkout still supplies the requested
+Playwright lock and working directory. The self-test intentionally uses the
+checked-out helper so future helper changes are tested before updating the pin.
+
+Bounded commands run their deadline inside the privilege boundary, including
+privileged package-manager children. Failures retain the observed index/download
+phase instead of labelling every nonzero command a mirror outage.
+
+The helper installs cached `.deb` files with no `apt-get update` and no network, and goes to a
 mirror only for packages the cache lacks, falling back from the runner's
 default mirror to archive.ubuntu.com and then mirrors.ubuntu.com. The daily
 `apt-cache-seed.yml` keeps the caches warm from main, which every pull request

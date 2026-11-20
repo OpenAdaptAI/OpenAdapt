@@ -37,6 +37,8 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    SerializationInfo,
+    ValidationInfo,
     field_validator,
     model_serializer,
     model_validator,
@@ -44,6 +46,17 @@ from pydantic import (
 
 from openadapt_flow import run_invocation as _run_invocation
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
+from openadapt_flow.job_authoring import (
+    JobAuthoringBinding,
+    check_workflow_input,
+    checked_bundle_schema,
+    dump_authoring_model,
+    dump_schema3_json,
+    require_checked_json_parser,
+    require_checked_json_projection,
+    require_supported_workflow,
+    validate_authoring_model_json,
+)
 from openadapt_flow.qualification_faults import FaultMutationReceipt
 from openadapt_flow.records.schema import (
     FieldRead,
@@ -3336,6 +3349,47 @@ class BundleManifest(BaseModel):
         description="mirrors Workflow.encrypted (workflow.json sealed at rest)",
     )
 
+    @model_validator(mode="wrap")
+    @classmethod
+    def _checked_authoring_json_source(
+        cls, value: Any, handler: Any, info: ValidationInfo
+    ) -> "BundleManifest":
+        manifest = handler(value)
+        if manifest.schema_version == 3:
+            # Do not let Pydantic coerce a legacy-looking raw version into 3
+            # after the original-byte profile check selected its schema.
+            checked_bundle_schema(
+                value.get("schema_version")
+                if isinstance(value, dict)
+                else manifest.schema_version
+            )
+            require_checked_json_parser(info)
+        return manifest
+
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "BundleManifest":
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
+
+    @model_serializer(mode="wrap")
+    def _checked_authoring_json_projection(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
+        return handler(self)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        return dump_schema3_json(self, **kwargs)
+
 
 class BackendHints(BaseModel):
     """Trusted local execution target captured with a remote-display demo.
@@ -3475,8 +3529,27 @@ class Workflow(BaseModel):
     same identity, risk, resolution, postcondition, and effect contracts.
     """
 
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     schema_version: int = SCHEMA_VERSION
     name: str
+    job_authoring: Optional[JobAuthoringBinding] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _supported_authoring_input(cls, value: Any, info: ValidationInfo) -> Any:
+        if isinstance(value, dict) and value.get("schema_version") == 3:
+            require_checked_json_parser(info)
+        check_workflow_input(
+            value, default_version=SCHEMA_VERSION, allowed_fields=cls.model_fields
+        )
+        return value
+
+    @model_validator(mode="after")
+    def _supported_authoring_model(self) -> "Workflow":
+        require_supported_workflow(self)
+        return self
+
     recording_id: Optional[str] = None
     # -- PHI governance manifest (PHI audit REM-1) --------------------------
     # A compiled bundle is a HIPAA-designated record; these fields let an
@@ -3639,6 +3712,23 @@ class Workflow(BaseModel):
     # fresh, empty manifest by hand.
     _unverified_load: bool = PrivateAttr(default=False)
 
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "Workflow":
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        if self.schema_version != 3:
+            return super().model_dump_json(**kwargs)
+        require_supported_workflow(self)
+        return dump_schema3_json(self, **kwargs)
+
     def model_copy(self, *, update: Any = None, deep: bool = False) -> "Workflow":
         clone = super().model_copy(update=update, deep=deep)
         from openadapt_flow.bundle_validation import transfer_verified_load_capability
@@ -3654,9 +3744,16 @@ class Workflow(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+    def _serialize_compatible(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
         """Omit empty additive execution hints from legacy bundle bytes."""
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
+        require_supported_workflow(self)
         data: dict[str, Any] = handler(self)
+        if self.job_authoring is None:
+            data.pop("job_authoring", None)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
         if self.locale_invariants is None:
@@ -3886,119 +3983,15 @@ class Workflow(BaseModel):
           structural validation then run on the decrypted content exactly as for
           a plaintext bundle.
         """
-        bundle = Path(bundle_dir)
-        from openadapt_flow import bundle_validation as _bv
-        from openadapt_flow import sealed_set as _sealed
+        from openadapt_flow import bundle_persistence as _persistence
 
-        encrypted_path = bundle / "workflow.json.enc"
-        plaintext_path = bundle / "workflow.json"
-        sealed_assets: Optional[dict[str, bytes]] = None
-        bundle_encrypted = encrypted_path.is_file()
-        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
-            # A sealed set: verify the whole file set, then decrypt the
-            # workflow and every crop in memory.
-            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
-            bundle_encrypted = True
-            raw = json.loads(reader.read_bytes("workflow.json"))
-            sealed_assets = {
-                rel: reader.read_bytes(rel) for rel in reader.files("templates/")
-            }
-        elif bundle_encrypted:
-            from openadapt_flow import crypto as _crypto
-
-            decrypted = _crypto.decrypt_bytes(
-                encrypted_path.read_bytes(), key, aad=_crypto.BUNDLE_AAD
-            )
-            raw = json.loads(decrypted)
-        else:
-            raw = json.loads(plaintext_path.read_bytes())
-        _bv.bundle_schema_version(raw)
-        # Verify the original canonical representation before upgrading or
-        # constructing today's model. Embedded manifest precedence is unchanged.
-        persisted = raw.get("manifest")
-        if persisted is None:
-            sidecar = bundle / "manifest.json"
-            if sidecar.is_file():
-                persisted = json.loads(sidecar.read_text(encoding="utf-8"))
-        stored = None
-        original_payload = None
-        if persisted is not None:
-            _bv.bundle_schema_version(persisted)
-            stored = BundleManifest.model_validate(persisted)
-            if stored.content_digest:
-                original_payload = (
-                    _bv.verify_original_content(raw, stored)
-                    if verify_integrity
-                    else _bv.source_canonical_payload(raw, stored.file_hashes)
-                )
-        if verify_integrity and (stored is None or not stored.content_digest):
-            raise _bv.BundleIntegrityError("bundle has no persisted integrity seal")
-        wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
-        wf._unverified_load = not verify_integrity
-        if stored is not None:
-            wf.manifest = stored
-        if original_payload is not None and stored is not None and verify_integrity:
-            _bv.remember_original_content(
-                wf, original_payload, stored, source_bundle_dir=bundle
-            )
-        if sealed_assets is not None:
-            wf._decrypted_templates = sealed_assets
-        elif bundle_encrypted:
-            # Decrypt the sealed image crops IN MEMORY (fail-loud on wrong key /
-            # tamper, exactly as the workflow.json above). The resolver reads
-            # them via ``decrypted_template``; nothing cleartext lands on disk.
-            wf._decrypted_templates = _decrypt_template_assets(bundle, key)
-
-        if verify_integrity and persisted is not None and wf.manifest is not None:
-            if bundle_encrypted:
-                # On-disk crops are ciphertext, so verify the sealed asset
-                # digests against the decrypted plaintext held in memory.
-                _verify_sealed_template_integrity(
-                    wf, bundle, wf.manifest, wf._decrypted_templates
-                )
-            else:
-                _bv.verify_integrity(wf, bundle, wf.manifest)
-            template = wf.manifest.provenance.governed_authorization_template
-            if template is not None:
-                # Manifest provenance is intentionally outside the content
-                # digest.  Rebuild this derived authority from the sealed
-                # workflow and accepted certification so a replacement
-                # self-consistent template cannot weaken production policy.
-                from openadapt_flow.qualification import (
-                    QualificationError,
-                    build_governed_authorization_template,
-                    record_certified_contract_form,
-                )
-
-                try:
-                    expected_template = build_governed_authorization_template(wf)
-                except QualificationError as exc:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template cannot be reproduced "
-                        "from the sealed certification"
-                    ) from exc
-                if template != expected_template:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template does not match the "
-                        "sealed workflow and certification"
-                    )
-                record_certified_contract_form(wf)
-
-        if wf.manifest is None:
-            wf.manifest = _bv.build_manifest(wf, bundle)
-
-        if validate:
-            report = _bv.validate_workflow(wf)
-            report.raise_if(categories=("structure",))
-
-        if not bundle_encrypted and wf.encrypted:
-            # The flag is authoritative only with an encrypted envelope on
-            # disk: a plaintext copy (for example a decrypted upload) that
-            # still says encrypted is plaintext, and loads as plaintext.
-            wf.encrypted = False
-            if wf.manifest is not None:
-                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
-        return wf
+        return _persistence.load_workflow(
+            cls,
+            bundle_dir,
+            validate=validate,
+            verify_integrity=verify_integrity,
+            key=key,
+        )
 
     def stamp_certification(
         self,
@@ -4016,7 +4009,9 @@ class Workflow(BaseModel):
         Persisted on the next :meth:`save`. Returns the manifest for convenience.
         """
         if self.manifest is None:
-            self.manifest = BundleManifest()
+            self.manifest = BundleManifest(
+                schema_version=3 if self.schema_version == 3 else SCHEMA_VERSION
+            )
         prov = self.manifest.provenance
         prov.policy_name = policy_name
         prov.certified = passed

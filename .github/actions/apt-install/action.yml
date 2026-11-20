@@ -76,7 +76,7 @@ outputs:
     description: The mirror stage that worked, when the network was used.
     value: ${{ steps.install.outputs.mirror }}
   reason:
-    description: On failure, dns-unreachable, mirror-unreachable, package-not-found or install-failed.
+    description: On failure, dns-unreachable, mirror-unreachable, package-not-found, download-failed, command-interrupted, index-update-failed or install-failed.
     value: ${{ steps.install.outputs.reason }}
 
 runs:

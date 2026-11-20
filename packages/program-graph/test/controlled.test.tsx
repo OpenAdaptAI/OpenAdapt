@@ -21,7 +21,7 @@ describe("host-driven workbench", () => {
     const { rerender } = render(<ProgramWorkbench spec={processRecords} selectedId="write_update" onSelect={onSelect} />);
     expect(screen.getByLabelText("Selected program step").textContent).toContain("Write declared update");
     fireEvent.click(screen.getByRole("button", { name: /For each record/ }));
-    expect(onSelect).toHaveBeenCalledWith("for_each_record");
+    expect(onSelect).toHaveBeenCalledWith("for_each_record", "user");
     // The host has not changed selectedId yet, so the inspector stays put.
     expect(screen.getByLabelText("Selected program step").textContent).toContain("Write declared update");
     rerender(<ProgramWorkbench spec={processRecords} selectedId="for_each_record" onSelect={onSelect} />);
