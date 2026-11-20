@@ -179,6 +179,14 @@ jobs:
               assert case["planted"] and case["input_attempts"][0]["response"]["no_keyboard_input_delivered"] is True
               assert case["retained_attempt_frame_sha256"] == case["input_attempts"][-1]["request"]["expected_frame_sha256"]
               assert case["rows_after"] == proof["rows_before"]
+              assert len(case["preparation_events"]) == 1
+              result = case["report"]["results"][0]
+              if case["case"] == "uncertain":
+                  assert result["delivery_receipt"] is None
+                  assert result["delivery_uncertainty"]["operation"] == "physical_type_text"
+                  assert result["delivery_uncertainty"]["retried"] is False
+              else:
+                  assert result["delivery_receipt"] == case["input_attempts"][-1]["response"]["receipt"]
           print(json.dumps({"editable_observation_cases": 8, "runtime_type_cases": 2, "skipped": 0, "rows_unchanged": True}))
           PYTHON
       - name: Record, compile and replay, judged from the record

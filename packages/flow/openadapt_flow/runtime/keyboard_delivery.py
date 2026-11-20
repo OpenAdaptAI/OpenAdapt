@@ -77,6 +77,11 @@ def native_keyboard_delivery(
     record identity and context through the ordinary full revalidation path.
     """
 
+    # A completed focusing gesture is preparation, not this keyboard action.
+    # Enter the shared TYPE/KEY/HOTKEY phase without its positive receipt;
+    # only the caller's actual keyboard acknowledgement may populate it.
+    # Keep delivery_attempted: earlier preparation may already have had effect.
+    result.delivery_receipt = None
     rejected_resolution, rejected_region = resolution, replay._active_delivery_region
 
     def revalidate(exc: KeyboardFrameChangedBeforeInput) -> bool:

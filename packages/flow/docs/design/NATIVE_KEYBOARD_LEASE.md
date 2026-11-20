@@ -29,6 +29,14 @@ returns. The client requires its operation and native target fingerprint to
 match. Replayed leases, changed focus, invalid frames and changed context refuse.
 Lost or malformed acknowledgements are uncertain and are never retried.
 
+Entering the shared TYPE/KEY/HOTKEY phase clears any earlier preparation
+receipt from the current-action field. A successful focusing gesture cannot
+stand in for a later keyboard acknowledgement. Lost acknowledgement leaves no
+current-action receipt and retains explicit physical-operation uncertainty.
+The earlier preparation still counts toward delivery_attempted; raw transport
+proof may retain its genuine focus acknowledgement separately. No new report
+schema or fabricated keyboard receipt is introduced.
+
 A stale-frame response permits at most two keyboard-only reacquisitions. This
 requires an authenticated response for the consumed lease proving zero keyboard
 input, real changed-pixel geometry, full target/identity/context/authorization

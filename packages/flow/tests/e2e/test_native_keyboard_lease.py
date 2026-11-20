@@ -121,7 +121,12 @@ class _Transport:
             if path == "/keyboard/input" and self.before_keyboard_input is not None:
                 planted = self.before_keyboard_input(copy.deepcopy(kwargs["json"]))
             response = original(url, **kwargs)
-            if path in {"/keyboard/lease", "/keyboard/input", "/uia/editable-value"}:
+            if path in {
+                "/keyboard/lease",
+                "/keyboard/input",
+                "/uia/editable-value",
+                "/uia/act",
+            }:
                 request = kwargs["json"]
                 event = {
                     "path": path,
@@ -1004,6 +1009,16 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             events = transport.events[start:]
             inputs = [event for event in events if event["path"] == "/keyboard/input"]
             case["input_attempts"] = inputs
+            # Retain genuine focus acknowledgement as non-authorizing raw
+            # transport evidence, separately from the current keyboard result.
+            preparation = [
+                event
+                for event in events
+                if event["path"] == "/uia/act"
+                and event["response"].get("receipt", {}).get("operation") == "uia_focus"
+            ]
+            assert len(preparation) == 1
+            case["preparation_events"] = preparation
             assert 2 <= len(inputs) <= 3
             assert inputs[0]["http_status"] == 409
             assert inputs[0]["response"]["reason"] == "stale_frame"
@@ -1062,6 +1077,9 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
             else:
                 assert report.success is False
                 assert result.delivery_uncertainty is not None
+                assert result.delivery_uncertainty.operation == "physical_type_text"
+                assert result.delivery_uncertainty.retried is False
+                assert result.delivery_receipt is None
                 assert actual["injected_fault"] == "discard_actual_acknowledgement"
         evidence["passed"] = True
     finally:

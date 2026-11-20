@@ -200,9 +200,10 @@ def test_runtime_revalidates_only_keyboard_phase_without_repeating_focus(
 @pytest.mark.parametrize("stale", [False, True])
 @pytest.mark.parametrize("lost_ack", [False, True])
 def test_report_retains_actual_keyboard_attempt_frame_even_with_lost_ack(
-    tmp_path, action, stale, lost_ack
+    tmp_path, action, stale, lost_ack, monkeypatch
 ):
-    from openadapt_flow.ir import ActionKind, Step, Workflow
+    from openadapt_flow.ir import ActionDeliveryReceipt, ActionKind, Step, Workflow
+    from openadapt_flow.runtime import keyboard_delivery as keyboard_delivery_mod
     from openadapt_flow.runtime.replayer import Replayer
     from tests.test_replayer import FakeBackend, FakeVision, Match, click_step, make_png
 
@@ -268,6 +269,26 @@ def test_report_retains_actual_keyboard_attempt_frame_even_with_lost_ack(
         key="a" if action != "type" else None,
         modifiers=["ctrl"] if action == "hotkey" else [],
     )
+    # A preceding native focusing phase may have an actual positive receipt.
+    # It must never stand in for the later keyboard call, even after a typed
+    # zero-keyboard-input refusal and bounded full revalidation.
+    preparation_receipt = ActionDeliveryReceipt(
+        receipt_id="actual-prior-focus",
+        operation="uia_focus",
+        native=True,
+        target_fingerprint="b" * 64,
+        delivered_at="2026-07-25T00:00:00+00:00",
+    )
+    original_delivery = keyboard_delivery_mod.native_keyboard_delivery
+
+    def with_preparation(replay, **kwargs):
+        kwargs["result"].delivery_receipt = preparation_receipt
+        kwargs["result"].delivery_attempted = True
+        return original_delivery(replay, **kwargs)
+
+    monkeypatch.setattr(
+        keyboard_delivery_mod, "native_keyboard_delivery", with_preparation
+    )
     report = Replayer(backend, vision=vision).run(
         Workflow(name="source", steps=[step]),
         bundle_dir=bundle,
@@ -281,6 +302,16 @@ def test_report_retains_actual_keyboard_attempt_frame_even_with_lost_ack(
     ).read_bytes() == backend.delivered_frames[0]
     assert backend.delivered_frames[0] != make_png()
     assert bool(result.delivery_uncertainty) is lost_ack
+    operation = "physical_type_text" if action == "type" else "physical_press"
+    if lost_ack:
+        assert result.delivery_receipt is None
+        assert result.delivery_uncertainty.operation == operation
+        assert result.delivery_uncertainty.retried is False
+    else:
+        assert result.delivery_receipt is not None
+        assert result.delivery_receipt.operation == operation
+        assert result.delivery_receipt != preparation_receipt
+    assert result.delivery_attempted is True
     assert len(result.fresh_actuation_events) == int(stale)
     assert backend.attempts == 1 + int(stale)
     assert len([x for x in backend.actions if x[0] == "click"]) == int(action == "type")
