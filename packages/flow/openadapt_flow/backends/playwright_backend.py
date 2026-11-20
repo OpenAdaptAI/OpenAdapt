@@ -22,6 +22,14 @@ from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
+from openadapt_flow.backends._field_metadata_js import (
+    _CREDENTIAL_AT_JS,
+    _DISPLAYED_TEXT_AT_JS,
+    _EDITABLE_VALUE_JS,
+    _FIELD_CREDENTIAL_JS,
+    _FIELD_LABEL_JS,
+    _TEXT_VALUE_AT_JS,
+)
 from openadapt_flow.backends._frame_js import (  # noqa: F401 - re-exported
     _FRAME_BOUNDARY_JS,
     _FRAME_SELECTOR_JS,
@@ -1529,96 +1537,6 @@ _IDENTITY_CANDIDATES_AT_JS = (
 # more rows than this reports ``incomplete`` and the runtime cannot prove the
 # target unique.
 IDENTITY_CANDIDATE_ROW_CAP = 5000
-
-_TEXT_VALUE_AT_JS = r"""([px, py]) => {
-    const hit = document.elementFromPoint(px, py);
-    if (!hit) return null;
-    const el = hit.closest(
-        'input, textarea, [contenteditable=""], [contenteditable="true"],' +
-        ' [role="textbox"]'
-    );
-    if (!el) return null;
-    if ('value' in el && typeof el.value === 'string') return el.value;
-    if (el.isContentEditable || el.getAttribute('role') === 'textbox') {
-        return el.textContent || '';
-    }
-    return null;
-}"""
-
-# The text the element under a point shows: an input's value, else its
-# rendered text (innerText honours CSS visibility). Null when nothing is hit.
-_DISPLAYED_TEXT_AT_JS = r"""([px, py]) => {
-    const el = document.elementFromPoint(px, py);
-    if (!el || el === document.body || el === document.documentElement) {
-        return null;
-    }
-    if ('value' in el && typeof el.value === 'string' &&
-        el.matches('input, textarea, select')) return el.value;
-    const text = (el.innerText || el.textContent || '').trim();
-    return text || null;
-}"""
-
-_EDITABLE_VALUE_JS = r"""(el) => {
-    if (!el.matches(
-            'input, textarea, [contenteditable=""], [contenteditable="true"],' +
-            ' [role="textbox"]')) return null;
-    if ('value' in el && typeof el.value === 'string') return el.value;
-    return el.textContent || '';
-}"""
-
-# Best available human label for a (focused) editable field, best-first:
-# associated <label for=...>, wrapping <label>, aria-label, aria-labelledby,
-# placeholder, name attribute, title. Whitespace-collapsed; null when the
-# element is not an editable field or carries no label evidence. PASSIVE
-# record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
-_FIELD_LABEL_JS = r"""(el) => {
-    if (!el.matches(
-            'input, textarea, select, [contenteditable=""],' +
-            ' [contenteditable="true"], [role="textbox"]')) return null;
-    const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-    if (el.id) {
-        try {
-            const forLabel = document.querySelector(
-                'label[for="' + CSS.escape(el.id) + '"]'
-            );
-            const t = clean(forLabel && forLabel.textContent);
-            if (t) return t;
-        } catch (e) {}
-    }
-    const wrapping = el.closest('label');
-    if (wrapping) {
-        // Label TEXT only: a control nested inside the label (e.g. a
-        // <textarea>) contributes its typed VALUE to textContent -- strip
-        // embedded controls so the captured label is never the value.
-        const cloned = wrapping.cloneNode(true);
-        for (const child of cloned.querySelectorAll(
-                'input, textarea, select, [contenteditable=""],' +
-                ' [contenteditable="true"], [role="textbox"]')) {
-            child.remove();
-        }
-        const t = clean(cloned.textContent);
-        if (t) return t;
-    }
-    const aria = clean(el.getAttribute('aria-label'));
-    if (aria) return aria;
-    const labelledby = el.getAttribute('aria-labelledby');
-    if (labelledby) {
-        const parts = [];
-        for (const id of labelledby.split(/\s+/)) {
-            const ref = document.getElementById(id);
-            const t = clean(ref && ref.textContent);
-            if (t) parts.push(t);
-        }
-        if (parts.length) return parts.join(' ');
-    }
-    const placeholder = clean(el.getAttribute('placeholder'));
-    if (placeholder) return placeholder;
-    const name = clean(el.getAttribute('name'));
-    if (name) return name;
-    const title = clean(el.getAttribute('title'));
-    if (title) return title;
-    return null;
-}"""
 
 _GUARD_CONTAINS_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
@@ -3345,6 +3263,70 @@ class PlaywrightBackend:
 
         return self._focused_element_eval(_FIELD_LABEL_JS)
 
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """Whether the focused field takes a sign-in credential, and where it is.
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.CredentialFieldBackend`).
+        Returns ``{"kind": "password" | "new-password" | "username" |
+        "unknown", "box": (x, y, w, h)}``
+        or None. The rules use only the page's own markup, the way a browser's
+        password manager finds a sign-in form:
+
+        * ``password``: an ``<input type="password">``, or an input whose
+          ``autocomplete`` names ``current-password`` (``new-password`` when
+          it names that: a password change or sign-up);
+        * ``username``: an input whose ``autocomplete`` names ``username``,
+          or the uniquely paired text, email or phone input across all
+          password candidates in the composed form (the document when it has
+          no form). Ambiguous controls return ``unknown``; CSS visibility is
+          not used as evidence that a password candidate is irrelevant.
+
+        ``box`` is in top-document viewport pixels, or None when the
+        element's box could not be read. Read-only and never raises. None
+        means the control was read and takes no credential; ``unknown``
+        means it could not be read (any doubt about the frame chain, see
+        :meth:`_focused_element_call`), and the recorder then refuses to type
+        a declared input into it.
+        """
+
+        box: dict[str, float] = {}
+        kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
+        if kind == "none":
+            return None
+        if kind not in ("password", "new-password", "username"):
+            # The focused control could not be read (a frame chain that does
+            # not verify, a failed call). The recorder refuses to type a
+            # declared input into it.
+            return {"kind": "unknown", "box": None}
+        try:
+            rect: Optional[tuple[int, int, int, int]] = (
+                int(box["x"]),
+                int(box["y"]),
+                max(1, int(round(box["width"]))),
+                max(1, int(round(box["height"]))),
+            )
+        except (KeyError, TypeError, ValueError):
+            rect = None
+        return {"kind": kind, "box": rect}
+
+    def credential_field_at(self, x: int, y: int) -> Optional[str]:
+        """The credential kind of the field at a top-document point, or None.
+
+        ``"frame"`` when the point is inside a frame (not looked into), and
+        ``"unknown"`` when the page can't be read: the recorder then keeps a
+        sign-in field blacked out, the safe direction.
+        """
+
+        try:
+            found = self.page.evaluate(_CREDENTIAL_AT_JS, [int(x), int(y)])
+        except Exception:
+            return "unknown"
+        return (
+            found
+            if found in ("password", "new-password", "username", "frame", "unknown")
+            else None
+        )
+
     def _focused_element_eval(self, js: str) -> Optional[str]:
         """Evaluate ``js`` on the focused element, descending nested frames.
 
@@ -4044,12 +4026,15 @@ class PlaywrightBackend:
         arg: Any = None,
         with_arg: bool = False,
         frame_path_out: Optional[list[str]] = None,
+        box_out: Optional[dict[str, float]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
         ``frame_path_out``, when given, receives the frame chain the focused
         element is in (outermost first; empty in the top document).
+        ``box_out``, when given, receives the element's bounding box in
+        top-document viewport pixels.
         """
 
         scope: Any = self.page
@@ -4075,6 +4060,9 @@ class PlaywrightBackend:
                             return None
                         if frame_path_out is not None:
                             frame_path_out[:] = frame_path
+                        if box_out is not None:
+                            box_out.clear()
+                            box_out.update(box)
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)

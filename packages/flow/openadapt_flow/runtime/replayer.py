@@ -258,9 +258,16 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_evaluator_contract_sha256,
 )
 from openadapt_flow.runtime.row_dates import _ROW_DATE_PATTERNS, _row_dates  # noqa: F401
+from openadapt_flow.runtime.secret_frames import persisted_run_frame
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.runtime.typed_echo import read_typed_echo
+from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
+    SECRET_ENV_PREFIX,
+    require_secret_sources,
+    secret_env_var,
+    secret_env_vars,
+)
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -468,18 +475,6 @@ MASKED_REPEAT_FRACTION = 0.66
 # once the anchor is in view), so a run of N recorded scrolls has a combined
 # budget of ~2.5x the total recorded distance.
 SCROLL_BUDGET_FACTOR = 2.5
-
-# A secret TYPE step's value is never stored in the bundle; it is read at
-# replay from this environment variable (the param name upper-cased, with
-# non-alphanumeric characters mapped to '_'). See ir.Step.secret.
-SECRET_ENV_PREFIX = "OPENADAPT_FLOW_SECRET_"
-
-
-def secret_env_var(param: str) -> str:
-    """Environment variable a secret parameter's value is read from."""
-    key = "".join(ch if ch.isalnum() else "_" for ch in param).upper()
-    return f"{SECRET_ENV_PREFIX}{key}"
-
 
 # Bounds for the Phase-2 program interpreter -- deterministic termination
 # guarantees. A worklist loop is bounded per-loop (LoopSpec.max_iterations); the
@@ -1803,6 +1798,7 @@ class Replayer:
             aborts at the first failed step; a program run ends at a terminal
             state (or an unhandled failure). ``success`` reflects that outcome.
         """
+        require_secret_sources(params or {}, workflow.secret_params)
         managed_refusal = self._managed_dispatch_refusal()
         if managed_refusal is not None:
             raise ValueError(managed_refusal)
@@ -20116,17 +20112,20 @@ class Replayer:
             candidate = f"{safe}__{occurrence:04d}"
         return candidate
 
-    @staticmethod
     @timed_span("artifact_write")
-    def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:
+    def _save_step_png(
+        self, run_dir: Path, step_id: str, suffix: str, png: bytes
+    ) -> str:
         """Save a per-step screenshot; return its run-dir-relative path.
 
         These frames are embedded by relative path into the shareable
         ``REPORT.md``. When opt-in image redaction is enabled
         (``OPENADAPT_FLOW_SCRUB_IMAGES=1``), PII/PHI regions are burned out
-        before the frame is written to disk; otherwise the raw frame is saved
+        before the frame is written to disk; otherwise the raw frame is saved.
+        A workflow with secret parameters always stores black frames instead
         (see openadapt_flow.privacy and docs/PRIVACY.md).
         """
         rel = f"steps/{step_id}_{suffix}.png"
+        png = persisted_run_frame(png, workflow=self._execution_workflow_snapshot)
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel

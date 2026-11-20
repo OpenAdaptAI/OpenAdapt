@@ -6,6 +6,10 @@ the page to ``RemoteDisplayBackend`` (``rdp``, local client window) and
 Flow sees only its pixels, as it would over RDP or Citrix. The agent replays
 the recorded Anthropic trajectory used by tests/e2e/test_jit_cua_e2e.py.
 
+Ordinary capture retains its existing default. The explicit credential-
+withholding cases must refuse before the actor when the observation seam is
+absent; no ordinary-capture result is a credential privacy guarantee.
+
 What it checks:
 
 * a cache miss records through the surface backend and compiles a DRAFT bound
@@ -105,8 +109,9 @@ def _opener(browser: Any, base: str, clients: list[PageWindowClient]):
 
 @pytest.mark.timeout(300)
 @pytest.mark.parametrize("kind", ["rdp", "citrix"])
+@pytest.mark.parametrize("withhold_credentials", [False, True])
 def test_an_agent_run_on_a_remote_window_compiles_and_fails_closed(
-    mockmed: str, browser: Any, tmp_path: Path, kind: str
+    mockmed: str, browser: Any, tmp_path: Path, kind: str, withhold_credentials: bool
 ) -> None:
     clients: list[PageWindowClient] = []
     built: list[Any] = []
@@ -138,7 +143,21 @@ def test_an_agent_run_on_a_remote_window_compiles_and_fails_closed(
         cache_dir=tmp_path / "cache",
         key_dir=tmp_path / "keys",
         on_warning=lambda text: None,
+        withhold_credentials=withhold_credentials,
     )
+
+    if withhold_credentials:
+        from openadapt_flow.secret_inputs import CredentialObservationUnsupported
+
+        with pytest.raises(CredentialObservationUnsupported) as caught:
+            jit.run(note="Synthetic follow-up in two weeks")
+        assert caught.value.code == "CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED"
+        assert agent.calls == 0 and len(clients) == 1 and clients[0].inputs == 0
+        assert jit.candidate() is None and not jit.bundle_dir.exists()
+        assert not list(jit.program_dir.rglob("events.jsonl"))
+        assert not list(jit.program_dir.rglob("*.png"))
+        assert _records(mockmed) == []
+        return
 
     miss = jit.run(note="Synthetic follow-up in two weeks")
     assert miss.status == "needs_human_admit", miss.detail

@@ -338,3 +338,12 @@ and `--log-url`, the transparency log) are not app URLs.
 | `openadapt-agent authoring connect` | `--url` | `--url` opens a fresh browser. Without it the command pins the local app window (one macOS or Linux window). Windows, RDP and Citrix are coach-only on the mailbox: the person drives and Capture records (`COACH_ONLY_BACKENDS` in `agent/mailbox.py`). |
 | `openadapt-agent seal keys pin` | `--url` | The seal key server's address, not an app. |
 
+
+
+Automatic first-run credential withholding requires field-type observation.
+A backend without that seam, including the current screen-only RDP/Citrix
+implementations, refuses with `CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED`
+before capture or actor input. `tests/test_jit_surface_pixels.py` checks this
+earlier refusal on genuine backends presented with a synthetic client window.
+The explicit person-entered secret pause/continue authoring path remains
+available; it does not infer credential types from pixels.

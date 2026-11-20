@@ -97,11 +97,17 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
         assert handoff["inputs"] == ["note"]
         assert handoff["expect"] == {"patient_id": "p1", "type": "Triage"}
 
-        # The airbag handoff can't carry a person's teach authorization yet,
-        # so admission refuses its draft (docs/TEACH_AUTHORIZATION.md).
-        from openadapt_flow.jit import AdmissionError
+        # The airbag handoff can't carry a person's teach authorization yet.
+        # Keep that independent gate covered even though protected reuse now
+        # refuses earlier: this legacy recording has no signed capture-mode proof.
+        from openadapt_flow.compile_agent.pipeline import FirstRunCompiler
+        from openadapt_flow.jit import AdmissionError, lifecycle
 
+        compiler = FirstRunCompiler.load(Path(handoff["task_dir"]))
+        jit = compiler._jit()
         with pytest.raises(AdmissionError, match="teach_auth_not_recorded"):
+            lifecycle.teach_authorization_gate(jit.program_dir, {}, key_dir=jit.key_dir)
+        with pytest.raises(AdmissionError, match="CREDENTIAL_CAPTURE_PRIVACY_MISMATCH"):
             bench.run2(
                 app,
                 Path(handoff["task_dir"]),

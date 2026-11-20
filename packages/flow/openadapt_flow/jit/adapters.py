@@ -659,17 +659,30 @@ class CaptureComputer:
         if self._guard is not None:
             self._guard.check_ops(ops, page=self._page, pointer=self._pointer)
         notes: list[str] = []
+        withheld = False
         for op in ops:
             if self._guard is not None:
                 # Where the key lands is known only now: focus may have moved.
                 self._guard.check_key(op, self._page)
             note = self._perform(op, node_id=node_id)
+            if op.kind == "type" and getattr(
+                self._session, "last_type_withheld", False
+            ):
+                withheld = True
             if note:
                 notes.append(note)
         self.actions += 1
+        logged = dict(native)
+        if withheld:
+            # A sign-in value typed into a credential field: the recording
+            # names it as a secret parameter, and this log never holds it.
+            logged = {
+                key: ("⟦withheld⟧" if key in ("text", "value") else value)
+                for key, value in logged.items()
+            }
         self.log.append(
             {
-                "native": dict(native),
+                "native": logged,
                 "steps": [op.kind for op in ops if op.kind not in ("observe", "wait")],
                 "notes": notes,
             }
