@@ -147,6 +147,65 @@ def test_ci_keeps_its_launch_options(launches, monkeypatch):
     assert calls == [{"headless": False}]
 
 
+@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize(
+    ("case", "explicit"),
+    [
+        pytest.param("shell", {}, id="shell"),
+        pytest.param("full-fallback", {}, id="full-fallback"),
+        pytest.param("probe-error", {}, id="probe-error"),
+        pytest.param(
+            "explicit-binary", {"executable_path": "/synthetic/selected"}, id="binary"
+        ),
+        pytest.param("explicit-channel", {"channel": "chromium"}, id="channel"),
+        pytest.param("persistent-default", {}, id="persistent-default"),
+        pytest.param("persistent-extension", {"channel": "chromium"}, id="extension"),
+        pytest.param("firefox", {}, id="firefox"),
+    ],
+)
+def test_chromium_fixture_selection_preserves_explicit_choices(
+    launches, monkeypatch, tmp_path, asynchronous, case, explicit
+):
+    from openadapt_flow import _browser_setup
+
+    _, browsers, calls = launches
+    launcher = browsers[asynchronous]
+    launcher.name = "firefox" if case == "firefox" else "chromium"
+    full = tmp_path / "synthetic-full-browser"
+    full.touch()
+    launcher.executable_path = str(full)
+    probed = []
+
+    def shell_present(*, only_shell):
+        probed.append(only_shell)
+        if case == "probe-error":
+            raise OSError("synthetic browser inventory failure")
+        return case == "shell"
+
+    monkeypatch.setattr(_browser_setup, "_bundled_present", shell_present)
+    # Native fixture selection must also apply on CI where headed protection
+    # intentionally leaves the caller's options alone.
+    monkeypatch.setenv("CI", "true")
+    args = ["--synthetic-option"]
+    result = _launch(
+        launcher,
+        asynchronous=asynchronous,
+        persistent=case.startswith("persistent-"),
+        headless=True,
+        args=args,
+        **explicit,
+    )
+    expected = {"headless": True, "args": ["--synthetic-option"], **explicit}
+    if case != "firefox":
+        expected["args"] += ["--use-mock-keychain", "--password-store=basic"]
+    if case == "full-fallback":
+        expected["executable_path"] = str(full)
+    assert calls == [result] == [expected]
+    assert args == ["--synthetic-option"]
+    should_probe = case in {"shell", "full-fallback", "probe-error"}
+    assert probed == ([True] if should_probe else [])
+
+
 def test_harmless_ignored_arguments_keep_headless_mode(launches):
     _, browsers, _ = launches
     assert browsers[0].launch(ignore_default_args=["--mute-audio"]) == {

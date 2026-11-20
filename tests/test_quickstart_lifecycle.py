@@ -172,6 +172,7 @@ def _fake_lifecycle(
     bundled_after_auto=False,
     full_after_auto=False,
     require_installed_browser=False,
+    preinstalled=False,
 ):
     lifecycle = _module()
     launcher_wheel = tmp_path / "openadapt.whl"
@@ -219,7 +220,8 @@ def _fake_lifecycle(
             launcher_wheel,
             work_dir,
             flow_wheel=None,
-            browser_system_deps=True,
+            browser_system_deps=not preinstalled,
+            browser_system_deps_preinstalled=preinstalled,
             source_revision="abc123",
             require_installed_browser=require_installed_browser,
         )
@@ -227,13 +229,21 @@ def _fake_lifecycle(
     return lifecycle, run, calls, work_dir
 
 
-def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypatch):
-    _lifecycle, run, calls, work_dir = _fake_lifecycle(tmp_path, monkeypatch)
+@pytest.mark.parametrize(
+    ("preinstalled", "recorded"),
+    [(False, "installed-via-playwright"), (True, "preinstalled-by-host")],
+)
+def test_lifecycle_summary_proves_preflight_and_lazy_install(
+    tmp_path, monkeypatch, preinstalled, recorded
+):
+    _lifecycle, run, calls, work_dir = _fake_lifecycle(
+        tmp_path, monkeypatch, preinstalled=preinstalled
+    )
 
     summary = run()
 
     assert summary["browser_preflight"] == {
-        "system_dependencies": "installed-via-playwright",
+        "system_dependencies": recorded,
         "doctor": "passed-before-browser-download",
         "chromium_present_before_quickstart": False,
         "chromium_present_after_quickstart": True,
@@ -253,7 +263,7 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
     assert written["browser_preflight"] == summary["browser_preflight"]
     assert written["auto_browser_pass"] == summary["auto_browser_pass"]
     commands = [command for command, _env in calls]
-    assert any("install-deps" in command for command in commands)
+    assert any("install-deps" in command for command in commands) is not preinstalled
     assert not any("--with-deps" in command for command in commands)
 
     quickstarts = [(command, env) for command, env in calls if "quickstart" in command]

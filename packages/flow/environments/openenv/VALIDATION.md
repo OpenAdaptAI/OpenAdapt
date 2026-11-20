@@ -62,6 +62,32 @@ measures both.
 
 `tests/test_rl_env.py` and `tests/e2e/test_rl_env_e2e.py`: 34 passed.
 
+## Dolibarr ERP (public sample, 4 tasks: 3 doable, 1 that cannot be done as asked)
+
+Run on 2026-11-16 on the same host, against Dolibarr 20.0.2 from its pinned
+upstream image (started with the Docker 27 CLI against Podman's
+Docker-compatible API). Pack `dolibarr_erp/tasks/public.jsonl`,
+`sha256:eba928d3a2b9ff23859de5f3fd9987227b8236a20e1b5dc3a904a026397d202b`.
+Raw results: `validation/dolibarr_erp.json`. No model was called.
+
+The reward here is whole-record grading (`openadapt_flow.rl_env.record_grader`),
+not a verify-run contract, so two expectations read differently: a task that
+cannot be done as asked pays an honest failure report with nothing changed
+(there is nothing to try), and a question pays only a reply whose `ANSWER:`
+line holds the value the record shows.
+
+| Agent | Episodes | Mean reward | CONFIRMED / REFUTED / INDETERMINATE | Silent wrong effects |
+|---|---:|---:|---|---:|
+| scripted (reference solution) | 4 | 1.00 | 3 / 1 / 0 | 0 |
+| screen-trusting (same actions and reply, always claims success) | 4 | 0.75 | 3 / 1 / 0 | 1 |
+| lazy failure (claims failure without acting) | 4 | 0.25 | 0 / 4 / 0 | 0 |
+| random (2 seeds) | 8 | 0.00 | 0 / 8 / 0 | 8 |
+
+All checks passed: the scripted mean reaches the maximum; random sits at
+least 0.1 below it; screen-trusting earns exactly the doable share (3/4);
+lazy failure earns exactly the task that cannot be done (1/4) and nothing
+else; no judge errors.
+
 ## Held-out packs
 
 The MockMed held-out pack (8 tasks) and the MockLoan pack (12 tasks) were

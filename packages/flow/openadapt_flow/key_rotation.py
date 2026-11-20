@@ -207,7 +207,6 @@ def rewrap(
             plan.replacement,
             expected_parent=(plan.device, plan.inode),
         )
-        sealed_set._forget(plan.root)
         # Success is reported only after the on-disk header opens with the new
         # key and the complete payload inventory still authenticates.
         opened, files, header = _verified(plan.root, new_key)

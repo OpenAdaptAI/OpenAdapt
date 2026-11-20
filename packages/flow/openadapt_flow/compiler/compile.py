@@ -57,6 +57,7 @@ from openadapt_flow.ir import (
     HoverEvidence,
     Landmark,
     NativeSelectContract,
+    OptionChoice,
     ParamKind,
     ParamSpec,
     Point,
@@ -110,6 +111,374 @@ MIN_TEMPLATE_STD = 5.0
 
 # Minimum OCR confidence for a line to be used as ocr_text / landmark text.
 MIN_OCR_CONFIDENCE = 0.5
+
+
+_CHOICE_KEYS = frozenset({"Enter", "ArrowUp", "ArrowDown", "Escape"})
+
+
+def _declare_choice_params(
+    events: list[dict], params: dict[str, str], param_values: list[str]
+) -> None:
+    """A choice bound to a parameter declares it, demonstrated label as default.
+
+    The label is then never asserted in any postcondition, as a typed
+    parameter's value is not. A name a typed field already uses keeps the
+    choice literal.
+    """
+
+    for event in events:
+        choice = event.get("choice")
+        if not isinstance(choice, dict):
+            continue
+        name, label = choice.get("param"), choice.get("label")
+        if not isinstance(name, str) or not isinstance(label, str) or not label:
+            continue
+        if choice.get("shows") or (name in params and params[name] != label):
+            choice.pop("param", None)
+            continue
+        params[name] = label
+        param_values.append(label)
+
+
+def _choice_action_is_local(step: Step, event: dict) -> bool:
+    """A choice gesture cannot absorb independent authority or record effects."""
+    return (
+        not step.effects
+        and not event.get("effects")
+        and step.dialog is None
+        and not step.opens
+        and not step.closes_surface
+        and step.submit_binding is None
+        and step.api_binding is None
+        and step.guard is None
+        and step.wait_until is None
+        and step.read_gate is None
+        and step.target_param is None
+        and step.risk != "irreversible"
+        and not any(
+            condition.kind
+            in (
+                PostconditionKind.URL_CHANGED,
+                PostconditionKind.TITLE_CHANGED,
+                PostconditionKind.NEW_TAB_OPENED,
+            )
+            for condition in step.expect
+        )
+    )
+
+
+def _plain_click(step: Step, event: dict) -> bool:
+    return (
+        step.action is ActionKind.CLICK
+        and step.anchor is not None
+        and _choice_action_is_local(step, event)
+    )
+
+
+def _search_words(typed: str, label: str) -> Optional[tuple[int, int]]:
+    """Where a typed search sits in the label, as whole words, or None.
+
+    The search ``Rich`` in ``10000GX - Richard Jones`` is the start of word 2;
+    ``Dr. As`` in ``Dr. Asha Rao`` is word 0 and the start of word 1.
+    """
+
+    query = typed.casefold().split()
+    words = label.casefold().split()
+    if not query:
+        return None
+    for first in range(len(words) - len(query) + 1):
+        window = words[first : first + len(query)]
+        if window[:-1] == query[:-1] and window[-1].startswith(query[-1]):
+            return (first, len(query))
+    return None
+
+
+def _choice_contract(choice: dict, query: Optional[str]) -> Optional[OptionChoice]:
+    try:
+        if choice.get("kind") == "native_select":
+            return OptionChoice(
+                kind="native_select",
+                label=str(choice.get("label") or ""),
+                value=choice.get("value")
+                if isinstance(choice.get("value"), str)
+                else None,
+                readback="select",
+            )
+        shape_data = choice.get("shape")
+        shape: dict[str, Any] = shape_data if isinstance(shape_data, dict) else {}
+        label = str(choice.get("label") or "")
+        return OptionChoice.model_validate(
+            {
+                "kind": "listed_option",
+                "label": label,
+                "value": (
+                    choice["value"]
+                    if isinstance(choice.get("value"), str)
+                    else (
+                        choice["field_value"]
+                        if isinstance(choice.get("field_value"), str)
+                        else None
+                    )
+                ),
+                "commit_field": choice.get("field")
+                if isinstance(choice.get("field"), str)
+                else None,
+                "query": (
+                    "none"
+                    if query is None
+                    else ("words" if _search_words(query, label) else "label")
+                ),
+                "query_words": _search_words(query, label)
+                if query is not None
+                else None,
+                "option": {
+                    "role": shape.get("role"),
+                    "tag": shape.get("tag"),
+                    "classes": tuple(shape.get("classes") or ()),
+                },
+                "readback": choice.get("readback"),
+                "shows": choice.get("shows")
+                if isinstance(choice.get("shows"), str)
+                else None,
+            }
+        )
+    except Exception:
+        return None
+
+
+def _choice_opening_matches(opening: dict, choice: dict) -> bool:
+    expected = choice.get("opening_gesture")
+    return expected is None or (
+        isinstance(expected, str)
+        and bool(expected)
+        and opening.get("choice_gesture") == expected
+    )
+
+
+def _choice_search_is_bound(
+    opening: dict, typed: dict, choice: dict, search_click: Optional[dict] = None
+) -> bool:
+    """Require recorder proof linking this input session to this opener.
+
+    The recorder emits the gesture link only for the opening control or its
+    newly shown popup. Matching words, adjacency and screen geometry do not
+    prove that a field is the list's search input.
+    """
+    gesture = opening.get("choice_gesture")
+    session = typed.get("input_session")
+    return (
+        isinstance(gesture, str)
+        and bool(gesture)
+        and isinstance(session, str)
+        and bool(session)
+        and typed.get("choice_gesture") == gesture
+        and choice.get("opening_gesture") == gesture
+        and choice.get("search_input_session") == session
+        and (
+            search_click is None
+            or (
+                search_click.get("choice_search_gesture") == gesture
+                and search_click.get("input_session") == session
+            )
+        )
+    )
+
+
+def _fold_choices(
+    pending: list[tuple[Step, Optional[bytes], Optional[bytes], dict]],
+    aliases: dict[str, str],
+    notes: list[dict[str, Any]],
+    ocr_cache: dict[Any, Any],
+) -> list[tuple[Step, Optional[bytes], Optional[bytes], dict]]:
+    """Fold each demonstrated dropdown choice into one SELECT_OPTION step.
+
+    docs/CHOICES.md. A recorded option click carries ``choice`` evidence: the
+    option's shape and label, and the recorder's read-back that the control
+    the previous press hit showed the label once the screen settled. A
+    native select's choice is a click at the select. The fold takes, in
+    order, the control's opening click, an optional search typed into the
+    list (only with a recorder-bound input session whose text is part of
+    the label, so replay can type the wanted label instead), and the option
+    click, and keeps the control's
+    anchor. Anything else stays as the clicks and keys it was, with a note.
+    """
+
+    out: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+    for step, before, after, event in pending:
+        choice = event.get("choice")
+        if not isinstance(choice, dict) or step.action is not ActionKind.CLICK:
+            out.append((step, before, after, event))
+            continue
+        if not _choice_action_is_local(step, event):
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": "the option click has an independent action contract",
+                }
+            )
+            continue
+        native = choice.get("kind") == "native_select"
+        absorbed: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+        query: Optional[str] = None
+        reason: Optional[str] = None
+        if native:
+            locator = step.anchor.structural if step.anchor is not None else None
+            # Only absorb keys when a matching opening click bounds the
+            # gesture. Adjacent keys alone need not belong to this select.
+            opening = len(out) - 1
+            while (
+                opening >= 0
+                and out[opening][0].action is ActionKind.KEY
+                and out[opening][0].key in _CHOICE_KEYS
+                and out[opening][0].surface == step.surface
+                and _choice_action_is_local(out[opening][0], out[opening][3])
+            ):
+                opening -= 1
+            if opening >= 0 and _plain_click(out[opening][0], out[opening][3]):
+                prior_step = out[opening][0]
+                prior = prior_step.anchor.structural if prior_step.anchor else None
+                if (
+                    prior is not None
+                    and locator is not None
+                    and locator.selector
+                    and prior.selector == locator.selector
+                    and (prior.frame_path or None) == (locator.frame_path or None)
+                    and prior_step.surface == step.surface
+                    and _choice_opening_matches(out[opening][3], choice)
+                ):
+                    absorbed = out[opening:]
+                    del out[opening:]
+            # The focusing click saw the control before the change; the
+            # change event already shows the new value.
+            control = (
+                absorbed[0][0]
+                if absorbed and absorbed[0][0].action is ActionKind.CLICK
+                else step
+            )
+        else:
+            opening = len(out) - 1
+            if out and out[-1][0].action is ActionKind.TYPE:
+                typed, _typed_before, _typed_after, typed_event = out[-1]
+                text = typed.text or ""
+                opening -= 1
+                search_click: Optional[dict] = None
+                if opening >= 0 and out[opening][3].get("choice_search_gesture"):
+                    search_step, _b, _a, search_click = out[opening]
+                    if (
+                        not _plain_click(search_step, search_click)
+                        or search_step.surface != step.surface
+                    ):
+                        reason = (
+                            "the popup search click has an independent action contract"
+                        )
+                    opening -= 1
+                if (
+                    typed.secret
+                    or typed.param is not None
+                    or not _choice_action_is_local(typed, typed_event)
+                    or typed.surface != step.surface
+                    or not text.strip()
+                    or text.casefold().strip()
+                    not in str(choice.get("label") or "").casefold()
+                ):
+                    reason = "the preceding input is not a literal local choice search"
+                elif opening < 0 or not _choice_search_is_bound(
+                    out[opening][3], typed_event, choice, search_click
+                ):
+                    reason = "the recorded search is not bound to the opening control"
+                elif reason is None:
+                    query = text
+            if reason is None:
+                if (
+                    opening < 0
+                    or not _plain_click(out[opening][0], out[opening][3])
+                    or out[opening][0].surface != step.surface
+                    or out[opening][3].get("choice_search_gesture")
+                ):
+                    reason = "no click opened the list"
+                elif not _choice_opening_matches(out[opening][3], choice):
+                    reason = "the option is not bound to the opening control"
+                else:
+                    absorbed = out[opening:]
+                    del out[opening:]
+            control = absorbed[0][0] if absorbed else step
+        contract = _choice_contract(choice, query) if reason is None else None
+        if contract is None:
+            # Restore what was taken off and keep the clicks as they were.
+            out.extend(absorbed)
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": reason or "the recorded choice evidence is incomplete",
+                }
+            )
+            continue
+        param = choice.get("param") if isinstance(choice.get("param"), str) else None
+        label = contract.label
+        anchor = (
+            control.anchor.model_copy(deep=True) if control.anchor is not None else None
+        )
+        # A control locator identifies where to act, not which record owns
+        # it. Folding must retain every identity tier from the opening click,
+        # including its pixel/OCR guard when no structured row was recorded.
+        try:
+            chosen = control.model_copy(
+                update={
+                    "id": step.id,
+                    "action": ActionKind.SELECT_OPTION,
+                    "intent": (
+                        f"choose <{param}>"
+                        if param
+                        else f"choose '{_text_preview(label)}'"
+                    ),
+                    "text": None if param else label,
+                    "param": param,
+                    "choice": contract,
+                    "anchor": anchor,
+                    "expect": list(step.expect),
+                    "risk": step.risk,
+                }
+            )
+            chosen = Step.model_validate(chosen.model_dump(mode="json"))
+        except Exception as exc:
+            out.extend(absorbed)
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": f"the choice step is invalid ({type(exc).__name__})",
+                }
+            )
+            continue
+        first_before = absorbed[0][1] if absorbed else before
+        merged = {
+            **{k: v for k, v in event.items() if not k.endswith("_before")},
+            **{
+                k: v
+                for k, v in (absorbed[0][3] if absorbed else event).items()
+                if k.endswith("_before")
+            },
+        }
+        for absorbed_step, _b, _a, absorbed_event in absorbed:
+            aliases[absorbed_step.id] = chosen.id
+            ocr_cache.pop((int(absorbed_event.get("i", -1)), "after"), None)
+        notes.append(
+            {
+                "change": "choice_gesture",
+                "step": chosen.id,
+                "kind": contract.kind,
+                "query": contract.query,
+                "parameter": param,
+                "absorbed_steps": [a[0].id for a in absorbed],
+            }
+        )
+        out.append((chosen, first_before, after, merged))
+    return out
 
 
 def _native_selection_event(
@@ -2086,6 +2455,7 @@ def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogRespons
     """
 
     response = raw.get("response")
+    kind = raw.get("type")
     message = str(raw.get("message") or "")
     values = sorted(
         (v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS),
@@ -2105,13 +2475,15 @@ def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogRespons
             "compile again"
         )
     if len(pieces) == 1 and not re.search(r"\d", message):
-        return DialogResponse.model_validate({"response": response, "message": message})
+        return DialogResponse.model_validate(
+            {"response": response, "message": message, "kind": kind}
+        )
     pattern = ".+".join(
         r"\d+".join(re.escape(part) for part in re.split(r"\d+", piece))
         for piece in pieces
     )
     return DialogResponse.model_validate(
-        {"response": response, "message_pattern": pattern}
+        {"response": response, "message_pattern": pattern, "kind": kind}
     )
 
 
@@ -2590,6 +2962,7 @@ def _compile_recording(
             text = event.get("text")
             if text:
                 param_values.append(text)
+    _declare_choice_params(events, params, param_values)
     # A compile-time secret's demonstrated value is excluded from
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
@@ -3307,6 +3680,9 @@ def _compile_recording(
             native_pending.append((step, before, after, event))
             index += 1
         pending = native_pending
+        pending = _fold_choices(
+            pending, absorbed_step_aliases, native_selection_notes, ocr_cache
+        )
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
     # the prior click names an exact field region; typing produces a provisional
@@ -3584,7 +3960,12 @@ def _compile_recording(
     # form, whatever the screen did after the click (a slow recording can
     # capture the page before it changes). Explicit risk_overrides below
     # still win.
-    for step in _form_submit_steps(steps, binding_observations):
+    credential_kinds = {
+        step.id: str(event["credential"])
+        for step, _before, _after, event in pending
+        if step.secret and isinstance(event.get("credential"), str)
+    }
+    for step in _form_submit_steps(steps, binding_observations, credential_kinds):
         if step.risk != "irreversible":
             step.risk = "irreversible"
             step.risk_explanation = "it submits the form the run typed into"
@@ -3882,6 +4263,9 @@ def _compile_recording(
                 len(decisions),
             )
 
+    # Each postcondition stays on its producing step. Later display persistence,
+    # reversible risk and target identity do not authorize delaying that check.
+
     # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
     # gesture that asserts nothing with an equivalent checked one, using only
     # the recording's own frames. Every change is recorded in
@@ -3901,7 +4285,11 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
-    compile_notes = [*compile_notes, *guard_notes, *native_selection_notes]
+    compile_notes = [
+        *compile_notes,
+        *guard_notes,
+        *native_selection_notes,
+    ]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -3920,6 +4308,7 @@ def _compile_recording(
         surface=surface,
         execution_mode=execution_mode,
         params=params,
+        dialogs_recorded=bool(meta.get("dialogs_captured")),
         # Workflow-program IR, Phase 1: emit a TYPED spec for each recorded
         # parameter alongside the frozen ``params`` dict -- generalizing the
         # recorder's single "note value at replay" into a first-class,
@@ -4277,16 +4666,30 @@ def _compile_recording(
 
 
 def _form_submit_steps(
-    steps: list[Step], observations: dict[str, object]
+    steps: list[Step],
+    observations: dict[str, object],
+    credential_kinds: Optional[dict[str, str]] = None,
 ) -> list[Step]:
     """Clicks on the labelled submit button of the one form owning every
-    field typed into since the previous such click."""
+    field typed into since the previous such click.
 
+    A sign-in is not a save: when the fields typed since the previous such
+    click are exactly a username and a current password the recorder withheld
+    (``credential_kinds``, from each secret TYPE event's ``credential``), its
+    submit button signs in and writes no record. A lone password (a PIN or a
+    re-authentication), a ``new-password`` field (a password change or sign-up)
+    or any other typed field keeps the escalation, and the keyword risk
+    inference still classifies the button on its own label.
+    """
+
+    kinds = credential_kinds or {}
     found: list[Step] = []
     typed = False
+    typed_kinds: list[Optional[str]] = []
     for step in steps:
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             typed = True
+            typed_kinds.append(kinds.get(step.id) if step.secret else None)
             continue
         raw = observations.get(step.id)
         if (
@@ -4295,8 +4698,10 @@ def _form_submit_steps(
             and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
             and _is_form_save(raw)
         ):
-            found.append(step)
+            if sorted(map(str, typed_kinds)) != ["password", "username"]:
+                found.append(step)
             typed = False
+            typed_kinds = []
     return found
 
 

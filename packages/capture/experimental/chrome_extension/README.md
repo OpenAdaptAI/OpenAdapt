@@ -8,7 +8,7 @@ launch a clean Chromium browser or attach to one existing signed-in local
 Chromium tab. Both modes retain the compiler's event, DOM identity, exact
 before/after frame, field geometry, and source-time secret-redaction contract.
 See the
-[`openadapt-flow` browser recording guide](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/BROWSER_RECORDING.md).
+[`openadapt-flow` browser recording guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/BROWSER_RECORDING.md).
 
 ## Current prototype behavior
 

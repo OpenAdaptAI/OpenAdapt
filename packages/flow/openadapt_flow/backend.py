@@ -44,6 +44,20 @@ class StructuralElementNotActionable(StructuralResolutionRefused):
     """
 
 
+class ChoiceRefused(RuntimeError):
+    """A choice refused before every backend-owned mutation.
+
+    Opening, search input, value assignment and option events already cross
+    delivery boundaries. A failure after any of those is instead
+    :class:`ActionDeliveryUncertain`. ``code`` never carries option text:
+    option labels can be patient data.
+    """
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        super().__init__(f"{code}{': ' + detail if detail else ''}")
+        self.code = code
+
+
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 
@@ -294,6 +308,30 @@ class FieldLabelBackend(Protocol):
 
         Whitespace-collapsed; None when no field is focused, the backend has
         no structured layer, or on any momentary failure (never raises).
+        """
+        ...
+
+
+@runtime_checkable
+class CredentialFieldBackend(Protocol):
+    """Optional RECORD-TIME capability: does the focused field take a sign-in
+    credential?
+
+    The recorder asks before an agent-driven TYPE. A ``password`` or
+    ``username`` field's typed value becomes a SECRET parameter (see
+    ``ir.Step.secret``): the event carries no text and the field's pixels are
+    blacked out in every frame that shows it. The answer comes from the
+    page's own markup only (field type, ``autocomplete`` and the sign-in
+    form's field order), never from the value or a label's wording. Never
+    called at replay.
+    """
+
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """Return password/new-password/username/unknown and an optional box.
+
+        None means an observed ordinary control. Unknown means unreadable;
+        absence of this capability is unsupported when withholding is requested.
+        Never raises.
         """
         ...
 
@@ -584,6 +622,26 @@ class NativeSelectBackend(Protocol):
 
     def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Read the committed option only while the delivered target is continuous."""
+        ...
+
+
+@runtime_checkable
+class ChoiceBackend(Protocol):
+    """Choose a dropdown option by its label or value (docs/CHOICES.md).
+
+    ``choose_option`` may raise :class:`ChoiceRefused` only before every
+    backend-owned mutation. After opening, search, assignment or option input,
+    failures raise :class:`ActionDeliveryUncertain`. A successful choice has a
+    stable shown and independent committed value; later confirmation remains
+    an observation, never permission to repeat input.
+    """
+
+    def choose_option(
+        self, contract: Any, wanted: str, *, point: tuple[int, int]
+    ) -> dict[str, Any]: ...
+
+    def confirm_choice(self) -> bool:
+        """Read the chosen option back once more on the settled page."""
         ...
 
 
