@@ -380,7 +380,7 @@ def test_flow_matches_the_shared_secret_name_golden_vectors():
     from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
 
     vectors = json.loads(
-        (Path(__file__).parent / "fixtures/secret-env-names.json").read_text()
+        (Path(__file__).parent / "fixtures/parameter-env-names.json").read_text()
     )
     for name, expected in vectors["cases"]:
         assert secret_env_var(name) == expected

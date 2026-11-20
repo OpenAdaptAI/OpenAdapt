@@ -243,8 +243,15 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_evaluator_contract_sha256,
 )
 from openadapt_flow.runtime.row_dates import _ROW_DATE_PATTERNS, _row_dates  # noqa: F401
+from openadapt_flow.runtime.secret_frames import persisted_run_frame
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
+from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
+    SECRET_ENV_PREFIX,
+    require_secret_sources,
+    secret_env_var,
+    secret_env_vars,
+)
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -454,36 +461,6 @@ MASKED_REPEAT_FRACTION = 0.66
 # once the anchor is in view), so a run of N recorded scrolls has a combined
 # budget of ~2.5x the total recorded distance.
 SCROLL_BUDGET_FACTOR = 2.5
-
-# A secret TYPE step's value is never stored in the bundle; it is read at
-# replay from this environment variable (the param name upper-cased, with
-# non-alphanumeric characters mapped to '_'). See ir.Step.secret.
-SECRET_ENV_PREFIX = "OPENADAPT_FLOW_SECRET_"
-
-
-def secret_env_var(param: str) -> str:
-    """Environment variable a secret parameter's value is read from."""
-    key = "".join(ch if ch.isascii() and ch.isalnum() else "_" for ch in param).upper()
-    return f"{SECRET_ENV_PREFIX}{key}"
-
-
-def secret_env_vars(params: Sequence[str]) -> dict[str, str]:
-    """Require an injective mapping from secret names to environment keys.
-
-    Case and punctuation normalization is lossy. Distinct parameters must
-    never silently share a credential slot, even when values happen to match.
-    """
-    keys: dict[str, str] = {}
-    owners: dict[str, str] = {}
-    for name in sorted(set(params)):
-        key = secret_env_var(name)
-        for alias in (name, key):
-            if alias in owners and owners[alias] != name:
-                raise ValueError("secret parameter names collide in the environment")
-            owners[alias] = name
-        keys[name] = key
-    return keys
-
 
 # Bounds for the Phase-2 program interpreter -- deterministic termination
 # guarantees. A worklist loop is bounded per-loop (LoopSpec.max_iterations); the
@@ -1804,9 +1781,7 @@ class Replayer:
             aborts at the first failed step; a program run ends at a terminal
             state (or an unhandled failure). ``success`` reflects that outcome.
         """
-        secret_env_vars(workflow.secret_params)
-        if set(params or {}) & set(workflow.secret_params):
-            raise ValueError("secret parameters must come from their secret source")
+        require_secret_sources(params or {}, workflow.secret_params)
         managed_refusal = self._managed_dispatch_refusal()
         if managed_refusal is not None:
             raise ValueError(managed_refusal)
@@ -20113,18 +20088,6 @@ class Replayer:
         (see openadapt_flow.privacy and docs/PRIVACY.md).
         """
         rel = f"steps/{step_id}_{suffix}.png"
-        workflow = self._execution_workflow_snapshot
-        if workflow is not None and workflow.secret_params:
-            # A username can be echoed anywhere after sign-in, and the field
-            # can move. Keep pixels for in-memory checks, but persist no page
-            # pixels for a run that handles secrets. This does not depend on
-            # optional OCR or on the page continuing to label the value.
-            from PIL import Image
-
-            with Image.open(io.BytesIO(png)) as frame:
-                blank = Image.new("RGB", frame.size, (0, 0, 0))
-                out = io.BytesIO()
-                blank.save(out, format="PNG")
-                png = out.getvalue()
+        png = persisted_run_frame(png, workflow=self._execution_workflow_snapshot)
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel
