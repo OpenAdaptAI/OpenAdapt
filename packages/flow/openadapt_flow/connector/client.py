@@ -37,9 +37,11 @@ from typing import Any, Iterable, Optional
 import httpx
 
 from openadapt_flow.connector import egress
+from openadapt_flow.connector.protocol import MANAGED_DELIVERY_AUTHORITY_CAPABILITY
 from openadapt_flow.hosted import HostedError
 
-MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY = "managed_qualification_authority_v2"
+# Retain the import name for callers; only the qualified v3 wire is advertised.
+MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY = MANAGED_DELIVERY_AUTHORITY_CAPABILITY
 CONTROL_HEADER = "x-oa-connector-control"
 
 

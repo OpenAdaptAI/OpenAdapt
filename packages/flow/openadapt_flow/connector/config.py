@@ -104,6 +104,9 @@ class ConnectorSettings:
     max_workers: int = 4
     #: Path to the qualification signer registry JSON (production admission).
     qualification_signers_file: Optional[str] = None
+    #: Independent operator-owned ProductionQualificationAuthority wrapper.
+    #: Qualified jobs must match it exactly; never built from a remote proof.
+    qualification_authority_file: Optional[str] = None
 
     def pinned_admission_keys(self) -> frozenset[str]:
         keys = {k.strip().lower() for k in self.trusted_admission_keys.split(",")}
@@ -271,6 +274,13 @@ def load_settings(
             None,
             "qualification_signers_file",
         ),
+        qualification_authority_file=_pick(
+            flags,
+            "BYOC_QUALIFICATION_AUTHORITY_FILE",
+            file_cfg.get("qualification_authority_file"),
+            None,
+            "qualification_authority_file",
+        ),
     )
 
 
@@ -302,6 +312,7 @@ def save_enrollment(
         ("egress_audit_log", settings.egress_audit_log),
         ("max_workers", settings.max_workers),
         ("qualification_signers_file", settings.qualification_signers_file),
+        ("qualification_authority_file", settings.qualification_authority_file),
     ]
     for key, value in fields:
         if value is None or value == "":
