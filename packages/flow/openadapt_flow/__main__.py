@@ -3389,32 +3389,17 @@ def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
     return pinned_lineage(args, cfg)
 
 
-#: The run-authorization fields a managed dispatch must agree on with the
-#: authorization this runner builds for the same bundle and inputs.
-MANAGED_SAFETY_FIELDS = (
-    "bundle_content_digest",
-    "runtime_inputs_digest",
-    "admitted_policy_name",
-    "admitted_policy_contract_sha256",
-    "execution_profile",
-    "minimum_effect_tier",
-    "qualified_effect_requirements",
-    "required_identity_step_ids",
-    "unverified_write_approvals",
+from openadapt_flow.runner.dispatch_envelope import (  # noqa: E402
+    MANAGED_SAFETY_FIELDS as MANAGED_SAFETY_FIELDS,
 )
 
 
 def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
-    """Whether Cloud's run authorization disagrees with the local one.
+    from openadapt_flow.runner.dispatch_envelope import (
+        managed_authorization_mismatch as check,
+    )
 
-    Cloud may admit only API steps the bundle itself admits. An API step Cloud
-    doesn't name runs on the GUI, so naming fewer is allowed.
-    """
-
-    return any(
-        getattr(authorization, field) != getattr(local, field)
-        for field in MANAGED_SAFETY_FIELDS
-    ) or any(row not in local.api_steps for row in authorization.api_steps)
+    return check(authorization, local)
 
 
 def _replay_worklist_pool(
@@ -4195,34 +4180,9 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
 def _stage_admitted_program_readback(
     args: argparse.Namespace, bundle: Path
 ) -> Optional[int]:
-    """Use the bundled read-back check for a managed admitted-program run.
+    from openadapt_flow.cli_program_dispatch import stage_admitted_program_readback
 
-    Call only after the run's authority is decided: the dispatch rests on
-    the program's own admission (``managed_admission_refusal`` returned
-    None) and no production authority file or qualification admission is in
-    play. Every other run ignores ``readback/verify.yaml`` and reads back
-    through its deployment config (jit/hosted_authority.py).
-    """
-
-    if not getattr(args, "managed_dispatch_file", None):
-        return None
-    from openadapt_flow.jit.hosted_authority import (
-        HostedAuthorityError,
-        is_admitted_program,
-        readback_effects,
-    )
-
-    if not is_admitted_program(bundle):
-        return None
-    try:
-        args._admitted_program_effects = readback_effects(bundle)
-    except HostedAuthorityError:
-        print(
-            "run REFUSED: the admitted program's bundled read-back check is "
-            "invalid. Nothing was executed."
-        )
-        return 2
-    return None
+    return stage_admitted_program_readback(args, bundle)
 
 
 def _admitted_bundle_refusal(
@@ -4437,6 +4397,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     dispatch_file = getattr(args, "managed_dispatch_file", None)
     managed_binding = None
     authorization = None
+    admitted_program = False
     if dispatch_file:
         try:
             managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
@@ -4730,6 +4691,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _bind_approval_mode(args)
     if refused is not None:
         return refused
+
+    if dispatch_file and admitted_program:
+        from openadapt_flow.cli_program_dispatch import bind_verified_program_run
+
+        refused = bind_verified_program_run(
+            args,
+            bundle=bundle,
+            workflow=workflow,
+            params=runtime_params,
+            worklists=runtime_worklists,
+            policy_source=policy_source,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+        )
+        if refused is not None:
+            return refused
 
     from openadapt_flow.cli_worklist_pool import loop_relation, requested_pool
     from openadapt_flow.runtime.worklist_pool import PoolRefusal
@@ -5212,6 +5189,23 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             getattr(args, "param", None), getattr(args, "params_file", None)
         ),
     )
+    from openadapt_flow.cli_program_dispatch import restore_verified_program_dispatch
+    from openadapt_flow.jit.hosted_authority import HostedAuthorityError
+
+    try:
+        managed_binding, effect_verifier = restore_verified_program_dispatch(
+            managed_binding,
+            manifest,
+            workflow,
+            policy_source=cfg.policy.policy,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+        )
+    except (HostedAuthorityError, ValueError, OSError):
+        print(
+            "Resume REFUSED: the exact managed program authority could not be verified again. Nothing was executed."
+        )
+        return 3
     if manifest.delivery_authority_kind == "cloud_runner" and allow_egress:
         print(
             "Resume REFUSED: this managed runner doesn't permit model grounding "
@@ -5270,6 +5264,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             replayer,
             key=ckpt_key,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_origin=(
+                f"{urlsplit(backend.page.url).scheme}://{urlsplit(backend.page.url).netloc}"
+                if getattr(backend, "page", None) is not None
+                else None
+            ),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
         )
 

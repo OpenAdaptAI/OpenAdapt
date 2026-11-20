@@ -94,15 +94,6 @@ class HostedAuthorityError(ValueError):
     """The admitted program cannot run under a hosted admission authority."""
 
 
-#: (admission SHA-256, bundle content digest) pairs that
-#: :func:`managed_admission_refusal` verified in this process. The replayer's
-#: input edges accept a dispatch with no qualification admission only when its
-#: ``approval_source`` and ``bundle_content_digest`` name one of these pairs
-#: (:func:`program_admission_edge_refusal`). Only a successful verification
-#: adds to it.
-_VERIFIED_ADMISSIONS: set[tuple[str, str]] = set()
-
-
 def _admission_file(bundle_dir: Path | str) -> Path:
     from openadapt_flow.jit.lifecycle import ADMISSION_FILE
 
@@ -269,6 +260,8 @@ def managed_admission_refusal(
         return "the bundle is not an admitted program with a read-back check"
     try:
         manifest = verify_admission(bundle, key_dir=key_dir)
+        if manifest.get("admission_mode", "person") not in {"person", "admitter_key"}:
+            return "the admission mode cannot authorize a hosted program"
         digest = admission_sha256(bundle)
         readback_effects(bundle)
         bound = readback_sha256(bundle)
@@ -285,40 +278,23 @@ def managed_admission_refusal(
         or getattr(authorization, "bundle_content_digest", None) != content
     ):
         return "the run authorization does not name this bundle"
-    _VERIFIED_ADMISSIONS.add((digest, content))
     return None
 
 
-def program_admission_edge_refusal(authorization: Any) -> Optional[str]:
-    """Why an input edge of a managed run may not rest on a program admission.
+def program_admission_edge_refusal(
+    authorization: Any, workflow: Any, *, managed_dispatch_binding: Any = None
+) -> Optional[str]:
+    """Refuse unless this exact dispatch carries freshly verified authority.
 
-    ``openadapt-flow run`` verified the admission once, before the replayer
-    started (:func:`managed_admission_refusal`). Each later input edge checks
-    that the authorization still names that verified admission, under the
-    Standard profile, with no qualification admission. Revocation is the
-    cloud's: every delivery still needs a fresh managed delivery permit, which
-    the cloud refuses once the admission key is revoked.
+    A previous verification in this process never grants authority to another
+    run, authorization, input set, policy, registry or dispatch session.
     """
+    from openadapt_flow.jit.dispatch_authority import ProgramDispatchAuthority
 
-    if authorization is None:
-        return "the managed dispatch carries no run authorization"
-    if getattr(authorization, "qualification_admission", None) is not None:
-        return "the dispatch carries a qualification admission"
-    if getattr(authorization, "execution_profile", None) != "standard":
-        return "an admitted program runs hosted only under the Standard profile"
-    source = getattr(authorization, "approval_source", None)
-    if not isinstance(source, str) or not source.startswith(APPROVAL_PREFIX):
-        return "the run authorization names no program admission"
-    pair = (
-        source[len(APPROVAL_PREFIX) :],
-        getattr(authorization, "bundle_content_digest", None),
-    )
-    if pair not in _VERIFIED_ADMISSIONS:
-        return "the program admission was not verified for this bundle in this run"
-    return None
-
-
-# -- the copy of the admission that goes to the cloud ---------------------------
+    authority = getattr(managed_dispatch_binding, "program_admission_authority", None)
+    if not isinstance(authority, ProgramDispatchAuthority):
+        return "the managed program has no verified per-dispatch authority"
+    return authority.refusal(workflow, managed_dispatch_binding, authorization)
 
 
 def _pseudonymized(manifest: Mapping[str, Any], keys: Path) -> dict[str, Any]:

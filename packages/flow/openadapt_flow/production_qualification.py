@@ -569,6 +569,8 @@ class ProductionQualificationGuard:
 def managed_qualification_edge_refusal(
     authorization: object,
     workflow: object,
+    *,
+    managed_dispatch_binding: object = None,
 ) -> str | None:
     """Recheck the Cloud admission at a consequential input edge.
 
@@ -587,7 +589,14 @@ def managed_qualification_edge_refusal(
             program_admission_edge_refusal,
         )
 
-        if program_admission_edge_refusal(authorization) is None:
+        if (
+            program_admission_edge_refusal(
+                authorization,
+                workflow,
+                managed_dispatch_binding=managed_dispatch_binding,
+            )
+            is None
+        ):
             return None
         return (
             "Standard and Regulated actuation requires a signed qualification admission"

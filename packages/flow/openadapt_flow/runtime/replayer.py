@@ -1794,6 +1794,15 @@ class Replayer:
         self._layout_target_kind = execution_target_kind
         self._layout_fingerprints = None
         self._reset_render_scale()
+        from openadapt_flow.jit.dispatch_authority import claim_program_execution
+
+        claim_program_execution(
+            self,
+            workflow,
+            bundle_dir=Path(bundle_dir),
+            params=params,
+            worklists=worklists,
+        )
         production_refusal = self._production_qualification_refusal(workflow)
         if production_refusal is not None:
             raise ValueError(production_refusal)
@@ -1974,39 +1983,11 @@ class Replayer:
             and not durable_resume
             and self.managed_dispatch_binding is not None
         ):
-            from openadapt_flow.runtime.durable.authority import DurableAuthority
+            from openadapt_flow.runtime.delivery_freshness import InitialDeliveryGuard
 
-            managed_durable_run = durable_run
-
-            class _ManagedInitialDeliveryGuard:
-                def __init__(self_nonlocal) -> None:
-                    self_nonlocal.authority = DurableAuthority(
-                        run_dir, managed_durable_run.store
-                    )
-                    self_nonlocal.pending_remote_permit: Any = None
-
-                def before_delivery(self_nonlocal) -> None:
-                    if self_nonlocal.pending_remote_permit is not None:
-                        raise RuntimeError(
-                            "a prior production delivery lacks an acknowledgment receipt"
-                        )
-                    self_nonlocal.pending_remote_permit = (
-                        self_nonlocal.authority.before_initial_delivery(
-                            managed_durable_run._manifest  # noqa: SLF001 - exact retained manifest
-                        )
-                    )
-
-                def acknowledge_delivery(self_nonlocal) -> None:
-                    pending = self_nonlocal.pending_remote_permit
-                    if pending is None:
-                        return
-                    self_nonlocal.authority.acknowledge_remote_delivery(
-                        managed_durable_run._manifest,  # noqa: SLF001
-                        pending,
-                    )
-                    self_nonlocal.pending_remote_permit = None
-
-            self._durable_initial_delivery_guard = _ManagedInitialDeliveryGuard()
+            self._durable_initial_delivery_guard = InitialDeliveryGuard(
+                run_dir, durable_run
+            )
         (run_dir / "steps").mkdir(parents=True, exist_ok=True)
 
         report = RunReport(
@@ -3112,53 +3093,19 @@ class Replayer:
         if durable_run is not None and self._durable_continuation_guard is None:
 
             def write_ahead() -> None:
-                # What a resume reads if the process stops while the span's
-                # requests are going out: the folded steps are done, and the
-                # save is paused as delivery-uncertain. A resume then starts at
-                # the save and only reconciles it; it never sends a write of
-                # the sequence again. The save's own outcome replaces this
-                # pause, and the run's completion consumes it.
-                observations = router.observations if router is not None else None
-                self._web_form_folded_checkpointed = True
-                for offset, item in enumerate(folded):
-                    durable_run.record(
-                        start_index + offset,
-                        workflow.steps[start_index + offset],
-                        item,
-                        dict(params),
-                        workflow=workflow,
-                        active_surface=surface,
-                        surface_observations=observations,
-                    )
-                provisional = StepResult(
-                    step_id=save.id,
-                    intent=save.intent,
-                    ok=False,
-                    safety_halt=True,
-                    failure_category="safety_halt",
-                    actuation="api",
-                    delivery_attempted=True,
-                    surface=surface,
-                    risk=save.risk,
-                    risk_explanation=save.risk_explanation,
-                    risk_review_required=save.risk_review_required,
-                    error=(
-                        f"Step '{save.id}' ({save.intent}): the API step began "
-                        "sending its requests and the run stopped before it "
-                        "finished; they may have written. Resume never sends "
-                        "them again; reconcile by reading the records back"
-                    ),
-                )
-                durable_run.record(
+                from openadapt_flow.runtime.api_delivery import record_span_write_ahead
+
+                record_span_write_ahead(
+                    self,
+                    durable_run,
+                    workflow,
+                    folded,
+                    start_index,
                     end_index,
-                    save,
-                    provisional,
-                    dict(params),
-                    workflow=workflow,
-                    active_surface=surface,
-                    surface_observations=observations,
+                    params,
+                    surface,
+                    router.observations if router is not None else None,
                 )
-                self._web_form_write_ahead_pause = durable_run.pause_digest()
 
             self._web_form_write_ahead = write_ahead
         self._web_form_folded_checkpointed = False
@@ -9790,6 +9737,37 @@ class Replayer:
                 None if isinstance(again, str) else ("api_request", again.digest)
             )
             self._web_form_form_state_set = True
+        if (
+            approved_view is None
+            and send_prepared is None
+            and callable(getattr(api_actuator, "prepare", None))
+            and callable(getattr(api_actuator, "send", None))
+        ):
+            # Prepare first (reads only), so a save that can't be sent falls
+            # back to the GUI without a write-ahead checkpoint.
+            from openadapt_flow.runtime.actuators.api import (
+                ApiActuationResult as _Receipt,
+            )
+
+            try:
+                early = api_actuator.prepare(binding, runtime_params_for_gui(params))
+            except Exception as exc:  # noqa: BLE001 - reads only, nothing sent
+                early = None
+                result.ok = False
+                result.error = (
+                    f"Step '{step.id}' ({step.intent}): preparing the API request "
+                    f"failed ({type(exc).__name__}); nothing was sent"
+                )
+                return True
+            if isinstance(early, _Receipt):
+                # UNAVAILABLE: nothing was sent, as on the actuate path below.
+                result.effect_results.append(f"[api] {early.reason}")
+                del result.effect_contract_hashes[api_hash_start:]
+                if binding.on_unavailable == "halt":
+                    self._set_api_unavailable_refusal(step, result, reason=early.reason)
+                    return True
+                return False
+            send_prepared = early
         try:
             refusal = self._delivery_authorization_refusal(
                 workflow, params, step, result, api_delivery=True
@@ -9830,37 +9808,6 @@ class Replayer:
         # crash anywhere in its sequence of writes resumes at the save, which
         # is only ever reconciled, never sent again (_run_web_form_span).
         write_ahead = getattr(self, "_web_form_write_ahead", None)
-        if (
-            write_ahead is not None
-            and send_prepared is None
-            and callable(getattr(api_actuator, "prepare", None))
-            and callable(getattr(api_actuator, "send", None))
-        ):
-            # Prepare first (reads only), so a save that can't be sent falls
-            # back to the GUI without a write-ahead checkpoint.
-            from openadapt_flow.runtime.actuators.api import (
-                ApiActuationResult as _Receipt,
-            )
-
-            try:
-                early = api_actuator.prepare(binding, runtime_params_for_gui(params))
-            except Exception as exc:  # noqa: BLE001 - reads only, nothing sent
-                early = None
-                result.ok = False
-                result.error = (
-                    f"Step '{step.id}' ({step.intent}): preparing the API request "
-                    f"failed ({type(exc).__name__}); nothing was sent"
-                )
-                return True
-            if isinstance(early, _Receipt):
-                # UNAVAILABLE: nothing was sent, as on the actuate path below.
-                result.effect_results.append(f"[api] {early.reason}")
-                del result.effect_contract_hashes[api_hash_start:]
-                if binding.on_unavailable == "halt":
-                    self._set_api_unavailable_refusal(step, result, reason=early.reason)
-                    return True
-                return False
-            send_prepared = early
         if write_ahead is not None and send_prepared is not None:
             try:
                 write_ahead()
@@ -9887,21 +9834,23 @@ class Replayer:
             if refusal is not None:
                 mark_first_local_delivery_held(result, refusal)
                 return True
-        # This transition is the explicit delivery boundary. Set it BEFORE the
-        # call because an exception/timeout may occur after the request left the
-        # process but before the actuator can return a receipt-like outcome.
-        result.delivery_attempted = True
+        from openadapt_flow.runtime.api_delivery import execute_api_request
+
         try:
-            if local is None:
-                self._require_qualification_environment_current()
-            if send_prepared is not None:
-                # Exactly the request whose digest was approved and re-checked.
-                outcome = api_actuator.send(binding, send_prepared)
-            else:
-                outcome = api_actuator.actuate(
-                    binding,
-                    runtime_params_for_gui(params),
-                )
+            outcome = execute_api_request(
+                self,
+                api_actuator,
+                binding,
+                send_prepared,
+                params,
+                result,
+                workflow,
+                step,
+            )
+        except StructuralResolutionRefused as exc:
+            result.ok = False
+            result.error = str(exc)
+            return True
         except Exception as exc:  # noqa: BLE001 - external actuator boundary
             # The actuator contract is no-throw, but a deployment adapter can
             # still violate it. The delivery boundary was crossed immediately
@@ -10128,6 +10077,11 @@ class Replayer:
         The API request is never retried and the GUI fallback never runs.
         """
 
+        from openadapt_flow.runtime.api_delivery import managed_delivery_unacknowledged
+
+        allow_contract_resolution = (
+            allow_contract_resolution and not managed_delivery_unacknowledged(self)
+        )
         result.delivery_uncertainty = ActionDeliveryUncertainty(
             operation="api_request",
             native=False,
@@ -12345,6 +12299,9 @@ class Replayer:
         attempted_before = result.delivery_attempted
         acknowledgers = self._active_delivery_acknowledgers
         self._active_delivery_acknowledgers = ()
+        from openadapt_flow.runtime.delivery_freshness import recheck_pending_delivery
+
+        recheck_pending_delivery(self, acknowledgers, result)
         try:
             delivered = call()
         except (FreshActuationRequired, StructuralResolutionRefused):
@@ -12779,7 +12736,11 @@ class Replayer:
                 managed_qualification_edge_refusal,
             )
 
-            refusal = managed_qualification_edge_refusal(authorization, workflow)
+            refusal = managed_qualification_edge_refusal(
+                authorization,
+                workflow,
+                managed_dispatch_binding=self.managed_dispatch_binding,
+            )
             if refusal is not None:
                 return "Production qualification could not be verified before execution"
             return None
@@ -12860,7 +12821,9 @@ class Replayer:
 
             try:
                 edge_refusal = managed_qualification_edge_refusal(
-                    self.governed_authorization, workflow
+                    self.governed_authorization,
+                    workflow,
+                    managed_dispatch_binding=self.managed_dispatch_binding,
                 )
             except Exception as exc:  # noqa: BLE001 - authority boundary
                 refusal = (

@@ -19,16 +19,17 @@
 
 ### Fixes
 
-- A managed run of an admitted program (`openadapt wrap publish`) no longer
-  stops before its first input. `openadapt-flow run` verified the program's
-  signed admission at the start, but the replayer's own start check and every
-  input-edge check still asked for a qualification admission, which such a
-  program never has, so every hosted run halted with "Production qualification
-  could not be verified before execution". The checks now accept the dispatch
-  when its authorization names the exact admission and bundle that `run`
-  verified in the same process (`hosted_authority.program_admission_edge_refusal`).
-  An edge with no verified admission, another admission or another bundle
-  still refuses, and every delivery still needs Cloud's v2 permit and receipt.
+- Managed runs of an admitted program carry verification for that exact
+  dispatch through the CLI, public `Replayer` and deployment API. The proof
+  binds the admission, bundle, inputs, policy, run, dispatch session and
+  current trust registry. It is used once; resume verifies a fresh proof.
+  Missing or changed authority refuses before input.
+- Managed input requires a signed v3 permit with an exclusive input-start
+  deadline. The receiver checks it after preparation, immediately before each
+  desktop input or API request. Each API request retains its acknowledgment
+  before another request starts. A delayed permit, expired deadline or missing
+  receipt halts the run. Late completion evidence is retained as a separate
+  nonauthorizing uncertainty observation and cannot produce VERIFIED.
 
 ### Features
 

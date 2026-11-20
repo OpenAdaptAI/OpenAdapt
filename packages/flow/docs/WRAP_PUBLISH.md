@@ -165,12 +165,27 @@ run before any action unless all of these hold:
 - the run shape matches what the runner derives itself;
 - the profile is Standard. Regulated needs the qualification campaign.
 
-Each later input edge checks again that the authorization still names the
-admission and bundle the run verified, and every input still needs Cloud's
-delivery permit, which Cloud refuses once a key is revoked.
+Each dispatch carries one verified authority bound to its exact admission,
+bundle, inputs, policy, run, dispatch session and trust registry. The CLI,
+public `Replayer` and deployment API use this same authority. It is used once;
+resume verifies a fresh one against the retained inputs and current keys.
+Every input checks the scope again after preparation.
+
+Each input also requires a signed v3 delivery permit. Immediately before the
+input, the receiver checks the signed `delivery_not_after` deadline, registry
+expiry and registry-check age. These limits have no grace period. An issued
+permit authorizes one input start until its deadline; revocation can refuse a
+new grant but does not retroactively revoke an already issued grant. API
+sequences obtain and acknowledge a separate permit for every request.
 
 Only then does the run read back through the bundled `verify.yaml`, and it is
-VERIFIED only when that read-back confirms the write. A run that rests on a
+VERIFIED only when that read-back confirms the write and every attempted
+input has its valid delivery receipt. A completion outside the signed timing
+limits retains raw uncertainty evidence, halts further input and requires
+reconciliation. A timely signed receipt remains valid historical evidence if
+its HTTPS response arrives later. Historical v2 artifacts remain readable,
+but cannot authorize live input. See [Managed authority lifetime](design/MANAGED_AUTHORITY_LIFETIME.md).
+ A run that rests on a
 qualification admission or a production authority file ignores the bundled
 file and reads back through its own deployment config.
 
