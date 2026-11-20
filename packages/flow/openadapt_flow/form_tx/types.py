@@ -16,11 +16,11 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-FORM_DOSSIER_SCHEMA = "openadapt.form-dossier/v1"
-UI_PROFILE_SCHEMA = "openadapt.ui-profile/v1"
-FORM_PACK_SCHEMA = "openadapt.form-pack/v1"
-FORM_RECEIPT_SCHEMA = "openadapt.form-tx-receipt/v1"
-PACK_PATCH_SCHEMA = "openadapt.form-pack-patch/v1"
+FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
+UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
+FORM_PACK_SCHEMA: Literal["openadapt.form-pack/v1"] = "openadapt.form-pack/v1"
+FORM_RECEIPT_SCHEMA: Literal["openadapt.form-tx-receipt/v1"] = "openadapt.form-tx-receipt/v1"
+PACK_PATCH_SCHEMA: Literal["openadapt.form-pack-patch/v1"] = "openadapt.form-pack-patch/v1"
 
 
 def canonical_json_bytes(payload: Any) -> bytes:
@@ -247,6 +247,7 @@ class FieldCodecSpec(BaseModel):
 
     kind: FormCodecKind = FormCodecKind.WHITESPACE_COLLAPSE
     date_order: Literal["YMD", "MDY", "DMY"] = "YMD"
+    currency_symbol: Optional[Literal["$", "€", "£", "₹"]] = None
     enum_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 
