@@ -24,11 +24,17 @@ from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
 )
+from openadapt_flow.runtime.durable import CheckpointStore, resume
 from openadapt_flow.runtime.program_predicates import (
     program_predicate_evaluator_contract_sha256,
 )
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
+from tests.test_durable_runtime import (
+    _approval,
+    _PauseAfterObservation,
+    _with_checkpointed_observation_prefix,
+)
 from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 
@@ -186,7 +192,10 @@ def _governed_report(
     root,
     *,
     required_identity_step_ids: tuple[str, ...] = (),
+    checkpointed_before_input: bool = False,
 ):
+    if checkpointed_before_input:
+        workflow = _with_checkpointed_observation_prefix(workflow)
     bundle_dir = root / "bundle"
     workflow.save(bundle_dir)
     workflow = Workflow.load(bundle_dir)
@@ -200,14 +209,45 @@ def _governed_report(
         required_identity_step_ids=required_identity_step_ids,
     )
     run_dir = root / "run"
-    report = Replayer(
-        FakeBackend(frame=make_png((1280, 720))),
+    backend = FakeBackend(frame=make_png((1280, 720)))
+    replayer_type = _PauseAfterObservation if checkpointed_before_input else Replayer
+    report = replayer_type(
+        backend,
         vision=_SettledVision(),
         governed_authorization=authorization,
         durable=True,
         require_settled=True,
         poll_interval_s=0.01,
     ).run(workflow, bundle_dir=bundle_dir, run_dir=run_dir)
+    if checkpointed_before_input:
+        # Same normal/profile/settled premises; the original P→submit path has
+        # not entered before this real WAIT checkpoint and ordinary pause.
+        store = CheckpointStore(run_dir)
+        (prefix,) = store.program_checkpoints()
+        pending = store.read_pending()
+        assert report.success is False and backend.actions == []
+        assert report.visited_states == ["__observation_prefix__"]
+        assert prefix.seq == 1 and prefix.verified_state_id == "__observation_prefix__"
+        assert prefix.delivery_attempted is not True
+        assert prefix.new_effect_keys == prefix.new_unverified_effect_keys == []
+        assert prefix.new_effects == prefix.new_unverified_effects == []
+        assert prefix.new_effect_evidence == []
+        assert pending is not None and pending.delivery_uncertainty is None
+        assert (
+            pending.program_checkpoint_seq == 1 and pending.program_history_delta == []
+        )
+        assert pending.program_history == prefix.transition_history
+        report = resume(
+            run_dir,
+            Replayer(
+                FakeBackend(frame=make_png((1280, 720))),
+                vision=_SettledVision(),
+                require_settled=True,
+                poll_interval_s=0.01,
+            ),
+            approval=_approval(bundle_dir, run_dir),
+        )
+        assert report.governed_authorization_id == authorization.authorization_id
     return workflow, run_dir, report
 
 
@@ -256,6 +296,7 @@ def test_real_program_fault_prefix_accepts_retained_pre_delivery_frames(tmp_path
         _pre_delivery_fault_workflow(),
         tmp_path,
         required_identity_step_ids=("submit",),
+        checkpointed_before_input=True,
     )
 
     assert report.execution_outcome == ExecutionOutcome.HALTED.value

@@ -27,7 +27,6 @@ from tests.test_attended_actions import (
 )
 from tests.test_durable_program import (
     _approval,
-    _retry_approval,
     _run_branch_loop_to_pause,
 )
 from tests.test_replayer import FakeBackend, FakeVision, Match
@@ -88,7 +87,9 @@ def test_normal_checkpoint_and_pause_form_one_append_only_history(tmp_path):
 
 
 def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None
@@ -103,7 +104,7 @@ def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
             effect_verifier=verifier,
             poll_interval_s=0.0,
         ),
-        approval=_retry_approval(bundle),
+        approval=_approval(bundle, run_dir),
     )
 
     assert resumed.success is True
@@ -133,9 +134,11 @@ def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
 def test_restart_after_post_pause_checkpoint_uses_latest_history_boundary(
     tmp_path,
 ):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     verifier.refute.clear()
-    approval = _retry_approval(bundle)
+    approval = _approval(bundle, run_dir)
 
     class CrashBeforeSecondResumedAction(Replayer):
         resumed_actions = 0

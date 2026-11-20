@@ -199,6 +199,7 @@ from openadapt_flow.runtime.dialog_delivery import (
     arm_dialog,
     wait_for_dialog,
 )
+from openadapt_flow.runtime.durable import program_runtime as _program_runtime
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDeliveryHeld
 from openadapt_flow.runtime.durable.first_local_runtime import (
@@ -214,6 +215,7 @@ from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
     LoopCursor,
     ProgramCheckpoint,
+    ProgramDeliveryCursor,
     ProgramTransitionReceipt,
     control_frames_hash,
 )
@@ -2434,6 +2436,7 @@ class Replayer:
                 new_crops=new_crops,
                 durable_run=durable_run,
                 resume_checkpoint=resume_program,
+                first_local_delivery=first_local_delivery,
             )
         else:
             span_skip_to = -1
@@ -4162,6 +4165,7 @@ class Replayer:
         new_crops: dict[str, bytes],
         durable_run: Optional[Any] = None,
         resume_checkpoint: Optional[ProgramCheckpoint] = None,
+        first_local_delivery: bool = False,
     ) -> None:
         """Interpret ``workflow.program`` as a state machine, writing results
         and the terminal outcome onto ``report``.
@@ -4184,6 +4188,7 @@ class Replayer:
         self._program_step_budget = PROGRAM_MAX_STEPS
         # -- durable interpreter state (Phase-2, RFC §5) ---------------------
         self._program_durable = durable_run
+        self._program_first_local_delivery = first_local_delivery
         self._program_run_dir = run_dir
         self._program_governed_runtime_inputs_digest = (
             report.governed_runtime_inputs_digest
@@ -4676,16 +4681,40 @@ class Replayer:
         # mutable live frame stack. A refusal must still persist a safe resume
         # cursor instead of serializing that corrupted state.
         pre_action_frames = [self._frame_to_model(frame) for frame in self._frame_stack]
-        result = self._run_step(
-            action_step,
-            workflow=workflow,
-            step_index=0,
-            params=params,
-            bundle_dir=bundle_dir,
-            run_dir=run_dir,
-            new_crops=new_crops,
-            graph_ctx=ctx,
-        )
+        first_local_step = None
+        if self._program_first_local_delivery and self._program_durable is not None:
+            try:
+                cursor = self._capture_program_delivery_cursor(state, params, report)
+            except (ValueError, TypeError) as exc:
+                raise _ProgramHalt(
+                    "halt",
+                    "first_local_delivery_held: invalid program cursor",
+                    safety=True,
+                ) from exc
+            first_local_step = FirstLocalDeliveryStep(
+                self._program_durable,
+                0,
+                action_step,
+                dict(params),
+                program_cursor=cursor,
+                current_program_cursor=lambda: self._capture_program_delivery_cursor(
+                    state, params, report
+                ),
+            )
+        self._first_local_delivery_step = first_local_step
+        try:
+            result = self._run_step(
+                action_step,
+                workflow=workflow,
+                step_index=0,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+                graph_ctx=ctx,
+            )
+        finally:
+            self._first_local_delivery_step = None
         # Report the exact cursor that was validated before callbacks. The live
         # frame stack is mutable backend-facing state and can no longer be
         # trusted after an action callback starts.
@@ -4720,9 +4749,20 @@ class Replayer:
                 "but the program changed during delivery; no later state "
                 f"was executed{prior_error}"
             )
+        if (
+            first_local_step is not None
+            and not result.ok
+            and (first_local_step.pause_digest or first_local_step.held)
+        ):
+            mark_first_local_delivery_held(
+                result,
+                "first_local_delivery_held: the armed program delivery did not verify",
+            )
         report.results.append(result)
         self._account_result(report, result)
-        if self._program_durable is not None:
+        if self._program_durable is not None and not (
+            first_local_step and first_local_step.pause_digest
+        ):
             self._sync_durable_audit(self._program_durable, report)
         # Track the previously EXECUTED action for the next TYPE step's
         # click-to-focus heuristic. A SKIPPED step (guard on_unmet="skip") did
@@ -4776,7 +4816,9 @@ class Replayer:
         # approved resume can RESTORE it from exactly here. Persist BEFORE
         # selecting an outgoing guarded edge: predicate evaluation can halt,
         # but the already-performed write must still enter the effect ledger.
-        self._record_program_checkpoint(state, result, params, report)
+        self._record_program_checkpoint(
+            state, result, params, report, first_local_step=first_local_step
+        )
         nxt = self._select_transition(
             state,
             workflow=workflow,
@@ -5674,182 +5716,25 @@ class Replayer:
                     break
         return selected
 
+    def _capture_program_delivery_cursor(
+        self, state: State, params: Mapping[str, RuntimeParamScalar], report: RunReport
+    ) -> ProgramDeliveryCursor:
+        return _program_runtime.capture_program_delivery_cursor(
+            self, state, params, report
+        )
+
     def _record_program_checkpoint(
         self,
         state: State,
         result: StepResult,
         params: Mapping[str, RuntimeParamScalar],
         report: RunReport,
+        *,
+        first_local_step: Optional[FirstLocalDeliveryStep] = None,
     ) -> None:
-        """Persist a verified-state interpreter checkpoint (Tier-3, program mode).
-
-        Captures the whole interpreter state -- the frame stack (subflow / loop
-        nesting), each loop's cursor, the bound params, the effects CONFIRMED at
-        this state (both their hashes, for the idempotency ledger, and their
-        resolved contracts, for the resume-time re-verification), the expected
-        on-screen text (for the resume-time state revalidation), and the bundle
-        version -- so an approved resume RESTORES the interpreter from here."""
-        durable = self._program_durable
-        if durable is None:
-            return
-        step = state.step
-        if step is None:
-            raise _ProgramHalt(
-                "halt",
-                "verified action checkpoint has no compiled step",
-                safety=True,
-            )
-        from openadapt_flow.action_evidence import action_evidence_error
-
-        profile = (
-            self.governed_authorization.execution_profile
-            if self.governed_authorization is not None
-            else None
+        _program_runtime.record_program_checkpoint(
+            self, state, result, params, report, first_local_step=first_local_step
         )
-        evidence_error = action_evidence_error(
-            step,
-            result,
-            params=params,
-            identity_required=(
-                step.identity_armed
-                or (
-                    self.governed_authorization is not None
-                    and self.governed_authorization.requires_verified_identity(step.id)
-                )
-            ),
-            strict_production=(
-                profile in {"standard", "regulated"}
-                and (
-                    step.identity_armed
-                    or (
-                        self.governed_authorization is not None
-                        and self.governed_authorization.requires_verified_identity(
-                            step.id
-                        )
-                    )
-                )
-            ),
-        )
-        if evidence_error is not None:
-            raise _ProgramHalt(
-                "halt",
-                "refusing a durable checkpoint with invalid action evidence: "
-                f"{evidence_error}",
-                safety=True,
-            )
-        new_keys = (
-            list(result.effect_contract_hashes)
-            if result.effect_verified is True
-            else []
-        )
-        new_unverified_keys = (
-            list(result.effect_contract_hashes)
-            if result.effect_approved_unverified
-            else []
-        )
-        from openadapt_flow.policy import effects_for_actuation
-
-        declared_effects = effects_for_actuation(step, result.actuation)
-        resolved_effects = (
-            [
-                e.model_dump(mode="json")
-                for e in self._resolve_effects(declared_effects, params)
-            ]
-            if declared_effects
-            else []
-        )
-        # Extend the live ledger so a later state in the SAME leg (and the next
-        # checkpoint's union) sees these as already-confirmed.
-        self._completed_effect_keys.extend(new_keys)
-        if new_keys:
-            self._completed_effect_evidence.extend(result.effect_evidence)
-        self._completed_unverified_effect_keys.extend(new_unverified_keys)
-        expected = [
-            pc.text
-            for pc in step.expect
-            if pc.kind is PostconditionKind.TEXT_PRESENT and pc.text
-        ]
-        self._program_seq += 1
-        report_history = list(report.visited_states)
-        transition_delta = report_history[self._program_history_boundary_index :]
-        transition_history = [*self._program_durable_history, *transition_delta]
-        checkpoint = ProgramCheckpoint(
-            run_id=self._run_id,
-            workflow_name=durable.workflow_name,
-            seq=self._program_seq,
-            verified_state_id=state.id,
-            intent=step.intent if step is not None else "",
-            frames=[self._frame_to_model(f) for f in self._frame_stack],
-            bound_params=dict(params),
-            new_effect_keys=new_keys,
-            new_effects=resolved_effects if new_keys else [],
-            new_effect_evidence=(list(result.effect_evidence) if new_keys else []),
-            new_unverified_effect_keys=new_unverified_keys,
-            new_unverified_effects=(resolved_effects if new_unverified_keys else []),
-            step_id=step.id,
-            identity=result.identity,
-            input_verified=result.input_verified,
-            starting_state_settled=result.starting_state_settled,
-            delivery_attempted=result.delivery_attempted,
-            delivery_receipt=result.delivery_receipt,
-            drag_end_resolution=result.drag_end_resolution,
-            fresh_actuation_events=list(result.fresh_actuation_events),
-            before_png=result.before_png,
-            postconditions_ok=result.postconditions_ok,
-            skipped=result.skipped,
-            actuation=result.actuation,
-            delivery_uncertainty=result.delivery_uncertainty,
-            resolution=result.resolution,
-            drift_oracle_calls=result.drift_oracle_calls,
-            heal=result.heal,
-            governed_authorization_id=(
-                self.governed_authorization.authorization_id
-                if self.governed_authorization is not None
-                else None
-            ),
-            governed_approval_source=(
-                self.governed_authorization.approval_source
-                if self.governed_authorization is not None
-                else None
-            ),
-            expected_texts=expected,
-            expected_postconditions=(
-                [condition.model_copy(deep=True) for condition in step.expect]
-                if not result.skipped
-                else []
-            ),
-            transition_history_hash=_history_hash(transition_history),
-            visited_states_delta=transition_delta,
-            program_transition_evidence_delta=report.program_transition_evidence[
-                self._program_transition_evidence_checkpoint_len :
-            ],
-            business_decision_evidence_delta=report.business_decision_evidence[
-                self._business_decision_evidence_checkpoint_len :
-            ],
-            program_exception_evidence_delta=report.program_exception_evidence[
-                self._program_exception_evidence_checkpoint_len :
-            ],
-            transition_parent_hash=self._program_history_parent_hash,
-            transition_delta=transition_delta,
-            transition_history=transition_history,
-            bundle_version=self._bundle_version,
-        )
-        durable.record_program_checkpoint(checkpoint)
-        self._program_checkpoint_history_len = len(report_history)
-        self._program_transition_evidence_checkpoint_len = len(
-            report.program_transition_evidence
-        )
-        self._business_decision_evidence_checkpoint_len = len(
-            report.business_decision_evidence
-        )
-        self._program_exception_evidence_checkpoint_len = len(
-            report.program_exception_evidence
-        )
-        self._program_history_boundary_index = len(report_history)
-        self._program_durable_history = transition_history
-        self._program_history_parent_hash = checkpoint.transition_history_hash
-        if self._durable_continuation_guard is not None:
-            self._durable_continuation_guard.acknowledge_progress()
 
     def _record_program_pause(
         self, halt: "_ProgramHalt", report: RunReport, *, workflow: Workflow
@@ -5862,6 +5747,17 @@ class Replayer:
         the pause and propose operator options."""
         durable = self._program_durable
         if durable is None:
+            return
+        from openadapt_flow.runtime.durable.first_local_delivery import (
+            is_first_local_delivery,
+        )
+
+        existing = durable.store.read_pending()
+        if existing is not None and is_first_local_delivery(
+            existing.delivery_uncertainty
+        ):
+            # A failed or interrupted first action cannot replace its exact
+            # write-ahead with an ordinary retryable program halt.
             return
         failing = next((r for r in reversed(report.results) if not r.ok), None)
         if failing is None:
