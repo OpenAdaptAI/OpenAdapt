@@ -1042,10 +1042,13 @@ def test_program_resume_does_not_reperform_confirmed_write(tmp_path):
 
 
 def test_program_resume_without_approval_is_refused(tmp_path):
-    _report, run_dir, _bundle, _verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, _bundle, _verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
 
+    backend = FakeBackend()
     resume_replayer = Replayer(
-        FakeBackend(),
+        backend,
         vision=FakeVision(),
         effect_verifier=FakeSoRVerifier(),
         poll_interval_s=0.01,
@@ -1054,6 +1057,7 @@ def test_program_resume_without_approval_is_refused(tmp_path):
     # re-execution.
     with pytest.raises(ApprovalRequired):
         resume(run_dir, resume_replayer)
+    assert backend.actions == []
 
     # An approval record with a blank approver is likewise not authentication.
     with pytest.raises(ApprovalRequired):
@@ -1062,6 +1066,7 @@ def test_program_resume_without_approval_is_refused(tmp_path):
             resume_replayer,
             approval=ApprovalRecord(approver="   ", bundle_version=""),
         )
+    assert backend.actions == []
     # The pause is still there (nothing was consumed / resumed).
     assert CheckpointStore(run_dir).read_pending() is not None
 
@@ -1335,11 +1340,14 @@ def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path)
 
 
 def test_program_resume_refused_when_pause_expired(tmp_path):
-    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(
+        tmp_path, before_input=True
+    )
     verifier.refute.clear()
 
+    backend = FakeBackend()
     resume_replayer = Replayer(
-        FakeBackend(),
+        backend,
         vision=FakeVision(),
         effect_verifier=verifier,
         poll_interval_s=0.01,
@@ -1350,6 +1358,7 @@ def test_program_resume_refused_when_pause_expired(tmp_path):
     far_future = datetime.now(timezone.utc) + timedelta(days=365)
     with pytest.raises(PauseExpired):
         resume(run_dir, resume_replayer, approval=_approval(bundle), now=far_future)
+    assert backend.actions == []
 
 
 # -- 6. clean durable program run: checkpoints every verified state, no pause -

@@ -1146,7 +1146,10 @@ def test_program_ledger_never_promotes_approved_write_to_confirmed(tmp_path):
         },
     )
     workflow, bundle = _seal(
-        tmp_path, Workflow(name="unverified_ledger", program=program)
+        tmp_path,
+        _with_checkpointed_observation_prefix(
+            Workflow(name="unverified_ledger", program=program)
+        ),
     )
     assert workflow.manifest is not None
     approvals = tuple(
@@ -1168,13 +1171,18 @@ def test_program_ledger_never_promotes_approved_write_to_confirmed(tmp_path):
         "Saved": Match(point=(1, 1), region=(0, 0, 2, 2), confidence=0.99)
     }
 
-    report = Replayer(
-        backend,
-        vision=vision,
-        governed_authorization=authorization,
-        durable=True,
-        poll_interval_s=0.0,
-    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+    # Approved-unverified ledger behavior belongs to a genuinely admitted leg.
+    run_dir = tmp_path / "run"
+    _run_to_checkpointed_observation_pause(
+        workflow, bundle, run_dir, authorization=authorization
+    )
+    report = resume(
+        run_dir,
+        Replayer(backend, vision=vision, poll_interval_s=0.0),
+        approval=_resume_approval(
+            run_dir, bundle, "resume the checkpointed ledger contract"
+        ),
+    )
 
     assert report.success is True
     writes = [
@@ -1186,7 +1194,16 @@ def test_program_ledger_never_promotes_approved_write_to_confirmed(tmp_path):
     assert all(result.effect_verified is None for result in writes)
     assert all(result.effect_approved_unverified for result in writes)
     assert len([action for action in backend.actions if action[0] == "click"]) == 1
-    checkpoints = CheckpointStore(tmp_path / "run").program_checkpoints()
+    physical_checkpoints = CheckpointStore(tmp_path / "run").program_checkpoints()
+    prefix = physical_checkpoints[0]
+    assert prefix.verified_state_id == "__observation_prefix__"
+    assert prefix.new_effect_keys == prefix.new_unverified_effect_keys == []
+    assert prefix.new_effects == prefix.new_unverified_effects == []
+    assert prefix.new_effect_evidence == [] and prefix.delivery_attempted is not True
+    assert all(checkpoint.new_effect_keys == [] for checkpoint in physical_checkpoints)
+    checkpoints = physical_checkpoints[1:]
+    # The repeated approved write is reported without a second input/checkpoint.
+    assert [checkpoint.verified_state_id for checkpoint in checkpoints] == ["first"]
     assert checkpoints[0].new_effect_keys == []
     assert checkpoints[0].new_unverified_effect_keys == [effect.contract_hash()]
     assert all(checkpoint.new_effect_keys == [] for checkpoint in checkpoints)
