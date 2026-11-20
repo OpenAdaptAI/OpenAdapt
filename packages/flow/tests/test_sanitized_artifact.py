@@ -1924,7 +1924,7 @@ def test_readback_auth_refuses_shape_valid_credentials_without_phi_detection(
     auth = yaml.safe_load((tmp_path / "sanitized/readback/verify.yaml").read_text())[
         "verifier"
     ]["auth"]
-    assert auth[field] == "<redacted>"
+    assert auth == "<redacted>"
 
 
 @pytest.mark.parametrize("shape", ["env_name", "http_header"])
@@ -1984,7 +1984,130 @@ def test_auth_reference_rejects_opaque_hex_independently_of_entropy(field, suffi
     )
     assert output != original
     assert literal not in output
-    assert yaml.safe_load(output)["verifier"]["auth"][field] == REDACTED
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@settings(max_examples=40, deadline=None)
+@given(
+    words=st.lists(
+        st.text(alphabet="ABCDEF0123456789", min_size=5, max_size=8),
+        min_size=4,
+        max_size=6,
+    ),
+    separator=st.sampled_from(["_", "-"]),
+)
+def test_auth_reference_separators_do_not_exempt_opaque_hex(field, words, separator):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "A" + separator.join(words)
+    original, output = _scrub_auth_document(
+        _reference_with(field, literal), FakeScrubber()
+    )
+    assert output != original
+    assert literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@settings(max_examples=40, deadline=None)
+@given(
+    words=st.lists(
+        st.text(alphabet="GHIJ", min_size=5, max_size=8),
+        min_size=4,
+        max_size=6,
+    ),
+    separator=st.sampled_from(["_", "-"]),
+)
+def test_auth_reference_separators_do_not_exempt_nonhex_opaque_values(
+    field, words, separator
+):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "G" + separator.join(words)
+    original, output = _scrub_auth_document(
+        _reference_with(field, literal), FakeScrubber()
+    )
+    assert output != original
+    assert literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+def test_auth_reference_public_name_limit_applies_across_word_boundaries(field):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    # Both are plausible local names. Only the shorter spelling belongs to
+    # the conservative outbound profile; neither entropy nor a separator
+    # gives the longer spelling a preservation exemption.
+    allowed = "LONGNAME_SHORT_PUBLIC"
+    refused = "LONGNAME_PUBLIC_NAMING"
+    original, output = _scrub_auth_document(
+        _reference_with(field, allowed), IdentifierHostileScrubber()
+    )
+    assert output == original
+    original, output = _scrub_auth_document(
+        _reference_with(field, refused), IdentifierHostileScrubber()
+    )
+    assert output != original
+    assert refused not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@pytest.mark.parametrize("word", ["G" * 20, "GHIJ" * 6])
+def test_auth_reference_long_words_are_opaque_without_an_entropy_exception(field, word):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "LOCAL_" + word
+    original, output = _scrub_auth_document(
+        _reference_with(field, literal), FakeScrubber()
+    )
+    assert output != original
+    assert literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+def test_auth_reference_short_mixed_separator_value_is_not_a_header_exemption():
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "word_fragment-part"
+    original, output = _scrub_auth_document(
+        _reference_with("header", literal), FakeScrubber()
+    )
+    assert output != original
+    assert literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+@pytest.mark.parametrize(
+    ("field", "name"),
+    [
+        ("header", "Authorization"),
+        ("header", "X-Api-Key"),
+        ("header", "x-request-id"),
+        ("header", "X-API-Key"),
+        ("header", "SERVICE2_READER_KEY"),
+        ("value_env", "SERVICE2_READER_KEY"),
+        ("bearer_env", "SERVICE2_ACCESS_TOKEN"),
+        ("basic_env", "SERVICE2_CREDENTIALS"),
+    ],
+)
+def test_auth_reference_public_name_profile_preserves_wiring(field, name):
+    original, output = _scrub_auth_document(
+        _reference_with(field, name), IdentifierHostileScrubber()
+    )
+    assert output == original
 
 
 @settings(max_examples=40, deadline=None)
@@ -2007,7 +2130,7 @@ def test_auth_reference_rejects_short_segmented_secret_families(prefix, groups):
         _reference_with("header", literal), FakeScrubber()
     )
     assert output != original and literal not in output
-    assert yaml.safe_load(output)["verifier"]["auth"]["header"] == REDACTED
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
 
 
 _AUTH_NESTED_LITERALS = st.recursive(
@@ -2058,18 +2181,37 @@ class IdentifierHostileScrubber(FakeScrubber):
     )
 )
 def test_auth_reference_valid_names_survive_provider_false_positives(field, words):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
     name = "_".join(words) + "_KEY"
     original, output = _scrub_auth_document(
         _reference_with(field, name), IdentifierHostileScrubber()
     )
-    assert output == original
+    if len("".join(words) + "KEY") < 20:
+        assert output == original
+    else:
+        # Valid local AuthRef names may exceed the narrower outbound profile.
+        assert output != original
+        assert name not in output
+        assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
 
 
 @pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
-def test_readback_auth_opaque_hex_makes_whole_bundle_unpublishable(tmp_path, field):
+@pytest.mark.parametrize(
+    "literal",
+    [
+        ("ABCDEF0123456789" * 2)[:-1] + "0",
+        "ABCD1234_EFAB5678_CDEF9012",
+        "LOCAL_" + "GHIJ" * 6,
+    ],
+)
+def test_readback_auth_opaque_hex_makes_whole_bundle_unpublishable(
+    tmp_path, field, literal
+):
     import yaml
 
-    literal = ("ABCDEF0123456789" * 2)[:-1] + "0"
     privacy.set_text_scrubber(FakeScrubber())
     bundle, keys = tmp_path / "bundle", tmp_path / "keys"
     _wrap_files(bundle, keys=keys)

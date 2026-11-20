@@ -39,7 +39,6 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
-from math import log2
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import parse_qs
@@ -562,28 +561,29 @@ _AUTH_SECRET_PREFIX = re.compile(
 
 
 def _auth_reference_is_identifier(value: str) -> bool:
-    """Conservatively distinguish reference syntax from a pasted credential.
+    """Apply a conservative publication profile to declared reference names.
 
-    Shape alone cannot do this: access keys can also be legal environment or
-    header names. Apply the report's shared credential patterns even when the
-    PHI provider misses the token, plus known prefixes and opaque high-entropy
-    runs. Ambiguous values are redacted and require corrected local wiring.
+    The runtime accepts broader names; that is not a publication exemption.
+    Keep fewer than twenty alphanumeric characters in nonempty words with
+    one separator style. The bound applies after removing separators, so
+    splitting an opaque value cannot earn the exemption. Known credential
+    patterns still veto it independently of the PHI provider. This lexical
+    profile is not proof that an arbitrary short name cannot be a literal.
+    Broader or ambiguous names require corrected local wiring.
     """
     from openadapt_flow.report_redaction import redact_text
 
     if _AUTH_SECRET_PREFIX.match(value) or redact_text(value)[1]:
         return False
-    # Hex has a maximum entropy of four bits per character. Most finite
-    # samples fall below that maximum, so classify the opaque alphabet/length
-    # directly instead of relying on the general entropy threshold.
-    if re.search(r"[A-Fa-f0-9]{20,}", value):
+    joined = value.replace("_", "").replace("-", "")
+    if len(joined) >= 20:
         return False
-    for run in re.findall(r"[A-Za-z0-9]{20,}", value):
-        probabilities = [run.count(char) / len(run) for char in set(run)]
-        entropy = -sum(p * log2(p) for p in probabilities)
-        if entropy >= 4.0:
-            return False
-    return True
+    if "_" in value and "-" in value:
+        return False
+    return all(
+        re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", word) is not None
+        for word in re.split(r"[_-]", value)
+    )
 
 
 class _DeclaredFields:
@@ -690,11 +690,11 @@ class _DeclaredFields:
     def invalid_reference_record(self, path: tuple[str | int, ...], value: Any) -> bool:
         """Close a reference record before walking any unknown keys or values.
 
-        Only declared reference leaves, each a string or null, belong in the
-        record. Unknown keys (which may themselves hold credentials), nested
-        containers and other scalar types redact the whole record. A missing
-        optional record remains null. The declaration supplies the complete
-        field set; no detector decides whether an extra field is safe.
+        Only declared reference leaves, each a public-profile string or null,
+        belong in the record. Unknown keys (which may themselves hold
+        credentials), invalid values and nested containers redact the whole
+        record. A missing optional record remains null. No detector decides
+        whether an extra field or ambiguous name is safe.
         """
         local = self._local(path)
         for record in self.reference_records:
@@ -703,7 +703,7 @@ class _DeclaredFields:
             if value is None:
                 return False
             allowed = {
-                pattern[-1]
+                pattern[-1]: shape
                 for pattern, shape in self.fields
                 if len(pattern) == len(record) + 1
                 and self._match(record, pattern[:-1])
@@ -716,7 +716,14 @@ class _DeclaredFields:
                 or any(
                     not isinstance(key, str)
                     or key not in allowed
-                    or (child is not None and not isinstance(child, str))
+                    or (
+                        child is not None
+                        and (
+                            not isinstance(child, str)
+                            or not _SHAPES[allowed[key]].fullmatch(child)
+                            or not _auth_reference_is_identifier(child)
+                        )
+                    )
                     for key, child in value.items()
                 )
             )
