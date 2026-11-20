@@ -210,10 +210,12 @@ place is refused. The external attended journal stores each decision-log
 snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
 cover the plaintext. A run whose attended files are plaintext from an earlier
 version still resumes, and its first encrypted write converts them.
-The key is stretched with scrypt once per run, under a random salt kept in the
-run's `.attended_state.encrypted` marker, and each file and journal row gets
-its own nonce under keys derived from it, so the cost doesn't grow with the
-number of files or journal rows. Each file names the salt it was sealed
+File and journal operations derive their keys with scrypt under the random
+salt kept in the run's `.attended_state.encrypted` marker. A conversion
+operation reuses its local AEAD across the files it converts; independent
+reads and writes derive again, so the cost grows with the number of independent
+crypto operations. Each file and journal row still gets its own nonce. Each
+file names the salt it was sealed
 under, and a file whose salt is not the one in the run's marker is refused, so
 a file copied in from another run under the same key does not read. If two
 processes convert the same run at once, the one that loses the race to write

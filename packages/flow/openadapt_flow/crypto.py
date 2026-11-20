@@ -38,12 +38,10 @@ plaintext default, loudly.
 from __future__ import annotations
 
 import base64
-import hmac
 import json
 import os
 import secrets
 import threading
-from collections import OrderedDict
 from typing import Final, Optional
 
 from cryptography.exceptions import InvalidTag
@@ -182,50 +180,22 @@ def is_encrypted(data: bytes) -> bool:
     return isinstance(obj, dict) and obj.get("format") == _MAGIC
 
 
-# Derived keys, in memory only, so one salt costs one scrypt per process. A
-# run's checkpoint store seals every container with one salt
-# (:func:`new_salt` and ``encrypt_bytes(salt=...)``), and reads them back many
-# times per run; without this each read and write ran scrypt again (about 130
-# per run in the screen-path study). An entry is reused only for the same
-# passphrase fingerprint, compared with compare_digest, and the same work
-# factors; a different passphrase derives again (and fails to decrypt, as before).
-# The cache retains a fixed-size HMAC-SHA256 tag of the UTF-8 passphrase,
-# using a cache-only process-local random key and an explicit domain. The tag,
-# MAC key and derived keys remain sensitive process memory; this does not erase
-# caller strings, temporary bytes or keys.
-# Neither cache value is written anywhere.
-_DERIVED: "OrderedDict[tuple[bytes, int, int, int], tuple[bytes, bytes]]" = (
-    OrderedDict()
-)
-_DERIVED_LIMIT: Final[int] = 32
-_DERIVED_LOCK = threading.Lock()
-_DERIVED_FINGERPRINT_KEY: Final[bytes] = secrets.token_bytes(32)
-_DERIVED_FINGERPRINT_DOMAIN: Final[bytes] = b"openadapt-flow/derived-key-cache/v1\0"
-#: Count of scrypt runs in this process (for tests and profiling).
+# Each request derives once. Reuse an explicit SetKey within a sealed-set
+# operation instead of retaining a process-global passphrase, verifier or key
+# cache. Derived keys and caller inputs remain sensitive memory; no erasure is
+# promised by returning from an operation.
+_DERIVATION_COUNT_LOCK = threading.Lock()
+#: Count of successful scrypt runs in this process (tests and profiling).
 derivations = 0
 
 
 def _derive(passphrase: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
     global derivations
-    secret = passphrase.encode("utf-8")
-    fingerprint = hmac.digest(
-        _DERIVED_FINGERPRINT_KEY, _DERIVED_FINGERPRINT_DOMAIN + secret, "sha256"
+    key = Scrypt(salt=salt, length=_KEY_LEN, n=n, r=r, p=p).derive(
+        passphrase.encode("utf-8")
     )
-    slot = (bytes(salt), int(n), int(r), int(p))
-    with _DERIVED_LOCK:
-        cached = _DERIVED.get(slot)
-        if cached is not None:
-            _DERIVED.move_to_end(slot)
-    if cached is not None and hmac.compare_digest(cached[0], fingerprint):
-        return cached[1]
-    kdf = Scrypt(salt=salt, length=_KEY_LEN, n=n, r=r, p=p)
-    key = kdf.derive(secret)
-    with _DERIVED_LOCK:
+    with _DERIVATION_COUNT_LOCK:
         derivations += 1
-        _DERIVED[slot] = (fingerprint, key)
-        _DERIVED.move_to_end(slot)
-        while len(_DERIVED) > _DERIVED_LIMIT:
-            _DERIVED.popitem(last=False)
     return key
 
 
@@ -249,10 +219,9 @@ def encrypt_bytes(
     :data:`CHECKPOINT_AAD`) authenticated -- but not encrypted -- alongside the
     ciphertext. Returns the serialized JSON container as bytes.
 
-    ``salt`` lets one writer (a run's checkpoint store) seal many containers
-    under one derived key, so scrypt runs once for all of them. Each
-    container still records its salt and gets a fresh random nonce, so the
-    format is unchanged. Default: a fresh salt per container.
+    ``salt`` lets one writer seal containers under the same salt. Each call
+    still runs scrypt and uses a fresh random nonce; sharing a salt does not
+    create a process-global key cache. Default: a fresh salt per container.
     """
     passphrase = require_key(key)
     if salt is None:
