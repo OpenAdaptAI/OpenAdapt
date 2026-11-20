@@ -5808,13 +5808,29 @@ class EngineDispatcher:
         self.emit("sample_progress", {"state": "running", "detail": ""})
         started = time.monotonic()
         try:
-            self.services.flow_bridge.tutorial(sample_dir, break_it=True)
+            outcome = self.services.flow_bridge.tutorial(sample_dir, break_it=True)
         except Exception:
             logger.exception("The sample task did not run")
             self.emit("sample_progress", {"state": "failed", "detail": ""})
             return {
                 "ok": False,
                 "error": "The sample didn't run. Check that the OpenAdapt engine is ready.",
+            }
+        if getattr(outcome, "ok", True) is False:
+            # The sample uses only made-up data, so the end of its error
+            # output is safe to keep in the engine log.
+            logger.error(
+                "The sample task exited with code {code}: {tail}",
+                code=getattr(outcome, "returncode", None),
+                tail=str(getattr(outcome, "stderr", "") or "")[-2000:],
+            )
+            self.emit("sample_progress", {"state": "failed", "detail": ""})
+            return {
+                "ok": False,
+                "error": (
+                    "The sample stopped before it finished. The first run downloads "
+                    "what it needs, so check your internet connection, then run it again."
+                ),
             }
         runs: list[dict[str, Any]] = []
         for kind, folder in (("normal", "run"), ("save_dropped", "run-broken")):

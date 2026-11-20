@@ -1,6 +1,49 @@
 # CHANGELOG
 
 
+## v0.30.6 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: show the window again on a second launch
+
+
+
+## v0.30.5 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: On macOS 26, a step that starts a helper process (a replay, an
+  export, saving an approval key) could on rare occasions wait forever. The
+  engine now starts its helper processes in a way that cannot stall like that.
+
+
+
+## v0.30.4 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: stop terminal windows opening over the app on Windows
+
+
+
+## v0.30.3 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: describe OpenAdapt for any app on the welcome screen
+
+
+
+## v0.30.2 (2026-11-18)
+
+### Bug Fixes
+
+- **desktop**: let the installed app's sample run on a fresh Mac
+- **desktop**: stop the release-intent tests hanging on macOS (#2237)
+
+
+
 ## v0.30.1 (2026-11-12)
 
 ### Bug Fixes

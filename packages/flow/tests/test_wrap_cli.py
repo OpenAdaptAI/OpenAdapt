@@ -328,3 +328,67 @@ def test_held_task_reports_cache_halted_and_never_runs_a_paid_miss(
     assert result["halt_reason"] == "record_written refuted at step_005"
     assert result["receipt_outcome"] == "RECONCILIATION_REQUIRED"
     assert agents == [None]
+
+
+@pytest.mark.parametrize(
+    "provider,variable", [("claude", "ANTHROPIC_API_KEY"), ("openai", "OPENAI_API_KEY")]
+)
+def test_missing_model_key_names_the_variable_and_no_run_record(
+    monkeypatch, tmp_path, capsys, provider, variable
+):
+    setup = SimpleNamespace(
+        cache=SimpleNamespace(server=lambda *_: None),
+        instruction="Save {note}",
+        parameters=("note",),
+    )
+    monkeypatch.setattr(recording, "load_task", lambda *_args, **_kwargs: setup)
+    key_provider = "anthropic" if provider == "claude" else "openai"
+    monkeypatch.setattr(
+        providers,
+        "build_agent",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            requires_model_key=True, model_key_provider=key_provider
+        ),
+    )
+
+    def missing(selected):
+        raise keys.MissingModelKey(f"no {selected} key for the recording run")
+
+    monkeypatch.setattr(keys, "load_customer_model_key", missing)
+    runs = tmp_path / "runs"
+    code = cli.main(
+        [
+            "--task",
+            str(tmp_path / "task.json"),
+            "--provider",
+            provider,
+            "--request-id",
+            "r1",
+            "--max-cost-usd",
+            "2",
+            "--runs-dir",
+            str(runs),
+        ]
+    )
+    err = capsys.readouterr().err.strip()
+    assert code == 2
+    assert len(err.splitlines()) == 1
+    assert variable in err and "[MISSING_MODEL_KEY]" in err
+    assert "run record" not in err
+    assert not runs.exists()
+
+
+def test_person_without_a_terminal_refuses_before_task_load(monkeypatch, capsys):
+    loaded = []
+    monkeypatch.setattr(
+        recording, "load_task", lambda *args, **kwargs: loaded.append(args)
+    )
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False, raising=False)
+    parser = cli.build_parser()
+    args = parser.parse_args(["--task", "task.json", "--person", "Pat Example"])
+    with pytest.raises(SystemExit) as exc:
+        cli._task(args, parser)
+    assert exc.value.code == 2
+    assert loaded == []
+    err = capsys.readouterr().err
+    assert "interactive terminal" in err and "--admit-key" in err

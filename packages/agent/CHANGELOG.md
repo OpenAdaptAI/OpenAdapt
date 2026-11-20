@@ -2,7 +2,7 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
-## Unreleased (2.2.2)
+## v2.2.2 (2026-11-14)
 
 - Accept `openadapt-flow` 3.x. Flow 3 moved its vision stack to the `vision`
   extra, so this package now requires `openadapt-flow[vision]>=2.2.0,<4`.

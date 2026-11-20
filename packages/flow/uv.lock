@@ -2622,7 +2622,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "3.0.0"
+version = "3.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -2868,8 +2868,8 @@ requires-dist = [
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
     { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
-    { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9" },
-    { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9" },
+    { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9,<5.1" },
+    { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9,<5.1" },
     { name = "openenv", marker = "python_full_version >= '3.11' and extra == 'openenv'", specifier = ">=0.11,<0.12" },
     { name = "pillow", marker = "extra == 'dev'", specifier = ">=10.0" },
     { name = "pillow", marker = "extra == 'vision'", specifier = ">=10.0" },

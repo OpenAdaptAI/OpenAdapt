@@ -2246,6 +2246,11 @@ def _run_business_rules(
                         f"{rule.case_id} trial {trial}: {failure}; certification "
                         f"withdrawn (save step {save_id})"
                     )
+        # Every rule passed. Saving the copy bound ``workflow``'s verified
+        # source to ``rule_dir`` (a save re-anchors it, #1993), and the copy
+        # is removed below, so the caller's own save would find its source
+        # assets missing. Save the bundle itself while the copy still exists.
+        save_qualified_workflow(workflow, bundle_dir)
     except BaseException:
         _invalidate_certification(workflow)
         save_qualified_workflow(workflow, bundle_dir)

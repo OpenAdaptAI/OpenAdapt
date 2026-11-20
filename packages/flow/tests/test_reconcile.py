@@ -206,8 +206,17 @@ def _kinds(result) -> set[tuple[str, str, str]]:
     return {(b.kind, b.leg, b.outcome.value) for b in result.breaks}
 
 
-def test_clean_unit_agrees(world) -> None:
+def test_clean_unit_agrees(world, monkeypatch: pytest.MonkeyPatch) -> None:
+    class ReadClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz)
+
+    # ``now=`` controls due times, while reader timestamps use a separate clock.
+    # Keep the full-output privacy assertion independent of today's date.
+    monkeypatch.setattr("openadapt_flow.reconcile.datetime", ReadClock)
     result = reconcile(world(), {"submission_id": "PA-1"}, now=NOW)
+    assert result.scope.window.read_at == "2026-11-02T12:00:00Z"
     assert result.outcome is Outcome.CONFIRMED, result.reasons
     assert result.breaks == []
     assert result.scope.unread == ()

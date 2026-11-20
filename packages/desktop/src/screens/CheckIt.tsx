@@ -1347,7 +1347,7 @@ export function CheckIt({
                             id={`${idPrefix}-app`}
                             className="input"
                             value={appName}
-                            placeholder="Your EMR or portal"
+                            placeholder="The app's name"
                             onChange={(event) => setAppName(event.target.value)}
                           />
                         </Field>

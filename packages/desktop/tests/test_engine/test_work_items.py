@@ -620,6 +620,27 @@ def test_the_sample_runs_without_a_recording_and_reports_plain_results(task) -> 
     assert ("sample_progress", {"state": "done", "detail": ""}) in events
 
 
+def test_a_sample_that_exits_with_an_error_says_so(task) -> None:
+    """Flow's tutorial failed (for example, a download it needs was refused)."""
+
+    from openadapt_desktop.flow_bridge import FlowResult
+
+    disp, _db, events = task
+
+    class _FailedBridge(_SampleBridge):
+        def tutorial(self, out_dir: Path, *, break_it: bool = True, timeout=None):
+            return FlowResult(ok=False, returncode=1, stdout="", stderr="certificate verify failed")
+
+    disp.services._flow_bridge = _FailedBridge()
+
+    sample = disp.dispatch("run_sample", {})
+
+    assert sample["ok"] is False
+    assert "stopped before it finished" in sample["error"]
+    assert "internet connection" in sample["error"]
+    assert ("sample_progress", {"state": "failed", "detail": ""}) in events
+
+
 def test_an_interrupted_item_run_becomes_a_record_to_check(task) -> None:
     disp, db, _events = task
     bridge = _Bridge([_verified_report(transaction="VERIFIED", execution="VERIFIED")])

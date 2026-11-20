@@ -94,7 +94,7 @@ function Evidence({ mode }: { mode: ApprovalModeState }) {
                     <strong>{requirementTitle(item.code)}.</strong>{" "}
                     {item.met ? "" : requirementNext(item)}
                     {item.checked_by === "person" && (
-                      <em className="faint"> A person at the clinic decides this.</em>
+                      <em className="faint"> A person at your organization decides this.</em>
                     )}
                     {item.checked_by === "software_and_person" && (
                       <em className="faint"> Part of this is a person's decision.</em>

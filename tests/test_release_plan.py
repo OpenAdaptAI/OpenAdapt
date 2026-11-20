@@ -128,6 +128,8 @@ def test_every_package_the_plan_releases_is_a_dispatch_choice() -> None:
         "workflow_dispatch"
     ]["inputs"]
     assert set(inputs["package"]["options"]) == {"all", *PLAN.PACKAGES}
+    # The plan reads pyproject.toml with tomllib, which Python 3.10 lacks.
+    pytest.importorskip("tomllib")
     for package, project in PLAN.PACKAGES.items():
         meta = PLAN._toml(
             (ROOT / "packages" / package / "pyproject.toml").read_text(encoding="utf-8")

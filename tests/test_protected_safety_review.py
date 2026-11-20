@@ -776,6 +776,107 @@ def test_workflow_uses_trusted_main_for_merge_group_not_group_content() -> None:
     assert "ref: ${{ github.event.merge_group.head_sha }}" not in text
 
 
+MAIN_TIP = "c" * 40
+
+
+class PullRequestTargetApi(FakeApi):
+    """A ``pull_request_target`` run as GitHub reports it.
+
+    The run record's ``head_sha`` is the pull request head. ``GITHUB_SHA`` is a
+    base-branch commit (here main's tip), and the checkout is the pull
+    request's recorded base, so all three differ.
+    """
+
+    def __init__(self, *, run_head_sha: str = HEAD, files: list[str]) -> None:
+        super().__init__()
+        self.run_head_sha = run_head_sha
+        self.files = [{"filename": name} for name in files]
+
+    def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+        value = super().request(path, method=method, data=data)
+        if path == "/actions/runs/77":
+            value["event"] = "pull_request_target"
+            value["head_sha"] = self.run_head_sha
+        if path == "/git/ref/heads/main":
+            value = {"object": {"sha": MAIN_TIP}}
+        return value
+
+    def pages(self, path: str) -> list[dict[str, Any]]:
+        if path == "/pulls/42/files":
+            return self.files
+        if path == "/issues/42/comments":
+            return []
+        return super().pages(path)
+
+
+def _run_pull_request_target(
+    api: FakeApi, event_head: Any = HEAD
+) -> tuple[str, list[str]]:
+    return run(
+        {"pull_request": {"number": 42, "head": {"sha": event_head}}},
+        BASE,
+        api,
+        event_name="pull_request_target",
+        workflow_run_id="77",
+        workflow_attempt=None,
+        workflow_sha=MAIN_TIP,
+    )
+
+
+def test_pull_request_target_run_on_unprotected_change_passes() -> None:
+    api = PullRequestTargetApi(files=["README.md"])
+    conclusion, errors = _run_pull_request_target(api)
+    assert conclusion == "success", errors
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+
+
+def test_pull_request_target_run_on_unreviewed_protected_change_fails() -> None:
+    api = PullRequestTargetApi(files=["packages/flow/openadapt_flow/verify_run.py"])
+    conclusion, errors = _run_pull_request_target(api)
+    assert conclusion == "failure"
+    assert not any("workflow run SHA" in error for error in errors)
+    assert any("review" in error for error in errors), errors
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+    assert api.check_run["conclusion"] == "failure"
+
+
+@pytest.mark.parametrize("run_head_sha", [BASE, MAIN_TIP, "e" * 40])
+def test_pull_request_target_run_for_another_commit_fails(run_head_sha: str) -> None:
+    api = PullRequestTargetApi(run_head_sha=run_head_sha, files=["README.md"])
+    conclusion, errors = _run_pull_request_target(api)
+    assert conclusion == "failure"
+    assert "workflow run SHA does not match the triggering event SHA" in errors
+
+
+@pytest.mark.parametrize("event_head", [None, "", "b" * 39, "B" * 40])
+def test_pull_request_target_event_without_exact_head_never_passes(
+    event_head: Any,
+) -> None:
+    api = PullRequestTargetApi(files=["README.md"])
+    try:
+        conclusion, _errors = _run_pull_request_target(api, event_head)
+    except EvidenceError:
+        assert api.check_run is None
+        return
+    assert conclusion == "failure"
+
+
+def test_comment_run_is_still_bound_to_the_workflow_sha() -> None:
+    api = FakeApi()
+    conclusion, errors = run(
+        {"issue": {"number": 42, "pull_request": {}}},
+        BASE,
+        api,
+        event_name="issue_comment",
+        workflow_run_id="77",
+        workflow_sha=HEAD,
+    )
+    assert conclusion == "failure"
+    assert "workflow run SHA does not match the triggering event SHA" in errors
+
+
 def test_first_api_failure_publishes_failure_for_known_pr_head() -> None:
     class FailedFirstRequestApi(FakeApi):
         def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:

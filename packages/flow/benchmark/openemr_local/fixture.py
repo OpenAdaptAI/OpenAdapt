@@ -96,6 +96,18 @@ EXPECTED_TABLE_DELTAS: Mapping[str, Mapping[str, int]] = {
         "uuid_registry": 14,
     },
 }
+#: The UI arms' uuid counts above were measured with the pinned image's four
+#: built-in accounts (``openadapt_actor``, ``phimail-service``,
+#: ``portal-user``, ``oe-system``). OpenEMR's first patient save after a reset
+#: gives every account a FHIR ``Group`` and ``Location`` id in
+#: ``uuid_mapping``, and each new mapping row its own ``uuid_registry`` row
+#: (measured 2026-11-19 on 8.0.0.3: the lifecycle fixture's three extra clerk
+#: accounts made a recording +18/+20, six over +12/+14 on each table, all six
+#: ``users`` rows of ``Group``/``Location``). The contract stays exact: it is
+#: these counts plus two rows per account beyond the four, on each table.
+BUILT_IN_ACCOUNTS = 4
+PER_ACCOUNT_UI_DELTAS: Mapping[str, int] = {"uuid_mapping": 2, "uuid_registry": 2}
+UI_ARMS = frozenset({"compiled", "agent", "recording"})
 MIN_FREE_BYTES = 15 * 1024**3
 ACTOR_SCOPE = "openid api:oemr user/patient.crus"
 ORACLE_SCOPE = "openid api:oemr user/patient.rs"
@@ -927,7 +939,13 @@ def audit_table_deltas(
     """
     if arm not in EXPECTED_TABLE_DELTAS:
         raise FixtureError(f"no database delta contract for arm {arm!r}")
-    expected = EXPECTED_TABLE_DELTAS[arm]
+    expected = dict(EXPECTED_TABLE_DELTAS[arm])
+    if arm in UI_ARMS and "users" in before:
+        extra = before["users"] - BUILT_IN_ACCOUNTS
+        if extra < 0:
+            raise FixtureError("fewer accounts than the pinned image's built-ins")
+        for table, per_account in PER_ACCOUNT_UI_DELTAS.items():
+            expected[table] = expected[table] + per_account * extra
     all_deltas = {
         table: after.get(table, 0) - before.get(table, 0)
         for table in sorted(set(before) | set(after))

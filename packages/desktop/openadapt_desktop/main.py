@@ -182,6 +182,11 @@ def main() -> None:
     # Before anything writes to disk, in every process mode (the embedded
     # Flow modes included): local data stays readable only by this account.
     apply_private_umask()
+    # Before any download, in every process mode: an installed engine on macOS
+    # or Linux has no certificate bundle of its own.
+    from openadapt_desktop.tls_trust import ensure_tls_trust_store
+
+    ensure_tls_trust_store()
     _configure_frozen_browser_cache()
     if sys.argv[1:2] == [EMBEDDED_FLOW_MODE]:
         _run_embedded_flow()

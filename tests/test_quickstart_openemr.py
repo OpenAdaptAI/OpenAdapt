@@ -427,7 +427,7 @@ def test_plain_output_matches_the_snapshot(root):
 def test_act_three_reads_as_a_stop_before_a_duplicate(root):
     output, outcome = _plain(FakeOpenEMR(root))
     assert "■ Stopped before saving: possible duplicate" in output
-    assert "What OpenEMR's record showed:  0 new charts" in output
+    assert "OpenEMR's record:       0 new charts" in output
     assert "A screen-trusting bot" not in output, "nothing on screen claimed success"
     assert outcome.broken is not None and outcome.broken.stopped
 
@@ -440,7 +440,8 @@ def test_runs_are_checked_in_openemrs_record(root):
     )
     assert output.count("✓ checked in OpenEMR's record") == 4
     assert "■ Stopped before saving" in output
-    assert "4 of 5 saved and checked in OpenEMR's record" in output
+    assert "4 of 5 saved and checked · " in output
+    assert "■ 4 of 5 saved and checked" in output
     assert outcome.checked == 4
 
 
@@ -472,7 +473,7 @@ def test_a_stop_the_duplicate_check_did_not_cause_is_not_the_demonstration(root,
     assert "duplicate check listed" not in output
     assert "Replaying those clicks" not in output
     assert "listing a matching chart" not in output
-    assert "possible duplicate" not in output.split("Break it", 1)[1]
+    assert "possible duplicate" not in output.split("[5/5]", 1)[1]
     assert "■ Stopped" in output
     assert "not at the check this act sets off" in output
 
@@ -605,7 +606,7 @@ def test_real_openemr_quickstart(tmp_path, monkeypatch):
     assert outcome.broken.transaction_outcome == "HALTED_BEFORE_EFFECT"
     assert outcome.broken.new_records == 0
     assert outcome.broken.stop_attributed, outcome.broken.halt_reason
-    assert "5 of 5 saved and checked in OpenEMR's record" in output
+    assert "5 of 5 saved and checked" in output
     for index in range(1, 6):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"
