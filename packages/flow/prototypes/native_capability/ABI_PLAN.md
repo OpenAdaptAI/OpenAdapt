@@ -1,6 +1,7 @@
 # Owned COM ABI fixture: pre-execution plan
 
-This is a separate child of immutable source prototype b0ab00af. It does not
+This is a separate child of immutable source prototype b0ab00af. Its README
+records that proposal-time scope; source presence here grants no native result. It does not
 change that prototype, current Windows-agent source or any runtime consumer.
 It tests direct calls on first-party in-process objects deriving from the SDK's
 IUIAutomationElement and Toggle/SelectionItem/Value interfaces. It never creates,
@@ -55,17 +56,23 @@ Run from a new owned copy of this directory, with the existing compiler path:
 C:\Python312\python.exe -I -S run_abi_fixture.py --process-support install_playwright_browser.py --sdk 10.0.22621.0
 ```
 
-The runner invokes only these two child operations, in order:
+The runner invokes these three child operations, in order. The first is a
+separate fixed-I/O guard, never an extra fixture case:
 
 ```text
+C:\Python312\python.exe -I -S io_capture_control.py
 C:\Windows\System32\cmd.exe /d /c compile_fixture.cmd <existing-vcvars64.bat> 10.0.22621.0 <exact-hashed-cl.exe>
 out\fixture.exe
 ```
 
 The compiler command is in the checked-in batch file, using the original b0
 source plus own fixture, console subsystem and static CRT. It invokes the exact
-hashed compiler path, not PATH selection. Compile failure never advances to
-execution. The existing unchanged `scripts/install_playwright_browser.py` process
+hashed compiler path, not PATH selection. Before compilation, exact owned stdout/stderr literal bytes must be captured
+in SEPARATE files, with observed lengths/hashes and a proved empty/closed/reaped
+Job. Missing, empty, partial, extra or unconfirmed capture refuses before compile.
+The shared gated child forwards stdout/stderr handles explicitly under
+CREATE_NO_WINDOW. Compile failure or an empty /Bv compile log refuses before
+fixture execution; no normalization or exit-zero substitution is allowed. The existing unchanged `scripts/install_playwright_browser.py` process
 support is copied with its original name and checked by exact SHA before loading.
 Only its kernel32 retained Windows Job class is used;
 installer/browser/retry entrypoints are never called. This kernel32 process-only
@@ -82,9 +89,11 @@ never received START and may be stopped only through its retained Popen handle.
 No taskkill, process-name/PID search or new process manager is used. Even normal
 leader exit requires the job to be empty, not just the leader's exit status.
 
-Compiler wait is90seconds; fixture wait20seconds; work deadline130seconds refuses
+Fixed-I/O wait is5seconds, compiler wait90seconds and fixture wait20seconds;
+work deadline130seconds refuses
 any late phase. Each phase has at most the existing5second Job-verification and
-5second wrapper-reap allowances, for150seconds of bounded waits in the runner.
+5second wrapper-reap allowances, for at most160seconds of bounded waits across three phases; the outer owner
+launcher remains180seconds and SSH240seconds.
 OS creation/file operations themselves are not proven hang-free by this plan.
 Each wrapper's owned PID and state is written before START/wait. Unconfirmed job
 empty/close/wrapper cleanup is a closed failure, never success or permission to
@@ -94,7 +103,7 @@ cleanup disposition; no replacement command or retry follows.
 Use the documented exclusive native Windows lease/QUEUE/REBOOTING rules and
 wrap the bounded SSH capture in the Mac CPU-slot wrapper. The WSL remote-test
 slot gate belongs to a different lane and is not invoked. Copy only the
-seven named subject/fixture source files plus the unchanged process-support file; no environment, credentials, keys, runtime package or
+eight named subject/fixture source files plus the unchanged process-support file; no environment, credentials, keys, runtime package or
 lab-agent file. The direct-native plaintext launcher, its retained hash, outer SSH timeout
 and exact owned root are reviewed privately before execution. No WSL command or
 queued WSL workload is created. The existing remote sync/install launcher is not used, because it installs

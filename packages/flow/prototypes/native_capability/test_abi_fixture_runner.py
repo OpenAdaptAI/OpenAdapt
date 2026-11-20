@@ -77,13 +77,16 @@ class OwnedProcess:
 @pytest.mark.parametrize(
     "mode", ["ok", "timeout", "error", "cleanup_failure", "assign_refused"]
 )
-def test_owned_job_cleanup_is_closed_without_relaunch(tmp_path, monkeypatch, mode):
+@pytest.mark.parametrize("split_output", [False, True])
+def test_owned_job_cleanup_is_closed_without_relaunch(
+    tmp_path, monkeypatch, mode, split_output
+):
     (tmp_path / "out").mkdir()
     process = OwnedProcess(
         "timeout" if mode == "cleanup_failure" else mode,
         stopped_after_cleanup=mode != "cleanup_failure",
     )
-    launches, events = [], []
+    launches, events, launch_options = [], [], []
 
     class Pipe:
         def write(self, value):
@@ -119,6 +122,7 @@ def test_owned_job_cleanup_is_closed_without_relaunch(tmp_path, monkeypatch, mod
 
     def launch(*args, **kwargs):
         launches.append(args)
+        launch_options.append(kwargs)
         return process
 
     monkeypatch.setattr(runner.subprocess, "Popen", launch)
@@ -130,8 +134,14 @@ def test_owned_job_cleanup_is_closed_without_relaunch(tmp_path, monkeypatch, mod
         1,
         time.monotonic() + 10,
         Support,
+        tmp_path / "out" / "test.stderr" if split_output else None,
     )
     assert len(launches) == 1
+    assert launch_options[0]["stdout"].name == str(tmp_path / "out" / "test.log")
+    if split_output:
+        assert launch_options[0]["stderr"].name == str(tmp_path / "out" / "test.stderr")
+    else:
+        assert launch_options[0]["stderr"] == subprocess.STDOUT
     assert launches[0][0][1:5] == [
         "-I",
         "-S",
@@ -164,7 +174,12 @@ def test_expired_total_deadline_starts_nothing(tmp_path, monkeypatch):
         runner.subprocess, "Popen", lambda *a, **k: pytest.fail("must not start")
     )
     result = runner.bounded(
-        ["synthetic"], tmp_path, tmp_path / "out" / "test.log", 1, time.monotonic() - 1, None
+        ["synthetic"],
+        tmp_path,
+        tmp_path / "out" / "test.log",
+        1,
+        time.monotonic() - 1,
+        None,
     )
     assert not runner.completed_ok(result)
     assert result["timeout"] is True and result["started"] is False
@@ -219,7 +234,15 @@ def test_owned_gated_child_requires_exact_start_and_no_window(monkeypatch, line)
     result = runner.owned_gated_child(["synthetic-child"])
     if line == b"START\n":
         assert result == 0 and calls == [
-            (["synthetic-child"], {"check": False, "creationflags": 77})
+            (
+                ["synthetic-child"],
+                {
+                    "check": False,
+                    "creationflags": 77,
+                    "stdout": runner.sys.stdout,
+                    "stderr": runner.sys.stderr,
+                },
+            )
         ]
     else:
         assert result == 125 and not calls
@@ -299,3 +322,111 @@ def test_mixed_roles_and_unclassified_row_cannot_preserve_count_claim():
     rows[0]["oracle_controls"] = 1
     rows[-2] = {"passed": True}
     assert not runner.validate_rows(rows)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "stdout_missing",
+        "stderr_missing",
+        "stdout_partial",
+        "stderr_partial",
+        "stdout_extra",
+        "stderr_extra",
+    ],
+)
+def test_capture_positive_requires_both_exact_raw_streams(tmp_path, fault):
+    stdout = tmp_path / "positive.stdout"
+    stderr = tmp_path / "positive.stderr"
+    stdout.write_bytes(runner.CAPTURE_STDOUT)
+    stderr.write_bytes(runner.CAPTURE_STDERR)
+    if fault:
+        label, mutation = fault.split("_")
+        path = stdout if label == "stdout" else stderr
+        if mutation == "missing":
+            path.unlink()
+        elif mutation == "partial":
+            path.write_bytes(path.read_bytes()[:-1])
+        else:
+            path.write_bytes(path.read_bytes() + b"extra")
+    observed = runner.capture_control_evidence(stdout, stderr)
+    assert observed["validated"] is (fault is None)
+    for label, path in (("stdout", stdout), ("stderr", stderr)):
+        if path.exists():
+            import hashlib
+
+            raw = path.read_bytes()
+            assert observed[label]["bytes"] == len(raw)
+            assert observed[label]["sha256"] == hashlib.sha256(raw).hexdigest()
+        else:
+            assert observed[label]["available"] is False
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "stdout_partial",
+        "stderr_partial",
+        "zero_streams",
+        "job_unconfirmed",
+        "compiler_empty",
+    ],
+)
+def test_actual_stage_order_stops_before_compile_or_fixture_on_missing_capture(
+    tmp_path, monkeypatch, fault
+):
+    import types
+
+    calls = []
+    receipt = {}
+    complete = {
+        "started": True,
+        "timeout": False,
+        "exit_code": 0,
+        "owned_process_stopped": True,
+        "job_assigned": True,
+        "job_empty": True,
+        "job_closed": True,
+    }
+
+    def fake_bounded(command, root, log, timeout, deadline, support, error_log=None):
+        calls.append(command)
+        result = complete.copy()
+        if len(calls) == 1:
+            log.write_bytes(
+                runner.CAPTURE_STDOUT[:-1]
+                if fault == "stdout_partial"
+                else runner.CAPTURE_STDOUT
+            )
+            error_log.write_bytes(
+                runner.CAPTURE_STDERR[:-1]
+                if fault == "stderr_partial"
+                else runner.CAPTURE_STDERR
+            )
+            if fault == "zero_streams":
+                log.write_bytes(b"")
+                error_log.write_bytes(b"")
+            if fault == "job_unconfirmed":
+                result["job_empty"] = False
+        else:
+            log.write_bytes(b"")
+        return result
+
+    monkeypatch.setattr(runner, "bounded", fake_bounded)
+    options = types.SimpleNamespace(vcvars=tmp_path / "owned-vcvars", sdk="owned-sdk")
+    code = runner.execute_owned_stages(
+        tmp_path,
+        tmp_path,
+        object(),
+        time.monotonic() + 130,
+        tmp_path / "owned-compiler",
+        options,
+        receipt,
+    )
+    if fault == "compiler_empty":
+        assert code == 7 and len(calls) == 2
+        assert receipt["closed_refusal"] == "compiler_capture_empty"
+    else:
+        assert code == 6 and len(calls) == 1
+    assert "fixture" not in receipt

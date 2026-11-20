@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 # Immutable b0 subject bytes, not an asserted native qualification flag.
@@ -18,6 +19,8 @@ PROCESS_SUPPORT_SHA256 = (
     "c731e2d758c98d7be512be487e81161cc81847f9ac15082a80504ea729758b90"
 )
 OWNED_WRAPPER_FLAG = "--owned-abi-child"
+CAPTURE_STDOUT = b"openadapt-owned-stdout/v1\n"
+CAPTURE_STDERR = b"openadapt-owned-stderr/v1\n"
 SOURCE_FILES = (
     *FROZEN_SUBJECT,
     "abi_fixture.cpp",
@@ -25,6 +28,7 @@ SOURCE_FILES = (
     "fixture_patterns_stubs.inc",
     "compile_fixture.cmd",
     "run_abi_fixture.py",
+    "io_capture_control.py",
 )
 
 
@@ -76,13 +80,17 @@ def owned_gated_child(command):
         return 125
     try:
         return subprocess.run(
-            command, check=False, creationflags=subprocess.CREATE_NO_WINDOW
+            command,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
         ).returncode
     except BaseException:
         return 126
 
 
-def bounded(command, root, log, timeout, deadline, support):
+def bounded(command, root, log, timeout, deadline, support, error_log=None):
     """Reuse the existing retained Job and START-gated wrapper, no retry."""
     result = {
         "started": False,
@@ -102,7 +110,13 @@ def bounded(command, root, log, timeout, deadline, support):
             result["timeout"] = True
             return result
         job = support._WindowsJob()
-        with log.open("wb") as output:
+        with ExitStack() as streams:
+            output = streams.enter_context(log.open("wb"))
+            error_output = (
+                streams.enter_context(error_log.open("wb"))
+                if error_log is not None
+                else subprocess.STDOUT
+            )
             process = subprocess.Popen(
                 [
                     sys.executable,
@@ -115,7 +129,7 @@ def bounded(command, root, log, timeout, deadline, support):
                 cwd=root,
                 stdin=subprocess.PIPE,
                 stdout=output,
-                stderr=subprocess.STDOUT,
+                stderr=error_output,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
             result.update(started=True, pid=process.pid, owned_process_stopped=False)
@@ -259,6 +273,83 @@ def validate_rows(rows):
     )
 
 
+def capture_control_evidence(stdout, stderr):
+    evidence = {"validated": False}
+    for label, path, expected in (
+        ("stdout", stdout, CAPTURE_STDOUT),
+        ("stderr", stderr, CAPTURE_STDERR),
+    ):
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            evidence[label] = {"available": False, "matches": False}
+        else:
+            evidence[label] = {
+                "available": True,
+                "bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "matches": raw == expected,
+            }
+    evidence["validated"] = all(
+        evidence[label]["matches"] for label in ("stdout", "stderr")
+    )
+    return evidence
+
+
+def execute_owned_stages(root, out, support, deadline, compiler, options, receipt):
+    receipt["capture_control_job"] = bounded(
+        [sys.executable, "-I", "-S", str(root / "io_capture_control.py")],
+        root,
+        out / "capture-positive.stdout",
+        5,
+        deadline,
+        support,
+        out / "capture-positive.stderr",
+    )
+    if not completed_ok(receipt["capture_control_job"]):
+        return 6
+    receipt["capture_control"] = capture_control_evidence(
+        out / "capture-positive.stdout", out / "capture-positive.stderr"
+    )
+    if receipt["capture_control"]["validated"] is not True:
+        return 6
+    receipt["compile"] = bounded(
+        [
+            r"C:\Windows\System32\cmd.exe",
+            "/d",
+            "/c",
+            str(root / "compile_fixture.cmd"),
+            str(options.vcvars),
+            options.sdk,
+            str(compiler),
+        ],
+        root,
+        out / "compile.log",
+        90,
+        deadline,
+        support,
+    )
+    if not completed_ok(receipt["compile"]):
+        return 2
+    if (out / "compile.log").stat().st_size == 0:
+        receipt["closed_refusal"] = "compiler_capture_empty"
+        return 7
+    receipt["executable_sha256"] = hashlib.sha256(
+        (out / "fixture.exe").read_bytes()
+    ).hexdigest()
+    receipt["fixture"] = bounded(
+        [str(out / "fixture.exe")], root, out / "cases.jsonl", 20, deadline, support
+    )
+    if not completed_ok(receipt["fixture"]):
+        return 3
+    rows = [json.loads(line) for line in (out / "cases.jsonl").read_text().splitlines()]
+    if not validate_rows(rows):
+        return 4
+    receipt["validated_cases"] = 64
+    receipt["oracle_controls"] = 1
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -306,40 +397,9 @@ def main():
     }
     deadline = time.monotonic() + 130
     try:
-        receipt["compile"] = bounded(
-            [
-                r"C:\Windows\System32\cmd.exe",
-                "/d",
-                "/c",
-                str(root / "compile_fixture.cmd"),
-                str(options.vcvars),
-                options.sdk,
-                str(compiler),
-            ],
-            root,
-            out / "compile.log",
-            90,
-            deadline,
-            support,
+        return execute_owned_stages(
+            root, out, support, deadline, compiler, options, receipt
         )
-        if not completed_ok(receipt["compile"]):
-            return 2
-        receipt["executable_sha256"] = hashlib.sha256(
-            (out / "fixture.exe").read_bytes()
-        ).hexdigest()
-        receipt["fixture"] = bounded(
-            [str(out / "fixture.exe")], root, out / "cases.jsonl", 20, deadline, support
-        )
-        if not completed_ok(receipt["fixture"]):
-            return 3
-        rows = [
-            json.loads(line) for line in (out / "cases.jsonl").read_text().splitlines()
-        ]
-        if not validate_rows(rows):
-            return 4
-        receipt["validated_cases"] = 64
-        receipt["oracle_controls"] = 1
-        return 0
     finally:
         receipt["toolchain_after"] = {
             str(p): hashlib.sha256(p.read_bytes()).hexdigest()
