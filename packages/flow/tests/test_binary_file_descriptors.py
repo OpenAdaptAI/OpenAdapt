@@ -20,8 +20,10 @@ from tests._binary_descriptor_contract import (
     assert_descriptor_roundtrip,
     assert_directory_anchor_and_private_mode,
     assert_explicit_text_mode_refused,
-    crt_files as crt_files,
     raw_descriptor_owners,
+)
+from tests._binary_descriptor_contract import (
+    crt_files as crt_files,
 )
 
 
