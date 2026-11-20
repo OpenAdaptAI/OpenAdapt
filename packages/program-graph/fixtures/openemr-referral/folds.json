@@ -2,7 +2,7 @@
   "groups": [
     {
       "id": "section:fields-step_000",
-      "title": "Who: title, first name, last name",
+      "title": "Name",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_000",
@@ -15,7 +15,7 @@
     },
     {
       "id": "section:fields-step_009",
-      "title": "Who: date of birth, sex",
+      "title": "Date of birth and sex",
       "subtitle": "4 steps \u00b7 2 fields",
       "nodes": [
         "for_each::s::step_009",
@@ -26,7 +26,7 @@
     },
     {
       "id": "section:fields-step_015",
-      "title": "Contact: street, city, state, postal code",
+      "title": "Address",
       "subtitle": "11 steps \u00b7 4 fields",
       "nodes": [
         "for_each::s::step_015",
@@ -44,7 +44,7 @@
     },
     {
       "id": "section:fields-step_030",
-      "title": "Contact: home phone, email, country",
+      "title": "Phone, email and country",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_030",
@@ -57,7 +57,7 @@
     },
     {
       "id": "section:save-step_039",
-      "title": "Create New Patient",
+      "title": "Create the chart",
       "subtitle": "2 steps \u00b7 reads the record back",
       "nodes": [
         "for_each::s::step_039",
@@ -72,8 +72,55 @@
     }
   ],
   "source": {
-    "body_bundle": "openemr/new-referral, certified for clinical-write",
-    "body_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "body_bundle": "packages/flow/benchmark/openemr_local/referral_program/program",
+    "body_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+    "display_derivation": {
+      "kind": "authored_for_each_visualization",
+      "source_body_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+      "display_bundle_content_digest": "a4640b1de38296299d772133532a47ea8538a1890af8b63294caaefe5df3f0db",
+      "executed": false,
+      "qualified": false,
+      "reviewed_display_titles_sha256": "178aab4b9f1c416eda18b414eba93f918648b07dfdbf5058c9eb82a8b58b1cc9",
+      "worklist_source": "signed body-run params in summary order",
+      "worklist_report_sha256": [
+        "25470d647829c3dfa1a5c20a1fbd136ba7408504f54e76ab3c22675109084460",
+        "eb019383148bb8e20d835f867aaebb345473676979cec44c24b987381c1373ba",
+        "a11c257fafe370e19e5c432a8dd9d2595e7ba7c26a26f65c48757ec2f5682693",
+        "f53316fad3c73d577f68264cb403bb114759f2c4db522074f381b60b2fad99b5"
+      ],
+      "record_count": 4,
+      "node_to_body_step": {
+        "for_each::s::step_000": "step_000",
+        "for_each::s::step_001": "step_001",
+        "for_each::s::step_003": "step_003",
+        "for_each::s::step_005": "step_005",
+        "for_each::s::step_006": "step_006",
+        "for_each::s::step_008": "step_008",
+        "for_each::s::step_009": "step_009",
+        "for_each::s::step_011": "step_011",
+        "for_each::s::step_012": "step_012",
+        "for_each::s::step_013": "step_013",
+        "for_each::s::step_015": "step_015",
+        "for_each::s::step_016": "step_016",
+        "for_each::s::step_017": "step_017",
+        "for_each::s::step_018": "step_018",
+        "for_each::s::step_020": "step_020",
+        "for_each::s::step_021": "step_021",
+        "for_each::s::step_023": "step_023",
+        "for_each::s::step_024": "step_024",
+        "for_each::s::step_025": "step_025",
+        "for_each::s::step_027": "step_027",
+        "for_each::s::step_029": "step_029",
+        "for_each::s::step_030": "step_030",
+        "for_each::s::step_032": "step_032",
+        "for_each::s::step_033": "step_033",
+        "for_each::s::step_035": "step_035",
+        "for_each::s::step_036": "step_036",
+        "for_each::s::step_037": "step_037",
+        "for_each::s::step_039": "step_039",
+        "for_each::s::step_040": "step_040"
+      }
+    },
     "source_recording_sha256": "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894",
     "sections": "compiled by Flow (openadapt-flow sections, titles from the form structure in ui-structure/events.jsonl)",
     "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",

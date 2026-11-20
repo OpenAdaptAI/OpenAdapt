@@ -3279,6 +3279,9 @@ def _case_run_report_integrity_error(
                 ("physical_press", False),
             },
         }.get((item.actuation, step.action), set())
+        if step.choice is not None:
+            # docs/CHOICES.md: proven by its read-back, not a delivery receipt.
+            return "dropdown choice steps carry no delivery receipt; refusing"
         if (
             step.action is ActionKind.SELECT_OPTION
             and step.native_selection is not None

@@ -82,6 +82,7 @@ Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent"
 Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md"
 "Bug Tracker" = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openadapt_agent"]

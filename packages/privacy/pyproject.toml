@@ -50,6 +50,9 @@ openadapt-privacy-scan = "openadapt_privacy.scan:main"
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/CHANGELOG.md"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 [build-system]
 requires = ["hatchling"]

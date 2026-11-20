@@ -214,6 +214,12 @@ windows = [
     "requests>=2.31",
     "pywin32>=312; platform_system == 'Windows'",
 ]
+# Windows service host for the BYOC connector:
+# `openadapt-flow connector service install|start|stop|remove|status`.
+# pywin32 is under the PSF-2.0 license.
+connector-windows = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
 # Reference reward worker: `openadapt-flow serve-reward`. Reads the system of
 # record after a training episode and signs a reward receipt with a local key.
 # A reward receipt is not an Execute Seal; the worker never imports Cloud.
@@ -319,6 +325,8 @@ langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CHANGELOG.md"
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"
@@ -385,6 +393,8 @@ exclude = [
     # Grader-soundness ledgers and summaries are repository-only.
     "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
+    # Vendored third-party widget builds for the choice-widgets fixture.
+    "/benchmark/choice_widgets/vendor",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -455,6 +465,8 @@ exclude = [
     # Grader-soundness ledgers and summaries are repository-only.
     "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
+    # Vendored third-party widget builds for the choice-widgets fixture.
+    "/benchmark/choice_widgets/vendor",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",

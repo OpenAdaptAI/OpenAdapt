@@ -54,7 +54,7 @@ verifier refuses to read, so the quickstart reports `NOT SENT` and the agent
 writes nothing.
 
 The contracts the quickstart uses are in
-[`quickstart.py`](src/openadapt_verify/quickstart.py). Each is an
+[`quickstart.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/src/openadapt_verify/quickstart.py). Each is an
 [`openadapt.verify/v1` contract](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md);
 copy one and point it at your store.
 
@@ -349,7 +349,7 @@ refusal never authorizes retrying the write. The `openadapt_verify.shadow`
 module also exposes the canonical shadow verifier without changing its scope.
 
 To configure the same protected journal for `run`, `recheck`, and `serve`,
-see [Use the protected journal from installed tools](../flow/docs/VERIFIER_API.md#use-the-protected-journal-from-installed-tools).
+see [Use the protected journal from installed tools](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md#use-the-protected-journal-from-installed-tools).
 An enrolled journal refuses if a process opens it without its authority.
 The legacy default provides no tamper evidence when the checked agent can
 write to its journal directory.

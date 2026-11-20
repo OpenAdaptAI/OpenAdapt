@@ -839,6 +839,9 @@ class _FakeScrubber:
     (the redaction geometry is Presidio's job, out of scope for these unit
     tests — here we only assert the scrub PATH is taken)."""
 
+    def sanitization_config(self):
+        return {}
+
     def __init__(self):
         self.text_calls = 0
         self.image_calls = 0
@@ -1453,6 +1456,9 @@ def test_report_break_scrubs_phi(tmp_path, monkeypatch):
     _halted_run(run_dir)
 
     class FakeScrubber:
+        def sanitization_config(self):
+            return {}
+
         def scrub_text(self, text, is_separated=False):
             return text.replace("Jane Doe", "<PERSON>").replace("12345", "<NUM>")
 

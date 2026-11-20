@@ -13,5 +13,7 @@ export {
   type MediaContext,
   type MediaResolver,
   type ProgramView,
+  type SelectionOrigin,
+  type SelectionHandler,
   type ProgramWorkbenchProps,
 } from "./ProgramWorkbench.js";

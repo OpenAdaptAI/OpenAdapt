@@ -49,6 +49,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol, Union, runtime_checkable
 
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.compiler.induction import (
     InductionResult,
     NarratedGuard,
@@ -228,7 +229,7 @@ def interpretation_workflow(
             steps.insert(inserted, _guarded_copy(point.step, guard))
     else:
         raise ValueError(f"unknown interpretation {interpretation!r}")
-    out = wf.model_copy(update={"steps": steps, "program": None})
+    out = derive_authored_workflow(wf, update={"steps": steps, "program": None})
     return out, inserted
 
 
