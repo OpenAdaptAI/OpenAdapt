@@ -390,3 +390,53 @@ def test_command_explicit_budget_preserves_nonzero_status(
     with pytest.raises(lab_mod.WinRMLabError, match="guest command exited 7"):
         synthetic_ssh_lab.run_cmd("synthetic-command", timeout_s=90)
     assert len(calls) == 2 and all(call[1]["timeout"] == 90 for call in calls)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_launch_agent_deploys_fault_helper_only_on_explicit_opt_in(
+    monkeypatch, tmp_path, enabled
+):
+    from types import SimpleNamespace
+
+    from openadapt_flow.backends.parallels_vm import AgentEndpoint
+    from openadapt_flow.backends.win_agent import server as agent_server
+    from openadapt_flow.backends.win_agent import tls
+
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "10.0.0.2")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "test-user")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/test-key")
+    lab = lab_mod.WinRMLab(profile="winlap")
+    monkeypatch.setattr(lab, "attach_console", lambda: None)
+    monkeypatch.setattr(lab, "resolve_python", lambda: r"C:\Python\pythonw.exe")
+    monkeypatch.setattr(lab, "stop_interactive", lambda name: None)
+    monkeypatch.setattr(lab, "run_ps", lambda *a, **kw: None)
+    pushes = []
+    launches = []
+    monkeypatch.setattr(
+        lab, "push_file", lambda src, dest: pushes.append((Path(src), dest))
+    )
+    monkeypatch.setattr(
+        lab, "launch_interactive", lambda command, **kw: launches.append(command)
+    )
+    cert_dir = tmp_path / "tls"
+    cert_dir.mkdir()
+    monkeypatch.setattr(
+        tls,
+        "generate_self_signed_cert",
+        lambda hosts: SimpleNamespace(
+            certfile=str(cert_dir / "cert.pem"),
+            keyfile=str(cert_dir / "key.pem"),
+            fingerprint="a" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        AgentEndpoint, "backend", lambda self: SimpleNamespace(probe=lambda: True)
+    )
+    lab.launch_agent(token="synthetic-test-token", allow_qualification_faults=enabled)
+    helpers = [src for src, dest in pushes if "qualification_faults" in dest]
+    assert helpers == (
+        [Path(agent_server.__file__).with_name("qualification_faults.py")]
+        if enabled
+        else []
+    )
+    assert ("--allow-qualification-faults" in launches[0]) is enabled

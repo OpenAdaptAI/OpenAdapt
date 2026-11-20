@@ -14,6 +14,17 @@ For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
 
+## Native Windows qualification campaigns
+
+`qualify` can run the normal case and five faults through a native Windows
+session hook with an authenticated, explicitly enabled fault agent. The native
+screen mutations currently support buttons with an AutomationId or exact
+role/name; other controls refuse. RDP and Citrix campaign fault staging is
+separate and remains unavailable. The executable, machine and exact OS build
+are part of the qualification boundary, so this does not qualify arbitrary
+fresh workers. A script-hosted application's own code is covered by its
+declared version, not the host executable's hash.
+
 ## Validated on
 
 Every published result used synthetic patients, claims and records.

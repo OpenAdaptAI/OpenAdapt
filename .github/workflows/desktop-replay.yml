@@ -27,6 +27,7 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
+      - packages/flow/tests/e2e/test_windows_qualification_campaign.py
       - packages/flow/tests/_approver_keys.py
       - packages/flow/tests/conftest.py
       - packages/flow/tests/e2e/conftest.py
@@ -138,6 +139,22 @@ jobs:
           echo "governed step outcome: $GOVERNED_OUTCOME"
           python ../../scripts/ci/check_windows_governed_safety.py \
             "$RUNNER_TEMP/windows-governed-evidence.json"
+      - name: Qualify native Windows with real faults and complete record read-back
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE: ${{ runner.temp }}/windows-qualification-evidence.json
+        run: |
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wq" \
+            tests/e2e/test_windows_qualification_campaign.py --junitxml=runs/windows-qualification-junit.xml
+          python - <<'PYCODE'
+          import json, os
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse("runs/windows-qualification-junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1 and not any(c.find(tag) is not None for c in cases for tag in ("skipped", "failure", "error"))
+          evidence = json.load(open(os.environ["OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE"]))
+          assert evidence["completed"] and len(evidence["result"]["cases"]) == 18 and evidence["admission_verified"]
+          assert all(case["passed"] for case in evidence["result"]["cases"])
+          PYCODE
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -146,6 +163,11 @@ jobs:
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/windows-qualification-evidence.json
+            ${{ runner.temp }}/wq/**/report.json
+            ${{ runner.temp }}/wq/**/result.json
+            ${{ runner.temp }}/wq/**/agent.log
+            ${{ runner.temp }}/wq/**/*.png
             ${{ runner.temp }}/wg/**/report.json
             ${{ runner.temp }}/wg/**/agent.log
             ${{ runner.temp }}/wg/**/item-approval/*

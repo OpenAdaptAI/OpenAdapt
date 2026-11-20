@@ -52,6 +52,7 @@ from openadapt_flow.lookup_capabilities import (
     resolve_deployment_surface,
     surface_offers_structure,
 )
+from openadapt_flow.qualify import surfaces
 from openadapt_flow.qualify.config import (
     CASE_IDS,
     RULE_CASE_PREFIX,
@@ -59,14 +60,6 @@ from openadapt_flow.qualify.config import (
     QualifyConfigError,
     VerifyConfig,
 )
-from openadapt_flow.qualify.environment import (
-    WEB_OBSERVER_CONTRACT_SHA256,
-    WEB_OBSERVER_ID,
-    WebEnvironmentObserver,
-    web_environment_digest,
-    web_environment_payload,
-)
-from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
 from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
@@ -335,10 +328,14 @@ def check_ready(
     """Every problem that would stop the campaign, found before it runs."""
 
     problems: list[str] = []
-    if config.app.target != "web":
+    if config.app.target not in {"web", "windows"}:
         problems.append(
-            f"app.target {config.app.target!r}: qualify runs web campaigns today; "
-            "the pixel-surface fault driver for Windows, RDP and Citrix is not built"
+            f"app.target {config.app.target!r}: qualification fault staging is "
+            "available for web and native Windows targets only"
+        )
+    if config.app.target == "windows" and not config.app.session:
+        problems.append(
+            "app.target windows needs app.session returning an opt-in native backend"
         )
     if (
         config.app.reset is None
@@ -384,14 +381,20 @@ def check_ready(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
     structural = save.anchor.structural if save.anchor is not None else None
+    native = config.app.target == "windows"
+    if native and structural is not None and structural.role not in {None, "button"}:
+        problems.append("native qualification fault staging supports button saves only")
     if save.anchor is not None and (
         structural is None
-        or not (structural.selector or (structural.role and structural.name))
+        or not (
+            (structural.automation_id if native else structural.selector)
+            or (structural.role and structural.name)
+        )
     ):
         problems.append(
-            f"save step {save.id} has no structural locator (a selector, or a "
-            "role and a name): the web fault driver needs it for the ambiguity "
-            "and identity faults"
+            f"save step {save.id} has no structural locator "
+            f"({'automation_id' if native else 'selector'}, or role and name): "
+            "the fault driver needs it for ambiguity and identity faults"
         )
     problems.extend(business_rule_problems(workflow, config, save, params))
     return problems
@@ -405,8 +408,8 @@ def check_ready(
 @dataclass
 class CampaignSetup:
     runner_key: LocalTestKey
-    driver: WebFaultDriver
-    observer: WebEnvironmentObserver
+    driver: Any
+    observer: Any
     environment: dict[str, Any]
 
 
@@ -444,23 +447,11 @@ def configure_project(
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     app = config.app
-    capabilities = sorted(
-        {
-            "headless_chromium" if app.headless else "headed_chromium",
-            "independent_system_of_record",
-            "playwright_dom",
-        }
-    )
     boundary = EnvironmentBoundary(
-        target_kind="web",
         application=app.name,
-        application_identity=app.origin,
         application_version=app.version,
-        environment_observer_id=WEB_OBSERVER_ID,
-        environment_observer_contract_sha256=WEB_OBSERVER_CONTRACT_SHA256,
-        environment_digest=web_environment_digest(environment),
         runtime_version=FLOW_VERSION,
-        required_capabilities=capabilities,
+        **surfaces.boundary_fields(config, environment),
     )
     # Re-qualifying a bundle that already has a project (a sealed copy, a
     # repaired copy, or one certified before) replaces the project with a new
@@ -524,7 +515,9 @@ def configure_project(
         key_id=runner_key.key_id,
         public_key_base64=runner_key.public_key_base64,
     )
-    driver = WebFaultDriver(workflow, key_id=f"{campaign_id}-fault-driver")
+    driver = surfaces.fault_driver(
+        workflow, config, key_id=f"{campaign_id}-fault-driver"
+    )
     set_trusted_fault_driver_key(
         workflow,
         key_id=driver.attestation_key_id,
@@ -545,9 +538,7 @@ def configure_project(
     return CampaignSetup(
         runner_key=runner_key,
         driver=driver,
-        observer=WebEnvironmentObserver(
-            application_version=app.version, headless=app.headless
-        ),
+        observer=surfaces.observer(config),
         environment=environment,
     )
 
@@ -571,21 +562,6 @@ def _records_reader(
     return None
 
 
-def _same_field(record: Mapping[str, Any], key: str, want: Any) -> bool:
-    """Whether ``record[key]`` equals ``want``, by text.
-
-    A null equals only a field that is there and null: ``str(None)`` is
-    ``"None"``, which would match the text ``"None"`` or a missing field.
-    """
-
-    if key not in record:
-        return False
-    have = record[key]
-    if have is None or want is None:
-        return have is None and want is None
-    return str(have) == str(want)
-
-
 def _canon(record: Mapping[str, Any]) -> str:
     return json.dumps(record, sort_keys=True, default=str)
 
@@ -594,10 +570,10 @@ class RecordReadback:
     """Read the system of record before and after a trial; judge the trial.
 
     ``exact_record``: exactly the expected number of records match the save's
-    selector, every declared field equals its expected value, and no record
-    that existed before changed. ``no_mutation``: nothing matches and no
-    record changed. Uses the configured verifier's own read path (REST today);
-    other kinds fall back to the run report and say so.
+    selector and no other changes occurred, or exactly the declared fields
+    of selected existing rows changed. ``no_mutation``: complete before/after
+    multisets are equal. Unavailable reads and unsupported effects refuse.
+    Verifiers without a records read fall back to the report and say so.
     """
 
     def __init__(self, verifier: Any, save: Any, params: Mapping[str, str]) -> None:
@@ -639,64 +615,17 @@ class RecordReadback:
                 "silent_incorrect_success": bool(not passed and report.success),
                 "effect_verdict": "INDETERMINATE",
             }
-        after = self._read() or []
-        written = next(
-            (e for e in self._effects if e.kind.value == "record_written"), None
-        )
-        selector = {
-            k: v.literal if hasattr(v, "literal") else v
-            for k, v in ((written.match if written else {}) or {}).items()
-        }
+        from openadapt_flow.qualify.record_oracle import judge_records
 
-        def matches(rec: Mapping[str, Any], sel: Mapping[str, Any]) -> bool:
-            return all(_same_field(rec, k, v) for k, v in sel.items())
-
-        matched = [rec for rec in after if selector and matches(rec, selector)]
-        after_set = {_canon(rec) for rec in after}
-        changed_existing = [rec for rec in self.before if _canon(rec) not in after_set]
-        field_checks = []
-        for effect in self._effects:
-            if effect.kind.value != "field_equals" or effect.field is None:
-                continue
-            want = effect.value.literal if effect.value is not None else None
-            ok = len(matched) == 1 and _same_field(matched[0], effect.field, want)
-            field_checks.append({"field": effect.field, "match": ok})
-        expected = written.expected_count if written else 1
-        exact = (
-            len(matched) == expected
-            and not changed_existing
-            and all(item["match"] for item in field_checks)
-        )
-        nothing = (
-            not matched and not changed_existing and len(after) == len(self.before)
-        )
-        if oracle_kind == "exact_record":
-            passed = exact
-            observed = "exact_record" if passed else "record_mismatch"
-        elif oracle_kind == "no_mutation":
-            passed = (
-                not matched and not changed_existing and len(after) == len(self.before)
-            )
-            observed = "no_mutation" if passed else "unexpected_mutation"
-        else:
-            raise QualifyError(f"unknown oracle kind {oracle_kind!r}")
         return {
             **base,
-            "read_path": "system_of_record verifier records read",
-            "independent": True,
-            "passed": passed,
-            "observed": observed,
-            # RFC-0002 verdict of the read itself, whatever the case expected.
-            "effect_verdict": "CONFIRMED" if exact else "REFUTED",
-            "landed": "exact" if exact else ("none" if nothing else "some"),
-            "records_before": len(self.before),
-            "records_after": len(after),
-            "matching_records": len(matched),
-            "existing_records_changed": len(changed_existing),
-            "fields_matched": sum(item["match"] for item in field_checks),
-            "fields_expected": len(field_checks),
-            "field_check": field_checks,
-            "silent_incorrect_success": bool(not passed and report.success),
+            **judge_records(
+                self.before,
+                self._read(),
+                self._effects,
+                oracle_kind,
+                success=report.success,
+            ),
         }
 
 
@@ -843,9 +772,7 @@ def _run(
             params=dict(ctx.params),
             bundle_dir=bundle_dir,
             run_dir=ctx.run_dir,
-            execution_target_kind="web",
-            execution_origin=config.app.origin,
-            execution_entry_url=backend.page.url,
+            **surfaces.execution_fields(backend, config),
             run_id=ctx.run_id,
         )
         marks["task_end"] = time.time()
@@ -853,8 +780,11 @@ def _run(
             hooks.after_run(ctx, backend, report)
         return report, verifier
     finally:
-        close()
-        marks["browser_closed"] = time.time()
+        try:
+            surfaces.cleanup_faults(fault_driver, backend)
+        finally:
+            close()
+            marks["browser_closed"] = time.time()
 
 
 def _judge_trial(
@@ -1437,11 +1367,7 @@ def qualify(
     )
     backend, close = opener()
     try:
-        environment = web_environment_payload(
-            backend,
-            application_version=config.app.version,
-            headless=config.app.headless,
-        )
+        environment = surfaces.environment_payload(backend, config)
     finally:
         close()
     setup = configure_project(
@@ -1456,9 +1382,10 @@ def qualify(
     save_qualified_workflow(workflow, bundle_dir)
     workflow = Workflow.load(bundle_dir)
     save = next(s for s in workflow.steps if s.id == save.id)
-    runner_id = (
-        hooks.runner_id
-        or f"openadapt-flow/qualify-web-{'headless' if config.app.headless else 'headed'}"
+    runner_id = hooks.runner_id or (
+        "openadapt-flow/qualify-windows"
+        if config.app.target == "windows"
+        else f"openadapt-flow/qualify-web-{'headless' if config.app.headless else 'headed'}"
     )
     policy_name = certify or config.campaign.policy
 
@@ -1619,6 +1546,7 @@ def qualify(
                         verify_sha256=verify_sha,
                         verifier_identity=verifier_id,
                         fault_driver_version=setup.driver.contract_sha256[:16],
+                        fault_driver_kind=f"{config.app.target}-generic",
                         cases=case_entries,
                     ),
                 )
@@ -1744,6 +1672,7 @@ def qualify(
                 verify_sha256=verify_sha,
                 verifier_identity=verifier_id,
                 fault_driver_version=setup.driver.contract_sha256[:16],
+                fault_driver_kind=f"{config.app.target}-generic",
                 cases=case_entries,
             ),
         )
@@ -1753,6 +1682,7 @@ def qualify(
         verify_sha256=verify_sha,
         verifier_identity=verifier_id,
         fault_driver_version=setup.driver.contract_sha256[:16],
+        fault_driver_kind=f"{config.app.target}-generic",
         cases=case_entries,
     )
     result_path = write_json(out / "qualification" / "result.json", qresult)
@@ -1844,7 +1774,7 @@ def qualify(
         notes=notes,
         reports=reports,
         observer=setup.observer,
-        environment_digest=web_environment_digest(environment),
+        environment_digest=surfaces.environment_digest(environment, config),
         result=qresult,
         admission_note=admission_note,
         lookup=lookup_record,
