@@ -116,6 +116,27 @@ class FreshActuationRequired(RuntimeError):
         self.frame_size = frame_size
 
 
+class KeyboardFrameChangedBeforeInput(FreshActuationRequired):
+    """A known one-shot keyboard lease refused before its keyboard gesture.
+
+    Earlier phases (such as a focusing click) may have happened. Only the
+    keyboard phase may be reacquired, after complete fresh revalidation.
+    """
+
+    def __init__(
+        self, *, lease_sha256: str, target_fingerprint: str, **kwargs: Any
+    ) -> None:
+        import re
+
+        if not re.fullmatch(r"[a-f0-9]{64}", lease_sha256) or not re.fullmatch(
+            r"[a-f0-9]{64}", target_fingerprint
+        ):
+            raise ValueError("keyboard lease evidence requires exact digests")
+        super().__init__(**kwargs)
+        self.lease_sha256 = lease_sha256
+        self.target_fingerprint = target_fingerprint
+
+
 @runtime_checkable
 class SystemOfRecordBackend(Protocol):
     """Optional system-of-record observation a backend MAY expose.
@@ -493,6 +514,15 @@ class FocusedElementActuationLeaseBackend(Protocol):
     def cancel_focused_element_lease(self) -> None:
         """Cancel an unconsumed focused-element binding."""
         ...
+
+
+@runtime_checkable
+class NativeKeyboardLeaseBackend(Protocol):
+    """A backend exposes actual native focus and its current one-shot lease."""
+
+    def native_keyboard_lease_available(self) -> bool: ...
+
+    def guarded_keyboard_target_fingerprint(self) -> Optional[str]: ...
 
 
 @runtime_checkable

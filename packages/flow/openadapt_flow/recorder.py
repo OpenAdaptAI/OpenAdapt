@@ -49,6 +49,7 @@ this module must not depend on `openadapt_flow.vision`.
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import time
@@ -890,7 +891,7 @@ class Recorder:
         structural_before = self._structural_state()
         # Who has the focus before and after a key press, for a key that moves
         # the focus and changes nothing visible (the ``focus_on``
-        # postcondition). Key events only.
+        # postcondition), and the receiving target of native text input.
         focus_before = self._focus_identity(event)
         # Structured identity of the clicked target (DOM / a11y text), when
         # the backend exposes it: captured on the BEFORE frame, before the
@@ -1014,13 +1015,12 @@ class Recorder:
             quiet_before=quiet_before,
         )
         if focus_before is not None:
+            # Preserve the actual input target even when the input navigates
+            # or closes the window and its after-focus is no longer readable.
+            event = {**event, "focus_before": focus_before}
             focus_after = self._focus_identity(event)
             if focus_after is not None:
-                event = {
-                    **event,
-                    "focus_before": focus_before,
-                    "focus_after": focus_after,
-                }
+                event = {**event, "focus_after": focus_after}
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
@@ -1363,18 +1363,18 @@ class Recorder:
         return census if isinstance(census, dict) else None
 
     def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
-        """The focused element's identity around a key event, if readable."""
+        """The focused element before/after keyboard input, if readable."""
 
-        if event.get("kind") not in ("key", "hotkey"):
+        if event.get("kind") not in ("type", "key", "hotkey"):
             return None
         reader = getattr(self._backend, "focus_identity", None)
         if not callable(reader):
             return None
         try:
             value = reader()
+            return copy.deepcopy(value) if isinstance(value, dict) else None
         except Exception:
             return None
-        return value if isinstance(value, dict) else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.

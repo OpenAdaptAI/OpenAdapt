@@ -83,6 +83,7 @@ from openadapt_flow.backend import (
     GuardedKeyboardActionBackend,
     GuardedRemotePointerActionBackend,
     GuardedSelectOptionBackend,
+    NativeKeyboardLeaseBackend,
     NativeSelectBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
@@ -179,6 +180,7 @@ from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
+from openadapt_flow.runtime import keyboard_delivery as keyboard_delivery_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -11432,6 +11434,14 @@ class Replayer:
             f"{step.submit_binding_unbound_reason} — refusing to act; run aborted"
         )
 
+    def _native_keyboard_lease_required(self, step: Step) -> bool:
+        return bool(
+            step.action in (ActionKind.TYPE, ActionKind.KEY, ActionKind.HOTKEY)
+            and step.anchor is not None
+            and isinstance(self.backend, NativeKeyboardLeaseBackend)
+            and self.backend.native_keyboard_lease_available()
+        )
+
     def _step_needs_consequential_revalidation(
         self, step: Step, workflow: Workflow
     ) -> bool:
@@ -11465,6 +11475,8 @@ class Replayer:
             # Exact fault-prefix proof includes read-only prior actions. Arm a
             # fresh remote lease for those actions only during the fault run,
             # so ordinary demo replay keeps its reversible fast path.
+            return True
+        if self._native_keyboard_lease_required(step):
             return True
         if self._step_requires_remote_guarded_actuation(step, workflow):
             return True
@@ -11503,7 +11515,7 @@ class Replayer:
     ) -> bool:
         """Whether keyboard delivery must stay bound to the verified focus."""
 
-        return (
+        return self._native_keyboard_lease_required(step) or (
             step.action
             in (
                 ActionKind.KEY,
@@ -11827,7 +11839,8 @@ class Replayer:
                     if isinstance(self.backend, RemoteActuationBackend)
                     else (
                         cast(
-                            GuardedKeyboardActionBackend, self.backend
+                            GuardedKeyboardActionBackend,
+                            self.backend,
                         ).guarded_keyboard_frame()
                         if (
                             guarded_keyboard_backend
@@ -12424,36 +12437,15 @@ class Replayer:
         retried: bool,
         attempt: int,
     ) -> FreshActuationEvent:
-        target_region = matched_region
-        if target_region is None and step.anchor is not None:
-            target_region = self._translate_recorded_region(
-                step, resolution, step.anchor.region
-            )
-        target_intersection = (
-            self._regions_intersect(exc.changed_bbox, target_region)
-            if target_region is not None
-            else None
-        )
-        identity_regions = self._fresh_actuation_identity_regions(
-            step, workflow, resolution
-        )
-        identity_intersection = (
-            any(
-                self._regions_intersect(exc.changed_bbox, region)
-                for region in identity_regions
-            )
-            if identity_regions
-            else None
-        )
-        return FreshActuationEvent(
-            attempt=attempt,
-            operation=exc.operation,
-            changed_pixel_count=exc.changed_pixel_count,
-            changed_bbox=exc.changed_bbox,
-            frame_size=exc.frame_size,
-            target_intersection=target_intersection,
-            identity_intersection=identity_intersection,
+        return keyboard_delivery_mod.fresh_actuation_event(
+            self,
+            exc,
+            step=step,
+            workflow=workflow,
+            resolution=resolution,
+            matched_region=matched_region,
             retried=retried,
+            attempt=attempt,
         )
 
     def _active_program_frame_refusal(
@@ -14406,20 +14398,22 @@ class Replayer:
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
             if guarded_type:
-                refusal = self._delivery_authorization_refusal(
-                    workflow, params, step, result
-                )
-                if refusal is not None:
-                    return refusal
-                self._require_qualification_environment_current()
-                result.delivery_receipt = self._deliver_backend_call(
-                    result,
-                    lambda: cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).type_text_guarded(
-                        text,
-                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
-                    ),
+                result.delivery_receipt, resolution, before_png = (
+                    keyboard_delivery_mod.native_keyboard_delivery(
+                        self,
+                        step=step,
+                        workflow=workflow,
+                        params=params,
+                        bundle_dir=bundle_dir,
+                        run_dir=run_dir,
+                        result=result,
+                        resolution=resolution,
+                        frame=before_png,
+                        baseline=baseline_field_value,
+                        call=lambda digest: cast(
+                            GuardedKeyboardActionBackend, self.backend
+                        ).type_text_guarded(text, expected_frame_sha256=digest),
+                    )
                 )
                 result.actuation = "guarded_keyboard"
             elif requires_atomic_keyboard and not isinstance(
@@ -14484,20 +14478,22 @@ class Replayer:
                 and isinstance(self.backend, GuardedKeyboardActionBackend)
             )
             if guarded_key:
-                refusal = self._delivery_authorization_refusal(
-                    workflow, params, step, result
-                )
-                if refusal is not None:
-                    return refusal
-                self._require_qualification_environment_current()
-                result.delivery_receipt = self._deliver_backend_call(
-                    result,
-                    lambda: cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).press_guarded(
-                        key,
-                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
-                    ),
+                result.delivery_receipt, resolution, before_png = (
+                    keyboard_delivery_mod.native_keyboard_delivery(
+                        self,
+                        step=step,
+                        workflow=workflow,
+                        params=params,
+                        bundle_dir=bundle_dir,
+                        run_dir=run_dir,
+                        result=result,
+                        resolution=resolution,
+                        frame=before_png,
+                        baseline=None,
+                        call=lambda digest: cast(
+                            GuardedKeyboardActionBackend, self.backend
+                        ).press_guarded(key, expected_frame_sha256=digest),
+                    )
                 )
                 result.actuation = "guarded_keyboard"
             elif requires_atomic_keyboard and not isinstance(

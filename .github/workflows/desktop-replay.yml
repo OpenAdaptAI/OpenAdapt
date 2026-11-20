@@ -11,7 +11,9 @@ name: Desktop replay
 #   as a continue-on-error step, so it reports but does not fail the job
 #   (packages/flow/tests/e2e/test_windows_hosted_governed.py). A gating
 #   step after it fails the job on any unsafe write the run made
-#   (scripts/ci/check_windows_governed_safety.py).
+#   (scripts/ci/check_windows_governed_safety.py). A separate gating proof
+#   checks one-shot native keyboard leases with real TYPE, KEY and HOTKEY
+#   receipts, UIA field read-back, planted lease faults and unchanged SQLite rows.
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -26,6 +28,7 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_native_keyboard_lease.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
       - packages/flow/tests/_approver_keys.py
       - packages/flow/tests/conftest.py
@@ -57,7 +60,9 @@ jobs:
   replay:
     name: windows replay (Patient Notes, WindowsBackend)
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     defaults:
       run:
         working-directory: packages/flow
@@ -65,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -89,6 +95,42 @@ jobs:
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
             tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
+      - name: Native keyboard leases (real input, read-back and planted refusals)
+        timeout-minutes: 6
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_NATIVE_KEYBOARD_LEASE_EVIDENCE: ${{ runner.temp }}/nkl/evidence.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nkl"
+          {
+            git rev-parse HEAD
+            git rev-parse "HEAD^{tree}"
+            printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } | tee "$RUNNER_TEMP/nkl/source.log"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/nkl/cases" \
+            tests/e2e/test_native_keyboard_lease.py \
+            --junitxml="$RUNNER_TEMP/nkl/junit.xml" 2>&1 | tee "$RUNNER_TEMP/nkl/pytest.log"
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path(os.environ["RUNNER_TEMP"]) / "nkl"
+          cases = list(ET.parse(root / "junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1
+          assert cases[0].get("name") == "test_native_keyboard_lease_actual_delivery_and_refusal"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          proof = json.loads((root / "evidence.json").read_text())
+          expected = {"type", "key", "hotkey", "stale_frame", "fresh_after_zero_input", "stale_focus", "replaced_target", "consumed_lease", "uncertain_ack"}
+          assert len(proof["cases"]) == len(expected)
+          assert {case["case"] for case in proof["cases"]} == expected
+          assert proof["passed"] is True and proof["agent_terminated"] is True and proof["fixture_terminated"] is True
+          assert proof["head"] == os.environ["EXPECTED_SOURCE_SHA"]
+          assert proof["rows_before"] == proof["rows_after"]
+          print(json.dumps({"native_lease_cases": len(expected), "skipped": 0, "rows_unchanged": True}))
+          PYTHON
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -144,6 +186,16 @@ jobs:
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/nkl/*.json
+            ${{ runner.temp }}/nkl/*.xml
+            ${{ runner.temp }}/nkl/*.log
+            ${{ runner.temp }}/nkl/cases/**/evidence.json
+            ${{ runner.temp }}/nkl/cases/**/*.png
+            ${{ runner.temp }}/nkl/cases/**/agent.log
+            ${{ runner.temp }}/nkl/cases/**/lease-replaced.json
+            ${{ runner.temp }}/nkl/cases/**/patient_notes.ps1
+            ${{ runner.temp }}/nkl/cases/**/pn_db.py
+            ${{ runner.temp }}/nkl/cases/**/patients.db
             ${{ runner.temp }}/wg/**/report.json
             ${{ runner.temp }}/wg/**/agent.log
             ${{ runner.temp }}/wg/**/item-approval/*
@@ -227,7 +279,7 @@ jobs:
           mkdir -p "$EVIDENCE_DIR"
           {
             git rev-parse HEAD
-            git rev-parse HEAD^{tree}
+            git rev-parse "HEAD^{tree}"
             printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
             cat /etc/os-release
             uname -a

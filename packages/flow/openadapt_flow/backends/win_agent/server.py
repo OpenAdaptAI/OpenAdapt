@@ -350,7 +350,65 @@ def _delivery_receipt(
     }
 
 
-def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
+def _prepare_keyboard_input(data: dict[str, Any]) -> None:
+    """Prepare Unicode paste before the final leased frame/context checks."""
+    text = data.get("text")
+    if (
+        data.get("action") != "type_text"
+        or not isinstance(text, str)
+        or not text
+        or text.isascii()
+    ):
+        return
+    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    command = (
+        "Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString("
+        f"[Convert]::FromBase64String('{encoded}')))"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", command],
+        capture_output=True,
+        timeout=10,
+        creationflags=0x08000000,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("Unicode keyboard preparation failed")
+
+
+def _guarded_key_chord(gui: Any, keys: list[str], guard: Any) -> None:
+    """Guard each physical edge; release held keys after uncertain delivery.
+
+    A key can intentionally move focus. A changed target then makes delivery
+    uncertain, including after the final edge; it never authorizes a retry.
+    Cleanup emits releases only, even when the live target cannot be read.
+    """
+    held: list[str] = []
+    try:
+        for key in keys:
+            guard()
+            # A throwing native call might already have sent its edge.
+            held.append(key)
+            gui.keyDown(key, _pause=False)
+            guard()
+        for key in reversed(keys):
+            guard()
+            gui.keyUp(key, _pause=False)
+            held.pop()
+            guard()
+    finally:
+        for key in reversed(held):
+            try:
+                gui.keyUp(key, _pause=False)
+            except Exception:  # noqa: BLE001 - preserve the original uncertainty
+                pass
+
+
+def _perform_input(
+    payload: dict[str, Any],
+    *,
+    keyboard_guard: Any = None,
+    clipboard_prepared: bool = False,
+) -> dict[str, Any]:
     """Execute one bounded physical-input request in the interactive session."""
     data = _exact_object(
         payload,
@@ -460,6 +518,8 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 )
 
             def require_foreground() -> None:
+                if callable(keyboard_guard):
+                    keyboard_guard()
                 if _foreground_window_identity() != foreground:
                     raise AgentRequestError(
                         409,
@@ -470,26 +530,21 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
             if text.isascii():
                 for index, char in enumerate(text):
                     require_foreground()
-                    pyautogui.write(char, interval=0, _pause=False)
+                    if callable(keyboard_guard):
+                        _guarded_key_chord(pyautogui, [char], require_foreground)
+                    else:
+                        pyautogui.write(char, interval=0, _pause=False)
                     require_foreground()
                     if index + 1 < len(text):
                         time.sleep(float(interval))
             else:
-                encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
-                ps = (
-                    "Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString("
-                    f"[Convert]::FromBase64String('{encoded}')))"
-                )
-                completed = subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps],
-                    capture_output=True,
-                    timeout=10,
-                )
-                if completed.returncode != 0:
-                    raise RuntimeError("Set-Clipboard failed")
-                time.sleep(0.2)
+                if not clipboard_prepared:
+                    _prepare_keyboard_input(data)
                 require_foreground()
-                pyautogui.hotkey("ctrl", "v")
+                if callable(keyboard_guard):
+                    _guarded_key_chord(pyautogui, ["ctrl", "v"], require_foreground)
+                else:
+                    pyautogui.hotkey("ctrl", "v")
                 require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
@@ -508,7 +563,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
         import pyautogui  # noqa: PLC0415 - Windows-only, lazy by design
 
         pyautogui.FAILSAFE = False
-        if len(keys) == 1:
+        if callable(keyboard_guard):
+            _guarded_key_chord(pyautogui, keys, keyboard_guard)
+        elif len(keys) == 1:
             pyautogui.press(keys[0])
         else:
             pyautogui.hotkey(*keys)
@@ -932,6 +989,59 @@ def _uia_field_label(control: object) -> Optional[str]:
             return name
     name = " ".join(str(_control_value(control, "Name", "") or "").split())
     return name or None
+
+
+def _focused_target(auto: Any) -> Optional[dict[str, Any]]:
+    """The actual visible, uniquely named focused control, without its value."""
+    try:
+        focused = auto.GetFocusedControl()
+    except Exception:  # noqa: BLE001 - no observation, no target evidence
+        return None
+    node = focused
+    target = None
+    for _ in range(6):
+        if node is None:
+            return None
+        if str(_control_value(node, "ControlTypeName", "")) in _ACTIONABLE_TYPES:
+            target = node
+            break
+        node = _parent(node)
+    if target is None:
+        return None
+    candidate = _candidate(target)
+    if candidate is None:
+        return None
+    locator = {
+        key: candidate.get(key)
+        for key in ("automation_id", "role", "name", "window_name")
+    }
+    found, truncated = _find_candidates(locator, auto)
+    if (
+        truncated
+        or len(found) != 1
+        or not hmac.compare_digest(found[0][1]["fingerprint"], candidate["fingerprint"])
+    ):
+        return None
+    if not _hits_target(auto, target, candidate):
+        return None
+    # Focus may change while enumerating the tree: the second live read must
+    # identify the same runtime control, not merely the same label.
+    try:
+        current = auto.GetFocusedControl()
+    except Exception:  # noqa: BLE001
+        return None
+    if (
+        current is None
+        or _runtime_id(current) != _runtime_id(focused)
+        or not _runtime_id(focused)
+    ):
+        return None
+    latest = _candidate(target)
+    if latest is None or not hmac.compare_digest(
+        latest["fingerprint"], candidate["fingerprint"]
+    ):
+        return None
+    return candidate
 
 
 def _focused_field_label(auto: Any) -> Optional[str]:
@@ -1525,6 +1635,10 @@ def _perform_uia_initialized(
             # a locator that matches others too could only ever be refused.
             locator = None
         return {"status": "ok", "locator": locator}
+
+    if operation == "focused-target":
+        _exact_object(payload, label=operation)
+        return {"status": "ok", "target": _focused_target(auto)}
 
     if operation == "focused-field-label":
         _exact_object(payload, required=frozenset(), label=operation)
@@ -2813,6 +2927,45 @@ def make_handler_class(
     deterministic fake frame (no mss / no live desktop).
     """
 
+    keyboards = None
+    keyboard_errors: tuple[type[Exception], ...] = ()
+    keyboard_refusals: tuple[type[Exception], ...] = ()
+    if config.authed():
+        try:
+            from openadapt_flow.backends.win_agent.keyboard_lease import (
+                KeyboardLeaseController,
+                KeyboardLeaseError,
+                KeyboardLeaseRefused,
+            )
+        except ModuleNotFoundError:
+            from win_agent_keyboard_lease import (  # type: ignore[no-redef,import-not-found]
+                KeyboardLeaseController,
+                KeyboardLeaseError,
+                KeyboardLeaseRefused,
+            )
+        keyboard_errors, keyboard_refusals = (
+            (KeyboardLeaseError,),
+            (KeyboardLeaseRefused,),
+        )
+
+        def deliver_keyboard(data: dict[str, Any]) -> dict[str, Any]:
+            assert keyboards is not None
+            if input_fn is _perform_input:
+                return _perform_input(
+                    data,
+                    keyboard_guard=keyboards.require_current_target,
+                    clipboard_prepared=True,
+                )
+            return input_fn(data)
+
+        keyboards = KeyboardLeaseController(
+            uia_fn,
+            grab_fn,
+            context_fn,
+            deliver_keyboard,
+            prepare=_prepare_keyboard_input if input_fn is _perform_input else None,
+        )
+
     class AgentHandler(BaseHTTPRequestHandler):
         server_version = "OAFlowWinAgent/1.0"
 
@@ -2862,11 +3015,17 @@ def make_handler_class(
                             "context_identity_v1",
                             "context_environment_v1",
                             "typed_input_v1",
+                            *(
+                                ["native_keyboard_lease_v1"]
+                                if keyboards is not None
+                                else []
+                            ),
                             "guarded_input_v1",
                             "uia_v1",
                             "uia_read_v1",
                             "window_bounds_v1",
                             "uia_authoring_tree_v1",
+                            "native_focus_v1",
                             *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
@@ -2910,12 +3069,20 @@ def make_handler_class(
                 "/window/bounds": ("uia", "window-bounds"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/focused-field-label": ("uia", "focused-field-label"),
+                "/uia/focused-target": ("uia", "focused-target"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),
                 "/uia/tree": ("uia", "tree"),
             }
+            if keyboards is not None:
+                typed_routes.update(
+                    {
+                        "/keyboard/lease": ("keyboard-lease", "observe"),
+                        "/keyboard/input": ("keyboard-lease", "deliver"),
+                    }
+                )
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:
                 self._send_json(404, {"status": "error", "error": "not found"})
@@ -2974,6 +3141,26 @@ def make_handler_class(
             if self.path in typed_routes:
                 kind, operation = typed_routes[self.path]
                 try:
+                    if kind == "keyboard-lease":
+                        assert keyboards is not None
+                        if operation == "observe":
+                            _exact_object(data, label="keyboard lease observation")
+                            result = keyboards.issue()
+                        else:
+                            request = _exact_object(
+                                data,
+                                required=frozenset(
+                                    {"lease_id", "expected_frame_sha256", "input"}
+                                ),
+                                label="keyboard lease input",
+                            )
+                            result = keyboards.deliver(
+                                request["lease_id"],
+                                request["expected_frame_sha256"],
+                                request["input"],
+                            )
+                        self._send_json(200, result)
+                        return
                     if kind == "context":
                         _exact_object(data, label="context identity request")
                     if kind == "guarded-input":
@@ -3104,6 +3291,19 @@ def make_handler_class(
                             if kind == "context"
                             else uia_fn(operation, data)
                         )
+                except keyboard_refusals as exc:
+                    self._send_json(409, exc.payload())  # type: ignore[attr-defined]
+                    return
+                except keyboard_errors:
+                    self._send_json(
+                        409,
+                        {
+                            "status": "error",
+                            "code": "keyboard_lease_unavailable",
+                            "error": "native keyboard lease refused",
+                        },
+                    )
+                    return
                 except AgentRequestError as exc:
                     self._send_json(
                         exc.status,
