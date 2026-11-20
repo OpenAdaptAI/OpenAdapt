@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runner.protocol import dispatch_binding_sha256
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
@@ -146,7 +147,7 @@ def write_managed_dispatch_envelope_value(
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = open_binary(path, flags, 0o600)
     except OSError as exc:
         raise ManagedDispatchEnvelopeError(
             "could not create a private managed dispatch envelope"
@@ -206,7 +207,7 @@ def _read_managed_dispatch_envelope(path: Path) -> ManagedDispatchEnvelope:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise ManagedDispatchEnvelopeError(
             "managed dispatch envelope could not be opened safely"

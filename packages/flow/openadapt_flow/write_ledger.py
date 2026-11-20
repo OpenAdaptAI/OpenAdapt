@@ -55,6 +55,7 @@ from typing import (
     Sequence,
 )
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.write_journal_authority import (
     JournalCommit,
     JournalHead,
@@ -247,7 +248,7 @@ class FileLedger:
         expected = authority.protection_scope_sha256().encode("ascii")
         size = len(_PROTECTED_MARKER_PREFIX) + len(expected) + 1
         try:
-            fd = os.open(
+            fd = open_binary(
                 self.root / _PROTECTED_MARKER,
                 os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW,
             )
@@ -279,7 +280,7 @@ class FileLedger:
             + b"\n"
         )
         try:
-            fd = os.open(
+            fd = open_binary(
                 self.root / _PROTECTED_MARKER,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                 0o600,
@@ -288,7 +289,7 @@ class FileLedger:
                 marker.write(wire)
                 marker.flush()
                 os.fsync(marker.fileno())
-            directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            directory = open_binary(self.root, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory)
             finally:
@@ -319,7 +320,7 @@ class FileLedger:
     def _legacy_secret(self) -> bytes:
         path = self.root / "ledger.key"
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = open_binary(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
             pass
         else:
@@ -408,7 +409,7 @@ class FileLedger:
             flags = os.O_RDWR | os.O_APPEND | os.O_CREAT
             if self._authority is not None:
                 flags |= os.O_NOFOLLOW | os.O_NONBLOCK
-            fd = os.open(path, flags, 0o600)
+            fd = open_binary(path, flags, 0o600)
             try:
                 info = os.fstat(fd)
                 if self._authority is not None and not stat.S_ISREG(info.st_mode):
@@ -431,7 +432,7 @@ class FileLedger:
 
     def _legacy_gate(self, *, exclusive: bool = False) -> Any:
         _require_unprotected(self.root)
-        fd = os.open(
+        fd = open_binary(
             self._locks / ".enrollment.lock",
             os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
             0o600,
@@ -462,7 +463,7 @@ class FileLedger:
         try:
             if authority is None:
                 gate = self._legacy_gate()
-            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            fd = open_binary(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             handle = os.fdopen(fd, "rb+")
             os.chmod(path, 0o600)
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -548,7 +549,7 @@ class FileLedger:
                 if path.suffix != ".jsonl":
                     continue
                 key = _check_key(path.stem)
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                fd = open_binary(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                 with os.fdopen(fd, "rb") as source:
                     if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                         raise ValueError
@@ -598,7 +599,7 @@ class FileLedger:
                 token = authority.prepare(current)
                 try:
                     self._append(key, event)
-                    fd = os.open(self._entries, os.O_RDONLY | os.O_DIRECTORY)
+                    fd = open_binary(self._entries, os.O_RDONLY | os.O_DIRECTORY)
                     try:
                         os.fsync(fd)
                     finally:
@@ -1276,7 +1277,7 @@ def _read_authority_config(path: Path) -> tuple[Path, Path, str, str]:
     if not path.is_absolute():
         raise LedgerIntegrityHeld("ledger_authority_config_invalid")
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = open_binary(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise LedgerIntegrityHeld("ledger_authority_config_invalid")

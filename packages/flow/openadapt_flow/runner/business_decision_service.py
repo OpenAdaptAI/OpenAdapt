@@ -35,7 +35,7 @@ from openadapt_flow.interop.decision_relay_transport import (
 )
 from openadapt_flow.ir import Workflow
 from openadapt_flow.policy import Policy, load_policy, policy_contract_sha256
-from openadapt_flow.private_file import PrivateFileAclError
+from openadapt_flow.private_file import PrivateFileAclError, open_binary
 from openadapt_flow.private_file import (
     windows_descriptor_has_private_acl as _windows_descriptor_has_private_acl,
 )
@@ -131,7 +131,7 @@ def load_business_decision_key_material(path: Path) -> BusinessDecisionKeyMateri
         raise RunnerConfigError("business decision key file must not be a link")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise RunnerConfigError(
             "business decision key file cannot be opened safely"

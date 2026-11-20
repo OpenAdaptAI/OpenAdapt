@@ -32,6 +32,7 @@ from openadapt_desktop.auth.runner_bind import (
 )
 from openadapt_desktop.auth.store import load_authoring_lease, store_authoring_lease
 from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.private_fs import open_binary
 
 API_TIMEOUT_S = 10.0
 DEFAULT_LEASE_S = 900
@@ -233,7 +234,7 @@ class NodeTable:
         if not os.name == "nt":
             os.chmod(self._path.parent, 0o700)
         flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self._path, flags, 0o600)
+        descriptor = open_binary(self._path, flags, 0o600)
         try:
             if os.name != "nt":
                 os.fchmod(descriptor, 0o600)

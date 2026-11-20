@@ -99,6 +99,7 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.vision_hint import vision_hint
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -6640,7 +6641,7 @@ def _read_qualification_case_inputs(path: Path, *, workflow):
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise ValueError(
             "qualification case inputs could not be opened safely"
@@ -6723,7 +6724,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         except OSError as exc:
             raise ValueError(
                 "qualification attempt ledger is not a private directory"
@@ -6811,7 +6812,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(marker, flags, 0o600)
+            descriptor = open_binary(marker, flags, 0o600)
         except FileExistsError:
             print(
                 "run REFUSED: this qualification case attempt already started in this "
@@ -6840,7 +6841,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     directory_flags |= os.O_DIRECTORY
                 if hasattr(os, "O_NOFOLLOW"):
                     directory_flags |= os.O_NOFOLLOW
-                directory = os.open(ledger_dir, directory_flags)
+                directory = open_binary(ledger_dir, directory_flags)
                 try:
                     os.fsync(directory)
                 finally:
