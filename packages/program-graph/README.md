@@ -65,7 +65,7 @@ import "@openadapt/program-graph/styles.css";
 | `initialCursor`, `autoPlay`, `speed` | Where the trace starts, whether it plays on load (never when the viewer prefers reduced motion), and how much faster than recorded time it plays. |
 | `cursor`, `onCursorChange` | Controlled trace position, for a host that runs its own play bar. |
 | `playhead` | `{ node, iteration, status: "running" \| "saved" \| "stopped", reason }`. Lights one step without a trace: earlier steps show as reached, a loop on a later iteration animates its return edge, and a stop lights the exit to the stop card with its reason. |
-| `selectedId`, `onSelect`, `initialSelectedId` | Controlled or initial selection. |
+| `selectedId`, `onSelect`, `initialSelectedId` | Controlled or initial selection. `onSelect(nodeId, origin)` reports `user`, `follow` (trace/playhead), or `tour`. One-argument handlers remain supported. |
 | `expanded`, `onExpandedChange` | Controlled open folds. |
 | `views`, `initialView` | Which tabs to show (`program`, `evidence`, `stops`) and which opens first. One view shows no tab bar. |
 | `showHeader`, `showPlayer`, `showInspector` | Hide the title bar, the player or the inspector. |
@@ -78,6 +78,13 @@ import "@openadapt/program-graph/styles.css";
 | `notes` | Replaces or hides (`null`) the note under the map and under the evidence table. |
 | `theme` | `dark` (default) or `light`. The workbench keeps its own colours whatever the host page's theme. |
 | `layout` | Card size and spacing. |
+
+Selection origins describe UI causation, not execution or consent. Pointer,
+keyboard and inspector choices emit `user`; automatic trace or playhead movement
+emits `follow`; guided-tour choices emit `tour`. Updating controlled `selectedId`
+or mapping a selected child into a folded card does not emit a selection callback.
+A host preserving a visitor’s choice during playback can ignore `follow` while
+handling `user` and `tour`, including re-selection of the currently playing node.
 
 A host that lays out its own page can use the parts on their own:
 `ProgramMap` (the map only), `StepInspector` (one step's inspector),

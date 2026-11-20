@@ -44,6 +44,12 @@ import {
 
 export type ProgramView = "program" | "evidence" | "stops";
 
+/** Why the displayed selection changed; this carries no execution authority. */
+export type SelectionOrigin = "user" | "follow" | "tour";
+
+/** The first argument remains compatible with existing one-argument handlers. */
+export type SelectionHandler = (nodeId: string, origin: SelectionOrigin) => void;
+
 /** What a media reference is for, so the host can decide whether and how to show it. */
 export interface MediaContext {
   node: string;
@@ -85,7 +91,7 @@ export interface ProgramWorkbenchProps {
   initialSelectedId?: string;
   /** Controlled selection: the host owns it and updates it from onSelect. */
   selectedId?: string;
-  onSelect?: (nodeId: string) => void;
+  onSelect?: SelectionHandler;
   /** Controlled trace position: events applied. The host updates it from onCursorChange. */
   cursor?: number;
   onCursorChange?: (cursor: number) => void;
@@ -457,7 +463,7 @@ function MapPanel({
   setExpanded: (next: Set<string>) => void;
   traceState: TraceState | null;
   selectedId: string;
-  setSelectedId: (id: string) => void;
+  setSelectedId: SelectionHandler;
   titleFor: (node: GraphNode) => string;
   canvasNote: string | null;
   layoutOptions?: LayoutOptions;
@@ -575,7 +581,7 @@ function MapPanel({
         const group = display.folds.get(id);
         setExpanded(new Set([...expanded, id]));
         if (group) {
-          setSelectedId(group.members[0].id);
+          setSelectedId(group.members[0].id, "user");
           focusAfterRender.current = group.members[0].id;
         }
       }}
@@ -583,12 +589,12 @@ function MapPanel({
         const next = new Set(expanded);
         next.delete(id);
         setExpanded(next);
-        setSelectedId(id);
+        setSelectedId(id, "user");
         focusAfterRender.current = id;
       }}
       onPickMember={(foldId, memberId) => {
         setExpanded(new Set([...expanded, foldId]));
-        setSelectedId(memberId);
+        setSelectedId(memberId, "user");
         focusAfterRender.current = memberId;
       }}
     />
@@ -633,7 +639,7 @@ function MapPanel({
     }
     event.preventDefault();
     if (next) {
-      setSelectedId(next);
+      setSelectedId(next, "user");
       buttons.current.get(next)?.focus();
     }
   };
@@ -751,13 +757,13 @@ function MapPanel({
                   }
                   tabIndex={isSelected ? 0 : -1}
                   onClick={() => {
-                    setSelectedId(node.id);
+                    setSelectedId(node.id, "user");
                     if (!inspectorOpen) setInspectorOpen(true);
                   }}
                   onDoubleClick={() => {
                     if (nodeFold) {
                       setExpanded(new Set([...expanded, nodeFold.id]));
-                      setSelectedId(nodeFold.members[0].id);
+                      setSelectedId(nodeFold.members[0].id, "user");
                       focusAfterRender.current = nodeFold.members[0].id;
                     }
                   }}
@@ -1077,9 +1083,9 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
 
   const { onSelect, onCursorChange, onExpandedChange } = props;
   const setSelectedId = useCallback(
-    (id: string) => {
+    (id: string, origin: SelectionOrigin) => {
       setOwnSelected(id);
-      onSelect?.(id);
+      onSelect?.(id, origin);
     },
     [onSelect],
   );
@@ -1149,7 +1155,7 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
     if (!traceState?.current || moveKey === null || followed.current === moveKey) return;
     const first = followed.current === null && cursor === 0 && Boolean(trace);
     followed.current = moveKey;
-    if (!first) setSelectedId(traceState.current.node);
+    if (!first) setSelectedId(traceState.current.node, "follow");
   }, [traceState, moveKey, cursor, trace, setSelectedId]);
 
   return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState, numberOf, suppressFollow };
@@ -1212,7 +1218,7 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
       state.suppressFollow(stop.cursor);
       state.setCursor(stop.cursor);
     }
-    if (stop.select) state.setSelectedId(stop.select);
+    if (stop.select) state.setSelectedId(stop.select, "tour");
     setInspectorOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourAt, tourStops]);
@@ -1411,7 +1417,7 @@ export function StepInspector(
     folds?: FoldSpec | null;
     expanded?: string[];
     onExpandedChange?: (expanded: string[]) => void;
-    onSelect?: (nodeId: string) => void;
+    onSelect?: SelectionHandler;
     trace?: RunTrace | null;
     cursor?: number;
     playhead?: Playhead | null;
@@ -1449,17 +1455,17 @@ export function StepInspector(
         onUnfold={(id) => {
           change(new Set([...expanded, id]));
           const members = display.folds.get(id)?.members;
-          if (members?.length) props.onSelect?.(members[0].id);
+          if (members?.length) props.onSelect?.(members[0].id, "user");
         }}
         onRefold={(id) => {
           const next = new Set(expanded);
           next.delete(id);
           change(next);
-          props.onSelect?.(id);
+          props.onSelect?.(id, "user");
         }}
         onPickMember={(foldId, memberId) => {
           change(new Set([...expanded, foldId]));
-          props.onSelect?.(memberId);
+          props.onSelect?.(memberId, "user");
         }}
       />
     </Root>
