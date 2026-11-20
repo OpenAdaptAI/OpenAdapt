@@ -5,7 +5,7 @@ this computer. Publishing builds the run's *public* Seal (``public-seal.json``,
 :mod:`openadapt_flow.public_seal`): counts, outcomes, the step strip, digests
 and the hour the run started, signed by the same key. The program name is in
 it only with ``--names`` (or for the synthetic tutorial), because a program
-name can be a person's name. The exact card is always printed first; only
+name can be a person's name. The full public Seal is always printed first; only
 that file is uploaded, and only after the person says yes:
 
 * in a terminal, a y/N prompt that defaults to No;
@@ -46,7 +46,7 @@ _QUICKSTART_ROOT = re.compile(r"openadapt-quickstart(-[0-9]+)?")
 
 #: The exact consent question; ``{host}`` is the endpoint's host.
 PROMPT = (
-    "This uploads the summary above to {host} and gives you a link. Anyone "
+    "This uploads the signed Seal above to {host} and gives you a link. Anyone "
     "with the link can see it. It does not upload your inputs, screenshots or "
     "records. Publish? [y/N] "
 )
@@ -295,12 +295,8 @@ def build(
 
 
 def card_text(doc: Mapping[str, Any]) -> str:
-    """The exact card that is uploaded, and the key that signs it."""
-    return json.dumps(
-        {"card": doc["card"], "signed_by": doc["seal"]["key_id"]},
-        indent=2,
-        sort_keys=True,
-    )
+    """Show every field in the public Seal before consent."""
+    return json.dumps(dict(doc), indent=2, sort_keys=True)
 
 
 # -- publishing ---------------------------------------------------------------
@@ -571,8 +567,8 @@ def publish(
 ) -> Optional[str]:
     """Build, show, ask, upload. Returns the link, or None when nothing was sent.
 
-    The exact card is always printed before anything is asked or sent;
-    ``yes`` skips the question, never the card. Raises :class:`PublishError`
+    The full public Seal is always printed before anything is asked or sent;
+    ``yes`` skips the question, never the preview. Raises :class:`PublishError`
     with an exit code for each refusal.
     """
     run_dir = Path(run_dir)
@@ -584,6 +580,10 @@ def publish(
         return str(existing["url"])
     doc = build(run_dir, names=names, github=github, provenance=provenance)
     say(card_text(doc))
+    say(
+        "Anyone who sees two Seals can compare their key IDs to see "
+        "if the same key signed both."
+    )
     if dry_run:
         say(f"Dry run: wrote {run_dir / 'public-seal.json'}. Nothing was uploaded.")
         return None

@@ -167,9 +167,37 @@ def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp
     assert record == {"id": SEAL_ID, "url": url, "delete_token": TOKEN}
     assert stat.S_IMODE((run / "seal.publish.json").stat().st_mode) == 0o600
     assert f"Published: {url}" in said
-    # The exact card is shown before anything is sent.
-    shown = json.loads(said[0])
-    assert shown["card"] == json.loads(body)["card"]
+    assert json.loads(said[0]) == json.loads(body)
+    assert "the same key signed both" in said[1]
+
+
+@needs_engine
+def test_authorized_run_previews_scope_digest_and_issue_time_before_consent(make_run):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = make_run()
+    seal_run(
+        run,
+        authorization=("a" * 64, "r3"),
+        replace_unanchored=True,
+        enqueue=False,
+    )
+    transport = Recorder()
+    shown = []
+
+    def decline(_question):
+        seal = json.loads(shown[0])["seal"]
+        assert seal["authorization_sha256"] == "a" * 64
+        assert seal["scope_item"] == "r3"
+        saved = json.loads((run / "public-seal.json").read_text())
+        assert seal["issued_at"] == saved["seal"]["issued_at"]
+        return "no"
+
+    url = publish(
+        run, interactive=True, ask=decline, say=shown.append, transport=transport
+    )
+    assert url is None
+    assert transport.requests == []
 
 
 def test_no_terminal_and_no_yes_refuses_without_a_request(make_run, tmp_path):
@@ -208,7 +236,7 @@ def test_the_prompt_defaults_to_no(make_run, tmp_path, answer):
 
 def test_the_prompt_text_is_the_agreed_one():
     assert PROMPT.format(host="app.openadapt.ai") == (
-        "This uploads the summary above to app.openadapt.ai and gives you a link. "
+        "This uploads the signed Seal above to app.openadapt.ai and gives you a link. "
         "Anyone with the link can see it. It does not upload your inputs, "
         "screenshots or records. Publish? [y/N] "
     )
@@ -710,13 +738,14 @@ def test_the_quickstart_offer_shows_the_card_then_asks_once(
     )
     asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
     assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
-    # The exact card that would be uploaded is printed before the question.
-    card = json.loads((run / "public-seal.json").read_text())["card"]
+    # The complete document and key disclosure precede consent, even on refusal.
+    doc = json.loads((run / "public-seal.json").read_text())
     shown = [
         json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
     ]
-    assert shown and shown[0]["card"] == card
-    assert card["provenance"] == "synthetic-tutorial"
+    assert shown == [doc]
+    assert any("the same key signed both" in line for _, line in events[: asks[0]])
+    assert doc["card"]["provenance"] == "synthetic-tutorial"
     assert events[-1] == ("say", "Not published.")
     assert not (run / "seal.publish.json").exists()
     # Only the status check was sent; a No uploads nothing.

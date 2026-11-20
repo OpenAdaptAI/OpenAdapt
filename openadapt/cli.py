@@ -2041,10 +2041,10 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
             "and the hour the run started, signed by this computer's Seal key. "
             "It never holds inputs, typed values, screenshots or record "
             "contents. The program name is left out unless you pass --names "
-            "(the synthetic tutorial includes it). The exact card is printed "
-            "first, and nothing is uploaded until you say yes: at the prompt, "
-            "or with --yes when there is no terminal. --yes skips the "
-            "question, not the printed card."
+            "(the synthetic tutorial includes it). The preview shows the full "
+            "public Seal. Seals signed by the same key have the same public "
+            "key ID. Confirm at the prompt, or pass --yes to publish without "
+            "a prompt."
         ),
         allow_abbrev=False,
     )
