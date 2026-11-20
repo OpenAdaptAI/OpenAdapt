@@ -1,0 +1,8 @@
+{
+  "_why": "Calibrated 2026-11-16 by benchmark.dolibarr_erp.calibrate: three read-only sessions (16 pages each, an edit form opened and left) changed only the signed-in user's login columns. tms is the row's own last-modified stamp; it moves with any real change, which is still graded on its other columns.",
+  "ignore_columns": {
+    "*": ["tms"],
+    "llx_user": ["datelastlogin", "iplastlogin", "datepreviouslogin", "ippreviouslogin"]
+  },
+  "ignore_tables": []
+}
