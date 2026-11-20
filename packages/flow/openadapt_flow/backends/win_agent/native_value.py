@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Callable, Protocol
 
 MAX_UTF16_UNITS = 65536
-PROOF_SCHEMA = "openadapt.native-value-completeness/v1"
+PROOF_SCHEMA = "openadapt.native-value-completeness/v2"
 
 
 def utf16_bytes(value: str) -> bytes:
@@ -67,7 +67,7 @@ class CompleteValue:
 
 class NativeTextReader(Protocol):
     def owner(self, hwnd: int) -> NativeOwner: ...
-    def read(self, owner: NativeOwner) -> NativeRead: ...
+    def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead: ...
 
 
 class Win32TextReader:
@@ -128,10 +128,13 @@ class Win32TextReader:
             raise ValueUnavailable("native_text_timeout_or_failure")
         return int(result.value)
 
-    def read(self, owner: NativeOwner) -> NativeRead:
+    def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead:
         def unchanged() -> None:
             if self.owner(owner.hwnd) != owner:
                 raise ValueUnavailable("native_owner_changed")
+            # Extent and full-text messages are separate provider calls.
+            # Recheck sensitivity after ownership and before each message.
+            guard()
 
         unchanged()
         extent = self._message(owner.hwnd, 0x000E)
@@ -171,6 +174,22 @@ def _identity(control: Any) -> tuple[int, int, tuple[int, ...]]:
     return hwnd, pid, tuple(runtime)
 
 
+def require_non_sensitive_value(control: Any) -> None:
+    """Refuse text access unless the current password status is exactly False.
+
+    Missing, exceptional and non-boolean states do not authorize a getter.
+    All value, capability and preview consumers share this rule. Call again
+    after any provider call and immediately before each text getter; a prior
+    result or negotiated protocol version is never authority for a later read.
+    """
+    try:
+        allowed = control.IsPassword is False
+    except Exception:
+        allowed = False
+    if not allowed:
+        raise ValueUnavailable("password_or_password_status_unavailable")
+
+
 def observe_complete_value(
     control: Any,
     *,
@@ -187,6 +206,7 @@ def observe_complete_value(
     around every source read. It never upgrades either disagreeing source.
     """
     try:
+        require_non_sensitive_value(control)
         deadline = clock() + 5.0
         binding = identity()
         if not isinstance(binding, str) or not 1 <= len(binding) <= 256:
@@ -210,8 +230,7 @@ def observe_complete_value(
                 or reader.owner(bound[0]) != owner
             ):
                 raise ValueUnavailable("value_identity_changed")
-            if getattr(control, "IsPassword", None) is not False:
-                raise ValueUnavailable("password_or_password_status_unavailable")
+            require_non_sensitive_value(control)
             if (
                 require_editable
                 and getattr(control, "ControlTypeName", None) != "EditControl"
@@ -220,11 +239,16 @@ def observe_complete_value(
 
         def uia() -> str:
             guard()
-            pattern = control.GetValuePattern()
+            method = control.GetValuePattern
+            guard()
+            pattern = method()
+            guard()
             read_only = getattr(pattern, "IsReadOnly", None)
+            guard()
             if type(read_only) is not bool or (require_editable and read_only):
                 raise ValueUnavailable("read_only_or_read_only_status_unavailable")
             value = getattr(pattern, "Value", None)
+            guard()
             if not isinstance(value, str):
                 raise ValueUnavailable("value_pattern_unavailable")
             if len(utf16_bytes(value)) // 2 > MAX_UTF16_UNITS:
@@ -236,7 +260,7 @@ def observe_complete_value(
 
         def native() -> NativeRead:
             guard()
-            result = reader.read(owner)
+            result = reader.read(owner, guard=guard)
             guard()
             units = len(utf16_bytes(result.value)) // 2
             if not 0 <= result.extent <= MAX_UTF16_UNITS:

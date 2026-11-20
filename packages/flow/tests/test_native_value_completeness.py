@@ -11,11 +11,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from openadapt_flow.backends.win_agent.native_value import (
+    PROOF_SCHEMA,
     NativeOwner,
     NativeRead,
     ValueUnavailable,
     Win32TextReader,
     observe_complete_value,
+    require_non_sensitive_value,
     utf16_bytes,
     valid_value_proof,
 )
@@ -47,7 +49,8 @@ class Reader:
         assert hwnd == OWNER.hwnd
         return self.owner_value
 
-    def read(self, owner):
+    def read(self, owner, *, guard):
+        guard()
         self.reads += 1
         units = len(utf16_bytes(self.value)) // 2
         return NativeRead(owner, units, units, self.value)
@@ -138,7 +141,7 @@ def test_missing_or_unstable_completeness_evidence_is_explicitly_unavailable(fau
         reader.owner_value = replace(OWNER, pid=999)
     elif fault == "timeout":
 
-        def timeout(owner):
+        def timeout(owner, *, guard):
             raise ValueUnavailable("native_text_timeout_or_failure")
 
         reader.read = timeout
@@ -147,9 +150,9 @@ def test_missing_or_unstable_completeness_evidence_is_explicitly_unavailable(fau
     elif fault == "unstable_native":
         original = reader.read
 
-        def changing(owner):
+        def changing(owner, *, guard):
             reader.value += "x"
-            return original(owner)
+            return original(owner, guard=guard)
 
         reader.read = changing
     elif fault == "unstable_provider":
@@ -170,9 +173,9 @@ def test_missing_or_unstable_completeness_evidence_is_explicitly_unavailable(fau
     elif fault == "replaced_identity":
         original = reader.read
 
-        def replacing(owner):
+        def replacing(owner, *, guard):
             target.GetRuntimeId = lambda: [9, 9]
-            return original(owner)
+            return original(owner, guard=guard)
 
         reader.read = replacing
     elif fault == "scope_changed":
@@ -182,13 +185,13 @@ def test_missing_or_unstable_completeness_evidence_is_explicitly_unavailable(fau
         times = iter([0.0, 6.0])
         kwargs["clock"] = lambda: next(times, 6.0)
     elif fault == "bad_copy":
-        reader.read = lambda owner: NativeRead(owner, 5, 4, "exact")
+        reader.read = lambda owner, *, guard: NativeRead(owner, 5, 4, "exact")
     elif fault == "owner_changed":
         original = reader.read
 
-        def replace_owner(owner):
+        def replace_owner(owner, *, guard):
             reader.owner_value = replace(OWNER, thread=999)
-            return original(owner)
+            return original(owner, guard=guard)
 
         reader.read = replace_owner
     result = observe_complete_value(
@@ -287,7 +290,7 @@ def protocol_reader(value):
 @pytest.mark.parametrize("value", ["", "é𝄞  \n", "x" * 8192 + "-END"])
 def test_actual_native_message_protocol_uses_exact_utf16_buffer_and_counts(value):
     reader, user = protocol_reader(value)
-    result = reader.read(OWNER)
+    result = reader.read(OWNER, guard=lambda: None)
     assert result.value == value and result.extent == len(utf16_bytes(value)) // 2
     assert [entry[0] for entry in user.calls] == [0xE, 0xD]
 
@@ -321,7 +324,7 @@ def test_native_protocol_never_promotes_timeout_owner_change_or_incomplete_copy(
     elif fault == "ansi":
         user.unicode = False
     with pytest.raises(ValueUnavailable, match=reason):
-        reader.read(OWNER)
+        reader.read(OWNER, guard=lambda: None)
     if fault in {"timeout", "oversize", "replace", "ansi"}:
         assert 0xD not in [entry[0] for entry in user.calls]
 
@@ -345,4 +348,103 @@ def test_provider_without_a_native_extent_or_with_a_mutable_scope_is_incomplete(
     result = observe(target, Reader("exact"))
     proof = result.proof.payload()
     del proof["native_reads"]
+    assert not valid_value_proof("exact", proof)
+
+
+@pytest.mark.parametrize("status", [True, None, 0, 1, "false", "error"])
+def test_shared_sensitive_guard_refuses_before_any_source_or_capability_getter(status):
+    class Target:
+        calls = []
+
+        @property
+        def IsPassword(self):
+            if status == "error":
+                raise RuntimeError("status unavailable")
+            return status
+
+        def __getattr__(self, name):
+            self.calls.append(name)
+            raise AssertionError("no source or capability access is allowed")
+
+    target = Target()
+    with pytest.raises(
+        ValueUnavailable, match="password_or_password_status_unavailable"
+    ):
+        require_non_sensitive_value(target)
+    result = observe_complete_value(
+        target, identity=lambda: "bound", native_reader=Reader()
+    )
+    assert (
+        not result.complete
+        and result.reason == "password_or_password_status_unavailable"
+    )
+    assert target.calls == []
+
+
+@pytest.mark.parametrize("stage", ["pattern_lookup", "pattern_call", "readability"])
+@pytest.mark.parametrize("status", [True, None])
+def test_status_changes_during_capability_calls_never_reach_value_getter(stage, status):
+    target, _ = control("exact")
+    calls = []
+
+    class Pattern:
+        @property
+        def IsReadOnly(self):
+            calls.append("readability")
+            if stage == "readability":
+                target.IsPassword = status
+            return False
+
+        @property
+        def Value(self):
+            calls.append("value")
+            raise AssertionError("sensitive getter must not be called")
+
+    def factory():
+        calls.append("pattern_call")
+        if stage == "pattern_call":
+            target.IsPassword = status
+        return Pattern()
+
+    class Target(type(target)):
+        @property
+        def GetValuePattern(self):
+            calls.append("pattern_lookup")
+            if stage == "pattern_lookup":
+                self.IsPassword = status
+            return factory
+
+    target = Target(**{k: v for k, v in vars(target).items() if k != "GetValuePattern"})
+    result = observe(target, Reader("exact"))
+    assert not result.complete and result.value is None
+    assert result.reason == "password_or_password_status_unavailable"
+    assert "value" not in calls
+    if stage == "pattern_lookup":
+        assert "pattern_call" not in calls
+
+
+def test_native_extent_status_change_refuses_before_full_text_message():
+    target, _ = control("exact")
+    reader, user = protocol_reader("exact")
+    original = user.SendMessageTimeoutW
+
+    def message(*args):
+        result = original(*args)
+        if args[1] == 0xE:
+            target.IsPassword = True
+        return result
+
+    user.SendMessageTimeoutW = message
+    result = observe(target, reader)
+    assert not result.complete and result.value is None
+    assert result.reason == "password_or_password_status_unavailable"
+    assert [call[0] for call in user.calls] == [0xE]
+
+
+def test_previous_proof_version_is_not_compatible_with_pre_read_sensitive_guard():
+    target, _ = control("exact")
+    result = observe(target, Reader("exact"))
+    assert result.complete and result.proof.schema == PROOF_SCHEMA
+    proof = result.proof.payload()
+    proof["schema"] = "openadapt.native-value-completeness/v1"
     assert not valid_value_proof("exact", proof)
