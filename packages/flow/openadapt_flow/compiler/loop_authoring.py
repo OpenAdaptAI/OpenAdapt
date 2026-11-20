@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.ir import (
     LoopSpec,
     ProgramGraph,
@@ -185,8 +186,9 @@ def author_data_driven_loop(
     Args:
         body: A single-demonstration compiled workflow (the linear body). Its
             ``steps``, ``param_specs``, ``secret_params`` and templates are
-            preserved; only ``program`` / ``subflows`` / ``data_sources`` /
-            ``name`` are added.
+            preserved; ``program`` / ``subflows`` / ``data_sources`` / ``name``
+            change. A loaded body's source seal is verified and its old
+            certification expires; qualify the loop before a certified run.
         records: The worklist -- one dict per record, keyed by worklist column.
         column_map: Optional worklist-column -> body-parameter mapping; identity
             when omitted. Validated by :func:`resolve_column_map`.
@@ -265,8 +267,8 @@ def author_data_driven_loop(
 
     # Keep the verified source manifest until Workflow.save verifies the
     # original bundle, then reseals the authored derivative.
-    return body.model_copy(
-        deep=True,
+    return derive_authored_workflow(
+        body,
         update={
             "name": name or f"{body.name}-for-each",
             "program": program,
