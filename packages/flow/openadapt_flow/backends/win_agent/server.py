@@ -537,35 +537,43 @@ def _control_value(control: object, attr: str, default: object = "") -> object:
         return default
 
 
-def _parent(control: object) -> Optional[object]:
-    method = _control_value(control, "GetParentControl", None)
+def _parent(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[object]:
+    method = get(control, "GetParentControl", None)
     try:
         return method() if callable(method) else None
     except Exception:  # noqa: BLE001
         return None
 
 
-def _window_name(control: object) -> Optional[str]:
+def _window_name(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[str]:
     node: Optional[object] = control
     for _ in range(_MAX_UIA_DEPTH):
-        if str(_control_value(node, "ControlTypeName", "")) == "WindowControl":
-            value = " ".join(str(_control_value(node, "Name", "") or "").split())
+        if str(get(node, "ControlTypeName", "")) == "WindowControl":
+            value = " ".join(str(get(node, "Name", "") or "").split())
             return value or None
-        node = _parent(node)
+        node = _parent(node, get=get)
         if node is None:
             break
     return None
 
 
-def _role(control: object) -> Optional[str]:
-    control_type = str(_control_value(control, "ControlTypeName", ""))
+def _role(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[str]:
+    control_type = str(get(control, "ControlTypeName", ""))
     if control_type == "SplitButtonControl":
         return "button"
     return _CONTROL_TO_ROLE.get(control_type)
 
 
-def _bounds(control: object) -> Optional[list[int]]:
-    rect: Any = _control_value(control, "BoundingRectangle", None)
+def _bounds(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[list[int]]:
+    rect: Any = get(control, "BoundingRectangle", None)
     try:
         if rect is None or rect.right <= rect.left or rect.bottom <= rect.top:
             return None
@@ -597,17 +605,19 @@ def _centered_on(control: object, x: int, y: int) -> bool:
     )
 
 
-def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
-    automation_id = str(_control_value(control, "AutomationId", "") or "") or None
-    name = " ".join(str(_control_value(control, "Name", "") or "").split()) or None
-    role = _role(control)
+def _locator_from_control(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[dict[str, Any]]:
+    automation_id = str(get(control, "AutomationId", "") or "") or None
+    name = " ".join(str(get(control, "Name", "") or "").split()) or None
+    role = _role(control, get=get)
     if not automation_id and not (role and name):
         return None
     return {
         "automation_id": automation_id,
         "role": role,
         "name": name,
-        "window_name": _window_name(control),
+        "window_name": _window_name(control, get=get),
     }
 
 
@@ -876,9 +886,11 @@ def _locator_payload(value: object) -> dict[str, Any]:
     return out
 
 
-def _runtime_id(control: object) -> list[int]:
+def _runtime_id(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> list[int]:
     """Return UIA's per-element runtime id as a bounded JSON value."""
-    method = _control_value(control, "GetRuntimeId", None)
+    method = get(control, "GetRuntimeId", None)
     try:
         value = list(method()) if callable(method) else []
     except Exception:  # noqa: BLE001 - some providers omit RuntimeId
@@ -890,7 +902,12 @@ def _runtime_id(control: object) -> list[int]:
     return value
 
 
-def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
+def _target_fingerprint(
+    control: object,
+    candidate: dict[str, Any],
+    *,
+    get: Callable[..., Any] = _control_value,
+) -> str:
     """Bind resolution to this exact live UIA element and geometry.
 
     The locator alone is intentionally insufficient: a closed/reopened window
@@ -904,10 +921,10 @@ def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
             for key in ("automation_id", "role", "name", "window_name")
         },
         "bounds": candidate.get("bounds"),
-        "runtime_id": _runtime_id(control),
-        "process_id": _control_value(control, "ProcessId", 0),
-        "native_window_handle": _control_value(control, "NativeWindowHandle", 0),
-        "class_name": str(_control_value(control, "ClassName", "") or ""),
+        "runtime_id": _runtime_id(control, get=get),
+        "process_id": get(control, "ProcessId", 0),
+        "native_window_handle": get(control, "NativeWindowHandle", 0),
+        "class_name": str(get(control, "ClassName", "") or ""),
     }
     canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -946,9 +963,11 @@ def _focused_field_label(auto: Any) -> Optional[str]:
     return _uia_field_label(focused)
 
 
-def _candidate(control: object) -> Optional[dict[str, Any]]:
-    locator = _locator_from_control(control)
-    bounds = _bounds(control)
+def _candidate(
+    control: object, *, get: Callable[..., Any] = _control_value
+) -> Optional[dict[str, Any]]:
+    locator = _locator_from_control(control, get=get)
+    bounds = _bounds(control, get=get)
     if locator is None or bounds is None:
         return None
     role = locator["role"]
@@ -968,7 +987,7 @@ def _candidate(control: object) -> Optional[dict[str, Any]]:
         "point": [int((bounds[0] + bounds[2]) / 2), int((bounds[1] + bounds[3]) / 2)],
         "supported_operations": operations,
     }
-    candidate["fingerprint"] = _target_fingerprint(control, candidate)
+    candidate["fingerprint"] = _target_fingerprint(control, candidate, get=get)
     return candidate
 
 
@@ -996,10 +1015,12 @@ def _find_candidates(
             # A failed selector/bounds read cannot hide a second match and
             # turn a partial query into unique value authority.
             try:
+                _native_value_api().require_non_sensitive_value(control)
                 facts = {
-                    key: getattr(control, key)
+                    key: _read_control_value(control, key, None)
                     for key in ("AutomationId", "Name", "ControlTypeName")
                 }
+                _native_value_api().require_non_sensitive_value(control)
                 if any(not isinstance(value, str) for value in facts.values()):
                     return found, True
                 possible = all(
@@ -1020,16 +1041,28 @@ def _find_candidates(
                     for _ in range(_MAX_UIA_DEPTH + 1):
                         if node is None:
                             break
-                        if node.ControlTypeName == "WindowControl":
-                            if not isinstance(node.Name, str):
+                        if (
+                            _read_control_value(node, "ControlTypeName", None)
+                            == "WindowControl"
+                        ):
+                            if not isinstance(
+                                _read_control_value(node, "Name", None), str
+                            ):
                                 return found, True
                             break
-                        node = node.GetParentControl()
+                        node = _parent(node, get=_read_control_value)
                     else:
                         return found, True
             except Exception:  # noqa: BLE001 - unknown query scope is incomplete
                 return found, True
-        candidate = _candidate(control)
+        try:
+            candidate = _candidate(
+                control, get=_read_control_value if strict_walk else _control_value
+            )
+        except Exception:  # noqa: BLE001 - changing sensitive metadata is no complete census
+            if strict_walk:
+                return found, True
+            raise
         if strict_walk and possible and candidate is None:
             return found, True
         if candidate is not None:
@@ -1330,34 +1363,63 @@ _MAX_READ_ROWS = 200
 _MAX_ROW_DEPTH = 4
 
 
-def _value_text(control: object) -> Optional[str]:
-    """The text a person sees in ``control``: its value, else its name.
+def _native_value_api() -> Any:
+    """Use the canonical package helper or its exact standalone sibling."""
+    if __package__:
+        from openadapt_flow.backends.win_agent import native_value
+    else:
+        import win_agent_native_value as native_value  # type: ignore[import-not-found,no-redef]
 
-    Read-only. Edit boxes and grid cells expose their content through the
-    Value pattern (an empty box reads as empty, never as its name); other
-    controls through the legacy MSAA value or their Name.
+    return native_value
+
+
+def _read_control_value(control: object, name: str, default: Any) -> Any:
+    """Metadata for a semantic value read, without a sensitivity-order gap."""
+    guard = _native_value_api().require_non_sensitive_value
+    guard(control)
+    value = _control_value(control, name, default)
+    guard(control)
+    return value
+
+
+def _require_value_contract(value: object) -> None:
+    if value != _native_value_api().PROOF_SCHEMA or not isinstance(value, str):
+        raise AgentRequestError(
+            400, "invalid_schema", "incompatible native value contract"
+        )
+
+
+def _value_text(control: object) -> Optional[str]:
+    """Bounded non-authorizing preview, only for known non-sensitive controls.
+
+    A protocol declaration never authorizes a getter. Recheck the shared
+    sensitive-status guard before/after every capability, value or fallback
+    call; changes during a provider call discard the preview and stop fallback.
     """
-    method = _control_value(control, "GetValuePattern", None)
-    if callable(method):
-        try:
-            pattern = method()
-            value = getattr(pattern, "Value", None) if pattern is not None else None
-        except Exception:  # noqa: BLE001 - pattern not supported
-            value = None
-        if isinstance(value, str):
-            return value[:_MAX_READ_TEXT]
-    method = _control_value(control, "GetLegacyIAccessiblePattern", None)
-    if callable(method):
-        try:
-            value = getattr(method(), "Value", None)
-        except Exception:  # noqa: BLE001 - pattern not supported
-            value = None
-        if isinstance(value, str) and value:
-            return value[:_MAX_READ_TEXT]
-    name = _control_value(control, "Name", "")
-    if isinstance(name, str) and name:
-        return name[:_MAX_READ_TEXT]
-    return None
+    guard = _native_value_api().require_non_sensitive_value
+    try:
+        guard(control)
+        for capability in ("GetValuePattern", "GetLegacyIAccessiblePattern"):
+            guard(control)
+            method = _control_value(control, capability, None)
+            guard(control)
+            if not callable(method):
+                continue
+            try:
+                pattern = method()
+                guard(control)
+                value = getattr(pattern, "Value", None)
+            except Exception:  # noqa: BLE001 - unsupported capability is no value
+                value = None
+            guard(control)
+            if isinstance(value, str) and (value or capability == "GetValuePattern"):
+                return value[:_MAX_READ_TEXT]
+        guard(control)
+        name = _control_value(control, "Name", "")
+        guard(control)
+        return name[:_MAX_READ_TEXT] if isinstance(name, str) and name else None
+    except Exception:  # noqa: BLE001 - sensitivity and provider failures refuse
+        return None
 
 
 def _children(control: object) -> list[object]:
@@ -1605,13 +1667,15 @@ def _perform_uia_initialized(
     if operation == "read":
         data = _exact_object(
             payload,
-            required=frozenset({"locator"}),
+            required=frozenset({"locator", "value_contract"}),
             optional=frozenset({"rows"}),
             label="uia read",
         )
+        _require_value_contract(data["value_contract"])
         if not isinstance(data.get("rows", False), bool):
             raise AgentRequestError(400, "invalid_schema", "rows must be a boolean")
         read_locator = _locator_payload(data["locator"])
+        read_deadline = time.monotonic() + 5.0
         found, truncated = _find_candidates(read_locator, auto, strict_walk=True)
         unique = len(found) == 1 and not truncated
         result: dict[str, Any] = {
@@ -1638,39 +1702,60 @@ def _perform_uia_initialized(
             # A legacy client sees text=None for every unavailable value.
             result["preview_text"] = _value_text(control)
 
+            hwnd = _control_value(control, "NativeWindowHandle", 0)
+
             def identity() -> Optional[str]:
-                fresh, cut = _find_candidates(read_locator, auto, strict_walk=True)
-                if (
-                    cut
-                    or len(fresh) != 1
-                    or fresh[0][1]["fingerprint"] != candidate["fingerprint"]
-                ):
+                # A strict complete census is required at both observation
+                # endpoints. Between them, guard the fixed element through a
+                # fresh handle lookup, RuntimeId/PID/geometry/locator binding.
+                # This is neither continuous global uniqueness nor permission
+                # for a future write. Rewalking the whole desktop for every
+                # native guard exhausted the unchanged five-second bound.
+                try:
+                    if (
+                        time.monotonic() >= read_deadline
+                        or type(hwnd) is not int
+                        or hwnd <= 0
+                    ):
+                        return None
+                    live = auto.ControlFromHandle(hwnd)
+                    _native_value_api().require_non_sensitive_value(live)
+                    current = _candidate(live, get=_read_control_value)
+                    _native_value_api().require_non_sensitive_value(live)
+                    if (
+                        current is None
+                        or current["fingerprint"] != candidate["fingerprint"]
+                    ):
+                        return None
+                    return hashlib.sha256(
+                        json.dumps(
+                            [read_locator, current["fingerprint"]],
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                except Exception:  # noqa: BLE001 - unknown fixed identity refuses
                     return None
-                return hashlib.sha256(
-                    json.dumps(
-                        [read_locator, fresh[0][1]["fingerprint"]],
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        ensure_ascii=False,
-                    ).encode("utf-8")
-                ).hexdigest()
 
             binding = identity()
             observed = _form_field_value(control, identity)
             result["reason"] = observed.reason or "value_identity_changed"
-            if (
-                observed.complete
-                and observed.proof is not None
-                and binding is not None
-                and identity() == binding
-            ):
-                result.update(
-                    text=observed.value,
-                    complete=True,
-                    reason=None,
-                    value_proof=observed.proof.payload(),
-                    value_identity=binding,
-                )
+            if observed.complete and observed.proof is not None and binding is not None:
+                fresh, cut = _find_candidates(read_locator, auto, strict_walk=True)
+                if (
+                    not cut
+                    and len(fresh) == 1
+                    and fresh[0][1]["fingerprint"] == candidate["fingerprint"]
+                    and identity() == binding
+                ):
+                    result.update(
+                        text=observed.value,
+                        complete=True,
+                        reason=None,
+                        value_proof=observed.proof.payload(),
+                        value_identity=binding,
+                    )
         if data.get("rows"):
             # Row/cell concatenation and a bounded preview walk do not prove
             # full text or inventory. No composite row source is qualified.
@@ -2357,27 +2442,30 @@ _MAX_FORM_FIELDS = 512
 _TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 
 
-def _form_exposes_value(control: object) -> bool:
-    """A visible label may also expose a value; never downgrade that value."""
-    method = _control_value(control, "GetValuePattern", None)
-    if not callable(method):
-        return False
+def _form_exposes_value(control: object) -> Optional[bool]:
+    """Value capability, or unknown; an unknown must not fall back to Name."""
+    guard = _native_value_api().require_non_sensitive_value
     try:
-        return isinstance(getattr(method(), "Value", None), str)
-    except Exception:  # noqa: BLE001 - the visible-label channel has no Value pattern
-        return False
+        guard(control)
+        method = _control_value(control, "GetValuePattern", None)
+        guard(control)
+        if not callable(method):
+            return False
+        try:
+            pattern = method()
+            guard(control)
+            value = getattr(pattern, "Value", None)
+        except Exception:  # noqa: BLE001 - unsupported value capability
+            value = None
+        guard(control)
+        return isinstance(value, str)
+    except Exception:  # noqa: BLE001 - a sensitive/unknown capability is not absence
+        return None
 
 
 def _form_field_value(control: object, identity: Callable[[], Optional[str]]) -> Any:
     """A complete identity-bound value; partial/unsupported sources refuse."""
-    if __package__:
-        from openadapt_flow.backends.win_agent.native_value import (
-            observe_complete_value,
-        )
-    else:  # standalone deployment must use its exact sibling, not an installed copy
-        from win_agent_native_value import observe_complete_value  # type: ignore[import-not-found,no-redef]
-
-    return observe_complete_value(control, identity=identity)
+    return _native_value_api().observe_complete_value(control, identity=identity)
 
 
 def _form_value_identity(
@@ -2500,7 +2588,13 @@ def _window_form_fields(
         return None, False
     if window is None:
         return None, False
-    title = " ".join(str(_control_value(window, "Name", "") or "").split())
+    guard = _native_value_api().require_non_sensitive_value
+    try:
+        guard(window)
+        title = " ".join(str(_control_value(window, "Name", "") or "").split())
+        guard(window)
+    except Exception:  # noqa: BLE001 - no sensitive/unknown name preview
+        return None, False
     fields: list[dict[str, Any]] = []
 
     def children_of(control: Any) -> list[Any]:
@@ -2577,7 +2671,10 @@ def _window_form_fields(
         if not children and control_type in _FORM_NAMED_TYPES | _FORM_ITEM_TYPES:
             text, proof, value_identity = None, None, None
             if bounds is not None and on_screen:
-                if control_type in _FORM_ITEM_TYPES or _form_exposes_value(control):
+                exposes = _form_exposes_value(control)
+                if exposes is None:
+                    return None, False
+                if control_type in _FORM_ITEM_TYPES or exposes:
                     value_identity = identity()
                     observed = _form_field_value(control, identity)
                     if (
@@ -2589,9 +2686,14 @@ def _window_form_fields(
                         return None, False
                     text, proof = observed.value, observed.proof.payload()
                 else:
-                    name = " ".join(
-                        str(_control_value(control, "Name", "") or "").split()
-                    )
+                    try:
+                        guard(control)
+                        name = " ".join(
+                            str(_control_value(control, "Name", "") or "").split()
+                        )
+                        guard(control)
+                    except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
+                        return None, False
                     text = name or None
                 if text is not None:
                     fields.append(
@@ -2634,7 +2736,14 @@ def _window_form_fields_operation(
     other window (it could sit over a field whose pixels the caller leaves
     out), or UIA cannot read the window completely.
     """
-    framed = _window_operation("window-bounds", payload, user32)
+    data = _exact_object(
+        payload,
+        required=frozenset({"hwnd", "pid", "value_contract"}),
+        label="window form fields",
+    )
+    _require_value_contract(data["value_contract"])
+    frame_payload = {key: data[key] for key in ("hwnd", "pid")}
+    framed = _window_operation("window-bounds", frame_payload, user32)
     window = framed.get("window")
     if window is None:
         return {"status": "ok", "window": None, "fields": []}
@@ -2649,7 +2758,7 @@ def _window_form_fields_operation(
             return {"status": "ok", "window": None, "fields": []}
 
     def unchanged() -> bool:
-        fresh = _window_operation("window-bounds", payload, user32).get("window")
+        fresh = _window_operation("window-bounds", frame_payload, user32).get("window")
         if fresh != window:
             return False
         return all(

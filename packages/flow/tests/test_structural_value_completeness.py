@@ -460,3 +460,60 @@ def test_explicit_native_transforms_do_not_imply_whitespace_loss():
     assert parsed and observed == transformed.value.literal == "2026-11-20"
     assert effect.value.literal == "2026-11-20"
     assert _exact_value("invalid", dated)[1] is False
+
+
+@pytest.mark.parametrize(
+    "fault", ["none", "replacement", "aba", "final_duplicate", "final_incomplete"]
+)
+def test_structural_scope_checks_complete_census_endpoints_and_fresh_fixed_identity(
+    monkeypatch, fault
+):
+    import sys
+
+    from openadapt_flow.backends.win_agent import server
+
+    target = _Control("EditControl", value="exact")
+    target.AutomationId = "field"
+    window = _window(target)
+    perform = _agent(monkeypatch, window)
+    auto = sys.modules["uiautomation"]
+    auto.GetRootControl = lambda: window
+    original_lookup = auto.ControlFromHandle
+    replaced = _Control("EditControl", value="exact")
+    replaced.NativeWindowHandle = target.NativeWindowHandle
+    replaced.AutomationId = "field"
+    replaced.parent = window
+    replaced.GetRuntimeId = lambda: [99, target.NativeWindowHandle]
+    lookups = []
+
+    def lookup(hwnd):
+        lookups.append(hwnd)
+        if fault == "replacement" or (fault == "aba" and len(lookups) == 2):
+            return replaced
+        return original_lookup(hwnd)
+
+    monkeypatch.setattr(auto, "ControlFromHandle", lookup)
+    original_census = server._find_candidates
+    censuses = []
+
+    def census(*args, **kwargs):
+        censuses.append(True)
+        found, truncated = original_census(*args, **kwargs)
+        if len(censuses) == 2 and fault == "final_duplicate":
+            return found + found, truncated
+        if len(censuses) == 2 and fault == "final_incomplete":
+            return found, True
+        return found, truncated
+
+    monkeypatch.setattr(server, "_find_candidates", census)
+    result = perform("read", {"locator": {"automation_id": "field"}})
+    if fault == "none":
+        assert result["complete"] is True and result["text"] == "exact"
+        assert len(censuses) == 2 and len(lookups) > 2
+    else:
+        assert result["complete"] is False and result["text"] is None
+        assert result["value_proof"] is None
+        if fault.startswith("final"):
+            assert len(censuses) == 2
+        # Observing a replacement once permanently refuses this observation;
+        # restoring the old handle/runtime later cannot upgrade the result.

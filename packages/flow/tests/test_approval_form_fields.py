@@ -29,6 +29,7 @@ from openadapt_flow.approval_mode.form_state import (
     window_fields_state,
 )
 from openadapt_flow.backends.win_agent.native_value import (
+    PROOF_SCHEMA,
     NativeOwner,
     NativeRead,
     valid_value_proof,
@@ -39,7 +40,7 @@ from openadapt_flow.backends.windows_backend import WindowsBackend
 def _proof(text, hwnd=100, pid=10):
     raw = text.encode("utf-16-le", errors="surrogatepass")
     return {
-        "schema": "openadapt.native-value-completeness/v1",
+        "schema": PROOF_SCHEMA,
         "method": "uia-value+wm-gettext",
         "hwnd": hwnd,
         "pid": pid,
@@ -347,7 +348,9 @@ _proved_fields(_GOOD)
 def test_the_windows_backend_reads_the_fields_of_its_one_window():
     backend, sent = _windows_backend({"s1": (7, 10), "save": (99, 10)}, _GOOD)
     answer = backend.approval_form_fields("save")
-    assert sent == [("/window/form-fields", {"hwnd": 7, "pid": 10})]
+    assert sent == [
+        ("/window/form-fields", {"hwnd": 7, "pid": 10, "value_contract": PROOF_SCHEMA})
+    ]
     assert answer is not None
     assert answer["bounds"] == (0, 0, 1024, 720)
     assert valid_value_proof(
@@ -566,7 +569,8 @@ def _agent(monkeypatch, window, desktop=None):
         def owner(self, hwnd):
             return NativeOwner(hwnd, controls[hwnd].ProcessId, 5)
 
-        def read(self, owner):
+        def read(self, owner, *, guard):
+            guard()
             control = controls[owner.hwnd]
             value = (
                 control._value
@@ -585,7 +589,13 @@ def _agent(monkeypatch, window, desktop=None):
     client = types.SimpleNamespace(gen_dir="unset")
     monkeypatch.setitem(sys.modules, "comtypes", types.SimpleNamespace(client=client))
     monkeypatch.setitem(sys.modules, "comtypes.client", client)
-    return agent_server._perform_uia
+
+    def perform(operation, payload):
+        if operation in {"read", "window-form-fields"}:
+            payload = {"value_contract": PROOF_SCHEMA, **payload}
+        return agent_server._perform_uia(operation, payload)
+
+    return perform
 
 
 def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch):

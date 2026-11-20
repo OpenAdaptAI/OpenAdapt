@@ -39,6 +39,7 @@ on:
       - packages/flow/tests/test_approval_form_fields.py
       - packages/flow/tests/test_approval_value_completeness.py
       - packages/flow/tests/test_native_value_completeness.py
+      - packages/flow/tests/test_native_sensitive_reads.py
       - packages/flow/tests/test_native_value_deployment.py
       - packages/flow/tests/test_structural_value_completeness.py
       - packages/flow/tests/test_desktop_readback.py
@@ -99,6 +100,7 @@ jobs:
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
             tests/test_approval_form_window.py tests/test_approval_form_fields.py \
             tests/test_binary_file_descriptors.py tests/test_native_value_completeness.py \
+            tests/test_native_sensitive_reads.py \
             tests/test_approval_value_completeness.py tests/test_native_value_deployment.py \
             tests/test_structural_value_completeness.py tests/test_desktop_readback.py \
             --junitxml=runs/windows-guards-junit.xml
