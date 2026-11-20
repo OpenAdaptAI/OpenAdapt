@@ -557,3 +557,54 @@ def test_unavailable_raw_password_status_refuses_without_wrapper_or_text_access(
         not result.complete
         and result.reason == "password_or_password_status_unavailable"
     )
+
+
+def test_exact_helper_bytes_need_no_global_import_cache_registration() -> None:
+    import inspect
+    import sys
+    from pathlib import Path
+    from types import ModuleType
+
+    from openadapt_flow.backends.win_agent import native_value
+
+    source = Path(native_value.__file__).read_bytes()
+    name = "_unregistered_native_value_test"
+    assert name not in sys.modules
+    module = ModuleType(name)
+    # Compile inside this future-annotations test module: caller flags must
+    # not turn the helper's concrete annotations back into deferred strings.
+    exec(
+        compile(source, str(native_value.__file__), "exec", dont_inherit=True),
+        module.__dict__,
+    )
+    assert name not in sys.modules
+    for value in vars(module).values():
+        if (inspect.isfunction(value) or inspect.isclass(value)) and getattr(
+            value, "__module__", None
+        ) == name:
+            assert all(
+                type(annotation) is not str
+                for annotation in getattr(value, "__annotations__", {}).values()
+            )
+            if inspect.isclass(value):
+                for member in vars(value).values():
+                    if inspect.isfunction(member):
+                        assert all(
+                            type(annotation) is not str
+                            for annotation in member.__annotations__.values()
+                        )
+    owner = module.NativeOwner(1, 2, 3)
+    assert module.NativeRead(owner, 0, 0, "").value == ""
+    proof = module.ValueProof(
+        module.PROOF_SCHEMA,
+        "uia-value+wm-gettext",
+        1,
+        2,
+        3,
+        0,
+        module.hashlib.sha256(b"").hexdigest(),
+    )
+    result = module.CompleteValue(True, "", None, proof)
+    assert result.complete and module.valid_value_proof(
+        result.value, result.proof.payload()
+    )

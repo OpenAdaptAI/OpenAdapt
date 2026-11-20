@@ -6,8 +6,6 @@ never an instruction to prefer one source. No names, normalization or truncation
 are used. The caller also supplies its current focus/window identity guard.
 """
 
-from __future__ import annotations
-
 import ctypes
 import hashlib
 import time
