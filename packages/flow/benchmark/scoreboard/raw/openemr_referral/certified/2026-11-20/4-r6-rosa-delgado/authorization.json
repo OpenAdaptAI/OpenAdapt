@@ -1,0 +1,7 @@
+{
+  "authorized_by": "Richard Abrich in Advisor fable on 2026-11-19: 'yes do the new runs for 2x frames.' Signing authorized by 'you do it' at15:16UTC. Corrected-capture rerun; initial attempt retained. Scope r3,r4,r5,r6, synthetic OpenEMR only.",
+  "how": "Standard run gate on the certified bundle, evaluated per run; governed authorization built from that gate",
+  "policy": "clinical-write",
+  "bundle_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+  "existing_chart_seed_status": 201
+}

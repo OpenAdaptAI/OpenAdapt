@@ -111,8 +111,10 @@ def _browser() -> Iterator[object]:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        yield browser
-        browser.close()
+        try:
+            yield browser
+        finally:
+            browser.close()
 
 
 ReplayFn = Callable[..., tuple[RunReport, Path]]

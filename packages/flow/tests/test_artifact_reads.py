@@ -103,8 +103,11 @@ CONVERTED["sanitized_artifact.py"] = (
     "_tree_rows",
     "_reseal_sanitized_bundle",
     "sanitize_artifact",
+    "_sanitize_artifact",
+    "ensure_current_derivative",
     "load_and_verify_derivative",
     "_rescan_derivative",
+    "_rescan_derivative_impl",
     "_write_deterministic_archive",
     "approve_derivative",
     "load_valid_approval",
@@ -177,7 +180,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "first_screen_probe",
         "Path(explicit).read_bytes()",
     ): "the --first-screen PNG a person passes in",
-    ("hosted.py", "push", "derivative.exists()"): "the review copy's directory",
     (
         "sanitized_artifact.py",
         "_source_files",
@@ -185,9 +187,19 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ): "walks a plain source; a sealed one is listed from its index above",
     (
         "sanitized_artifact.py",
-        "sanitize_artifact",
+        "_sanitize_artifact",
         "destination.exists()",
     ): "the new derivative directory, not an artifact",
+    (
+        "sanitized_artifact.py",
+        "ensure_current_derivative",
+        "candidate.exists()",
+    ): "checks generation-directory collisions without reading artifact content",
+    (
+        "sanitized_artifact.py",
+        "ensure_current_derivative",
+        "approved_archive_path(candidate).exists()",
+    ): "preserves an existing sibling archive; content reads use read_approved_archive",
     (
         "sanitized_artifact.py",
         "load_valid_approval",

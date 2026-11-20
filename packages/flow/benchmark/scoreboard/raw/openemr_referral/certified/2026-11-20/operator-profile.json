@@ -1,0 +1,102 @@
+{
+  "counted": "Seals that verify against the pinned keys and have a valid transparency-log anchor",
+  "excluded": {
+    "duplicate": 0,
+    "item_reused": 0,
+    "not_valid": 0,
+    "unanchored": 0
+  },
+  "generated_at": "2026-11-20T00:30:00Z",
+  "operators": {
+    "seal-ed25519-ca08dd7f42a4be01": {
+      "apps": [
+        "openemr"
+      ],
+      "first_anchored_at": "2026-11-20T00:29:31Z",
+      "last_anchored_at": "2026-11-20T00:29:51Z",
+      "other_outcomes": {},
+      "outcomes": {
+        "completed_unverified": 0,
+        "failed": 0,
+        "stopped_before_effect": 1,
+        "verified": 3
+      },
+      "programs": [
+        "openemr-create-synthetic-patient"
+      ],
+      "public_key": "UQOSlj3iCypSdSwrUYYOcLbS6yy25yM6syjHVnqcHBg=",
+      "public_key_sha256": "ca08dd7f42a4be017301c3f6e7dab39ff0671fab22a16ec6d8ad8353d165c2ad",
+      "rekor_log_indexes": [
+        4011311201,
+        4011313265,
+        4011317256,
+        4011321057
+      ],
+      "run_list": [
+        {
+          "anchor": {
+            "integrated_time": 1795134571,
+            "log_index": 4011311201,
+            "uuid": "108e9186e8c5677aef4e3026f4186a1d4543fee3416c90080c354cf2435f86891cf6795f3a5bbb99"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-11-20T00:29:30Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r3",
+          "seal_sha256": "3fb27257dbc65e58ca752a3b410f45b683138a157955cf720e32c449b2b4186a",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1795134576,
+            "log_index": 4011313265,
+            "uuid": "108e9186e8c5677afa7862615919666702327f5e71076f3f5007b196339288854a79586ca8ce06aa"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-11-20T00:29:34Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r4",
+          "seal_sha256": "bf937307e49beed8fd6992917da2c49fa3e15ddb0f1144dbc88be5e53e8ae6fd",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1795134584,
+            "log_index": 4011317256,
+            "uuid": "108e9186e8c5677a5244525413eb591ae9f1f629e34f159156f937efe161748cff2978d79ccd104d"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-11-20T00:29:42Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r5",
+          "seal_sha256": "baa1d5b97c1461bd170dc6f887913dcbb66be4b9716b8b5cd5aaee566f44d4c6",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1795134591,
+            "log_index": 4011321057,
+            "uuid": "108e9186e8c5677a6698d186dcdad9804a76a035b173dd86664fbdf8f0feb67d71ebce8b3e3ec785"
+          },
+          "app": "openemr",
+          "execution_outcome": "HALTED",
+          "issued_at": "2026-11-20T00:29:49Z",
+          "outcome": "stopped_before_effect",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r6",
+          "seal_sha256": "f5528f6c7d15b518610db30bf5c351cb235dfe80385bd2832b8997d1840d0fca",
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        }
+      ],
+      "runs": 4,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01"
+    }
+  },
+  "schema": "openadapt.operator-profile/v1"
+}

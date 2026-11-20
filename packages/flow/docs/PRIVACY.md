@@ -181,3 +181,20 @@ through. The control is therefore a **data-flow boundary**, stated in full in
 - **Console paths** (`__main__.py`) print run-dir paths and the appliance URL;
   these are not identifiers but avoid pasting them into shared channels for a
   patient-specific run dir.
+
+
+### Transformation freshness
+
+Outbound derivatives bind the source inventory, artifact kind, policy revision,
+complete engine Python source closure, and scrubber configuration. Reuse and approval require
+the current identity. A policy or scrubber change creates a separate unapproved
+generation from the original source, even when the transformed files are
+unchanged. Earlier directories, approvals, and archives remain intact. A rescan
+checks the new generation; it does not supply a person's approval.
+
+Custom scrubbers, including stateless providers, must implement `sanitization_config()` with their
+complete semantic, non-secret JSON configuration. Credentials, patient values,
+and runtime caches do not belong there. The built-in provider binds its effective
+policy and local dependency/model versions. Private manual-redaction overrides
+request a fresh generation for each top-level derivation; reviewing and publishing
+that selected generation does not derive it again.

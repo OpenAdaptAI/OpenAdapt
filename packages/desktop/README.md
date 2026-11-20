@@ -8,7 +8,7 @@ OpenAdapt Desktop automates repeated data entry in the apps your team already
 uses: web apps, electronic medical records (EMRs), insurance portals, desktop
 apps, and apps reached over RDP or Citrix. You, or an AI agent, do the task
 while OpenAdapt records it. An agent running on your computer can drive the
-recording ([openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) `serve --authoring`) in native Windows apps, through the same Windows input layer replay
+recording ([openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) `serve --authoring`) in native Windows apps, through the same Windows input layer replay
 uses, and over RDP or Citrix, from the client window's pixels alone. The
 recording marks each step as done by the agent or by a person, and a person
 accepts it before it's used. A ChatGPT or Claude.ai session that connects
@@ -23,7 +23,7 @@ It's for teams that type the same fields into the same systems every day, and
 for the developers and IT staff who set it up for them. This repository holds
 the desktop app (Tauri and React) and the Python engine it runs locally. The
 compiler and runtime are in
-[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow).
+[`packages/flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
 
 ## Quick start
 
@@ -48,7 +48,7 @@ means the save was read back, and `HALTED` means it stopped. A warning that
 patient data isn't scrubbed is expected, because the sample's patients are
 made up.
 
-There's no signed installer yet, so the desktop app runs from source. Install
+To run the desktop app from source, install
 [uv](https://docs.astral.sh/uv/), [Rust](https://rustup.rs), Node.js 22, and
 the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
 operating system. Then:
@@ -65,6 +65,9 @@ npm run tauri dev
 `scripts/dev_sidecar.py` connects the app to the engine in your checkout. On
 Windows, run it with `--frozen` to build the packaged engine instead; that
 takes several minutes.
+
+If the app is already running, launching it again brings the existing window
+forward and does not start a second engine.
 
 ## How it works
 
@@ -121,7 +124,7 @@ that looks close, and a person can show OpenAdapt the right way from
 **Needs you**. OpenAdapt records each fallback as a proposed repair and never
 changes the task on its own.
 
-In Flow's [drift benchmark](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/structural_action/STRUCTURAL_ACTION.md),
+In Flow's [drift benchmark](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/structural_action/STRUCTURAL_ACTION.md),
 a synthetic page of 21 buttons was redrawn with 15 of them moved, relabeled,
 and re-themed. Every button kept its element ID. Lookup by structure found
 all 21. Matching on the screen alone found only the 6 that didn't change. On
@@ -129,7 +132,7 @@ apps with no structure to read, such as a Citrix window, OpenAdapt has only the
 screen to go on, so a redesign is more likely to stop a run.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/docs/showcase/demo.gif" width="860" alt="One recording replayed by openadapt-flow on the interface it was recorded on and, side by side, under a theme it had never seen">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/flow/docs/showcase/demo.gif" width="860" alt="One recording replayed by openadapt-flow on the interface it was recorded on and, side by side, under a theme it had never seen">
 </p>
 
 The recording above comes from openadapt-flow, the runtime this app runs.
@@ -228,7 +231,7 @@ npm run test:ui
 ```
 
 Recording needs the operating-system permissions that
-[openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) asks
+[openadapt-capture](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) asks
 for:
 
 ```bash
@@ -265,8 +268,6 @@ openadapt-flow, this file and openadapt-flow are current.
 
 ## Limits
 
-- There's no signed installer yet. The next macOS and Windows packages wait on
-  code-signing certificates, so run the app from source for now.
 - Lists run one item at a time, as one Flow process per item.
 - Each app type needs its own driver. Windows apps run through an agent from
   openadapt-flow on the Windows computer, and Citrix needs the Citrix Workspace

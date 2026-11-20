@@ -22,6 +22,7 @@ through a channel the agent's browser cannot reach.
 | `mockloan` | MockLoan disbursements with a fault server | MIT (OpenAdapt fixture) | bundled, runs in the container | 0 public (all held out) | validated on the held-out pack |
 | `openemr` | OpenEMR 8.0.0.3 patient registration | GPL-3.0 | upstream images by digest; operator starts them | 3 | awaiting a live run |
 | `frappe_lending` | Frappe/ERPNext + Lending loan application | GPL-3.0 (ERPNext, Lending), MIT (Frappe) | image built locally from pinned upstreams | none yet | manifest and oracle only |
+| `dolibarr_erp` | Dolibarr 20 ERP back office (customers, invoices, payments, orders, stock), graded on the whole record | GPL-3.0-or-later | upstream images by digest; operator starts them | 4 public | validated (reference solutions and trivial floors) |
 | `openimis_claims` | openIMIS 25.10 claim intake | AGPL-3.0-only | upstream images by digest; repository-only | none yet | blocked: the fixture has no per-episode reset |
 
 `VALIDATION.md` records what each one was run with, and when.
