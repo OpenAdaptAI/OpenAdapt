@@ -110,13 +110,27 @@ def _run_to_second_action_pause(tmp_path, workflow: Workflow):
             workflow, bundle, run_dir, FakeBackend(), verifier, vision=FakeVision()
         )
     else:
-        report = Replayer(
-            FakeBackend(),
+        backend = FakeBackend()
+        initial = _StopBeforeInput(
+            backend,
             vision=FakeVision(),
             effect_verifier=verifier,
             durable=True,
             poll_interval_s=0.0,
-        ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+        )
+        initial.stop_before_step = "s1"
+        report = initial.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+        pending = CheckpointStore(run_dir).read_pending()
+        assert pending is not None and pending.delivery_uncertainty is None
+        assert pending.state_id == "s1" and pending.program_checkpoint_seq == 1
+        assert backend.actions == [("press", "A")]
+        assert (
+            next(r for r in report.results if r.step_id == "s1").delivery_attempted
+            is False
+        )
+        assert [
+            c.verified_state_id for c in CheckpointStore(run_dir).program_checkpoints()
+        ] == ["s0"]
     assert report.success is False
     return bundle, run_dir, verifier
 
@@ -137,20 +151,22 @@ def test_program_resume_revalidates_retained_text_absent_before_input(tmp_path):
     )
     verifier.refute.clear()
     backend = FakeBackend()
+    blocked_vision = _vision_with_blocking_error()
 
     with pytest.raises(StateDiverged, match="retained postcondition"):
         resume(
             run_dir,
             Replayer(
                 backend,
-                vision=_vision_with_blocking_error(),
+                vision=blocked_vision,
                 effect_verifier=verifier,
                 poll_interval_s=0.0,
             ),
-            approval=_retry_approval(bundle),
+            approval=_approval(bundle, run_dir),
         )
 
     assert backend.actions == []
+    assert blocked_vision.text_calls == ["Blocking error"]
 
 
 def test_linear_resume_revalidates_retained_text_absent_before_input(tmp_path):

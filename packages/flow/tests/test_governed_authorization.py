@@ -34,6 +34,7 @@ from openadapt_flow.runtime.authorization import (
 )
 from openadapt_flow.runtime.durable import (
     CheckpointStore,
+    StateDiverged,
     bundle_version,
     issue_resume_approval,
     resume,
@@ -46,6 +47,10 @@ from openadapt_flow.runtime.effects import (
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests.test_durable_runtime import (
+    _run_to_checkpointed_observation_pause,
+    _with_checkpointed_observation_prefix,
+)
 from tests.test_replayer import (
     FakeBackend,
     FakeVision,
@@ -548,7 +553,7 @@ def test_scroll_stop_predicate_mutation_halts_before_scroll(tmp_path):
     assert "changed after admission" in (report.results[0].error or "")
 
 
-def test_transition_halt_checkpoints_already_performed_write(tmp_path):
+def _transition_halt_case(tmp_path, *, checkpoint_prefix=False):
     effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
         match={"patient": "A"},
@@ -583,9 +588,10 @@ def test_transition_halt_checkpoints_already_performed_write(tmp_path):
             "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
         },
     )
-    workflow, bundle = _seal(
-        tmp_path, Workflow(name="transition_checkpoint", program=program)
-    )
+    workflow = Workflow(name="transition_checkpoint", program=program)
+    if checkpoint_prefix:
+        workflow = _with_checkpointed_observation_prefix(workflow)
+    workflow, bundle = _seal(tmp_path, workflow)
     assert workflow.manifest is not None
     authorization = GovernedRunAuthorization(
         bundle_content_digest=workflow.manifest.content_digest,
@@ -597,6 +603,15 @@ def test_transition_halt_checkpoints_already_performed_write(tmp_path):
             ),
         ),
     )
+    return workflow, bundle, effect, authorization
+
+
+def test_transition_halt_checkpoints_already_performed_write(tmp_path):
+    # Approved-unverified transition recovery is an existing resumed contract.
+    workflow, bundle, effect, authorization = _transition_halt_case(
+        tmp_path, checkpoint_prefix=True
+    )
+    assert workflow.manifest is not None
     backend = FakeBackend()
     target_path = bundle / "templates" / "btn.png"
     original_target = target_path.read_bytes()
@@ -606,13 +621,20 @@ def test_transition_halt_checkpoints_already_performed_write(tmp_path):
     }
     run_dir = tmp_path / "run"
 
-    report = Replayer(
-        backend,
-        vision=vision,
-        governed_authorization=authorization,
-        durable=True,
-        poll_interval_s=0.0,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    _run_to_checkpointed_observation_pause(
+        workflow, bundle, run_dir, authorization=authorization
+    )
+    store = CheckpointStore(run_dir)
+    assert store.read_manifest().governed_authorization == authorization
+    assert vision.settle_count == 0
+    # Preserve mutate_on=3 on the actual write leg only.
+    report = resume(
+        run_dir,
+        Replayer(backend, vision=vision, poll_interval_s=0.0),
+        approval=_resume_approval(
+            run_dir, bundle, "resume the proven no-input program pause"
+        ),
+    )
 
     assert report.success is False
     assert backend.actions == [("press", "Enter")]
@@ -1298,3 +1320,36 @@ def test_durable_resume_restores_governed_authorization(durable_governed_first_l
     assert resumed.governed_authorization_id == authorization.authorization_id
     assert resumed_backend.actions == []
     assert resumed.results[-1].safety_halt is True
+
+
+def test_fresh_approved_unverified_program_cannot_claim_a_verified_tail(tmp_path):
+    workflow, bundle, _effect, authorization = _transition_halt_case(tmp_path)
+    run_dir = tmp_path / "run"
+    backend = FakeBackend()
+    report = Replayer(
+        backend,
+        vision=resolving_vision(),
+        governed_authorization=authorization,
+        durable=True,
+        poll_interval_s=0.0,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    store = CheckpointStore(run_dir)
+    pending = store.read_pending()
+    result = next(r for r in report.results if r.step_id == "write")
+    assert report.success is False and backend.actions == []
+    assert result.safety_halt is True and result.effect_approved_unverified is False
+    assert result.delivery_attempted is not True
+    assert pending is not None and pending.delivery_uncertainty is None
+    assert pending.state_id == "write-state" and pending.program_checkpoint_seq == 0
+    assert store.program_checkpoints() == []
+    contender = FakeBackend()
+    with pytest.raises(StateDiverged, match="already contains a durable run"):
+        Replayer(
+            contender,
+            vision=resolving_vision(),
+            governed_authorization=authorization,
+            durable=True,
+            poll_interval_s=0.0,
+        ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert contender.actions == [] and backend.actions == []
+    assert store.program_checkpoints() == []
