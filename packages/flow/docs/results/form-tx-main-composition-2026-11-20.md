@@ -8,10 +8,10 @@ The package consistency check then found six missing artifact paths: the existin
 
 All tests and lint/type checks ran through the shared CPU gate. Python was the existing supported Anaconda 3.12.7 interpreter, with Flow and Types imports explicitly bound to this checkout. This is an existing local test environment, not a newly qualified locked dependency closure. Browser tests were headless and used synthetic fixtures and temporary profiles.
 
-- Nine changed FormTx/copilot test modules: **161 passed**, no failures or skips, in133.42s.
-- Seven existing extension messaging/content/frame/network/native-host regression modules: **165 passed**, no failures or skips, in42.68s. These are distinct tests; total326.
-- Repository-pinned cached Ruff0.17.0: affected engine lint passed; all16 source files already formatted.
-- Repository-configured mypy: no issues in16 affected source files.
+- Nine changed FormTx/copilot test modules: **161 passed**, no failures or skips, in 133.42s.
+- Seven existing extension messaging/content/frame/network/native-host regression modules: **165 passed**, no failures or skips, in 42.68s. These are distinct tests; total 326.
+- Repository-pinned cached Ruff 0.17.0: affected engine lint passed; all 16 source files already formatted.
+- Repository-configured mypy: no issues in 16 affected source files.
 - Package consistency: initially failed with exactly six unregistered paths; passed after the canonical inventory update.
 - `git diff --check`: passed.
 
