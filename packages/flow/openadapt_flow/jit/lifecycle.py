@@ -109,6 +109,7 @@ RECORDER_FIELDS = (
     "recorded_by",
     "agent_principal_id",
     "dialect",
+    "credential_withholding",
     # What the agent was allowed to do and who signed it. Absent (None) on
     # drafts from before teach authorizations, which still verify.
     "teach_scope",
@@ -532,6 +533,40 @@ def _recorder(program: Path, key_dir: Optional[Path]) -> dict[str, Any]:
             "changed after the recording. Record the draft again"
         )
     return block
+
+
+def require_credential_withholding(
+    program_dir: Path | str,
+    *,
+    bundle_dir: Path | str | None = None,
+    key_dir: Path | str | None = None,
+) -> None:
+    """Require protection evidenced by the selected artifact's signed source.
+
+    Legacy missing markers remain valid ordinary records. They cannot satisfy
+    a caller that requested protected capture. Unsigned task/cache metadata is
+    never proof, and a neighboring draft cannot authorize another bundle.
+    """
+    program = Path(program_dir)
+    bundle = Path(bundle_dir) if bundle_dir is not None else program / "bundle"
+    keys = Path(key_dir) if key_dir is not None else None
+    canonical = (program / "bundle").resolve()
+    foreign = bundle.resolve() != canonical
+    if foreign and not (bundle / ADMISSION_FILE).is_file():
+        raise AdmissionError(
+            "CREDENTIAL_CAPTURE_PRIVACY_MISMATCH: the selected bundle has no "
+            "admitted credential-withholding proof"
+        )
+    if (bundle / ADMISSION_FILE).is_file() or foreign:
+        record = verify_admission(bundle, key_dir=keys)
+    else:
+        record = _recorder(program, keys)
+    if record.get("credential_withholding") is not True:
+        raise AdmissionError(
+            "CREDENTIAL_CAPTURE_PRIVACY_MISMATCH: protected capture was requested "
+            "but this program has no signed credential-withholding proof; "
+            "record it again with credential observation"
+        )
 
 
 def _is_recording_agent(name: str, recorder: Mapping[str, Any]) -> bool:
@@ -1546,6 +1581,8 @@ def _write_manifest(
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if "credential_withholding" in recorder:
+        body["credential_withholding"] = recorder["credential_withholding"]
     if candidate.get("teach_authorization"):
         # The bundle carries who authorized the teaching. Only written when
         # present, so manifests from before teach authorizations verify.

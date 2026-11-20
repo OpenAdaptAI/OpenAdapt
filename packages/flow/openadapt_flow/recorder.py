@@ -369,6 +369,9 @@ class Recorder:
         blacked out in every frame that shows it. Text matching none of
         them is refused before it is typed (:class:`CredentialFieldError`).
         """
+        from openadapt_flow.secret_inputs import require_credential_observation
+
+        require_credential_observation(self._backend)
         values: dict[str, Optional[str]] = {}
         for name, value in inputs.items():
             text = str(value)
@@ -1379,15 +1382,15 @@ class Recorder:
     ) -> Optional[tuple[str, tuple[int, int, int, int]]]:
         """``(kind, region)`` when the focused field takes a sign-in credential.
 
-        Backends MAY expose ``focused_field_credential``
+        Credential withholding requires ``focused_field_credential``
         (:class:`openadapt_flow.backend.CredentialFieldBackend`). A field whose
-        box can't be read blacks out the whole frame. A backend without the
-        seam yields None: a screen-only substrate has no field type to read.
+        box can't be read blacks out the whole frame. A seam lost after
+        preflight is unknown, never an ordinary field.
         """
-        getter = getattr(self._backend, "focused_field_credential", None)
-        if getter is None:
-            return None
         try:
+            getter = getattr(self._backend, "focused_field_credential", None)
+            if not callable(getter):
+                return "unknown", _WHOLE_FRAME
             found = getter()
         except Exception:
             found = {"kind": "unknown"}

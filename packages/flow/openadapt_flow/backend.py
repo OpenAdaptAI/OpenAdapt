@@ -313,8 +313,12 @@ class CredentialFieldBackend(Protocol):
     """
 
     def focused_field_credential(self) -> Optional[dict[str, Any]]:
-        """``{"kind": "password" | "username", "box": (x, y, w, h) | None}``
-        or None. Never raises."""
+        """Return password/new-password/username/unknown and an optional box.
+
+        None means an observed ordinary control. Unknown means unreadable;
+        absence of this capability is unsupported when withholding is requested.
+        Never raises.
+        """
         ...
 
 

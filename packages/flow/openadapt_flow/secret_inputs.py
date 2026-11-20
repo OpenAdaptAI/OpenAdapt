@@ -19,6 +19,36 @@ from typing import Any
 
 __all__ = ["public_values", "secret_environment"]
 
+
+class CredentialObservationUnsupported(ValueError):
+    """Credential withholding needs an observable field classification seam."""
+
+    code = "CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED"
+
+    def __init__(self) -> None:
+        super().__init__(
+            f"{self.code}: this backend cannot observe credential fields; "
+            "credential-withholding capture cannot start"
+        )
+
+
+def credential_withholding_requested(value: bool) -> bool:
+    """A trusted caller option cannot be a truthy task-data value."""
+    if type(value) is not bool:
+        raise TypeError("withhold_credentials must be a bool")
+    return value
+
+
+def require_credential_observation(backend: Any) -> None:
+    """Refuse missing capabilities before credential-withholding capture."""
+    try:
+        supported = callable(getattr(backend, "focused_field_credential", None))
+    except Exception:
+        supported = False
+    if not supported:
+        raise CredentialObservationUnsupported()
+
+
 # A secret TYPE step's value is never stored in the bundle; it is read at
 # replay from this environment variable (the param name upper-cased, with
 # non-alphanumeric characters mapped to '_'). See ir.Step.secret.

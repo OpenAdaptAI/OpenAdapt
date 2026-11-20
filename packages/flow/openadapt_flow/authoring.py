@@ -831,6 +831,9 @@ class AuthoringSession:
         named for its input, and its text is never recorded.
         """
 
+        from openadapt_flow.secret_inputs import require_credential_observation
+
+        require_credential_observation(self._backend)
         self._require_recording().withhold_credentials(dict(inputs))
 
     def press(self, key: str) -> None:

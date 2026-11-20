@@ -305,3 +305,30 @@ uploaded.
 
 Exit codes: 0 published, 1 refused, 2 setup missing, 3 waiting (the upload was
 not confirmed, or the endpoint is not callable yet).
+
+
+### Credential observation before capture
+
+Automatic credential withholding requires a backend that can observe the
+focused field's credential type. If that capability is absent, noncallable
+or unavailable, capture refuses with
+`CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED` before recording or entering the
+actor. Pixels alone do not prove that a field is ordinary. Current screen-only
+RDP/Citrix backends therefore cannot use this automatic capture path.
+
+The explicit person-entered secret handoff remains available through
+`AuthoringSession.pause_for_input(secret=True)` and
+`continue_input(operator_confirmed=True)`. It names the secret parameter and
+redacts the person-marked field without recording its text. Trusted setup
+outside capture remains separate; a generic preparation callback does not
+exempt an automatic capture from the observation requirement.
+
+
+General `compile_agent` recording keeps its existing default,
+`withhold_credentials=False`; those recordings can contain input values.
+Trusted Python callers can request `withhold_credentials=True`. Wrap's
+`FirstRunCompiler` always requests it; task JSON cannot opt out. Protected
+callers also require the mode in the program's verified signed recorder or
+admission provenance before returning or running a cached program. Legacy,
+false or non-boolean claims cannot satisfy that requirement. An unsigned cache
+key or task file is not evidence that an earlier recording withheld values.

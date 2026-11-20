@@ -543,6 +543,7 @@ class FirstRunCompiler:
             teach_authorization=self.teach_authorization,
             on_screen=self.on_screen,
             before_capture=self.before_capture,
+            withhold_credentials=True,
         )
 
         # Resolve only the fixed task-local promoted-repair pointer.
@@ -1321,6 +1322,13 @@ class FirstRunCompiler:
         line = f"openadapt-flow compile-agent run {self.dir}"
         return f"{line} {flags}".rstrip()
 
+    def require_credential_withholding(self) -> None:
+        """Verify capture privacy before exposing any protected cached artifact."""
+        jit = self._jit()
+        lifecycle.require_credential_withholding(
+            jit.program_dir, bundle_dir=jit.bundle_dir, key_dir=jit.key_dir
+        )
+
     def emit(self) -> dict[str, Any]:
         """Write the Agent Skill, the MCP server, and the CLI line."""
 
@@ -1329,6 +1337,7 @@ class FirstRunCompiler:
         jit = self._jit()
         if not jit.admitted:
             raise lifecycle.AdmissionError("emit an admitted program only")
+        self.require_credential_withholding()
         cli = self.cli_line()
         skill = emit_skill_for(jit.bundle_dir, self.out_dir / "skill", cli)
         mcp = emit_mcp(self, self.out_dir / "mcp" / "server.py")
@@ -1365,6 +1374,7 @@ class FirstRunCompiler:
                 run_dir=None,
                 detail="this task has no admitted program; compile an agent run first",
             )
+        self.require_credential_withholding()
         result, receipt, path = self._governed("run", values, lambda: jit.run(**params))
         outcome = _receipt_outcome(receipt)
         verified = result.status == "VERIFIED" and outcome == "VERIFIED"
