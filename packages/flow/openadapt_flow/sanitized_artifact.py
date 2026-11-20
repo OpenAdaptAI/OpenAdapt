@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+from math import log2
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import parse_qs
@@ -543,14 +544,40 @@ _SHAPES: dict[str, re.Pattern[str]] = {
         "bundle_path": r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.[a-z]{1,5}",
         "env_source": r"env:[A-Z][A-Z0-9_]{0,63}",
         # AuthRef carries credential references, never resolved values.
-        "env_name": r"[A-Z_][A-Z0-9_]{0,127}",
-        "http_header": r"[A-Za-z][A-Za-z0-9_-]{0,126}",
+        "env_name": r"[A-Z_][A-Z0-9_]{0,63}",
+        "http_header": r"[A-Za-z][A-Za-z0-9_-]{0,63}",
         "task_key": r"skill-[0-9a-f]{8,64}(?:-[0-9a-f]{8,64})?",
         "workflow_id": r"wf_[0-9a-f]{16,64}",
         "opaque_id": r"[A-Za-z0-9_-]{1,128}",
         "surface_route": r"surface=[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}",
     }.items()
 }
+
+
+_AUTH_REFERENCE_SHAPES = frozenset({"env_name", "http_header"})
+_AUTH_SECRET_PREFIX = re.compile(
+    r"^(?:sk_|rk_|gh[pousr]_|github_pat_|xox[abprs]-|glpat-)", re.IGNORECASE
+)
+
+
+def _auth_reference_is_identifier(value: str) -> bool:
+    """Conservatively distinguish reference syntax from a pasted credential.
+
+    Shape alone cannot do this: access keys can also be legal environment or
+    header names. Apply the report's shared credential patterns even when the
+    PHI provider misses the token, plus known prefixes and opaque high-entropy
+    runs. Ambiguous values are redacted and require corrected local wiring.
+    """
+    from openadapt_flow.report_redaction import redact_text
+
+    if _AUTH_SECRET_PREFIX.match(value) or redact_text(value)[1]:
+        return False
+    for run in re.findall(r"[A-Za-z0-9]{20,}", value):
+        probabilities = [run.count(char) / len(run) for char in set(run)]
+        entropy = -sum(p * log2(p) for p in probabilities)
+        if entropy >= 4.0:
+            return False
+    return True
 
 
 class _DeclaredFields:
@@ -659,7 +686,14 @@ class _DeclaredFields:
                 return self.document is not None and self._derived_ok(name, path, value)
         for pattern, shape in self.fields:
             if self._match(pattern, local):
-                return shape != _CONTENT and bool(_SHAPES[shape].fullmatch(value))
+                return (
+                    shape != _CONTENT
+                    and bool(_SHAPES[shape].fullmatch(value))
+                    and (
+                        shape not in _AUTH_REFERENCE_SHAPES
+                        or _auth_reference_is_identifier(value)
+                    )
+                )
         return False
 
     def shape_at(self, path: tuple[str | int, ...]) -> Optional[str]:
@@ -988,6 +1022,13 @@ def _scrub_json_value(
     shape = fields.shape_at(path) if fields is not None and not keep else None
     if keep:
         scrubbed = mapped
+    elif shape in _AUTH_REFERENCE_SHAPES:
+        # A rejected reference is not safe merely because the PHI provider
+        # did not recognize its token. Never preserve an invalid or opaque
+        # auth identifier, including credentials shaped like valid names.
+        from openadapt_flow.report_redaction import REDACTED
+
+        scrubbed = REDACTED
     elif shape == "principal":
         # A principal is a machine handle, a fingerprint or ``hmac:<hex>``.
         # Anything else is replaced whether or not the scrubber recognizes

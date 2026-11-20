@@ -1806,7 +1806,7 @@ def test_readback_auth_references_survive_without_resolving_credentials(tmp_path
             if key.endswith("_env")
         }
     )
-    assert resolved
+    assert set(resolved) == {auth.get("header", "Authorization")}
     assert all(
         b"local-only-secret" not in raw
         for raw in _tree(tmp_path / "sanitized").values()
@@ -1877,3 +1877,57 @@ def test_auth_reference_shapes_are_not_global_scrubber_exemptions(tmp_path):
         "extra"
     ]
     assert extra == {"header": "<SECRET>", "value_env": "<SECRET>"}
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "sk_live_SYNTHETIC_CREDENTIAL",
+        "ghp_0123456789abcdefghijklmnopqrstuvwxyzABCD",
+        "AKIAIOSFODNN7EXAMPLE",
+        "rk_test_SYNTHETIC_CREDENTIAL",
+        "xoxb-SYNTHETIC-CREDENTIAL",
+        "glpat-SYNTHETIC-CREDENTIAL",
+        "A7K9M2P4R6T8V0X3Z5B1D9F2H4J6L8N0",
+        "aB3dE5gH7jK9mN2pQ4sT6vW8yZ0cF1iL",
+        "eyJhbGciOiJub25lIn0.eyJzdWIiOiJzeW50aGV0aWMifQ.synthetic",
+    ],
+)
+def test_readback_auth_refuses_shape_valid_credentials_without_phi_detection(
+    tmp_path, field, literal
+):
+    import yaml
+
+    # This scrubber does NOT detect credentials. Refusal must be deterministic,
+    # rather than depending on a PHI provider's token recognizers.
+    privacy.set_text_scrubber(FakeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    checks = yaml.safe_load(readback.read_text())
+    checks["verifier"]["auth"] = (
+        {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY", field: literal}
+        if field in {"header", "value_env"}
+        else {field: literal}
+    )
+    readback.write_text(yaml.safe_dump(checks, sort_keys=False))
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    assert all(
+        literal.encode() not in raw for raw in _tree(tmp_path / "sanitized").values()
+    )
+    auth = yaml.safe_load((tmp_path / "sanitized/readback/verify.yaml").read_text())[
+        "verifier"
+    ]["auth"]
+    assert auth[field] == "<redacted>"
+
+
+@pytest.mark.parametrize("shape", ["env_name", "http_header"])
+def test_auth_reference_identifier_length_is_bounded(shape):
+    from openadapt_flow.sanitized_artifact import _SHAPES
+
+    assert _SHAPES[shape].fullmatch("A_" * 32)
+    assert not _SHAPES[shape].fullmatch("A_" * 32 + "A")
