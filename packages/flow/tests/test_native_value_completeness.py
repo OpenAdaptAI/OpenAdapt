@@ -448,3 +448,47 @@ def test_previous_proof_version_is_not_compatible_with_pre_read_sensitive_guard(
     proof = result.proof.payload()
     proof["schema"] = "openadapt.native-value-completeness/v1"
     assert not valid_value_proof("exact", proof)
+
+
+@pytest.mark.parametrize("stage", ["extent", "full", "value"])
+@pytest.mark.parametrize("status", [True, None])
+def test_editability_metadata_cannot_invalidate_final_sensitive_guard(stage, status):
+    class Target(SimpleNamespace):
+        armed = False
+
+        @property
+        def ControlTypeName(self):
+            if self.armed:
+                self.IsPassword = status
+            return "EditControl"
+
+    base, _ = control("")
+    target = Target(**{k: v for k, v in vars(base).items() if k != "ControlTypeName"})
+    accesses = []
+
+    class StagedReader(Reader):
+        def read(self, owner, *, guard):
+            target.armed = stage == "extent"
+            guard()
+            accesses.append("extent")
+            target.armed = stage == "full"
+            guard()
+            accesses.append("full")
+            return NativeRead(owner, 0, 0, "")
+
+    class Pattern:
+        @property
+        def IsReadOnly(self):
+            target.armed = stage == "value"
+            return False
+
+        @property
+        def Value(self):
+            accesses.append("value")
+            return ""
+
+    target.GetValuePattern = Pattern
+    result = observe(target, StagedReader(), require_editable=True)
+    assert not result.complete and result.value is None
+    assert result.reason == "password_or_password_status_unavailable"
+    assert stage not in accesses

@@ -230,12 +230,14 @@ def observe_complete_value(
                 or reader.owner(bound[0]) != owner
             ):
                 raise ValueUnavailable("value_identity_changed")
-            require_non_sensitive_value(control)
             if (
                 require_editable
                 and getattr(control, "ControlTypeName", None) != "EditControl"
             ):
                 raise ValueUnavailable("not_editable_value_control")
+            # This MUST be last: any preceding provider metadata/identity
+            # getter can change the sensitive status before the next access.
+            require_non_sensitive_value(control)
 
         def uia() -> str:
             guard()
