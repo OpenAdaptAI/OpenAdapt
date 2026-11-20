@@ -389,3 +389,185 @@ def test_wpf_readiness_waits_for_the_point_before_returning_items(fixture_state)
 
     assert _wait(fixture_state, find_items) == [item, item]
     assert 0.1 <= clock.now < 0.2
+
+
+# Every history uses only fake UIA objects and the existing simulated clock.
+# The native fixture's process launcher is replaced before its start is called.
+def _probe_sequence(tmp_path, monkeypatch, fixture_state, states):
+    from tests import test_native_census_real_apps as native
+
+    clock = fixture_state[0]
+    current = "not_started"
+    attempts = []
+    items, points = [], {}
+    for index in range(3):
+        rect = SimpleNamespace(
+            left=55, top=75 + 20 * index, right=85, bottom=91 + 20 * index
+        )
+        item = SimpleNamespace(
+            ControlTypeName="ListItemControl",
+            GetChildren=lambda rect=rect: [SimpleNamespace(BoundingRectangle=rect)],
+        )
+        items.append(item)
+        points[(70, 83 + 20 * index)] = item
+
+    def rows():
+        if current == "rows_error":
+            raise RuntimeError("synthetic row enumeration failure")
+        return items[:2] if current == "short_list" else items
+
+    def exists(*args):
+        if current == "exists_error":
+            raise RuntimeError("synthetic list existence failure")
+        return current != "list_missing"
+
+    listing = SimpleNamespace(Exists=exists, GetChildren=rows)
+
+    def list_control(**kwargs):
+        if current == "list_error":
+            raise RuntimeError("synthetic list lookup failure")
+        return listing
+
+    window = SimpleNamespace(
+        ProcessId=1234, Name=native.TITLE, ListControl=list_control
+    )
+
+    def from_handle(hwnd):
+        nonlocal current
+        assert hwnd == 5678
+        current = states[min(len(attempts), len(states) - 1)]
+        attempts.append(current)
+        clock.now += 40  # Simulated discovery cost, not a longer startup budget.
+        if current == "window_error":
+            raise RuntimeError("synthetic window lookup failure")
+        window.ProcessId = 999 if current == "other_pid" else 1234
+        window.Name = (
+            "different synthetic window" if current == "other_title" else native.TITLE
+        )
+        return None if current == "window_missing" else window
+
+    def from_point(x, y):
+        if (x, y) == (70, 123):
+            if current == "point_error":
+                raise RuntimeError("synthetic point lookup failure")
+            if current == "foreign_point":
+                return SimpleNamespace(ProcessId=999, ControlTypeName="WindowControl")
+        return SimpleNamespace(
+            ProcessId=1234,
+            ControlTypeName="TextControl",
+            GetParentControl=lambda: points[(x, y)],
+        )
+
+    auto = SimpleNamespace(
+        ControlFromHandle=from_handle,
+        ControlFromPoint=from_point,
+        ControlsAreSame=lambda left, right: left is right,
+    )
+
+    class Owned(Process):
+        def terminate(self):
+            self.code = -15
+
+        def wait(self, timeout):
+            return self.code
+
+    proc = Owned()
+
+    def spawn(argv, stdout, stderr):
+        _signal(Path(argv[argv.index("-ReadyPath") + 1]), rows=3)
+        return proc
+
+    monkeypatch.setattr(native, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setenv("OPENADAPT_TEST_WINDOWS_UIA", "1")
+    monkeypatch.setattr(
+        native, "pytest", SimpleNamespace(importorskip=lambda name: auto)
+    )
+    monkeypatch.setattr(native, "subprocess", SimpleNamespace(Popen=spawn))
+    fixture = native.wpf_worklist.__wrapped__(tmp_path)
+    result, error = None, None
+    try:
+        _, start = next(fixture)
+        try:
+            result = start([{}, {}, {}])
+        except startup.NativeAppStartupError as exc:
+            error = str(exc)
+    finally:
+        fixture.close()
+    assert proc.poll() == -15
+    return result, error, attempts, clock.now
+
+
+_PRIOR_PROBES = ("foreign_point", "window_missing", "list_missing", "short_list")
+_PROBE_STATES = {
+    "window_missing": "window_missing",
+    "list_missing": "list_missing",
+    "short_list": "row_count_mismatch",
+    "window_error": "window_lookup",
+    "list_error": "list_lookup",
+    "exists_error": "list_existence",
+    "other_pid": "window_identity",
+    "other_title": "window_identity",
+    "rows_error": "row_enumeration",
+    "point_error": "points_unproven",
+    "foreign_point": "points_unproven",
+}
+
+
+@pytest.mark.parametrize("prior", _PRIOR_PROBES)
+@pytest.mark.parametrize("current,expected", _PROBE_STATES.items())
+def test_each_probe_replaces_earlier_observations(
+    tmp_path, monkeypatch, fixture_state, prior, current, expected
+):
+    result, error, attempts, elapsed = _probe_sequence(
+        tmp_path, monkeypatch, fixture_state, [prior, current]
+    )
+    assert result is None and error is not None
+    detail = error.rsplit("; latest_probe_state=", 1)[-1]
+    if current != "foreign_point":
+        assert "hit_pid=999" not in detail  # An earlier foreign point is not current.
+    assert detail.startswith(expected), detail
+    failed = (current.endswith("_error") and current != "point_error") or current in (
+        "other_pid",
+        "other_title",
+    )
+    attempt = 2 if failed else 3
+    started = 40.1 * (attempt - 1)
+    finished = started + 40
+    assert attempts[-1] == current and len(attempts) == attempt
+    assert f"latest_probe_attempt={attempt};" in error
+    fields = dict(
+        part.split("=", 1)
+        for part in error.split("; ")
+        if part.startswith("latest_probe_")
+    )
+    assert float(fields["latest_probe_started_s"]) == pytest.approx(started)
+    assert float(fields["latest_probe_finished_s"]) == pytest.approx(finished)
+    assert fields["latest_probe_outcome"] == ("error" if failed else "no_items")
+    assert elapsed == pytest.approx(finished)
+    assert "UIA discovery failed" in error if failed else "deadline exceeded" in error
+
+
+@pytest.mark.parametrize("prior", [None, *_PRIOR_PROBES])
+def test_prior_refusal_does_not_change_owned_success(
+    tmp_path, monkeypatch, fixture_state, prior
+):
+    states = ["ready"] if prior is None else [prior, "ready"]
+    result, error, attempts, elapsed = _probe_sequence(
+        tmp_path, monkeypatch, fixture_state, states
+    )
+    assert error is None and result is not None and len(result) == 3
+    assert attempts == states
+    assert elapsed == pytest.approx(40 * len(states) + 0.1 * (len(states) - 1))
+    assert elapsed < 120
+
+
+def test_no_discovery_has_no_attributed_probe(fixture_state):
+    with pytest.raises(startup.NativeAppStartupError) as caught:
+        _wait(
+            fixture_state, lambda hwnd: pytest.fail("no rendered signal"), timeout_s=1
+        )
+    error = str(caught.value)
+    assert "latest_probe_attempt=0;" in error
+    assert "latest_probe_started_s=None;" in error
+    assert "latest_probe_finished_s=None;" in error
+    assert "latest_probe_outcome=not_attempted;" in error
