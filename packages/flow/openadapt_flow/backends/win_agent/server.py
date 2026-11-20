@@ -2825,12 +2825,14 @@ def make_handler_class(
             from openadapt_flow.backends.win_agent.qualification_faults import (
                 FaultStagingError,
                 QualificationFaultController,
+                validate_identity_offset,
             )
         except ModuleNotFoundError:
             # launch_agent deploys this script and its helper side by side.
             from win_agent_qualification_faults import (  # type: ignore[no-redef,import-not-found]
                 FaultStagingError,
                 QualificationFaultController,
+                validate_identity_offset,
             )
         fault_error = (FaultStagingError,)
         faults = fault_controller or QualificationFaultController(uia_fn, grab_fn)
@@ -3031,6 +3033,7 @@ def make_handler_class(
                             data = _exact_object(
                                 data,
                                 required=frozenset({"kind", "locator"}),
+                                optional=frozenset({"identity_offset"}),
                                 label="qualification fault",
                             )
                             kind_value = data["kind"]
@@ -3042,8 +3045,21 @@ def make_handler_class(
                                 raise AgentRequestError(
                                     400, "invalid_schema", "unknown qualification fault"
                                 )
-                            result = faults.stage(
-                                kind_value, _locator_payload(data["locator"])
+                            try:
+                                offset = validate_identity_offset(
+                                    data.get("identity_offset"), kind_value
+                                )
+                            except ValueError as exc:
+                                raise AgentRequestError(
+                                    400, "invalid_schema", str(exc)
+                                ) from exc
+                            locator = _locator_payload(data["locator"])
+                            result = (
+                                faults.stage(
+                                    kind_value, locator, identity_offset=offset
+                                )
+                                if offset is not None
+                                else faults.stage(kind_value, locator)
                             )
                         self._send_json(200, result)
                         return

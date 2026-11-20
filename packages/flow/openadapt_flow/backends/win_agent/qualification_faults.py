@@ -66,11 +66,31 @@ if ($c.kind -eq 'stale_identity') {
             $f.Controls.Add($b)
         }
     } else {
+        $left = $x; $top = $y
+        if ($null -ne $c.identity_bounds) {
+            $left = [Math]::Min($left, [int]$c.identity_bounds[0])
+            $top = [Math]::Min($top, [int]$c.identity_bounds[1])
+            $right = [Math]::Max($x + $w, [int]$c.identity_bounds[2])
+            $bottom = [Math]::Max($y + $h, [int]$c.identity_bounds[3])
+            $f.Location = New-Object Drawing.Point($left, $top)
+            $f.Size = New-Object Drawing.Size(($right - $left), ($bottom - $top))
+            $identity = New-Object Windows.Forms.Label
+            $identity.Name = 'qualification-altered-identity'
+            $identity.Text = 'Different record 8675309 2040-12-31'
+            $identity.AccessibleName = $identity.Text
+            $identity.Location = New-Object Drawing.Point(([int]$c.identity_bounds[0] - $left), ([int]$c.identity_bounds[1] - $top))
+            $identity.Size = New-Object Drawing.Size(([int]$c.identity_bounds[2] - [int]$c.identity_bounds[0]), ([int]$c.identity_bounds[3] - [int]$c.identity_bounds[1]))
+            $identity.Font = New-Object Drawing.Font('Segoe UI', 12)
+            $identity.BackColor = [Drawing.Color]::White
+            $identity.ForeColor = [Drawing.Color]::Black
+            $f.Controls.Add($identity)
+        }
         $l = New-Object Windows.Forms.Label
         $l.Name = 'qualification-altered-action'
         $l.Text = 'Merge Into Existing Record'
         $l.AccessibleName = $l.Text
-        $l.Dock = 'Fill'
+        $l.Location = New-Object Drawing.Point(($x - $left), ($y - $top))
+        $l.Size = New-Object Drawing.Size($w, $h)
         $l.BackColor = [Drawing.Color]::White
         $l.ForeColor = [Drawing.Color]::Red
         $f.Controls.Add($l)
@@ -92,6 +112,33 @@ class FaultStagingError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def validate_identity_offset(
+    value: object, kind: str
+) -> tuple[int, int, int, int] | None:
+    """A bounded recorded rectangle, relative to the live resolved save point."""
+    if value is None:
+        return None
+    if (
+        kind != "wrong_identity"
+        or not isinstance(value, (tuple, list))
+        or len(value) != 4
+        or any(isinstance(v, bool) or not isinstance(v, int) for v in value)
+    ):
+        raise ValueError(
+            "identity_offset requires four integer coordinates for wrong_identity"
+        )
+    dx, dy, width, height = value
+    if (
+        abs(dx) > 32768
+        or abs(dy) > 32768
+        or not 1 <= width <= 8192
+        or not 1 <= height <= 8192
+        or width * height > 16_777_216
+    ):
+        raise ValueError("identity_offset is outside the bounded rectangle contract")
+    return dx, dy, width, height
 
 
 def _launch_overlay(payload: dict[str, Any]) -> Any:
@@ -158,13 +205,23 @@ class QualificationFaultController:
         self._active = None
         return {"status": "ok", "cleared": True}
 
-    def stage(self, kind: str, locator: dict[str, Any]) -> dict[str, Any]:
+    def stage(
+        self,
+        kind: str,
+        locator: dict[str, Any],
+        *,
+        identity_offset: tuple[int, int, int, int] | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(kind, str) or kind not in {
             "ambiguity",
             "wrong_identity",
             "stale_identity",
         }:
             raise FaultStagingError("qualification_unknown_fault")
+        try:
+            offset = validate_identity_offset(identity_offset, kind)
+        except ValueError as exc:
+            raise FaultStagingError("qualification_invalid_identity_offset") from exc
         if self._active is not None:
             raise FaultStagingError("qualification_mutation_active")
         before = self._uia("find", {"locator": locator})
@@ -204,6 +261,26 @@ class QualificationFaultController:
         identity = self._uia("element-identity-at", target_point).get("identity")
         if identity is None:
             raise FaultStagingError("qualification_identity_unavailable")
+        identity_point = None
+        region_identity = None
+        identity_bounds = None
+        if offset is not None:
+            dx, dy, width, height = offset
+            left, top = point[0] + dx, point[1] + dy
+            identity_bounds = [left, top, left + width, top + height]
+            union_width = max(bounds[2], identity_bounds[2]) - min(bounds[0], left)
+            union_height = max(bounds[3], identity_bounds[3]) - min(bounds[1], top)
+            if (
+                any(abs(v) > 32768 for v in identity_bounds)
+                or union_width > 8192
+                or union_height > 8192
+                or union_width * union_height > 16_777_216
+            ):
+                raise FaultStagingError("qualification_identity_geometry_unavailable")
+            identity_point = {"x": left + width // 2, "y": top + height // 2}
+            region_identity = self._uia("element-identity-at", identity_point).get(
+                "identity"
+            )
         png = self._capture()
         if not png.startswith(b"\x89PNG\r\n\x1a\n"):
             raise FaultStagingError("qualification_capture_unavailable")
@@ -214,7 +291,7 @@ class QualificationFaultController:
         for value in data.values():
             if value is not None and (not isinstance(value, str) or len(value) > 512):
                 raise FaultStagingError("qualification_target_identity_unavailable")
-        data.update(kind=kind, bounds=bounds)
+        data.update(kind=kind, bounds=bounds, identity_bounds=identity_bounds)
         token = uuid.uuid4().hex
         process = self._launch(data)
         self._active = (token, process)
@@ -238,6 +315,18 @@ class QualificationFaultController:
                         observed.get("status") == "ok"
                         and observed.get("identity") is not None
                         and observed["identity"] != identity
+                    )
+                if changed and identity_point is not None:
+                    at_region = self._uia("element-identity-at", identity_point)
+                    changed = (
+                        at_region.get("status") == "ok"
+                        and isinstance(at_region.get("identity"), dict)
+                        and at_region["identity"] != region_identity
+                        and at_region["identity"].get("automation_id")
+                        in {
+                            "qualification-altered-identity",
+                            "qualification-altered-action",
+                        }
                     )
                 frame = self._capture()
                 if (

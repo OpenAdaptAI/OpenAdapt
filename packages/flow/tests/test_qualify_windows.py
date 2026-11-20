@@ -116,6 +116,7 @@ def test_native_project_binds_observed_environment_and_distinct_fault_contract()
         "qualification_faults_v1",
         "uia_v1",
         "context_environment_v1",
+        "native_keyboard_lease_v1",
     }
     environment = surfaces.environment_payload(native, config)
     setup = configure_project(
@@ -146,11 +147,13 @@ def test_native_fault_receipt_signs_captured_mutation_and_cleans_owned_overlay()
     workflow.steps[-1].anchor.structural = StructuralLocator(
         automation_id="commit", role="button"
     )
+    workflow.steps[-1].anchor.identifier_region = (10, 10, 100, 30)
     driver = WindowsFaultDriver(workflow)
     staged, cleared = [], []
     backend = SimpleNamespace(
-        stage_qualification_fault=lambda kind, locator: staged.append((kind, locator))
-        or "owned-id",
+        stage_qualification_fault=lambda kind, locator, **kwargs: (
+            staged.append((kind, locator)) or "owned-id"
+        ),
         clear_qualification_fault=cleared.append,
         screenshot=lambda: b"changed frame",
     )
@@ -181,4 +184,62 @@ def test_native_environment_refuses_disabled_fault_agent_before_representative_r
     native.stage_qualification_fault = lambda *_: None
     native.agent_capabilities = lambda: {"uia_v1", "context_environment_v1"}
     with pytest.raises(ValueError, match="enabled fault"):
+        surfaces.environment_payload(native, native_config())
+
+
+@pytest.mark.parametrize(
+    "recorded_click,identifier,expected",
+    [
+        ((300, 400), (100, 200, 160, 40), (-200, -200, 160, 40)),
+        ((50, 60), (200, 210, 300, 30), (150, 150, 300, 30)),
+        ((-40, 200), (-200, 10, 100, 20), (-160, -190, 100, 20)),
+    ],
+)
+def test_native_wrong_identity_uses_the_recorded_identity_box_not_only_save_label(
+    recorded_click, identifier, expected
+):
+    workflow = _workflow()
+    anchor = workflow.steps[-1].anchor
+    anchor.structural = StructuralLocator(automation_id="commit", role="button")
+    anchor.click_point = recorded_click
+    anchor.identifier_region = identifier
+    staged = []
+
+    def stage(kind, locator, *, identity_offset=None):
+        staged.append((kind, locator, identity_offset))
+        return "owned-id"
+
+    backend = SimpleNamespace(
+        stage_qualification_fault=stage, screenshot=lambda: b"changed frame"
+    )
+    driver = WindowsFaultDriver(workflow)
+    assert driver._screen_fault(_context("wrong_identity", backend=backend)) is not None
+    assert staged[0][0] == "wrong_identity"
+    assert staged[0][2] == expected
+
+
+def test_native_wrong_identity_without_recorded_region_refuses_mutation():
+    workflow = _workflow()
+    workflow.steps[-1].anchor.structural = StructuralLocator(
+        automation_id="commit", role="button"
+    )
+    workflow.steps[-1].anchor.identifier_region = None
+    staged = []
+    backend = SimpleNamespace(
+        stage_qualification_fault=lambda *args, **kwargs: staged.append(args)
+    )
+    driver = WindowsFaultDriver(workflow)
+    assert driver._screen_fault(_context("wrong_identity", backend=backend)) is None
+    assert driver.declined == "native_identity_region_unavailable" and staged == []
+
+
+def test_native_environment_refuses_agent_without_real_keyboard_receipts():
+    native = Native()
+    native.stage_qualification_fault = lambda *_: None
+    native.agent_capabilities = lambda: {
+        "qualification_faults_v1",
+        "uia_v1",
+        "context_environment_v1",
+    }
+    with pytest.raises(ValueError, match="native keyboard lease"):
         surfaces.environment_payload(native, native_config())

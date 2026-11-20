@@ -34,12 +34,17 @@ def environment_payload(backend: Any, config: Any) -> dict[str, Any]:
     if config.app.target == "windows":
         if not callable(getattr(backend, "stage_qualification_fault", None)):
             raise ValueError("Windows qualification needs an opt-in native fault agent")
-        capabilities: set[str] = set(getattr(backend, "agent_capabilities", lambda: ())())
-        if not {"qualification_faults_v1", "uia_v1", "context_environment_v1"} <= set(
-            capabilities
-        ):
+        capabilities: set[str] = set(
+            getattr(backend, "agent_capabilities", lambda: ())()
+        )
+        if not {
+            "qualification_faults_v1",
+            "uia_v1",
+            "context_environment_v1",
+            "native_keyboard_lease_v1",
+        } <= set(capabilities):
             raise ValueError(
-                "Windows qualification needs enabled fault, UIA and environment capabilities"
+                "Windows qualification needs enabled fault, UIA, environment and native keyboard lease capabilities"
             )
         return observer(config).observe(backend, "windows").model_dump(mode="json")
     return web_environment_payload(
@@ -70,7 +75,12 @@ def boundary_fields(config: Any, environment: dict[str, Any]) -> dict[str, Any]:
         "environment_observer_contract_sha256": observed.contract_sha256,
         "environment_digest": environment_digest(environment, config),
         "required_capabilities": (
-            ["native_windows", "uia_v1", "independent_system_of_record"]
+            [
+                "native_windows",
+                "uia_v1",
+                "native_keyboard_lease_v1",
+                "independent_system_of_record",
+            ]
             if config.app.target == "windows"
             else sorted(
                 {

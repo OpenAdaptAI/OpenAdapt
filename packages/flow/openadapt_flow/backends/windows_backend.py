@@ -1279,7 +1279,13 @@ class WindowsBackend:
             window_name=value.get("window_name"),
         )
 
-    def stage_qualification_fault(self, kind: str, locator: StructuralLocator) -> str:
+    def stage_qualification_fault(
+        self,
+        kind: str,
+        locator: StructuralLocator,
+        *,
+        identity_offset: tuple[int, int, int, int] | None = None,
+    ) -> str:
         """Stage one opt-in native test fault; absence never counts as success."""
         if not isinstance(kind, str) or kind not in {
             "ambiguity",
@@ -1287,13 +1293,20 @@ class WindowsBackend:
             "stale_identity",
         }:
             raise ValueError("unknown Windows qualification fault")
-        payload = {
+        from openadapt_flow.backends.win_agent.qualification_faults import (
+            validate_identity_offset,
+        )
+
+        offset = validate_identity_offset(identity_offset, kind)
+        payload: dict[str, Any] = {
             "kind": kind,
             "locator": {
                 key: getattr(locator, key)
                 for key in ("automation_id", "role", "name", "window_name")
             },
         }
+        if offset is not None:
+            payload["identity_offset"] = list(offset)
         result = self._qualification_request("/qualification/fault", payload)
         token = result.get("mutation_id")
         if (

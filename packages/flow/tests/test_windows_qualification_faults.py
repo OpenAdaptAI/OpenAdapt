@@ -247,3 +247,124 @@ def test_failed_cleanup_retains_ownership_and_blocks_another_overlay():
         controller.stage("wrong_identity", LOCATOR)
     surface.process.terminate = original
     assert controller.clear(receipt["mutation_id"])["cleared"]
+
+
+class RecordSurface(Surface):
+    record_changes = True
+
+    def launch(self, payload):
+        self.launched = payload
+        return super().launch(payload)
+
+    def uia(self, operation, payload):
+        if operation == "element-identity-at" and payload != {"x": 60, "y": 30}:
+            changed = self.staged and self.record_changes
+            return {
+                "status": "ok",
+                "identity": {
+                    "name": "Different record 8675309"
+                    if changed
+                    else "Original record",
+                    "automation_id": "qualification-altered-identity"
+                    if changed
+                    else "record-header",
+                },
+            }
+        return super().uia(operation, payload)
+
+
+@pytest.mark.parametrize(
+    "offset", [(-50, -20, 120, 30), (100, 80, 300, 45), (-200, 200, 200, 60)]
+)
+def test_wrong_identity_mutates_recorded_region_at_live_resolved_save(offset):
+    surface = RecordSurface()
+    controller = surface.controller()
+    receipt = controller.stage("wrong_identity", LOCATOR, identity_offset=offset)
+    dx, dy, width, height = offset
+    assert surface.launched["identity_bounds"] == [
+        60 + dx,
+        30 + dy,
+        60 + dx + width,
+        30 + dy + height,
+    ]
+    assert surface.launched["bounds"] == [10, 10, 110, 50]
+    controller.clear(receipt["mutation_id"])
+
+
+def test_changed_save_label_cannot_attest_unchanged_record_identity():
+    surface = RecordSurface()
+    surface.record_changes = False
+    with pytest.raises(FaultStagingError, match="not_observed"):
+        surface.controller().stage(
+            "wrong_identity", LOCATOR, identity_offset=(150, -25, 300, 30)
+        )
+    assert surface.process.stopped
+
+
+@pytest.mark.parametrize(
+    "kind,offset",
+    [
+        ("wrong_identity", [0, 0, 0, 10]),
+        ("wrong_identity", [0, 0, True, 10]),
+        ("wrong_identity", [0, 0, 1.0, 10]),
+        ("wrong_identity", [0, 0, 8193, 10]),
+        ("wrong_identity", [0, 0, 8192, 8192]),
+        ("wrong_identity", [32769, 0, 1, 1]),
+        ("wrong_identity", [0, 0, 1, 1, 1]),
+        ("ambiguity", [0, 0, 120, 20]),
+        ("stale_identity", [0, 0, 120, 20]),
+    ],
+)
+def test_identity_rectangle_schema_refuses_unbounded_and_unrelated_mutations(
+    kind, offset
+):
+    faults = Faults()
+    with agent(faults=faults) as url:
+        response = requests.post(
+            url + "/qualification/fault",
+            json={
+                "kind": kind,
+                "locator": LOCATOR,
+                "identity_offset": offset,
+            },
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 400
+        assert not faults.calls
+
+
+def test_backend_delivers_only_recorded_relative_identity_rectangle():
+    class RecordFaults(Faults):
+        def stage(self, kind, locator, *, identity_offset=None):
+            self.calls.append((kind, locator, identity_offset))
+            return {"status": "ok", "mutation_id": TOKEN, "kind": kind}
+
+    faults = RecordFaults()
+    with agent(faults=faults) as url:
+        with pytest.warns(UserWarning, match="plaintext"):
+            backend = WindowsBackend(url, auth_token="test-token")
+        backend.stage_qualification_fault(
+            "wrong_identity",
+            StructuralLocator(**LOCATOR),
+            identity_offset=(-80, -160, 300, 30),
+        )
+        backend.clear_qualification_fault(TOKEN)
+    assert faults.calls[0] == ("wrong_identity", LOCATOR, (-80, -160, 300, 30))
+
+
+def test_identity_translation_cannot_escape_absolute_geometry_contract():
+    surface = RecordSurface()
+    with pytest.raises(FaultStagingError, match="geometry_unavailable"):
+        surface.controller().stage(
+            "wrong_identity", LOCATOR, identity_offset=(32700, 0, 400, 40)
+        )
+    assert not surface.staged
+
+
+def test_small_identity_box_far_from_target_cannot_allocate_unbounded_union_overlay():
+    surface = RecordSurface()
+    with pytest.raises(FaultStagingError, match="geometry_unavailable"):
+        surface.controller().stage(
+            "wrong_identity", LOCATOR, identity_offset=(-20000, -20000, 100, 30)
+        )
+    assert not surface.staged
