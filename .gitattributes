@@ -3,3 +3,7 @@ tests/fixtures/seal_view/** -text
 packages/seal-view/test/fixtures/** -text
 # Exact upload bytes; Cloud pins this file's SHA-256.
 packages/flow/tests/fixtures/public_seal/golden_vectors.json -text
+
+# Preserve the exact upstream license bytes, including prose whitespace.
+packages/desktop/src/styles/vendor/semantic-theme/fonts/OFL-*.txt whitespace=-blank-at-eol
+packages/desktop/openadapt_desktop/portal/shell/fonts/OFL-*.txt whitespace=-blank-at-eol
