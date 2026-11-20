@@ -86,24 +86,21 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ### Installation Scripts
 
-#### Windows
-- Press Windows Key, type "powershell", and press Enter
-- Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
-  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/legacy/install/install_openadapt.ps1' | Invoke-Expression"
-  </pre>
+The scripted installers in [`legacy/install/`](install/) set up the v0.46.0
+repository layout, from before the code moved under `legacy/`. They are kept as
+historical reference and are not maintained against the current repository, so
+this page no longer gives a command that runs them.
 
-#### MacOS
-- Download and install Git and Python 3.10
-- Press Command+Space, type "terminal", and press Enter
-- Copy and paste the following command into the terminal, and press Enter:
-  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/legacy/install/install_openadapt.sh)"
-  </pre>
+To use the legacy app, install the frozen release with
+`pip install openadapt==0.46.0`. For current work, use the packages listed in
+the notice at the top of this page.
 
 <br/>
 
 ### Manual Setup
+
+These steps describe the v0.46.0 repository layout and are kept for reference.
+In the current repository this code lives under `legacy/`.
 
 Prerequisite:
 - Python 3.10
