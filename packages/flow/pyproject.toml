@@ -319,6 +319,8 @@ langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CHANGELOG.md"
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"

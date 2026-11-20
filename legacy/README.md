@@ -17,7 +17,7 @@
 >
 > **Quick start:** `pip install openadapt[all]`
 >
-> **Migration guide:** See [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for migration instructions.
+> **Migration guide:** See [docs/LEGACY_FREEZE.md](../docs/LEGACY_FREEZE.md) for migration instructions.
 >
 > **Legacy users:** This codebase remains available. Install with `pip install openadapt==0.46.0`
 
@@ -90,7 +90,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 - Press Windows Key, type "powershell", and press Enter
 - Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
+   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/legacy/install/install_openadapt.ps1' | Invoke-Expression"
   </pre>
 
 #### MacOS
@@ -98,7 +98,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 - Press Command+Space, type "terminal", and press Enter
 - Copy and paste the following command into the terminal, and press Enter:
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/legacy/install/install_openadapt.sh)"
   </pre>
 
 <br/>
@@ -221,10 +221,10 @@ python -m openadapt.replay NaiveReplayStrategy
 
 Other replay strategies include:
 
-- [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Early proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
-- (*)[`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window.
-- (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
-- (*)[`VisualBrowserReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual_browser.py): Like VisualReplayStrategy but generates segments from the visible DOM read by the browser extension.
+- [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/stateful.py): Early proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
+- (*)[`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window.
+- (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
+- (*)[`VisualBrowserReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/visual_browser.py): Like VisualReplayStrategy but generates segments from the visible DOM read by the browser extension.
 
 
 The (*) prefix indicates strategies which accept an "instructions" parameter that is used to modify the recording, e.g.:
@@ -233,7 +233,7 @@ The (*) prefix indicates strategies which accept an "instructions" parameter tha
 python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
 ```
 
-See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
+See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 ### Browser integration
 
@@ -310,7 +310,7 @@ Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
 `ActionEvent`(s) based on the previously recorded `ActionEvent`s in order to
 accomplish the task specified in the
-[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/models.py#L46)
+[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/models.py#L46)
 and narrated by the user in
 [`AudioInfo.words_with_timestamps`](https://github.com/OpenAdaptAI/OpenAdapt/pull/346/files#diff-224d5ce89a18f796cae99bf3da5a9862def2127db2ed38e68a07a25a8624166fR393),
 while accounting for differences in screen resolution, window size, application
