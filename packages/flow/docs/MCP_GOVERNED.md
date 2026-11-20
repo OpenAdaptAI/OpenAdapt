@@ -38,15 +38,17 @@ configuration or complete the original bundle's existing qualification path;
 changing a per-call URL cannot fix it.
 
 After child launch, missing, malformed, unreadable or inconsistent reports and
-abnormal child exits return `HALTED` with `RECONCILIATION_REQUIRED`. A write may
+abnormal child exits return `UNCERTAIN` with `RECONCILIATION_REQUIRED`. A write may
 have landed. Inspect the retained run and reconcile the record before another
 attempt. Missing output does not establish that nothing ran. The adapter never
 retries automatically and does not echo child output or report validation errors.
 
-Success requires a complete typed outcome envelope for the requested production
-profile, a verified transaction, production eligibility, and the captured bundle,
-semantic, runtime-input and target bindings. Qualification-only evidence cannot
-report production success. Sealed reports use the existing artifact reader;
+`runtime_reported` may reflect a complete typed report with matching invocation,
+profile, bundle, semantic, runtime-input and target bindings. These are
+unauthenticated claims. The outer result remains `UNCERTAIN`, with `success`,
+`production_eligible` and `retry_allowed` all `false`, even when the report claims
+a verified transaction. Qualification-only evidence supplies no runtime claim.
+Sealed reports use the existing artifact reader;
 there is no plaintext fallback when that reader fails. The output directory is
 owned before launch; links, replacement, unknown directory identity and observed
 file drift cannot supply a new completion. The response is a
