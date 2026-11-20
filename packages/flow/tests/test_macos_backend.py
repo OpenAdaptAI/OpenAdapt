@@ -377,14 +377,19 @@ def test_ambiguous_selector_refuses_bound_text_without_any_fallback() -> None:
     assert not client.calls
 
 
-def test_capture_and_input_permissions_fail_loud() -> None:
+@pytest.mark.parametrize("version, pane", [
+    ("27.2", "Accessibility"), ("27.3", "System & App Protection Override"),
+    ("27.10", "System & App Protection Override"), ("28.0", "System & App Protection Override"),
+])
+def test_capture_and_input_permissions_fail_loud(monkeypatch, version, pane) -> None:
+    monkeypatch.setattr("openadapt_flow.macos_permissions.platform.mac_ver", lambda: (version, (), ""))
     capture_client = FakeMacClient(capture_trusted=False)
     with pytest.raises(MacOSBackendError, match="Screen Recording"):
         backend(capture_client).screenshot()
     assert not capture_client.calls
 
     input_client = FakeMacClient(input_trusted=False)
-    with pytest.raises(MacOSBackendError, match="Accessibility"):
+    with pytest.raises(MacOSBackendError, match=pane):
         backend(input_client).type_text("must not land")
     assert not input_client.calls
 

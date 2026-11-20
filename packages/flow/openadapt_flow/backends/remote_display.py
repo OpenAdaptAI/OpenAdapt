@@ -33,13 +33,11 @@ Faithful pixel-only property (the whole point):
   PHI-free on-screen application/workflow/session markers or a live session
   digest observer. Those observers never expose captured text.
 
-Permission reality (macOS, and the honest failure mode): window capture needs
-**Screen Recording** permission and input injection needs **Accessibility**
-permission for the driving app (Terminal / the Python host). If Accessibility is
-not granted, ``CGEventPost`` is **silently dropped** — a dropped click that looked
-like success is the exact "silent wrong action" this project refuses. So every
-input method FAILS LOUD (raises :class:`RemoteDisplayError`) when the process is
-not Accessibility-trusted; a caller never mistakes a no-op for a completed action.
+Permission checks: capture needs Screen Recording; app control uses Accessibility
+before macOS 27.3 and System & App Protection Override on macOS 27.3 or later.
+Process AX trust remains a conservative preflight, not proof of target-app scope.
+Input still requires the exact target/focus/frame checks below. A denied or
+unconfirmed permission must never turn a dropped event into a claimed effect.
 
 The macOS bindings are isolated behind :class:`MacWindowClient` (a small
 :class:`WindowClient` seam) so the coordinate math, the pixel<->point mapping, and
@@ -527,7 +525,7 @@ class WindowClient(Protocol):
     """
 
     def input_trusted(self) -> bool:
-        """True iff this process may inject OS input (Accessibility granted)."""
+        """Process input preflight; callers must also verify the exact target."""
         ...
 
     def frontmost_pid(self) -> Optional[int]:
@@ -1614,8 +1612,9 @@ class RemoteDisplayBackend:
         if self._require_input_trust and not self._client.input_trusted():
             raise RemoteDisplayError(
                 "process is not trusted to inject OS input, so input would be "
-                "silently dropped. macOS: grant Accessibility to the driving "
-                "app (System Settings > Privacy & Security > Accessibility). "
+                "silently dropped. macOS: "
+                + _mac_control_remedy()
+                + " "
                 "Windows: the target window belongs to an elevated (or "
                 "unknown-elevation) process and UIPI would discard our input "
                 "— run the driver elevated. Refusing to emit an input that "
@@ -2019,6 +2018,12 @@ def _hit_test_pid(x: float, y: float) -> Optional[int]:
         return None
 
 
+def _mac_control_remedy() -> str:
+    from openadapt_flow.macos_permissions import control_permission_guidance
+
+    return control_permission_guidance()["instructions"]
+
+
 class MacWindowClient:
     """Live :class:`WindowClient` over Quartz (capture/input) + AppKit (activate).
 
@@ -2064,7 +2069,11 @@ class MacWindowClient:
             return False
 
     def request_input_access(self) -> bool:
-        """Ask macOS to show its Accessibility consent prompt."""
+        """Request legacy consent; newer macOS requires manual Settings setup."""
+        from openadapt_flow.macos_permissions import control_permission_guidance
+
+        if control_permission_guidance()["setup_mode"] != "legacy":
+            return self.input_trusted()
         services = _pyobjc_module("ApplicationServices")
         try:
             return bool(

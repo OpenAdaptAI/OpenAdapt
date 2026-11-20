@@ -2843,9 +2843,12 @@ def _doctor_macos_permissions() -> list[str]:
         click.echo("  [ERROR] macOS permissions could not be checked.")
         return ["macos-permissions"]
 
+    from openadapt.macos_permissions import control_permission_guidance
+
+    guidance = control_permission_guidance()
     failures = []
     for name, check, pane in (
-        ("Accessibility", client.input_trusted, "Accessibility"),
+        (guidance["label"], client.input_trusted, guidance["label"]),
         (
             "Screen Recording",
             client.capture_trusted,
@@ -2858,7 +2861,17 @@ def _doctor_macos_permissions() -> list[str]:
             failures.append(name)
             click.echo(f"  [ERROR] {name}: permission could not be checked.")
             continue
-        if granted:
+        if name == guidance["label"] and guidance["setup_mode"] != "legacy":
+            if not granted:
+                failures.append(name)
+            state = "WARN" if granted else "UNCONFIRMED"
+            detail = "passed" if granted else "did not confirm access"
+            click.echo(
+                f"  [{state}] {name}: AX process trust preflight {detail}; "
+                "this does not verify access to the selected app. "
+                + guidance["instructions"]
+            )
+        elif granted:
             click.echo(f"  [OK] {name}: permission is granted.")
         else:
             failures.append(name)
