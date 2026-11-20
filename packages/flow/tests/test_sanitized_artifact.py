@@ -1752,3 +1752,108 @@ def test_declared_wrap_file_names_and_schemas_match_their_owners():
         assert (rule[1] if rule else None) == (
             frozenset({schema}) if schema else None
         ), rel
+
+
+class AuthSyntaxScrubber(FakeScrubber):
+    """Model NER false positives on auth references, while catching literals."""
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        for value in (
+            "X-Api-Key",
+            "NOTES_READER_KEY",
+            "ACCESS_TOKEN",
+            "BASIC_CREDENTIALS",
+            "sk_live_SYNTHETIC_CREDENTIAL",
+        ):
+            text = text.replace(value, "<SECRET>")
+        return super().scrub_text(text, is_separated)
+
+
+@pytest.mark.parametrize(
+    "auth",
+    [
+        {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY"},
+        {"bearer_env": "ACCESS_TOKEN"},
+        {"basic_env": "BASIC_CREDENTIALS"},
+    ],
+)
+def test_readback_auth_references_survive_without_resolving_credentials(tmp_path, auth):
+    import yaml
+
+    from openadapt_flow.runtime.effects.auth import AuthRef
+
+    privacy.set_text_scrubber(AuthSyntaxScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    checks = yaml.safe_load(readback.read_text())
+    checks["verifier"]["auth"] = auth
+    readback.write_text(yaml.safe_dump(checks, sort_keys=False))
+    before = readback.read_bytes()
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "preserved"
+    assert (tmp_path / "sanitized/readback/verify.yaml").read_bytes() == before
+    assert _admission_verifies(tmp_path / "sanitized", keys)
+    # The same wiring still resolves on the customer machine. The credential
+    # is deliberately not in the bundle or sanitized derivative.
+    reference = AuthRef.model_validate(auth)
+    resolved = reference.resolve_headers(
+        {
+            value: "local-only-secret"
+            for key, value in auth.items()
+            if key.endswith("_env")
+        }
+    )
+    assert resolved
+    assert all(
+        b"local-only-secret" not in raw
+        for raw in _tree(tmp_path / "sanitized").values()
+    )
+
+
+@pytest.mark.parametrize(
+    "auth",
+    [
+        {"header": "Jane Doe", "value_env": "NOTES_READER_KEY"},
+        {"header": "X-Api-Key", "value_env": "Jane Doe"},
+        {"bearer_env": "Bearer sk_live_SYNTHETIC_CREDENTIAL"},
+        {"basic_env": "Jane Doe:sk_live_SYNTHETIC_CREDENTIAL"},
+        {
+            "header": "X-Api-Key",
+            "value_env": "NOTES_READER_KEY",
+            "value": "sk_live_SYNTHETIC_CREDENTIAL",
+        },
+    ],
+)
+def test_readback_auth_free_text_and_credential_literals_are_still_scrubbed(
+    tmp_path, auth
+):
+    import yaml
+
+    privacy.set_text_scrubber(AuthSyntaxScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    checks = yaml.safe_load(readback.read_text())
+    checks["verifier"]["auth"] = auth
+    readback.write_text(yaml.safe_dump(checks, sort_keys=False))
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    derivative = (tmp_path / "sanitized/readback/verify.yaml").read_text()
+    assert "Jane Doe" not in derivative
+    assert "sk_live_SYNTHETIC_CREDENTIAL" not in derivative
+
+
+def test_readback_auth_declaration_covers_the_runtime_reference_schema():
+    from openadapt_flow.runtime.effects.auth import AuthRef
+    from openadapt_flow.sanitized_artifact import _declared_bundle_files
+
+    declared = _declared_bundle_files()["readback/verify.yaml"]
+    fields = {
+        path[-1] for path, _shape in declared.fields if path[:2] == ("verifier", "auth")
+    }
+    assert fields == set(AuthRef.model_fields)
