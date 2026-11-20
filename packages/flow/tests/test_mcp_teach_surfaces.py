@@ -1,21 +1,13 @@
-"""The MCP teach tools on a remote session (RDP, Citrix), through the real backends.
+"""Protected MCP teaching refuses pixel-only RDP and Citrix capture.
 
-MockMed runs in a browser page that Flow never reads: tests/surface_kiosk
-shows it to ``RemoteDisplayBackend`` and ``CitrixWorkspaceBackend`` as a
-client window, so Flow sees pixels only. A scripted MCP client teaches the
-task with pixel clicks, as an agent reading the screen would.
+The factory constructs the real remote backends over an owned headless kiosk.
+They expose pixels and input, not credential-field observation. A person's
+save approval cannot add that missing capability: teach_start refuses before
+recording or actor input, closes its backend and releases its app lock.
 
-What it checks:
-
-* the observation is screen-only and the screen tool works when the operator
-  turned it on;
-* every click a person must approve in the client's form (the harness can't
-  read which record a remote screen shows), and without a form nothing is
-  clicked;
-* run 1 compiles, passes its record check against the system of record, and
-  a person confirms the check;
-* admission fails closed with its reason: the canary is refused because a
-  pixel-only click carries no verified record identity (docs/BACKEND_PARITY.md).
+Ordinary trusted compile_agent capture is a separate contract, exercised by
+both surfaces in test_jit_surface_pixels.py. This fixture is not a native
+RDP, ICA or HDX qualification.
 """
 
 from __future__ import annotations
@@ -64,7 +56,6 @@ AGENT_ID = "agent:mcp-teach-surface"
 #: would find them (the same points tests/fixtures/jit/anthropic_add_note.json
 #: clicks).
 CLICKS = [(775, 186), (114, 159), (85, 214), (344, 350)]
-SAVE = (134, 457)
 
 
 @pytest.fixture(scope="module")
@@ -74,7 +65,9 @@ def mockmed() -> Iterator[str]:
     stop()
 
 
-def _open_backend(base: str):
+def _open_backend(
+    base: str, clients: list[PageWindowClient], built: list[Any], closed: list[Any]
+):
     """Build each backend through the factory, with a fresh kiosk page as the
     client window. Each call opens its own browser on the calling thread."""
 
@@ -95,13 +88,15 @@ def _open_backend(base: str):
         )
         page.goto(f"{base}/?fault=ok&idempotency=demo#tasks")
         page.wait_for_timeout(300)
-        backend = build_backend(
-            cfg, window_client=PageWindowClient(page, owner=cfg.rdp_window, title=TITLE)
-        )
+        client = PageWindowClient(page, owner=cfg.rdp_window, title=TITLE)
+        clients.append(client)
+        backend = build_backend(cfg, window_client=client)
+        built.append(backend)
 
         def close() -> None:
             browser.close()
             pw.stop()
+            closed.append(backend)
 
         backend.close = close  # type: ignore[attr-defined]
         return backend
@@ -190,8 +185,14 @@ def test_teach_on_a_remote_window(
     from openadapt_flow.agent.mcp import build_server
     from openadapt_flow.agent.runner import RunnerConfig
     from openadapt_flow.agent.teach import TeachBridge, TeachConfig
+    from openadapt_flow.backends.citrix_workspace import CitrixWorkspaceBackend
+    from openadapt_flow.backends.remote_display import RemoteDisplayBackend
     from openadapt_flow.jit.compile_agent import SurfaceApp
+    from openadapt_flow.secret_inputs import CredentialObservationUnsupported
 
+    clients: list[PageWindowClient] = []
+    built: list[Any] = []
+    closed: list[Any] = []
     section = SECTIONS[kind]
     verify = tmp_path / "verify.yaml"
     verify.write_text(
@@ -215,7 +216,7 @@ def test_teach_on_a_remote_window(
             ),
             screens="unscrubbed",
             reset=lambda: _http_json(f"{mockmed}/api/reset", method="POST", body={}),
-            open_backend=_open_backend(mockmed),
+            open_backend=_open_backend(mockmed, clients, built, closed),
         ),
         workflows=workflows,
     )
@@ -228,64 +229,69 @@ def test_teach_on_a_remote_window(
     }
 
     async def scenario() -> None:
-        # A client with no form: the first click needs a person, so nothing
-        # is clicked and run 1 keeps going.
-        async with connect(server, person=None) as session:
-            started = await _call(session, "teach_start", start)
-            assert started["surface"] == kind and started["person_approves_saves"]
-            assert "remote session" in started["observation"]
-            screen = await _call(session, "teach_screen")
-            assert len(screen["screen_png_base64"]) > 1000
-            x, y = CLICKS[0]
-            refused = await _call(
-                session, "teach_act", {"action": "click", "x": x, "y": y}
-            )
-            assert "needs a person's approval" in refused["_error"]
-            assert _records(mockmed) == []
-            assert (await _call(session, "teach_abort"))["status"] == "aborted"
+        # Both a declined form and a willing person have the same unsupported
+        # observation boundary. Retrying also proves the failed run releases it.
+        for index, person in enumerate((None, "dana.reviewer"), start=1):
+            async with connect(server, person=person) as session:
+                started = await _call(session, "teach_start", start)
+                assert isinstance(started.get("_error"), str), started
+                assert CredentialObservationUnsupported.code in started["_error"]
+                assert "cannot observe credential fields" in started["_error"]
+                assert "status" not in started and "surface" not in started
 
-        async with connect(server, person="dana.reviewer") as session:
-            started = await _call(session, "teach_start", start)
-            assert started["status"] == "recording", started
-            for x, y in CLICKS:
-                done = await _call(
-                    session, "teach_act", {"action": "click", "x": x, "y": y}
+                run = teach._run
+                assert run is not None and run.done.wait(5)
+                assert run._thread is not None
+                run._thread.join(timeout=5)
+                assert not run._thread.is_alive()
+                assert isinstance(run.error, CredentialObservationUnsupported)
+                assert not run.agent.ready.is_set() and run.agent.performed == 0
+                assert teach.config.app_lock.acquire(blocking=False)
+                teach.config.app_lock.release()
+
+                expected = (
+                    CitrixWorkspaceBackend if kind == "citrix" else RemoteDisplayBackend
                 )
-                assert done["status"] == "ok", done
-            typed = await _call(
-                session, "teach_act", {"action": "type", "input": "note"}
-            )
-            assert typed["status"] == "ok", typed
-            x, y = SAVE
-            saved = await _call(
-                session, "teach_act", {"action": "click", "x": x, "y": y}
-            )
-            assert saved["status"] == "ok", saved
-            draft = await _call(session, "teach_finish")
-            assert draft["status"] == "draft", draft
-            assert draft["surface"] == kind
-            assert draft["record_check"]["passed"]
-            assert {g["decision"] for g in draft["save_gate"]} == {"approved_by_hold"}
-            assert draft["parameters"]["lifted"] == ["note"]
+                assert len(built) == len(closed) == len(clients) == index
+                assert type(built[-1]) is expected and closed[-1] is built[-1]
+                assert not callable(
+                    getattr(built[-1], "focused_field_credential", None)
+                )
+                assert all(client.inputs == 0 for client in clients)
 
-            confirmed = await _call(
-                session,
-                "teach_confirm_checks",
-                {"task_key": draft["task_key"], "drop_fields": ["key", "source"]},
-            )
-            assert confirmed["confirmed_by"] == "dana.reviewer", confirmed
-
-            saved_rows = _records(mockmed)
-            admitted = await _call(
-                session,
-                "teach_admit",
-                {"task_key": draft["task_key"], "canary_inputs": [{"note": "Canary"}]},
-            )
-            assert admitted["status"] == "canary_failed", admitted
-            assert "Identity coverage" in admitted["detail"]
-            assert _records(mockmed) == saved_rows  # refused before any input
-            assert not any(
-                t.name.startswith("taught_") for t in (await session.list_tools()).tools
-            )
+                # No tool can act on the failed run or expose a recorded frame.
+                x, y = CLICKS[0]
+                for tool, args in (
+                    ("teach_act", {"action": "click", "x": x, "y": y}),
+                    ("teach_act", {"action": "type", "input": "note"}),
+                    ("teach_screen", {}),
+                    ("teach_abort", {}),
+                ):
+                    refused = await _call(session, tool, args)
+                    assert "no run 1 is in progress" in refused.get("_error", ""), (
+                        refused
+                    )
+                finished = await _call(session, "teach_finish")
+                assert finished["status"] == "capture_failed", finished
+                assert CredentialObservationUnsupported.code in finished["detail"]
+                assert not any(
+                    tool.name.startswith("taught_")
+                    for tool in (await session.list_tools()).tools
+                )
+                assert all(client.inputs == 0 for client in clients)
+                assert _records(mockmed) == []
+                cache = tmp_path / "teach"
+                for pattern in (
+                    "candidate.json",
+                    "workflow.json",
+                    "events.jsonl",
+                    "*.png",
+                ):
+                    assert not list(cache.rglob(pattern))
+                assert all(
+                    NOTE.encode() not in path.read_bytes()
+                    for path in cache.rglob("*")
+                    if path.is_file()
+                )
 
     anyio.run(scenario)
