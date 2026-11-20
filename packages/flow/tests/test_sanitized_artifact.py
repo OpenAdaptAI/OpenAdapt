@@ -12,6 +12,8 @@ from typing import Optional
 import httpx
 import jsonschema
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from PIL import Image, ImageDraw
 
 from openadapt_flow import hosted, privacy
@@ -1943,3 +1945,279 @@ def test_auth_reference_identifier_length_is_bounded(shape):
 
     assert _SHAPES[shape].fullmatch("A_" * 32)
     assert not _SHAPES[shape].fullmatch("A_" * 32 + "A")
+
+
+def _scrub_auth_document(auth, scrubber):
+    import yaml
+
+    from openadapt_flow.sanitized_artifact import _scrub_structured_text
+    from openadapt_flow.verify_run import VERIFY_CONFIG_SCHEMA
+
+    original = yaml.safe_dump(
+        {
+            "schema_version": VERIFY_CONFIG_SCHEMA,
+            "verifier": {"kind": "rest", "auth": auth},
+        },
+        sort_keys=False,
+    )
+    result = _scrub_structured_text(
+        original,
+        suffix=".yaml",
+        scrubber=scrubber,
+        redactions=[],
+        rel="readback/verify.yaml",
+        kind="bundle",
+        path_map={},
+        known_paths={"readback/verify.yaml"},
+    )
+    assert result is not None
+    return original, result[0]
+
+
+def _reference_with(field, value):
+    return (
+        {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY", field: value}
+        if field in {"header", "value_env"}
+        else {field: value}
+    )
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@settings(max_examples=40, deadline=None)
+@given(suffix=st.text(alphabet="0123456789ABCDEF", min_size=19, max_size=63))
+def test_auth_reference_rejects_opaque_hex_independently_of_entropy(field, suffix):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "A" + suffix
+    original, output = _scrub_auth_document(
+        _reference_with(field, literal), FakeScrubber()
+    )
+    assert output != original
+    assert literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"][field] == REDACTED
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    prefix=st.sampled_from(["sk-proj-", "sk-ant-", "rk-", "xoxe-", "xapp-", "XOXZ-"]),
+    groups=st.lists(
+        st.text(alphabet="aAbBcCdD0123456789", min_size=1, max_size=4),
+        min_size=4,
+        max_size=8,
+    ),
+)
+def test_auth_reference_rejects_short_segmented_secret_families(prefix, groups):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = prefix + "-".join(groups)
+    assert len(literal) <= 64
+    original, output = _scrub_auth_document(
+        _reference_with("header", literal), FakeScrubber()
+    )
+    assert output != original and literal not in output
+    assert yaml.safe_load(output)["verifier"]["auth"]["header"] == REDACTED
+
+
+_AUTH_NESTED_LITERALS = st.recursive(
+    st.just("sk_live_SYNTHETIC_CREDENTIAL"),
+    lambda child: st.one_of(
+        st.lists(child, min_size=1, max_size=3),
+        st.dictionaries(
+            st.sampled_from(["token", "value", "nested"]), child, min_size=1, max_size=3
+        ),
+    ),
+    max_leaves=5,
+)
+
+
+@settings(max_examples=40, deadline=None)
+@given(
+    unknown=st.sampled_from(["token", "value", "bearer", "nested", "reference"]),
+    child=_AUTH_NESTED_LITERALS,
+)
+def test_auth_reference_record_is_closed_even_when_provider_misses_nested_values(
+    unknown, child
+):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    original, output = _scrub_auth_document(
+        {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY", unknown: child},
+        FakeScrubber(),
+    )
+    assert output != original
+    assert "sk_live_SYNTHETIC_CREDENTIAL" not in output
+    assert yaml.safe_load(output)["verifier"]["auth"] == REDACTED
+
+
+class IdentifierHostileScrubber(FakeScrubber):
+    def scrub_text(self, text, is_separated=False):
+        return "<ORGANIZATION>"
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+@settings(max_examples=30, deadline=None)
+@given(
+    words=st.lists(
+        st.sampled_from(["NOTES", "READER", "SERVICE", "REPORT", "LOCAL", "ACCESS"]),
+        min_size=1,
+        max_size=6,
+    )
+)
+def test_auth_reference_valid_names_survive_provider_false_positives(field, words):
+    name = "_".join(words) + "_KEY"
+    original, output = _scrub_auth_document(
+        _reference_with(field, name), IdentifierHostileScrubber()
+    )
+    assert output == original
+
+
+@pytest.mark.parametrize("field", ["header", "value_env", "bearer_env", "basic_env"])
+def test_readback_auth_opaque_hex_makes_whole_bundle_unpublishable(tmp_path, field):
+    import yaml
+
+    literal = ("ABCDEF0123456789" * 2)[:-1] + "0"
+    privacy.set_text_scrubber(FakeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    document = yaml.safe_load(readback.read_text())
+    document["verifier"]["auth"] = _reference_with(field, literal)
+    readback.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    assert all(
+        literal.encode() not in raw for raw in _tree(tmp_path / "sanitized").values()
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "unknown_leaf",
+        "unknown_nested",
+        "known_container",
+        "secret_key",
+        "scalar",
+        "sequence",
+    ],
+)
+def test_readback_auth_invalid_record_makes_whole_bundle_unpublishable(tmp_path, case):
+    import yaml
+
+    from openadapt_flow.report_redaction import REDACTED
+
+    literal = "sk_live_SYNTHETIC_CREDENTIAL"
+    valid = {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY"}
+    auth = {
+        "unknown_leaf": {**valid, "value": literal},
+        "unknown_nested": {**valid, "nested": {"token": literal}},
+        "known_container": {**valid, "value_env": {"token": literal}},
+        "secret_key": {**valid, literal: "ignored"},
+        "scalar": literal,
+        "sequence": [literal],
+    }[case]
+    privacy.set_text_scrubber(FakeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    document = yaml.safe_load(readback.read_text())
+    document["verifier"]["auth"] = auth
+    readback.write_text(yaml.safe_dump(document, sort_keys=False))
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    assert all(
+        literal.encode() not in raw for raw in _tree(tmp_path / "sanitized").values()
+    )
+    assert (
+        yaml.safe_load((tmp_path / "sanitized/readback/verify.yaml").read_text())[
+            "verifier"
+        ]["auth"]
+        == REDACTED
+    )
+
+
+@pytest.mark.parametrize("encoding", ["yaml", "json"])
+def test_auth_reference_document_rejects_discarded_duplicate_values(encoding):
+    from openadapt_flow.sanitized_artifact import _scrub_structured_text
+    from openadapt_flow.verify_run import VERIFY_CONFIG_SCHEMA
+
+    if encoding == "yaml":
+        raw = (
+            f"schema_version: {VERIFY_CONFIG_SCHEMA}\nverifier:\n  kind: rest\n  auth:\n"
+            "    header: sk_live_SYNTHETIC_CREDENTIAL\n"
+            "    header: X-Api-Key\n    value_env: NOTES_READER_KEY\n"
+        )
+    else:
+        raw = (
+            '{"schema_version":'
+            + json.dumps(VERIFY_CONFIG_SCHEMA)
+            + ',"verifier":{"kind":"rest","auth":{'
+            '"header":"sk_live_SYNTHETIC_CREDENTIAL",'
+            '"header":"X-Api-Key","value_env":"NOTES_READER_KEY"}}}'
+        )
+    with pytest.raises(SanitizationError, match="Reference document repeats a field"):
+        _scrub_structured_text(
+            raw,
+            suffix=".yaml",
+            scrubber=FakeScrubber(),
+            redactions=[],
+            rel="readback/verify.yaml",
+            kind="bundle",
+            path_map={},
+            known_paths=set(),
+        )
+
+
+def test_auth_reference_document_rejects_merged_overrides_without_provider_detection():
+    from openadapt_flow.sanitized_artifact import _scrub_structured_text
+    from openadapt_flow.verify_run import VERIFY_CONFIG_SCHEMA
+
+    raw = (
+        f"schema_version: {VERIFY_CONFIG_SCHEMA}\n"
+        "defaults: &defaults\n  header: sk_live_SYNTHETIC_CREDENTIAL\n"
+        "  value_env: NOTES_READER_KEY\nverifier:\n  kind: rest\n"
+        "  auth:\n    <<: *defaults\n    header: X-Api-Key\n"
+    )
+    with pytest.raises(SanitizationError, match="Reference document repeats a field"):
+        _scrub_structured_text(
+            raw,
+            suffix=".yaml",
+            scrubber=FakeScrubber(),
+            redactions=[],
+            rel="readback/verify.yaml",
+            kind="bundle",
+            path_map={},
+            known_paths=set(),
+        )
+
+
+def test_auth_reference_document_keeps_unambiguous_alias_bytes():
+    from openadapt_flow.sanitized_artifact import _scrub_structured_text
+    from openadapt_flow.verify_run import VERIFY_CONFIG_SCHEMA
+
+    raw = (
+        f"schema_version: {VERIFY_CONFIG_SCHEMA}\n"
+        "defaults: &defaults\n  header: X-Api-Key\n  value_env: NOTES_READER_KEY\n"
+        "verifier:\n  kind: rest\n  auth: *defaults\n"
+    )
+    result = _scrub_structured_text(
+        raw,
+        suffix=".yaml",
+        scrubber=FakeScrubber(),
+        redactions=[],
+        rel="readback/verify.yaml",
+        kind="bundle",
+        path_map={},
+        known_paths=set(),
+    )
+    assert result is not None and result[0] == raw
