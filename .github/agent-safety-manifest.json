@@ -29,7 +29,11 @@
         "packages/flow/openadapt_flow/agent/contract.py",
         "packages/flow/tests/test_policy.py",
         "packages/flow/tests/test_approval_mode_switch_policy.py",
-        "packages/flow/tests/test_approval_mode_item_approval.py"
+        "packages/flow/tests/test_approval_mode_item_approval.py",
+        "packages/flow/openadapt_flow/secret_inputs.py",
+        "packages/flow/openadapt_flow/cli_params.py",
+        "packages/flow/openadapt_flow/runtime/secret_frames.py",
+        "packages/flow/openadapt_flow/backends/_field_metadata_js.py"
       ]
     },
     {

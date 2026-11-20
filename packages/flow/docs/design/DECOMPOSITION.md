@@ -603,8 +603,8 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 20057 |
-| `packages/flow/openadapt_flow/__main__.py` | 14570 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20056 |
+| `packages/flow/openadapt_flow/__main__.py` | 14530 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6711 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
@@ -612,7 +612,7 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4620 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4367 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3661 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6727 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6715 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight

@@ -55,6 +55,21 @@ class NoModelActor:
         self.read(harness.computer)
 
 
+class _ObservedOrdinaryBackend(SimpleNamespace):
+    """Resource-only fixtures explicitly observe no credential control."""
+
+    def focused_field_credential(self):
+        return None
+
+
+class _CredentialInputSession:
+    """The shared session double accepts and checks credential configuration."""
+
+    def withhold_credentials(self, inputs):
+        self.withheld_inputs = dict(inputs)
+        assert self.withheld_inputs == {"x": "synthetic"}
+
+
 @pytest.fixture
 def local_task(tmp_path: Path):
     class Handler(BaseHTTPRequestHandler):
@@ -341,7 +356,7 @@ def test_native_owned_backend_closes_once_and_preserves_primary(
     events = []
     primary = Cancelled() if cancel else RuntimeError(failure)
 
-    class Backend:
+    class Backend(_ObservedOrdinaryBackend):
         def close(self):
             events.append("close")
             if cleanup_fails:
@@ -349,7 +364,7 @@ def test_native_owned_backend_closes_once_and_preserves_primary(
 
     backend = Backend()
 
-    class Session:
+    class Session(_CredentialInputSession):
         def __init__(self, received, *args, **kwargs):
             assert received is backend
             events.append("session")
@@ -381,6 +396,7 @@ def test_native_owned_backend_closes_once_and_preserves_primary(
         verifier=None,
         policy="clinical-write",
         cache_dir=tmp_path / "native",
+        withhold_credentials=True,
         before_capture=hook,
     )
     rec = jit.recording(x="synthetic")
@@ -388,6 +404,7 @@ def test_native_owned_backend_closes_once_and_preserves_primary(
         monkeypatch.setattr(type(rec), "_finish", lambda *_: None)
     with pytest.raises(type(primary)) as caught:
         with rec:
+            assert rec._session.withheld_inputs == {"x": "synthetic"}
             events.append("actor")
             raise primary
     assert caught.value is primary
@@ -408,7 +425,7 @@ def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(
     def close():
         raise cleanup
 
-    class Session:
+    class Session(_CredentialInputSession):
         def __init__(self, *args, **kwargs):
             pass
 
@@ -427,9 +444,10 @@ def test_cleanup_failure_cannot_be_converted_to_a_completed_capture(
     jit = compile_agent(
         actor,
         task=TaskSignature("cleanup.test", "do {x}", {"x": str}),
+        withhold_credentials=True,
         app=SurfaceApp(
             {"kind": "windows", "agent_url": "http://127.0.0.1:1"},
-            open_backend=lambda _: SimpleNamespace(close=close),
+            open_backend=lambda _: _ObservedOrdinaryBackend(close=close),
         ),
         verifier=None,
         policy="clinical-write",
@@ -447,7 +465,7 @@ def test_actor_primary_survives_halt_and_all_cleanup_failures(
     events = []
     primary = Cancelled() if cancel else RuntimeError("actor primary")
 
-    class Session:
+    class Session(_CredentialInputSession):
         def __init__(self, *args, **kwargs):
             pass
 
@@ -470,9 +488,10 @@ def test_actor_primary_survives_halt_and_all_cleanup_failures(
     jit = compile_agent(
         SimpleNamespace(dialect="generic", requires_model_key=False),
         task=TaskSignature("primary.test", "do {x}", {"x": str}),
+        withhold_credentials=True,
         app=SurfaceApp(
             {"kind": "windows", "agent_url": "http://127.0.0.1:1"},
-            open_backend=lambda _: SimpleNamespace(close=backend_close),
+            open_backend=lambda _: _ObservedOrdinaryBackend(close=backend_close),
         ),
         verifier=None,
         policy="clinical-write",
@@ -481,6 +500,7 @@ def test_actor_primary_survives_halt_and_all_cleanup_failures(
     recording = jit.recording(x="synthetic")
     with pytest.raises(type(primary)) as caught:
         with recording:
+            assert recording._session.withheld_inputs == {"x": "synthetic"}
             recording.dispatcher.on_close(dispatcher_close)
             raise primary
     assert caught.value is primary

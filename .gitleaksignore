@@ -195,3 +195,8 @@ ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_arti
 # PR #2299: the literal GitLab-shaped string is explicitly SYNTHETIC-CREDENTIAL
 # in the auth-reference refusal matrix. This exact historical test finding only.
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
+
+# PR #2294: deliberately synthetic sign-in sentinel in the original e2e commit.
+# No real account uses it. This exact historical finding alone is excluded;
+# a new commit, path, rule or line still scans normally.
+4f919d5a2267cae1e8668d4a0aed3d1b0291f22a:packages/flow/tests/e2e/test_wrap_sign_in_e2e.py:generic-api-key:40
