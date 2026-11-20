@@ -3982,134 +3982,15 @@ class Workflow(BaseModel):
           structural validation then run on the decrypted content exactly as for
           a plaintext bundle.
         """
-        bundle = Path(bundle_dir)
-        from openadapt_flow import bundle_validation as _bv
-        from openadapt_flow import sealed_set as _sealed
+        from openadapt_flow import bundle_persistence as _persistence
 
-        encrypted_path = bundle / "workflow.json.enc"
-        plaintext_path = bundle / "workflow.json"
-        sealed_assets: Optional[dict[str, bytes]] = None
-        bundle_encrypted = encrypted_path.is_file()
-        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
-            # A sealed set: verify the whole file set, then decrypt the
-            # workflow and every crop in memory.
-            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
-            bundle_encrypted = True
-            raw = _bv.parse_bundle_json(reader.read_bytes("workflow.json"))
-            sealed_assets = {
-                rel: reader.read_bytes(rel) for rel in reader.files("templates/")
-            }
-        elif bundle_encrypted:
-            from openadapt_flow import crypto as _crypto
-
-            decrypted = _crypto.decrypt_bytes(
-                encrypted_path.read_bytes(), key, aad=_crypto.BUNDLE_AAD
-            )
-            raw = _bv.parse_bundle_json(decrypted)
-        else:
-            raw = _bv.parse_bundle_json(plaintext_path.read_bytes())
-        _bv.bundle_schema_version(raw)
-        try:
-            check_workflow_input(
-                raw, default_version=1, allowed_fields=cls.model_fields
-            )
-        except ValueError:
-            raise _bv.BundleSchemaError(
-                "unsupported workflow authoring contract"
-            ) from None
-        # Verify the original canonical representation before upgrading or
-        # constructing today's model. Embedded manifest precedence is unchanged.
-        persisted = raw.get("manifest")
-        if persisted is None:
-            sidecar = bundle / "manifest.json"
-            if sidecar.is_file():
-                persisted = _bv.parse_bundle_json(sidecar.read_text(encoding="utf-8"))
-        stored = None
-        original_payload = None
-        if persisted is not None:
-            _bv.bundle_schema_version(persisted)
-            if 3 in (
-                raw.get("schema_version", 1),
-                persisted.get("schema_version", 1),
-            ) and raw.get("schema_version", 1) != persisted.get("schema_version", 1):
-                raise _bv.BundleSchemaError(
-                    "workflow and manifest schema versions differ"
-                )
-            stored = BundleManifest.model_validate(persisted)
-            if stored.content_digest:
-                original_payload = (
-                    _bv.verify_original_content(raw, stored)
-                    if verify_integrity
-                    else _bv.source_canonical_payload(raw, stored.file_hashes)
-                )
-        if verify_integrity and (stored is None or not stored.content_digest):
-            raise _bv.BundleIntegrityError("bundle has no persisted integrity seal")
-        wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
-        wf._unverified_load = not verify_integrity
-        if stored is not None:
-            wf.manifest = stored
-        if original_payload is not None and stored is not None and verify_integrity:
-            _bv.remember_original_content(
-                wf, original_payload, stored, source_bundle_dir=bundle
-            )
-        if sealed_assets is not None:
-            wf._decrypted_templates = sealed_assets
-        elif bundle_encrypted:
-            # Decrypt the sealed image crops IN MEMORY (fail-loud on wrong key /
-            # tamper, exactly as the workflow.json above). The resolver reads
-            # them via ``decrypted_template``; nothing cleartext lands on disk.
-            wf._decrypted_templates = _decrypt_template_assets(bundle, key)
-
-        if verify_integrity and persisted is not None and wf.manifest is not None:
-            if bundle_encrypted:
-                # On-disk crops are ciphertext, so verify the sealed asset
-                # digests against the decrypted plaintext held in memory.
-                _verify_sealed_template_integrity(
-                    wf, bundle, wf.manifest, wf._decrypted_templates
-                )
-            else:
-                _bv.verify_integrity(wf, bundle, wf.manifest)
-            template = wf.manifest.provenance.governed_authorization_template
-            if template is not None:
-                # Manifest provenance is intentionally outside the content
-                # digest.  Rebuild this derived authority from the sealed
-                # workflow and accepted certification so a replacement
-                # self-consistent template cannot weaken production policy.
-                from openadapt_flow.qualification import (
-                    QualificationError,
-                    build_governed_authorization_template,
-                    record_certified_contract_form,
-                )
-
-                try:
-                    expected_template = build_governed_authorization_template(wf)
-                except QualificationError as exc:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template cannot be reproduced "
-                        "from the sealed certification"
-                    ) from exc
-                if template != expected_template:
-                    raise _bv.BundleIntegrityError(
-                        "governed authorization template does not match the "
-                        "sealed workflow and certification"
-                    )
-                record_certified_contract_form(wf)
-
-        if wf.manifest is None:
-            wf.manifest = _bv.build_manifest(wf, bundle)
-
-        if validate:
-            report = _bv.validate_workflow(wf)
-            report.raise_if(categories=("structure",))
-
-        if not bundle_encrypted and wf.encrypted:
-            # The flag is authoritative only with an encrypted envelope on
-            # disk: a plaintext copy (for example a decrypted upload) that
-            # still says encrypted is plaintext, and loads as plaintext.
-            wf.encrypted = False
-            if wf.manifest is not None:
-                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
-        return wf
+        return _persistence.load_workflow(
+            cls,
+            bundle_dir,
+            validate=validate,
+            verify_integrity=verify_integrity,
+            key=key,
+        )
 
     def stamp_certification(
         self,

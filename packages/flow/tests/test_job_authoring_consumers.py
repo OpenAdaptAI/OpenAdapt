@@ -14,7 +14,7 @@ from pydantic import TypeAdapter
 from pydantic_core import PydanticSerializationError
 
 from openadapt_flow import bundle_validation as bundles
-from openadapt_flow import crypto
+from openadapt_flow import crypto, sealed_set
 from openadapt_flow.ir import TEMPLATE_AAD, ActionKind, Anchor, Step, Workflow
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
@@ -50,6 +50,30 @@ def test_verified_source_helpers_handle_actual_plain_and_encrypted_bundles(
     assert loaded.manifest.schema_version == 3
     assert verified_job_authoring(loaded, tmp_path / "source").model_dump() == BINDING
     assert loaded.manifest.provenance.certified is False
+
+
+@pytest.mark.parametrize("storage", ["plain", "encrypted", "sealed"])
+def test_load_facade_preserves_actual_model_class_and_source_authority(
+    tmp_path, storage
+):
+    class SupportedWorkflow(Workflow):
+        pass
+
+    source = tmp_path / "source"
+    workflow = SupportedWorkflow.model_validate(authored().model_dump())
+    key = "synthetic load facade key" if storage != "plain" else None
+    if storage == "sealed":
+        with sealed_set.writing(source, "bundle", key):
+            workflow.save(source, key=key)
+    else:
+        workflow.save(source, encrypt=storage == "encrypted", key=key)
+    loaded = SupportedWorkflow.load(source, key=key)
+    assert type(loaded) is SupportedWorkflow
+    assert verified_job_authoring(loaded, source).model_dump() == BINDING
+    inspected = SupportedWorkflow.load(source, key=key, verify_integrity=False)
+    assert type(inspected) is SupportedWorkflow
+    with pytest.raises(JobAuthoringError, match="verified bundle load"):
+        verified_job_authoring(inspected, source)
 
 
 @pytest.mark.parametrize("encrypt", [False, True])
