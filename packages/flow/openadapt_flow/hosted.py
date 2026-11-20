@@ -1346,10 +1346,10 @@ def push(
         approve_derivative,
         approved_archive_path,
         build_ingest_manifest,
+        ensure_current_derivative,
         load_and_verify_derivative,
         load_valid_approval,
         read_approved_archive,
-        sanitize_artifact,
         source_tree_sha256,
     )
 
@@ -1370,14 +1370,7 @@ def push(
             stamp = source_tree_sha256(src)[:12]
             derivative = root / f"artifact-{stamp}"
         try:
-            if not derivative.exists():
-                sanitize_artifact(src, derivative, kind=actual_kind)
-            else:
-                existing = load_and_verify_derivative(derivative)
-                if existing.get("source_tree_sha256") != source_tree_sha256(src):
-                    raise SanitizationError(
-                        "Existing derivative does not match the current source tree"
-                    )
+            derivative, _ = ensure_current_derivative(src, derivative, kind=actual_kind)
             if _auto_approve_enabled(auto_approve):
                 approve_derivative(
                     derivative,
