@@ -163,10 +163,29 @@ def find_chrome(platform: str = sys.platform, env: dict[str, str] | None = None)
     )
 
 
+def windows_elevated() -> bool:
+    """Whether this Windows process runs with administrator rights.
+
+    An elevated process can't keep a handle on Chrome: Chrome restarts itself
+    without administrator rights through Explorer and the process Desktop
+    started exits, so the window can't be verified or closed by its handle.
+    """
+
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 - unknown counts as elevated (fail closed)
+        return True
+
+
 # --------------------------------------------------------------- lock checks
 
 
 def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # os.kill on Windows terminates the process; never probe with it.
+        return True
     if pid <= 0:
         return False
     try:
@@ -337,6 +356,7 @@ class ChromeProfileService:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         start_timeout: float = _START_TIMEOUT_S,
+        elevated: Callable[[], bool] | None = None,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.root = self.data_dir / "chrome-profiles"
@@ -349,6 +369,7 @@ class ChromeProfileService:
         self._clock = clock
         self._sleep = sleep
         self._start_timeout = start_timeout
+        self._elevated = elevated or (windows_elevated if platform == "win32" else (lambda: False))
         self._owned: dict[str, _Owned] = {}
         self._lock = threading.RLock()
 
@@ -533,6 +554,13 @@ class ChromeProfileService:
                     "profile_in_use",
                     "This profile is already open in a Chrome window that OpenAdapt "
                     "didn't open. Close that window and try again. Nothing was attached.",
+                )
+            if self._elevated():
+                raise ChromeProfileError(
+                    "elevated_refused",
+                    "OpenAdapt is running as administrator, so Chrome would restart "
+                    "itself in a window OpenAdapt can't verify. Start OpenAdapt "
+                    "without administrator rights and try again. Nothing was opened.",
                 )
             chrome = self._find()
             stale = user_data / _DEVTOOLS_FILE

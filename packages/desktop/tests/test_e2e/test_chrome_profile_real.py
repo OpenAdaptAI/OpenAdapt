@@ -27,7 +27,10 @@ from openadapt_desktop.chrome_profile import (
     ChromeProfileService,
     find_chrome,
     notice,
+    windows_elevated,
 )
+
+ELEVATED = sys.platform == "win32" and windows_elevated()
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("OPENADAPT_REAL_CHROME") != "1",
@@ -96,6 +99,22 @@ def _page_text(endpoint: str, origin: str) -> str:
             browser.close()
 
 
+@pytest.mark.skipif(not ELEVATED, reason="only an elevated Windows process is refused")
+def test_an_elevated_windows_desktop_refuses_real_chrome(tmp_path: Path) -> None:
+    find_chrome()
+    service = ChromeProfileService(tmp_path / "data")
+    profile_id = service.create("Synthetic", notice()["sha256"], True)["profile_id"]
+    with pytest.raises(ChromeProfileError) as err:
+        service.open(profile_id, "https://example.invalid/")
+    assert err.value.code == "elevated_refused"
+    assert not (service.root / profile_id / "user-data" / "lockfile").exists()
+
+
+@pytest.mark.skipif(
+    ELEVATED,
+    reason="an elevated Windows process is refused (GitHub's Windows runner); "
+    "the Windows lab runs this without administrator rights",
+)
 def test_sign_in_persists_and_desktop_closes_only_its_window(tmp_path: Path, portal: str) -> None:
     find_chrome()  # the job installs nothing; Chrome must already be there
     service = ChromeProfileService(tmp_path / "data")

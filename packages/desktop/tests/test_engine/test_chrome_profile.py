@@ -213,6 +213,7 @@ def test_open_refuses_a_bad_url(h: Harness) -> None:
     assert h.spawned == []
 
 
+@pytest.mark.skipif(os.name != "posix", reason="SingletonLock is a POSIX symlink")
 def test_profile_in_use_is_refused_before_launch_mac(h: Harness) -> None:
     profile_id = h.create()
     user_data = h.service.root / profile_id / "user-data"
@@ -223,11 +224,16 @@ def test_profile_in_use_is_refused_before_launch_mac(h: Harness) -> None:
     assert h.spawned == []
 
 
+posix_only = pytest.mark.skipif(os.name != "posix", reason="SingletonLock is a POSIX symlink")
+
+
+@posix_only
 def test_a_stale_lock_from_a_dead_process_is_not_in_use(tmp_path: Path) -> None:
     os.symlink(f"{socket.gethostname()}-999999", tmp_path / "SingletonLock")
     assert cp.profile_in_use(tmp_path, "darwin") is False
 
 
+@posix_only
 def test_a_lock_from_another_host_counts_as_in_use(tmp_path: Path) -> None:
     os.symlink("some-other-host-12", tmp_path / "SingletonLock")
     assert cp.profile_in_use(tmp_path, "darwin") is True
@@ -329,7 +335,7 @@ def test_chrome_candidates_per_platform() -> None:
         "C:/Users/u/AppData/Local/Google/Chrome/Application/chrome.exe",
     ]
     mac = cp.chrome_candidates("darwin", {})
-    assert str(mac[0]) == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    assert mac[0].as_posix() == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
 def test_default_dirs_per_platform() -> None:
@@ -486,3 +492,19 @@ def test_commands_are_window_only() -> None:
 
     reachable = set(socket_server._SOCKET_COMMANDS)
     assert not {c for c in reachable if c.startswith("chrome_profile")}
+
+
+def test_an_elevated_windows_desktop_refuses_before_launch(tmp_path: Path) -> None:
+    h = Harness(tmp_path, platform="win32", elevated=lambda: True)
+    profile_id = h.create()
+    with pytest.raises(ChromeProfileError) as err:
+        h.service.open(profile_id)
+    assert err.value.code == "elevated_refused"
+    assert h.spawned == []
+
+
+def test_unknown_elevation_counts_as_elevated(monkeypatch) -> None:
+    import ctypes
+
+    monkeypatch.delattr(ctypes, "windll", raising=False)
+    assert cp.windows_elevated() is True
