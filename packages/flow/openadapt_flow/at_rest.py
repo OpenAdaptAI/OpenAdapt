@@ -41,6 +41,8 @@ import time
 from pathlib import Path
 from typing import Final, Optional
 
+from openadapt_flow.private_file import open_binary
+
 OPT_OUT_ENV: Final[str] = "OPENADAPT_FLOW_PLAINTEXT_AT_REST"
 MODE_ENV: Final[str] = "OPENADAPT_FLOW_AT_REST"
 LEDGER_NAME: Final[str] = "plaintext-at-rest.jsonl"
@@ -237,7 +239,7 @@ def _record(
             },
             sort_keys=True,
         )
-        fd = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        fd = open_binary(ledger, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             os.write(fd, (line + "\n").encode("utf-8"))
         finally:
@@ -322,7 +324,7 @@ def _local_key(path: Path) -> str:
         # fails if another process got there first: no reader ever sees a
         # half-written key, and no key is ever replaced.
         tmp = path.with_name(f".{KEY_NAME}.{os.getpid()}.{secrets.token_hex(4)}")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        fd = open_binary(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             os.write(fd, (text + "\n").encode("ascii"))
             os.fsync(fd)

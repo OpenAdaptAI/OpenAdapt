@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from openadapt_flow import _browser_readiness, _browser_setup
 from openadapt_flow.agent import browser_teach
 from openadapt_flow.backends import (
@@ -228,7 +227,10 @@ def _environment(
         environment,
         "load_environment",
         lambda _path: SimpleNamespace(
-            manifest=SimpleNamespace(name="synthetic", app=SimpleNamespace(kind="url"))
+            manifest=SimpleNamespace(
+                name="synthetic",
+                app=SimpleNamespace(kind="url", read=None, noise=None, prepare=None),
+            )
         ),
     )
     monkeypatch.setattr(environment, "_driver_in_own_session", lambda: None)
@@ -291,10 +293,14 @@ def test_rl_failed_driver_stop_preserves_owned_supervision(
     assert acquisition.calls.count("launch") == 1
 
 
-def test_rl_navigation_failure_never_publishes_an_episode(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("judge_kind", ["episode", "record"])
+@pytest.mark.parametrize(
+    "failure", ["new-context", "route", "new-page", "page-timeout", "navigate"]
+)
+def test_rl_failed_reset_never_publishes_an_episode(
+    monkeypatch: pytest.MonkeyPatch, failure: str, judge_kind: str
 ) -> None:
-    acquisition = _Acquisition("navigate")
+    acquisition = _Acquisition(failure)
     acquisition.install(monkeypatch)
     env, supervision = _environment(acquisition, monkeypatch)
     from openadapt_flow.rl_env import environment
@@ -303,27 +309,59 @@ def test_rl_navigation_failure_never_publishes_an_episode(
         acquisition.step("close-judge")
         raise RuntimeError("synthetic judge cleanup failure")
 
-    task = SimpleNamespace(verify_text="synthetic", params={}, start_path="/entry")
+    task = SimpleNamespace(
+        verify_text="synthetic",
+        params={},
+        start_path="/entry",
+        grade={"synthetic": "whole-record"} if judge_kind == "record" else None,
+    )
+
+    def record_reader() -> dict[str, Any]:
+        return {}
+
+    noise = {"synthetic": "noise"}
+    if judge_kind == "record":
+        env.env.manifest.app.read = "synthetic:read"
+        env.env.manifest.app.noise = "synthetic:noise"
+    monkeypatch.setattr(
+        environment,
+        "_import",
+        {"synthetic:read": record_reader, "synthetic:noise": lambda: noise}.__getitem__,
+    )
     env.env.task = lambda _task_id: task
     monkeypatch.setattr(env, "_ensure_app", lambda: "https://synthetic.invalid")
     monkeypatch.setattr(env, "_reset_app", lambda _task: None)
     monkeypatch.setattr(environment, "render_verify_config", lambda *_args: {})
     judge = SimpleNamespace(close=close_judge)
-    monkeypatch.setattr(environment, "EpisodeJudge", lambda *_args, **_kwargs: judge)
+    selected_judges = []
+
+    def episode_judge(*_args: Any, **_kwargs: Any) -> Any:
+        selected_judges.append("episode")
+        return judge
+
+    def record_judge(reader: Any, grade: Any, *, noise: Any) -> Any:
+        assert reader is record_reader and grade is task.grade
+        assert noise == {"synthetic": "noise"}
+        selected_judges.append("record")
+        return judge
+
+    monkeypatch.setattr(environment, "EpisodeJudge", episode_judge)
+    monkeypatch.setattr(environment, "RecordJudge", record_judge)
 
     with pytest.raises(_Cancelled) as raised:
         env._reset(task_id="synthetic")
 
     assert raised.value is acquisition.primary
+    context_count = 0 if failure == "new-context" else 2 if failure == "navigate" else 1
     assert acquisition.cleanup == [
-        "close-context",
-        "close-context",
+        *(["close-context"] * context_count),
         "close-browser",
         "stop-driver",
         "close-supervision",
         "close-judge",
     ]
-    assert acquisition.calls.count("navigate") == 1
+    assert selected_judges == [judge_kind]
+    assert acquisition.calls.count("navigate") == (failure == "navigate")
     assert env._task is env._judge is env._page is env._pw is None
     assert env.state.done
     assert supervision == {}

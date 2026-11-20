@@ -43,6 +43,7 @@ from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 
 # Import-light (pydantic only): the effect CONTRACT types double as the
@@ -1493,7 +1494,7 @@ def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
         # O_BINARY: on Windows a plain os.open reads in text mode, turning
         # CRLF into LF, so the bytes hashed wouldn't be the bytes written.
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-        fd = os.open(str(source), flags)
+        fd = open_binary(str(source), flags)
     except OSError as exc:
         raise ValueError(
             f"deployment config {source} can't be opened as a plain file: {exc}"

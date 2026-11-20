@@ -34,6 +34,7 @@ from openadapt_flow.eligibility.client import (
     eligibility_request_sha256,
     parse_271,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.effects.document_hash import DocumentHashVerifier
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -180,7 +181,7 @@ def _write_exclusive(path: Path, payload: bytes) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    fd = os.open(path, flags, 0o600)
+    fd = open_binary(path, flags, 0o600)
     try:
         view = memoryview(payload)
         while view:
@@ -197,7 +198,7 @@ def _read_regular(path: Path) -> bytes:
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    fd = os.open(path, flags)
+    fd = open_binary(path, flags)
     try:
         opened = os.fstat(fd)
         if not stat.S_ISREG(opened.st_mode):
@@ -215,7 +216,7 @@ def _read_regular(path: Path) -> bytes:
 def _fsync_dir(path: Path) -> None:
     if os.name == "nt":
         return
-    fd = os.open(path, os.O_RDONLY)
+    fd = open_binary(path, os.O_RDONLY)
     try:
         os.fsync(fd)
     finally:

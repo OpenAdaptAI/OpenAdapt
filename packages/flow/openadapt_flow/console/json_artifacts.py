@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from openadapt_flow.private_file import open_binary
+
 MAX_ARTIFACT_BYTES = 5 * 1024 * 1024
 MAX_DOCUMENT_NODES = 20_000
 MAX_DOCUMENT_DEPTH = 100
@@ -323,7 +325,7 @@ def _read_bounded(artifact: JsonArtifact) -> bytes:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        fd = os.open(safe, flags)
+        fd = open_binary(safe, flags)
     except OSError as exc:
         raise JsonArtifactError(
             "artifact is no longer available", status_code=404
