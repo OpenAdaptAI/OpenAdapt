@@ -1857,3 +1857,23 @@ def test_readback_auth_declaration_covers_the_runtime_reference_schema():
         path[-1] for path, _shape in declared.fields if path[:2] == ("verifier", "auth")
     }
     assert fields == set(AuthRef.model_fields)
+
+
+def test_auth_reference_shapes_are_not_global_scrubber_exemptions(tmp_path):
+    import yaml
+
+    privacy.set_text_scrubber(AuthSyntaxScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    readback = bundle / "readback/verify.yaml"
+    checks = yaml.safe_load(readback.read_text())
+    checks["extra"] = {"header": "X-Api-Key", "value_env": "NOTES_READER_KEY"}
+    readback.write_text(yaml.safe_dump(checks, sort_keys=False))
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    extra = yaml.safe_load((tmp_path / "sanitized/readback/verify.yaml").read_text())[
+        "extra"
+    ]
+    assert extra == {"header": "<SECRET>", "value_env": "<SECRET>"}
