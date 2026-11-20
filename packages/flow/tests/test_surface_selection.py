@@ -25,7 +25,7 @@ from openadapt_flow.surface_selection import (
     native_surface_for_this_os,
     store_last_surface,
 )
-from tests.browser_readiness import ReadyBrowserMixin
+from tests.browser_readiness import ReadyBrowserMixin, assert_chromium_launch_args
 
 # ---------------------------------------------------------------------------
 # fakes (mirrors test_cli_new_commands)
@@ -48,7 +48,10 @@ class _FakeBrowser(ReadyBrowserMixin):
 
 
 class _FakeChromium:
-    def launch(self, headless=True):
+    name = "chromium"
+
+    def launch(self, headless=True, *, args):
+        assert_chromium_launch_args(args)
         return _FakeBrowser()
 
 

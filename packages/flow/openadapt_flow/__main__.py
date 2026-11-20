@@ -99,6 +99,7 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.vision_hint import vision_hint
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -6278,7 +6279,9 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     """Draft (never approve) an effect-oracle contract from retained evidence."""
     from openadapt_flow.scaffold_verifier import (
         NEXT_COMMANDS_TEMPLATE,
+        begin_verifier_outputs,
         build_record_check,
+        report_draft_fallback,
         write_draft,
     )
 
@@ -6287,8 +6290,22 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         return Path(value) if value else None
 
     out_dir = optional_path("out")
+    source = Path(args.source)
+    # Bind the proof source, refuse a plaintext copy of a sealed input, then
+    # refuse every occupied output directory before either writer runs. A
+    # fresh refusal's proof and TODO draft stay one generation. Fallback
+    # readback uses the check generation from that plan. An observed or
+    # probed refusal there is the same result and exits 2.
+    check_generation, draft_generation = begin_verifier_outputs(
+        source,
+        out_dir,
+        optional_path("recording"),
+        bundle=optional_path("bundle"),
+        prove=getattr(args, "prove", None),
+        proof_source=getattr(args, "_record_check_proof_source", None),
+    )
     built = build_record_check(
-        Path(args.source),
+        source,
         out_dir,
         db=optional_path("db"),
         verifier=optional_path("verifier"),
@@ -6300,42 +6317,25 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         fault_gate=bool(getattr(args, "fault_gate", False)),
         probe_reads=bool(getattr(args, "probe_reads", False)),
         probe_base=getattr(args, "probe_base", None),
+        generation=check_generation,
     )
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
-    if getattr(args, "probe_reads", False):
-        import json as _json
-
-        from openadapt_flow import sealed_set as _sealed_set
-        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
-
-        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
-        status, reason = "unavailable", ""
-        try:
-            data = _json.loads(_sealed_set.read_text(found))
-            status, reason = str(data.get("status")), str(data.get("reason") or "")
-        except (OSError, ValueError, _sealed_set.SealedSetError):
-            pass
-        if status == "refused":
-            print(
-                "Read discovery: REFUSED. A probed read confirmed the written "
-                f"values but can't see the whole save, so no check was written: "
-                f"{reason} ({found})."
-            )
-        else:
-            print(
-                "Read discovery: UNAVAILABLE. No probed read confirmed the "
-                "written values, so no read was proposed; a person must name "
-                f"one ({found})."
-            )
-    out, count = write_draft(Path(args.source), out_dir)
-    print(
-        "No read in the recording returns the saved record (no network capture, "
-        "--db or --verifier), so this is a TODO draft."
+    refusal_reason = report_draft_fallback(
+        check_generation,
+        probe_reads=bool(getattr(args, "probe_reads", False)),
     )
+    out, count = write_draft(source, out_dir, generation=draft_generation)
+    if refusal_reason is not None:
+        print(f"Recorded read REFUSED: {refusal_reason}. This is a TODO draft.")
+    else:
+        print(
+            "No read in the recording returns the saved record (no network capture, "
+            "--db or --verifier), so this is a TODO draft."
+        )
     print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
-    return 0
+    return 2 if refusal_reason is not None else 0
 
 
 def _cmd_explain(args: argparse.Namespace) -> int:
@@ -6640,7 +6640,7 @@ def _read_qualification_case_inputs(path: Path, *, workflow):
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise ValueError(
             "qualification case inputs could not be opened safely"
@@ -6723,7 +6723,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         except OSError as exc:
             raise ValueError(
                 "qualification attempt ledger is not a private directory"
@@ -6811,7 +6811,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(marker, flags, 0o600)
+            descriptor = open_binary(marker, flags, 0o600)
         except FileExistsError:
             print(
                 "run REFUSED: this qualification case attempt already started in this "
@@ -6840,7 +6840,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     directory_flags |= os.O_DIRECTORY
                 if hasattr(os, "O_NOFOLLOW"):
                     directory_flags |= os.O_NOFOLLOW
-                directory = os.open(ledger_dir, directory_flags)
+                directory = open_binary(ledger_dir, directory_flags)
                 try:
                     os.fsync(directory)
                 finally:

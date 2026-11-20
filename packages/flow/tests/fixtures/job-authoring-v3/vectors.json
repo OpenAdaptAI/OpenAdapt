@@ -1,0 +1,138 @@
+[
+  {
+    "case": "minimal",
+    "workflow": {
+      "schema_version": 3,
+      "name": "synthetic bound program",
+      "job_authoring": {
+        "schema": "openadapt.job-authoring-binding/v1",
+        "job_id": "11111111-1111-4111-8111-111111111111",
+        "org_id": "22222222-2222-4222-8222-222222222222",
+        "owner_principal_id": "33333333-3333-4333-8333-333333333333",
+        "intent_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "recording_id": null,
+      "contains_phi": false,
+      "phi_scrubbed": false,
+      "encrypted": false,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "viewport": null,
+      "params": {
+        "job_authoring": "ordinary semantic user data"
+      },
+      "param_specs": {},
+      "secret_params": [],
+      "steps": [],
+      "interstitials": [],
+      "program": null,
+      "subflows": {},
+      "data_sources": {}
+    },
+    "files": {},
+    "canonical_utf8": "{\"files\":{},\"workflow\":{\"contains_phi\":false,\"created_at\":\"2026-01-01T00:00:00+00:00\",\"data_sources\":{},\"encrypted\":false,\"interstitials\":[],\"job_authoring\":{\"intent_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"job_id\":\"11111111-1111-4111-8111-111111111111\",\"org_id\":\"22222222-2222-4222-8222-222222222222\",\"owner_principal_id\":\"33333333-3333-4333-8333-333333333333\",\"schema\":\"openadapt.job-authoring-binding/v1\"},\"name\":\"synthetic bound program\",\"param_specs\":{},\"params\":{\"job_authoring\":\"ordinary semantic user data\"},\"phi_scrubbed\":false,\"program\":null,\"recording_id\":null,\"schema_version\":3,\"secret_params\":[],\"steps\":[],\"subflows\":{},\"viewport\":null}}",
+    "content_digest": "26cee2ea4ed65e69470561f849787b776deffe104cb8912a8666869bdf0a6b73",
+    "workflow_json": "{\"schema_version\":3,\"name\":\"synthetic bound program\",\"job_authoring\":{\"schema\":\"openadapt.job-authoring-binding/v1\",\"job_id\":\"11111111-1111-4111-8111-111111111111\",\"org_id\":\"22222222-2222-4222-8222-222222222222\",\"owner_principal_id\":\"33333333-3333-4333-8333-333333333333\",\"intent_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"recording_id\":null,\"contains_phi\":false,\"phi_scrubbed\":false,\"encrypted\":false,\"created_at\":\"2026-01-01T00:00:00+00:00\",\"viewport\":null,\"params\":{\"job_authoring\":\"ordinary semantic user data\"},\"param_specs\":{},\"secret_params\":[],\"steps\":[],\"interstitials\":[],\"program\":null,\"subflows\":{},\"data_sources\":{},\"manifest\":null}"
+  },
+  {
+    "case": "numeric-unicode-payload",
+    "workflow": {
+      "schema_version": 3,
+      "name": "Synthetic Unicode é / 😀",
+      "job_authoring": {
+        "schema": "openadapt.job-authoring-binding/v1",
+        "job_id": "11111111-1111-4111-8111-111111111111",
+        "org_id": "22222222-2222-4222-8222-222222222222",
+        "owner_principal_id": "33333333-3333-4333-8333-333333333333",
+        "intent_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "recording_id": null,
+      "contains_phi": false,
+      "phi_scrubbed": false,
+      "encrypted": false,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "viewport": null,
+      "params": {
+        "job_authoring": "ordinary semantic user data"
+      },
+      "param_specs": {},
+      "secret_params": [],
+      "steps": [
+        {
+          "id": "read",
+          "intent": "synthetic read-only numeric fixture",
+          "action": "wait",
+          "anchor": null,
+          "text": null,
+          "param": null,
+          "secret": false,
+          "field_label": null,
+          "selection_commit_key": null,
+          "selection_region": null,
+          "key": null,
+          "modifiers": [],
+          "drag_end_anchor": null,
+          "scroll_dx": null,
+          "scroll_dy": null,
+          "expect": [],
+          "effects": [],
+          "api_binding": {
+            "kind": "rest",
+            "on_unavailable": "gui",
+            "method": "GET",
+            "url_template": "/records",
+            "body_template": {
+              "integer": 1,
+              "float": 1.0,
+              "negative_zero": -0.0,
+              "small": 1e-07,
+              "large": 1e+20,
+              "unicode_keys": {
+                "😀": "astral",
+                "": "BMP"
+              },
+              "job_authoring": {
+                "job_id": "ordinary user payload",
+                "schema": "data"
+              }
+            },
+            "query": {},
+            "headers": {},
+            "expected_status": [],
+            "timeout_s": 5.0,
+            "effects": [],
+            "identity": [],
+            "web_form": null,
+            "admission": null
+          },
+          "risk": "reversible",
+          "risk_explanation": null,
+          "risk_review_required": false,
+          "wait_until": null,
+          "guard": null,
+          "read": null,
+          "read_gate": null,
+          "surface": null,
+          "opens": [],
+          "surface_origin": null,
+          "closes_surface": false,
+          "dialog": null,
+          "timeout_s": 10.0,
+          "identity_armed": null,
+          "identity_unarmed_reason": null,
+          "identifier_crop_missing_reason": null,
+          "hover": null,
+          "submit_binding": null,
+          "submit_binding_unbound_reason": null
+        }
+      ],
+      "interstitials": [],
+      "program": null,
+      "subflows": {},
+      "data_sources": {}
+    },
+    "files": {},
+    "canonical_utf8": "{\"files\":{},\"workflow\":{\"contains_phi\":false,\"created_at\":\"2026-01-01T00:00:00+00:00\",\"data_sources\":{},\"encrypted\":false,\"interstitials\":[],\"job_authoring\":{\"intent_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"job_id\":\"11111111-1111-4111-8111-111111111111\",\"org_id\":\"22222222-2222-4222-8222-222222222222\",\"owner_principal_id\":\"33333333-3333-4333-8333-333333333333\",\"schema\":\"openadapt.job-authoring-binding/v1\"},\"name\":\"Synthetic Unicode é / 😀\",\"param_specs\":{},\"params\":{\"job_authoring\":\"ordinary semantic user data\"},\"phi_scrubbed\":false,\"program\":null,\"recording_id\":null,\"schema_version\":3,\"secret_params\":[],\"steps\":[{\"action\":\"wait\",\"anchor\":null,\"api_binding\":{\"admission\":null,\"body_template\":{\"float\":1.0,\"integer\":1,\"job_authoring\":{\"job_id\":\"ordinary user payload\",\"schema\":\"data\"},\"large\":1e+20,\"negative_zero\":-0.0,\"small\":1e-07,\"unicode_keys\":{\"\":\"BMP\",\"😀\":\"astral\"}},\"effects\":[],\"expected_status\":[],\"headers\":{},\"identity\":[],\"kind\":\"rest\",\"method\":\"GET\",\"on_unavailable\":\"gui\",\"query\":{},\"timeout_s\":5.0,\"url_template\":\"/records\",\"web_form\":null},\"closes_surface\":false,\"dialog\":null,\"drag_end_anchor\":null,\"effects\":[],\"expect\":[],\"field_label\":null,\"guard\":null,\"hover\":null,\"id\":\"read\",\"identifier_crop_missing_reason\":null,\"identity_armed\":null,\"identity_unarmed_reason\":null,\"intent\":\"synthetic read-only numeric fixture\",\"key\":null,\"modifiers\":[],\"opens\":[],\"param\":null,\"read\":null,\"read_gate\":null,\"risk\":\"reversible\",\"risk_explanation\":null,\"risk_review_required\":false,\"scroll_dx\":null,\"scroll_dy\":null,\"secret\":false,\"selection_commit_key\":null,\"selection_region\":null,\"submit_binding\":null,\"submit_binding_unbound_reason\":null,\"surface\":null,\"surface_origin\":null,\"text\":null,\"timeout_s\":10.0,\"wait_until\":null}],\"subflows\":{},\"viewport\":null}}",
+    "content_digest": "f14ae0a1fc257dd8d4d7911280b8edb163cc0f4ba72038cd029942bf17acdd9e",
+    "workflow_json": "{\"schema_version\":3,\"name\":\"Synthetic Unicode é / 😀\",\"job_authoring\":{\"schema\":\"openadapt.job-authoring-binding/v1\",\"job_id\":\"11111111-1111-4111-8111-111111111111\",\"org_id\":\"22222222-2222-4222-8222-222222222222\",\"owner_principal_id\":\"33333333-3333-4333-8333-333333333333\",\"intent_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"recording_id\":null,\"contains_phi\":false,\"phi_scrubbed\":false,\"encrypted\":false,\"created_at\":\"2026-01-01T00:00:00+00:00\",\"viewport\":null,\"params\":{\"job_authoring\":\"ordinary semantic user data\"},\"param_specs\":{},\"secret_params\":[],\"steps\":[{\"id\":\"read\",\"intent\":\"synthetic read-only numeric fixture\",\"action\":\"wait\",\"anchor\":null,\"text\":null,\"param\":null,\"secret\":false,\"field_label\":null,\"selection_commit_key\":null,\"selection_region\":null,\"key\":null,\"modifiers\":[],\"drag_end_anchor\":null,\"scroll_dx\":null,\"scroll_dy\":null,\"expect\":[],\"effects\":[],\"api_binding\":{\"kind\":\"rest\",\"on_unavailable\":\"gui\",\"method\":\"GET\",\"url_template\":\"/records\",\"body_template\":{\"integer\":1,\"float\":1.0,\"negative_zero\":-0.0,\"small\":1e-07,\"large\":1e+20,\"unicode_keys\":{\"😀\":\"astral\",\"\":\"BMP\"},\"job_authoring\":{\"job_id\":\"ordinary user payload\",\"schema\":\"data\"}},\"query\":{},\"headers\":{},\"expected_status\":[],\"timeout_s\":5.0,\"effects\":[],\"identity\":[],\"web_form\":null,\"admission\":null},\"risk\":\"reversible\",\"risk_explanation\":null,\"risk_review_required\":false,\"wait_until\":null,\"guard\":null,\"read\":null,\"read_gate\":null,\"surface\":null,\"opens\":[],\"surface_origin\":null,\"closes_surface\":false,\"dialog\":null,\"timeout_s\":10.0,\"identity_armed\":null,\"identity_unarmed_reason\":null,\"identifier_crop_missing_reason\":null,\"hover\":null,\"submit_binding\":null,\"submit_binding_unbound_reason\":null}],\"interstitials\":[],\"program\":null,\"subflows\":{},\"data_sources\":{},\"manifest\":null}"
+  }
+]

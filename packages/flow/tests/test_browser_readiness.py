@@ -181,6 +181,29 @@ def test_failed_rendering_never_retries_a_launch_or_changes_arguments(
     assert browser.closed
 
 
+@pytest.mark.parametrize("name", ["chromium", "firefox", "webkit"])
+def test_direct_launch_applies_only_chromium_keychain_args(name: str) -> None:
+    browser = Browser()
+    calls: list[dict[str, Any]] = []
+
+    def launch(**options: Any) -> Browser:
+        calls.append(options)
+        return browser
+
+    launcher = SimpleNamespace(name=name, launch=launch)
+    caller_args = ["--synthetic-option"]
+    original = {"headless": True, "executable_path": "/synthetic/browser"}
+    launched = readiness.launch_rendering_ready(launcher, **original, args=caller_args)
+    assert launched is browser
+    expected = ["--synthetic-option"]
+    if name == "chromium":
+        expected += ["--use-mock-keychain", "--password-store=basic"]
+    assert calls == [{**original, "args": expected}]
+    assert caller_args == ["--synthetic-option"]
+    assert len(browser.contexts) == 1 and browser.contexts[0].closed
+    assert not browser.closed
+
+
 def _unchecked_launches(source: str) -> list[int]:
     """Inspect launch references as well as calls, including dynamic aliases.
 

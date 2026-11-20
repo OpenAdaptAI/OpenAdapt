@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib
 import json
 import subprocess
+from contextlib import ExitStack, suppress
 from typing import Any, Callable, Mapping, Optional
 
 from openadapt_flow.qualify.config import (
@@ -51,39 +52,39 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
 
     def open_session() -> tuple[Any, Callable[[], None]]:
         from openadapt_flow._browser_setup import ensure_chromium_installed
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+        from openadapt_flow.backends.playwright_backend import (
+            PlaywrightBackend,
+            prepare_ws_guard,
+        )
 
         ensure_chromium_installed()
         from playwright.sync_api import sync_playwright
 
+        resources = ExitStack()
         pw = sync_playwright().start()
+        resources.callback(pw.stop)
         try:
             from openadapt_flow._browser_readiness import launch_rendering_ready
 
             browser = launch_rendering_ready(pw.chromium, headless=app.headless)
+            resources.callback(browser.close)
             context = browser.new_context(
                 viewport={"width": app.viewport[0], "height": app.viewport[1]},
                 device_scale_factor=1,
                 storage_state=storage_state,
                 service_workers="block",
             )
+            resources.callback(context.close)
             page = context.new_page()
-            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
-
             # Guard the page's WebSockets from its first document (wire check).
             prepare_ws_guard(page)
             page.goto(app.entry_url or app.url)
+            backend = PlaywrightBackend(page)
         except BaseException:
-            pw.stop()
+            with suppress(BaseException):
+                resources.close()
             raise
-
-        def close() -> None:
-            try:
-                browser.close()
-            finally:
-                pw.stop()
-
-        return PlaywrightBackend(page), close
+        return backend, resources.close
 
     return open_session
 

@@ -1,9 +1,9 @@
 # openadapt-capture
 
-[![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml)
+[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/LICENSE)
 
 Record what a person does on a Windows or macOS desktop, then read it back in
 Python. Capture saves mouse clicks, drags, scrolls, keystrokes, and screen
@@ -97,9 +97,11 @@ with Recorder("./my-capture", task_description="Rename a file") as recorder:
 
 To record one window instead of the whole desktop, pass
 `window={"owner": "Parallels", "title": None}` (substring match), or use
-`capture record --window-owner Parallels`. Coordinates are then in that
-window's own pixels, which is what remote-desktop clients such as RDP and
-Citrix need. Details: [docs/WINDOW_CAPTURE.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/WINDOW_CAPTURE.md).
+`capture record --window-owner Parallels`. After the window is chosen,
+Capture pins it by window id, process id, and process start time, so a
+title change such as a browser navigation does not retarget the recording.
+Coordinates are then in that window's own pixels, which is what
+remote-desktop clients such as RDP and Citrix need. Details: [docs/WINDOW_CAPTURE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/WINDOW_CAPTURE.md).
 
 To control a running recording from another process:
 
@@ -126,7 +128,7 @@ handoff = recorder.begin_authentication(
 recorder.end_authentication(handoff, outcome="completed")
 ```
 
-See [docs/AUTHENTICATION_HANDOFF.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/AUTHENTICATION_HANDOFF.md).
+See [docs/AUTHENTICATION_HANDOFF.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/AUTHENTICATION_HANDOFF.md).
 
 ## Use it with OpenAdapt
 
@@ -141,7 +143,7 @@ openadapt flow compile recording --out bundle --name rename-file
 ```
 
 Other platforms, replay, and remote desktops are covered in the
-[desktop recording guide](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/desktop/RECORDING.md).
+[desktop recording guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/desktop/RECORDING.md).
 The compiler accepts left and right clicks, left-button drags, typed text,
 named keys, key combinations, and scrolling. It rejects a recording that
 contains anything else, such as a middle click.
@@ -235,10 +237,10 @@ and is cleared, with its key destroyed, at least every 24 hours and when
 shadow mode stops. OpenAdapt never sends shadow mode data off the computer,
 but OS backup, sync, and endpoint security tools can still copy local files.
 See
-[docs/SHADOW_MINING.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/SHADOW_MINING.md).
+[docs/SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md).
 
 How Capture handles sensitive data, its licensing boundaries, and how releases
-are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/COMPLIANCE.md).
+are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/COMPLIANCE.md).
 
 ## Limits
 
@@ -248,7 +250,7 @@ are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI
   Wayland. It saves the text of a key only when an application receives the
   key. After a click or key that no application receives (for example,
   typing with no window focused), the rest of that recording saves each
-  key's code but not its text. `scripts/linux_xvfb_quickstart.sh` runs the
+  key's code but not its text. [`scripts/linux_xvfb_quickstart.sh`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/scripts/linux_xvfb_quickstart.sh) runs the
   quick start on Linux in a container.
 - Accessibility data appears only where the application exposes it. Across a
   remote-desktop connection, Capture sees pixels only.
@@ -259,9 +261,9 @@ are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI
   `stop_recording`), authentication handoffs, `action.after_screenshot`, and
   the `capture-*.json` files. If `pip install --upgrade openadapt-capture`
   gives you an earlier version, install from GitHub:
-  `pip install "git+https://github.com/OpenAdaptAI/openadapt-capture"`.
+  `pip install "git+https://github.com/OpenAdaptAI/OpenAdapt.git#subdirectory=packages/capture"`.
 - For web apps, use OpenAdapt's browser recorder. The Chrome extension in
-  [`experimental/`](https://github.com/OpenAdaptAI/openadapt-capture/tree/main/experimental) is an unfinished prototype and isn't
+  [`experimental/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture/experimental) is an unfinished prototype and isn't
   part of the package.
 
 ## Extras
@@ -279,9 +281,12 @@ extras add optional features:
 | `privacy` | `openadapt-privacy`, which `capture share send` needs to scrub a recording |
 | `share` | `capture share`, using Magic Wormhole |
 | `linux` | Accessibility observation on Linux (AT-SPI) |
-| `all` | All of the above |
+| `shadow` | Shadow-mode pattern mining (off by default; see the Privacy section). Not included in `all`. |
+| `all` | Audio, plot, profile, transcription, privacy, share, and linux |
 
 ## Development
+
+This package lives in [`packages/capture`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) in the OpenAdapt monorepo. From that directory:
 
 ```bash
 uv sync --extra dev
@@ -295,8 +300,8 @@ operating system permissions above:
 uv run pytest -m slow
 ```
 
-[docs/DESIGN.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/DESIGN.md) describes the recording pipeline.
+[docs/DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/DESIGN.md) describes the recording pipeline.
 
 ## License
 
-[MIT](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/LICENSE)
+[MIT](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/LICENSE)

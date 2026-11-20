@@ -64,6 +64,7 @@ from openadapt_flow.ir import (
     StepResult,
     SurfaceObservation,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -538,7 +539,7 @@ class CheckpointStore:
         """Persist one directory-entry update where the platform supports it."""
 
         try:
-            descriptor = os.open(path, os.O_RDONLY)
+            descriptor = open_binary(path, os.O_RDONLY)
         except OSError:
             return
         try:
@@ -556,7 +557,7 @@ class CheckpointStore:
         temporary = path.with_name(
             f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
         )
-        descriptor = os.open(
+        descriptor = open_binary(
             temporary,
             os.O_CREAT | os.O_EXCL | os.O_WRONLY,
             0o600,
@@ -684,7 +685,7 @@ class CheckpointStore:
 
         self.run_dir.mkdir(parents=True, exist_ok=True)
         path = self.run_dir / STATE_LOCK_FILENAME
-        descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        descriptor = open_binary(path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
             if os.name == "nt":
                 import msvcrt
@@ -801,7 +802,7 @@ class CheckpointStore:
             separators=(",", ":"),
         ).encode("utf-8")
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 claim,
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 0o600,
