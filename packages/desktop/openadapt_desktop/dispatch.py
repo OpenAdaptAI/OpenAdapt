@@ -272,6 +272,7 @@ class EngineDispatcher:
         # Shadow mode: built on first use, never from config or a remote
         # policy. Its commands are served on the Tauri window wire only.
         self._shadow: Any = None
+        self._chrome_profiles: Any = None
         self._shadow_resumed = False
         self.services.live_tap_provider = self._shadow_live_tap
         self._handlers: dict[str, Callable[..., dict | None]] = {}
@@ -436,6 +437,15 @@ class EngineDispatcher:
             "shadow_scan": self.shadow_scan,
             # Unencrypted patient data on this computer (Flow's ledger).
             "at_rest_status": self.at_rest_status,
+            # Desktop-managed Chrome profiles a person opted in to (window wire
+            # only; neither the tray nor the local agent socket lists these).
+            "chrome_profile_notice": self.chrome_profile_notice,
+            "chrome_profile_list": self.chrome_profile_list,
+            "chrome_profile_create": self.chrome_profile_create,
+            "chrome_profile_acknowledge": self.chrome_profile_acknowledge,
+            "chrome_profile_open": self.chrome_profile_open,
+            "chrome_profile_close": self.chrome_profile_close,
+            "chrome_profile_revoke": self.chrome_profile_revoke,
         }
 
     # ------------------------------------------------------- shadow mode
@@ -483,6 +493,82 @@ class EngineDispatcher:
     def shadow_unpause(self, **params: Any) -> dict:
         """Resume shadow mode recording after a pause."""
         return self.shadow.unpause()
+
+    # ------------------------------------------------- Chrome profiles
+
+    @property
+    def chrome_profiles(self) -> Any:
+        if self._chrome_profiles is None:
+            from openadapt_desktop.chrome_profile import ChromeProfileService
+
+            self._chrome_profiles = ChromeProfileService(self.config.data_dir)
+        return self._chrome_profiles
+
+    def _chrome_profile_call(self, action: Callable[[], dict]) -> dict:
+        from openadapt_desktop.chrome_profile import ChromeProfileError
+
+        try:
+            return {"ok": True, **action()}
+        except ChromeProfileError as exc:
+            return {"ok": False, "code": exc.code, "error": exc.message}
+
+    def chrome_profile_notice(self, **params: Any) -> dict:
+        """The notice a person agrees to before Desktop sets up a Chrome profile."""
+        from openadapt_desktop.chrome_profile import notice
+
+        return notice()
+
+    def chrome_profile_list(self, **params: Any) -> dict:
+        """The Chrome profiles a person opted in to, and which are open."""
+        return self._chrome_profile_call(self.chrome_profiles.list)
+
+    def chrome_profile_create(self, **params: Any) -> dict:
+        """Opt in to a new profile. Needs ``acknowledged=True`` and the notice hash."""
+        return self._chrome_profile_call(
+            lambda: self.chrome_profiles.create(
+                str(params.get("name") or ""),
+                str(params.get("notice_sha256") or ""),
+                params.get("acknowledged") is True,
+            )
+        )
+
+    def chrome_profile_acknowledge(self, **params: Any) -> dict:
+        """Agree again to a changed notice for one profile."""
+        return self._chrome_profile_call(
+            lambda: self.chrome_profiles.acknowledge(
+                str(params.get("profile_id") or ""),
+                str(params.get("notice_sha256") or ""),
+                params.get("acknowledged") is True,
+            )
+        )
+
+    def chrome_profile_open(self, **params: Any) -> dict:
+        """Open Google Chrome on a profile; returns its verified local endpoint."""
+        return self._chrome_profile_call(
+            lambda: self.chrome_profiles.open(
+                str(params.get("profile_id") or ""), params.get("url") or None
+            )
+        )
+
+    def chrome_profile_close(self, **params: Any) -> dict:
+        """Close the Chrome window Desktop opened for a profile."""
+        return self._chrome_profile_call(
+            lambda: self.chrome_profiles.close(str(params.get("profile_id") or ""))
+        )
+
+    def chrome_profile_revoke(self, **params: Any) -> dict:
+        """Turn a profile off; ``delete_data=True`` also deletes its folder."""
+        return self._chrome_profile_call(
+            lambda: self.chrome_profiles.revoke(
+                str(params.get("profile_id") or ""),
+                delete_data=params.get("delete_data") is True,
+            )
+        )
+
+    def close_chrome_profiles(self) -> None:
+        """Engine exit: close only the Chrome processes Desktop opened."""
+        if self._chrome_profiles is not None:
+            self._chrome_profiles.close_all()
 
     def close_shadow(self) -> None:
         """Clean exit: erase the shadow buffer and its key, if one is open."""

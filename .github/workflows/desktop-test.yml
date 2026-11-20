@@ -97,6 +97,41 @@ jobs:
           OPENADAPT_DESKTOP_FLOW_CONTRACT: source
         run: uv run --no-sync pytest tests/ -v
 
+  real-chrome-profile:
+    # Desktop-managed Chrome profile against the runner's installed Google
+    # Chrome: opt-in record, launch on a separate profile, verified attach,
+    # in-use refusal, sign-in kept across a close and reopen, and Desktop
+    # closing only the window it opened. Runs on every tier: it is the only
+    # macOS run of a real Chrome window (never on a developer Mac).
+    name: Real Chrome profile (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/desktop/uv.lock
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install locked dependencies
+        run: uv sync --locked --python 3.12 --extra dev --extra build
+
+      - name: Run the real Chrome profile test
+        env:
+          OPENADAPT_REAL_CHROME: "1"
+        run: uv run --no-sync pytest tests/test_e2e/test_chrome_profile_real.py tests/test_engine/test_chrome_profile.py -v
+
   qualification-contract:
     name: Qualification contract (bundled Flow)
     env:

@@ -2847,6 +2847,13 @@ class TestMisc:
             "shadow_pause",
             "shadow_unpause",
             "at_rest_status",
+            "chrome_profile_notice",
+            "chrome_profile_list",
+            "chrome_profile_create",
+            "chrome_profile_acknowledge",
+            "chrome_profile_open",
+            "chrome_profile_close",
+            "chrome_profile_revoke",
         }
         assert expected.issubset(set(disp.commands))
 

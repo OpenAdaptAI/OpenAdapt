@@ -289,6 +289,10 @@ def main() -> None:
             handler.dispatcher.close_shadow()
         except Exception as exc:
             logger.warning("Shadow mode didn't close cleanly: {}", type(exc).__name__)
+        try:
+            handler.dispatcher.close_chrome_profiles()
+        except Exception as exc:
+            logger.warning("Chrome profiles didn't close cleanly: {}", type(exc).__name__)
         db.close()
         logger.info("Engine stopped")
 

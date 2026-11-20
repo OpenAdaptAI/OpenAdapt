@@ -153,6 +153,10 @@ class IPCHandler:
             self.dispatcher.close_shadow()
         except Exception:
             logger.exception("Shadow mode didn't close cleanly")
+        try:
+            self.dispatcher.close_chrome_profiles()
+        except Exception:
+            logger.exception("Chrome profiles didn't close cleanly")
         self.send_response(msg_id, {"stopping": True})
 
     def _dispatch(self, message: dict) -> None:
