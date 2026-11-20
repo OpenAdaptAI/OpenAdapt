@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Optional, cast
+from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict
@@ -102,6 +102,22 @@ def _normalize_origin(url_or_origin: str) -> str:
     ):
         return f"{scheme}://{host}"
     return f"{scheme}://{host}:{port}"
+
+
+class _ResolvedTarget(NamedTuple):
+    """One resolved URL supplies both classification and forwarding components."""
+
+    full_url: str
+    origin: str
+    path: str
+    query: str
+
+    @classmethod
+    def from_url(cls, full_url: str) -> "_ResolvedTarget":
+        parts = urlsplit(full_url)
+        return cls(
+            full_url, _normalize_origin(full_url), parts.path or "/", parts.query
+        )
 
 
 def _status_text(status: Optional[int]) -> str:
@@ -1129,8 +1145,8 @@ class SessionWireTap:
         tap.import_har(har)
         return tap
 
-    def _resolve_target_url(self, url_or_target: str) -> tuple[str, str, str, str]:
-        """Resolve incoming URL or proxy request-target into ``(full_url, origin, path, query)``."""
+    def _resolve_target_url(self, url_or_target: str) -> _ResolvedTarget:
+        """Resolve origin/absolute proxy targets once, retaining the complete query."""
         parts = urlsplit(url_or_target)
         if parts.scheme and parts.netloc:
             req_origin = _normalize_origin(url_or_target)
@@ -1139,30 +1155,20 @@ class SessionWireTap:
             )
             path = parts.path or "/"
             query = parts.query
-            if tap_origin and req_origin == tap_origin:
-                upstream_target = self._join_upstream_path(path, query)
-                return (
-                    f"{self._upstream_scheme}://{self._upstream_netloc}{upstream_target}",
-                    self._upstream_origin,
-                    urlsplit(upstream_target).path or "/",
-                    query,
-                )
-            full_url = f"{parts.scheme}://{parts.netloc}{path}"
-            if query:
-                full_url = f"{full_url}?{query}"
-            return (full_url, req_origin, path, query)
+            if not (tap_origin and req_origin == tap_origin):
+                full_url = f"{parts.scheme}://{parts.netloc}{path}"
+                if query:
+                    full_url = f"{full_url}?{query}"
+                return _ResolvedTarget.from_url(full_url)
+        else:
+            path = parts.path or "/"
+            if not path.startswith("/"):
+                path = "/" + path
+            query = parts.query
 
-        rel_path = parts.path or "/"
-        if not rel_path.startswith("/"):
-            rel_path = "/" + rel_path
-        query = parts.query
-        upstream_target = self._join_upstream_path(rel_path, query)
-        full_url = f"{self._upstream_scheme}://{self._upstream_netloc}{upstream_target}"
-        return (
-            full_url,
-            self._upstream_origin,
-            urlsplit(upstream_target).path or "/",
-            query,
+        upstream_target = self._join_upstream_path(path, query)
+        return _ResolvedTarget.from_url(
+            f"{self._upstream_scheme}://{self._upstream_netloc}{upstream_target}"
         )
 
     def _join_upstream_path(self, rel_path: str, query: str) -> str:
@@ -1242,10 +1248,11 @@ class SessionWireTap:
     ) -> dict[str, Any]:
         """Atomically classify and gate a request before any upstream network I/O."""
         upper_method = method.strip().upper()
-        full_url, target_origin, path, query = self._resolve_target_url(raw_target)
+        target = self._resolve_target_url(raw_target)
+        full_url, target_origin, path, query = target
         is_mut, is_gql_mut = is_mutation_request(
             upper_method,
-            path,
+            target.full_url,
             request_body,
             request_headers,
         )
