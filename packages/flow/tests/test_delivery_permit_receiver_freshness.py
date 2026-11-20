@@ -98,7 +98,9 @@ def _response(
             input_edge_sequence=1,
             authority_sequence=0,
             issued_at=_utc(issued),
-            delivery_not_after=_utc(deadline or expires),
+            delivery_not_after=_utc(
+                deadline or min(expires, checked + timedelta(seconds=60))
+            ),
         ),
         Ed25519PrivateKey.from_private_bytes(bytes(range(32))),
     )
@@ -204,7 +206,7 @@ def test_real_https_response_must_be_fresh_before_input(
             elif fault == "stale_in_transit":
                 checked = issued - timedelta(seconds=59)
                 release_at = checked + timedelta(seconds=60, milliseconds=10)
-            deadline = min(deadline, expires)
+            deadline = min(deadline, expires, checked + timedelta(seconds=60))
             response, _permit = _response(
                 request,
                 checked=checked,
@@ -277,7 +279,20 @@ def test_real_https_response_must_be_fresh_before_input(
     ("checked", "issued", "expires", "received", "allowed"),
     [
         (BASE, BASE, BASE + timedelta(seconds=120), BASE, True),
-        (BASE, BASE, BASE + timedelta(seconds=120), BASE + timedelta(seconds=60), True),
+        (
+            BASE,
+            BASE,
+            BASE + timedelta(seconds=120),
+            BASE + timedelta(seconds=60) - timedelta(microseconds=1),
+            True,
+        ),
+        (
+            BASE,
+            BASE,
+            BASE + timedelta(seconds=120),
+            BASE + timedelta(seconds=60),
+            False,
+        ),
         (
             BASE,
             BASE,

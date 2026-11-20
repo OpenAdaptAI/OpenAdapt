@@ -372,12 +372,14 @@ def _issued_permit_transport(
                 environment_digest="5" * 64,
                 qualification_signer_registry_sha256="6" * 64,
                 qualification_signer_registry_revision=1,
-                qualification_signer_registry_checked_at="2026-08-20T00:00:00Z",
+                qualification_signer_registry_checked_at=issued_at,
                 qualification_signer_registry_expires_at="2026-08-20T01:00:00Z",
                 input_edge_sequence=sequence + 1,
                 authority_sequence=sequence,
                 issued_at=issued_at,
-                delivery_not_after="2026-08-20T01:00:00Z",
+                delivery_not_after=(
+                    _parse_permit_utc(issued_at) + timedelta(seconds=50)
+                ).strftime("%Y-%m-%dT%H:%M:%SZ"),
             ),
             key,
         )

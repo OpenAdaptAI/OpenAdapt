@@ -88,7 +88,14 @@ def test_v3_adds_only_the_signed_exclusive_start_deadline_and_separates_domain()
 
 @pytest.mark.parametrize(
     "deadline",
-    [None, "issued", "before_issued", "after_registry", "noncanonical"],
+    [
+        None,
+        "issued",
+        "before_issued",
+        "after_registry",
+        "after_snapshot",
+        "noncanonical",
+    ],
 )
 def test_v3_refuses_missing_nonexclusive_or_unbounded_deadline(
     deadline: str | None,
@@ -109,6 +116,14 @@ def test_v3_refuses_missing_nonexclusive_or_unbounded_deadline(
             "after_registry": (expires + timedelta(seconds=1)).strftime(
                 "%Y-%m-%dT%H:%M:%SZ"
             ),
+            "after_snapshot": (
+                datetime.fromisoformat(
+                    body["qualification_signer_registry_checked_at"].replace(
+                        "Z", "+00:00"
+                    )
+                )
+                + timedelta(seconds=61)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "noncanonical": "2026-08-18T12:00:20+00:00",
         }
         body["delivery_not_after"] = invalid[deadline]
@@ -217,3 +232,30 @@ def test_v3_receipt_grants_only_completion_inside_exact_signed_window(
     else:
         with pytest.raises(ValueError, match="chronology|signed input deadline"):
             ProductionDeliveryPermit.build(permit, receipt)
+
+
+def test_v3_snapshot_ceiling_and_historical_v2_issue_boundary_are_distinct() -> None:
+    body = _v3_body()
+    checked = datetime.fromisoformat(
+        body["qualification_signer_registry_checked_at"].replace("Z", "+00:00")
+    )
+    body["qualification_signer_registry_expires_at"] = (
+        checked + timedelta(seconds=120)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ceiling = (checked + timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    body["delivery_not_after"] = ceiling
+    assert (
+        ProductionDeliveryPermitV3Payload.model_validate(body).delivery_not_after
+        == ceiling
+    )
+    body["delivery_not_after"] = (checked + timedelta(seconds=61)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    with pytest.raises(ValueError, match="snapshot authority"):
+        ProductionDeliveryPermitV3Payload.model_validate(body)
+    # Historical v2 issue-time semantics remain inclusive at exactly 60s;
+    # only live use and the new signed v3 deadline are being tightened.
+    body.pop("delivery_not_after")
+    body["schema_version"] = "openadapt.production-delivery-permit-payload/v2"
+    body["issued_at"] = ceiling
+    assert ProductionDeliveryPermitPayload.model_validate(body).issued_at == ceiling

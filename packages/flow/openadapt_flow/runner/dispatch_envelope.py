@@ -135,6 +135,61 @@ def with_runner_local_authorization(
     )
 
 
+def _refuse_dropped_authorization_fields(raw: Any, parsed: Any) -> None:
+    """Keep unknown restrictions from disappearing at the managed boundary.
+
+    Historical models retain their existing extra-field policy. Only this
+    live dispatch boundary is closed, including structured child models.
+    """
+    if isinstance(parsed, BaseModel) and isinstance(raw, dict):
+        config = dict(type(parsed).model_config)
+        by_name = config.get("validate_by_name", config.get("populate_by_name", False))
+        by_alias = config.get("validate_by_alias", True)
+        accepted: dict[str, str] = {}
+        field_keys: dict[str, list[str]] = {}
+        for name, field in type(parsed).model_fields.items():
+            alias = (
+                field.validation_alias
+                if field.validation_alias is not None
+                else field.alias
+            )
+            keys: list[str] = []
+            if alias is None or by_name:
+                keys.append(name)
+            if alias is not None:
+                if not isinstance(alias, str):
+                    raise ValueError(
+                        "managed authorization has an unsupported field alias"
+                    )
+                if by_alias:
+                    keys.append(alias)
+            field_keys[name] = list(dict.fromkeys(keys))
+            for key in keys:
+                if key in accepted and accepted[key] != name:
+                    raise ValueError(
+                        "managed authorization has ambiguous field aliases"
+                    )
+                accepted[key] = name
+        if set(raw).difference(accepted):
+            raise ValueError("managed dispatch authorization contains unknown fields")
+        for name, keys in field_keys.items():
+            present = [key for key in keys if key in raw]
+            if len(present) > 1:
+                raise ValueError(
+                    "managed authorization repeats a field through aliases"
+                )
+            if present:
+                _refuse_dropped_authorization_fields(
+                    raw[present[0]], getattr(parsed, name)
+                )
+    elif isinstance(parsed, (tuple, list)) and isinstance(raw, (tuple, list)):
+        for raw_item, parsed_item in zip(raw, parsed):
+            _refuse_dropped_authorization_fields(raw_item, parsed_item)
+    elif isinstance(parsed, dict) and isinstance(raw, dict):
+        for key in raw.keys() & parsed.keys():
+            _refuse_dropped_authorization_fields(raw[key], parsed[key])
+
+
 class ManagedDispatchEnvelope(BaseModel):
     """The exact Cloud authority that one managed child process consumes."""
 
@@ -150,6 +205,18 @@ class ManagedDispatchEnvelope(BaseModel):
     runtime_inputs_digest: str = Field(pattern="^[a-f0-9]{64}$")
     authorization: GovernedRunAuthorization
     dispatch_binding_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _authorization_cannot_drop_restrictions(cls, value: Any) -> Any:
+        if isinstance(value, dict) and isinstance(value.get("authorization"), dict):
+            raw = value["authorization"]
+            # Retain the original tree for the closed-key check before the
+            # normalized model can enter the binding digest or runtime.
+            parsed = GovernedRunAuthorization.model_validate(raw)
+            _refuse_dropped_authorization_fields(raw, parsed)
+            return {**value, "authorization": parsed}
+        return value
 
     @model_validator(mode="after")
     def _binding_commits_to_exact_dispatch(self) -> "ManagedDispatchEnvelope":
