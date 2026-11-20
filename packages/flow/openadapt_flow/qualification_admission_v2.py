@@ -49,6 +49,8 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.private_file import open_binary
+
 SCHEMA: Final[Literal["openadapt.qualification-admission/v2"]] = (
     "openadapt.qualification-admission/v2"
 )
@@ -1277,7 +1279,7 @@ def _read_protected_file(path: str | Path, *, label: str, limit: int) -> bytes:
     _protected_owner_and_mode(before, label=label)
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
-        descriptor = os.open(resolved, flags)
+        descriptor = open_binary(resolved, flags)
         try:
             after = os.fstat(descriptor)
             if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
@@ -1332,7 +1334,7 @@ def _write_private_file(path: Path, payload: bytes, *, exclusive: bool) -> None:
     if exclusive:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(path, flags, 0o600)
+            descriptor = open_binary(path, flags, 0o600)
         except FileExistsError as exc:
             raise QualificationAdmissionError(
                 "qualification signer checkpoint already exists"
@@ -1350,7 +1352,7 @@ def _write_private_file(path: Path, payload: bytes, *, exclusive: bool) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(temporary, flags, 0o600)
+        descriptor = open_binary(temporary, flags, 0o600)
     except OSError as exc:
         raise QualificationAdmissionError(
             "qualification signer checkpoint could not be written"
@@ -1362,7 +1364,7 @@ def _write_private_file(path: Path, payload: bytes, *, exclusive: bool) -> None:
         finally:
             os.close(descriptor)
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
+        directory = open_binary(path.parent, os.O_RDONLY)
         try:
             os.fsync(directory)
         finally:

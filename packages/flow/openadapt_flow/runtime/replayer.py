@@ -188,6 +188,13 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
+from openadapt_flow.runtime.dialog_delivery import (
+    _DIALOG_WAIT_S as _DIALOG_WAIT_S,
+)
+from openadapt_flow.runtime.dialog_delivery import (
+    arm_dialog,
+    wait_for_dialog,
+)
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDeliveryHeld
 from openadapt_flow.runtime.durable.first_local_runtime import (
@@ -266,8 +273,6 @@ _PIXEL_RECHECK_REOBSERVES = 2
 _REMOTE_HOVER_JITTER_PX = 2
 _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
-# How long a step that raises a browser dialog waits for it to open.
-_DIALOG_WAIT_S = 5.0
 
 # How long past its step's timeout a held record check may run under an
 # approval mode before the held report decides the item (a person).
@@ -13547,7 +13552,7 @@ class Replayer:
         finally:
             # Keep the original one-shot arm through the entire observation
             # window. Rearming after input would reset its document epoch.
-            seen = take(_DIALOG_WAIT_S)
+            seen = self._wait_for_dialog(take, dialog)
         if error is not None:
             return error
         if not seen:
@@ -13587,15 +13592,8 @@ class Replayer:
             "not answered; run aborted"
         )
 
-    @staticmethod
-    def _arm_dialog(arm: Callable[..., Any], dialog: Any) -> None:
-        options = {"kind": dialog.kind} if dialog.kind is not None else {}
-        if dialog.message_pattern is not None:
-            arm(
-                dialog.response, None, message_pattern=dialog.message_pattern, **options
-            )
-        else:
-            arm(dialog.response, dialog.message, **options)
+    _arm_dialog = staticmethod(arm_dialog)
+    _wait_for_dialog = wait_for_dialog
 
     def _act_choice(
         self,

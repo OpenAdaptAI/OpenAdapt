@@ -809,6 +809,49 @@ def test_dialog_authority_does_not_survive_a_document_scope_change(
         page.close()
 
 
+@pytest.mark.parametrize(
+    "fault", ["unchanged_document", "frame_attached", "new_document"]
+)
+def test_dialog_wait_keeps_the_original_producer_arm(
+    server: Server, browser: Any, fault: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import DialogResponse
+    from openadapt_flow.runtime import Replayer
+
+    page = browser.new_page()
+    try:
+        page.goto(server.base + "/w/native")
+        backend = PlaywrightBackend(page)
+        dialog = DialogResponse(
+            response="accept", message="Synthetic confirmation", kind="confirm"
+        )
+        Replayer._arm_dialog(backend.arm_dialog, dialog)
+        if fault == "frame_attached":
+            page.evaluate("""() => {
+                const frame = document.createElement('iframe');
+                frame.srcdoc = '<p>Another document</p>'; document.body.appendChild(frame);
+            }""")
+            page.frame_locator("iframe").locator("p").wait_for()
+        elif fault == "new_document":
+            page.goto(server.base + "/w/native?new-document=1")
+        page.evaluate("""() => {
+            setTimeout(() => {
+                window.answer = confirm('Synthetic confirmation');
+            }, 250);
+        }""")
+        replay = Replayer.__new__(Replayer)
+        replay.backend = backend
+        seen = replay._wait_for_dialog(backend.take_dialogs, dialog)
+        expected = fault == "unchanged_document"
+        assert page.evaluate("window.answer") is expected
+        assert len(seen) == 1
+        assert seen[0]["matched"] is expected
+        assert seen[0]["response"] == ("accept" if expected else "dismiss")
+    finally:
+        page.close()
+
+
 def test_an_ambiguous_dialog_scope_refuses_the_step_before_input(
     server: Server, browser: Any
 ) -> None:
