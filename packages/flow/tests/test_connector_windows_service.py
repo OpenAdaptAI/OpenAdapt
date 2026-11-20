@@ -69,10 +69,67 @@ def _isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # --- CLI dispatch -------------------------------------------------------------
 @pytest.mark.parametrize("action", ws.SERVICE_ACTIONS)
 def test_cli_parses_every_service_action(action: str) -> None:
-    args = build_parser().parse_args(["connector", "service", action])
+    parser = build_parser()
+    args = parser.parse_args(["connector", "service", action])
     assert args.func is ws.cmd_connector_service
     assert args.service_action == action
     assert args.config_dir is None
+    explicit = parser.parse_args(
+        [
+            "connector",
+            "service",
+            action,
+            "--config-dir",
+            "own config path",
+            "--timeout",
+            "7.5",
+        ]
+    )
+    assert explicit.func is ws.cmd_connector_service
+    assert explicit.service_action == action
+    assert explicit.config_dir == "own config path"
+    assert explicit.timeout == 7.5
+
+
+@pytest.mark.parametrize("verb", ["enroll", "run"])
+def test_legacy_connector_parser_keeps_flags_and_dispatch(verb: str) -> None:
+    from openadapt_flow.__main__ import _cmd_connector
+
+    shared = [
+        "--control-plane-url",
+        "https://cp.example",
+        "--org-id",
+        "own-org",
+        "--profile",
+        "own-profile.yaml",
+        "--policy",
+        "own-policy",
+        "--storage-backend",
+        "local",
+        "--storage-root",
+        "own storage",
+    ]
+    extra = (
+        ["--enrollment-secret", "own-synthetic-secret", "--name", "own connector"]
+        if verb == "enroll"
+        else ["--token", "own-synthetic-token", "--poll-wait", "7", "--once"]
+    )
+    args = build_parser().parse_args(["connector", verb, *shared, *extra])
+    assert args.func is _cmd_connector
+    assert args.connector_cmd == verb
+    assert args.control_plane_url == "https://cp.example"
+    assert args.org_id == "own-org"
+    assert args.profile == "own-profile.yaml"
+    assert args.policy == "own-policy"
+    assert args.storage_backend == "local"
+    assert args.storage_root == "own storage"
+    if verb == "enroll":
+        assert args.enrollment_secret == "own-synthetic-secret"
+        assert args.name == "own connector"
+    else:
+        assert args.token == "own-synthetic-token"
+        assert args.poll_wait == 7
+        assert args.once is True
 
 
 def test_cli_rejects_an_unknown_action() -> None:
