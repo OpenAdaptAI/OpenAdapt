@@ -22,6 +22,7 @@
     "reviewer": { "type": "string", "minLength": 1 },
     "automatic": { "type": "boolean" },
     "policy_version": { "type": "string", "minLength": 1 },
+    "transformation_sha256": { "$ref": "#/$defs/sha256" },
     "manifest_sha256": { "$ref": "#/$defs/sha256" },
     "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
     "approved_derivative_sha256": { "$ref": "#/$defs/sha256" },
@@ -45,6 +46,25 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "policy_version": {
+            "const": "outbound-phi-v2"
+          }
+        },
+        "required": [
+          "policy_version"
+        ]
+      },
+      "then": {
+        "required": [
+          "transformation_sha256"
+        ]
+      }
+    }
+  ],
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
   }

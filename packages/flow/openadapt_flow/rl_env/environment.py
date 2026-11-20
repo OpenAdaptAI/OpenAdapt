@@ -27,6 +27,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -50,7 +51,12 @@ from pydantic import Field, model_validator
 
 from openadapt_flow.rl_env import CONTRACT_VERSION, lifecycle, typed
 from openadapt_flow.rl_env.lifecycle import ProcessNotReaped, kill_child_tree
-from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
+from openadapt_flow.rl_env.reward import (
+    EpisodeJudge,
+    Judgement,
+    RecordJudge,
+    render_verify_config,
+)
 from openadapt_flow.rl_env.tasks import (
     PUBLIC_SPLIT,
     EnvDirectory,
@@ -60,7 +66,16 @@ from openadapt_flow.rl_env.tasks import (
 )
 
 ActionKind = Literal[
-    "click", "fill", "type", "press", "select", "scroll", "goto", "wait", "done"
+    "click",
+    "fill",
+    "type",
+    "press",
+    "select",
+    "scroll",
+    "goto",
+    "wait",
+    "done",
+    "hover",
 ]
 
 #: Interactive elements listed in each observation, and the text budget.
@@ -128,10 +143,20 @@ class WebAction(Action):
         default=None, description="goto: a path or #fragment on the app's origin"
     )
     dy: Optional[int] = Field(default=None, description="scroll: pixels")
+    dx: Optional[int] = Field(default=None, description="scroll: horizontal pixels")
+    count: Optional[int] = Field(
+        default=None,
+        description="click: 2 for a double click, 3 for a triple click; "
+        "press: how many times to press the key (up to 50)",
+    )
     seconds: Optional[float] = Field(default=None, description="wait: <= 5")
     claim: Optional[Literal["success", "failure"]] = Field(
         default=None,
         description="done: did the task's change land in the record?",
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="done: the agent's final report (an answer the task asks for)",
     )
 
     @model_validator(mode="after")
@@ -381,7 +406,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self.screenshots = screenshots
         self._state = WebState(env_name=self.env.manifest.name)
         self._task: Optional[Task] = None
-        self._judge: Optional[EpisodeJudge] = None
+        self._judge: Optional[EpisodeJudge | RecordJudge] = None
         self._app_url: Optional[str] = None
         self._app_stop: Optional[Callable[[], None]] = None
         self._pw: Any = None
@@ -547,26 +572,23 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     def _ensure_page(self) -> Any:
         if self._page is not None:
             return self._page
+        if self._pw is not None:
+            raise ProcessNotReaped("a failed browser acquisition could not be stopped")
         from playwright.sync_api import sync_playwright
 
         _driver_in_own_session()
-        self._pw = sync_playwright().start()
-        self._driver_pid = _driver_pid(self._pw)
-        from openadapt_flow._browser_readiness import launch_rendering_ready
-
+        pw = self._pw = sync_playwright().start()
         try:
-            self._browser = launch_rendering_ready(self._pw.chromium, headless=True)
+            self._driver_pid = _driver_pid(pw)
+            from openadapt_flow._browser_readiness import launch_rendering_ready
+
+            self._browser = launch_rendering_ready(pw.chromium, headless=True)
         except BaseException:
-            self._pw.stop()
-            self._pw = None
+            self._close_failed_browser(pw)
             raise
         return self._new_context()
 
     def _new_context(self) -> Any:
-        if self._context is not None:
-            self._context.close()
-        self._context = self._browser.new_context(viewport=VIEWPORT)
-
         def route(route: Any) -> None:
             request = route.request
             if self._allowed(request.url, request.method):
@@ -578,10 +600,50 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             else:
                 route.abort("blockedbyclient")
 
-        self._context.route("**/*", route)
-        self._page = self._context.new_page()
-        self._page.set_default_timeout(10_000)
-        return self._page
+        pw = self._pw
+        self._page = None
+        try:
+            if self._context is not None:
+                self._context.close()
+                self._context = None
+            self._context = self._browser.new_context(viewport=VIEWPORT)
+            self._context.route("**/*", route)
+            page = self._context.new_page()
+            page.set_default_timeout(10_000)
+        except BaseException:
+            self._close_failed_browser(pw)
+            raise
+        self._page = page
+        return page
+
+    def _close_failed_browser(self, pw: Any) -> None:
+        # The timeout path may already have taken ownership of this driver.
+        if self._pw is not pw:
+            return
+        context, browser = self._context, self._browser
+        self._context = self._browser = self._page = None
+        for resource in (context, browser):
+            if resource is not None:
+                with suppress(BaseException):
+                    resource.close()
+        if pw is None:
+            return
+        try:
+            pw.stop()
+        except BaseException:
+            # Keep the driver's owned identity for teardown. A later episode
+            # must not use this browser or replace its supervision handle.
+            self._unproven = (
+                self._unproven or "a failed browser acquisition may still be running"
+            )
+            return
+        if self._pw is pw:
+            driver, self._driver_pid = self._driver_pid, None
+            self._pw = None
+            launch = _SUPERVISED.pop(driver, None) if driver is not None else None
+            if launch is not None:
+                with suppress(BaseException):
+                    launch.close()
 
     # -- OpenEnv API --------------------------------------------------------
     def reset(self, *args: Any, **kwargs: Any) -> WebObservation:
@@ -609,7 +671,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                 },
                 instruction=task.instruction if task else "",
                 step=self._state.step_count,
-                max_steps=self.env.manifest.agent.max_steps,
+                max_steps=self._max_steps(),
                 last_action_error=(
                     f"the step took longer than {STEP_TIMEOUT_S:.0f} s; "
                     "the episode ended with reward 0"
@@ -668,19 +730,30 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._state = WebState(env_name=self.env.manifest.name, done=True)
         app_url = self._ensure_app()
         self._reset_app(task)
-        cfg = render_verify_config(
-            task.verify_text or self.env.verify_text, app_url, self._records_url
-        )
         episode = episode_id or uuid.uuid4().hex
-        judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        app = self.env.manifest.app
+        judge: Any
+        if task.grade and app.read:
+            noise = _import(app.noise)() if app.noise else None
+            judge = RecordJudge(_import(app.read), task.grade, noise=noise)
+        else:
+            cfg = render_verify_config(
+                task.verify_text or self.env.verify_text, app_url, self._records_url
+            )
+            judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        pw = None
         try:
             self._ensure_page()
             page = self._new_context()
+            pw = self._pw
             page.goto(app_url + task.start_path, wait_until="load")
             if self.env.manifest.app.prepare:
                 _import(self.env.manifest.app.prepare)(page, app_url)
         except BaseException:
-            judge.close()
+            if pw is not None:
+                self._close_failed_browser(pw)
+            with suppress(BaseException):
+                judge.close()
             raise
         self._task = task
         self._judge = judge
@@ -712,19 +785,26 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             except ValueError as exc:
                 # An action this environment can't take still spends a step.
                 self._state.step_count += 1
-                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                if self._state.step_count >= self._max_steps():
                     return self._finish(None, error=str(exc))
                 return self._observe(reward=0.0, done=False, error=str(exc))
             action = WebAction(**native)
         self._state.step_count += 1
         if action.kind == "done":
-            return self._finish(action.claim)
+            return self._finish(action.claim, message=action.message or "")
         started = time.monotonic()
         error = self._act(action)
         self._last_ms = int(1000 * (time.monotonic() - started))
-        if self._state.step_count >= self.env.manifest.agent.max_steps:
+        if self._state.step_count >= self._max_steps():
             return self._finish(None, error=error)
         return self._observe(reward=0.0, done=False, error=error)
+
+    def _max_steps(self) -> int:
+        """The current task's step limit, else the manifest's."""
+
+        if self._task is not None and self._task.max_steps:
+            return self._task.max_steps
+        return self.env.manifest.agent.max_steps
 
     def _call_tool(self, action: CallToolAction) -> CallToolObservation:
         """Run one MCP tool call as a step; the observation rides in the result."""
@@ -786,10 +866,11 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         page = self._page
         try:
             if action.kind == "click":
+                clicks = min(max(action.count or 1, 1), 3)
                 if action.selector:
-                    self._locator(action.selector).click()
+                    self._locator(action.selector).click(click_count=clicks)
                 elif action.x is not None and action.y is not None:
-                    page.mouse.click(action.x, action.y)
+                    page.mouse.click(action.x, action.y, click_count=clicks)
                 else:
                     return "click needs a selector or x and y"
             elif action.kind == "fill":
@@ -799,13 +880,25 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             elif action.kind == "type":
                 page.keyboard.type(action.text or "")
             elif action.kind == "press":
-                page.keyboard.press(action.text or "Enter")
+                for _ in range(min(max(action.count or 1, 1), 50)):
+                    page.keyboard.press(action.text or "Enter")
             elif action.kind == "select":
                 if not action.selector:
                     return "select needs a selector"
                 self._locator(action.selector).select_option(action.value or "")
             elif action.kind == "scroll":
-                page.mouse.wheel(0, action.dy or 400)
+                if action.x is not None and action.y is not None:
+                    page.mouse.move(action.x, action.y)
+                page.mouse.wheel(
+                    action.dx or 0, action.dy if action.dy is not None else 400
+                )
+            elif action.kind == "hover":
+                if action.selector:
+                    self._locator(action.selector).hover()
+                elif action.x is not None and action.y is not None:
+                    page.mouse.move(action.x, action.y)
+                else:
+                    return "hover needs a selector or x and y"
             elif action.kind == "goto":
                 return self._goto(action.path or "/")
             elif action.kind == "wait":
@@ -896,8 +989,15 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         target = urlsplit(path)
         if target.path or target.query:
             # A new path keeps the task's query, which may carry the fault.
+            # Without a task query, the agent's own query (``?id=3``) stands.
             url = urlunsplit(
-                ("", "", target.path or start.path, start.query, target.fragment)
+                (
+                    "",
+                    "",
+                    target.path or start.path,
+                    start.query or target.query,
+                    target.fragment,
+                )
             )
         else:
             url = urlunsplit(("", "", start.path, start.query, target.fragment))
@@ -908,12 +1008,18 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         return None
 
     def _finish(
-        self, claim: Optional[str], error: Optional[str] = None
+        self, claim: Optional[str], error: Optional[str] = None, message: str = ""
     ) -> WebObservation:
         assert self._task is not None and self._judge is not None
         # Let any write the page already sent reach the record first.
         time.sleep(max(self.env.manifest.agent.settle_s, 0.5))
-        judgement = self._judge.judge(claim, self._task.feasible, self._attempted)
+        if isinstance(self._judge, RecordJudge):
+            # Only whole-record grading reads the final reply (answers, claims).
+            judgement = self._judge.judge(
+                claim, self._task.feasible, self._attempted, message=message
+            )
+        else:
+            judgement = self._judge.judge(claim, self._task.feasible, self._attempted)
         if self._unproven is not None:
             judgement = dataclasses.replace(
                 judgement,
@@ -971,7 +1077,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             elements=json.loads(json.dumps(elements)),
             screenshot_png_b64=shot,
             step=self._state.step_count,
-            max_steps=self.env.manifest.agent.max_steps,
+            max_steps=self._max_steps(),
             last_action_error=error,
             verdict=verdict,
             computer_state=typed.computer_state(

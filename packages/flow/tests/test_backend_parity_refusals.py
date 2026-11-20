@@ -21,7 +21,6 @@ import pytest
 from openadapt_flow.emit import emit_mcp_server, emit_skill
 from openadapt_flow.emit.skill import bundle_surface
 from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
-
 from tests._mcp_tools import call_generated_tool
 
 
@@ -100,7 +99,12 @@ def test_a_desktop_mcp_tool_takes_no_url(tmp_path: Path, monkeypatch) -> None:
     import inspect
 
     server = _load_server(tmp_path, monkeypatch, "macos")
-    assert list(inspect.signature(server.run_triage_note).parameters) == ["note"]
+    assert list(inspect.signature(server.run_triage_note).parameters) == ["note", "url"]
+    assert inspect.signature(server.run_triage_note).parameters["url"].default is None
+    assert (
+        server.run_triage_note(note="data", url="https://other.invalid")["outcome"]
+        == "REFUSED"
+    )
     assert "playwright" not in (tmp_path / "mcp" / "server.py").read_text()
 
 
@@ -144,16 +148,29 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
         seen["argv"] = argv
         seen["params"] = json.loads(Path(args["--params-file"]).read_text())
         run_dir = Path(args["--run-dir"])
-        run_dir.mkdir(parents=True)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        from openadapt_flow.qualification import workflow_contract_sha256
+        from openadapt_flow.runtime.authorization import runtime_inputs_digest
+        from tests._mcp_report import (
+            bind_synthetic_invocation,
+            synthetic_production_report,
+        )
+
+        workflow = Workflow.load(out_path.parent / "bundle")
+        report = synthetic_production_report(
+            workflow_name=workflow.name,
+            bundle_content_digest=workflow.manifest.content_digest,
+            workflow_contract_sha256=workflow_contract_sha256(workflow),
+            governed_runtime_inputs_digest=runtime_inputs_digest(
+                workflow, seen["params"], {}
+            ),
+            execution_target_kind="citrix",
+            execution_origin=None,
+            execution_entry_url=None,
+            params=seen["params"],
+        )
         (run_dir / "report.json").write_text(
-            json.dumps(
-                {
-                    "execution_outcome": "VERIFIED",
-                    "transaction_outcome": "VERIFIED",
-                    "production_eligible": True,
-                    "model_calls": 0,
-                }
-            )
+            bind_synthetic_invocation(report, argv).model_dump_json()
         )
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -163,7 +180,17 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
     server = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(server)
     monkeypatch.setattr(subprocess, "run", run)
-    server.DEPLOYMENT = str(tmp_path / "deploy.yaml")
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text(
+        "backend: {kind: citrix, rdp_window_title: Synthetic, rdp_readiness_text: Synthetic}\nruntime: {profile: standard}\n"
+    )
+    authority = tmp_path / "not-an-authority.json"
+    authority.write_text('{"schema":"synthetic.not-authority"}')
+    server.DEPLOYMENT, server.PROFILE, server.AUTHORITY_FILE = (
+        str(deploy),
+        "standard",
+        str(authority),
+    )
 
     # Portable tools expose allocated argument aliases in their public schema.
     # The governed CLI receives the original workflow keys and values.
@@ -174,11 +201,18 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
     assert set(registered) == {"run_triage_note"}
     tool = registered["run_triage_note"]
     assert type(tool).__module__.startswith("mcp.")
-    assert set(tool.parameters["properties"]) == {"kind", "section", "workflow_2"}
+    assert set(tool.parameters["properties"]) == {
+        "kind",
+        "section",
+        "workflow",
+        "url",
+    }
+    assert "url" not in tool.parameters["required"]
     out = asyncio.run(
-        call_generated_tool(server, {"kind": "REAL", "section": "S", "workflow_2": "W"})
+        call_generated_tool(server, {"kind": "REAL", "section": "S", "workflow": "W"})
     )
-    assert out["success"] is True and out["outcome"] == "VERIFIED"
+    assert out["success"] is False and out["outcome"] == "UNCERTAIN"
+    assert out["runtime_reported"]["outcome"] == "VERIFIED"
     assert seen["params"] == {"kind": "REAL", "section": "S", "workflow": "W"}
     assert seen["argv"][1:5] == [
         "-m",
@@ -194,8 +228,7 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
 def test_a_desktop_mcp_tool_reports_the_run_refusal(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """End to end: the real ``openadapt-flow run`` refuses a deployment that
-    names another surface, and the tool says so. Nothing is built."""
+    """A mismatched deployment refuses before any governed child launches."""
 
     import os
 
@@ -204,7 +237,20 @@ def test_a_desktop_mcp_tool_reports_the_run_refusal(
     deploy.write_text(
         "backend:\n  kind: linux\n  linux_app: a\n  linux_window_title: b\n"
     )
-    server.DEPLOYMENT = str(deploy)
+    authority = tmp_path / "not-an-authority.json"
+    authority.write_text('{"schema":"synthetic.not-authority"}')
+    server.DEPLOYMENT, server.PROFILE, server.AUTHORITY_FILE = (
+        str(deploy),
+        "standard",
+        str(authority),
+    )
+    import subprocess
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_a, **_k: pytest.fail("target mismatch must refuse before child"),
+    )
     root = str(Path(__file__).resolve().parents[1])
     monkeypatch.setenv(
         "PYTHONPATH",
@@ -212,7 +258,8 @@ def test_a_desktop_mcp_tool_reports_the_run_refusal(
     )
     out = server.run_triage_note(note="synthetic")
     assert out["success"] is False and out["outcome"] == "REFUSED"
-    assert "REFUSED" in out["detail"] and "'macos'" in out["detail"]
+    assert "No child ran" in out["detail"]
+    assert "--config deploy.yaml" in out["detail"]
 
 
 def test_a_multi_surface_bundle_is_named_by_its_primary_surface() -> None:
@@ -292,7 +339,7 @@ def test_the_execute_worker_runs_a_desktop_bundle_under_its_deployment(
     deploy = tmp_path / "deploy.yaml"
     deploy.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
     run_dir = tmp_path / "exec" / "run"
-    run_dir.mkdir(parents=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "report.json").write_text("{}")  # an earlier run's: never read
     seen: list[list[str]] = []
 

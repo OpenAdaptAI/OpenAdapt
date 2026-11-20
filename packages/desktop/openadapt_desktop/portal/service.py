@@ -72,6 +72,7 @@ from typing import Any, Callable
 from loguru import logger
 from packaging.version import InvalidVersion, Version
 
+from openadapt_desktop import child_process
 from openadapt_desktop.auth.store import load_runner_credential
 from openadapt_desktop.flow_bridge import FLOW_BIN, _flow_command, _subprocess_env
 from openadapt_desktop.portal.flow_client import FlowConsoleClient, FlowConsoleUnavailable
@@ -147,7 +148,7 @@ def _kill_tree(process: Any) -> None:
     """
     pid = getattr(process, "pid", None)
     if _WINDOWS and isinstance(pid, int):
-        subprocess.run(
+        child_process.run(
             ["taskkill", "/F", "/T", "/PID", str(pid)],
             capture_output=True,
             check=False,
@@ -267,7 +268,7 @@ class PortalService:
         self,
         config: Any,
         *,
-        popen: Callable[..., Any] = subprocess.Popen,
+        popen: Callable[..., Any] = child_process.popen,
         clock: Callable[[], float] = time.monotonic,
         stops: Any = None,
     ) -> None:

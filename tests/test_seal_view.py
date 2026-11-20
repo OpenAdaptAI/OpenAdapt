@@ -347,6 +347,44 @@ def test_the_map_shows_the_sealed_step_and_goes_back_to_the_seal(browser, runs):
         reader.close()
 
 
+@pytest.mark.parametrize("activation", ["pointer", "keyboard"])
+def test_an_explicit_current_step_pick_seeks_but_following_does_not(
+    browser, runs, activation
+):
+    reader = Reader(browser, _page(runs / "run-1"), reduced=True)
+    try:
+        reader.verdict("Valid")
+        reader.page.get_by_role("button", name="Next highlight").click()
+        position = reader.page.locator('input[type="range"]').first
+        end = position.get_attribute("max")
+        assert end is not None
+        position.fill(end)
+        # Following this host-driven playhead must not seek back to the start
+        # of the same step through the selection callback.
+        reader.page.wait_for_timeout(100)
+        assert position.input_value() == end
+        current = reader.page.locator(".opg-node[data-selected]").first
+        assert "Click Save Encounter" in (current.get_attribute("aria-label") or "")
+        line = reader.page.locator("p[data-step]").first.inner_text()
+        if activation == "keyboard":
+            current.focus()
+            current.press("Enter")
+        else:
+            current.click()
+        # The same node id now comes from a person. It seeks the start of that
+        # step rather than being mistaken for automatic playhead following.
+        reader.page.wait_for_function(
+            "end => Number(document.querySelector('input[type=range]').value) < Number(end)",
+            arg=end,
+            timeout=2_000,
+        )
+        assert reader.page.locator("p[data-step]").first.inner_text() == line
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
 def test_a_page_with_no_run_says_how_to_make_one(browser, tmp_path):
     empty = tmp_path / "seal.html"
     empty.write_text(viewer_template(), encoding="utf-8")

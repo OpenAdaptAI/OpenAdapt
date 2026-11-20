@@ -13,7 +13,7 @@ Nothing here is supported, and it can change or disappear without notice.
 Don't run the extension in a browser profile that holds real accounts. For
 browser workflows, use the Playwright recorder in `openadapt-flow`, which can
 launch a clean Chromium or attach to a signed-in local tab:
-[browser recording guide](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/BROWSER_RECORDING.md).
+[browser recording guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/BROWSER_RECORDING.md).
 
 [`docs/BROWSER_EXTENSION_BOUNDARY.md`](../docs/BROWSER_EXTENSION_BOUNDARY.md)
 lists what the extension would need before it could become a supported

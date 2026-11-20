@@ -94,11 +94,12 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    cast,
 )
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow.private_file import open_binary
+from openadapt_flow.run_invocation import invocation_kwargs
 from openadapt_flow.vision_hint import vision_hint
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -454,77 +455,9 @@ def _deployment_runtime(
 
 
 def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
-    """Merge the ``--backend`` family of CLI flags over ``cfg.backend``.
+    from openadapt_flow.surface_selection import resolve_backend_config
 
-    A deployment ``--config`` supplies the backend section; direct flags
-    (``--backend`` / ``--agent-url`` / ``--macos-app`` / ``--linux-app`` /
-    ``--rdp-host`` / ``--rdp-window`` / ``--rdp-window-title`` /
-    ``--rdp-readiness-text``) override individual fields, exactly as the
-    effects/actuation flags override their sections. A compiled window-scoped
-    RDP/Citrix workflow may contribute the exact target recorded with the
-    demonstration; explicit config/flags remain authoritative.
-    """
-    backend = cfg.backend
-    hints = getattr(workflow, "backend_hints", None)
-    configured = set(getattr(backend, "model_fields_set", set()))
-    explicit_kind = getattr(args, "backend", None)
-    configured_kind = backend.kind if "kind" in configured else None
-    selected_kind = explicit_kind or configured_kind
-    # Surface binding (Section 5): a surface-bound workflow supplies its own
-    # target when neither a flag nor the config selects one. There is no
-    # implicit browser default for a bound bundle; the browser is chosen only
-    # when the workflow was actually recorded on it.
-    bound_surface = getattr(workflow, "surface", None)
-    if selected_kind is None and hints is None and bound_surface is not None:
-        backend = backend.model_copy(update={"kind": bound_surface})
-    if hints is not None and (
-        selected_kind is None or _report_backend_kind(selected_kind) == hints.backend
-    ):
-        updates: dict[str, object] = {}
-        if selected_kind is None:
-            updates["kind"] = hints.backend
-        for field in ("rdp_window", "rdp_window_title", "rdp_readiness_text"):
-            if field not in configured:
-                value = getattr(hints, field)
-                if value is not None:
-                    updates[field] = value
-        if updates:
-            backend = backend.model_copy(update=updates)
-    if getattr(args, "backend", None):
-        backend = backend.model_copy(update={"kind": args.backend})
-    if getattr(args, "agent_url", None):
-        backend = backend.model_copy(update={"agent_url": args.agent_url})
-    if getattr(args, "macos_app", None):
-        backend = backend.model_copy(update={"macos_app": args.macos_app})
-    if getattr(args, "macos_window_title", None):
-        backend = backend.model_copy(
-            update={"macos_window_title": args.macos_window_title}
-        )
-    if getattr(args, "linux_app", None):
-        backend = backend.model_copy(update={"linux_app": args.linux_app})
-    if getattr(args, "linux_window_title", None):
-        backend = backend.model_copy(
-            update={"linux_window_title": args.linux_window_title}
-        )
-    if getattr(args, "linux_allow_physical_input", False):
-        backend = backend.model_copy(update={"linux_allow_physical_input": True})
-    if getattr(args, "rdp_host", None):
-        backend = backend.model_copy(update={"rdp_host": args.rdp_host})
-    if getattr(args, "rdp_window", None):
-        backend = backend.model_copy(update={"rdp_window": args.rdp_window})
-    if getattr(args, "rdp_window_title", None):
-        backend = backend.model_copy(update={"rdp_window_title": args.rdp_window_title})
-    if getattr(args, "rdp_readiness_text", None):
-        backend = backend.model_copy(
-            update={"rdp_readiness_text": args.rdp_readiness_text}
-        )
-    if getattr(args, "browser_cdp_endpoint", None):
-        backend = backend.model_copy(
-            update={"browser_cdp_endpoint": args.browser_cdp_endpoint}
-        )
-    if getattr(args, "browser_page_url", None):
-        backend = backend.model_copy(update={"browser_page_url": args.browser_page_url})
-    return backend
+    return resolve_backend_config(args, cfg, workflow)
 
 
 def _surface_selection_gate(
@@ -691,18 +624,9 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
 
 
 def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
-    """Return the closed hosted-summary token for a resolved backend kind.
+    from openadapt_flow.surface_selection import report_backend_kind
 
-    Execution accepts ``remote-display`` / ``remote_display`` as RDP aliases.
-    Hosted summaries use a closed enum, so fold those aliases without
-    collapsing the distinct Citrix product token to generic RDP.
-    """
-    token = str(kind).strip().lower()
-    if token in ("remote-display", "remote_display"):
-        return "rdp"
-    if token not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
-        raise ValueError(f"unsupported execution target kind: {kind!r}")
-    return cast("ExecutionTargetKind", token)
+    return report_backend_kind(kind)
 
 
 def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> bool:
@@ -863,6 +787,7 @@ def _build_and_run_replayer(
     execution_entry_url: Optional[str] = None,
     execution_target_origin: Optional[str] = None,
     run_id: Optional[str] = None,
+    invocation_context=None,
     approval_gate=None,
     qualification_fault_driver=None,
     surface_backends=None,
@@ -947,6 +872,7 @@ def _build_and_run_replayer(
             )
     report = replayer.run(
         workflow,
+        **invocation_kwargs(invocation_context),
         params=params,
         worklists=worklists,
         bundle_dir=bundle,
@@ -1385,6 +1311,7 @@ def _replay_desktop(
             production_qualification_guard=production_qualification_guard,
             qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
+            **invocation_kwargs(getattr(args, "_run_invocation_context", None)),
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
             execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
@@ -3110,6 +3037,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
+    if getattr(args, "invocation_challenge", None):
+        from openadapt_flow.run_invocation import prepare_producer_context
+
+        try:
+            _cfg, effects, actuation = _deployment_sections(args)
+            prepare_producer_context(
+                args, cfg, backend_cfg, workflow, effects, actuation
+            )
+        except ValueError:
+            print("run REFUSED: unsupported invocation producer. Nothing was executed.")
+            return 2
     surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
     if _refuse_shared_readback_session(
         cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
@@ -3267,6 +3205,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             ),
             runtime_config=cfg.runtime,
             execution_target_kind="web",
+            **invocation_kwargs(getattr(args, "_run_invocation_context", None)),
             surface_override=bool(getattr(args, "_surface_override", False)),
             execution_origin=(
                 f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
@@ -4326,6 +4265,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
             "grant admitted. Nothing was executed."
         )
         return 2
+    if getattr(args, "invocation_challenge", None) and (
+        is_composition_artifact(bundle)
+        or is_process_contract_artifact(bundle)
+        or is_variant_set_artifact(bundle)
+    ):
+        print("run REFUSED: unsupported invocation producer. Nothing was executed.")
+        return 2
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
@@ -4363,6 +4309,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if qualification_case is not None
         else _replay_params(args.param, getattr(args, "params_file", None))
     )
+    if getattr(args, "invocation_challenge", None):
+        from openadapt_flow.run_invocation import producer_supported
+
+        cfg, _effects, _actuation = _deployment_sections(args)
+        if not producer_supported(args, cfg, workflow):
+            print("run REFUSED: unsupported invocation producer. Nothing was executed.")
+            return 2
     cfg, effect_verifier, api_actuator, configured_durable, _egress = (
         _deployment_runtime(args, params=gate_params)
     )
@@ -6278,7 +6231,9 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     """Draft (never approve) an effect-oracle contract from retained evidence."""
     from openadapt_flow.scaffold_verifier import (
         NEXT_COMMANDS_TEMPLATE,
+        begin_verifier_outputs,
         build_record_check,
+        report_draft_fallback,
         write_draft,
     )
 
@@ -6287,8 +6242,22 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         return Path(value) if value else None
 
     out_dir = optional_path("out")
+    source = Path(args.source)
+    # Bind the proof source, refuse a plaintext copy of a sealed input, then
+    # refuse every occupied output directory before either writer runs. A
+    # fresh refusal's proof and TODO draft stay one generation. Fallback
+    # readback uses the check generation from that plan. An observed or
+    # probed refusal there is the same result and exits 2.
+    check_generation, draft_generation = begin_verifier_outputs(
+        source,
+        out_dir,
+        optional_path("recording"),
+        bundle=optional_path("bundle"),
+        prove=getattr(args, "prove", None),
+        proof_source=getattr(args, "_record_check_proof_source", None),
+    )
     built = build_record_check(
-        Path(args.source),
+        source,
         out_dir,
         db=optional_path("db"),
         verifier=optional_path("verifier"),
@@ -6300,42 +6269,25 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         fault_gate=bool(getattr(args, "fault_gate", False)),
         probe_reads=bool(getattr(args, "probe_reads", False)),
         probe_base=getattr(args, "probe_base", None),
+        generation=check_generation,
     )
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
-    if getattr(args, "probe_reads", False):
-        import json as _json
-
-        from openadapt_flow import sealed_set as _sealed_set
-        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
-
-        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
-        status, reason = "unavailable", ""
-        try:
-            data = _json.loads(_sealed_set.read_text(found))
-            status, reason = str(data.get("status")), str(data.get("reason") or "")
-        except (OSError, ValueError, _sealed_set.SealedSetError):
-            pass
-        if status == "refused":
-            print(
-                "Read discovery: REFUSED. A probed read confirmed the written "
-                f"values but can't see the whole save, so no check was written: "
-                f"{reason} ({found})."
-            )
-        else:
-            print(
-                "Read discovery: UNAVAILABLE. No probed read confirmed the "
-                "written values, so no read was proposed; a person must name "
-                f"one ({found})."
-            )
-    out, count = write_draft(Path(args.source), out_dir)
-    print(
-        "No read in the recording returns the saved record (no network capture, "
-        "--db or --verifier), so this is a TODO draft."
+    refusal_reason = report_draft_fallback(
+        check_generation,
+        probe_reads=bool(getattr(args, "probe_reads", False)),
     )
+    out, count = write_draft(source, out_dir, generation=draft_generation)
+    if refusal_reason is not None:
+        print(f"Recorded read REFUSED: {refusal_reason}. This is a TODO draft.")
+    else:
+        print(
+            "No read in the recording returns the saved record (no network capture, "
+            "--db or --verifier), so this is a TODO draft."
+        )
     print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
-    return 0
+    return 2 if refusal_reason is not None else 0
 
 
 def _cmd_explain(args: argparse.Namespace) -> int:
@@ -6640,7 +6592,7 @@ def _read_qualification_case_inputs(path: Path, *, workflow):
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise ValueError(
             "qualification case inputs could not be opened safely"
@@ -6723,7 +6675,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         except OSError as exc:
             raise ValueError(
                 "qualification attempt ledger is not a private directory"
@@ -6811,7 +6763,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
-            descriptor = os.open(marker, flags, 0o600)
+            descriptor = open_binary(marker, flags, 0o600)
         except FileExistsError:
             print(
                 "run REFUSED: this qualification case attempt already started in this "
@@ -6840,7 +6792,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     directory_flags |= os.O_DIRECTORY
                 if hasattr(os, "O_NOFOLLOW"):
                     directory_flags |= os.O_NOFOLLOW
-                directory = os.open(ledger_dir, directory_flags)
+                directory = open_binary(ledger_dir, directory_flags)
                 try:
                     os.fsync(directory)
                 finally:
@@ -9203,6 +9155,14 @@ def _add_deployment_flags(
 ) -> None:
     """Add the shared deployment-wiring flags (config + effects + actuation +
     durable, optionally a worklist) to a replay-family subparser."""
+    from openadapt_flow.run_invocation import challenge_value
+
+    p.add_argument(
+        "--invocation-challenge",
+        type=challenge_value,
+        default=None,
+        help="Non-authority freshness challenge for the local Standard producer.",
+    )
     p.add_argument(
         "--config-sha256",
         default=None,

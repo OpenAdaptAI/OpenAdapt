@@ -1768,3 +1768,131 @@ def test_rule3_visible_block_with_only_hidden_older_binding_fails() -> None:
     body = f"From: Claude\n<!-- Reviewed-Head: {PARENT} -->\n{BLOCK_HEADING}\n"
     errors = _evaluate(comments=_comments() + [_comment(body, "reviewer-login", 3)])
     assert any("returned BLOCK" in error for error in errors), errors
+
+
+def _external_declaration(*, association: str = "CONTRIBUTOR") -> dict[str, Any]:
+    comment = _comment(_declaration("Grok"), "author-login", 90)
+    comment["author_association"] = association
+    return comment
+
+
+@pytest.mark.parametrize(
+    "association", ["NONE", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"]
+)
+@pytest.mark.parametrize("branch", ["agent/123", "fix/example", "flow/example"])
+def test_external_author_provenance_needs_a_trusted_cross_vendor_review(
+    association: str, branch: str
+) -> None:
+    declaration = _external_declaration(association=association)
+    pull = _pull_request(branch)
+    assert _evaluate(pull_request=pull, comments=[declaration]) == [
+        "expected exactly one current exact-head independent review"
+    ]
+    comments = [declaration] + _comments(reviewer="Codex")
+    assert _evaluate(pull_request=pull, comments=comments) == []
+    assert _evaluate(pull_request=pull, comments=comments, files=GATE_FILE) == []
+
+
+@pytest.mark.parametrize("branch", ["codex/example", "grok/example"])
+def test_external_fork_author_declaration_does_not_trust_the_branch_prefix(
+    branch: str,
+) -> None:
+    pull = _pull_request(branch)
+    pull["head"]["repo"]["full_name"] = "external/OpenAdapt"
+    comments = [_external_declaration()] + _comments(reviewer="Codex")
+    assert _evaluate(pull_request=pull, comments=comments) == []
+
+
+@pytest.mark.parametrize("login", ["someone-else", "author-login ", "", None])
+def test_external_third_party_declaration_cannot_supply_author_identity(
+    login: str | None,
+) -> None:
+    declaration = _external_declaration()
+    declaration["user"]["login"] = login
+    errors = _evaluate(
+        pull_request=_pull_request("agent/123"),
+        comments=[declaration] + _comments(reviewer="Codex"),
+    )
+    assert any("author declaration" in error for error in errors)
+
+
+@pytest.mark.parametrize("user", [None, {}, [], "author-login"])
+def test_external_malformed_comment_identity_cannot_supply_provenance(
+    user: Any,
+) -> None:
+    declaration = _external_declaration()
+    declaration["user"] = user
+    errors = _evaluate(
+        pull_request=_pull_request("agent/123"),
+        comments=[declaration] + _comments(reviewer="Codex"),
+    )
+    assert any("author declaration" in error for error in errors)
+
+
+@pytest.mark.parametrize("fault", ["edited", "stale", "quoted", "duplicate"])
+def test_external_author_declaration_keeps_immutability_and_head_rules(
+    fault: str,
+) -> None:
+    declaration = _external_declaration()
+    declarations = [declaration]
+    if fault == "edited":
+        declaration["updated_at"] = "2026-11-05T18:01:00Z"
+    elif fault == "stale":
+        declaration["body"] = _declaration("Grok", PARENT)
+    elif fault == "quoted":
+        declaration["body"] = "```text\n" + declaration["body"] + "```\n"
+    else:
+        declarations.append(dict(declaration, id=91))
+    errors = _evaluate(
+        pull_request=_pull_request("agent/123"),
+        comments=declarations + _comments(reviewer="Codex"),
+    )
+    assert any("author declaration" in error for error in errors)
+
+
+@pytest.mark.parametrize("author_login", ["AUTHOR-LOGIN", "author-login"])
+def test_external_author_identity_is_case_insensitive(author_login: str) -> None:
+    declaration = _external_declaration()
+    declaration["user"]["login"] = author_login
+    assert (
+        _evaluate(
+            pull_request=_pull_request("agent/123"),
+            comments=[declaration] + _comments(reviewer="Codex"),
+        )
+        == []
+    )
+
+
+def test_external_author_provenance_does_not_allow_same_vendor_self_review() -> None:
+    assert _evaluate(
+        pull_request=_pull_request("agent/123"),
+        comments=[_external_declaration()] + _comments(reviewer="Grok"),
+    ) == ["author and reviewer must be from different vendors"]
+
+
+@pytest.mark.parametrize("login", ["author-login", "someone-else"])
+@pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
+def test_external_author_has_no_independent_review_grant_or_veto(
+    login: str, verdict: str
+) -> None:
+    declaration = _external_declaration()
+    review = _comment(_review(reviewer="Claude", verdict=verdict), login, 91)
+    review["author_association"] = "CONTRIBUTOR"
+    pull = _pull_request("agent/123")
+    assert _evaluate(pull_request=pull, comments=[declaration, review]) == [
+        "expected exactly one current exact-head independent review"
+    ]
+    assert (
+        _evaluate(
+            pull_request=pull,
+            comments=[declaration, review] + _comments(reviewer="Codex"),
+        )
+        == []
+    )
+
+
+def test_external_author_declaration_conflicting_with_local_branch_fails() -> None:
+    assert _evaluate(
+        pull_request=_pull_request("codex/example"),
+        comments=[_external_declaration()] + _comments(reviewer="Claude"),
+    ) == ["author declaration conflicts with the branch vendor prefix"]

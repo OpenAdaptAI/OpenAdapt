@@ -198,3 +198,9 @@ e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/re
 e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:120
 e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:132
 e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/reconciler.py:generic-api-key:102
+# PR #2295: synthetic privacy sentinel, never a credential. Later source builds
+# the same test value at runtime; this pins only the historical false positive.
+e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets_e2e.py:generic-api-key:201
+# PR #2299: the literal GitLab-shaped string is explicitly SYNTHETIC-CREDENTIAL
+# in the auth-reference refusal matrix. This exact historical test finding only.
+cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
