@@ -20,8 +20,12 @@ Two install bugs motivate this file.
 from __future__ import annotations
 
 import io
+import hashlib
+import json
 import re
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -138,13 +142,54 @@ def test_ci_guard_runs_on_the_first_unsupported_pythons():
 
 
 def test_ci_guard_resolves_the_launcher_by_name():
-    """Installing the wheel file alone can't catch pip choosing an old release."""
+    """Named extras must resolve the source artifact, not a newer PyPI release."""
     workflow = (ROOT / ".github" / "workflows" / "main.yml").read_text()
     guard = workflow[workflow.index("unsupported-python-guard:") :]
-    resolve = guard.index("--find-links dist")
+    resolve = guard.index('"$spec @ $wheel_url"')
     assert resolve < guard.index("pip install dist/*.whl")
     for spec in ("openadapt", "'openadapt[browser]'", "'openadapt[capture]'"):
         assert spec in guard[guard.index("for spec in") : resolve]
+
+
+@pytest.mark.parametrize("fault", [None, "version", "url", "hash", "flow", "agent"])
+def test_ci_resolution_report_binds_the_built_subject(tmp_path, fault):
+    """Execute the workflow's real validator against planted report faults."""
+    workflow = (ROOT / ".github" / "workflows" / "main.yml").read_text()
+    marker = 'python - "$spec" <<\'PY\'\n'
+    inline = workflow.split(marker, 1)[1].split("\n          PY", 1)[0]
+    check = textwrap.dedent(inline)
+    (tmp_path / "pyproject.toml").write_text((ROOT / "pyproject.toml").read_text())
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / f"openadapt-{PROJECT['version']}-py3-none-any.whl"
+    wheel.write_bytes(b"the exact locally built artifact")
+    subject = {
+        "metadata": {"name": "openadapt", "version": PROJECT["version"]},
+        "download_info": {
+            "url": wheel.resolve().as_uri(),
+            "archive_info": {"hashes": {"sha256": hashlib.sha256(wheel.read_bytes()).hexdigest()}},
+        },
+    }
+    report = {"install": [subject]}
+    if fault == "version":
+        subject["metadata"]["version"] = "9999.0.0"
+    elif fault == "url":
+        subject["download_info"]["url"] = "https://example.invalid/same-version.whl"
+    elif fault == "hash":
+        subject["download_info"]["archive_info"]["hashes"]["sha256"] = "0" * 64
+    elif fault in ("flow", "agent"):
+        report["install"].append({"metadata": {"name": f"openadapt-{fault}", "version": "1.0.0"}})
+    (tmp_path / "resolution.json").write_text(json.dumps(report))
+    result = subprocess.run(
+        [sys.executable, "-c", check, "openadapt[browser]"],
+        cwd=tmp_path, capture_output=True, text=True, check=False,
+    )
+    if fault is None:
+        assert result.returncode == 0, result.stderr
+        assert "with no engine" in result.stdout
+    else:
+        assert result.returncode != 0
+        assert "AssertionError" in result.stderr, result.stderr
 
 
 # ---------------------------------------------------------------------------

@@ -112,16 +112,25 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build --wheel
 
-      # Installing dist/*.whl directly would hide the original bug, which was
-      # pip choosing an older release by name. Resolve by name with PyPI in
-      # view: if this launcher didn't install here, an old release that allows
-      # this Python (1.3.0 did) would win and the version check would fail.
+      # Resolve by name, but bind the subject to the wheel just built. PyPI is
+      # still available for dependencies; a later public launcher must not
+      # replace the historical source under test. An incompatible subject must
+      # fail resolution rather than fall back to another launcher.
       - name: Resolve openadapt by name and confirm pip picks this launcher
         run: |
+          wheel_url=$(python - <<'PY'
+          import pathlib
+
+          wheels = list(pathlib.Path("dist").glob("openadapt-*.whl"))
+          assert len(wheels) == 1, wheels
+          print(wheels[0].resolve().as_uri())
+          PY
+          )
           for spec in openadapt 'openadapt[browser]' 'openadapt[capture]'; do
-            python -m pip install --dry-run --quiet --find-links dist \
-              --report resolution.json "$spec"
+            python -m pip install --dry-run --ignore-installed --quiet \
+              --report resolution.json "$spec @ $wheel_url"
             python - "$spec" <<'PY'
+          import hashlib
           import json
           import pathlib
           import sys
@@ -136,6 +145,11 @@ jobs:
               for item in report["install"]
           }
           assert chosen.get("openadapt") == expected, (spec, chosen.get("openadapt"))
+          wheel, = pathlib.Path("dist").glob("openadapt-*.whl")
+          subject, = (item for item in report["install"] if item["metadata"]["name"] == "openadapt")
+          downloaded = subject["download_info"]
+          assert downloaded["url"] == wheel.resolve().as_uri(), downloaded
+          assert downloaded["archive_info"]["hashes"]["sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest(), downloaded
           for name in ("openadapt-flow", "openadapt-agent"):
               assert name not in chosen, (spec, name, chosen[name])
           print(f"{spec}: pip chose openadapt {expected} with no engine")
