@@ -7,8 +7,8 @@ named in ``OPENADAPT_EXTENSION_RECORDING`` (or ``--recording``):
 
 - ``EXTENSION_EVIDENCE`` -> redacted append to ``extension_evidence.jsonl``
 - ``COPILOT_GET_STATE`` -> read validated ``CopilotViewState`` from ``copilot_state.json``
-- ``COPILOT_SUBMIT_DECISION`` -> validate ``HumanResolutionInput`` and append to
-  ``copilot_decisions.jsonl`` with ``idempotency_key`` deduplication.
+- ``COPILOT_SUBMIT_DECISION`` -> validate the bound run/halt envelope and
+  queue one idempotent operator decision for the live runtime to claim.
 
 Zero remote calls. Unknown or malformed envelopes fail closed.
 """
@@ -40,11 +40,11 @@ from openadapt_flow.copilot_bridge import (  # noqa: E402
     COPILOT_STATE_SCHEMA,
     CopilotSessionBridge,
 )
+from openadapt_flow.copilot_protocol import CopilotBoundDecision  # noqa: E402
 from openadapt_flow.extension_evidence import (  # noqa: E402
     ExtensionEvidenceBuffer,
     validate_native_message,
 )
-from openadapt_flow.form_tx.types import HumanResolutionInput  # noqa: E402
 
 
 def read_message() -> Any:
@@ -54,6 +54,8 @@ def read_message() -> Any:
     if len(raw_len) != 4:
         return None
     (length,) = struct.unpack("<I", raw_len)
+    if length > 1_048_576:
+        raise ValueError("native message exceeds size limit")
     payload = sys.stdin.buffer.read(length)
     if len(payload) != length:
         return None
@@ -86,7 +88,7 @@ def _handle_copilot_get_state(
 def _handle_copilot_submit_decision(
     msg: Mapping[str, Any], bridge: CopilotSessionBridge
 ) -> dict[str, Any]:
-    extra = set(msg.keys()) - {"type", "decision", "schema"}
+    extra = set(msg.keys()) - {"type", "decision", "binding", "schema"}
     if extra:
         raise ValueError(
             f"unexpected fields in COPILOT_SUBMIT_DECISION: {sorted(extra)}"
@@ -96,8 +98,11 @@ def _handle_copilot_submit_decision(
     raw_decision = msg.get("decision")
     if not isinstance(raw_decision, Mapping):
         raise ValueError("decision object required")
-    decision = HumanResolutionInput.model_validate(raw_decision)
-    accepted_new, total_count = bridge.append_decision(decision)
+    item = CopilotBoundDecision.model_validate(
+        {"decision": raw_decision, "binding": msg.get("binding")}
+    )
+    decision = item.decision
+    accepted_new, total_count = bridge.append_bound_decision(item)
     return {
         "ok": True,
         "type": "COPILOT_DECISION_ACK",
@@ -134,9 +139,9 @@ def main(argv: list[str] | None = None) -> int:
     while True:
         try:
             msg = read_message()
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            write_message({"ok": False, "error": f"invalid_json: {exc}"})
-            continue
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            write_message({"ok": False, "error": "invalid_native_message"})
+            return 2
         if msg is None:
             break
         if not isinstance(msg, Mapping):
@@ -147,15 +152,15 @@ def main(argv: list[str] | None = None) -> int:
         if msg_type == "COPILOT_GET_STATE":
             try:
                 write_message(_handle_copilot_get_state(msg, bridge))
-            except (ValidationError, ValueError, OSError) as exc:
-                write_message({"ok": False, "error": str(exc)})
+            except (ValidationError, ValueError, OSError):
+                write_message({"ok": False, "error": "copilot_message_rejected"})
             continue
 
         if msg_type == "COPILOT_SUBMIT_DECISION":
             try:
                 write_message(_handle_copilot_submit_decision(msg, bridge))
-            except (ValidationError, ValueError, OSError) as exc:
-                write_message({"ok": False, "error": str(exc)})
+            except (ValidationError, ValueError, OSError):
+                write_message({"ok": False, "error": "copilot_message_rejected"})
             continue
 
         if msg_type == "EXTENSION_EVIDENCE":

@@ -20,6 +20,7 @@ import os
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ from openadapt_flow.copilot_bridge import (
     CopilotSessionBridge,
     CopilotViewState,
 )
+from openadapt_flow.copilot_protocol import CopilotRunBinding
 from openadapt_flow.form_tx.types import (
     FormHaltItem,
     FormHaltKind,
@@ -63,6 +65,25 @@ def _load_installer():
 
 
 install_host = _load_installer()
+
+
+def _binding(run_id):
+    return CopilotRunBinding(
+        run_id=run_id,
+        session_nonce="a" * 64,
+        generation=1,
+        pack_digest="b" * 64,
+        dossier_digest="c" * 64,
+        operator_id="chrome_sidepanel_operator",
+        expires_at_unix=int(time.time()) + 300,
+    )
+
+
+def _claim_all(bridge, binding):
+    result = []
+    while (item := bridge.claim_bound_decision(binding)) is not None:
+        result.append(item.decision)
+    return result
 
 
 def _frame(message: object) -> bytes:
@@ -262,6 +283,14 @@ def test_native_host_copilot_messages_and_fail_closed_validation(tmp_path: Path)
     # Publish state and verify co-existence with EXTENSION_EVIDENCE + decision dedup.
     published = CopilotViewState(
         run_id="run-host-02",
+        binding=_binding("run-host-02"),
+        halts=(
+            FormHaltItem(
+                halt_id="halt-tier",
+                kind=FormHaltKind.UNGROUNDED_REQUIRED_FIELD,
+                message="Choose a tier",
+            ),
+        ),
         outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
         status_line="Awaiting operator resolution",
         fields_filled_auto=5,
@@ -272,7 +301,7 @@ def test_native_host_copilot_messages_and_fail_closed_validation(tmp_path: Path)
     valid_decision = {
         "halt_id": "halt-tier",
         "action": "provide_value",
-        "actor_id": "operator-local",
+        "actor_id": "chrome_sidepanel_operator",
         "provided_value": "plus",
         "remember_as_candidate_rule": True,
         "idempotency_key": "idem-host-1",
@@ -281,8 +310,16 @@ def test_native_host_copilot_messages_and_fail_closed_validation(tmp_path: Path)
         tmp_path,
         [
             {"type": "COPILOT_GET_STATE"},
-            {"type": "COPILOT_SUBMIT_DECISION", "decision": valid_decision},
-            {"type": "COPILOT_SUBMIT_DECISION", "decision": valid_decision},
+            {
+                "type": "COPILOT_SUBMIT_DECISION",
+                "decision": valid_decision,
+                "binding": published.binding.model_dump(mode="json"),
+            },
+            {
+                "type": "COPILOT_SUBMIT_DECISION",
+                "decision": valid_decision,
+                "binding": published.binding.model_dump(mode="json"),
+            },
             {
                 "type": "EXTENSION_EVIDENCE",
                 "evidence": {
@@ -363,7 +400,7 @@ def chrome_copilot(tmp_path: Path):
     sync = pytest.importorskip("playwright.sync_api")
     profile = tmp_path / "profile"
     session_dir = tmp_path / "session"
-    session_dir.mkdir()
+    session_dir.mkdir(mode=0o700)
 
     env = {k: v for k, v in os.environ.items() if k != "OPENADAPT_EXTENSION_RECORDING"}
     with sync.sync_playwright() as playwright:
@@ -430,6 +467,7 @@ def test_sidepanel_copilot_end_to_end_native_messaging_and_highlights(chrome_cop
     # 2. Publish CopilotViewState with PREFILL_ENTITY_CONFLICT + UNGROUNDED_REQUIRED_FIELD.
     initial_state = CopilotViewState(
         run_id="run-e2e-001",
+        binding=_binding("run-e2e-001"),
         outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
         status_line="Paused: 1 prefill entity conflict and 1 ungrounded required field.",
         fields_filled_auto=4,
@@ -607,7 +645,7 @@ def test_sidepanel_copilot_end_to_end_native_messaging_and_highlights(chrome_cop
     )
 
     seen_keys: set[str] = set()
-    drained = bridge.drain_new_decisions(seen_keys)
+    drained = _claim_all(bridge, initial_state.binding)
     assert len(drained) == 2
     assert drained[0].halt_id == "halt-coverage-tier"
     assert drained[0].action == HumanDecisionAction.PROVIDE_VALUE
@@ -626,6 +664,7 @@ def test_sidepanel_copilot_end_to_end_native_messaging_and_highlights(chrome_cop
     # 6. Publish terminal VERIFIED_DONE state and verify Verified Receipt Card + highlight cleanup.
     done_state = CopilotViewState(
         run_id="run-e2e-001",
+        binding=_binding("run-e2e-001"),
         outcome=FormTxOutcome.VERIFIED_DONE,
         status_line="Transaction committed and verified via summary read-back.",
         fields_filled_auto=6,
@@ -681,8 +720,8 @@ def test_sidepanel_copilot_end_to_end_native_messaging_and_highlights(chrome_cop
     # Confirm zero live secret exposure across all session files on disk.
     for artifact in session_dir.iterdir():
         if artifact.is_file():
-            content = artifact.read_text(encoding="utf-8")
-            assert LIVE_PORTAL_PASSWORD not in content, artifact.name
+            content = artifact.read_bytes()
+            assert LIVE_PORTAL_PASSWORD.encode() not in content, artifact.name
 
 
 @posix_only
@@ -705,6 +744,7 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
     bridge.publish_state(
         CopilotViewState(
             run_id="run-e2e-002",
+            binding=_binding("run-e2e-002"),
             outcome=FormTxOutcome.DELIVERY_UNCERTAIN,
             status_line="Reconciling form fields on step 1...",
             fields_filled_auto=2,
@@ -721,6 +761,7 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
     bridge.publish_state(
         CopilotViewState(
             run_id="run-e2e-002",
+            binding=_binding("run-e2e-002"),
             outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
             status_line="Operator confirmation required.",
             fields_filled_auto=3,
@@ -804,7 +845,7 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
         timeout=10000,
     )
 
-    decisions = bridge.drain_new_decisions(set())
+    decisions = _claim_all(bridge, bridge.read_state().binding)
     assert len(decisions) == 2
     assert decisions[0].action == HumanDecisionAction.PROVIDE_VALUE
     assert decisions[0].provided_value == "GRP-44810"

@@ -322,6 +322,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ active: recording, queued: queued.length });
     return true;
   }
+  if ((msg.type === 'COPILOT_SYNC_STATE' || msg.type === 'COPILOT_DECISION') &&
+      sender.url !== chrome.runtime.getURL('sidepanel.html')) {
+    sendResponse({ ok: false, error: 'copilot_requires_sidepanel' });
+    return true;
+  }
   if (msg.type === 'COPILOT_SYNC_STATE') {
     (async () => {
       const reply = await sendCopilotNative({ type: 'COPILOT_GET_STATE' });
@@ -356,6 +361,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const reply = await sendCopilotNative({
         type: 'COPILOT_SUBMIT_DECISION',
         decision: msg.decision,
+        binding: msg.binding,
       });
       sendResponse(
         reply || { ok: false, error: 'copilot_decision_failed' }

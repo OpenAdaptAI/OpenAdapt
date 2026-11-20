@@ -88,18 +88,12 @@
   }
 
   function computeIdempotencyKey(runId, haltId, action, providedValue, rememberRule) {
-    const valueToken =
-      providedValue === undefined || providedValue === null
-        ? ''
-        : typeof providedValue === 'string'
-          ? providedValue
-          : JSON.stringify(providedValue);
     return [
       'copilot',
       String(runId || 'run'),
       String(haltId),
       String(action),
-      valueToken,
+      'value-redacted',
       rememberRule ? '1' : '0',
     ].join(':');
   }
@@ -264,6 +258,11 @@
   }
 
   async function submitDecisionForHalt(cardEl, halt, action) {
+    if (!currentState || !currentState.binding) {
+      showCardFeedback(cardEl, 'No active operator session. Refresh the panel.', true);
+      return;
+    }
+    const binding = currentState.binding;
     let providedValue = null;
     if (action === 'provide_value') {
       const inputEl = cardEl.querySelector('[data-role="operator-input"]');
@@ -288,14 +287,14 @@
     const decision = {
       halt_id: halt.halt_id,
       action,
-      actor_id: 'chrome_sidepanel_operator',
+      actor_id: binding.operator_id,
       actor_role: 'operator',
       provided_value: providedValue,
       mapped_dossier_key: halt.dossier_key || null,
       remember_as_candidate_rule: rememberRule,
       note: '',
       idempotency_key: computeIdempotencyKey(
-        runId,
+        binding.session_nonce + ':' + binding.generation + ':' + runId,
         halt.halt_id,
         action,
         providedValue,
@@ -311,6 +310,7 @@
     const resp = await sendRuntimeMessage({
       type: 'COPILOT_DECISION',
       decision,
+      binding,
     });
 
     for (const btn of buttons) {
