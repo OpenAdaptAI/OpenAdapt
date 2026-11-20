@@ -170,9 +170,12 @@ jobs:
           # fail on SIGPIPE and silently report "not changed".
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
+          # Both Flow fixtures and the released-launcher Seal tests consume
+          # this checkout's browser support, independently of installed Flow.
+          browser_support='^conftest\.py$|^packages/flow/(tests/(headless_guard|_attached_chromium)\.py|openadapt_flow/_browser_readiness\.py)$|^tests/test_browser_fixture_source\.py$'
           # Flow depends on the in-tree types, and its `capture` extra is tested
           # against the in-tree capture.
-          flow="$(hit "^packages/(flow|capture|types)/|$wf")"
+          flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
           # The types package is the leaf: only its own files re-run it.
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
@@ -186,7 +189,7 @@ jobs:
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
           # The Seal viewer inlines the program map's source.
-          seal_view="$(hit "^packages/(seal-view|program-graph)/|^openadapt/seal_view/|^tests/test_seal_view\.py$|^tests/fixtures/seal_view/|$wf")"
+          seal_view="$(hit "^packages/(seal-view|program-graph)/|^openadapt/seal_view/|^tests/test_seal_view\.py$|^tests/fixtures/seal_view/|$browser_support|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"

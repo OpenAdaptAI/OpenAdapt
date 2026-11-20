@@ -25,8 +25,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from openadapt_flow._browser_readiness import chromium_launch_args
 from openadapt_flow.backends._owned import close_owned
+
+from .headless_guard import chromium_launch_args
 
 
 @contextmanager

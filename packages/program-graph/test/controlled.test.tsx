@@ -121,7 +121,7 @@ describe("host-driven workbench", () => {
     render(<StepInspector spec={processRecords} folds={folds} nodeId="write_update" onSelect={onSelect} />);
     expect(within(screen.getByLabelText("Selected program step")).getByRole("heading", { name: group.title })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));
-    expect(onSelect).toHaveBeenCalledWith("open_record");
+    expect(onSelect.mock.calls).toEqual([["open_record", "user"]]);
   });
 });
 
