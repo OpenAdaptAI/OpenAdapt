@@ -7,15 +7,18 @@ import json
 import math
 import re
 from collections.abc import Iterable, Mapping
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar, cast
 from uuid import UUID
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializationInfo,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_serializer,
     model_validator,
@@ -31,8 +34,75 @@ _BINDING_FIELDS = frozenset(
 )
 
 
+_JSON_PARSE_CHECKED: ContextVar[bool] = ContextVar(
+    "authoring_json_parse", default=False
+)
+_JSON_PROJECTION_CHECKED: ContextVar[bool] = ContextVar(
+    "authoring_json_projection", default=False
+)
+_ParsedModel = TypeVar("_ParsedModel", bound=BaseModel)
+
+
 class JobAuthoringError(ValueError):
     """Closed attribution/schema refusal; messages contain no private values."""
+
+
+def validate_authoring_model_json(
+    model: type[_ParsedModel],
+    data: str | bytes | bytearray,
+    *,
+    strict_profile: bool = False,
+    **kwargs: Any,
+) -> _ParsedModel:
+    """Check original bytes before entering Pydantic's already-decoded schema.
+
+    TypeAdapter/core JSON entrypoints cannot expose duplicate keys or numeric
+    tokens to model validators. Refuse those entrypoints for the new format;
+    supported model methods enter this bounded scope only after checking bytes.
+    This scope is an encoding check, never verified-load or admission authority.
+    """
+    # Bind the real BaseModel method to this class, preserving JSON-specific
+    # strict enum/date semantics. Never accept an arbitrary scoped callback.
+    parse_model = getattr(BaseModel.model_validate_json, "__func__")
+
+    def validate() -> _ParsedModel:
+        return cast(_ParsedModel, parse_model(model, data, **kwargs))
+
+    try:
+        parse_authoring_json(data, strict=strict_profile)
+    except JobAuthoringError:
+        raise
+    except (ValueError, TypeError):
+        if strict_profile:
+            raise
+        # Preserve the original Pydantic parser's legacy error semantics.
+        return validate()
+    token = _JSON_PARSE_CHECKED.set(True)
+    try:
+        return validate()
+    finally:
+        _JSON_PARSE_CHECKED.reset(token)
+
+
+def require_checked_json_parser(info: ValidationInfo) -> None:
+    if info.mode == "json" and not _JSON_PARSE_CHECKED.get():
+        raise JobAuthoringError(
+            "job-authoring JSON requires the supported model parser"
+        )
+
+
+def dump_authoring_model(model: BaseModel, **kwargs: Any) -> dict[str, Any]:
+    """Produce checked Python values for the shared canonical JSON writer."""
+    token = _JSON_PROJECTION_CHECKED.set(True)
+    try:
+        return BaseModel.model_dump(model, **kwargs)
+    finally:
+        _JSON_PROJECTION_CHECKED.reset(token)
+
+
+def require_checked_json_projection(info: SerializationInfo) -> None:
+    if info.mode == "json" and not _JSON_PROJECTION_CHECKED.get():
+        raise JobAuthoringError("schema 3 JSON requires the supported model writer")
 
 
 class JobAuthoringBinding(BaseModel):
@@ -54,8 +124,15 @@ class JobAuthoringBinding(BaseModel):
     def model_validate_json(
         cls, json_data: str | bytes | bytearray, **kwargs: Any
     ) -> "JobAuthoringBinding":
-        parse_authoring_json(json_data, strict=True)
-        return super().model_validate_json(json_data, **kwargs)
+        return validate_authoring_model_json(
+            cls, json_data, strict_profile=True, **kwargs
+        )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _checked_json_source(cls, value: Any, info: ValidationInfo) -> Any:
+        require_checked_json_parser(info)
+        return value
 
     @field_validator("job_id", "org_id", "owner_principal_id")
     @classmethod
@@ -376,7 +453,11 @@ def verified_job_authoring(
     *,
     expected_binding: object = None,
 ) -> JobAuthoringBinding:
-    """Read exact attribution from verified source; this is not admission."""
+    """Read attribution from the verified loaded snapshot, not a fresh disk load.
+
+    A later export/registration must verify its exact artifact against this
+    snapshot's content identity. This check supplies no admission authority.
+    """
     binding = require_supported_workflow(
         workflow,
         for_execution=True,

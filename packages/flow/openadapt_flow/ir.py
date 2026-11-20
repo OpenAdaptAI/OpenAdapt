@@ -37,6 +37,8 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    SerializationInfo,
+    ValidationInfo,
     field_validator,
     model_serializer,
     model_validator,
@@ -45,11 +47,14 @@ from pydantic import (
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
-    JobAuthoringError,
     check_workflow_input,
+    checked_bundle_schema,
+    dump_authoring_model,
     dump_schema3_json,
-    parse_authoring_json,
+    require_checked_json_parser,
+    require_checked_json_projection,
     require_supported_workflow,
+    validate_authoring_model_json,
 )
 from openadapt_flow.qualification_faults import FaultMutationReceipt
 from openadapt_flow.records.schema import (
@@ -3343,6 +3348,42 @@ class BundleManifest(BaseModel):
         description="mirrors Workflow.encrypted (workflow.json sealed at rest)",
     )
 
+    @model_validator(mode="wrap")
+    @classmethod
+    def _checked_authoring_json_source(
+        cls, value: Any, handler: Any, info: ValidationInfo
+    ) -> "BundleManifest":
+        manifest = handler(value)
+        if manifest.schema_version == 3:
+            # Do not let Pydantic coerce a legacy-looking raw version into 3
+            # after the original-byte profile check selected its schema.
+            checked_bundle_schema(
+                value.get("schema_version")
+                if isinstance(value, dict)
+                else manifest.schema_version
+            )
+            require_checked_json_parser(info)
+        return manifest
+
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> "BundleManifest":
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
+
+    @model_serializer(mode="wrap")
+    def _checked_authoring_json_projection(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
+        return handler(self)
+
     def model_dump_json(self, **kwargs: Any) -> str:
         if self.schema_version != 3:
             return super().model_dump_json(**kwargs)
@@ -3495,7 +3536,9 @@ class Workflow(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _supported_authoring_input(cls, value: Any) -> Any:
+    def _supported_authoring_input(cls, value: Any, info: ValidationInfo) -> Any:
+        if isinstance(value, dict) and value.get("schema_version") == 3:
+            require_checked_json_parser(info)
         check_workflow_input(
             value, default_version=SCHEMA_VERSION, allowed_fields=cls.model_fields
         )
@@ -3672,14 +3715,12 @@ class Workflow(BaseModel):
     def model_validate_json(
         cls, json_data: str | bytes | bytearray, **kwargs: Any
     ) -> "Workflow":
-        try:
-            parse_authoring_json(json_data)
-        except JobAuthoringError:
-            raise
-        except (ValueError, TypeError):
-            # Preserve the existing parser's legacy error semantics.
-            pass
-        return super().model_validate_json(json_data, **kwargs)
+        return validate_authoring_model_json(cls, json_data, **kwargs)
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.schema_version != 3:
+            return super().model_dump(**kwargs)
+        return dump_authoring_model(self, **kwargs)
 
     def model_dump_json(self, **kwargs: Any) -> str:
         if self.schema_version != 3:
@@ -3702,8 +3743,12 @@ class Workflow(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+    def _serialize_compatible(
+        self, handler: Any, info: SerializationInfo
+    ) -> dict[str, Any]:
         """Omit empty additive execution hints from legacy bundle bytes."""
+        if self.schema_version == 3:
+            require_checked_json_projection(info)
         require_supported_workflow(self)
         data: dict[str, Any] = handler(self)
         if self.job_authoring is None:

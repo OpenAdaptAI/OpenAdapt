@@ -45,8 +45,15 @@ duplicate object keys, invalid Unicode and byte-order marks. The checks apply to
 structured request data as well as attribution fields. They do not reinterpret
 strings containing JSON or remove user payload keys named `job_authoring`.
 
-Workflow and schema-3 manifest JSON writers share this rule. Legacy writers and
-canonical projections remain unchanged. The [vectors](../tests/fixtures/job-authoring-v3/vectors.json)
+Workflow and schema-3 manifest JSON writers share this rule. Raw JSON must use
+the supported model `model_validate_json` and `model_dump_json` methods. Alternate
+Pydantic TypeAdapter/core/base JSON entry points refuse schema 3: they cannot
+retain original duplicate keys and number tokens or select this number writer.
+Their Python-value projections remain available; they make no raw-byte promise.
+The closed binding also refuses alternate raw-JSON parsers. Its five string fields
+have no numerical encoding ambiguity. These encoding scopes confer no verified
+load, qualification or admission capability. Legacy writers, alternate parsers
+and canonical projections remain unchanged. The [vectors](../tests/fixtures/job-authoring-v3/vectors.json)
 include ordinary numeric data, negative zero, Unicode key order and nested
 job-named payloads. Their generator never touches legacy vectors.
 
@@ -59,10 +66,17 @@ actual verified load through the supported consumer. Copying serialized metadata
 or attaching a manifest cannot grant its process-local load capability.
 
 `openadapt_flow.job_authoring.verified_job_authoring(workflow, bundle_dir,
-expected_binding=...)` returns the closed binding only after checking the actual
-source, current content and optional exact expected identity. The expected value
-must come from an authoritative caller. This helper does not issue an admission
-or decide who may execute the program.
+expected_binding=...)` returns the closed binding after checking the retained
+verified-load snapshot, current in-memory model and optional exact expected
+identity. The expected value must come from an authoritative caller. This helper
+does not issue an admission or decide who may execute the program.
+
+This is a loaded-snapshot check. It does not reread `workflow.json` or decrypt a
+fresh copy of encrypted source files. Plain assets are checked against their
+sealed hashes; encrypted assets use the authenticated plaintext retained at
+load. A caller that later exports or registers bytes from the source directory
+must independently verify that exact artifact and its digest against the approved
+snapshot. A matching job binding alone does not establish artifact freshness.
 
 CLI replay and deployment-created replayers share the same early runtime guard,
 including resume paths and preconstructed models. Unsupported or changed input

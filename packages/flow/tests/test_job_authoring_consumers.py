@@ -10,9 +10,12 @@ import pytest
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
+from pydantic import TypeAdapter
+from pydantic_core import PydanticSerializationError
 
 from openadapt_flow import bundle_validation as bundles
-from openadapt_flow.ir import Workflow
+from openadapt_flow import crypto
+from openadapt_flow.ir import TEMPLATE_AAD, ActionKind, Anchor, Step, Workflow
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
     JobAuthoringError,
@@ -47,6 +50,72 @@ def test_verified_source_helpers_handle_actual_plain_and_encrypted_bundles(
     assert loaded.manifest.schema_version == 3
     assert verified_job_authoring(loaded, tmp_path / "source").model_dump() == BINDING
     assert loaded.manifest.provenance.certified is False
+
+
+@pytest.mark.parametrize("encrypt", [False, True])
+@pytest.mark.parametrize("changed", ["workflow", "asset"])
+def test_loaded_snapshot_is_not_a_fresh_exported_directory_claim(
+    tmp_path, encrypt, changed
+):
+    source = tmp_path / "source"
+    (source / "templates").mkdir(parents=True)
+    asset = source / "templates" / "target.png"
+    asset.write_bytes(b"synthetic original asset")
+    workflow = authored()
+    workflow.steps.append(
+        Step(
+            id="read",
+            intent="synthetic source snapshot",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="templates/target.png", region=(0, 0, 1, 1), click_point=(0, 0)
+            ),
+        )
+    )
+    key = "synthetic schema 3 snapshot key" if encrypt else None
+    saved = workflow.save(source, encrypt=encrypt, key=key)
+    loaded = Workflow.load(source, key=key)
+    assert (
+        verified_job_authoring(loaded, source, expected_binding=BINDING).model_dump()
+        == BINDING
+    )
+
+    if changed == "workflow":
+        original = saved.read_bytes()
+        if encrypt:
+            original = crypto.decrypt_bytes(original, key, aad=crypto.BUNDLE_AAD)
+        raw = json.loads(original)
+        raw["job_authoring"]["intent_sha256"] = "b" * 64
+        replaced = json.dumps(raw).encode()
+        saved.write_bytes(
+            crypto.encrypt_bytes(replaced, key, aad=crypto.BUNDLE_AAD)
+            if encrypt
+            else replaced
+        )
+    else:
+        replaced = b"synthetic replaced asset"
+        if encrypt:
+            asset.with_suffix(".png.enc").write_bytes(
+                crypto.encrypt_bytes(replaced, key, aad=TEMPLATE_AAD)
+            )
+        else:
+            asset.write_bytes(replaced)
+
+    if changed == "asset" and not encrypt:
+        # Plain asset verification reads the current file at this call.
+        with pytest.raises(bundles.BundleIntegrityError):
+            verified_job_authoring(loaded, source, expected_binding=BINDING)
+    else:
+        # The loaded workflow and authenticated encrypted asset map remain
+        # the original snapshot. They do not certify a later directory export.
+        assert (
+            verified_job_authoring(
+                loaded, source, expected_binding=BINDING
+            ).model_dump()
+            == BINDING
+        )
+    with pytest.raises(bundles.BundleIntegrityError):
+        Workflow.load(source, key=key)
 
 
 @pytest.mark.parametrize(
@@ -233,6 +302,18 @@ class JobBindingTransitions(RuleBasedStateMachine):
         self.current = Workflow.load(destination)
         self.expected = wire
         self.state = "verified"
+
+    @invariant()
+    def alternate_json_paths_never_inherit_checked_encoding_from_a_prior_call(self):
+        for model in (self.current, self.current.job_authoring, self.current.manifest):
+            wire = model.model_dump_json()
+            with pytest.raises(ValueError, match="supported model parser"):
+                TypeAdapter(type(model)).validate_json(wire)
+        for model in (self.current, self.current.manifest):
+            with pytest.raises(
+                PydanticSerializationError, match="supported model writer"
+            ):
+                TypeAdapter(type(model)).dump_json(model)
 
     @invariant()
     def current_authority_requires_actual_unchanged_source(self):
