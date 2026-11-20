@@ -310,3 +310,102 @@ def test_the_edge_check_refuses_a_verified_digest_for_another_bundle(
         update={"bundle_content_digest": "f" * 64}
     )
     assert managed_qualification_edge_refusal(other, managed["workflow"])
+
+
+@pytest.mark.parametrize("admission_state", ["verified", "missing", "other_bundle"])
+def test_cli_replay_rechecks_program_admission_before_any_input(
+    managed: dict[str, Any],
+    issuer: Issuer,
+    admission_state: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep the CLI and replay together; only external I/O is scripted."""
+    import playwright.sync_api as playwright
+
+    import openadapt_flow._browser_setup as browser_setup
+    import openadapt_flow.backends.playwright_backend as browser_backend
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow import crypto
+    from openadapt_flow.backends import factory
+    from openadapt_flow.deployment import (
+        DeploymentConfig,
+        PolicySection,
+        RuntimeSection,
+    )
+    from tests.test_cli_new_commands import _FakePlaywright
+
+    monkeypatch.setenv(crypto.ENV_KEY, _KEY)
+    # The dispatch has already passed `run`'s admission gate. Calling the
+    # real replay command tests its reload, construction and input edges,
+    # rather than replacing `_cmd_replay` with a success stub.
+    if admission_state == "verified":
+        _verify(managed)
+    elif admission_state == "other_bundle":
+        _verify(managed, content_digest="d" * 64)
+    authorization = managed["authorization"]
+    binding = ManagedDispatchBinding(
+        _BINDING_FACTORY,
+        run_id=RUN_ID,
+        authorization=authorization,
+        binding_sha256=dispatch_binding_sha256(RUN_ID, authorization),
+    )
+    params = tmp_path / "params.json"
+    params.write_text(json.dumps(PARAMS))
+    args = cli.build_parser().parse_args(
+        [
+            "replay",
+            str(managed["bundle"]),
+            "--run-dir",
+            str(managed["run_dir"]),
+            "--params-file",
+            str(params),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    args._governed_run_authorization = authorization
+    args._managed_dispatch_binding = binding
+    args._delivery_authority_kind = "cloud_runner"
+    args._remote_delivery_run_id = RUN_ID
+    cfg = DeploymentConfig(
+        policy=PolicySection(policy="permissive"),
+        runtime=RuntimeSection(durable=True, require_settled=True),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_deployment_runtime",
+        lambda *_a, **_k: (
+            cfg,
+            managed["verifier"],
+            None,
+            True,
+            False,
+        ),
+    )
+    monkeypatch.setattr(playwright, "sync_playwright", _FakePlaywright)
+    monkeypatch.setattr(
+        browser_setup,
+        "launch_chromium",
+        lambda *_a, **_k: _FakePlaywright().chromium.launch(),
+    )
+    monkeypatch.setattr(browser_backend, "prepare_ws_guard", lambda _page: None)
+    monkeypatch.setattr(factory, "build_backend", lambda *_a, **_k: FakeBackend())
+    configured = cli._configured_replayer
+
+    def configure(*a: Any, **kw: Any) -> Replayer:
+        replayer = configured(*a, **kw)
+        replayer.vision = _ReadyVision()
+        return replayer
+
+    monkeypatch.setattr(cli, "_configured_replayer", configure)
+    if admission_state != "verified":
+        with pytest.raises(ValueError, match="Production qualification"):
+            cli._cmd_replay(args)
+        assert issuer.permits == 0
+        return
+    assert cli._cmd_replay(args) == 0
+    assert issuer.permits >= 2
+    assert issuer.receipts == issuer.permits
