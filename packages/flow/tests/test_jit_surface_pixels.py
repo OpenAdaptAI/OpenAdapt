@@ -143,8 +143,11 @@ def test_an_agent_run_on_a_remote_window_compiles_and_fails_closed(
         cache_dir=tmp_path / "cache",
         key_dir=tmp_path / "keys",
         on_warning=lambda text: None,
-        withhold_credentials=withhold_credentials,
+        # Ordinary trusted capture uses the actual default. MCP teaching does
+        # not expose this choice: its pipeline always requests protection.
+        **({"withhold_credentials": True} if withhold_credentials else {}),
     )
+    assert jit.withhold_credentials is withhold_credentials
 
     if withhold_credentials:
         from openadapt_flow.secret_inputs import CredentialObservationUnsupported
