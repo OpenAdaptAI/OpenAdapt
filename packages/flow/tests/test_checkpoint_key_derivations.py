@@ -94,7 +94,7 @@ def test_a_cached_key_never_opens_for_another_passphrase(tmp_path):
     run = tmp_path / "run"
     store = CheckpointStore(run, key=KEY)
     store.write_checkpoint(_checkpoint(0))
-    assert store.last_checkpoint() is not None  # key now cached for this salt
+    assert store.last_checkpoint() is not None  # prior independent successful read
     with pytest.raises(crypto.DecryptionError):
         CheckpointStore(run, key=WRONG).last_checkpoint()
 

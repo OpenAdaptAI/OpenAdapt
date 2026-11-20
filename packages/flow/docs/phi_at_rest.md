@@ -102,11 +102,15 @@ What stays readable is listed under [What is not encrypted](#what-is-not-encrypt
 | `OPENADAPT_RECORDING_KEY` | Recordings. When it is unset, recordings use `OPENADAPT_BUNDLE_KEY`. |
 
 The key is a passphrase. Flow stretches it with scrypt (N=2^15, r=8, p=1)
-over a random per-directory salt, once per directory, and seals each file with
-AES-256-GCM under the derived key, a fresh random 96-bit nonce and the file's
-path in the associated data. Both primitives come from the `cryptography`
-package. Key management (KMS, escrow, rotation) is the operator's: Flow reads
-the passphrase from the environment and never writes it.
+over a random per-directory salt when it opens a reader or writer handle.
+That explicit handle reuses its derived key to seal or open files with
+AES-256-GCM, a fresh random 96-bit nonce for each write, and the file's path in
+the associated data. Independent path-helper reads authenticate again; the
+module retains no reader or passphrase cache. Caller inputs and derived keys
+remain sensitive memory; releasing a handle does not promise erasure. Both
+primitives come from the `cryptography` package. Key management (KMS, escrow,
+rotation) is the operator's: Flow reads the passphrase from the environment
+and never writes it.
 
 ## Sealed sets
 
