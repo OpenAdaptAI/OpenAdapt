@@ -375,6 +375,56 @@ def build_patient_registration_domain_schema() -> CanonicalDomainSchema:
                 section_hints=("consent", "authorization", "agreement"),
                 required=False,
             ),
+            CanonicalFieldSpec(
+                dossier_key="full_name",
+                synonyms=(
+                    "patient full name",
+                    "full name",
+                    "legal full name",
+                    "complete name",
+                ),
+                expected_codec=FieldCodecSpec(kind=FormCodecKind.TITLE_CASE),
+                section_hints=("patient", "demographics", "personal"),
+                required=False,
+            ),
+            CanonicalFieldSpec(
+                dossier_key="visit_type",
+                synonyms=(
+                    "visit category",
+                    "visit type",
+                    "appointment type",
+                    "visit_type",
+                ),
+                expected_codec=FieldCodecSpec(kind=FormCodecKind.CASEFOLD),
+                section_hints=("queue", "visit", "routing", "appointment"),
+                required=False,
+            ),
+            CanonicalFieldSpec(
+                dossier_key="clinical_department",
+                synonyms=(
+                    "clinical department",
+                    "department",
+                    "specialty",
+                    "clinic department",
+                ),
+                expected_codec=FieldCodecSpec(kind=FormCodecKind.CASEFOLD),
+                section_hints=("queue", "department", "routing"),
+                required=False,
+                triggers_re_render_hint=True,
+            ),
+            CanonicalFieldSpec(
+                dossier_key="consulting_provider",
+                synonyms=(
+                    "consulting doctor",
+                    "attending physician",
+                    "consulting provider",
+                    "attending doctor",
+                    "consulting_doctor",
+                ),
+                expected_codec=FieldCodecSpec(kind=FormCodecKind.CASEFOLD),
+                section_hints=("queue", "department", "routing", "provider"),
+                required=False,
+            ),
         ),
         expected_outputs=(
             CanonicalFieldSpec(
@@ -771,6 +821,8 @@ def _is_action_button(ctrl: ObservedControl) -> bool:
     tag_cf = ctrl.tag.casefold()
     itype_cf = ctrl.input_type.casefold()
     role_cf = ctrl.role.casefold()
+    if role_cf in {"combobox", "listbox", "checkbox", "radio", "switch", "textbox"}:
+        return False
     return (
         tag_cf == "button"
         or itype_cf in {"submit", "button", "reset"}

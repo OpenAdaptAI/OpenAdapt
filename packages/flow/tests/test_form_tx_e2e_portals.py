@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from benchmark.form_tx_portals.packs import (
-    build_underwriting_scenarios,
-    build_underwriting_wizard_pack,
-)
-from benchmark.form_tx_portals.runner import (
-    format_markdown_report,
-    run_portal_benchmark,
-)
-from benchmark.form_tx_portals.servers import (
-    LegacyHospitalQueuePortal,
-    StatefulUnderwritingPortal,
-)
 from openadapt_flow.copilot_bridge import (
     CopilotFieldHighlight,
     CopilotSessionBridge,
@@ -37,6 +28,23 @@ from openadapt_flow.form_tx.types import (
     FormTxOutcome,
     HumanDecisionAction,
     HumanResolutionInput,
+)
+
+_BENCH_ROOT = str(Path(__file__).resolve().parents[1] / "benchmark")
+if _BENCH_ROOT not in sys.path:
+    sys.path.insert(0, _BENCH_ROOT)
+
+from form_tx_portals.packs import (  # noqa: E402
+    build_underwriting_scenarios,
+    build_underwriting_wizard_pack,
+)
+from form_tx_portals.runner import (  # noqa: E402
+    format_markdown_report,
+    run_portal_benchmark,
+)
+from form_tx_portals.servers import (  # noqa: E402
+    LegacyHospitalQueuePortal,
+    StatefulUnderwritingPortal,
 )
 
 
@@ -211,10 +219,14 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
                 domain=build_patient_registration_domain_schema(),
                 form_snapshots=(live_snap,),
             )
-            assert "patient.full_name" in induction.matched_keys
-            assert "patient.mobile" in induction.matched_keys
-            assert "visit.department" in induction.matched_keys
-            assert "visit.consulting_doctor" in induction.matched_keys
+            assert "full_name" in induction.matched_keys
+            assert "date_of_birth" in induction.matched_keys
+            assert "administrative_sex" in induction.matched_keys
+            assert "phone_number" in induction.matched_keys
+            assert "visit_type" in induction.matched_keys
+            assert "clinical_department" in induction.matched_keys
+            assert "consulting_provider" in induction.matched_keys
+            assert induction.unmapped_portal_required_labels == ()
             ctx3.close()
         finally:
             browser.close()

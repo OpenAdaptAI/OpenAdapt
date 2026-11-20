@@ -9,8 +9,8 @@ from __future__ import annotations
 import calendar
 import re
 from datetime import date
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Optional, Sequence
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Any, Sequence
 
 from openadapt_flow.form_tx.types import (
     FieldCodecSpec,

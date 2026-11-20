@@ -15,13 +15,31 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from openadapt_flow.form_tx.codecs import normalize_currency_cents, normalize_phone_digits
-from openadapt_flow.form_tx.types import (
+_BENCH_DIR = Path(__file__).resolve().parents[1]
+_FLOW_DIR = Path(__file__).resolve().parents[2]
+for _p in (str(_BENCH_DIR), str(_FLOW_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from form_tx_portals.packs import (  # noqa: E402
+    UnderwritingScenario,
+    build_hms_queue_dossiers,
+    build_hospital_hms_pack,
+    build_underwriting_scenarios,
+    build_underwriting_wizard_pack,
+)
+from form_tx_portals.servers import (  # noqa: E402
+    LegacyHospitalQueuePortal,
+    StatefulUnderwritingPortal,
+)
+from openadapt_flow.form_tx.codecs import normalize_phone_digits  # noqa: E402
+from openadapt_flow.form_tx.types import (  # noqa: E402
     ControlKind,
     FieldAnchorSpec,
     FieldCodecSpec,
@@ -31,15 +49,6 @@ from openadapt_flow.form_tx.types import (
     HumanDecisionAction,
     HumanResolutionInput,
 )
-
-from .packs import (
-    UnderwritingScenario,
-    build_hms_queue_dossiers,
-    build_hospital_hms_pack,
-    build_underwriting_scenarios,
-    build_underwriting_wizard_pack,
-)
-from .servers import LegacyHospitalQueuePortal, StatefulUnderwritingPortal
 
 
 @dataclass

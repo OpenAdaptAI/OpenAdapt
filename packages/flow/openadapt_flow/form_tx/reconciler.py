@@ -172,12 +172,15 @@ class ReconcilerSession:
         self._commit_in_progress: bool = False
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
+        self._bound_surface: Optional[FormSurfaceBackend] = None
 
 
 def _is_action_button(ctrl: ObservedControl) -> bool:
     tag = ctrl.tag.casefold()
     itype = ctrl.input_type.casefold()
     role = ctrl.role.casefold()
+    if role in {"combobox", "listbox", "checkbox", "radio", "switch", "textbox"}:
+        return False
     return (
         tag == "button"
         or itype in ("button", "submit", "reset", "image")
@@ -415,11 +418,13 @@ class FormReconciler:
         self,
         surface: Optional[FormSurfaceBackend] = None,
         *,
+        signing_key: Optional[Ed25519PrivateKey] = None,
         max_screen_transitions: int = 25,
         max_passes_per_screen: int = 10,
         summary_judge: Optional[SummaryJudge] = None,
     ) -> None:
         self._surface = surface
+        self._default_signing_key = signing_key
         self.max_screen_transitions = max_screen_transitions
         self.max_passes_per_screen = max_passes_per_screen
         self._summary_judge = summary_judge if summary_judge is not None else SummaryJudge()
@@ -429,23 +434,36 @@ class FormReconciler:
         pack: FormPack,
         dossier: InputDossier,
         *,
+        surface: Optional[FormSurfaceBackend] = None,
         run_id: Optional[str] = None,
         signing_key: Optional[Ed25519PrivateKey] = None,
     ) -> ReconcilerSession:
         """Initialize a fresh ``ReconcilerSession`` from ``pack`` and ``dossier``."""
-        return ReconcilerSession(
+        sess = ReconcilerSession(
             run_id=run_id,
             pack=pack,
             dossier=dossier,
-            signing_key=signing_key,
+            signing_key=signing_key if signing_key is not None else self._default_signing_key,
         )
+        sess._bound_surface = surface
+        return sess
 
     start_session = create_session
 
     def _resolve_surface(
-        self, override: Optional[FormSurfaceBackend]
+        self,
+        override: Optional[FormSurfaceBackend],
+        session: Optional[ReconcilerSession] = None,
     ) -> FormSurfaceBackend:
-        active = override if override is not None else self._surface
+        active = (
+            override
+            if override is not None
+            else (
+                session._bound_surface
+                if session is not None and session._bound_surface is not None
+                else self._surface
+            )
+        )
         if active is None:
             raise ValueError("FormReconciler requires a FormSurfaceBackend instance")
         return active
@@ -1433,7 +1451,7 @@ class FormReconciler:
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
         """Advance ``session`` deterministically until verified completion or a governed halt."""
-        active_surface = self._resolve_surface(surface)
+        active_surface = self._resolve_surface(surface, session)
         pack = session.pack
         session.active_halts.clear()
 
@@ -1957,7 +1975,7 @@ class FormReconciler:
                 f"allowed: {[a.value for a in active_halt.allowed_actions]}"
             )
 
-        active_surface = self._resolve_surface(surface)
+        active_surface = self._resolve_surface(surface, session)
         meta = session._halt_metadata.get(active_halt.halt_id, {})
         field_sig: str = meta.get("field_signature") or (
             active_halt.dom_selector or active_halt.halt_id
