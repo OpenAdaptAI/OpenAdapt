@@ -248,7 +248,9 @@ def test_a_refused_run_does_not_touch_the_captured_windows(monkeypatch, tmp_path
     )
     with pytest.raises(ValueError, match="refused here"):
         _replayer_on(backend).run(
-            SimpleNamespace(), bundle_dir=tmp_path / "b", run_dir=tmp_path / "r"
+            SimpleNamespace(secret_params=()),
+            bundle_dir=tmp_path / "b",
+            run_dir=tmp_path / "r",
         )
     assert backend._verified_windows == {"s1": (7, 10)}
     assert backend._conflicted_windows == {"s2"}
@@ -279,7 +281,7 @@ def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path
     monkeypatch.setattr(Replayer, "_initial_external_network_calls", reached)
     with pytest.raises(_Reached):
         _replayer_on(backend).run(
-            SimpleNamespace(interstitials=()),
+            SimpleNamespace(interstitials=(), secret_params=()),
             bundle_dir=tmp_path / "b",
             run_dir=tmp_path / "r",
         )
