@@ -28,6 +28,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -56,6 +57,13 @@ MIRRORS_TXT = "mirror://mirrors.ubuntu.com/mirrors.txt"
 
 UPDATE_TIMEOUT = 150
 DOWNLOAD_TIMEOUT = 420
+PLAYWRIGHT_TIMEOUT = 300
+SYSTEM_TIMEOUTS = ("/usr/bin/gnutimeout", "/usr/bin/timeout")
+
+NETWORK_FAILURE = re.compile(
+    r"Could not connect|Unable to connect|Connection timed out|"
+    r"Connection refused|Network is unreachable|Connection failed"
+)
 
 DNS_FAILURE = re.compile(
     r"Temporary failure resolving|Could not resolve|Name or service not known"
@@ -226,6 +234,118 @@ def parse_shim_log(text: str) -> list[str]:
     return packages
 
 
+def _gnu_timeout(privileged: bool) -> str:
+    """Identify the installed provider without trusting a subject PATH.
+
+    A system pathname alone is not an implementation identity: compatible
+    utility replacements can differ in process-group and exit semantics.
+    Version queries are read-only local metadata, like dpkg-query below.
+    """
+    if sys.platform == "linux" or privileged:
+        candidates = SYSTEM_TIMEOUTS
+    else:
+        candidates = tuple(
+            path
+            for name in ("gtimeout", "gnutimeout", "timeout")
+            if (path := shutil.which(name)) is not None
+        )
+    for timer in candidates:
+        if not os.access(timer, os.X_OK):
+            continue
+        try:
+            version = _owned_run([timer, "--version"], 5)
+        except OSError:
+            continue
+        first_line = (version.stdout or "").partition("\n")[0]
+        if version.returncode == 0 and "(GNU coreutils)" in first_line:
+            return timer
+    raise SystemExit(
+        "::error title=CI command deadline::A verified GNU timeout is required "
+        "on this runner; compatible command names are not sufficient"
+    )
+
+
+def _deadline_command(command: list[str], timeout: float) -> list[str]:
+    """Put the process-group deadline inside the command's privilege boundary.
+
+    Killing a sudo monitor cannot kill its privileged children. GNU timeout
+    owns the command group at the same privilege level and sends KILL to the
+    group at the deadline. Trusted CI tools must stay in that process group;
+    this is not containment for a program deliberately escaping its session.
+    """
+    if timeout <= 0:
+        raise ValueError("the command deadline must be positive")
+    privileged = os.geteuid() == 0 or command[:2] == ["sudo", "-n"]
+    timer = _gnu_timeout(privileged)
+    deadline = [timer, "--signal=KILL", "--", f"{timeout:g}s"]
+    if command[:2] == ["sudo", "-n"]:
+        return [*command[:2], *deadline, *command[2:]]
+    return [*deadline, *command]
+
+
+def _owned_run(
+    command: list[str],
+    timeout: float,
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    merge_stderr: bool = False,
+) -> subprocess.CompletedProcess:
+    """Bound a trusted command at the identity that can kill its descendants.
+
+    Same-identity POSIX commands run in a new owned session. Delegated sudo
+    commands need a qualified system timer inside sudo, because an ordinary
+    caller cannot kill root children. Children must remain in the owned group;
+    this is lifecycle management, not containment for a program escaping it.
+
+    Return code 137 describes an operation forcibly stopped by this controller,
+    including a parent that exited while descendants kept its pipes open. It
+    must never turn that incomplete operation into a successful parent exit.
+    """
+    if timeout <= 0:
+        raise ValueError("the command deadline must be positive")
+    stderr = subprocess.STDOUT if merge_stderr else subprocess.PIPE
+    if command[:2] == ["sudo", "-n"]:
+        return subprocess.run(
+            _deadline_command(command, timeout),
+            cwd=cwd,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=stderr,
+        )
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=stderr,
+        start_new_session=True,
+    )
+
+    def stop_group() -> None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # The complete owned group already exited.
+
+    try:
+        stdout, error = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        stop_group()
+        stdout, error = proc.communicate()
+        return subprocess.CompletedProcess(command, 137, stdout, error)
+    except BaseException as primary:
+        try:
+            stop_group()
+            proc.communicate()
+        except BaseException as cleanup:
+            raise primary from cleanup
+        raise
+    return subprocess.CompletedProcess(command, proc.returncode, stdout, error)
+
+
 def resolve_playwright(python_cmd: str, target: str, cwd: str) -> list[str]:
     """Ask the pinned Playwright which packages it would install, offline.
 
@@ -247,14 +367,7 @@ def resolve_playwright(python_cmd: str, target: str, cwd: str) -> list[str]:
         env["PATH"] = f"{shim_dir}{os.pathsep}{env.get('PATH', '')}"
         env["OPENADAPT_APT_SHIM_LOG"] = str(log)
         command = shlex.split(python_cmd) + ["-m", "playwright", "install-deps", target]
-        result = subprocess.run(
-            command,
-            cwd=cwd or None,
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=300,
-        )
+        result = _owned_run(command, PLAYWRIGHT_TIMEOUT, cwd=cwd or None, env=env)
         packages = parse_shim_log(log.read_text())
         if result.returncode != 0 or not packages:
             sys.stderr.write(result.stdout + result.stderr)
@@ -275,25 +388,25 @@ def _sudo(command: list[str]) -> list[str]:
     return command if os.geteuid() == 0 else ["sudo", "-n", *command]
 
 
-def _run(command: list[str], timeout: int | None = None) -> tuple[int, str]:
+def _run(command: list[str], timeout: float | None = None) -> tuple[int, str]:
     print("+ " + " ".join(shlex.quote(part) for part in command), flush=True)
     try:
-        proc = subprocess.run(
-            command,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        output = exc.output or ""
-        if isinstance(output, bytes):
-            output = output.decode(errors="replace")
-        print(output, flush=True)
-        print(f"timed out after {timeout}s", flush=True)
-        return 124, output
+        if timeout is None:
+            proc = subprocess.run(
+                command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            )
+        else:
+            proc = _owned_run(command, timeout, merge_stderr=True)
+    except OSError as exc:
+        raise SystemExit(f"::error title=CI command execution::{exc}") from exc
     print(proc.stdout, end="", flush=True)
-    return proc.returncode, proc.stdout
+    code = 128 - proc.returncode if proc.returncode < 0 else proc.returncode
+    if timeout is not None and code in (124, 137):
+        print(
+            f"bounded command interrupted (deadline limit {timeout:g}s, exit {code})",
+            flush=True,
+        )
+    return code, proc.stdout
 
 
 def _write_root(path: Path, text: str) -> None:
@@ -556,18 +669,25 @@ def cmd_install(args: argparse.Namespace) -> int:
     sources = Sources()
     tried: list[str] = []
     dns_failures = 0
+    network_failures = 0
+    interrupted = False
+    index_reached = False
     for name, archive, security in stages(_arch()):
         tried.append(name)
         print(f"::group::apt via {name}", flush=True)
         sources.apply(archive, security)
         code, output = _run(_sudo(["apt-get", "update"]), timeout=UPDATE_TIMEOUT)
+        interrupted |= code in (124, 137)
         if not update_reached_distro(code, output, third_party_hosts()):
             print("::endgroup::", flush=True)
-            dns_failures += bool(DNS_FAILURE.search(output))
+            dns = bool(DNS_FAILURE.search(output))
+            dns_failures += dns
+            network_failures += dns or bool(NETWORK_FAILURE.search(output))
             print(
                 f"::warning::apt-get update failed via {name}; trying the next mirror"
             )
             continue
+        index_reached = True
         if source:
             # Only the index refresh was requested; the packages are present.
             print("::endgroup::", flush=True)
@@ -579,6 +699,7 @@ def cmd_install(args: argparse.Namespace) -> int:
             timeout=DOWNLOAD_TIMEOUT,
         )
         print("::endgroup::", flush=True)
+        interrupted |= code in (124, 137)
         if code != 0 and NOT_FOUND.search(output):
             return _finish(
                 result,
@@ -588,7 +709,6 @@ def cmd_install(args: argparse.Namespace) -> int:
                 f"{' '.join(missing)}",
             )
         if code != 0:
-            dns_failures += bool(DNS_FAILURE.search(output))
             print(
                 f"::warning::downloading packages failed via {name}; trying the next mirror"
             )
@@ -614,23 +734,50 @@ def cmd_install(args: argparse.Namespace) -> int:
 
     sources.apply(None, None)
     when = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    if index_reached:
+        return _finish(
+            result,
+            {"source": "", "mirror": "", "reason": "download-failed"},
+            "::error title=Ubuntu package download failed::Ubuntu index access "
+            "succeeded, but package download commands failed at every usable mirror. "
+            "Inspect the command errors and deadline output above. Packages not "
+            f"installed: {' '.join(missing) or names}",
+        )
+    if interrupted:
+        return _finish(
+            result,
+            {"source": "", "mirror": "", "reason": "command-interrupted"},
+            "::error title=Ubuntu index command interrupted::Bounded index commands "
+            "were interrupted before an index refresh succeeded. Inspect the "
+            "deadline and command output above.",
+        )
+    package_status = (
+        f"Packages not installed: {' '.join(missing)}."
+        if missing
+        else f"Requested packages available: {names}; index refresh failed."
+    )
     if dns_failures == len(tried):
         return _finish(
             result,
             {"source": "", "mirror": "", "reason": "dns-unreachable"},
-            "::error title=Ubuntu package hosts unreachable (DNS)::Ubuntu package hosts "
-            "unreachable (DNS); infrastructure outage, not a test failure. No cached .deb "
-            f"files covered the list and every mirror ({'; '.join(tried)}) failed to resolve "
-            f"at {when}. Packages not installed: {' '.join(missing) or names}. Re-run the job "
-            "when DNS recovers.",
+            "::error title=APT index DNS errors::DNS resolution errors were reported "
+            f"during every configured index attempt ({'; '.join(tried)}) at {when}. "
+            f"{package_status}",
+        )
+    if network_failures != len(tried):
+        return _finish(
+            result,
+            {"source": "", "mirror": "", "reason": "index-update-failed"},
+            "::error title=Ubuntu index update failed::Index refresh failed across "
+            "the configured mirrors. Inspect the command errors above; the failures "
+            f"do not establish a DNS or connection outage. {package_status}",
         )
     return _finish(
         result,
         {"source": "", "mirror": "", "reason": "mirror-unreachable"},
-        "::error title=Ubuntu package mirror unreachable::Infrastructure outage, not a "
-        f"test failure: no Ubuntu mirror answered ({'; '.join(tried)}) at {when}, so these "
-        f"packages could not be installed: {' '.join(missing) or names}. Re-run the job "
-        "when the mirror recovers.",
+        "::error title=Ubuntu package mirror connection errors::Index refresh failed "
+        f"with connection errors across the configured mirrors ({'; '.join(tried)}) "
+        f"at {when}. {package_status}",
     )
 
 
