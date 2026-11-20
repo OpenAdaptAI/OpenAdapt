@@ -230,9 +230,7 @@ def test_save_step_png_redacts_when_opt_in(monkeypatch, tmp_path: Path):
     (run_dir / "steps").mkdir(parents=True)
     player = object.__new__(Replayer)
     player._execution_workflow_snapshot = Workflow(name="ordinary-run", steps=[])
-    rel = player._save_step_png(
-        run_dir, "step_x", "before", _png_bytes((200, 40, 40))
-    )
+    rel = player._save_step_png(run_dir, "step_x", "before", _png_bytes((200, 40, 40)))
     import io
 
     saved = (run_dir / rel).read_bytes()
