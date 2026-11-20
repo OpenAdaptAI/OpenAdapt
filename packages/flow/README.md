@@ -374,12 +374,17 @@ app and one that drops the save, which return results without opening a
 browser.
 
 `openadapt-flow emit-mcp bundle --out server.py` writes a standalone MCP
-server for one bundle. It replays without the record check. A web bundle's
-tool takes the app's URL. A bundle recorded on Windows, macOS, Linux, RDP or
-Citrix takes none: start the server with `python server.py --config
-deploy.yaml`. Each call then runs `openadapt-flow run bundle --config
-deploy.yaml`, the governed path, so the file's app, record check, policy and
-approvals all apply.
+server for one bundle. Web and desktop tools use the same governed `run` CLI.
+Start the server with `--config deploy.yaml --profile standard
+--qualification-authority-file authority.json`; the deployment supplies the
+target and read-back. Per-call URL overrides refuse. Existing qualification,
+policy and approval checks still apply.
+
+The adapter's outer result is `REFUSED` before launch or `UNCERTAIN` after a
+launch attempt. It never asserts production eligibility from an unauthenticated
+report. Fresh bound local runtime claims are labelled separately. See the
+[governed tool observation contract](docs/MCP_GOVERNED_TOOLS.md) for the supported
+producer modes and the report-authentication prerequisite.
 
 ### From Claude Code
 

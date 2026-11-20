@@ -44,6 +44,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow import run_invocation as _run_invocation
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
@@ -6236,6 +6237,7 @@ class ReportRedaction(BaseModel):
 
 
 class RunReport(BaseModel):
+    invocation_context: Optional[_run_invocation.InvocationContext] = None
     workflow_name: str
     started_at: str
     execution_profile: Optional[Literal["demo", "standard", "regulated"]] = Field(
@@ -6665,10 +6667,7 @@ class RunReport(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Omit additive multi-surface evidence from single-surface reports."""
 
-        data: dict[str, Any] = handler(self)
-        if not self.observed_surface_environments:
-            data.pop("observed_surface_environments", None)
-        return data
+        return _run_invocation.serialize_report_compatible(self, handler)
 
     @model_validator(mode="after")
     def _validate_outcome_envelope_binding(self) -> "RunReport":
@@ -6679,6 +6678,7 @@ class RunReport(BaseModel):
         mutable from the local report that produced it.
         """
 
+        _run_invocation.validate_report_profile(self)
         expected_qualification_only = bool(self.governed_qualification_case_id_sha256)
         if "qualification_evidence_only" not in self.model_fields_set:
             # Normalize reports written before the typed marker existed from

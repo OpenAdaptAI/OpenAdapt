@@ -605,8 +605,8 @@ PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwrigh
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 20257 |
-| `packages/flow/openadapt_flow/__main__.py` | 14571 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20242 |
+| `packages/flow/openadapt_flow/__main__.py` | 14530 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6865 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
@@ -672,3 +672,11 @@ The binary descriptor policy adds one shared-helper import to `__main__.py`
 and `runtime/durable/attended.py`. Their budgets increase by one line each;
 byte-mode handling remains in the small private-file helper and the source
 contract checks every raw-reader/writer entry point.
+
+
+The governed MCP invocation repair moves pure backend resolution to
+`surface_selection.py` and initial report creation/compatible evidence serialization
+to `run_invocation.py`. The report records a non-authority local invocation context
+before persistence; the original runtime RunID, profile and qualification gates
+keep their existing roles. The three affected large-file budgets decrease above.
+No new trust authority or independently authenticated producer is supplied.
