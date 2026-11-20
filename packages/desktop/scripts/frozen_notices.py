@@ -240,6 +240,19 @@ REVIEWED_EXTERNAL_NOTICE_FILES: dict[tuple[str, str], dict[str, str]] = {
             "012477eb0ae60687750030b5b3d1206dd5a17244ffe5ed5300044feaf6ae62ad"
         ),
     },
+    ("loguru", "0.8.0"): {
+        "relative_path": "loguru/LICENSE",
+        "source_url": (
+            "https://github.com/Delgan/loguru/blob/"
+            "28349be3cd740867bc947eef741c69370ca45735/LICENSE"
+        ),
+        "source_commit": "28349be3cd740867bc947eef741c69370ca45735",
+        "sha256": "b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327",
+        "license_expression": "MIT",
+        "license_evidence_sha256": (
+            "012477eb0ae60687750030b5b3d1206dd5a17244ffe5ed5300044feaf6ae62ad"
+        ),
+    },
     ("pyobjc-core", "12.2.1"): {
         "relative_path": "pyobjc/LICENSE.txt",
         "source_url": (
