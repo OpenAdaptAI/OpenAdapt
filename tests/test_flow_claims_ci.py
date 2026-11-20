@@ -353,3 +353,97 @@ def test_junit_cli_keeps_full_option_spellings_and_complete_validation(
     )
     assert out.is_file()
     assert _check(out, _registry(tmp_path / "claims.yaml")) == 0
+
+
+def _serial_seed_script() -> tuple[str, str]:
+    run = next(
+        step["run"]
+        for step in _workflow()["jobs"]["flow-unit"]["steps"]
+        if step.get("name") == "Test"
+    )
+    guard = run.split("<<'PYTHON'\n", 1)[1].split("\nPYTHON", 1)[0]
+    return run, guard
+
+
+def test_seed_timing_case_has_one_required_serial_owner() -> None:
+    run, _guard = _serial_seed_script()
+    case = "tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency"
+    assert f"serial_case={case}" in run
+    assert 'if [ "$file" = "${serial_case%%::*}" ]; then run_serial=true; fi' in run
+    assert '--deselect="$serial_case"' in run
+    assert run.count('"$serial_case"') == 2  # deselect and exact serial invocation
+    assert "pytest -n 0 -v --basetemp=runs/ci-serial" in run
+    assert '--junitxml=runs/flow-serial.xml "$serial_case" || serial_rc=$?' in run
+    assert "serial_coverage=(--cov-append)" in run
+    assert 'if [ "$serial_rc" -ne 0 ]; then exit "$serial_rc"; fi' in run
+    assert 'exit "$unit_rc"' in run
+    # Check the actual shell structure, without executing pytest or any command.
+    rendered = run.replace("${{ matrix.shard }}", "1").replace("${{ matrix.of }}", "3")
+    result = subprocess.run(
+        ["bash", "-n"], input=rendered, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        None,
+        "missing",
+        "duplicate",
+        "skipped",
+        "failure",
+        "error",
+        "name",
+        "class",
+        "parallel-duplicate",
+    ],
+)
+def test_serial_seed_census_preserves_cases_and_refuses_missing_or_failed_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, defect: str | None
+) -> None:
+    import xml.etree.ElementTree as ET
+
+    _run, guard = _serial_seed_script()
+    name = "test_50k_seed_speed_and_8_worker_background_concurrency"
+    case = _case("test_tx_acid_servers", name=name)
+    parallel = tmp_path / "unit.xml"
+    (tmp_path / "runs").mkdir()
+    serial = tmp_path / "runs" / "flow-serial.xml"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["census", str(parallel)])
+
+    def write_reports(
+        serial_cases: str, parallel_cases: str = _case("test_replayer")
+    ) -> None:
+        parallel.write_text(
+            f"<testsuites><testsuite>{parallel_cases}</testsuite></testsuites>"
+        )
+        serial.write_text(
+            f"<testsuites><testsuite>{serial_cases}</testsuite></testsuites>"
+        )
+
+    # Every negative is paired with the same genuine one-case positive first.
+    write_reports(case)
+    exec(compile(guard, "workflow-serial-census", "exec"), {})
+    merged = list(ET.parse(parallel).getroot().iter("testcase"))
+    assert [(c.get("classname"), c.get("name")) for c in merged] == [
+        ("tests.test_replayer", "example"),
+        ("tests.test_tx_acid_servers", name),
+    ]
+    if defect is None:
+        return
+    if defect == "missing":
+        write_reports("")
+    elif defect == "duplicate":
+        write_reports(case + case)
+    elif defect in ("skipped", "failure", "error"):
+        write_reports(_case("test_tx_acid_servers", f"<{defect}/>", name=name))
+    elif defect == "name":
+        write_reports(_case("test_tx_acid_servers", name="different_case"))
+    elif defect == "class":
+        write_reports(_case("different_module", name=name))
+    else:
+        write_reports(case, case)
+    with pytest.raises(AssertionError):
+        exec(compile(guard, "workflow-serial-census", "exec"), {})
