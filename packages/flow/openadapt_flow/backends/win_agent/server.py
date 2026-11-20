@@ -3149,7 +3149,7 @@ def make_handler_class(
                             "context_environment_v1",
                             "typed_input_v1",
                             *(
-                                ["native_keyboard_lease_v1"]
+                                ["native_keyboard_lease_v1", "native_editable_value_v1"]
                                 if keyboards is not None
                                 else []
                             ),

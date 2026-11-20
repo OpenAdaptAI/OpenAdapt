@@ -121,6 +121,7 @@ def test_actual_http_getter_siblings_share_exact_value_and_lease_binding():
     )
     try:
         backend = WindowsBackend(agent.url, auth_token="unit-token")
+        assert "native_editable_value_v1" in backend.agent_capabilities()
         point = tuple(_focused_target(auto)["point"])
         assert backend.text_value_at(*point) == ""
         assert backend.focused_text_value() == ""
