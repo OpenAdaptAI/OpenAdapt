@@ -33,11 +33,18 @@ def wait_for_rendered_items(
     *,
     timeout_s: float,
 ) -> list[Any]:
-    """Wait for the owned render signal and UIA items within one deadline."""
+    """Wait within one deadline; diagnostics identify the latest probe's time.
+
+    A completed probe describes its observation then, not current desktop state.
+    """
     started = monotonic()
     deadline = started + timeout_s
     phase = "ContentRendered signal"
     signal: Optional[dict[str, Any]] = None
+    probe_attempt = 0
+    probe_started_s: Optional[float] = None
+    probe_finished_s: Optional[float] = None
+    probe_outcome = "not_attempted"
 
     def fail(reason: str) -> NoReturn:
         raise NativeAppStartupError(
@@ -45,6 +52,10 @@ def wait_for_rendered_items(
             f"exit={proc.poll()}; phase={phase}; "
             f"elapsed={monotonic() - started:.3f}s; "
             f"ready={ready_path.exists()}; "
+            f"latest_probe_attempt={probe_attempt}; "
+            f"latest_probe_started_s={probe_started_s!r}; "
+            f"latest_probe_finished_s={probe_finished_s!r}; "
+            f"latest_probe_outcome={probe_outcome}; "
             f"stdout_tail={_tail(stdout_path)!r}; "
             f"stderr_tail={_tail(stderr_path)!r}"
         )
@@ -78,10 +89,18 @@ def wait_for_rendered_items(
                 fail("invalid ContentRendered signal")
         if signal is not None:
             phase = "owned window UIA items"
+            probe_attempt += 1
+            probe_started_s = monotonic() - started
+            probe_finished_s = None
+            probe_outcome = "in_progress"
             try:
                 items = find_items(signal["hwnd"])
             except Exception as exc:
+                probe_finished_s = monotonic() - started
+                probe_outcome = "error"
                 fail(f"UIA discovery failed ({type(exc).__name__}: {str(exc)[:400]})")
+            probe_finished_s = monotonic() - started
+            probe_outcome = "no_items" if items is None else "items_returned"
             if proc.poll() is not None:
                 fail("owned child exited during UIA discovery")
             if monotonic() >= deadline:
