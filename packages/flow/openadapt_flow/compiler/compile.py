@@ -4258,6 +4258,9 @@ def _compile_recording(
                 len(decisions),
             )
 
+    # Each postcondition stays on its producing step. Later display persistence,
+    # reversible risk and target identity do not authorize delaying that check.
+
     # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
     # gesture that asserts nothing with an equivalent checked one, using only
     # the recording's own frames. Every change is recorded in
@@ -4277,7 +4280,11 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
-    compile_notes = [*compile_notes, *guard_notes, *native_selection_notes]
+    compile_notes = [
+        *compile_notes,
+        *guard_notes,
+        *native_selection_notes,
+    ]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 

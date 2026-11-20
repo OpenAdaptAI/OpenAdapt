@@ -260,6 +260,7 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.runtime.row_dates import _ROW_DATE_PATTERNS, _row_dates  # noqa: F401
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
+from openadapt_flow.runtime.typed_echo import read_typed_echo
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -18089,28 +18090,21 @@ class Replayer:
         allow_masked: bool = False,
         allow_retry: bool = True,
     ) -> Optional[str]:
-        """Verify a TYPE action landed; one guarded refocus-and-retype retry.
+        """Verify TYPE; retry input only after exact unchanged-field proof.
 
-        A retry needs a browser surface, structural browser observations and
-        exact field readback proving no change. An opaque or native surface
-        cannot prove where the first input went and must halt. For a browser,
-        re-click the field (when its point is known), select-all so a false-negative
-        first attempt is replaced rather than duplicated, retype. When the
-        region DID change but the value cannot be read (a dialog over the
-        field, an unexpected re-render), retyping is not safe — select-all
-        could destroy pre-existing field content and the re-click could
-        re-fire whatever now sits at that point — so the run halts
-        immediately with the accurate reason. Typed input that cannot be
-        confirmed must never be reported as success (VALIDATION.md 'focus
-        stolen' finding).
+        Bounded read-only observations live in ``typed_echo``. A changed but
+        unreadable field always halts; remaining browser/structural guards
+        decide whether an unchanged field permits one refocus/retype.
         """
-        landed, changed = self._typed_input_landed(
-            text,
-            field_point,
-            baseline_png,
-            field_region=field_region,
-            baseline_field_value=baseline_field_value,
-            allow_masked=allow_masked,
+        landed, changed = read_typed_echo(
+            lambda: self._typed_input_landed(
+                text,
+                field_point,
+                baseline_png,
+                field_region=field_region,
+                baseline_field_value=baseline_field_value,
+                allow_masked=allow_masked,
+            )
         )
         if landed:
             result.input_verified = True
