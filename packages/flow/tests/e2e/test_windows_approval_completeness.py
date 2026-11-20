@@ -1,0 +1,306 @@
+"""Native approval values, independent managed storage, and no-write refusal.
+
+This synthetic observation variant removes the grid from the visible form so
+virtual cells with no independent native value source do not obscure the
+specific field contract under test. The original SQLite data and save handler
+remain. It qualifies neither those virtual cells nor a complete Flow save.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import os
+import time
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from openadapt_flow import vision
+from openadapt_flow.approval_mode.form_state import approval_form_state
+from openadapt_flow.approval_mode.gate import ApprovalGate, StepContext
+from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+from openadapt_flow.backends.win_agent import server
+from openadapt_flow.backends.win_agent.native_value import valid_value_proof
+from openadapt_flow.ir import ActionKind, Step, StepResult, Workflow
+from tests.e2e.test_windows_hosted_replay import RUN_E2E, _Host
+
+pytestmark = [
+    pytest.mark.skipif(
+        not RUN_E2E, reason="opt-in hosted Windows native approval proof"
+    ),
+    pytest.mark.timeout(300),
+]
+EVIDENCE_ENV = "OAFLOW_NATIVE_APPROVAL_EVIDENCE"
+SHORT = "Synthetic Ω café 42"
+HOOK = r"""
+# This is a synthetic observation variant, not qualification of virtual cells.
+$form.Controls.Remove($grid)
+$grid.Hide()
+$approvalProbe = New-Object System.Windows.Forms.TextBox
+$approvalProbe.Name = 'approvalProbe'
+$approvalProbe.AccessibleName = 'approvalProbe'
+$approvalProbe.Location = New-Object System.Drawing.Point(20, 120)
+$approvalProbe.Size = New-Object System.Drawing.Size(590, 28)
+$approvalProbe.MaxLength = 131072
+$form.Controls.Add($approvalProbe)
+function Get-ApprovalStored {
+    $values = @{}
+    $controls = @{ probe=$script:approvalProbe; search=$script:searchBox; note=$script:noteBox }
+    foreach ($id in $controls.Keys) {
+        $control = $controls[$id]
+        $text = [string]$control.Text
+        $bytes = [Text.Encoding]::Unicode.GetBytes($text)
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { $hash = ([BitConverter]::ToString($hasher.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $hasher.Dispose() }
+        $values[$id] = @{ utf16_units=$text.Length; sha256_utf16le=$hash;
+            suffix=$text.Substring([Math]::Max(0, $text.Length - 16));
+            hwnd=$control.Handle.ToInt64(); pid=$PID }
+    }
+    return @{ fields=$values; form_hwnd=$form.Handle.ToInt64(); pid=$PID }
+}
+$approvalTimer = New-Object System.Windows.Forms.Timer
+$approvalTimer.Interval = 40
+$approvalTimer.Add_Tick({
+    $commandPath = Join-Path $PSScriptRoot 'approval-command'
+    if (-not (Test-Path $commandPath)) { return }
+    $command = [IO.File]::ReadAllText($commandPath)
+    Remove-Item $commandPath
+    switch ($command) {
+        'empty' { $script:approvalProbe.Text = '' }
+        'short' { $script:approvalProbe.Text = 'Synthetic Ω café 42' }
+        'long' { $script:approvalProbe.Text = ('x' * 8192) + '-END' }
+        'snapshot' { }
+        default { throw 'Unknown synthetic approval fixture command' }
+    }
+    [void]$script:approvalProbe.Focus()
+    $snapshot = Get-ApprovalStored
+    $snapshot['command'] = $command
+    $temporary = Join-Path $PSScriptRoot 'approval-ack.tmp'
+    [IO.File]::WriteAllText($temporary, ($snapshot | ConvertTo-Json -Depth 6))
+    [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'approval-ack.json'))
+})
+$approvalTimer.Start()
+"""
+
+
+def _command(root: Path, command: str) -> dict:
+    ack = root / "approval-ack.json"
+    ack.unlink(missing_ok=True)
+    temporary = root / "approval-command.tmp"
+    temporary.write_text(command)
+    temporary.replace(root / "approval-command")
+    deadline = time.monotonic() + 15
+    while not ack.is_file():
+        assert time.monotonic() < deadline, "synthetic approval fixture timed out"
+        time.sleep(0.05)
+    result = json.loads(ack.read_text(encoding="utf-8-sig"))
+    assert result["command"] == command
+    return result
+
+
+def _check_stored(snapshot: dict, expected: str) -> None:
+    actual = snapshot["fields"]["probe"]
+    raw = expected.encode("utf-16-le")
+    assert actual["utf16_units"] == len(raw) // 2
+    assert actual["sha256_utf16le"] == hashlib.sha256(raw).hexdigest()
+    assert actual["suffix"] == expected[-16:]
+
+
+def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkeypatch):
+    import uiautomation as auto
+
+    destination = Path(os.environ[EVIDENCE_ENV])
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    frames = destination.with_suffix(".frames")
+    frames.mkdir(exist_ok=True)
+    evidence = {
+        "schema": "openadapt.native-approval-completeness-proof/v1",
+        "scope": "synthetic observation variant, not full Flow/save qualification",
+        "phases": [],
+        "transport": [],
+    }
+    host = _Host(tmp_path)
+    fixture = tmp_path / "patient_notes.ps1"
+    fixture.write_text(
+        fixture.read_text().replace(
+            "[void]$form.ShowDialog()", HOOK + "\n[void]$form.ShowDialog()"
+        ),
+        encoding="utf-8-sig",
+    )
+    try:
+        backend = host.start_agent()
+        original_post = backend._session.post
+        writes = []
+
+        def post(url, **kwargs):
+            path = url.removeprefix(backend.server_url)
+            if path in {"/input", "/input/guarded", "/uia/act", "/execute_windows"}:
+                writes.append(path)
+            response = original_post(url, **kwargs)
+            if path == "/window/form-fields":
+                evidence["transport"].append(
+                    {
+                        "path": path,
+                        "request": kwargs["json"],
+                        "status": response.status_code,
+                        "response": response.json(),
+                    }
+                )
+            return response
+
+        monkeypatch.setattr(backend._session, "post", post)
+        host.launch_app()
+        before = host.rows()
+        evidence["before_rows"] = before
+        for name, expected in (
+            ("empty", ""),
+            ("short", SHORT),
+            ("long", "x" * 8192 + "-END"),
+        ):
+            managed = _command(tmp_path, name)
+            _check_stored(managed, expected)
+            payload = {"hwnd": managed["form_hwnd"], "pid": managed["pid"]}
+            # Reacquire actual UIA/runtime/native scope, using the exact engine
+            # reader independently in this process as well as over HTTP.
+            with auto.UIAutomationInitializerInThread():
+                window = auto.ControlFromHandle(payload["hwnd"])
+                control = auto.ControlFromHandle(managed["fields"]["probe"]["hwnd"])
+                user32 = server._user32_factory()
+                initial = server._window_operation("window-bounds", payload, user32)[
+                    "window"
+                ]
+                assert initial is not None
+
+                def identity():
+                    return server._form_value_identity(
+                        control,
+                        window,
+                        payload["hwnd"],
+                        lambda: (
+                            server._window_operation("window-bounds", payload, user32)[
+                                "window"
+                            ]
+                            == initial
+                        ),
+                        auto,
+                    )
+
+                observed = server._form_field_value(control, identity)
+                uia_value = control.GetValuePattern().Value
+                rect = control.BoundingRectangle
+                point = (
+                    int((rect.left + rect.right) / 2),
+                    int((rect.top + rect.bottom) / 2),
+                )
+            assert backend.record_verified_window("probe", *point)
+            fields = backend.approval_form_fields("save")
+            phase = {
+                "name": name,
+                "managed_before": managed,
+                "uia_utf16_units": len(uia_value.encode("utf-16-le")) // 2,
+                "uia_sha256_utf16le": hashlib.sha256(
+                    uia_value.encode("utf-16-le")
+                ).hexdigest(),
+                "direct_complete": observed.complete,
+                "direct_reason": observed.reason,
+                "fields": fields,
+            }
+            evidence["phases"].append(phase)
+            if name == "long":
+                assert (
+                    not observed.complete
+                    and observed.reason == "provider_native_value_disagreement"
+                )
+                assert phase["uia_utf16_units"] == 4096 and fields is None
+            else:
+                assert observed.complete and observed.value == expected
+                assert observed.proof is not None and valid_value_proof(
+                    expected, observed.proof.payload()
+                )
+                assert fields is not None
+                by_hwnd = {
+                    f["value_proof"]["hwnd"]: f
+                    for f in fields["fields"]
+                    if f["value_proof"] is not None
+                }
+                for stored in managed["fields"].values():
+                    field = by_hwnd[stored["hwnd"]]
+                    assert (
+                        field["value_proof"]["sha256_utf16le"]
+                        == stored["sha256_utf16le"]
+                    )
+                    assert field["value_proof"]["utf16_units"] == stored["utf16_units"]
+                    assert field["value_proof"]["pid"] == stored["pid"]
+            frame = backend.screenshot()
+            store = ItemApprovalStore(tmp_path / ("run-" + name))
+            gate = ApprovalGate("each_item", approval_store=store, approval_wait_s=0)
+            gate.begin_item(
+                run_id="run-" + name, bundle_content_digest="a" * 64, profile="standard"
+            )
+            step = Step(
+                id="save",
+                intent="Save synthetic fixture",
+                action=ActionKind.KEY,
+                key="Enter",
+                risk="irreversible",
+            )
+            result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+            verdict = gate.before_step(
+                StepContext(
+                    step=step,
+                    workflow=Workflow(name="native approval", steps=[step]),
+                    result=result,
+                    step_index=0,
+                    run_id="run-" + name,
+                    frame=lambda: frame,
+                    form_state=lambda png: approval_form_state(
+                        backend, vision, png, "save"
+                    ),
+                )
+            )
+            assert not verdict.proceed  # nobody approved; no input may occur
+            phase["gate_checks"] = [
+                check.model_dump(mode="json") for check in verdict.checks
+            ]
+            requests = store.requests()
+            phase["request_count"] = len(requests)
+            if name == "long":
+                assert not requests and any(
+                    c.detail == "form_state_unreadable" for c in verdict.checks
+                )
+            else:
+                assert (
+                    len(requests) == 1
+                    and requests[0].form_state_kind == "window_fields"
+                )
+                request = requests[0]
+                raw = (store.run_dir / request.screenshot).read_bytes()
+                assert hashlib.sha256(raw).hexdigest() == request.screenshot_sha256
+                with Image.open(io.BytesIO(raw)) as image:
+                    size = image.size
+                    image.verify()
+                (frames / (name + ".png")).write_bytes(raw)
+                phase["frame"] = {
+                    "file": name + ".png",
+                    "sha256": request.screenshot_sha256,
+                    "size": size,
+                    "bytes": len(raw),
+                }
+            after = _command(tmp_path, "snapshot")
+            _check_stored(after, expected)
+            assert after["fields"] == managed["fields"]
+            phase["managed_after"] = after
+            phase["after_rows"] = host.rows()
+            assert phase["after_rows"] == before
+            assert not writes
+        evidence["input_requests"] = writes
+    finally:
+        host.close()
+        evidence["fixture_and_agent_stopped"] = host.app is None and (
+            host.agent is None or host.agent.poll() is not None
+        )
+        destination.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
