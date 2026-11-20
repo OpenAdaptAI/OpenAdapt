@@ -564,3 +564,224 @@ def test_bound_action_refuses_detachment_while_waiting(app: Any, routed: bool) -
         surface.fill_text("#name", "Unsafe")
     assert frame.is_detached()
     assert app.posts == []
+
+
+def _focus_surface(app: Any, mode: str, content: str, shell: str | None = None) -> Any:
+    app.pages["/form"] = content
+    if mode == "page":
+        app.page.goto(app.origin + "/form?record=one")
+        frame = app.page.main_frame
+    else:
+        app.pages["/shell"] = (
+            shell
+            or '<!doctype html><iframe name="work" src="/form?record=one"></iframe>'
+        )
+        app.page.goto(app.origin + "/shell")
+        frame = app.page.frame(name="work")
+    surface = PlaywrightFormSurface(
+        frame if mode == "frame" else app.page,
+        profile(),
+        base_origin=app.origin,
+        frame_path_patterns=(r"/form",) if mode == "routed" else (),
+    )
+    surface.snapshot()
+    return frame, surface
+
+
+_FOCUS_FORM = """<!doctype html><body data-authenticated>
+<label>First<input id="name" value="Original" onchange="fetch('/save',{method:'POST'})"></label>
+<label>Next<input id="other" value="Other" onchange="fetch('/save',{method:'POST'})"></label>
+"""
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+def test_native_text_focus_works_with_an_intercepting_nonmodal_widget(
+    app: Any, mode: str
+) -> None:
+    html = (
+        _FOCUS_FORM
+        + """<div id="widget" hidden
+       style="position:absolute;z-index:10000;background:white">Nonmodal choices</div>
+    <script>
+        window.pointerEvents = 0;
+        document.addEventListener('pointerdown', () => window.pointerEvents++);
+        document.querySelector('#name').addEventListener('focus', () => {
+            const other=document.querySelector('#other'), box=other.getBoundingClientRect();
+            const widget=document.querySelector('#widget');widget.hidden=false;
+            Object.assign(widget.style,{left:box.left+'px',top:box.top+'px',
+                width:box.width+'px',height:box.height+'px'});
+        });
+    </script>"""
+    )
+    frame, surface = _focus_surface(app, mode, html)
+    surface.fill_text("#name", "First value")
+    assert frame.locator("#widget").is_visible()
+    # Demonstrate actual interception; the target is still visible/editable.
+    with pytest.raises(PlaywrightTimeoutError):
+        frame.locator("#other").click(timeout=200)
+    surface.snapshot()
+    surface.fill_text("#other", "Next value")
+    assert frame.locator("#other").input_value() == "Next value"
+    assert frame.locator("#widget").is_visible()
+    assert frame.evaluate("window.pointerEvents") == 0
+    assert app.posts == ["/save", "/save"]
+
+
+def _modal_markup(kind: str, body: str) -> str:
+    if kind == "native":
+        return (
+            '<dialog id="modal">'
+            + body
+            + "</dialog><script>document.querySelector('#modal').showModal()</script>"
+        )
+    return '<div role="dialog" aria-modal="true">' + body + "</div>"
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+@pytest.mark.parametrize("kind", ["native", "aria"])
+def test_native_text_focus_refuses_a_target_outside_active_modal(
+    app: Any, mode: str, kind: str
+) -> None:
+    html = _FOCUS_FORM + _modal_markup(kind, '<input id="inside" value="Inside">')
+    frame, surface = _focus_surface(app, mode, html)
+    with pytest.raises(SurfaceContextError, match="outside_modal|inert"):
+        surface.fill_text("#name", "Must not write")
+    assert frame.locator("#name").input_value() == "Original"
+    assert app.posts == []
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+@pytest.mark.parametrize("kind", ["native", "aria"])
+def test_native_text_focus_preserves_intended_field_inside_modal(
+    app: Any, mode: str, kind: str
+) -> None:
+    html = _FOCUS_FORM + _modal_markup(
+        kind,
+        '<label>Approved field<input id="inside" value="Inside" onchange="fetch(\'/save\',{method:\'POST\'})"></label>',
+    )
+    frame, surface = _focus_surface(app, mode, html)
+    surface.fill_text("#inside", "Approved value")
+    assert frame.locator("#inside").input_value() == "Approved value"
+    assert frame.locator("#name").input_value() == "Original"
+    assert app.posts == ["/save"]
+
+
+@pytest.mark.parametrize("mode", ["frame", "routed"])
+@pytest.mark.parametrize("kind", ["native", "aria"])
+@pytest.mark.parametrize("inside", [False, True])
+def test_native_text_focus_honors_ancestor_document_modal_scope(
+    app: Any, mode: str, kind: str, inside: bool
+) -> None:
+    iframe = '<iframe name="work" src="/form?record=one"></iframe>'
+    shell = "<!doctype html>" + (
+        _modal_markup(kind, iframe)
+        if inside
+        else iframe + _modal_markup(kind, '<input value="Modal">')
+    )
+    frame, surface = _focus_surface(app, mode, _FOCUS_FORM, shell)
+    if inside:
+        surface.fill_text("#name", "Approved in frame")
+        assert frame.locator("#name").input_value() == "Approved in frame"
+        assert app.posts == ["/save"]
+    else:
+        with pytest.raises(SurfaceContextError, match="outside_modal|inert"):
+            surface.fill_text("#name", "Must not write")
+        assert frame.locator("#name").input_value() == "Original"
+        assert app.posts == []
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+@pytest.mark.parametrize(
+    "change", ["query", "navigation", "element", "document", "detach", "redirect"]
+)
+def test_native_text_focus_never_follows_focus_target_or_document_changes(
+    app: Any, mode: str, change: str
+) -> None:
+    frame, surface = _focus_surface(app, mode, _FOCUS_FORM)
+    frame.evaluate(
+        """change => {
+        const el=document.querySelector('#name');
+        el.addEventListener('focus', () => {
+            if(change==='query') history.replaceState({}, '', '?record=two');
+            else if(change==='navigation') location.href='/form?record=two';
+            else if(change==='element') el.replaceWith(el.cloneNode());
+            else if(change==='document') {
+                document.open();document.write('<!doctype html><input id="name" value="Replacement">');document.close();
+            }
+            else if(change==='detach') el.remove();
+            else queueMicrotask(() => document.querySelector('#other').focus());
+        }, {once:true});
+    }""",
+        change,
+    )
+    with pytest.raises(SurfaceContextError):
+        surface.fill_text("#name", "Must not follow")
+    if change == "navigation":
+        frame.wait_for_load_state()
+    if change != "detach":
+        assert frame.locator("#name").input_value() in {"Original", "Replacement"}
+    assert app.posts == []
+    assert surface.mutation_count == 0
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+def test_native_text_focus_waits_for_editability_without_changing_context(
+    app: Any, mode: str
+) -> None:
+    frame, surface = _focus_surface(app, mode, _FOCUS_FORM)
+    frame.evaluate("""() => {
+        const el=document.querySelector('#name');el.readOnly=true;
+        setTimeout(() => el.readOnly=false,200);
+    }""")
+    surface.fill_text("#name", "Editable value")
+    assert frame.locator("#name").input_value() == "Editable value"
+    assert app.posts == ["/save"]
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+def test_native_text_focus_refuses_context_change_during_editability_wait(
+    app: Any, mode: str
+) -> None:
+    frame, surface = _focus_surface(app, mode, _FOCUS_FORM)
+    frame.evaluate("""() => {
+        const el=document.querySelector('#name');el.readOnly=true;
+        setTimeout(() => {history.replaceState({},'', '?record=two');el.readOnly=false;},200);
+    }""")
+    with pytest.raises(SurfaceContextError):
+        surface.fill_text("#name", "Must not write")
+    assert frame.locator("#name").input_value() == "Original"
+    assert app.posts == []
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+@pytest.mark.parametrize("kind", ["native", "aria"])
+@pytest.mark.parametrize("action", _ACTION_TARGETS)
+def test_every_bound_action_refuses_target_outside_active_modal(
+    app: Any, mode: str, kind: str, action: str
+) -> None:
+    html = _action_form(action) + _modal_markup(kind, '<input value="Modal target">')
+    frame, surface = _focus_surface(app, mode, html)
+    app.pages["/popup"] = "<!doctype html><body>Popup"
+    with pytest.raises(SurfaceContextError, match="outside_modal|inert"):
+        _run_action(surface, action)
+    assert frame.locator("#name").input_value() == "Original"
+    assert frame.locator("#choice").input_value() == "a"
+    assert not frame.locator("#check").is_checked()
+    assert app.posts == []
+    assert len(app.context.pages) == 1
+
+
+@pytest.mark.parametrize("mode", ["page", "frame", "routed"])
+@pytest.mark.parametrize("kind", ["native", "aria"])
+@pytest.mark.parametrize("action", _ACTION_TARGETS)
+def test_every_bound_action_preserves_intended_target_inside_modal(
+    app: Any, mode: str, kind: str, action: str
+) -> None:
+    frame, surface = _focus_surface(
+        app, mode, "<!doctype html><body>" + _modal_markup(kind, _action_form(action))
+    )
+    app.pages["/popup"] = "<!doctype html><body>Popup"
+    _run_action(surface, action)
+    assert app.posts == ["/save"]
+    assert surface.mutation_count == 1
+    assert len(app.context.pages) == 1
