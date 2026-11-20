@@ -195,3 +195,6 @@ ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_arti
 
 # PR #2293: type annotation and a signer loader call; AST confirms no string literal.
 843e59bd733199cf3ba36296212580500d11824d:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:840
+
+# PR #2293: moved Ed25519 type annotation; AST matches prior source and has no literal.
+7571d9c86e1911d70b17e81cfa72ea7464a192cf:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
