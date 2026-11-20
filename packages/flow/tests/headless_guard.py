@@ -3,13 +3,37 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import os
 import subprocess
+from collections.abc import Sequence
 from functools import wraps
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+_SOURCE_READINESS = (
+    Path(__file__).resolve().parents[1] / "openadapt_flow" / "_browser_readiness.py"
+)
+
+
+def chromium_launch_args(args: Sequence[str] | None = None) -> list[str]:
+    """Use this checkout's fixture policy without replacing the tested subject.
+
+    Released-consumer tests intentionally install an older Flow. Importing
+    its package for new test support mixes those two independent sources.
+    The canonical policy module is stdlib-only; load it by its owned path.
+    Missing or invalid support raises before a browser can be launched.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_openadapt_fixture_browser_readiness", _SOURCE_READINESS
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("source browser launch support is unavailable")
+    support = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(support)
+    return support.chromium_launch_args(args)
 
 
 def _headed(options: dict[str, Any]) -> bool:
@@ -57,8 +81,6 @@ class _LaunchGuard:
         options = self.options(options)
         if getattr(browser_type, "name", None) != "chromium":
             return options
-        from openadapt_flow._browser_readiness import chromium_launch_args
-
         options["args"] = chromium_launch_args(options.get("args"))
         if (
             persistent
