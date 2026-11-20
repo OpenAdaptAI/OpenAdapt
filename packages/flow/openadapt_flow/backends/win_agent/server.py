@@ -2930,19 +2930,23 @@ def make_handler_class(
     keyboards = None
     keyboard_errors: tuple[type[Exception], ...] = ()
     keyboard_refusals: tuple[type[Exception], ...] = ()
+    keyboard_uncertain: tuple[type[Exception], ...] = ()
     if config.authed():
         try:
             from openadapt_flow.backends.win_agent.keyboard_lease import (
+                KeyboardDeliveryUncertain,
                 KeyboardLeaseController,
                 KeyboardLeaseError,
                 KeyboardLeaseRefused,
             )
         except ModuleNotFoundError:
             from win_agent_keyboard_lease import (  # type: ignore[no-redef,import-not-found]
+                KeyboardDeliveryUncertain,
                 KeyboardLeaseController,
                 KeyboardLeaseError,
                 KeyboardLeaseRefused,
             )
+        keyboard_uncertain = (KeyboardDeliveryUncertain,)
         keyboard_errors, keyboard_refusals = (
             (KeyboardLeaseError,),
             (KeyboardLeaseRefused,),
@@ -3291,6 +3295,9 @@ def make_handler_class(
                             if kind == "context"
                             else uia_fn(operation, data)
                         )
+                except keyboard_uncertain as exc:
+                    self._send_json(500, exc.payload())  # type: ignore[attr-defined]
+                    return
                 except keyboard_refusals as exc:
                     self._send_json(409, exc.payload())  # type: ignore[attr-defined]
                     return
@@ -3310,7 +3317,27 @@ def make_handler_class(
                         {"status": "error", "code": exc.code, "error": str(exc)},
                     )
                     return
-                except Exception:  # noqa: BLE001 - bounded generic error, no traceback/PHI
+                except Exception as exc:  # noqa: BLE001 - bounded generic error, no traceback/PHI
+                    if kind == "keyboard-lease":
+                        allowed = (
+                            RuntimeError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                            KeyError,
+                        )
+                        self._send_json(
+                            500,
+                            {
+                                "status": "error",
+                                "code": "keyboard_delivery_uncertain",
+                                "reason": "unclassified_native_failure",
+                                "failure_type": type(exc).__name__
+                                if type(exc) in allowed
+                                else "Exception",
+                            },
+                        )
+                        return
                     self._send_json(
                         500,
                         {

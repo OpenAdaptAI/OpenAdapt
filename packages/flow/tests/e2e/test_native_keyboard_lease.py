@@ -112,6 +112,7 @@ class _Transport:
         self.events = evidence["transport"] = []
 
         def post(url, **kwargs):
+            started = time.monotonic()
             response = original(url, **kwargs)
             path = url.removeprefix(backend.server_url)
             if path in {"/keyboard/lease", "/keyboard/input"}:
@@ -120,6 +121,7 @@ class _Transport:
                     "path": path,
                     "request": _redacted(request),
                     "http_status": response.status_code,
+                    "elapsed_ms": int((time.monotonic() - started) * 1000),
                     "response": _redacted(response.json()),
                 }
                 self.events.append(event)
@@ -151,9 +153,9 @@ def _values(backend) -> dict[str, str]:
 def _wait_value(backend, automation_id: str, expected: str) -> None:
     deadline = time.monotonic() + 15
     while _read(backend, automation_id) != expected:
-        assert (
-            time.monotonic() < deadline
-        ), f"UIA {automation_id} did not reach {expected!r}"
+        assert time.monotonic() < deadline, (
+            f"UIA {automation_id} did not reach {expected!r}"
+        )
         time.sleep(0.05)
 
 
@@ -390,9 +392,9 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
             if _sha(planted_png) != digest:
                 (tmp_path / "planted-frame-after.png").write_bytes(planted_png)
                 break
-            assert (
-                time.monotonic() < deadline
-            ), "planted input never changed visible pixels"
+            assert time.monotonic() < deadline, (
+                "planted input never changed visible pixels"
+            )
             time.sleep(0.05)
         assert (
             backend.focus_identity()["native_focus"]["target_fingerprint"]
@@ -586,6 +588,12 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
         uncertain["after"] = {"values": _values(backend), "rows": host.rows()}
         evidence["passed"] = True
     finally:
+        try:
+            evidence["final_values"] = _values(backend)
+            evidence["final_context"] = backend._guard_context()
+            (tmp_path / "final.png").write_bytes(backend.screenshot())
+        except Exception as exc:
+            evidence["final_field_observation_error"] = type(exc).__name__
         try:
             evidence["rows_after"] = (
                 host.rows() if (tmp_path / "patients.db").exists() else None

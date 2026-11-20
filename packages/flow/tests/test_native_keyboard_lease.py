@@ -168,16 +168,30 @@ def test_malformed_keyboard_data_never_reaches_input(bad):
 
 def test_deadline_during_actual_delivery_is_uncertain_not_zero_input():
     surface = Surface()
+
     def deliver(payload):
         surface.calls.append(payload)
         surface.now = 20.0
         surface.controller.require_current_target()
         raise AssertionError("expired delivery cannot acknowledge")
+
     surface.controller._deliver = deliver
     lease = surface.controller.issue()
     with pytest.raises(RuntimeError) as caught:
-        surface.controller.deliver(lease["lease_id"], lease["frame_sha256"], {"action": "press", "keys": ["enter"]})
+        surface.controller.deliver(
+            lease["lease_id"],
+            lease["frame_sha256"],
+            {"action": "press", "keys": ["enter"]},
+        )
     assert not isinstance(caught.value, KeyboardLeaseRefused)
+    assert caught.value.payload() == {
+        "status": "error",
+        "code": "keyboard_delivery_uncertain",
+        "reason": "deadline_during_input",
+        "guard_checks": 1,
+        "elapsed_ms": 20000,
+    }
+    assert "no_keyboard_input_delivered" not in caught.value.payload()
     assert len(surface.calls) == 1
 
 
@@ -192,10 +206,66 @@ def test_changed_frame_geometry_is_measured_from_actual_pixels():
         stream = BytesIO()
         image.save(stream, format="PNG")
         return stream.getvalue()
+
     before = Image.new("RGB", (10, 10), "white")
     after = before.copy()
     after.putpixel((2, 3), (255, 255, 254))
     assert frame_change(png(before), png(after)) == {
-        "changed_pixel_count": 1, "changed_bbox": [2, 3, 1, 1], "frame_size": [10, 10]
+        "changed_pixel_count": 1,
+        "changed_bbox": [2, 3, 1, 1],
+        "frame_size": [10, 10],
     }
     assert frame_change(png(before), png(before)) is None
+
+
+@pytest.mark.parametrize("typed", [True, False])
+def test_http_uncertainty_diagnostics_never_attest_zero_input_or_expose_contents(typed):
+    import requests
+
+    from openadapt_flow.backends.win_agent.keyboard_lease import (
+        KeyboardDeliveryUncertain,
+    )
+    from openadapt_flow.backends.win_agent.server import AgentConfig
+    from tests.test_win_agent_server import RunningAgent
+
+    surface = Surface()
+
+    def fail(payload):
+        surface.calls.append(payload)
+        if typed:
+            raise KeyboardDeliveryUncertain("deadline_during_input", 4, 15001)
+        raise TypeError("SECRET INPUT CONTENT")
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="unit-token"),
+        grab_fn=lambda: PNG,
+        uia_fn=surface.uia,
+        context_fn=lambda: surface.context,
+        input_fn=fail,
+    )
+    headers = {"Authorization": "Bearer unit-token"}
+    try:
+        lease = requests.post(
+            agent.url + "/keyboard/lease", json={}, headers=headers, timeout=2
+        ).json()
+        response = requests.post(
+            agent.url + "/keyboard/input",
+            headers=headers,
+            timeout=2,
+            json={
+                "lease_id": lease["lease_id"],
+                "expected_frame_sha256": lease["frame_sha256"],
+                "input": {"action": "press", "keys": ["enter"]},
+            },
+        )
+        assert response.status_code == 500
+        data = response.json()
+        assert data["code"] == "keyboard_delivery_uncertain"
+        assert "no_keyboard_input_delivered" not in data and "receipt" not in data
+        assert "SECRET" not in response.text
+        assert data["reason"] == (
+            "deadline_during_input" if typed else "unclassified_native_failure"
+        )
+        assert len(surface.calls) == 1
+    finally:
+        agent.close()

@@ -24,6 +24,23 @@ class KeyboardLeaseError(RuntimeError):
     """A bounded observation failure, with no delivery assertion."""
 
 
+class KeyboardDeliveryUncertain(RuntimeError):
+    """Bounded diagnostics after the keyboard delivery boundary; never retryable."""
+
+    def __init__(self, reason: str, checks: int, elapsed_ms: int) -> None:
+        self.reason, self.checks, self.elapsed_ms = reason, checks, elapsed_ms
+        super().__init__("native keyboard delivery became uncertain")
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "status": "error",
+            "code": "keyboard_delivery_uncertain",
+            "reason": self.reason,
+            "guard_checks": self.checks,
+            "elapsed_ms": self.elapsed_ms,
+        }
+
+
 class KeyboardLeaseRefused(KeyboardLeaseError):
     """A consumed known lease refused before its keyboard input callback."""
 
@@ -200,6 +217,7 @@ class KeyboardLeaseController:
         )
         self._clock, self._lifetime_s = clock, lifetime_s
         self._prepare = prepare
+        self._guard_checks, self._delivery_started = 0, 0.0
         self._delivering: tuple[dict[str, Any], dict[str, Any], float] | None = None
         self._pending: (
             tuple[str, float, dict[str, Any], dict[str, Any], bytes] | None
@@ -278,6 +296,7 @@ class KeyboardLeaseController:
         if self._clock() > deadline:
             refuse("expired")
         self._delivering = (target, context, deadline)
+        self._guard_checks, self._delivery_started = 0, self._clock()
         try:
             result = self._deliver(payload)
         finally:
@@ -306,10 +325,33 @@ class KeyboardLeaseController:
         if self._delivering is None:
             raise RuntimeError("keyboard delivery has no active focus lease")
         target, context, deadline = self._delivering
-        if (
-            self._clock() > deadline
-            or _target(self._uia("focused-target", {}))["fingerprint"]
-            != target["fingerprint"]
-            or _context(self._context()) != context
-        ):
-            raise RuntimeError("keyboard target changed during delivery")
+        self._guard_checks += 1
+
+        def uncertain(reason: str) -> None:
+            raise KeyboardDeliveryUncertain(
+                reason,
+                self._guard_checks,
+                max(
+                    0,
+                    min(
+                        3_600_000, int((self._clock() - self._delivery_started) * 1000)
+                    ),
+                ),
+            )
+
+        if self._clock() > deadline:
+            uncertain("deadline_during_input")
+        try:
+            current = _target(self._uia("focused-target", {}))
+        except KeyboardLeaseError:
+            uncertain("focused_target_unavailable_during_input")
+            return
+        if current["fingerprint"] != target["fingerprint"]:
+            uncertain("focused_target_changed_during_input")
+        try:
+            current_context = _context(self._context())
+        except KeyboardLeaseError:
+            uncertain("context_unavailable_during_input")
+            return
+        if current_context != context:
+            uncertain("context_changed_during_input")
