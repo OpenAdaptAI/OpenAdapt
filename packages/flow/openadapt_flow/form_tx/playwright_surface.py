@@ -103,6 +103,54 @@ _DOCUMENT_CONTEXT_JS = r"""
 """
 
 
+_TEXT_FOCUS_SCOPE_JS = r"""
+(el, requireActive) => {
+    if (!el.isConnected || el.ownerDocument !== document) {
+        return 'target_document_changed';
+    }
+    const parent = (node) => node.parentElement ||
+        (node.getRootNode && node.getRootNode().host) || null;
+    const contains = (container, node) => {
+        for (let cur = node; cur; cur = parent(cur)) {
+            if (cur === container) return true;
+        }
+        return false;
+    };
+    for (let cur = el; cur; cur = parent(cur)) {
+        if (cur.inert || cur.hasAttribute('inert')) return 'target_is_inert';
+    }
+    const visible = (node) => {
+        const style = node.ownerDocument.defaultView.getComputedStyle(node);
+        return !node.hidden && node.getClientRects().length > 0 &&
+            style.display !== 'none' && style.visibility !== 'hidden' &&
+            style.visibility !== 'collapse';
+    };
+    // Native modality and ARIA modality are platform semantics, independent of
+    // a widget library's styling or whether its backdrop intercepts a pointer.
+    const roots = [document];
+    for (let i = 0; i < roots.length; i++) {
+        for (const node of roots[i].querySelectorAll('*')) {
+            if (node.shadowRoot) roots.push(node.shadowRoot);
+        }
+    }
+    for (const root of roots) {
+        for (const modal of root.querySelectorAll('dialog:modal, [aria-modal="true"]')) {
+            if ((modal.matches('dialog:modal') || visible(modal)) &&
+                    !contains(modal, el)) return 'target_outside_modal';
+        }
+    }
+    if (requireActive) {
+        let active = document.activeElement;
+        while (active && active.shadowRoot && active.shadowRoot.activeElement) {
+            active = active.shadowRoot.activeElement;
+        }
+        if (active !== el) return 'target_does_not_own_focus';
+    }
+    return '';
+}
+"""
+
+
 _CHECK_BUSY_AND_DOM_JS = r"""
 (busySelectors) => {
     const isVisible = (el) => {
@@ -1539,6 +1587,8 @@ class PlaywrightFormSurface:
                     state, timeout=self._ui_profile.max_settle_ms
                 )
             self._assert_document_context(expected)
+            self._check_actuation_scope(handle, require_active=False)
+            self._assert_document_context(expected)
             yield handle, expected
         except Exception as exc:
             try:
@@ -1578,12 +1628,40 @@ class PlaywrightFormSurface:
         )
         self.wait_for_quiescence()
 
+    def _check_actuation_scope(self, handle: Any, *, require_active: bool) -> None:
+        reason = handle.evaluate(_TEXT_FOCUS_SCOPE_JS, require_active)
+        if reason != "":
+            raise SurfaceContextError(f"Form target refused: {reason}")
+        frame = handle.owner_frame()
+        if frame is None:
+            raise SurfaceContextError("Form target has no owning document")
+        # A modal in an ancestor document also constrains a field in an iframe.
+        # Playwright supplies the frame element even across origin boundaries.
+        while frame.parent_frame is not None:
+            outer = frame.frame_element()
+            try:
+                reason = outer.evaluate(_TEXT_FOCUS_SCOPE_JS, require_active)
+                if reason != "":
+                    raise SurfaceContextError(f"Form frame refused: {reason}")
+            finally:
+                with contextlib.suppress(Exception):
+                    outer.dispose()
+            frame = frame.parent_frame
+
     def fill_text(self, dom_selector: str, value: str) -> None:
         """Focus, clear, enter ``value`` into ``dom_selector``, blur, and wait for settle."""
         with self._resolve_live_locator(dom_selector) as (loc, context_id):
-            loc.click(timeout=self._ui_profile.max_settle_ms)
+            loc.wait_for_element_state(
+                "editable", timeout=self._ui_profile.max_settle_ms
+            )
+            self._assert_document_context(context_id)
+            self._check_actuation_scope(loc, require_active=False)
+            loc.focus()
+            self._assert_document_context(context_id)
+            self._check_actuation_scope(loc, require_active=True)
             self._assert_document_context(context_id)
             loc.fill(str(value), timeout=self._ui_profile.max_settle_ms)
+            self._assert_document_context(context_id)
             try:
                 loc.evaluate("(el) => el.blur()")
             except Exception:
