@@ -300,6 +300,7 @@ def main() -> int:
     global BUNDLE, OUT, CERTIFIED_PATH, CERTIFIED_COMMIT, CERTIFIED_URL
     ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--runs", type=Path, help="the certified runs (summary.json and one directory per referral)")
+    ap.add_argument("--display-titles", type=Path, default=OUT / "display-titles.json", help="reviewed titles bound to exact compiled node groups")
     ap.add_argument("--source-commit", default=CERTIFIED_COMMIT, help="commit containing the published, sealed run reports")
     ap.add_argument("--source-path", default=CERTIFIED_PATH, help="repository path of the published, sealed run reports")
     ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
@@ -373,6 +374,17 @@ def main() -> int:
         flow("visualize", str(loop_dir), "--format", "json", "-o", str(local))
         spec = json.loads(public.read_text())
         folds = fold(json.loads(local.read_text()))
+        display_titles_sha256 = None
+        if args.display_titles:
+            assert args.display_titles.is_file(), "reviewed display titles are missing"
+            title_data = json.loads(args.display_titles.read_text())
+            overrides = title_data["groups"]
+            assert len(overrides) == len(folds["groups"]), "reviewed titles belong to different compiled sections"
+            for group, override in zip(folds["groups"], overrides):
+                assert group["nodes"] == override["nodes"], "reviewed title belongs to different compiled nodes"
+                assert isinstance(override["title"], str) and 0 < len(override["title"]) <= 200
+                group["title"] = override["title"]
+            display_titles_sha256 = sha256(args.display_titles)
         loop_manifest = json.loads((loop_dir / "manifest.json").read_text())
         display_derivation = {
             "kind": "authored_for_each_visualization",
@@ -380,6 +392,7 @@ def main() -> int:
             "display_bundle_content_digest": loop_manifest["content_digest"],
             "executed": False,
             "qualified": False,
+            "reviewed_display_titles_sha256": display_titles_sha256,
             "worklist_source": "signed body-run params in summary order",
             "worklist_report_sha256": worklist_reports,
             "record_count": len(worklist_reports),
