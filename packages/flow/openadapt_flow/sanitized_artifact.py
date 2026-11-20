@@ -35,6 +35,7 @@ import shutil
 import tempfile
 import webbrowser
 import zipfile
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -50,11 +51,16 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on 3.10 CI
     import tomli as tomllib
 
 from openadapt_flow import artifacts, crypto, privacy, sealed_set
+from openadapt_flow.sanitization_policy import (
+    POLICY_REVISION,
+    identity_sha256,
+    transformation_identity,
+)
 
 MANIFEST_NAME = ".openadapt-sanitization.json"
 APPROVAL_NAME = ".openadapt-approval.json"
 SCHEMA_VERSION = 1
-POLICY_VERSION = "outbound-phi-v1"
+POLICY_VERSION = POLICY_REVISION
 POLICY_KEY_ID_ENV = "OPENADAPT_SANITIZATION_POLICY_KEY_ID"
 POLICY_KEY_ENV = "OPENADAPT_SANITIZATION_POLICY_KEY"
 
@@ -160,6 +166,60 @@ def _scrubber_version() -> str:
         return f"injected:{type(scrubber).__module__}.{type(scrubber).__name__}"
 
 
+def current_transformation_identity(
+    source_sha256: str, kind: str, *, manual_overrides: bool = False
+) -> dict[str, Any]:
+    """The shared current identity used by creation, reuse and approval."""
+    if (
+        not isinstance(source_sha256, str)
+        or kind not in {"recording", "bundle"}
+        or not re.fullmatch(r"[a-f0-9]{64}", source_sha256)
+    ):
+        raise SanitizationError("Invalid transformation source or artifact kind")
+    provider = privacy.get_scrubber()
+    if provider is None:
+        raise SanitizationError(
+            "No PHI scrubber is available to verify transformation freshness"
+        )
+    try:
+        return transformation_identity(
+            source_sha256=source_sha256,
+            kind=kind,
+            policy_revision=POLICY_VERSION,
+            provider=provider,
+            scrubber_version=_scrubber_version(),
+            manual_overrides=manual_overrides,
+        )
+    except Exception as exc:  # noqa: BLE001 - provider errors must not expose private state
+        raise SanitizationError(
+            "Cannot establish sanitizer identity; scrubbers must declare complete non-secret sanitization_config()"
+        ) from exc
+
+
+def _require_current_transformation(manifest: dict[str, Any]) -> None:
+    identity = manifest.get("transformation")
+    if not isinstance(identity, dict) or not isinstance(
+        identity.get("manual_overrides"), bool
+    ):
+        raise SanitizationError(
+            "Sanitizer identity is stale or missing; regenerate from the original source, then review and approve the new generation"
+        )
+    expected = current_transformation_identity(
+        manifest.get("source_tree_sha256", ""),
+        manifest.get("kind", ""),
+        manual_overrides=identity["manual_overrides"],
+    )
+    if (
+        identity != expected
+        or manifest.get("transformation_sha256") != identity_sha256(expected)
+        or manifest.get("policy_version") != POLICY_VERSION
+        or manifest.get("scrubber_version") != expected["scrubber"]["version"]
+    ):
+        raise SanitizationError(
+            "Sanitizer identity changed; regenerate from the original source, then review and approve the new generation"
+        )
+
+
 def _source_files(src: Path) -> list[Path]:
     from openadapt_flow.evidence_files import is_publication_input_path_excluded
 
@@ -204,6 +264,53 @@ def source_tree_sha256(source: Path) -> str:
         for path in _source_files(source)
     ]
     return _canonical_hash(rows)
+
+
+def ensure_current_derivative(
+    source: Path,
+    destination: Path,
+    *,
+    kind: str,
+    redactions_file: Optional[Path] = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Reuse only the current transformation, preserving every older generation.
+
+    This never approves or changes an existing derivative. Explicit private
+    redaction overrides conservatively request a fresh generation every time.
+    """
+    source, destination = Path(source), Path(destination)
+    identity = current_transformation_identity(
+        source_tree_sha256(source),
+        kind,
+        manual_overrides=redactions_file is not None,
+    )
+    stamp = identity_sha256(identity)
+    candidate = destination
+    generation = 0
+    while (
+        candidate.exists()
+        or candidate.is_symlink()
+        or approved_archive_path(candidate).exists()
+    ):
+        if candidate.is_symlink():
+            raise SanitizationError("Derivative destination is a symbolic link")
+        if redactions_file is None:
+            try:
+                manifest = load_and_verify_derivative(candidate)
+                if manifest["transformation"] == identity:
+                    _verify_original_source(source, manifest)
+                    return candidate, manifest
+            except (SanitizationError, OSError, ValueError):
+                pass
+        generation += 1
+        suffix = "" if generation == 1 else f"-{generation}"
+        candidate = destination.with_name(
+            f"{destination.name}.generation-{stamp}{suffix}"
+        )
+    manifest = sanitize_artifact(
+        source, candidate, kind=kind, redactions_file=redactions_file
+    )
+    return candidate, manifest
 
 
 def _verify_original_source(source: Path, manifest: dict[str, Any]) -> None:
@@ -1514,7 +1621,32 @@ def _is_generated_artifact_path(kind: str, rel: Path) -> bool:
     return False
 
 
+def _sanitization_operation():
+    provider = privacy.get_scrubber()
+    operation = getattr(provider, "sanitization_operation", None)
+    return operation() if callable(operation) else nullcontext()
+
+
 def sanitize_artifact(
+    source: Path,
+    destination: Path,
+    *,
+    kind: str,
+    redactions_file: Optional[Path] = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Transform under one provider policy; approval is a separate operation."""
+    with _sanitization_operation():
+        return _sanitize_artifact(
+            source,
+            destination,
+            kind=kind,
+            redactions_file=redactions_file,
+            overwrite=overwrite,
+        )
+
+
+def _sanitize_artifact(
     source: Path,
     destination: Path,
     *,
@@ -1571,6 +1703,11 @@ def sanitize_artifact(
             raise SanitizationError(f"Destination already exists: {destination}")
         shutil.rmtree(destination)
     redactions = _load_redactions(redactions_file)
+    transformation = current_transformation_identity(
+        source_tree_sha256(source),
+        kind,
+        manual_overrides=redactions_file is not None,
+    )
     sealed = _seals_derivative(source)
     writer: Optional[sealed_set.SealedSetWriter] = None
     if sealed:
@@ -1588,7 +1725,12 @@ def sanitize_artifact(
         )
         sealed_set.register_writer(writer)
     else:
-        staging_root = Path(tempfile.mkdtemp(prefix="openadapt-sanitize-"))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staging_root = Path(
+            tempfile.mkdtemp(
+                prefix=f".{destination.name}.", dir=str(destination.parent)
+            )
+        )
         staging = staging_root / "artifact"
         staging.mkdir(parents=True)
     entries: list[dict[str, Any]] = []
@@ -1694,10 +1836,20 @@ def sanitize_artifact(
             (str(path.relative_to(source)), _sha256_file(path)) for path in files
         ]
         derivative_rows = _tree_rows(staging)
+        if transformation != current_transformation_identity(
+            _canonical_hash(source_rows),
+            kind,
+            manual_overrides=redactions_file is not None,
+        ):
+            raise SanitizationError(
+                "Source or sanitizer identity changed during transformation"
+            )
         manifest: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "policy_version": POLICY_VERSION,
             "scrubber_version": _scrubber_version(),
+            "transformation": transformation,
+            "transformation_sha256": identity_sha256(transformation),
             "created_at": _utc_now(),
             "source_name_sha256": _sha256_bytes(source.name.encode("utf-8")),
             "kind": kind,
@@ -1728,8 +1880,9 @@ def sanitize_artifact(
             writer = None
             os.rename(staging, destination)
         else:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(staging), str(destination))
+            # Stage on the same filesystem and install atomically. shutil.move
+            # would nest into an existing generation if another process won.
+            os.rename(staging, destination)
         return manifest
     finally:
         if writer is not None:
@@ -1754,6 +1907,7 @@ def load_and_verify_derivative(destination: Path) -> dict[str, Any]:
         raise SanitizationError(f"Invalid sanitization manifest: {exc}") from exc
     if manifest.get("schema_version") != SCHEMA_VERSION:
         raise SanitizationError("Unsupported sanitization manifest version")
+    _require_current_transformation(manifest)
     entries = manifest.get("files")
     if not isinstance(entries, list) or not manifest.get("coverage_complete"):
         raise SanitizationError("Sanitization coverage is incomplete")
@@ -1763,6 +1917,7 @@ def load_and_verify_derivative(destination: Path) -> dict[str, Any]:
         raise SanitizationError("Derivative files changed or are not fully inventoried")
     if _canonical_hash(list(actual)) != manifest.get("derivative_tree_sha256"):
         raise SanitizationError("Derivative tree hash does not match its manifest")
+    _require_current_transformation(manifest)
     return manifest
 
 
@@ -1771,6 +1926,11 @@ def approval_path(destination: Path) -> Path:
 
 
 def _rescan_derivative(destination: Path) -> dict[str, Any]:
+    with _sanitization_operation():
+        return _rescan_derivative_impl(destination)
+
+
+def _rescan_derivative_impl(destination: Path) -> dict[str, Any]:
     """Re-run every handler immediately before approval.
 
     This catches identifiers introduced through a reviewer-supplied replacement
@@ -1843,6 +2003,7 @@ def _rescan_derivative(destination: Path) -> dict[str, Any]:
             raise SanitizationError(
                 f"Approval has no verification handler for {entry['path']}"
             )
+    _require_current_transformation(manifest)
     return manifest
 
 
@@ -1949,6 +2110,7 @@ def approve_derivative(
         "reviewer": reviewer.strip(),
         "automatic": automatic,
         "policy_version": manifest["policy_version"],
+        "transformation_sha256": manifest["transformation_sha256"],
         "manifest_sha256": _manifest_hash(manifest),
         "derivative_tree_sha256": manifest["derivative_tree_sha256"],
         "approved_derivative_sha256": archive_hash,
@@ -1994,6 +2156,8 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
         approval = json.loads(_read_text(path))
     except json.JSONDecodeError as exc:
         raise SanitizationError(f"Invalid approval: {exc}") from exc
+    if approval.get("transformation_sha256") != manifest["transformation_sha256"]:
+        raise SanitizationError("Approval is stale: transformation identity changed")
     if approval.get("manifest_sha256") != _manifest_hash(manifest):
         raise SanitizationError("Approval is stale: the sanitization manifest changed")
     if approval.get("derivative_tree_sha256") != manifest.get("derivative_tree_sha256"):
@@ -2006,6 +2170,7 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
         raise SanitizationError("Approved immutable archive changed")
     if approval.get("approved_archive_size_bytes") != len(archive_bytes):
         raise SanitizationError("Approved immutable archive size changed")
+    _require_current_transformation(manifest)
     return approval
 
 
@@ -2148,6 +2313,7 @@ def _approval_from_ingest_envelope(
         "reviewer": reviewer,
         "automatic": method == "policy",
         "policy_version": manifest["policy_version"],
+        "transformation_sha256": manifest["transformation_sha256"],
         "manifest_sha256": _manifest_hash(manifest),
         "derivative_tree_sha256": manifest["derivative_tree_sha256"],
         "approved_derivative_sha256": archive_sha256,
