@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from openadapt_flow.form_tx.playwright_surface import (
@@ -59,7 +60,9 @@ def app(browser: Any) -> Any:
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        target=lambda: server.serve_forever(poll_interval=0.02), daemon=True
+    )
     thread.start()
     state.origin = f"http://127.0.0.1:{server.server_port}"
     state.context = browser.new_context()
@@ -391,4 +394,173 @@ def test_foreign_priority_match_cannot_fall_back_to_lower_route(app: Any) -> Non
     )
     with pytest.raises(SurfaceContextError, match="untrusted origin"):
         surface.snapshot()
+    assert app.posts == []
+
+
+_ACTION_TARGETS = {
+    "fill": "#name",
+    "select": "#choice",
+    "check": "#check",
+    "click": "#write",
+    "open_combo": "#combo",
+    "choose_combo": "#option",
+    "popup": "#popup",
+}
+
+
+def _action_form(action: str) -> str:
+    visible = "" if action == "choose_combo" else "hidden"
+    return f"""<!doctype html><title>Action form</title><body data-authenticated>
+    <script>window.write = () => fetch('/save', {{method:'POST'}});</script>
+    <label>Name<input id="name" value="Original" onchange="window.write()"></label>
+    <label>Choice<select id="choice" onchange="window.write()"><option value="a">A</option><option value="b">B</option></select></label>
+    <label>Check<input type="checkbox" id="check" onchange="window.write()"></label>
+    <button id="write" onclick="window.write()">Write</button>
+    <button id="combo" role="combobox" aria-controls="options" aria-expanded="false"
+      onclick="document.querySelector('#options').hidden=false;this.setAttribute('aria-expanded','true');window.write()">Choices</button>
+    <div id="options" role="listbox" {visible}>
+      <button role="option" id="option" data-value="b" onclick="window.write()">B</button>
+    </div>
+    <button id="popup" onclick="window.write();window.open('/popup')">Popup</button>
+    """
+
+
+def _run_action(surface: PlaywrightFormSurface, action: str) -> None:
+    if action == "fill":
+        surface.fill_text("#name", "Changed")
+    elif action == "select":
+        surface.select_native_option("#choice", "b")
+    elif action == "check":
+        surface.set_checkbox_or_radio("#check")
+    elif action == "click":
+        surface.click("#write")
+    elif action == "open_combo":
+        surface.open_portal_combobox_options("#combo")
+    elif action == "choose_combo":
+        surface.choose_portal_combobox_option(
+            "#combo", ObservedOption(value="b", label="B")
+        )
+    else:
+        with surface.open_popup_surface("#popup") as child:
+            child.snapshot()
+
+
+def _action_surface(
+    app: Any, action: str, routed: bool, max_settle_ms: int = 2500
+) -> Any:
+    frame = load(app, _action_form(action))
+    app.pages["/popup"] = "<!doctype html><title>Child</title><body>child"
+    surface = PlaywrightFormSurface(
+        app.page if routed else frame,
+        profile(max_settle_ms),
+        base_origin=app.origin,
+        frame_path_patterns=(r"/form",) if routed else (),
+    )
+    snap = surface.snapshot()
+    return frame, surface, snap
+
+
+@pytest.mark.parametrize("routed", [False, True])
+@pytest.mark.parametrize("action", _ACTION_TARGETS)
+@pytest.mark.parametrize("change", ["navigation", "query", "replacement"])
+def test_waiting_action_never_retargets_changed_document(
+    app: Any,
+    routed: bool,
+    action: str,
+    change: str,
+) -> None:
+    frame, surface, before = _action_surface(app, action, routed)
+    selector = _ACTION_TARGETS[action]
+    # Mutate after the structural observation. The action must wait on this
+    # element; the replacement document deliberately exposes the same selectors.
+    frame.evaluate(
+        """selector => {
+        document.querySelector(selector).disabled=true;
+    }""",
+        selector,
+    )
+    if change == "replacement":
+        app.page.evaluate("""() => setTimeout(() => {
+            const old=document.querySelector('iframe');old.replaceWith(old.cloneNode());
+        }, 300)""")
+    else:
+        frame.evaluate(
+            """({selector, change}) => {
+            setTimeout(() => {
+                if(change==='navigation') location.href='/form?record=two';
+                else {
+                    history.replaceState({}, '', '?record=two');
+                    document.querySelector(selector).disabled=false;
+                }
+            }, 300);
+        }""",
+            {"selector": selector, "change": change},
+        )
+    with pytest.raises(SurfaceContextError):
+        _run_action(surface, action)
+    app.page.wait_for_function(
+        "document.querySelector('iframe').contentDocument?.readyState === 'complete' && document.querySelector('iframe').contentDocument?.querySelector('#name')"
+    )
+    live = app.page.frame(name="work")
+    live.wait_for_load_state()
+    assert live.locator("#name").input_value() == "Original"
+    assert live.locator("#choice").input_value() == "a"
+    assert not live.locator("#check").is_checked()
+    assert app.posts == []
+    assert len(app.context.pages) == 1
+    assert surface.mutation_count == 0
+    if routed or change != "replacement":
+        assert surface.snapshot().context_id != before.context_id
+
+
+@pytest.mark.parametrize("routed", [False, True])
+@pytest.mark.parametrize("action", _ACTION_TARGETS)
+def test_waiting_action_succeeds_when_observed_document_is_unchanged(
+    app: Any,
+    routed: bool,
+    action: str,
+) -> None:
+    frame, surface, before = _action_surface(app, action, routed)
+    frame.evaluate(
+        """selector => {
+        const target=document.querySelector(selector);target.disabled=true;
+        setTimeout(() => target.disabled=false, 200);
+    }""",
+        _ACTION_TARGETS[action],
+    )
+    _run_action(surface, action)
+    assert surface.snapshot().context_id == before.context_id
+    assert app.posts == ["/save"]
+    assert surface.mutation_count == 1
+    assert len(app.context.pages) == 1
+
+
+@pytest.mark.parametrize("routed", [False, True])
+def test_bound_action_timeout_does_not_mutate_or_retarget(
+    app: Any, routed: bool
+) -> None:
+    frame, surface, before = _action_surface(app, "fill", routed, 300)
+    frame.locator("#name").evaluate("el => el.disabled=true")
+    with pytest.raises(PlaywrightTimeoutError):
+        surface.fill_text("#name", "Unsafe")
+    assert surface.snapshot().context_id == before.context_id
+    assert frame.locator("#name").input_value() == "Original"
+    assert app.posts == []
+    frame.locator("#name").evaluate("el => el.disabled=false")
+    surface.snapshot()
+    surface.fill_text("#name", "After timeout")
+    assert frame.locator("#name").input_value() == "After timeout"
+    assert app.posts == ["/save"]
+
+
+@pytest.mark.parametrize("routed", [False, True])
+def test_bound_action_refuses_detachment_while_waiting(app: Any, routed: bool) -> None:
+    frame, surface, _ = _action_surface(app, "fill", routed)
+    frame.locator("#name").evaluate("el => el.disabled=true")
+    app.page.evaluate(
+        "() => setTimeout(() => document.querySelector('iframe').remove(), 200)"
+    )
+    with pytest.raises(SurfaceContextError):
+        surface.fill_text("#name", "Unsafe")
+    assert frame.is_detached()
     assert app.posts == []
