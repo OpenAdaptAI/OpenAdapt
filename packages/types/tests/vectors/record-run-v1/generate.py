@@ -236,7 +236,61 @@ def build() -> dict[str, dict]:
     _confirmation_vectors(add)
     _handoff_vectors(vectors)
     _canonical_vectors(vectors)
+    _chain_vectors(vectors)
     return vectors
+
+
+def _chain_vectors(vectors) -> None:
+    """Follow-up chains: an original receipt sent, then acknowledged, then recorded."""
+    sent, sent_openings = _confirmed("sent")
+    original = r.sign_statement(sent, [signer("this_computer")])
+
+    def update(state, sequence, of=original):
+        st, _ = _confirmed(state, salt=_salts())
+        confirmations = st["predicate"]["confirmations"]
+        return r.sign_statement(
+            r.follow_up_statement(of, sequence, confirmations), [signer("this_computer")]
+        )
+
+    ack, recorded = update("acknowledged", 1), update("recorded_as_intended", 2)
+    ok_lines = [
+        "Sent to the other party, not confirmed",
+        "Update 1: Acknowledged by the other party",
+        "Update 2: Confirmed in the other party's system",
+    ]
+
+    def put(name, description, updates, expected):
+        vectors[name] = {
+            "description": description,
+            "registry": "registry.json",
+            "chain": {"original": original, "updates": updates},
+            "expected": expected,
+        }
+
+    put("chain-valid", "An original receipt and two follow-ups, in order.",
+        [ack, recorded], {"ok": True, "reason": None, "lines": ok_lines})
+    another = _confirmed("sent")[0]
+    another["predicate"]["model_calls"] = 1  # a different receipt
+    other = r.sign_statement(another, [signer("this_computer")])
+    put("chain-wrong-original", "A follow-up that names another receipt's payload.",
+        [update("acknowledged", 1, of=other)], {"ok": False, "reason": "wrong_original", "lines": []})
+    put("chain-out-of-sequence", "Two follow-ups whose sequence numbers skip.",
+        [ack, update("recorded_as_intended", 3)], {"ok": False, "reason": "out_of_sequence", "lines": []})
+    payload = base64.b64decode(recorded["payload"]).replace(
+        b'"state":"recorded_as_intended"', b'"state":"recorded_differently"', 1
+    )
+    put("chain-tampered", "The second follow-up edited after signing.",
+        [ack, dict(recorded, payload=base64.b64encode(payload).decode())],
+        {"ok": False, "reason": "update_refused", "lines": []})
+    empty = r.follow_up_statement(original, 1, [])
+    raw = r.canonical_json(empty).encode()
+    unsigned_rules = {
+        "payloadType": r.PAYLOAD_TYPE,
+        "payload": base64.b64encode(raw).decode(),
+        "signatures": [{"keyid": IDS["this_computer"], "sig": base64.b64encode(KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, raw))).decode()}],
+    }
+    put("chain-empty", "A signed follow-up that carries no confirmation: refused.",
+        [unsigned_rules], {"ok": False, "reason": "update_refused", "lines": []})
 
 
 #: A synthetic report with floats, nesting, unicode and unsorted keys.

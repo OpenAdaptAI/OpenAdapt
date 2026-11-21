@@ -284,6 +284,14 @@ class Confirmation(_Closed):
     commitments: dict[StrictStr, StrictStr] = Field(min_length=2, max_length=34)
 
 
+class Follows(_Closed):
+    """The receipt a follow-up record updates: the SHA-256 of the original
+    receipt's DSSE payload bytes, and this update's place in the chain."""
+
+    receipt: Digest
+    sequence: Count = Field(ge=1, le=MAX_LINES)
+
+
 class RunPredicateV1(_Closed):
     program: Program
     started_hour: StrictStr = Field(pattern=_HOUR)
@@ -299,6 +307,11 @@ class RunPredicateV1(_Closed):
     confirmations: list[Confirmation] = Field(default_factory=list, max_length=64)
     #: The approval binding; omitted when the run recorded none.
     approval: Optional[Approval] = None
+    #: Set only on a follow-up record: a later, separately signed statement
+    #: that repeats the original receipt's predicate and carries only the
+    #: counterparty confirmations that changed since. Omitted otherwise, so a
+    #: receipt is byte-identical to one made before follow-ups existed.
+    follows: Optional[Follows] = None
 
 
 class RunStatementV1(_Closed):
@@ -313,6 +326,8 @@ class RunStatementV1(_Closed):
             del out["predicate"]["confirmations"]
         if out["predicate"]["approval"] is None:
             del out["predicate"]["approval"]
+        if out["predicate"]["follows"] is None:
+            del out["predicate"]["follows"]
         for subject in out["subject"]:
             if subject["media_type"] is None:
                 del subject["media_type"]
@@ -362,6 +377,8 @@ def _check_approval(a: Approval) -> Optional[str]:
 def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     """A closed statement that contradicts itself is refused, never repaired."""
     p = statement.predicate
+    if p.follows is not None and not p.confirmations:
+        return "a follow-up record carries at least one confirmation"
     names = [s.name for s in statement.subject]
     if len(set(names)) != len(names) or not {"report.json", "report.canonical"} & set(
         names
@@ -1135,6 +1152,138 @@ def confirmation_line(c: Confirmation, observed_at: Optional[str] = None) -> str
     return f"Sent to the other party{at}, not confirmed"
 
 
+# -- follow-up records ------------------------------------------------------------
+
+#: Predicate fields a follow-up copies from its original, unchanged.
+FOLLOW_UP_COPIED: Final = (
+    "program",
+    "started_hour",
+    "outcome",
+    "reason_code",
+    "steps",
+    "lines",
+    "checks",
+    "model_calls",
+    "disclosure",
+    "approval",
+)
+#: Why a chain of follow-ups is refused (beyond a refusal of one record).
+ChainRefusal = Literal[
+    "original_refused",
+    "original_is_follow_up",
+    "update_refused",
+    "not_a_follow_up",
+    "wrong_original",
+    "out_of_sequence",
+    "changed_original",
+    "mixed_demo",
+]
+
+
+def payload_sha256(envelope: Mapping[str, Any]) -> str:
+    """SHA-256 of an envelope's DSSE payload bytes: what ``follows`` names."""
+    return hashlib.sha256(
+        base64.b64decode(str(envelope["payload"]), validate=True)
+    ).hexdigest()
+
+
+@dataclass(frozen=True)
+class ChainVerification:
+    ok: bool
+    reason: Optional[ChainRefusal] = None
+    detail: str = ""
+    original: Optional[ReceiptVerification] = None
+    updates: tuple[ReceiptVerification, ...] = ()
+    #: The original's confirmation lines, then ``Update N: <line>`` for each
+    #: follow-up's lines, in order. Never merged with the signer lines.
+    lines: tuple[str, ...] = ()
+
+
+def follow_up_statement(
+    original: Mapping[str, Any], sequence: int, confirmations: Sequence[Any]
+) -> dict[str, Any]:
+    """A follow-up statement: ``original``'s statement (a dict from its
+    payload) with only the changed ``confirmations`` and ``follows`` set.
+    ``original`` is the original receipt's envelope."""
+    payload = loads_strict(base64.b64decode(str(original["payload"]), validate=True))
+    predicate = {k: v for k, v in payload["predicate"].items() if k in FOLLOW_UP_COPIED}
+    predicate["confirmations"] = list(confirmations)
+    predicate["follows"] = {
+        "receipt": {"sha256": payload_sha256(original)},
+        "sequence": sequence,
+    }
+    return {**payload, "predicate": predicate}
+
+
+def verify_chain(
+    original: Mapping[str, Any],
+    updates: Sequence[Mapping[str, Any]],
+    registry: Sequence[RoleKey],
+    *,
+    openings: Optional[Mapping[str, Any]] = None,
+    update_openings: Sequence[Optional[Mapping[str, Any]]] = (),
+) -> ChainVerification:
+    """Verify a receipt and its follow-up records, in order.
+
+    Each follow-up must verify on its own, name the original's payload
+    digest in ``follows``, count 1, 2, 3 in ``sequence``, and copy every
+    other predicate field and the subjects unchanged. Any failure refuses
+    the whole chain. A valid chain shows the original's confirmation lines
+    and then each update's, labelled ``Update N``.
+    """
+    first = verify_receipt(original, registry, openings=openings)
+    if not first.ok or first.statement is None:
+        return ChainVerification(False, "original_refused", first.detail, first)
+    base = first.statement
+    if "follows" in base["predicate"]:
+        return ChainVerification(
+            False, "original_is_follow_up", "the first record is a follow-up", first
+        )
+    digest = payload_sha256(original)
+    lines = list(first.confirmation_lines)
+    checked: list[ReceiptVerification] = []
+    for index, update in enumerate(updates):
+        opened = update_openings[index] if index < len(update_openings) else None
+        result = verify_receipt(update, registry, openings=opened)
+        checked.append(result)
+        if not result.ok or result.statement is None:
+            return ChainVerification(
+                False,
+                "update_refused",
+                f"update {index + 1}: {result.reason}",
+                first,
+                tuple(checked),
+            )
+        if result.demo != first.demo:
+            # A demo-key update can't extend a real chain, or the reverse.
+            return ChainVerification(
+                False, "mixed_demo", f"update {index + 1}", first, tuple(checked)
+            )
+        predicate = result.statement["predicate"]
+        follows = predicate.get("follows")
+        if not isinstance(follows, Mapping):
+            return ChainVerification(
+                False, "not_a_follow_up", f"update {index + 1}", first, tuple(checked)
+            )
+        if follows["receipt"]["sha256"] != digest:
+            return ChainVerification(
+                False, "wrong_original", f"update {index + 1}", first, tuple(checked)
+            )
+        if follows["sequence"] != index + 1:
+            return ChainVerification(
+                False, "out_of_sequence", f"update {index + 1}", first, tuple(checked)
+            )
+        same = result.statement["subject"] == base["subject"] and all(
+            predicate.get(k) == base["predicate"].get(k) for k in FOLLOW_UP_COPIED
+        )
+        if not same:
+            return ChainVerification(
+                False, "changed_original", f"update {index + 1}", first, tuple(checked)
+            )
+        lines += [f"Update {index + 1}: {line}" for line in result.confirmation_lines]
+    return ChainVerification(True, None, "", first, tuple(checked), tuple(lines))
+
+
 def _check_openings(
     openings: Any,
     commitments: Mapping[str, str],
@@ -1207,6 +1356,11 @@ __all__ = [
     "canonical_json",
     "commitment",
     "Approval",
+    "ChainVerification",
+    "FOLLOW_UP_COPIED",
+    "follow_up_statement",
+    "payload_sha256",
+    "verify_chain",
     "jcs",
     "report_canonical_sha256",
     "report_subject_match",
