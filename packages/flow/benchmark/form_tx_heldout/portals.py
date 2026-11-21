@@ -88,7 +88,7 @@ PORTALS: dict[str, PortalSpec] = {
     ),
     "tidewater": PortalSpec(
         name="tidewater",
-        title="Tidewater Grange agency quick quote",
+        title="Tidewater Bay agency quick quote",
         description="Home plus auto bundle quick quote, server-rendered pages built from shadow-DOM custom elements, 3 steps plus review",
         factory=Tidewater,
         entry_path="/qq/start",

@@ -1,4 +1,4 @@
-"""Tidewater Grange Insurance: home + auto bundle quick quote.
+"""Tidewater Bay Insurance: home + auto bundle quick quote.
 
 Server-rendered pages whose inputs are custom elements (``<tg-field>``,
 ``<tg-choice>``, ``<tg-typeahead>``) with open shadow roots: each label and
@@ -163,8 +163,8 @@ table.rv tr{border-bottom:1px solid #e1ebee}"""
 def page(title: str, body: str) -> str:
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"<title>{esc(title)} | Tidewater Grange Insurance</title><style>{CSS}</style></head><body>"
-        "<div class='top'>Tidewater Grange Insurance<small>Agency Quick Quote &middot; Home + Auto</small></div>"
+        f"<title>{esc(title)} | Tidewater Bay Insurance</title><style>{CSS}</style></head><body>"
+        "<div class='top'>Tidewater Bay Insurance<small>Agency Quick Quote &middot; Home + Auto</small></div>"
         f"<div class='wrap'>{body}</div>{COMPONENTS}</body></html>"
     )
 

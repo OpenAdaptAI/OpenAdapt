@@ -67,6 +67,18 @@
 
 ### Fixes
 
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
   secret boundary stops recording before that text reaches its artifacts.

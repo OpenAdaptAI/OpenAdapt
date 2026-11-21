@@ -697,7 +697,7 @@ CASES["pinecrest"] = [
 
 
 # =====================================================================
-# Tidewater Grange Insurance (shadow-DOM custom elements, bundle quote)
+# Tidewater Bay Insurance (shadow-DOM custom elements, bundle quote)
 # =====================================================================
 
 

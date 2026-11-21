@@ -137,6 +137,7 @@ def _harborline_estimator(page: Any, intake: dict[str, Any]) -> bool:
 
 
 OPERATOR_TOOLS = {"harborline": _harborline_estimator}
+POSTHOC = {"on": False}
 
 
 def operator_decision(
@@ -174,7 +175,8 @@ def operator_decision(
             note,
         )
 
-    if halt.kind == FormHaltKind.AUTH_WALL_DETECTED:
+    expired = POSTHOC["on"] and "session has expired" in str(halt.message).lower()
+    if halt.kind == FormHaltKind.AUTH_WALL_DETECTED or expired:
         login = script.get("session_login") or {}
         if login and sign_in(page, login["username"], login["password"]):
             return res(HumanDecisionAction.FIXED_ON_SCREEN)
@@ -351,6 +353,12 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=("B", "C"), required=True)
     ap.add_argument("--split", choices=("dev", "scored"), default="scored")
+    ap.add_argument(
+        "--posthoc",
+        action="store_true",
+        help="labelled post-hoc row: harborline pack P1 and operator sign-in on a "
+        "session-expired stop (see RESULTS.md)",
+    )
     ap.add_argument("portals", nargs="*")
     args = ap.parse_args(argv)
     answer_key = load_answer_key()
@@ -361,6 +369,13 @@ def main(argv: list[str]) -> int:
             for pid in portals:
                 spec = PORTALS[pid]
                 pack, profile = PACKS[pid]
+                if args.posthoc and pid == "harborline":
+                    from benchmark.form_tx_heldout_run.packs import (
+                        HARBORLINE_PACK_POSTHOC_P1,
+                    )
+
+                    pack = HARBORLINE_PACK_POSTHOC_P1
+                POSTHOC["on"] = args.posthoc
                 server, base = spec.start(host="127.0.0.1", port=0)
                 acc = RuleAccumulator()
                 try:

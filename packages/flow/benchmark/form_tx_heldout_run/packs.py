@@ -296,3 +296,29 @@ def dossier_for(intake: dict[str, Any], request_id: str) -> InputDossier:
 
 def _intake_value(value: Any) -> Any:
     return value
+
+
+# ------------------------------------------------------- post-hoc (labelled)
+# Written after the scored run, from what it showed; never replaces the
+# frozen row. P1: the estimator's Quality Grade select is pre-set to
+# "Standard", so it is overwritten from the intake like the other defaults.
+HARBORLINE_PACK_POSTHOC_P1 = HARBORLINE_PACK.model_copy(
+    update={
+        "pack_id": "heldout.harborline.home.posthoc_p1",
+        "popup_subroutines": (
+            HARBORLINE_PACK.popup_subroutines[0].model_copy(
+                update={
+                    "bindings": (
+                        _bind(
+                            "property.construction_quality",
+                            "quality",
+                            ControlKind.SELECT,
+                            EXACT,
+                            portal_default=True,
+                        ),
+                    )
+                }
+            ),
+        ),
+    }
+)

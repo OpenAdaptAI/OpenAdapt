@@ -12,7 +12,7 @@ All names, people, addresses and policy numbers are invented.
 | `harborline` | Harborline Mutual | legacy table-layout homeowners wizard, server-rendered, pop-up estimator window |
 | `cobalt` | Cobalt Ridge Insurance | single-page auto quote, div/ARIA widgets, async type-ahead listboxes |
 | `pinecrest` | Pinecrest Assurance | homeowners app inside an iframe, full re-render on change, modal estimator |
-| `tidewater` | Tidewater Grange Insurance | home + auto bundle, shadow-DOM custom elements |
+| `tidewater` | Tidewater Bay Insurance | home + auto bundle, shadow-DOM custom elements |
 
 ## Using a portal
 

@@ -1,4 +1,4 @@
-"""Driver for the Tidewater Grange shadow-DOM quick quote."""
+"""Driver for the Tidewater Bay shadow-DOM quick quote."""
 
 from __future__ import annotations
 

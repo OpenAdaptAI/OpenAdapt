@@ -170,3 +170,9 @@ from the portal branch.
   pinecrest (the form is in an iframe) and only a bare Next button on
   tidewater (shadow DOM). They run with an empty pack; on the dev cases the
   layer submitted nothing and ended `readback_refuted`.
+
+**D3, 2026-11-21, after the arm B and C runs and while arm A waited for a
+lab slot (arm A's copy of the files had already been taken).** The made-up
+carrier "Tidewater Grange" was renamed "Tidewater Bay" in the portal source,
+because "Grange" is part of a real insurer's name. Display text only; the
+answer key and its hash are unchanged, and `MANIFEST.json` was rebuilt.
