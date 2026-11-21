@@ -127,8 +127,12 @@ def wrap_readback_evidence(
         return None
     if not isinstance(document, dict):
         return None
+    # verify-run writes openadapt.effect-receipt/v1: the labels sit under
+    # "receipt". Older flat receipts carry them at the top level.
+    nested = document.get("receipt")
+    source = nested if isinstance(nested, dict) else document
     labels = {
-        k: document.get(k) for k in ("outcome", "effect_verdict", "verification_tier")
+        k: source.get(k) for k in ("outcome", "effect_verdict", "verification_tier")
     }
     for value in labels.values():
         if (
