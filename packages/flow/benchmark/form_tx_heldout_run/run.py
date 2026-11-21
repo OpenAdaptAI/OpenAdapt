@@ -33,6 +33,12 @@ SUITES = {
     "heldout": ("benchmark.form_tx_heldout", "benchmark.form_tx_heldout_run.packs"),
     "heldout2": ("benchmark.form_tx_heldout2", "benchmark.form_tx_heldout_run.packs2"),
     "heldout3": ("benchmark.form_tx_heldout3", "benchmark.form_tx_heldout_run.packs3"),
+    # Set 4: arm B packs (with the compiler report) and arm B0 packs (without).
+    "heldout4": ("benchmark.form_tx_heldout4", "benchmark.form_tx_heldout_run.packs4"),
+    "heldout4b0": (
+        "benchmark.form_tx_heldout4",
+        "benchmark.form_tx_heldout_run.packs4b0",
+    ),
 }
 _SUITE = {"name": "heldout"}
 

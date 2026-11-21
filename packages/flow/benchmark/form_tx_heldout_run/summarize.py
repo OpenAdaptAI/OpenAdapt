@@ -28,11 +28,15 @@ _PKG = {
     "heldout": "benchmark.form_tx_heldout",
     "heldout2": "benchmark.form_tx_heldout2",
     "heldout3": "benchmark.form_tx_heldout3",
+    "heldout4": "benchmark.form_tx_heldout4",
+    "heldout4b0": "benchmark.form_tx_heldout4",
 }[SUITE]
 _PACKS = {
     "heldout": "benchmark.form_tx_heldout_run.packs",
     "heldout2": "benchmark.form_tx_heldout_run.packs2",
     "heldout3": "benchmark.form_tx_heldout_run.packs3",
+    "heldout4": "benchmark.form_tx_heldout_run.packs4",
+    "heldout4b0": "benchmark.form_tx_heldout_run.packs4b0",
 }[SUITE]
 PORTALS = importlib.import_module(_PKG + ".portals").PORTALS
 load_answer_key = importlib.import_module(_PKG + ".scoring").load_answer_key
