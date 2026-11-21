@@ -11,6 +11,10 @@ from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
+#: The documented one-liner (docs/WRAP.md): the launcher's ``wrap`` extra
+#: brings the built-in agent's SDK, which the base launcher leaves out.
+WRAP_EXAMPLE_COMMAND = "uvx --python 3.12 'openadapt[wrap]@latest' wrap --example"
+
 
 def add_parser(sub: Any) -> None:
     """List ``wrap`` in ``openadapt-flow``'s parser.
@@ -19,7 +23,7 @@ def add_parser(sub: Any) -> None:
     parsing, so this entry only names the verb for help and the command map.
     """
 
-    sub.add_parser(
+    wrap = sub.add_parser(
         "wrap",
         help=(
             "Run an agent task once, compile and admit the run, then reuse the "
@@ -27,7 +31,14 @@ def add_parser(sub: Any) -> None:
             "--example runs a bundled sample)"
         ),
         add_help=False,
+        allow_abbrev=False,
     )
+    wrap.set_defaults(func=_cmd_wrap)
+
+
+def _cmd_wrap(args: argparse.Namespace) -> int:
+    """Reached only when a caller parses ``wrap`` itself; same as no arguments."""
+    return main([])
 
 
 class NoAdmittedProgram(RuntimeError):
@@ -362,10 +373,16 @@ def example_main(rows: Sequence[str], *, client: Any = None) -> int:
         parser.error("--max-cost-usd must be positive")
     sdk = "anthropic" if provider == "claude" else "agents"
     if client is None and importlib.util.find_spec(sdk) is None:
-        package = "anthropic" if provider == "claude" else "openai-agents"
+        if provider == "claude":
+            print(
+                "openadapt wrap --example: the built-in agent needs the wrap "
+                f"extra; run: {WRAP_EXAMPLE_COMMAND}",
+                file=sys.stderr,
+            )
+            return 2
         print(
-            f"openadapt wrap --example: the {package} package is not installed; "
-            f"install it next to OpenAdapt (pip install {package})",
+            "openadapt wrap --example: the openai-agents package is not "
+            "installed; install it next to OpenAdapt (pip install openai-agents)",
             file=sys.stderr,
         )
         return 2

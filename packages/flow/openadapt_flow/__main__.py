@@ -13629,17 +13629,9 @@ def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
 
 def _qualify_default_form(argv: list[str]) -> list[str]:
     """``qualify <bundle> --verify ...`` means ``qualify campaign <bundle> ...``."""
+    from openadapt_flow.cli_forms import qualify_default_form
 
-    if len(argv) >= 2 and argv[0] == "qualify" and not argv[1].startswith("-"):
-        verbs = set()
-        for action in build_parser()._subparsers._group_actions:  # type: ignore[union-attr]
-            qualify_parser = getattr(action, "choices", {}).get("qualify")
-            if qualify_parser is not None:
-                for sub_action in qualify_parser._subparsers._group_actions:  # type: ignore[union-attr]
-                    verbs |= set(getattr(sub_action, "choices", {}) or {})
-        if argv[1] not in verbs:
-            return [argv[0], "campaign", *argv[1:]]
-    return argv
+    return qualify_default_form(argv, build_parser)
 
 
 # Flags that print and exit before any work, so loading OCR would only slow
@@ -14245,9 +14237,7 @@ def main(
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    if argv[:1] == ["wrap"]:
-        # wrap has its own parser (and takes a command after ``--``); the
-        # verb is listed in this parser for help and the command map.
+    if argv[:1] == ["wrap"]:  # own parser; listed below for help and the map
         from openadapt_flow.wrap.cli import main as wrap_main
 
         return wrap_main(argv[1:])
