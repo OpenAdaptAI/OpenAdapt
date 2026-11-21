@@ -783,7 +783,9 @@ def test_readback_evidence_is_closed():
     assert wrap_readback_evidence(good, "") is None
 
 
-_VERIFIED_ENVELOPE = Path(__file__).parent / "fixtures" / "connector_outcome_envelope_verified.json"
+_VERIFIED_ENVELOPE = (
+    Path(__file__).parent / "fixtures" / "connector_outcome_envelope_verified.json"
+)
 
 
 def test_a_verified_outcome_envelope_passes_the_egress_guard():
@@ -803,7 +805,10 @@ def test_a_verified_outcome_envelope_passes_the_egress_guard():
     }
     sent = egress.guard_callback(body)
     assert sent["outcome"]["outcome"] == "VERIFIED"
-    assert sent["outcome"]["workflow_contract_sha256"] == envelope["workflow_contract_sha256"]
+    assert (
+        sent["outcome"]["workflow_contract_sha256"]
+        == envelope["workflow_contract_sha256"]
+    )
 
 
 def test_the_outcome_envelope_still_refuses_free_text():
