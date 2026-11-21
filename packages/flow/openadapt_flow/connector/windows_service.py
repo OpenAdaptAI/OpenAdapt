@@ -235,6 +235,11 @@ def serve(
             config_file(config_dir),
         )
         return 2
+    try:
+        settings.validate_run_config()
+    except ConnectorConfigError as exc:
+        logger.error("connector run: %s", exc)
+        return 2
     logger.info(
         "service starting: config %s, settings %s",
         config_file(config_dir),

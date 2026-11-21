@@ -74,6 +74,7 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         # encryption and strict modes are covered by test_at_rest_default.py.
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST": "test suite: synthetic data",
         "OPENADAPT_FLOW_AT_REST_HOME": str(root / ".at-rest-home"),
+        "OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR": None,
         "OPENADAPT_FLOW_AT_REST": None,
     }
 
