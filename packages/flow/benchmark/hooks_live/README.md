@@ -37,6 +37,8 @@ Every receipt was checked with `receipt_record.verify_run_receipt` against
 this run's signing key (`signing-key.json`): all 8 verify, with the signer
 line "Signed by this computer". The reports and receipts are in `runs/`. The
 private openings and snapshots were not kept.
+The reports name the hold digest `hold_key`; later code calls it
+`hold_sha256`. The files are kept byte for byte, because the receipts sign them.
 
 Task 4b is the advisory limit that `docs/HOOKS.md` describes. The hook reads
 the command text, so a script that builds the database path at run time
