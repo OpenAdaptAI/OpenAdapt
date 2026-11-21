@@ -1,0 +1,25 @@
+{
+  "case_id": "tb-s06",
+  "facts": {
+    "owner.first_name": "Kenji",
+    "owner.last_name": "Aldermoor",
+    "owner.email": "kenji.a@example.test",
+    "owner.phone": "503-555-0153",
+    "owner.zip": "97206",
+    "pet.name": "Sardine",
+    "pet.species": "Cat",
+    "pet.breed": "Siamese",
+    "pet.mixed_breed": false,
+    "pet.weight": 10,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2018-12-05",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$5,000",
+    "plan.reimbursement": "80%",
+    "plan.deductible": 250,
+    "plan.wellness": false,
+    "policy.start_date": "2027-01-01",
+    "pet.outdoor_minutes_per_day": 45
+  }
+}

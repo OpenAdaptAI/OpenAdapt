@@ -1,0 +1,25 @@
+{
+  "case_id": "wf-s07",
+  "facts": {
+    "association.name": "Orchard Lane Townhome Condominiums",
+    "unit.street": "3301 Orchard Ln",
+    "unit.unit_number": "14",
+    "unit.city": "Medford",
+    "unit.state": "OR",
+    "unit.zip": "97504",
+    "building.year_built": 1986,
+    "unit.floor": 1,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "owner.first_name": "Gareth",
+    "owner.last_name": "Lindqvist",
+    "owner.date_of_birth": "1975-07-30",
+    "owner.email": "g.lindqvist@example.test",
+    "owner.phone": "541-555-0158",
+    "coverage.improvements": 41000,
+    "coverage.personal_property": 28000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-12"
+  }
+}

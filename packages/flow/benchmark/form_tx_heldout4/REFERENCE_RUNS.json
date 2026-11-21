@@ -1,0 +1,1768 @@
+{
+ "environment": "lab laptop WSL Ubuntu 24.04, headless Chromium via Playwright, 2026-11-21",
+ "summary": {
+  "reference_human": {
+   "scored_cases": 32,
+   "correct": 32,
+   "wrong": 0,
+   "not_submitted": 0,
+   "clean_cases": 5,
+   "clean_cases_correct": 5,
+   "submit_clean_cases": 15,
+   "submit_clean_cases_correct": 15,
+   "dev_correct": true,
+   "per_portal": {
+    "wrenfield": {
+     "scored_cases": 11,
+     "correct": 11,
+     "wrong": 0,
+     "not_submitted": 0
+    },
+    "corvane": {
+     "scored_cases": 11,
+     "correct": 11,
+     "wrong": 0,
+     "not_submitted": 0
+    },
+    "thistlebrook": {
+     "scored_cases": 10,
+     "correct": 10,
+     "wrong": 0,
+     "not_submitted": 0
+    }
+   }
+  },
+  "naive_filler": {
+   "scored_cases": 32,
+   "correct": 10,
+   "wrong": 20,
+   "not_submitted": 2,
+   "clean_cases": 5,
+   "clean_cases_correct": 5,
+   "submit_clean_cases": 15,
+   "submit_clean_cases_correct": 8,
+   "dev_correct": true,
+   "per_portal": {
+    "wrenfield": {
+     "scored_cases": 11,
+     "correct": 4,
+     "wrong": 7,
+     "not_submitted": 0
+    },
+    "corvane": {
+     "scored_cases": 11,
+     "correct": 3,
+     "wrong": 7,
+     "not_submitted": 1
+    },
+    "thistlebrook": {
+     "scored_cases": 10,
+     "correct": 3,
+     "wrong": 6,
+     "not_submitted": 1
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "association"
+   ],
+   "wrong_details": [
+    {
+     "field": "association",
+     "expected": "Larch Hollow Condominium Association (Beaverton, OR)",
+     "stored": "Larch Hollow Condominium Association (Tigard, OR)"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_agree",
+    "typeahead_ambiguous"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "occupancy"
+   ],
+   "wrong_details": [
+    {
+     "field": "occupancy",
+     "expected": "Rented to others",
+     "stored": "Owner-occupied (primary residence)"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 0.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "improvements"
+   ],
+   "wrong_details": [
+    {
+     "field": "improvements",
+     "expected": 68600,
+     "stored": 44100
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "wood_stove"
+   ],
+   "wrong_details": [
+    {
+     "field": "wood_stove",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.9,
+   "events": [
+    "relogin"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "association",
+    "street",
+    "unit_number",
+    "city",
+    "zip",
+    "year_built",
+    "floor",
+    "wood_stove",
+    "phone"
+   ],
+   "wrong_details": [
+    {
+     "field": "association",
+     "expected": "Harrowgate Towers Condominium (Vancouver, WA)",
+     "stored": "Kestrel Point Condominium Association (Bellingham, WA)"
+    },
+    {
+     "field": "street",
+     "expected": "700 Harrowgate Blvd",
+     "stored": "15 Kestrel Point Rd"
+    },
+    {
+     "field": "unit_number",
+     "expected": "1804",
+     "stored": "3"
+    },
+    {
+     "field": "city",
+     "expected": "Vancouver",
+     "stored": "Bellingham"
+    },
+    {
+     "field": "zip",
+     "expected": "98660",
+     "stored": "98225"
+    },
+    {
+     "field": "year_built",
+     "expected": 2019,
+     "stored": 1999
+    },
+    {
+     "field": "floor",
+     "expected": 18,
+     "stored": 1
+    },
+    {
+     "field": "wood_stove",
+     "expected": "No",
+     "stored": "Yes"
+    },
+    {
+     "field": "phone",
+     "expected": "360-555-0126",
+     "stored": "360-555-0190"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s09",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "seasonal_credit"
+   ],
+   "wrong_details": [
+    {
+     "field": "seasonal_credit",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "rule_trap"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s10",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "water_backup"
+   ],
+   "wrong_details": [
+    {
+     "field": "water_backup",
+     "expected": "Not included",
+     "stored": "$5,000"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s11",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "motorcycles"
+   ],
+   "wrong_details": [
+    {
+     "field": "motorcycles",
+     "expected": [
+      {
+       "vin": "KS9RB0905NA214470",
+       "year": 2022,
+       "make": "Kessin",
+       "model": "Ridgeback 900 Touring",
+       "engine_cc": 898,
+       "ownership": "Owned outright",
+       "lienholder": ""
+      }
+     ],
+     "stored": [
+      {
+       "vin": "KS9RB0905NA214470",
+       "year": 2022,
+       "make": "Kessin",
+       "model": "Ridgeback 900",
+       "engine_cc": 898,
+       "ownership": "Owned outright",
+       "lienholder": ""
+      }
+     ]
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "safety_course"
+   ],
+   "wrong_details": [
+    {
+     "field": "safety_course",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "annual_miles"
+   ],
+   "wrong_details": [
+    {
+     "field": "annual_miles",
+     "expected": 5400,
+     "stored": 450
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unit_mismatch"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "years_endorsed"
+   ],
+   "wrong_details": [
+    {
+     "field": "years_endorsed",
+     "expected": 3,
+     "stored": 12
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_agree",
+    "estimator_ok"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 0.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "cpe_coverage"
+   ],
+   "wrong_details": [
+    {
+     "field": "cpe_coverage",
+     "expected": 3720,
+     "stored": 3330
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.6,
+   "events": [
+    "relogin"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "bi_pd_limits",
+    "collision_deductible",
+    "comprehensive_deductible",
+    "cpe_coverage",
+    "roadside"
+   ],
+   "wrong_details": [
+    {
+     "field": "bi_pd_limits",
+     "expected": "250/500/100",
+     "stored": "25/50/25"
+    },
+    {
+     "field": "collision_deductible",
+     "expected": 250,
+     "stored": 500
+    },
+    {
+     "field": "comprehensive_deductible",
+     "expected": 250,
+     "stored": 500
+    },
+    {
+     "field": "cpe_coverage",
+     "expected": 1800,
+     "stored": 0
+    },
+    {
+     "field": "roadside",
+     "expected": "Roadside and trip interruption",
+     "stored": "Not included"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s09",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s10",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "city"
+   ],
+   "wrong_details": [
+    {
+     "field": "city",
+     "expected": "Fircrest",
+     "stored": "Tacoma"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s11",
+   "filler": "naive",
+   "outcome": "error",
+   "seconds": 1.2,
+   "events": [],
+   "submitted": false,
+   "submit_count": 0,
+   "expected_behavior": "needs_operator_answer",
+   "correct": false,
+   "record_correct": false,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [
+    "effective_date",
+    "prior_insurance",
+    "first_name",
+    "last_name",
+    "dob",
+    "phone",
+    "years_endorsed",
+    "safety_course",
+    "street",
+    "city",
+    "state",
+    "zip",
+    "motorcycles",
+    "annual_miles",
+    "bi_pd_limits",
+    "collision_deductible",
+    "comprehensive_deductible",
+    "cpe_coverage",
+    "roadside"
+   ],
+   "traps": [
+    "unknown_question"
+   ],
+   "error": "DriverError: motorcycle not added: Enter the lienholder or lessor."
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "breed"
+   ],
+   "wrong_details": [
+    {
+     "field": "breed",
+     "expected": "Labrador Retriever Mix",
+     "stored": "Labrador Retriever"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 3.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "weight_lb"
+   ],
+   "wrong_details": [
+    {
+     "field": "weight_lb",
+     "expected": 44,
+     "stored": 20
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unit_mismatch"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "spayed_neutered"
+   ],
+   "wrong_details": [
+    {
+     "field": "spayed_neutered",
+     "expected": "Yes",
+     "stored": "No"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "prefill_agree"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s07",
+   "filler": "naive",
+   "outcome": "error",
+   "seconds": 2.3,
+   "events": [],
+   "submitted": false,
+   "submit_count": 0,
+   "expected_behavior": "needs_operator_answer",
+   "correct": false,
+   "record_correct": false,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [
+    "first_name",
+    "last_name",
+    "email",
+    "phone",
+    "zip",
+    "pet_name",
+    "species",
+    "breed",
+    "weight_lb",
+    "birth_month",
+    "birth_year",
+    "spayed_neutered",
+    "indoor_only",
+    "recent_illness",
+    "condition_notes",
+    "annual_limit",
+    "reimbursement",
+    "deductible",
+    "wellness",
+    "start_date"
+   ],
+   "traps": [
+    "unknown_question"
+   ],
+   "error": "DriverError: screen health blocked: Tell us briefly what happened."
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.6,
+   "events": [
+    "relogin"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "start_date"
+   ],
+   "wrong_details": [
+    {
+     "field": "start_date",
+     "expected": "2027-01-15",
+     "stored": "2026-11-22"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s09",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "indoor_only"
+   ],
+   "wrong_details": [
+    {
+     "field": "indoor_only",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "rule_trap"
+   ]
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s10",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "reimbursement"
+   ],
+   "wrong_details": [
+    {
+     "field": "reimbursement",
+     "expected": "90%",
+     "stored": "80%"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ]
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 0.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_agree",
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.5,
+   "events": [
+    "estimator_corrected"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.5,
+   "events": [
+    "relogin"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s09",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "rule_trap"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s10",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.8,
+   "events": [
+    "summary_fix:water_backup"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "wrenfield",
+   "case_id": "wf-s11",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 0.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.7,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unit_mismatch"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.8,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.0,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_agree",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "estimator_corrected"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 4.1,
+   "events": [
+    "relogin"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s09",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s10",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.0,
+   "events": [
+    "summary_fix:city"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s11",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 3.5,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.3,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.0,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unit_mismatch"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.1,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "prefill_agree"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 3.4,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.8,
+   "events": [
+    "relogin",
+    "summary_fix:start_date"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s09",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.2,
+   "events": [],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "recurring_rule",
+    "rule_trap"
+   ],
+   "operator_labels_not_seen": []
+  },
+  {
+   "portal": "thistlebrook",
+   "case_id": "tb-s10",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 5.7,
+   "events": [
+    "summary_fix:reimbursement"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": []
+  }
+ ]
+}

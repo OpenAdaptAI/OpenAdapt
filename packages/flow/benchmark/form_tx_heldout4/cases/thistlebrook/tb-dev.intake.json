@@ -1,0 +1,24 @@
+{
+  "case_id": "tb-dev",
+  "facts": {
+    "owner.first_name": "Ada",
+    "owner.last_name": "Quennell",
+    "owner.email": "ada.q@example.test",
+    "owner.phone": "512-555-0148",
+    "owner.zip": "78704",
+    "pet.name": "Juniper",
+    "pet.species": "Dog",
+    "pet.breed": "Border Collie",
+    "pet.mixed_breed": false,
+    "pet.weight": 38,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2021-08-03",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$10,000",
+    "plan.reimbursement": "80%",
+    "plan.deductible": 250,
+    "plan.wellness": false,
+    "policy.start_date": "2026-12-01"
+  }
+}

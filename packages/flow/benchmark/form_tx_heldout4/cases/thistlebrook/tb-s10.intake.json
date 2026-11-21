@@ -1,0 +1,24 @@
+{
+  "case_id": "tb-s10",
+  "facts": {
+    "owner.first_name": "Ishaan",
+    "owner.last_name": "Brookfield",
+    "owner.email": "ishaan.b@example.test",
+    "owner.phone": "720-555-0145",
+    "owner.zip": "80203",
+    "pet.name": "Maple",
+    "pet.species": "Dog",
+    "pet.breed": "Australian Shepherd",
+    "pet.mixed_breed": false,
+    "pet.weight": 47,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2023-05-20",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "Unlimited",
+    "plan.reimbursement": "90%",
+    "plan.deductible": 500,
+    "plan.wellness": false,
+    "policy.start_date": "2026-12-03"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "case_id": "cv-s06",
+  "facts": {
+    "policy.effective_date": "2026-12-20",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Odessa",
+    "rider.last_name": "Brightwater",
+    "rider.date_of_birth": "1981-06-12",
+    "rider.phone": "360-555-0151",
+    "rider.years_endorsed": 11,
+    "rider.safety_course": true,
+    "garaging.street": "912 Pellham Way",
+    "garaging.city": "Olympia",
+    "garaging.state": "WA",
+    "garaging.zip": "98501",
+    "motorcycles": [
+      {
+        "vin": "KS9SL1104TA017763",
+        "year": 2026,
+        "make": "Kessin",
+        "model": "Sable 1100",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 8000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "250/500/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.roadside": "Roadside and trip interruption",
+    "coverage.cpe_items": [
+      {
+        "item": "Saddlebags",
+        "value": 1400
+      },
+      {
+        "item": "Heated grips",
+        "value": 350
+      },
+      {
+        "item": "Custom exhaust",
+        "value": 1100
+      }
+    ]
+  }
+}

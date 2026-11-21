@@ -1,0 +1,27 @@
+{
+  "case_id": "wf-s02",
+  "facts": {
+    "association.name": "Tidewater Row Condominium Association",
+    "unit.street": "18 Tidewater Row",
+    "unit.unit_number": "4",
+    "unit.city": "Astoria",
+    "unit.state": "OR",
+    "unit.zip": "97103",
+    "building.year_built": 1921,
+    "unit.floor": 1,
+    "unit.occupancy": "Secondary or seasonal home",
+    "unit.wood_stove": true,
+    "owner.first_name": "Priya",
+    "owner.last_name": "Lakhani",
+    "owner.date_of_birth": "1971-02-27",
+    "owner.email": "priya.lakhani@example.test",
+    "owner.phone": "360-555-0119",
+    "coverage.improvements": 55000,
+    "coverage.personal_property": 25000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2027-01-01",
+    "unit.months_occupied_per_year": 6
+  }
+}

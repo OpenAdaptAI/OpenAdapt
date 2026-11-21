@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-dev",
+  "facts": {
+    "association.name": "Quarry Bend Lofts Owners Association",
+    "unit.street": "2210 NW Quarry Bend Ave",
+    "unit.unit_number": "3C",
+    "unit.city": "Portland",
+    "unit.state": "OR",
+    "unit.zip": "97210",
+    "building.year_built": 2008,
+    "unit.floor": 3,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Maren",
+    "owner.last_name": "Olsgaard",
+    "owner.date_of_birth": "1987-04-12",
+    "owner.email": "maren.olsgaard@example.test",
+    "owner.phone": "503-555-0142",
+    "coverage.improvements": 62000,
+    "coverage.personal_property": 45000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-15"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s11",
+  "facts": {
+    "association.name": "Harrowgate Park Condominium Owners",
+    "unit.street": "1290 Harrowgate Park Dr",
+    "unit.unit_number": "31",
+    "unit.city": "Vancouver",
+    "unit.state": "WA",
+    "unit.zip": "98661",
+    "building.year_built": 2004,
+    "unit.floor": 3,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Bertrand",
+    "owner.last_name": "Okoye",
+    "owner.date_of_birth": "1981-10-14",
+    "owner.email": "b.okoye@example.test",
+    "owner.phone": "360-555-0137",
+    "coverage.improvements": 44000,
+    "coverage.personal_property": 32000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "$5,000",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-22"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "tb-s07",
+  "facts": {
+    "owner.first_name": "Mireille",
+    "owner.last_name": "Haskett",
+    "owner.email": "mireille.h@example.test",
+    "owner.phone": "615-555-0166",
+    "owner.zip": "37209",
+    "pet.name": "Clover",
+    "pet.species": "Dog",
+    "pet.breed": "Golden Retriever",
+    "pet.mixed_breed": false,
+    "pet.weight": 58,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2024-02-14",
+    "pet.spayed_neutered": false,
+    "plan.annual_limit": "$20,000",
+    "plan.reimbursement": "90%",
+    "plan.deductible": 750,
+    "plan.wellness": true,
+    "policy.start_date": "2026-12-12"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "case_id": "cv-s11",
+  "facts": {
+    "policy.effective_date": "2026-12-28",
+    "rider.prior_insurance": "Less than 6 months",
+    "rider.first_name": "Yusra",
+    "rider.last_name": "Kalnins",
+    "rider.date_of_birth": "1996-10-03",
+    "rider.phone": "971-555-0115",
+    "rider.years_endorsed": 3,
+    "rider.safety_course": true,
+    "garaging.street": "3500 SW Merriden St",
+    "garaging.city": "Beaverton",
+    "garaging.state": "OR",
+    "garaging.zip": "97005",
+    "motorcycles": [
+      {
+        "vin": "VH4TK6907PE215598",
+        "year": 2023,
+        "make": "Vahlberg",
+        "model": "Tarka 690",
+        "ownership": "Financed"
+      }
+    ],
+    "usage.mileage": 4000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "100/300/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.cpe_amount": 600,
+    "coverage.roadside": "Roadside assistance"
+  }
+}

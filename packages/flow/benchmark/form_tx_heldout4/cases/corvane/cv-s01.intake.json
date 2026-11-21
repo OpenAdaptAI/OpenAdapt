@@ -1,0 +1,34 @@
+{
+  "case_id": "cv-s01",
+  "facts": {
+    "policy.effective_date": "2026-12-05",
+    "rider.prior_insurance": "Less than 6 months",
+    "rider.first_name": "Ingrid",
+    "rider.last_name": "Sorvald",
+    "rider.date_of_birth": "1992-07-24",
+    "rider.phone": "503-555-0177",
+    "rider.years_endorsed": 4,
+    "rider.safety_course": false,
+    "garaging.street": "2280 SE Wexley Pl",
+    "garaging.city": "Portland",
+    "garaging.state": "OR",
+    "garaging.zip": "97214",
+    "motorcycles": [
+      {
+        "vin": "SM2CV6504PC118837",
+        "year": 2023,
+        "make": "Strand Motorworks",
+        "model": "Cove 650",
+        "ownership": "Financed",
+        "lienholder": "Brannagh Valley Credit Union"
+      }
+    ],
+    "usage.mileage": 4000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "50/100/50",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.cpe_amount": 0,
+    "coverage.roadside": "Not included"
+  }
+}

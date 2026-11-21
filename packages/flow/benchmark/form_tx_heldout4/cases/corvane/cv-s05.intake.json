@@ -1,0 +1,34 @@
+{
+  "case_id": "cv-s05",
+  "facts": {
+    "policy.effective_date": "2026-12-01",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Henrik",
+    "rider.last_name": "Valdane",
+    "rider.date_of_birth": "1970-01-08",
+    "rider.phone": "541-555-0129",
+    "rider.safety_course": true,
+    "garaging.street": "77 Carrow Rd",
+    "garaging.city": "Eugene",
+    "garaging.state": "OR",
+    "garaging.zip": "97401",
+    "motorcycles": [
+      {
+        "vin": "VH4GR9500NE630274",
+        "year": 2022,
+        "make": "Vahlberg",
+        "model": "Grisle 950",
+        "ownership": "Financed",
+        "lienholder": "Odelmere Savings Bank"
+      }
+    ],
+    "usage.mileage": 6000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "100/300/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.cpe_amount": 1200,
+    "coverage.roadside": "Not included",
+    "rider.endorsement_date": "2023-04-18"
+  }
+}

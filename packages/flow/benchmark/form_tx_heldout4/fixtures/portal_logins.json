@@ -1,0 +1,5 @@
+{
+  "wrenfield": {"username": "condo.owner@example.test", "password": "wrenfield-test-pass-41"},
+  "corvane": {"username": "CVA-40518", "password": "corvane-test-pass-42"},
+  "thistlebrook": {"username": "pet.parent@example.test", "password": "thistlebrook-test-pass-43"}
+}

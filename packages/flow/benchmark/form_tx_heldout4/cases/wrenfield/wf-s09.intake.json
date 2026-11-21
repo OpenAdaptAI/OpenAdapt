@@ -1,0 +1,27 @@
+{
+  "case_id": "wf-s09",
+  "facts": {
+    "association.name": "Kestrel Point Condominium Association",
+    "unit.street": "15 Kestrel Point Rd",
+    "unit.unit_number": "22",
+    "unit.city": "Bellingham",
+    "unit.state": "WA",
+    "unit.zip": "98225",
+    "building.year_built": 1999,
+    "unit.floor": 3,
+    "unit.occupancy": "Secondary or seasonal home",
+    "unit.wood_stove": false,
+    "owner.first_name": "Callum",
+    "owner.last_name": "Ostrowski",
+    "owner.date_of_birth": "1962-05-09",
+    "owner.email": "callum.o@example.test",
+    "owner.phone": "360-555-0145",
+    "coverage.improvements": 36000,
+    "coverage.personal_property": 22000,
+    "coverage.loss_assessment": 1000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2027-03-01",
+    "unit.months_occupied_per_year": 11
+  }
+}

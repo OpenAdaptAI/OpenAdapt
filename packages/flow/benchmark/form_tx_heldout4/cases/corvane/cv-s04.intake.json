@@ -1,0 +1,33 @@
+{
+  "case_id": "cv-s04",
+  "facts": {
+    "policy.effective_date": "2027-01-01",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Devon",
+    "rider.last_name": "Achebe-Lunn",
+    "rider.date_of_birth": "1988-09-17",
+    "rider.phone": "425-555-0108",
+    "rider.years_endorsed": 7,
+    "rider.safety_course": true,
+    "garaging.street": "3390 Garnet Loop",
+    "garaging.city": "Bellevue",
+    "garaging.state": "WA",
+    "garaging.zip": "98004",
+    "motorcycles": [
+      {
+        "vin": "KS9DT7003LA552019",
+        "year": 2020,
+        "make": "Kessin",
+        "model": "Drift 700",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 450,
+    "usage.mileage_period": "per month",
+    "coverage.liability_limits": "50/100/50",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 800,
+    "coverage.roadside": "Roadside assistance"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "case_id": "cv-s09",
+  "facts": {
+    "policy.effective_date": "2026-12-12",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Colm",
+    "rider.last_name": "Arbuthnot",
+    "rider.date_of_birth": "1966-08-21",
+    "rider.phone": "406-555-0140",
+    "rider.years_endorsed": 30,
+    "rider.safety_course": true,
+    "garaging.street": "18 Larkwell Rd",
+    "garaging.city": "Missoula",
+    "garaging.state": "MT",
+    "garaging.zip": "59801",
+    "motorcycles": [
+      {
+        "vin": "SM2PK4002SC209318",
+        "year": 2025,
+        "make": "Strand Motorworks",
+        "model": "Pike 400",
+        "ownership": "Owned outright"
+      },
+      {
+        "vin": "VH4WL8003SE450917",
+        "year": 2025,
+        "make": "Vahlberg",
+        "model": "Wilder 800",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 9000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "100/300/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 0,
+    "coverage.roadside": "Roadside assistance"
+  }
+}
