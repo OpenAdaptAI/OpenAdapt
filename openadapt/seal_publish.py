@@ -144,12 +144,24 @@ def hosted_seals_live(
     """True only when ``origin`` answers 200 ``{"enabled": true}`` within ``timeout_s``.
 
     Anything else (an error, a timeout, a 404 from a Cloud without the route,
-    ``{"enabled": false}``) is False. The wait is bounded with a thread, since
-    a socket timeout does not bound the DNS lookup.
+    ``{"enabled": false}``) is False.
+    """
+    return _status_true(origin + STATUS_PATH, transport=transport, timeout_s=timeout_s)
+
+
+def _status_true(
+    url: str,
+    *,
+    transport: Optional[Transport] = None,
+    timeout_s: float = STATUS_TIMEOUT_S,
+) -> bool:
+    """GET ``url``; True only for 200 ``{"enabled": true}`` within ``timeout_s``.
+
+    The wait is bounded with a thread, since a socket timeout does not bound
+    the DNS lookup.
     """
     import threading
 
-    url = origin + STATUS_PATH
     headers = {"Accept": "application/json"}
     if transport is None:
         real = _module_transport()
@@ -162,7 +174,7 @@ def hosted_seals_live(
     def ask() -> None:
         try:
             answer.append(transport("GET", url, None, headers))
-        except Exception:  # noqa: BLE001 - any failure means "do not offer"
+        except Exception:  # noqa: BLE001 - any failure means "no"
             pass
 
     worker = threading.Thread(target=ask, name="seal-status", daemon=True)
@@ -213,9 +225,16 @@ def consent(
         raise PublishError(
             "Not published: no terminal to ask. Pass --yes to publish.", 2
         )
+    return _ask_consent(PROMPT.format(host=host), ask, show)
+
+
+def _ask_consent(
+    prompt: str, ask: Callable[[str], str], show: Optional[Callable[[], None]]
+) -> bool:
+    """Inspect locally as often as requested; only an explicit yes authorizes a send."""
     try:
         while True:
-            answer = ask(PROMPT.format(host=host)).strip().lower()
+            answer = ask(prompt).strip().lower()
             if show is None or answer not in ("show", "s", "--show"):
                 break
             show()
@@ -320,6 +339,22 @@ def card_text(doc: Mapping[str, Any]) -> str:
                 label = label[:-2] + "ID"
             lines.append(f"  {label}: {', '.join(runs)}")
     return "\n".join(lines)
+
+
+def _preview_seals(
+    docs: list[tuple[Path, dict[str, Any]]], say: Callable[[str], None]
+) -> None:
+    for run_dir, doc in docs:
+        say(card_text(doc))
+        say(f"Exact upload: {run_dir.resolve() / 'public-seal.json'}")
+    say(
+        "Type --show at the prompt to read the exact bytes. "
+        "For the seal publish command, add --show to inspect without uploading."
+    )
+    say(
+        "Anyone who sees two Seals can compare their key IDs to see "
+        "if the same key signed both."
+    )
 
 
 def _preview_fields(name: str, value: Any) -> Iterator[tuple[str, str]]:
@@ -622,15 +657,7 @@ def publish(
         say(f"To take it down: {command(f'seal unpublish {_quote(run_dir)}')}")
         return str(existing["url"])
     doc = build(run_dir, names=names, github=github, provenance=provenance)
-    say(card_text(doc))
-    public_file = run_dir / "public-seal.json"
-    if public_file.is_relative_to(Path.cwd()):
-        public_file = public_file.relative_to(Path.cwd())
-    say(f"Exact upload: {public_file} (or add --show to the same publish command).")
-    say(
-        "Anyone who sees two Seals can compare their key IDs to see "
-        "if the same key signed both."
-    )
+    _preview_seals([(run_dir, doc)], say)
     if dry_run:
         say(f"Dry run: wrote {run_dir / 'public-seal.json'}. Nothing was uploaded.")
         return None
@@ -655,6 +682,87 @@ def publish(
     return str(record["url"])
 
 
+#: Answers ``{"enabled": true}`` only while Cloud shows two Seals on one page
+#: (``/seal#<id>,<id>``). Older Clouds answer 404, and the CLI prints one link
+#: per Seal instead.
+PAIRS_STATUS_PATH = "/api/public/local-seal-pairs/status"
+
+#: The quickstart's one question, for both of its Seals.
+QUICKSTART_PROMPT = (
+    "This uploads {subjects} to {host} and gives you a link. "
+    "Anyone with the link can see the public fields above. They hold no inputs, screenshots or "
+    "records, and the runs used synthetic data. Publish? [y/N] "
+)
+
+
+def pair_link(origin: str, seal_ids: list[str]) -> str:
+    return f"{origin}/seal#{','.join(seal_ids)}"
+
+
+def pairs_live(origin: str, *, transport: Optional[Transport] = None) -> bool:
+    """True only when Cloud's pair status route answers ``{"enabled": true}``."""
+    return _status_true(origin + PAIRS_STATUS_PATH, transport=transport)
+
+
+def publish_quickstart(
+    run_dirs: list[Path],
+    *,
+    ask: Callable[[str], str],
+    say: Callable[[str], None] = print,
+    endpoint_value: Optional[str] = None,
+    transport: Optional[Transport] = None,
+    command: Callable[[str], str] = lambda rest: f"openadapt {rest}",
+) -> Optional[str]:
+    """Offer the quickstart's Seals (the checked run, then the stopped run) at once.
+
+    Each card is built and written to its run's ``public-seal.json`` first, and
+    every public field is shown with the full path to its file, so the exact
+    bytes can be read before answering. One y/N question, default No, covers
+    both. Returns the link to open (one page for both when Cloud supports it),
+    or None when nothing was sent.
+    """
+    origin = endpoint(endpoint_value)
+    docs = []
+    for run_dir in run_dirs:
+        docs.append(
+            (Path(run_dir), build(Path(run_dir), provenance="synthetic-tutorial"))
+        )
+    if not docs:
+        return None
+    _preview_seals(docs, say)
+
+    def show() -> None:
+        for _, doc in docs:
+            say(public_bytes(doc).decode("utf-8"))
+
+    subjects = "1 signed Seal" if len(docs) == 1 else f"{len(docs)} signed Seals"
+    if not _ask_consent(
+        QUICKSTART_PROMPT.format(subjects=subjects, host=host_of(origin)), ask, show
+    ):
+        say("Not published.")
+        return None
+    sender = transport or _module_transport()
+    records = []
+    for run_dir, doc in docs:
+        existing = read_record(run_dir)
+        if existing is not None and existing.get("id"):
+            records.append(existing)
+            continue
+        records.append(upload(run_dir, doc, origin=origin, transport=sender))
+    ids = [str(record["id"]) for record in records]
+    if len(ids) > 1 and pairs_live(origin, transport=transport):
+        link = pair_link(origin, ids)
+        say(f"Published. Both runs on one page: {link}")
+    else:
+        link = str(records[-1]["url"])
+        for (run_dir, doc), record in zip(docs, records):
+            say(f"Published {doc['card'].get('outcome', '')}: {record['url']}")
+    say("Each run folder keeps its delete token. To take one down:")
+    for run_dir, _ in docs:
+        say(f"  {command(f'seal unpublish {_quote(run_dir)}')}")
+    return link
+
+
 __all__ = [
     "DEFAULT_ENDPOINT",
     "ENV_ENDPOINT",
@@ -671,7 +779,10 @@ __all__ = [
     "hosted_seals_live",
     "in_ci",
     "parse_link",
+    "pair_link",
+    "pairs_live",
     "publish",
+    "publish_quickstart",
     "unpublish",
     "upload",
 ]

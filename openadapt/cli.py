@@ -806,12 +806,12 @@ def _quickstart_publish_offer():
     if not _public_seals_available():
         return None
 
-    def offer(run_dir: Path, say, ask) -> bool:
+    def offer(run_dirs: list[Path] | Path, say, ask) -> bool:
         from openadapt.seal_publish import (
             PublishError,
             endpoint,
             hosted_seals_live,
-            publish,
+            publish_quickstart,
         )
 
         try:
@@ -819,16 +819,10 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say("Put this Seal online? These fields would be shared:")
+        if isinstance(run_dirs, Path):
+            run_dirs = [run_dirs]
         try:
-            publish(
-                run_dir,
-                interactive=True,
-                ask=ask,
-                say=say,
-                provenance="synthetic-tutorial",
-                command=_hint,
-            )
+            publish_quickstart(run_dirs, ask=ask, say=say, command=_hint)
         except PublishError as exc:
             say(str(exc))
         except (KeyboardInterrupt, EOFError):

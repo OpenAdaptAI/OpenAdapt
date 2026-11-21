@@ -8,7 +8,8 @@
 
 - Before publishing a Seal, the quickstart and `openadapt seal publish` list
   each public field and explain how readers can link Seals signed by the same
-  key. Type `show` at the prompt to inspect the exact upload, or run
+  key. The quickstart shows the checked and stopped Seals, with both file
+  paths, before asking once. Type `show` at the prompt to inspect the exact upload, or run
   `openadapt seal publish --show` to write its bytes to standard output without
   publishing.
 
