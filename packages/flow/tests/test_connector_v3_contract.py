@@ -270,7 +270,9 @@ def test_cloud_grounding_policy_shape_is_a_supported_governance_field(tmp_path):
 
     raw["grounding_model"]["phi_grounding_allowlist_override"] = ["*"]
     with pytest.raises(ByocGovernanceError, match="unsupported governance fields"):
-        parse_job(raw, lease_job_id="synthetic-lease").ensure_governed(require_run_token=True)
+        parse_job(raw, lease_job_id="synthetic-lease").ensure_governed(
+            require_run_token=True
+        )
 
 
 def test_legacy_parse_never_inherits_live_authority_from_environment(
