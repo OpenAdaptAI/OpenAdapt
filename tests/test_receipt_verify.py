@@ -8,6 +8,7 @@ content, and older formats that must still verify.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,8 +17,8 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
-from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
+    ReceiptRecordError,
     build_statement,
     local_registry,
     receipt_after_run,
@@ -25,6 +26,8 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
+
+from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
@@ -39,19 +42,16 @@ def _isolated(tmp_path, monkeypatch):
 def _run(tmp_path: Path, outcome: str = "HALTED", name: str = "run") -> Path:
     run = tmp_path / name
     run.mkdir()
-    report = {
-        "run_id": f"{name}-1",
-        "workflow_name": "MockMed referral",
-        "execution_outcome": outcome,
-        "started_at": "2026-11-20T23:14:00Z",
-        "bundle_content_digest": BUNDLE,
-        "model_calls": 0,
-        "results": [
-            {"ok": True, "effect_verified": True, "postconditions_ok": True},
-            {"ok": outcome == "VERIFIED", "effect_verified": outcome == "VERIFIED"},
-            {"ok": True},
-        ],
-    }
+    fixture = "run-1" if outcome == "VERIFIED" else "run-broken"
+    data = Path(__file__).parent / "fixtures" / "seal_view" / fixture / "report.json"
+    report = json.loads(data.read_bytes())
+    report.update(
+        run_id=f"{name}-1",
+        workflow_name="MockMed referral",
+        execution_outcome=outcome,
+        started_at="2026-11-20T23:14:00Z",
+        bundle_content_digest=BUNDLE,
+    )
     (run / "report.json").write_text(json.dumps(report))
     return run
 
@@ -69,7 +69,9 @@ def test_a_stopped_run_gets_a_receipt_and_stays_stopped(tmp_path):
     assert result.ok and result.outcome == "STOPPED"
     assert result.signer_lines == ("Signed by this computer",)
     lines = result.statement["predicate"]["lines"]
-    assert [line["check"] for line in lines] == ["confirmed", "refuted"]
+    # Two contracts belong to one attempted write. The stopped run saw one
+    # absence but the other check never completed.
+    assert [(line["step"], line["check"]) for line in lines] == [(5, "not_checked")]
     out = _verify(str(run))
     assert out.exit_code == 0, out.output
     assert "Signed by this computer" in out.output
@@ -98,36 +100,24 @@ def test_signing_never_upgrades(run_outcome):
 def test_a_verified_report_with_a_refuted_write_is_not_verified():
     report = {
         "execution_outcome": "VERIFIED",
-        "results": [{"ok": False, "effect_verified": False}],
+        "results": [
+            {"step_id": "a", "intent": "save", "ok": False, "effect_verified": False}
+        ],
     }
     statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
     assert statement["predicate"]["outcome"] == "UNKNOWN"
 
 
-@pytest.mark.parametrize(
-    "tail,reason",
-    [
-        ([{"effect_verified": False}], "refuted_write"),
-        ([{"effect_verified": True}], "too_many_writes"),
-    ],
-)
-def test_writes_past_the_line_limit_still_decide_the_outcome(tail, reason):
-    """A receipt shows at most MAX_LINES writes; it never says VERIFIED over
-    writes it left out."""
+def test_writes_past_the_line_limit_refuse_to_sign():
+    """A receipt never says VERIFIED over writes it left out: more writes than
+    a receipt can show refuse to sign (this writer never truncates)."""
     from openadapt_types.receipt import MAX_LINES
 
     confirmed = [{"ok": True, "effect_verified": True}] * MAX_LINES
-    report = {"execution_outcome": "VERIFIED", "results": confirmed + tail}
-    statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
-    predicate = statement["predicate"]
-    assert (predicate["outcome"], predicate["reason_code"]) == ("UNKNOWN", reason)
-    assert len(predicate["lines"]) == MAX_LINES
-    exact, _ = build_statement(
-        {"execution_outcome": "VERIFIED", "results": confirmed},
-        "1" * 64,
-        flow_version="3.5.0",
-    )
-    assert exact["predicate"]["outcome"] == "VERIFIED"
+    for tail in ([{"effect_verified": False}], [{"effect_verified": True}]):
+        report = {"execution_outcome": "VERIFIED", "results": confirmed + tail}
+        with pytest.raises(ReceiptRecordError):
+            build_statement(report, "1" * 64, flow_version="3.5.0")
 
 
 def test_a_run_folder_without_its_report_is_not_verified(tmp_path):
@@ -371,6 +361,270 @@ def test_the_public_allow_list_is_inside_todays_public_fields():
             assert field in known, (version, path, source)
 
 
+@pytest.mark.parametrize("fixture", ["run-1", "run-broken"])
+def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
+    from openadapt_flow.offline_seal import public_key_entry
+    from openadapt_types.receipt_callback import verified_receipt_metrics
+
+    run = tmp_path / fixture
+    run.mkdir()
+    source = Path(__file__).parent / "fixtures" / "seal_view" / fixture / "report.json"
+    raw = source.read_bytes()
+    (run / "report.json").write_bytes(raw)
+    envelope = write_receipt_record(run)
+    entry = public_key_entry()
+    pin = {key: entry[key] for key in ("key_id", "public_key")}
+    canonical = r.report_canonical_sha256(json.loads(raw))
+    exact = hashlib.sha256(raw).hexdigest()
+    assert canonical != exact
+    legacy = hashlib.sha256(r.canonical_json(json.loads(raw)).encode()).hexdigest()
+    checked = r.verify_receipt(envelope, local_registry())
+    assert checked.ok
+    subjects = {s["name"]: s["digest"]["sha256"] for s in checked.statement["subject"]}
+    assert (
+        subjects["report.json"] == exact
+        and subjects["report.canonical"] == canonical
+    )
+    lines = checked.statement["predicate"]["lines"]
+    assert len(lines) == 1 and lines[0]["step"] == 5
+    assert (lines[0]["check"], lines[0]["strength"]) == (
+        ("confirmed", "read_back")
+        if fixture == "run-1"
+        else ("not_checked", "same_screen")
+    )
+    wire = (run / "receipt.json").read_bytes()
+    assert verified_receipt_metrics(
+        wire, pinned_signer=pin, report_jcs_sha256=canonical, outcome=checked.outcome
+    ) == {
+        "receipt_record": envelope,
+        "receipt_record_signer": pin,
+    }
+    with pytest.raises(ValueError, match="canonical report"):
+        verified_receipt_metrics(
+            wire, pinned_signer=pin, report_jcs_sha256=exact, outcome=checked.outcome
+        )
+    if legacy != canonical:
+        with pytest.raises(ValueError, match="canonical report"):
+            verified_receipt_metrics(
+                wire, pinned_signer=pin, report_jcs_sha256=legacy, outcome=checked.outcome
+            )
+    with pytest.raises(ValueError, match="outcome"):
+        verified_receipt_metrics(
+            wire, pinned_signer=pin, report_jcs_sha256=canonical, outcome="FAILED"
+        )
+    if fixture == "run-broken":
+        # A stopped execution can still need reconciliation for a possible write.
+        precise_outcome = r.receipt_outcome(json.loads(raw)["transaction_outcome"])[0]
+        assert (checked.outcome, precise_outcome) == ("STOPPED", "UNKNOWN")
+        with pytest.raises(ValueError, match="outcome"):
+            verified_receipt_metrics(
+                wire,
+                pinned_signer=pin,
+                report_jcs_sha256=canonical,
+                outcome=precise_outcome,
+            )
+    assert write_receipt_record(run) == envelope
+    (run / "report.json").write_bytes(raw + b"\n")
+    with pytest.raises(ReceiptRecordError, match="already_signed"):
+        write_receipt_record(run)
+    assert (run / "receipt.json").read_bytes() == wire
+
+
+def test_incomplete_or_excess_write_evidence_cannot_appear_verified():
+    result = {
+        "step_id": "save",
+        "intent": "save",
+        "effect_verified": False,
+        "ok": False,
+        "risk": "irreversible",
+    }
+    report = {"execution_outcome": "VERIFIED", "results": [result]}
+    statement, _ = build_statement(report, "a" * 64)
+    assert statement["predicate"]["outcome"] == "UNKNOWN"
+    assert statement["predicate"]["lines"][0]["check"] == "not_checked"
+    for key in ("delivery_attempted", "skipped"):
+        report["results"] = [{**result, key: key == "skipped"}]
+        statement, _ = build_statement(report, "a" * 64)
+        assert statement["predicate"]["lines"] == []
+    report["results"] = [result] * (r.MAX_LINES + 1)
+    with pytest.raises(ReceiptRecordError, match="too_many_writes"):
+        build_statement(report, "a" * 64)
+
+
+def test_signing_preserves_conflicting_legacy_files(tmp_path):
+    run = _run(tmp_path)
+    old = b'{"schema_version":"openadapt.run-receipt/v2"}'
+    other = b'{"schema_version":"openadapt.run-receipt/v2","other":true}'
+    (run / "receipt.json").write_bytes(old)
+    (run / "run-summary.json").write_bytes(other)
+    with pytest.raises(ReceiptRecordError, match="legacy_summary_conflict"):
+        write_receipt_record(run)
+    assert (run / "receipt.json").read_bytes() == old
+    assert (run / "run-summary.json").read_bytes() == other
+    assert not (run / r.PRIVATE_FILE).exists()
+
+
+def test_reuse_requires_the_original_signer_and_intact_openings(tmp_path, monkeypatch):
+    run = _run(tmp_path)
+    envelope = write_receipt_record(run)
+    home = tmp_path / "other-home"
+    with monkeypatch.context() as patch:
+        patch.setenv("OPENADAPT_SEAL_HOME", str(home))
+        with pytest.raises(ReceiptRecordError, match="existing_unverified"):
+            write_receipt_record(run)
+    (run / r.PRIVATE_FILE).write_text("{}")
+    with pytest.raises(ReceiptRecordError, match="existing_unverified"):
+        write_receipt_record(run)
+    assert json.loads((run / r.RECEIPT_FILE).read_bytes()) == envelope
+
+
+def test_new_finalizer_requires_explicit_opt_in_and_waits_for_settlement(tmp_path):
+    run = _run(tmp_path)
+    assert receipt_after_run(run, env={}, require_opt_in=True) is None
+    assert not (run / r.RECEIPT_FILE).exists()
+    path = run / "report.json"
+    report = json.loads(path.read_bytes())
+    report["transaction_outcome"] = "SAVED_AWAITING_CHECK"
+    path.write_text(json.dumps(report))
+    assert "readback_pending" in receipt_after_run(
+        run, env={"OPENADAPT_RECEIPT": "on"}, require_opt_in=True
+    )
+    assert not (run / r.RECEIPT_FILE).exists()
+
+
+@pytest.mark.parametrize("finalizer", ["cli", "pool"])
+def test_completed_unverified_no_write_uses_actual_report_serialization(
+    tmp_path, monkeypatch, finalizer
+):
+    from unittest.mock import patch
+
+    import openadapt_flow.__main__ as cli
+    from openadapt_flow import receipt_record
+    from openadapt_flow.ir import RunReport, Workflow
+    from openadapt_flow.offline_seal import public_key_entry
+    from openadapt_flow.transaction import stamp_transaction_outcome
+    from openadapt_types.receipt_callback import verified_receipt_metrics
+
+    report = RunReport(
+        workflow_name="read",
+        started_at="2026-11-20T23:14:00Z",
+        execution_profile="demo",
+        execution_outcome="COMPLETED_UNVERIFIED",
+        results=[],
+    )
+    stamp_transaction_outcome(report, Workflow(name="read", steps=[]))
+    assert report.transaction_outcome == "COMPLETED_UNVERIFIED"
+    path = report.save(tmp_path)
+    if finalizer == "cli":
+        monkeypatch.setattr(
+            cli, "_cmd_replay", lambda args: cli._finish_replay(tmp_path, report, args)
+        )
+        with patch.object(
+            receipt_record, "receipt_after_run", wraps=receipt_record.receipt_after_run
+        ) as sign:
+            cli.main(["replay", str(tmp_path / "unused"), "--run-dir", str(tmp_path)])
+        sign.assert_called_once_with(tmp_path, require_opt_in=False, expected_report=report)
+    else:
+        from openadapt_flow.cli_worklist_pool import _item_run
+
+        monkeypatch.setenv("OPENADAPT_RECEIPT", "on")
+        _item_run(report, None, tmp_path)
+    envelope = json.loads((tmp_path / r.RECEIPT_FILE).read_bytes())
+    entry = public_key_entry()
+    digest = r.report_canonical_sha256(json.loads(path.read_bytes()))
+    keys = {name: entry[name] for name in ("key_id", "public_key")}
+    checked = r.verify_receipt(envelope, local_registry())
+    assert checked.ok and checked.outcome == "UNKNOWN"
+    assert checked.statement["predicate"]["lines"] == []
+    assert (
+        verified_receipt_metrics(
+            (tmp_path / r.RECEIPT_FILE).read_bytes(),
+            pinned_signer=keys,
+            report_jcs_sha256=digest,
+            outcome=r.receipt_outcome(report.transaction_outcome)[0],
+        )["receipt_record"]
+        == envelope
+    )
+
+
+def test_cli_refusal_cannot_sign_a_prior_report(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    import openadapt_flow.__main__ as cli
+    from openadapt_flow import offline_seal
+
+    run = _run(tmp_path)
+    monkeypatch.setattr(cli, "_cmd_replay", lambda args: 2)
+    legacy = Mock(return_value=None)
+    monkeypatch.setattr(offline_seal, "seal_after_run", legacy)
+    result = cli.main(["replay", str(tmp_path / "unused"), "--run-dir", str(run)])
+    assert result == 2
+    legacy.assert_called_once_with(run)
+    assert not (run / r.RECEIPT_FILE).exists()
+
+
+def test_refuses_folder_with_another_finalizers_report(tmp_path):
+    from openadapt_flow.ir import RunReport
+
+    other = RunReport(workflow_name="other", started_at="2026-11-21T00:00:00Z")
+    run = _run(tmp_path)
+    assert "report_changed" in receipt_after_run(run, expected_report=other)
+    assert not (run / r.RECEIPT_FILE).exists()
+
+
+def test_legacy_summary_recognized_by_schema_under_any_filename(tmp_path):
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.receipt import build_receipt, read_run_summary
+
+    run = tmp_path / "run"
+    run.mkdir()
+    fixture = Path(__file__).parent / "fixtures" / "seal_view" / "run-1" / "report.json"
+    raw = fixture.read_bytes()
+    (run / "report.json").write_bytes(raw)
+    report = RunReport.model_validate_json(raw)
+    legacy = build_receipt(report).model_dump_json().encode()
+    old = run / "receipt.json"
+    old.write_bytes(legacy)
+    assert read_run_summary(run)["schema_version"] == "openadapt.run-receipt/v2"
+    write_receipt_record(run)
+    assert (run / "run-summary.json").read_bytes() == legacy
+    assert read_run_summary(run)["schema_version"] == "openadapt.run-receipt/v2"
+    alternative = run / "audit-export.json"
+    alternative.write_bytes(legacy)
+    result = _verify(str(alternative))
+    assert "run-receipt/v2" in result.output
+
+
+def test_declared_but_unbound_effect_stays_visible():
+    report = {
+        "execution_outcome": "HALTED",
+        "results": [
+            {
+                "step_id": "save",
+                "intent": "save",
+                "ok": False,
+                "delivery_attempted": True,
+            }
+        ],
+        "change_ledger": [
+            {
+                "step_id": "save",
+                "position": 1,
+                "status": "unknown",
+                "effects": [{"contract_hash": None, "status": "unknown"}],
+            }
+        ],
+    }
+    statement, _ = build_statement(report, "a" * 64)
+    (line,) = statement["predicate"]["lines"]
+    assert (statement["predicate"]["outcome"], line["check"], line["strength"]) == (
+        "STOPPED",
+        "not_checked",
+        "none",
+    )
+    assert "effect_not_declared" not in line["not_checked"]
+
+
 def _approved_run(tmp_path: Path, approvals: list, mode: str = "each_item") -> Path:
     """A run whose report carries Flow's own approval block, built by its model."""
     from openadapt_flow.approval_mode.model import (
@@ -410,7 +664,8 @@ PERSON_APPROVAL = {
 
 def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
     run = _approved_run(tmp_path, [PERSON_APPROVAL])
-    write_receipt_record(run)
+    envelope = write_receipt_record(run)
+    assert write_receipt_record(run) == envelope
     payload = base64.b64decode(
         json.loads((run / "receipt.json").read_text())["payload"]
     )
@@ -615,3 +870,27 @@ def test_a_receipt_names_both_report_digests(tmp_path):
     report["model_calls"] = 3
     (run / "report.json").write_text(json.dumps(report, indent=4))
     assert not verify_run_receipt(run, local_registry()).ok
+
+
+@pytest.mark.parametrize("status", ["pending", "approved", "continuing"])
+def test_durable_pause_cannot_be_signed(tmp_path, status):
+    from openadapt_flow.runtime.durable.checkpoint import (
+        CheckpointStore,
+        PendingEscalation,
+    )
+
+    run = _run(tmp_path)
+    store = CheckpointStore(run)
+    store.write_pending(
+        PendingEscalation(
+            workflow_name="read",
+            step_index=0,
+            step_id="save",
+            category="effect_escalated",
+            status=status,
+        )
+    )
+    with pytest.raises(ReceiptRecordError, match="restartable_run"):
+        write_receipt_record(run)
+    assert not (run / r.RECEIPT_FILE).exists()
+    assert not (run / r.PRIVATE_FILE).exists()
