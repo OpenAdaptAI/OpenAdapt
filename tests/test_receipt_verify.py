@@ -16,7 +16,6 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
-from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
     build_statement,
     local_registry,
@@ -25,6 +24,8 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
+
+from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
