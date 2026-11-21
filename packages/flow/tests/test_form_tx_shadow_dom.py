@@ -15,7 +15,10 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
-from openadapt_flow.form_tx.surface import AmbiguousAnchorError, match_anchor_in_snapshot
+from openadapt_flow.form_tx.surface import (
+    AmbiguousAnchorError,
+    match_anchor_in_snapshot,
+)
 from openadapt_flow.form_tx.types import FieldAnchorSpec, ObservedOption, UIProfileSpec
 
 SHADOW_PAGE = r"""<!doctype html>
