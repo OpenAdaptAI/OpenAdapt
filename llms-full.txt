@@ -670,7 +670,7 @@ improvising or retrying when something is off.
 | Surface | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Web (Playwright, Chromium) | Released | Real apps on local test copies (OpenEMR, Odoo, Frappe Lending, openIMIS) and Medplum; CI runs in-tree apps on every build | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
-| Native Windows (UI Automation) | Released | Synthetic (a WinForms test app in a Windows 11 VM, 3 of 3 trials); CI on a GitHub-hosted Windows runner on every change to the Windows path and nightly: record, compile and replay of the WinForms Patient Notes app through the real win_agent, judged from its SQLite record, with a near-identical sibling roster that must not be written, and a non-gating governed run of the same workflow under the Standard profile with a person's signed approval, a hold and a resume, whose resume currently stops before the save on a false form change (fail-closed, nothing written; [#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)), followed by a gating check that fails the job on any sibling, held or unverified write ([desktop-replay.yml](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/.github/workflows/desktop-replay.yml)); on a real Windows 11 ARM machine, record, compile and replay of the same kind of WinForms test form with an owned confirm dialog, 3 of 3 trials, each also refusing a target covered by another app's window and one blocked by a modal dialog before any input | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
+| Native Windows (UI Automation) | Released | Earlier synthetic evidence: a WinForms test app in a Windows 11 VM, 3 of 3 trials; GitHub-hosted CI records, compiles and replays Patient Notes through the real agent with SQLite and sibling-write checks. A historical short-note approval/hold/resume composition completed verified target-only saves ([run44665211915](https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/44665211915)); it does not qualify the new complete-value contract. Current approval/structural work ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)) remains held on current-head native evidence and independently qualified record identity. Its synthetic native observation variant excludes a full Flow save and unsupported virtual cells. Existing safety/no-skip gates remain enabled ([desktop-replay.yml](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/.github/workflows/desktop-replay.yml)). Earlier Windows 11 ARM evidence: record, compile and replay of a WinForms form with an owned confirm dialog, 3 of 3 trials, plus covered-target/modal refusal before input. | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
 | Native macOS (Accessibility) | Released | Synthetic (TextEdit, 3 of 3 file effects, driving the backend directly); a real third-party app, calibre (Qt, SQLite library): record, compile (certified under `clinical-write`) and a `standard` run checked against the library's database, `VERIFIED` with only the target book changed; a same-title book by another author stopped at the identity check and two identical books were refused as ambiguous, each with nothing written ([benchmark/macos_native](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/macos_native/README.md)) | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) |
 | Native Linux (AT-SPI, X11) | Released | Real AT-SPI in CI (`flow-linux-atspi`, Xvfb with a window manager): a GTK3 fixture (3 verified effects, 3 ambiguous and 3 stale targets refused) and a GTK3 chart app with SQLite: record, compile (certified under `clinical-write`), a `standard` run `VERIFIED` against the database, another patient's chart and a look-alike chart stopped before the save, and a repaired notice admitted on its AT-SPI element identity ([benchmark/repair_every_backend](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/repair_every_backend/README.md)) | [LINUX_NATIVE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/desktop/LINUX_NATIVE.md) |
 | RDP (pixels; Aardwolf or headless FreeRDP with a session pool) | Released | A Windows 11 VM over Aardwolf RDP, 3 of 3 (transport and input), plus a FreeRDP batch; through the stock Remote Desktop client on a real H.264/AVC444 session, 105 scripted runs on two apps (OpenEMR in Edge and a WinForms test app): 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops ranked by cause | [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md), `backends/xfreerdp.py`, [benchmark/rdp_avc_real](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/rdp_avc_real/README.md) |
@@ -2229,6 +2229,38 @@ What is not:
 - Values chosen by clicking (not typing), drag and drop, and WebSocket
   traffic are checked only by the write adapter or the read-back, if at all.
 - The instruction detector on approval forms is a heuristic display aid.
+- On Windows, value-backed approval controls require identity-bound agreement
+  between exact UI Automation values and independent native extent/full reads.
+  Missing, sensitive, incomplete or disagreeing values, unknown subtrees and
+  another visible owned window refuse the advertised native projection; the
+  whole window is not downgraded to OCR. Visibility is an exact supported raw
+  property; unknown visibility or required visible bounds/type refuses the
+  projection. Relevant toggle/selection state has a separate complete/state
+  observation: unknown, failed or unrepresented composite state refuses before
+  masking. Known absent state patterns do not establish absent business state.
+  Empty complete values remain covered. A value-capable control carries its
+  full-value obligation regardless of type; generic containers stay unmasked.
+  Password status and value-pattern availability use raw UIA properties with
+  default values ignored; an unsupported default False is unknown. A named
+  control is a separate caption channel only when its value-pattern
+  absence is known; a failed/unknown value probe cannot hide required data in
+  a caption mask. This does not prove a caption is a record identity.
+  The remaining unmasked pixels are read by OCR. The projection still trusts
+  that standard controls render the qualified text inside their rectangles;
+  custom painting that violates that relationship is not qualified.
+  Structural field values require the same complete-value contract. Name/MSAA
+  and clipped previews do not authorize business-value or absence predicates;
+  unknown markers remain indeterminate. No complete native row-inventory
+  source is qualified. Structural uniqueness is checked at both observation
+  endpoints, with fresh fixed-control identity during reads, not continuously
+  or as authority for a later write. Current complete-value Flow/save and
+  held-out application qualification remain pending. Unavailable form reads
+  carry a closed request-local refusal receipt with fixed non-content codes.
+  For the existing raw boolean probes it names only the property category,
+  guard/query phase and result category; this does not establish a provider
+  cause. It collects no extra source data after refusal and never permits
+  retry. Read-v3 client/server declarations are independent of helper proof-v3;
+  older incompatible consumers refuse before source getters.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

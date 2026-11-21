@@ -946,6 +946,38 @@ What is not:
 - Values chosen by clicking (not typing), drag and drop, and WebSocket
   traffic are checked only by the write adapter or the read-back, if at all.
 - The instruction detector on approval forms is a heuristic display aid.
+- On Windows, value-backed approval controls require identity-bound agreement
+  between exact UI Automation values and independent native extent/full reads.
+  Missing, sensitive, incomplete or disagreeing values, unknown subtrees and
+  another visible owned window refuse the advertised native projection; the
+  whole window is not downgraded to OCR. Visibility is an exact supported raw
+  property; unknown visibility or required visible bounds/type refuses the
+  projection. Relevant toggle/selection state has a separate complete/state
+  observation: unknown, failed or unrepresented composite state refuses before
+  masking. Known absent state patterns do not establish absent business state.
+  Empty complete values remain covered. A value-capable control carries its
+  full-value obligation regardless of type; generic containers stay unmasked.
+  Password status and value-pattern availability use raw UIA properties with
+  default values ignored; an unsupported default False is unknown. A named
+  control is a separate caption channel only when its value-pattern
+  absence is known; a failed/unknown value probe cannot hide required data in
+  a caption mask. This does not prove a caption is a record identity.
+  The remaining unmasked pixels are read by OCR. The projection still trusts
+  that standard controls render the qualified text inside their rectangles;
+  custom painting that violates that relationship is not qualified.
+  Structural field values require the same complete-value contract. Name/MSAA
+  and clipped previews do not authorize business-value or absence predicates;
+  unknown markers remain indeterminate. No complete native row-inventory
+  source is qualified. Structural uniqueness is checked at both observation
+  endpoints, with fresh fixed-control identity during reads, not continuously
+  or as authority for a later write. Current complete-value Flow/save and
+  held-out application qualification remain pending. Unavailable form reads
+  carry a closed request-local refusal receipt with fixed non-content codes.
+  For the existing raw boolean probes it names only the property category,
+  guard/query phase and result category; this does not establish a provider
+  cause. It collects no extra source data after refusal and never permits
+  retry. Read-v3 client/server declarations are independent of helper proof-v3;
+  older incompatible consumers refuse before source getters.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

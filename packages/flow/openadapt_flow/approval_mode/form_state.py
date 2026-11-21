@@ -16,6 +16,14 @@ the pause halts the item before the save").
   is read, in reading order and with its frame in the digest, so text
   elsewhere on the screen that changes by itself (a clock in a taskbar, a
   notification) is not mistaken for an edited form.
+- When the backend can also read that window's controls through the
+  platform's accessibility API (``approval_form_fields``: UI Automation on
+  Windows), each text field, label, button, list or grid cell and the title
+  bar is read by its value (with its toggle or selection state) and painted
+  out of the OCR read, and the rest of the window is still read by OCR. A
+  caret blinking in a text box, a hovered title-bar button or a selection
+  highlight that dims when the window loses focus then reads the same every
+  time, while a changed value changes the digest through either channel.
 
 Only a digest leaves this module. The digest stays in the run directory; it
 never enters the report or anything sent to Cloud.
@@ -28,6 +36,8 @@ import io
 import json
 import re
 from typing import Any, Optional, Sequence
+
+from openadapt_flow.approval_mode.window_fields import valid_form_field
 
 #: (kind, "sha256:<hex>")
 FormState = tuple[str, str]
@@ -154,17 +164,87 @@ def screen_text_state(
     return _digest("screen_text", {"rows": rows})
 
 
+def _clamp(region: Region, width: int, height: int) -> Optional[Region]:
+    x, y, w, h = region
+    left, top = max(0, x), max(0, y)
+    right, bottom = min(width, x + w), min(height, y + h)
+    if right <= left or bottom <= top:
+        return None
+    return (left, top, right - left, bottom - top)
+
+
+def window_fields_state(
+    vision: Any, frame_png: bytes, window_fields: dict[str, Any]
+) -> Optional[FormState]:
+    """The window's fields by value, and the rest of it by OCR, or ``None``.
+
+    ``window_fields`` is a backend's ``approval_form_fields`` answer: the
+    window's frame and its title bar and text fields, each with its screen
+    rectangle and text. Every field rectangle is painted out of the window
+    crop before OCR, so what OCR reads there (a caret, a hovered button)
+    cannot vary between reads; the field's own value stands in for it. The
+    frame, each field's kind, rectangle, value and state, and the remaining
+    words in reading order are all in the digest. ``None`` when nothing was read.
+    """
+
+    from PIL import Image, ImageDraw
+
+    try:
+        bounds = tuple(int(v) for v in window_fields["bounds"])
+        fields = list(window_fields["fields"])
+        with Image.open(io.BytesIO(frame_png)) as image:
+            window = _clamp(bounds, *image.size)  # type: ignore[arg-type]
+            if window is None:
+                return None
+            x0, y0, w, h = window
+            crop = image.convert("RGB").crop((x0, y0, x0 + w, y0 + h))
+        draw = ImageDraw.Draw(crop)
+        rows: list[Any] = []
+        for field in fields:
+            if not valid_form_field(field):
+                return None
+            kind, text = field["kind"], field["text"]
+            fx, fy, fw, fh = field["rect"]
+            state, proof = field["state"], field["value_proof"]
+            rows.append(
+                [kind, [fx, fy, fw, fh], text, state, proof, field["value_identity"]]
+            )
+            # State, container and empty values leave pixels visible. Only
+            # complete nonempty leaves or visible labels authorize a mask.
+            inside = (
+                None
+                if kind in {"state", "value"} or not text
+                else _clamp((fx - x0, fy - y0, fw, fh), w, h)
+            )
+            if inside is not None:
+                ix, iy, iw, ih = inside
+                draw.rectangle((ix, iy, ix + iw - 1, iy + ih - 1), fill="white")
+        out = io.BytesIO()
+        crop.save(out, format="PNG")
+        words = _words(vision, out.getvalue())
+    except Exception:  # noqa: BLE001 - unreadable is not "unchanged"
+        return None
+    if not words and not any(row[2] for row in rows):
+        return None
+    return _digest(
+        "window_fields", {"window": list(window), "fields": rows, "words": words}
+    )
+
+
 def capture_form_state(
     backend: Any,
     vision: Any,
     frame_png: Optional[bytes] = None,
     regions: Optional[Sequence[Region]] = None,
+    window_fields: Optional[dict[str, Any]] = None,
 ) -> Optional[FormState]:
     """The best available field state for this backend, or ``None``.
 
     A backend may provide ``form_state()`` returning JSON-serializable data;
     a browser backend is read through its page; any other backend falls back
-    to the words on the screen, in ``regions`` when they are given.
+    to the screen: the app window's fields by value and the rest by OCR when
+    ``window_fields`` is given, else the words in ``regions`` (or on the
+    whole screen).
     """
 
     custom = getattr(backend, "form_state", None)
@@ -180,6 +260,8 @@ def capture_form_state(
             frame_png = backend.screenshot()
         except Exception:  # noqa: BLE001
             return None
+    if window_fields is not None:
+        return window_fields_state(vision, frame_png, window_fields)
     return screen_text_state(vision, frame_png, regions)
 
 
@@ -229,10 +311,70 @@ def approval_window_regions(
     return [(left, top, right - left, bottom - top)]
 
 
+def approval_window_fields(
+    backend: Any, save_step: Optional[str], results: Sequence[Any] = ()
+) -> Optional[dict[str, Any]]:
+    """The backend's ``approval_form_fields`` answer for the approval's
+    window, or ``None`` (the approval refuses when this channel is required).
+
+    The same window :func:`approval_window_regions` names; the save step is
+    left out and the earlier steps' points name the window on a resumed run.
+    An unreadable native value never falls back to OCR. Never raises.
+    """
+
+    fields_of = getattr(backend, "approval_form_fields", None)
+    if not callable(fields_of):
+        return None
+    try:
+        points = [
+            (int(prior.resolution.point[0]), int(prior.resolution.point[1]))
+            for prior in results
+            if prior.step_id != save_step and prior.resolution is not None
+        ]
+        answer = fields_of(save_step, points)
+    except Exception:  # noqa: BLE001 - no answer is OCR alone
+        return None
+    if not isinstance(answer, dict) or set(answer) != {"bounds", "fields"}:
+        return None
+    return answer
+
+
+def approval_form_state(
+    backend: Any,
+    vision: Any,
+    frame_png: Optional[bytes],
+    save_step: Optional[str],
+    results: Sequence[Any] = (),
+) -> Optional[FormState]:
+    """The approval's form state for ``save_step``, or ``None``.
+
+    A backend offering native field reads must return complete evidence;
+    unavailable values refuse without an OCR downgrade. Backends without
+    that channel retain their existing DOM or screen read. Different read
+    channels have different kinds, so a changed channel halts the save.
+    """
+
+    if callable(getattr(backend, "approval_form_fields", None)):
+        # Once a native field channel is required, no answer (including a
+        # legacy/malformed response or a missing complete value) is a refusal.
+        # OCR cannot establish equality of a hidden or omitted suffix.
+        if frame_png is None:
+            return None
+        fields = approval_window_fields(backend, save_step, results)
+        if fields is None:
+            return None
+        return window_fields_state(vision, frame_png, fields)
+    regions = approval_window_regions(backend, frame_png, save_step, results)
+    return capture_form_state(backend, vision, frame_png, regions)
+
+
 __all__ = [
     "FormState",
+    "approval_form_state",
+    "approval_window_fields",
     "approval_window_regions",
     "capture_form_state",
+    "window_fields_state",
     "dom_form_state",
     "screen_text_state",
 ]
