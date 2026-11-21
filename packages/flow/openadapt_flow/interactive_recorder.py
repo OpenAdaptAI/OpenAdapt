@@ -2333,8 +2333,7 @@ class InteractiveRecorder:
         ] = None,
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
-        capture_network: bool = False,
-        network_bodies: str = "minimized",
+        capture_network: bool | str = False,
         encryption_key: Optional[str] = None,
         event_clock: Optional[list[float]] = None,
     ) -> None:
@@ -2348,10 +2347,8 @@ class InteractiveRecorder:
         # finalized sealed set.
         self._encryption_key = encryption_key
         # ``record --capture-network``: keep the page's requests next to the
-        # events (openadapt_flow.network_capture). Off by default.
+        # events (openadapt_flow.network_capture); "raw" keeps whole bodies.
         self._capture_network = capture_network
-        # Only declared field values leave memory unless "raw" (sealed).
-        self._network_bodies = network_bodies
         self._network = None
         self._out_dir = Path(out_dir)
         self._secret_fields = set(secret_fields)
@@ -2519,13 +2516,10 @@ class InteractiveRecorder:
             if self._capture_network:
                 from openadapt_flow.network_capture import NetworkCapture
 
-                # Attach before navigating, so the page that serves the form
-                # is in the capture.
-                self._network = NetworkCapture(
-                    self._context,
-                    secret_names=self._secret_fields,
-                    keep_fields=self._param_fields | self._identifier_fields,
-                    bodies=self._network_bodies,
+                # Attach before navigating, so the form's page is captured.
+                declared = self._param_fields | self._identifier_fields
+                self._network = NetworkCapture.for_recording(
+                    self._context, self._secret_fields, declared, self._capture_network
                 ).start()
             if self._owns_browser:
                 self._context.on("page", self._context_page_listener)

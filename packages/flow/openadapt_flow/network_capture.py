@@ -137,6 +137,23 @@ class NetworkCapture:
         # guard sends or refuses it.
         self._pending_writes: dict[Any, float] = {}
 
+    @classmethod
+    def for_recording(
+        cls,
+        context: Any,
+        secret_names: Iterable[str],
+        declared_fields: Iterable[str],
+        mode: bool | str,
+    ) -> "NetworkCapture":
+        """The recorder's capture: ``mode`` True means minimized bodies."""
+        bodies = mode if isinstance(mode, str) else "minimized"
+        return cls(
+            context,
+            secret_names=secret_names,
+            keep_fields=declared_fields,
+            bodies=bodies,
+        )
+
     def start(self) -> "NetworkCapture":
         if not self._attached:
             self._context.on("request", self._on_request)
@@ -358,12 +375,60 @@ def _require_sealed_or_allowed(path: Path) -> None:
 
     if sealed_set.is_sealed_path(path):
         return
-    purpose = "raw network bodies (network.jsonl, bodies=raw)"
-    if at_rest.plaintext_allowed(purpose):
+    if at_rest.plaintext_allowed(_RAW_PURPOSE):
         return
     raise at_rest.AtRestRefused(
-        at_rest.refusal(purpose, "the recording is not encrypted")
+        at_rest.refusal(_RAW_PURPOSE, "the recording is not encrypted")
     )
+
+
+_RAW_PURPOSE = "raw network bodies (network.jsonl, bodies=raw)"
+
+
+def add_cli_arguments(parser: Any) -> None:
+    """``record --capture-network`` and ``--capture-network-bodies``."""
+    parser.add_argument(
+        "--capture-network",
+        action="store_true",
+        help=(
+            "Web only: also keep the page's requests (network.jsonl; cookies, "
+            "passwords and session tokens withheld; bodies minimized, see "
+            "--capture-network-bodies). With raw bodies, compile proposes an "
+            "API step for a save it can repeat as one request; a person admits "
+            "it with 'api admit'"
+        ),
+    )
+    parser.add_argument(
+        "--capture-network-bodies",
+        choices=("minimized", "raw"),
+        default="minimized",
+        help=(
+            "With --capture-network: 'minimized' (default) keeps only the "
+            "--param and --identifier values of each body and a keyed hash of "
+            "the rest; 'raw' keeps the redacted bodies, which API step "
+            "proposals and debugging need, and requires an encrypted recording"
+        ),
+    )
+
+
+def cli_mode(args: Any, recording_key: Optional[str]) -> bool | str:
+    """False without ``--capture-network``, else the body mode.
+
+    Raw is refused before anything is recorded when the recording won't be
+    encrypted and plaintext at rest isn't explicitly allowed.
+    """
+    from openadapt_flow import at_rest
+
+    if not getattr(args, "capture_network", False):
+        return False
+    mode = getattr(args, "capture_network_bodies", None) or "minimized"
+    if mode == "raw" and recording_key is None:
+        if not at_rest.plaintext_allowed(_RAW_PURPOSE):
+            raise SystemExit(
+                "record: --capture-network-bodies raw needs an encrypted "
+                "recording (drop --no-encrypt). Nothing was recorded."
+            )
+    return str(mode)
 
 
 def bodies_mode(recording_dir: Path | str) -> Optional[str]:

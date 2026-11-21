@@ -237,6 +237,29 @@ def test_raw_bodies_in_an_encrypted_recording_are_ciphertext(
     assert PATIENT in reader.read_bytes(nc.NETWORK_FILE).decode()
 
 
+def test_record_cli_refuses_raw_bodies_before_recording_without_a_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    nc.add_cli_arguments(parser)
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV, raising=False)
+    assert nc.cli_mode(parser.parse_args([]), None) is False
+    on = parser.parse_args(["--capture-network"])
+    assert nc.cli_mode(on, None) == "minimized"
+    raw = parser.parse_args(["--capture-network", "--capture-network-bodies", "raw"])
+    assert nc.cli_mode(raw, "recording-passphrase") == "raw"
+    with pytest.raises(SystemExit, match="encrypted"):
+        nc.cli_mode(raw, None)
+
+
+def test_recorder_capture_keeps_its_declared_fields() -> None:
+    cap = nc.NetworkCapture.for_recording(_Context(), {"pw"}, {"mrn_param"}, True)
+    assert cap._bodies == "minimized" and "mrn_param" in cap._keep_fields
+    assert nc.NetworkCapture.for_recording(_Context(), (), (), "raw")._bodies == "raw"
+
+
 def test_bad_body_mode_is_refused() -> None:
     with pytest.raises(ValueError):
         nc.NetworkCapture(_Context(), bodies="everything")
