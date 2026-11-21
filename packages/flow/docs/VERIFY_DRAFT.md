@@ -206,4 +206,4 @@ send a call that could pass `--spend-cap-usd` (default 30).
   fault the store can't express this way, such as an email sent, is outside
   the contract's read.
 
-Measured on three apps: [benchmark/verify_draft/RESULTS.md](../benchmark/verify_draft/RESULTS.md).
+Measured on four apps, two of them never set up before: [benchmark/verify_draft/RESULTS.md](../benchmark/verify_draft/RESULTS.md).
