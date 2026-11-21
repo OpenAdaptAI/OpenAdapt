@@ -144,3 +144,29 @@ from the portal branch.
   work. The results say so.
 - **Order of record:** this file was pushed at `8ea2e5602`, before the portals
   were merged into this branch at `eeb53cadb`.
+
+**D2, 2026-11-21. Dev-case smoke only; no scored case had run.**
+
+- **Harborline pack works on its dev case** (submitted, every stored field
+  correct, one hand-back, `readback_incomplete`). Its confirmation page shows
+  stored values as plain table text, which the frozen surface does not read,
+  so every harborline field ends `not_checked` and no harborline case can end
+  `verified_done`.
+- **Operator estimator by hand.** Harborline's estimator needs Calculate and
+  then Use This Value; a popup subroutine has one apply button, so the layer
+  stops (`popup_contract_failed`). The scripted operator then runs the
+  estimator by hand with the intake's construction quality, clicks Use This
+  Value, and marks the stop fixed on screen. This counts as a hand-back. It
+  replaces "no script entry, escalate" for this one stop only.
+- **Pack choices made from the dev case:** selects the portal pre-sets
+  (stories, deductible, liability) are overwritten from the intake; native
+  Yes/No radios are set from the intake, because the frozen surface reads an
+  unchecked radio as holding its value and every radio would otherwise stop.
+- **Cobalt is unworkable on the frozen engine.** Its type-ahead comboboxes
+  fetch suggestions only after text is typed; the surface opens a listbox by
+  clicking, finds none, and raises `MissingAnchorError` out of the run (a
+  crash, not a stop). The scored cases still run with this pack.
+- **Pinecrest and tidewater are unworkable.** The surface sees 0 controls on
+  pinecrest (the form is in an iframe) and only a bare Next button on
+  tidewater (shadow DOM). They run with an empty pack; on the dev cases the
+  layer submitted nothing and ended `readback_refuted`.
