@@ -174,20 +174,39 @@ def _recorded_policy_name(workflow: Any) -> str | None:
     return None
 
 
-def _policy(source: str, *, workflow: Any = None, prefer_recorded: bool = False):
+def _policy(source: str | None, *, workflow: Any = None):
+    """Load an explicit policy or resolve the default for a bundle.
+
+    When ``source`` is ``None`` (omitted), reuse the bundle's recorded policy
+    if present; otherwise load ``DEFAULT_QUALIFICATION_POLICY`` (falling back
+    to ``LEGACY_FALLBACK_QUALIFICATION_POLICY`` only on older bundled Flow
+    versions that do not ship ``record-write``).
+
+    When ``source`` is explicitly provided, evaluate that exact selection
+    rather than overriding it with a previously recorded policy.
+    """
+
     load_policy = _flow_api()["load_policy"]
-    if prefer_recorded and source == DEFAULT_QUALIFICATION_POLICY and workflow is not None:
-        recorded = _recorded_policy_name(workflow)
-        if recorded:
+    if source is None:
+        if workflow is not None:
+            recorded = _recorded_policy_name(workflow)
+            if recorded:
+                try:
+                    return load_policy(recorded)
+                except (FileNotFoundError, ValueError):
+                    pass
+        try:
+            return load_policy(DEFAULT_QUALIFICATION_POLICY)
+        except (FileNotFoundError, ValueError) as exc:
             try:
-                return load_policy(recorded)
+                return load_policy(LEGACY_FALLBACK_QUALIFICATION_POLICY)
             except (FileNotFoundError, ValueError):
-                pass
+                raise QualificationError(str(exc)) from exc
     try:
         return load_policy(source)
     except (FileNotFoundError, ValueError) as exc:
         # Older bundled Flow versions (e.g. 2.4.x) ship clinical-write and permissive
-        # without the domain-neutral record-write alias. Fall back only for the default.
+        # without the domain-neutral record-write alias. Fall back only for that alias.
         if source == DEFAULT_QUALIFICATION_POLICY:
             try:
                 return load_policy(LEGACY_FALLBACK_QUALIFICATION_POLICY)
@@ -867,14 +886,14 @@ def inspect_bundle(
     bundle_dir: Path,
     *,
     workflow_id: str,
-    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    policy_source: str | None = None,
     bundle_key: str | None = None,
 ) -> dict:
     """Return graph, canonical project/report, controls, and exact refusals."""
 
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
-    policy = _policy(policy_source, workflow=workflow, prefer_recorded=True)
+    policy = _policy(policy_source, workflow=workflow)
     graph_payload = program_graph(bundle_dir, workflow)
     lint = api["lint_workflow"](workflow)
     runtime_policy = api["evaluate_policy"](workflow, policy)
@@ -2267,7 +2286,7 @@ def certify_bundle(
     bundle_dir: Path,
     *,
     workflow_id: str,
-    policy_source: str = DEFAULT_QUALIFICATION_POLICY,
+    policy_source: str | None = None,
     bundle_key: str | None = None,
 ) -> dict:
     """Run Flow's canonical certification and persist the versioned report."""
@@ -2278,7 +2297,7 @@ def certify_bundle(
         raise QualificationError(
             "Initialize the qualification boundary before running certification."
         )
-    policy = _policy(policy_source, workflow=workflow, prefer_recorded=True)
+    policy = _policy(policy_source, workflow=workflow)
     workflow_contract = api["workflow_contract_sha256"](workflow)
     capability_coverage = _capability_coverage(
         bundle_dir,

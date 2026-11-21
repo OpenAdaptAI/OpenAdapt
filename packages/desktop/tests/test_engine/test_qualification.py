@@ -1849,3 +1849,50 @@ def test_certify_bundle_with_custom_policy_yaml_path_succeeds_on_readback(
     assert certified["ok"] is True
     assert certified["policy"] == "custom-campaign-policy"
     assert certified["project"]["last_certification"]["policy_name"] == "custom-campaign-policy"
+
+
+def test_dispatcher_distinguishes_omitted_policy_from_explicit_stricter_policy(
+    tmp_path: Path,
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    # First certify under permissive so the bundle records permissive.
+    permissive_result = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source="permissive",
+    )
+    assert permissive_result["policy"] == "permissive"
+    assert permissive_result["project"]["last_certification"]["policy_name"] == "permissive"
+
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    try:
+        # Omitted policy reuses the recorded permissive policy.
+        reused = dispatcher.certify_qualification(workflow_id="wf-1")
+        assert reused["policy"] == "permissive"
+        assert reused["project"]["last_certification"]["policy_name"] == "permissive"
+
+        # Explicit record-write overrides permissive instead of reusing it.
+        upgraded = dispatcher.certify_qualification(
+            workflow_id="wf-1",
+            policy="record-write",
+        )
+        assert upgraded["policy"] in {"record-write", "clinical-write"}
+        assert upgraded["policy"] != "permissive"
+        assert upgraded["project"]["last_certification"]["policy_name"] == upgraded["policy"]
+    finally:
+        db.close()

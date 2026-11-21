@@ -2749,13 +2749,13 @@ class EngineDispatcher:
         """Inspect Flow's canonical graph, coverage, and certification contract."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             first_replay_review_is_draft,
             inspect_bundle,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             result = inspect_bundle(
@@ -3694,13 +3694,13 @@ class EngineDispatcher:
         """Persist a pass/fail policy attempt into the resealed local bundle."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             certify_bundle,
             first_replay_review_is_draft,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             bundle_key = self._qualification_bundle_key(workflow_id)
