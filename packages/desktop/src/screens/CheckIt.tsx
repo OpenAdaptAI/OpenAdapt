@@ -44,7 +44,7 @@ import { ExecutionTargetForm, TARGETS } from "../ui/ExecutionTargetForm";
 import { Button, Callout, Field } from "../ui/primitives";
 import { Icon, PageHead, Status, TechnicalDetails } from "../ui/simple";
 
-const POLICY = "clinical-write";
+const POLICY = "record-write";
 const PRACTICE_CASE = "practice-1";
 
 type Busy =
@@ -341,7 +341,7 @@ function armedIdentityGroups<T extends { identityArmed: boolean; identityText: s
   return [...groups].map(([text, count]) => ({ text, count }));
 }
 
-/** "the note you give it", "patient ID p1", joined in plain words. */
+/** "the note you give it", "record ID p1", joined in plain words. */
 function checkedThings(learned: LearnedRecordCheck): string[] {
   const things = (learned.values_checked ?? []).map(
     (name) => `the ${humanizeInput(name)} you give it`,

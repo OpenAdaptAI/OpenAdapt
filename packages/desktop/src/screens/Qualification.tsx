@@ -21,7 +21,7 @@ import { ProgramWorkbench, type SectionEdit } from "@openadapt/program-graph";
 import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
-const POLICY = "clinical-write";
+const POLICY = "record-write";
 
 type EditProgramSectionsResponse =
   | { ok: true; graph: QualificationProject["graph"] }

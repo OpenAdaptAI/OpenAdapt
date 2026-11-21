@@ -79,9 +79,9 @@
       "values": ["queued", "running", "decision_required", "waiting_for_reconciliation", "terminal"]
     },
     {
-      "source": "clinic_tool_status",
+      "source": "managed_tool_status",
       "repository": "OpenAdaptAI/openadapt-types",
-      "symbol": "openadapt_types/clinic_job.py ClinicToolStatusV1",
+      "symbol": "openadapt_types/managed_job.py ManagedToolStatusV1",
       "read_at": "origin/main 07b8b0c, read 2026-10-09",
       "values": ["VERIFIED", "HALTED", "RECONCILIATION_REQUIRED"]
     },
@@ -213,14 +213,14 @@
     "execution_outcome",
     "agent_status",
     "connector_status",
-    "clinic_tool_status",
+    "managed_tool_status",
     "program_terminal_state",
     "overlay_phase"
   ],
   "tiers": [
     ["transaction_outcome", "execute_terminal_outcome", "execute_state"],
     ["execution_outcome"],
-    ["agent_status", "connector_status", "clinic_tool_status", "program_terminal_state", "overlay_phase"]
+    ["agent_status", "connector_status", "managed_tool_status", "program_terminal_state", "overlay_phase"]
   ],
   "sources": {
     "transaction_outcome": {
@@ -454,8 +454,8 @@
         }
       }
     },
-    "clinic_tool_status": {
-      "meaning": "The status on a clinic tool result. HALTED here is coarse.",
+    "managed_tool_status": {
+      "meaning": "The status on a managed tool result. HALTED here is coarse.",
       "values": {
         "VERIFIED": {
           "result": "done",

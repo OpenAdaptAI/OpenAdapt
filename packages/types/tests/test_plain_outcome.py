@@ -28,7 +28,6 @@ from pydantic import ValidationError
 import openadapt_types
 from openadapt_types import (
     CONTROL_OVERLAY_TERMINAL_PHASES,
-    ClinicToolStatusV1,
     ControlOverlayPhase,
     EffectStrengthV1,
     ExecuteEvidenceContractV1,
@@ -37,8 +36,10 @@ from openadapt_types import (
     ExecuteStatusV1,
     ExecuteTerminalOutcomeV1,
     ExecuteWebhookEventTypeV1,
+    ManagedToolStatusV1,
     OutcomeSourceV1,
     PlainOutcomeInProgress,
+    PlainOutcomeInputsV1,
     PlainOutcomeV1,
     PlainProgressV1,
     PlainProofV1,
@@ -77,7 +78,7 @@ def test_sources_match_the_table_in_precedence_order() -> None:
     [
         (ExecuteTerminalOutcomeV1, "execute_terminal_outcome"),
         (ExecuteLifecycleStateV1, "execute_state"),
-        (ClinicToolStatusV1, "clinic_tool_status"),
+        (ManagedToolStatusV1, "managed_tool_status"),
         (ControlOverlayPhase, "overlay_phase"),
     ],
 )
@@ -92,9 +93,9 @@ def test_every_value_of_this_packages_enums_is_mapped(enum_cls: type, source: st
     [
         "openadapt_types.execute:ExecuteTerminalOutcomeV1=execute_terminal_outcome",
         "openadapt_types.execute:ExecuteLifecycleStateV1=execute_state",
-        "openadapt_types.clinic_job:ClinicToolStatusV1=clinic_tool_status",
+        "openadapt_types.managed_job:ManagedToolStatusV1=managed_tool_status",
         "openadapt_types.execute:ExecuteStatusV1.terminal_outcome=execute_terminal_outcome",
-        "openadapt_types.clinic_job:ClinicToolResultV1.status=clinic_tool_status",
+        "openadapt_types.managed_job:ManagedToolResultV1.status=managed_tool_status",
         "openadapt_types.control_overlay:ControlOverlayPhase=overlay_phase",
         "openadapt_types.control_overlay:ControlOverlayFrameV1.phase=overlay_phase",
         "openadapt_types.control_overlay_tracking:ControlOverlayFrameV2.phase=overlay_phase",
@@ -324,17 +325,17 @@ def test_precise_and_coarse_combinations_keep_the_safety_rule() -> None:
 
 
 def test_coarse_status_combinations_keep_the_safety_rule() -> None:
-    for agent, connector, clinic, program in itertools.product(
+    for agent, connector, managed, program in itertools.product(
         _value_choices("agent_status"),
         _value_choices("connector_status"),
-        _value_choices("clinic_tool_status"),
+        _value_choices("managed_tool_status"),
         _value_choices("program_terminal_state"),
     ):
         for dispatched, uncertain in FLAGS:
             inputs = {
                 "agent_status": agent,
                 "connector_status": connector,
-                "clinic_tool_status": clinic,
+                "managed_tool_status": managed,
                 "program_terminal_state": program,
                 "dispatched": dispatched,
                 "delivery_uncertain": uncertain,
@@ -346,6 +347,7 @@ def test_a_coarse_halt_never_reads_as_stopped_before_saving() -> None:
     for status in ("HALTED",):
         for result in (
             plain_outcome(execution_outcome=status),
+            plain_outcome(managed_tool_status=status),
             plain_outcome(clinic_tool_status=status),
             plain_outcome(agent_status="halt"),
             plain_outcome(connector_status="halt"),
@@ -354,6 +356,17 @@ def test_a_coarse_halt_never_reads_as_stopped_before_saving() -> None:
         ):
             assert result.result is PlainResultV1.CHECK_THE_RECORD
             assert "nothing was written" not in result.next_action.lower()
+
+
+def test_legacy_clinic_tool_status_compat_alias() -> None:
+    outcome = plain_outcome(clinic_tool_status="HALTED")
+    assert outcome.result is PlainResultV1.CHECK_THE_RECORD
+    assert outcome.technical_code == "managed_tool_status=HALTED"
+    assert outcome.exact.managed_tool_status == "HALTED"
+    assert outcome.exact.clinic_tool_status == "HALTED"
+    parsed_inputs = PlainOutcomeInputsV1.model_validate({"clinic_tool_status": "VERIFIED"})
+    assert parsed_inputs.managed_tool_status == "VERIFIED"
+    assert parsed_inputs.clinic_tool_status == "VERIFIED"
 
 
 def test_coarse_and_overlay_combinations_keep_the_safety_rule() -> None:

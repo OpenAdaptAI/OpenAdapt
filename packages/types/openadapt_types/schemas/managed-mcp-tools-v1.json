@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "ManagedMcpToolNameV1": {
+      "enum": [
+        "run_collect",
+        "run_attach_artifact",
+        "run_create_task"
+      ],
+      "title": "ManagedMcpToolNameV1",
+      "type": "string"
+    },
+    "ManagedMcpToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ManagedOutboxActionV1"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "$ref": "#/$defs/ManagedMcpToolNameV1"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ManagedMcpToolSpecV1",
+      "type": "object"
+    },
+    "ManagedOutboxActionV1": {
+      "enum": [
+        "collect",
+        "attach_artifact",
+        "create_task"
+      ],
+      "title": "ManagedOutboxActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.managed-mcp-tools/v1",
+      "default": "openadapt.managed-mcp-tools/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tools": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+        }
+      ],
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "ManagedMcpToolCatalogV1",
+  "type": "object"
+}

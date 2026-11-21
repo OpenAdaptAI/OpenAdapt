@@ -29,7 +29,7 @@ QualificationRisk = Literal[
 QualificationEffectKind = Literal["record_written", "field_equals"]
 QualificationIdentityEnforcement = Literal["canonical_ladder", "signal_quorum"]
 QualificationTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
-DEFAULT_QUALIFICATION_POLICY = "clinical-write"
+DEFAULT_QUALIFICATION_POLICY = "record-write"
 ENVIRONMENT_IDENTIFIER_DERIVATION = "sha256(trimmed UTF-8 operator identifier)"
 FIRST_REPLAY_DRAFT_APPLICATION_VERSION = (
     "openadapt-desktop-first-replay-draft/v1"

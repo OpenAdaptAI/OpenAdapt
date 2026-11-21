@@ -61,12 +61,12 @@ PLAIN_OUTCOME_SCHEMA = "openadapt.plain-outcome/v1"
 PLAIN_PROGRESS_SCHEMA = "openadapt.plain-progress/v1"
 
 # An outcome code: an enum value, never free text. Anything else is treated as
-# unrecognized and kept out of ``exact`` so a stray string can't carry PHI.
+# unrecognized and kept out of ``exact`` so a stray string can't carry sensitive data.
 _CODE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _CODE_PATTERN = _CODE.pattern
 _TECHNICAL_CODE_PATTERN = (
     r"^(transaction_outcome|execute_terminal_outcome|execute_state|execution_outcome"
-    r"|agent_status|connector_status|clinic_tool_status|program_terminal_state|overlay_phase"
+    r"|agent_status|connector_status|managed_tool_status|program_terminal_state|overlay_phase"
     r"|fallback)"
     r"=[A-Za-z][A-Za-z0-9_]{0,63}$"
 )
@@ -105,7 +105,9 @@ class OutcomeSourceV1(str, Enum):
     EXECUTION_OUTCOME = "execution_outcome"
     AGENT_STATUS = "agent_status"
     CONNECTOR_STATUS = "connector_status"
-    CLINIC_TOOL_STATUS = "clinic_tool_status"
+    MANAGED_TOOL_STATUS = "managed_tool_status"
+    #: Legacy/compat alias for ``MANAGED_TOOL_STATUS``.
+    CLINIC_TOOL_STATUS = "managed_tool_status"
     PROGRAM_TERMINAL_STATE = "program_terminal_state"
     OVERLAY_PHASE = "overlay_phase"
 
@@ -129,13 +131,37 @@ class PlainOutcomeInputsV1(_StrictContract):
     execution_outcome: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     agent_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     connector_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
-    clinic_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
+    managed_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     program_terminal_state: StrictStr | None = Field(
         default=None, pattern=_CODE_PATTERN
     )
     overlay_phase: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     dispatched: StrictBool | None = None
     delivery_uncertain: StrictBool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_clinic_tool_status(cls, data: object) -> object:
+        # Legacy/compat shim for payloads serialized with clinic_tool_status.
+        if isinstance(data, Mapping) and "clinic_tool_status" in data:
+            normalized = dict(data)
+            legacy_val = normalized.pop("clinic_tool_status")
+            if (
+                "managed_tool_status" in normalized
+                and normalized["managed_tool_status"] != legacy_val
+            ):
+                raise ValueError(
+                    "conflicting managed_tool_status and legacy clinic_tool_status values"
+                )
+            normalized.setdefault("managed_tool_status", legacy_val)
+            return normalized
+        return data
+
+    @property
+    def clinic_tool_status(self) -> StrictStr | None:
+        """Legacy/compat alias for :attr:`managed_tool_status`."""
+
+        return self.managed_tool_status
 
 
 class PlainOutcomeV1(_StrictContract):
@@ -470,6 +496,7 @@ def plain_outcome(
     execution_outcome: str | Enum | None = None,
     agent_status: str | Enum | None = None,
     connector_status: str | Enum | None = None,
+    managed_tool_status: str | Enum | None = None,
     clinic_tool_status: str | Enum | None = None,
     program_terminal_state: str | Enum | None = None,
     overlay_phase: str | Enum | None = None,
@@ -496,6 +523,10 @@ def plain_outcome(
     for a person, or an overlay phase such as executing or paused.
     """
 
+    # Legacy/compat: accept clinic_tool_status when managed_tool_status is omitted.
+    effective_managed_tool_status = (
+        managed_tool_status if managed_tool_status is not None else clinic_tool_status
+    )
     resolved = _resolve(
         {
             "transaction_outcome": transaction_outcome,
@@ -504,7 +535,7 @@ def plain_outcome(
             "execution_outcome": execution_outcome,
             "agent_status": agent_status,
             "connector_status": connector_status,
-            "clinic_tool_status": clinic_tool_status,
+            "managed_tool_status": effective_managed_tool_status,
             "program_terminal_state": program_terminal_state,
             "overlay_phase": overlay_phase,
         },

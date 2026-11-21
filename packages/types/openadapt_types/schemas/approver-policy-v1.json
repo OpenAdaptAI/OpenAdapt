@@ -18,14 +18,15 @@
         "reversible",
         "consequential",
         "irreversible",
-        "clinical_write"
+        "high_risk_write",
+        "high_risk_write"
       ],
       "title": "StepClass",
       "type": "string"
     }
   },
   "additionalProperties": false,
-  "description": "Which kinds of approver may decide each class of step.\n\nThe default allows only a person for every class. A deployment may\nwiden a class to rules, agents or systems. ``clinical_write`` accepts a\nnon-person approver only when ``clinical_write_opt_in_sha256`` pins the\ncustomer's signed opt-in.",
+  "description": "Which kinds of approver may decide each class of step.\n\nThe default allows only a person for every class. A deployment may\nwiden a class to rules, agents or systems. ``high_risk_write`` accepts a\nnon-person approver only when ``high_risk_write_opt_in_sha256`` pins the\ncustomer's signed opt-in.",
   "properties": {
     "allowed": {
       "additionalProperties": {
@@ -40,7 +41,7 @@
       "title": "Allowed",
       "type": "object"
     },
-    "clinical_write_opt_in_sha256": {
+    "high_risk_write_opt_in_sha256": {
       "anyOf": [
         {
           "pattern": "^sha256:[0-9a-f]{64}$",
@@ -51,7 +52,7 @@
         }
       ],
       "default": null,
-      "title": "Clinical Write Opt In Sha256"
+      "title": "High Risk Write Opt In Sha256"
     },
     "schema_version": {
       "const": "openadapt.approver-policy/v1",

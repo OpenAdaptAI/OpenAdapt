@@ -28,7 +28,7 @@ function project({
   return {
     ok: true,
     workflow_id: "wf-1",
-    policy: "clinical-write",
+    policy: "record-write",
     qualification_schema: "openadapt.qualification-project/v1",
     migration_required: false,
     draft_environment: draft,

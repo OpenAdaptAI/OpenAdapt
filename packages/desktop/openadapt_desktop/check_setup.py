@@ -158,7 +158,7 @@ def learn_record_check(
     }
     constants = dict(sorted(surface.constants.items()))
     # A fixed key the app sends with the save to stop a double save. Flow's
-    # clinical-write policy wants it on the record check; it is the app's
+    # record-write policy wants it on the record check; it is the app's
     # own value, so it is checked as sent, never invented.
     key_field = next((field for field in constants if _is_idempotency_field(field)), None)
     idempotency_literal = constants.pop(key_field) if key_field else None
@@ -403,7 +403,7 @@ def answer_entry(answered_by: str, **extra: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 _WRITE_CLASSES = frozenset({"state_changing", "consequential", "irreversible"})
-POLICY = "clinical-write"
+POLICY = "record-write"
 
 
 def _plan(qualification: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:

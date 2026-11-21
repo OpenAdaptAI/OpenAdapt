@@ -423,13 +423,13 @@
       "name": "clinic tool halt is coarse",
       "rule": "row",
       "input": {
-        "clinic_tool_status": "HALTED"
+        "managed_tool_status": "HALTED"
       },
       "expect": {
         "result": "check_the_record",
         "may_have_changed": true,
         "safe_to_retry": false,
-        "technical_code": "clinic_tool_status=HALTED"
+        "technical_code": "managed_tool_status=HALTED"
       }
     },
     {
@@ -505,7 +505,7 @@
       "rule": "7",
       "input": {
         "agent_status": "halt",
-        "clinic_tool_status": "RECONCILIATION_REQUIRED"
+        "managed_tool_status": "RECONCILIATION_REQUIRED"
       },
       "expect": {
         "result": "check_the_record",

@@ -13,7 +13,7 @@ import type {
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { Button, Callout, Card, CardHead, Field, Pill } from "../ui/primitives";
 
-const POLICY = "clinical-write";
+const POLICY = "record-write";
 
 const GUIDED_FAULT_CASES: {
   id: string;
