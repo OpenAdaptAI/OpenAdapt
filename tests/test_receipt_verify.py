@@ -196,10 +196,55 @@ def test_legacy_routes_never_drop_a_requested_check(tmp_path, monkeypatch):
     seal.write_text(json.dumps({"schema": "openadapt.local-seal/v1"}))
     assert route(str(seal), keys=keys, extra=["--strict"]) == 0
     assert calls[-1] == (seal.parent, ["--strict", "--keys", str(keys)])
+    # The folder route forwards the same options.
+    assert route(str(seal.parent), keys=keys, extra=["--strict"]) == 0
+    assert calls[-1] == (seal.parent, ["--strict", "--keys", str(keys)])
     # Another file that claims to be a Seal never stands for the folder's.
     other = seal.with_name("copy.json")
     other.write_text(seal.read_text())
-    assert route(str(other)) == 1 and len(calls) == 1
+    assert route(str(other)) == 1 and len(calls) == 2
+    # A link is checked with its signer pinned here.
+    links = []
+    rv.verify_path(
+        "https://openadapt.ai/s/x",
+        say=lambda s: None,
+        invoke_flow=None,
+        invoke_agent=None,
+        legacy_folder=folder,
+        legacy_link=lambda u, e: links.append(e) or 0,
+        is_link=lambda t: True,
+    )
+    assert links == [["--require-pinned"]]
+
+
+def test_a_hosted_seal_needs_its_key_pinned_here():
+    from openadapt import seal_publish
+
+    class Result:
+        ok, reason, key_id = True, None, "seal-ed25519-" + "1" * 16
+
+    class Engine:
+        @staticmethod
+        def verify_public_seal(doc):
+            return Result()
+
+    class Response:
+        status = 200
+        body = json.dumps({"card": {}, "seal": {}}).encode()
+
+    said = []
+    original = seal_publish._engine
+    seal_publish._engine = lambda: Engine()
+    try:
+        code = seal_publish.check_link(
+            "https://app.openadapt.ai/seal#" + "a" * 43,
+            transport=lambda *a: Response(),
+            say=said.append,
+            pinned=lambda kid: False,
+        )
+    finally:
+        seal_publish._engine = original
+    assert code == 1 and any("unknown signer" in x for x in said)
 
 
 def test_tampering_with_the_report_is_detected(tmp_path):
