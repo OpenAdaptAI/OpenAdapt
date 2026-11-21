@@ -111,10 +111,14 @@ class Observation(_Closed):
     strength: Strength
     #: Field ids that differ from what we sent (never the values).
     differing_fields: list[str] = Field(default_factory=list, max_length=64)
-    #: For each differing field, the digest of the value the other side holds
+    #: For each compared field, the digest of the value the other side holds
     #: (``missing`` when it holds none). Private: it opens only in the
     #: receipt's private openings.
     observed_digests: dict[str, str] = Field(default_factory=dict)
+    #: A status-only report accepted the item (a 277CA ``A2``). It still says
+    #: nothing about the fields, so the state stays ``acknowledged``; the
+    #: handoff needs no follow-up.
+    counterparty_accepted: bool = False
     reason: Optional[Reason] = None
     #: SHA-256 of the report or read-back body this came from.
     evidence_sha256: Optional[str] = Field(default=None, pattern=_DIGEST)
@@ -140,23 +144,38 @@ class Handoff(_Closed):
 
     @property
     def state(self) -> HandoffState:
-        return self.observations[-1].state if self.observations else "sent"
+        evidence = self.evidence
+        return evidence.state if evidence is not None else "sent"
 
     @property
     def last(self) -> Optional[Observation]:
         return self.observations[-1] if self.observations else None
 
+    @property
+    def evidence(self) -> Optional[Observation]:
+        """The latest observation that learned something: an unreachable
+        receiver says nothing about the record, so it never replaces an
+        earlier read. The latest one when every read failed."""
+
+        for observation in reversed(self.observations):
+            if observation.reason != "receiver_unreachable":
+                return observation
+        return self.last
+
     def overdue(self, now: Optional[datetime] = None) -> bool:
         return parse_iso(self.follow_up_due) <= (now or now_utc())
 
     def status(self, now: Optional[datetime] = None) -> Status:
-        """``done`` only when recorded as intended and nothing since says
-        otherwise; ``needs_follow_up`` when it differs, was refused, is
+        """``done`` only when recorded as intended (or accepted by a
+        status-only report) and nothing since says otherwise; ``needs_follow_up`` when it differs, was refused, is
         ambiguous, or is past its follow-up time; else ``waiting``."""
 
-        last = self.last
+        last = self.evidence
         reason = last.reason if last is not None else None
-        if self.state == "recorded_as_intended" and reason is None:
+        if reason is None and (
+            self.state == "recorded_as_intended"
+            or (last is not None and last.counterparty_accepted)
+        ):
             return "done"
         if (
             self.state == "recorded_differently"

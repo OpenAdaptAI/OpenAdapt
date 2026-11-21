@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from openadapt_flow.reports.parse import ReportError, ReportFormat
 
 if TYPE_CHECKING:  # pragma: no cover
+    from openadapt_flow.handoffs.payer import SettleRecorder
     from openadapt_flow.runtime.effects.deferred_report import (
         DeferredReportSpec,
         PendingLedger,
@@ -130,6 +131,19 @@ def _ui_final_from_config(path: Optional[str]) -> list[Any]:
     ]
 
 
+def _recorder(
+    ledger: "PendingLedger", report_format: Optional[str], report: Optional[Path]
+) -> "SettleRecorder":
+    """Record what the report says into the claim's handoff (``handoff list``)."""
+
+    import hashlib
+
+    from openadapt_flow.handoffs.payer import SettleRecorder
+
+    sha = hashlib.sha256(report.read_bytes()).hexdigest() if report else None
+    return SettleRecorder(ledger, report_format or "", sha)
+
+
 def cmd_deferred_settle(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.effects.deferred_report import settle_report_file
 
@@ -188,11 +202,13 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
                 issued_at = datetime.fromisoformat(args.report_time)
                 if issued_at.tzinfo is None:
                     raise ValueError("--report-time needs a time zone")
+            recorder = _recorder(ledger, fmt.format, Path(args.report))
             settled = settle_report_file(
-                ledger, Path(args.report), fmt, issued_at=issued_at
+                ledger, Path(args.report), fmt, issued_at=issued_at, observer=recorder
             )
         else:
-            settled = ledger.settle(None, None)
+            recorder = _recorder(ledger, None, None)
+            settled = ledger.settle(None, None, observer=recorder)
     except (OSError, ValueError, ReportError) as exc:
         print(f"deferred settle: {exc}", file=sys.stderr)
         return 2
@@ -201,6 +217,7 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
         word = "VERIFIED" if item.state == "verified" else "RECONCILIATION_REQUIRED"
         print(f"{item.id}: {word} ({item.reason}; code {item.code})")
     print(f"Settled {len(settled)}; {len(waiting)} still waiting.")
+    print("Open handoffs: openadapt-flow handoff list --ledger " + str(ledger.directory))
     return 0
 
 

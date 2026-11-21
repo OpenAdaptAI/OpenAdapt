@@ -13169,6 +13169,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_deferred_parser(sub)
 
+    from openadapt_flow.cli_handoff import register_handoff_parser
+
+    register_handoff_parser(sub)
+
     from openadapt_flow.cli_undo import register as _register_undo
 
     _register_undo(

@@ -43,7 +43,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Literal, Mapping, Optional
+from typing import Any, Callable, Iterator, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -135,6 +135,11 @@ class PendingCheck(BaseModel):
 
 #: ``report_format`` of a waiting entry a UI read-back settles.
 UI_READBACK_FORMAT = "ui-readback"
+
+
+#: Hears each waiting entry a report mentions: ``(entry, row, n)``, or
+#: ``(entry, None, 0)`` when the entry expired.
+SettleObserver = Callable[["PendingCheck", Optional[ReportRow], int], None]
 
 
 @dataclass(frozen=True)
@@ -359,6 +364,7 @@ class PendingLedger:
         *,
         issued_at: Optional[datetime] = None,
         now: Optional[datetime] = None,
+        observer: Optional[SettleObserver] = None,
     ) -> list[Settlement]:
         """Expire overdue entries, then settle waiting ones against a report.
 
@@ -368,6 +374,13 @@ class PendingLedger:
         or the caller's report time for a CSV or text report), and only
         entries waiting on that exact report format. ``report_text`` None only
         expires entries.
+
+        ``observer``, when given, hears about every waiting entry the report
+        mentions, including a row that is still pending (a 999 ``A``, a
+        277CA ``A1``), which settles nothing: ``observer(entry, row, n)``
+        with ``n`` the number of waiting entries on that key, and
+        ``observer(entry, None, 0)`` for an entry that expired. It never
+        changes what settles (:mod:`openadapt_flow.handoffs.payer`).
         """
 
         moment = now or _now()
@@ -398,6 +411,8 @@ class PendingLedger:
                             entry.id, "reconciliation_required", "deadline", reason
                         )
                     )
+                    if observer is not None:
+                        observer(entry, None, 0)
                 else:
                     still.append(entry)
             if report_text is None or fmt is None:
@@ -424,6 +439,9 @@ class PendingLedger:
                 by_digest.setdefault(entry.key_digest, []).append(entry)
             for digest, entries in by_digest.items():
                 row = rows.get(digest)
+                if row is not None and observer is not None:
+                    for entry in entries:
+                        observer(entry, row, len(entries))
                 if row is None or row.status == "pending":
                     continue
                 if len(entries) > 1:
@@ -615,12 +633,13 @@ def settle_report_file(
     fmt: ReportFormat,
     *,
     issued_at: Optional[datetime] = None,
+    observer: Optional[SettleObserver] = None,
 ) -> list[Settlement]:
     """Settle against a report file. A CSV or text report needs its issue
     time (``issued_at``); an X12 report carries its own."""
 
     text = Path(report_path).read_text(encoding="utf-8", errors="strict")
-    return ledger.settle(text, fmt, issued_at=issued_at)
+    return ledger.settle(text, fmt, issued_at=issued_at, observer=observer)
 
 
 __all__ = [
