@@ -463,6 +463,13 @@ def _write_locked(
     return envelope
 
 
+def save_settled_report(run_dir: Path, report: "RunReport") -> "RunReport":
+    """Save the final read-back before issuing the pooled item's opted-in receipt."""
+    report.save(run_dir)
+    receipt_after_run(run_dir, require_opt_in=True, expected_report=report)
+    return report
+
+
 def receipt_after_run(
     run_dir: Optional[Path],
     env: Optional[Mapping[str, str]] = None,

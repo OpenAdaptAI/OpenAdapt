@@ -174,6 +174,7 @@ from openadapt_flow.qualification_faults import (
     sha256_bytes,
     verify_fault_mutation_receipt,
 )
+from openadapt_flow.receipt_record import save_settled_report
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.run_invocation import (
     InvocationContext,
@@ -3639,13 +3640,7 @@ class Replayer:
             # to a person, and it never stays held open for the next item.
             if decide_approval:
                 self._stamp_approval(report)
-        report.save(run_dir)
-        # A pooled item's first report preceded its last system-of-record read.
-        # Only this settled save can be offered as its opted-in receipt.
-        from openadapt_flow.receipt_record import receipt_after_run
-
-        receipt_after_run(run_dir, require_opt_in=True, expected_report=report)
-        return report
+        return save_settled_report(run_dir, report)
 
     def recheck_deferred_readback(
         self,
