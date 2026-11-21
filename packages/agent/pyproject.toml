@@ -8,7 +8,7 @@ version = "2.2.2"
 description = "Let your AI agent enter information in apps with no API and get back whether it saved (MCP and Agent Skills)"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "MIT"
 authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}
@@ -20,7 +20,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -101,23 +100,14 @@ core-metadata-version = "2.4"
 # make the resolver keep a version with a wheel for the oldest supported
 # Python on each platform CI runs.
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
-]
-
-# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
-# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
-# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
-# keeps the last compatible release until the 3.10 floor is dropped.
-constraint-dependencies = [
-    "pillow>=13.0.0; python_full_version >= '3.11'",
-    "filelock>=4.2.1; python_full_version >= '3.11'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Pin Ruff's historical default gate so future releases cannot silently expand

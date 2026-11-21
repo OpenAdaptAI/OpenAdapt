@@ -15,7 +15,7 @@ playwright install chromium
 pytest -q
 ```
 
-Python 3.10–3.12 are supported and exercised in CI.
+Python 3.11 and 3.12 are supported and exercised in CI.
 
 ## The checks CI runs (run them locally first)
 
@@ -57,7 +57,7 @@ session and module fixtures. CI keeps its configured launch options.
 
 Every pull request and push to `main` runs the required safety, unit, browser
 E2E, native-platform contract, type, PHI, documentation, interoperability, and
-package checks. The complete Python 3.10–3.12 Linux matrix plus macOS suite is
+package checks. The complete Python 3.11–3.12 Linux matrix plus macOS suite is
 intentionally a second lane: it runs nightly and as an explicit release
 qualification, avoiding four redundant full-suite jobs on every routine merge
 without reducing the required merge or exact-main gates.

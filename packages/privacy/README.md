@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/LICENSE)
 
 Remove names, email addresses, phone numbers, SSNs, card numbers, medical
@@ -36,7 +36,7 @@ If the spaCy model or a Presidio package is missing, the scrubber raises
 `PrivacyModelUnavailable` or `ImportError` instead of returning text. It doesn't
 fall back to another model, and it never downloads a model at run time.
 
-You need Python 3.10 or later. Screenshot scrubbing also needs the
+You need Python 3.11 or later. Screenshot scrubbing also needs the
 [Tesseract](https://github.com/tesseract-ocr/tesseract) OCR binary on your
 `PATH`, for example from `brew install tesseract` or
 `apt-get install tesseract-ocr`.

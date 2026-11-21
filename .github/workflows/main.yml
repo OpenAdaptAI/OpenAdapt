@@ -31,7 +31,7 @@ jobs:
         # 3.12), which the queue needs to report. A push to main and a
         # dispatch run every supported Python on Linux and macOS.
         os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
 
     steps:
       - name: Checkout code
@@ -127,7 +127,7 @@ jobs:
 
   # pip on Python 3.13 and 3.14 used to skip every current launcher (all
   # capped below 3.13) and silently install openadapt 1.3.0, an unrelated
-  # pre-compiler CLI. The launcher now installs on any Python >=3.10 and keeps
+  # pre-compiler CLI. The launcher now installs on any Python >=3.11 and keeps
   # the engine behind a version marker. This job proves, on the first
   # unsupported interpreters, that the built wheel installs without the engine
   # and that each engine command prints the Python 3.12 install fix.
@@ -231,7 +231,7 @@ jobs:
             grep -q "uv tool install --python 3.12 openadapt" <<<"$output"
           done
           help_text=$(openadapt --help)
-          grep -q "OpenAdapt needs Python 3.10" <<<"$help_text"
+          grep -q "OpenAdapt needs Python 3.11" <<<"$help_text"
 
       - name: Run the Python support tests
         run: |

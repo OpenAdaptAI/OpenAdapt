@@ -200,7 +200,7 @@ def main():
     training/evaluation commands are research.
 
     \b
-    Quick Start (Python 3.10-3.12):
+    Quick Start (Python 3.11-3.12):
         python -m pip install --upgrade openadapt
         openadapt quickstart
 
@@ -393,11 +393,11 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # Oldest and newest interpreter the engine supports. openadapt-flow,
 # openadapt-agent, and Flow's OCR dependency publish Requires-Python <3.13, so
 # pyproject.toml installs them only below 3.13 while the launcher itself
-# installs on any Python >=3.10. Without that split, pip on 3.13 and 3.14
+# installs on any Python >=3.11. Without that split, pip on 3.13 and 3.14
 # silently backtracked to openadapt 1.3.0, an unrelated pre-compiler CLI.
 # tests/test_python_support.py keeps this range, the dependency markers, the
 # classifiers, and the CI guard matrix in step.
-_SUPPORTED_PYTHON = ((3, 10), (3, 12))
+_SUPPORTED_PYTHON = ((3, 11), (3, 12))
 
 
 def _host_platform() -> str:
@@ -463,13 +463,13 @@ def _python_remedy() -> str:
     if _python_supported():
         # A supported interpreter can still refuse installs (PEP 668).
         reason = (
-            "OpenAdapt needs Python 3.10\u20133.12 in its own environment. "
+            "OpenAdapt needs Python 3.11\u20133.12 in its own environment. "
             f"This Python {current} is managed by your operating system, so "
             "pip can't add packages to it."
         )
     else:
         reason = (
-            "OpenAdapt needs Python 3.10\u20133.12. This is Python "
+            "OpenAdapt needs Python 3.11\u20133.12. This is Python "
             f"{current}, which the OpenAdapt engine doesn't support yet, so "
             "only the launcher is installed."
         )
@@ -1265,14 +1265,14 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     if not _python_supported():
         click.echo(
             f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
-            "engine supports Python 3.10\u20133.12"
+            "engine supports Python 3.11\u20133.12"
         )
         for line in _python_fix().splitlines():
             click.echo(f"     {line}")
         # The engine and Playwright can't install on this interpreter, so the
         # later checks would only suggest a reinstall that can't help here.
         raise click.ClickException(
-            "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "Preflight failed. Reinstall OpenAdapt with Python 3.11\u20133.12 "
             "as shown above, and then run this command again."
         )
     flow_importable = find_spec("openadapt_flow") is not None
@@ -2971,11 +2971,11 @@ def doctor(backend: str | None, install_browser: bool, recording: bool):
         # Every later check would report the engine as missing and suggest a
         # reinstall that can't help on this interpreter. Say what will.
         click.echo(
-            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.10\u20133.12."
+            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.11\u20133.12."
         )
         click.echo(_python_remedy())
         raise click.ClickException(
-            "System check failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "System check failed. Reinstall OpenAdapt with Python 3.11\u20133.12 "
             "as shown above, and then run this command again."
         )
 

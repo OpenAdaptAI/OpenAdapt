@@ -235,7 +235,7 @@ print(report.transaction_outcome)  # COMPLETED_UNVERIFIED: a rehearsal
 `accept_params` names the field-label proposals to turn into parameters (see
 `bundle/param_proposals.json`); unlisted ones stay recorded constants.
 
-Python 3.10 through 3.12 is supported. On Windows `cmd.exe`, use double
+Python 3.11 and 3.12 are supported. On Windows `cmd.exe`, use double
 quotes: `pip install "openadapt-flow[browser]"`.
 
 `lint` lists what the bundle still needs, such as a record check for a write. It exits 1 only for an `error`; a fresh recording usually has a few

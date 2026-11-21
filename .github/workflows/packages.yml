@@ -35,15 +35,15 @@
 # files by name, failing if any of them is skipped.
 #
 # openadapt-capture (packages/capture) keeps its own uv.lock, so its jobs run
-# `uv sync --locked` against it: Linux on Python 3.10 (with the native AT-SPI
-# smoke on ubuntu-22.04), 3.11 and 3.12; macOS and Windows unit suites, plus
+# `uv sync --locked` against it: Linux on Python 3.11 (with the native AT-SPI
+# smoke on ubuntu-22.04) and 3.12; macOS and Windows unit suites, plus
 # the live recorder tests on Windows; lint; and the release contract. Flow's
 # `capture` extra installs the in-tree capture, so a capture change also
 # re-runs Flow.
 #
 # openadapt-privacy (packages/privacy) keeps its own uv.lock and runs
 # `uv sync --locked` against it: its suite without Presidio on
-# Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
+# Python 3.11 and 3.12, the full suite with Presidio and the spaCy model
 # on 3.12, and lint plus the release contract (changelog matches the version,
 # `uv build`, archive boundary).
 #
@@ -69,7 +69,7 @@
 #
 # openadapt-tray (packages/tray) keeps its own uv.lock and runs `uv sync
 # --locked` against it: its suite on Linux with Python 3.12 for a PR and in
-# the queue, plus 3.10, 3.11, macOS and Windows on main; ruff, the version and changelog
+# the queue, plus 3.11, macOS and Windows on main; ruff, the version and changelog
 # contract, `uv build` and the archive boundary; and Desktop's socket test
 # against this tray client, so a tray change cannot break the protocol
 # without the desktop suite running. A desktop change runs that same test in
@@ -217,7 +217,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main adds the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -254,7 +254,7 @@ jobs:
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -265,7 +265,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
       - name: Build and verify the public distribution boundary
@@ -284,7 +284,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main adds the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -322,7 +322,7 @@ jobs:
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -333,7 +333,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
 
@@ -437,7 +437,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.11", "3.12"]
     services:
       postgres:
         image: postgres:16-alpine
@@ -562,7 +562,7 @@ jobs:
         run: python scripts/check_engine_generality.py
       - name: Install uv (for the oldest-Python syntax check)
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
         # and failed only after merge. Check every file at the minimum.
@@ -572,7 +572,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
         run: ruff format --check openadapt_flow tests benchmark/harness benchmark/phase_latency
       - name: Mypy
@@ -1282,13 +1282,13 @@ jobs:
     needs: scope
     if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
     # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
-    runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.python-version == '3.11' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main runs all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -1309,7 +1309,7 @@ jobs:
           install-recommends: "true"
           packages: ffmpeg libportaudio2
       - name: Install native AT-SPI build and smoke dependencies
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           install-recommends: "true"
@@ -1317,12 +1317,12 @@ jobs:
             libgirepository1.0-dev libcairo2-dev pkg-config
             gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
       - name: Check the GLib and GObject introspection versions
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         run: pkg-config --modversion glib-2.0 gobject-introspection-1.0
       - name: Install
-        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
+        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.11' && '--extra linux' || '' }}
       - name: Verify native AT-SPI dependency compatibility
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         env:
           OPENADAPT_TEST_LINUX_ATSPI: "1"
           NO_AT_BRIDGE: "0"
@@ -1427,7 +1427,7 @@ jobs:
         run: uv sync --locked --extra dev
       - name: Ruff
         run: uv run --no-sync ruff check openadapt_capture/
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
         # and failed only after merge. Check every file at the minimum.
@@ -1437,7 +1437,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Verify the maintained changelog
         # --skip-tags: the monorepo's v* tags are the launcher's. Capture's
         # release tags through v1.2.2 live in OpenAdaptAI/openadapt-capture.
@@ -1459,7 +1459,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR and queue tiers: one Python; main runs all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
@@ -1528,7 +1528,7 @@ jobs:
         run: uv sync --locked --python 3.12 --extra dev
       - name: Ruff
         run: uv run --no-sync ruff check openadapt_privacy tests scripts
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
         # and failed only after merge. Check every file at the minimum.
@@ -1538,7 +1538,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Changelog matches the version and the release workflow
         run: uv run --no-sync pytest tests/test_release_config.py -v
       - name: Build wheel and source distribution
@@ -1565,9 +1565,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR and queue tiers: Linux on Python 3.12. Main adds 3.10, 3.11,
+        # PR and queue tiers: Linux on Python 3.12. Main adds 3.11,
         # macOS and Windows, where the tray's platform handlers differ.
-        include: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+        include: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -1616,7 +1616,7 @@ jobs:
       # The whole package, including examples/ and the root helper scripts.
       - name: Ruff
         run: uv run --no-sync ruff check .
-      - name: Syntax at the oldest supported Python (3.10)
+      - name: Syntax at the oldest supported Python (3.11)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
         # and failed only after merge. Check every file at the minimum.
@@ -1626,7 +1626,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
           uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
-          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Build wheel and source distribution
         run: uv build
       - name: Versions agree and both distributions exist
