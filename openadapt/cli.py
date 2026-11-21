@@ -819,10 +819,7 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say(
-            "Put this Seal online? This is the exact summary that would be "
-            f"uploaded ({run_dir / 'public-seal.json'}):"
-        )
+        say("Put this Seal online? These fields would be shared:")
         try:
             publish(
                 run_dir,
@@ -2041,8 +2038,8 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
             "and the hour the run started, signed by this computer's Seal key. "
             "It never holds inputs, typed values, screenshots or record "
             "contents. The program name is left out unless you pass --names "
-            "(the synthetic tutorial includes it). The preview shows the full "
-            "public Seal. Seals signed by the same key have the same public "
+            "(the synthetic tutorial includes it). The preview lists every field; "
+            "--show prints the exact upload. Seals signed by the same key have the same public "
             "key ID. Confirm at the prompt, or pass --yes to publish without "
             "a prompt."
         ),
@@ -2064,7 +2061,12 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="write and print public-seal.json; upload nothing",
+        help="preview all public fields and write public-seal.json; upload nothing",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="write the exact upload bytes to standard output and exit without publishing",
     )
     parser.add_argument(
         "--github",
@@ -2124,7 +2126,7 @@ def _ask_line(prompt: str) -> str:
 
 def _publish_seal(argv: list[str]) -> int:
     """`openadapt seal publish [RUN_DIR]`."""
-    from openadapt.seal_publish import PublishError, publish
+    from openadapt.seal_publish import PublishError, build, public_bytes, publish
 
     options = _seal_publish_parser().parse_args(argv)
     run_dir = options.run_dir or _newest_sealed_run()
@@ -2138,6 +2140,10 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(f"Not published: {run_dir} has no seal.json.", err=True)
         return 2
     try:
+        if options.show:
+            doc = build(run_dir, names=options.names, github=options.github)
+            click.get_binary_stream("stdout").write(public_bytes(doc))
+            return 0
         publish(
             run_dir,
             yes=options.yes,

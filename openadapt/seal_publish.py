@@ -5,7 +5,7 @@ this computer. Publishing builds the run's *public* Seal (``public-seal.json``,
 :mod:`openadapt_flow.public_seal`): counts, outcomes, the step strip, digests
 and the hour the run started, signed by the same key. The program name is in
 it only with ``--names`` (or for the synthetic tutorial), because a program
-name can be a person's name. The full public Seal is always printed first; only
+name can be a person's name. Every public field is listed before consent; only
 that file is uploaded, and only after the person says yes:
 
 * in a terminal, a y/N prompt that defaults to No;
@@ -20,6 +20,7 @@ Every network call goes through a :data:`Transport`, so tests replace it.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -29,7 +30,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Iterator, Mapping, Optional
 from urllib.parse import urlsplit
 
 DEFAULT_ENDPOINT = "https://app.openadapt.ai"
@@ -46,9 +47,9 @@ _QUICKSTART_ROOT = re.compile(r"openadapt-quickstart(-[0-9]+)?")
 
 #: The exact consent question; ``{host}`` is the endpoint's host.
 PROMPT = (
-    "This uploads the signed Seal above to {host} and gives you a link. Anyone "
+    "This uploads the signed Seal to {host} and gives you a link. Anyone "
     "with the link can see it. It does not upload your inputs, screenshots or "
-    "records. Publish? [y/N] "
+    "records. Type show for the exact bytes. Publish? [y/N] "
 )
 
 
@@ -192,6 +193,7 @@ def consent(
     interactive: bool,
     ask: Callable[[str], str],
     host: str,
+    show: Optional[Callable[[], None]] = None,
     env: Optional[Mapping[str, str]] = None,
 ) -> bool:
     """True only on an explicit yes. Raises PublishError (exit 2) when none can be had.
@@ -212,10 +214,14 @@ def consent(
             "Not published: no terminal to ask. Pass --yes to publish.", 2
         )
     try:
-        answer = ask(PROMPT.format(host=host))
+        while True:
+            answer = ask(PROMPT.format(host=host)).strip().lower()
+            if show is None or answer not in ("show", "s", "--show"):
+                break
+            show()
     except EOFError:
         return False
-    return answer.strip().lower() in ("y", "yes")
+    return answer in ("y", "yes")
 
 
 # -- building ---------------------------------------------------------------
@@ -295,8 +301,45 @@ def build(
 
 
 def card_text(doc: Mapping[str, Any]) -> str:
-    """Show every field in the public Seal before consent."""
-    return json.dumps(dict(doc), indent=2, sort_keys=True)
+    """List the actual public fields. Repeated step fields share a line in run order."""
+    lines = []
+    for section, fields in doc.items():
+        lines.append(section.title())
+        values: dict[str, list[str]] = {}
+        for name, value in fields.items():
+            for label, shown in _preview_fields(name, value):
+                values.setdefault(label, []).append(shown)
+        for label, items in values.items():
+            runs = []
+            for item, group in itertools.groupby(items):
+                count = sum(1 for _ in group)
+                runs.append(item if count == 1 else f"{item} × {count}")
+            label = label.replace("[]", " (in order)").replace(".", " / ")
+            label = label.replace("_", " ").capitalize().replace("sha256", "SHA-256")
+            if label.endswith(" id"):
+                label = label[:-2] + "ID"
+            lines.append(f"  {label}: {', '.join(runs)}")
+    return "\n".join(lines)
+
+
+def _preview_fields(name: str, value: Any) -> Iterator[tuple[str, str]]:
+    """Yield a path and value for each leaf, including explicit nulls and empty lists."""
+    if isinstance(value, dict) and value:
+        for key, child in value.items():
+            yield from _preview_fields(f"{name}.{key}", child)
+    elif isinstance(value, list) and value:
+        for child in value:
+            yield from _preview_fields(f"{name}[]", child)
+    else:
+        if isinstance(value, str):
+            shown = value
+            if name.endswith(("_sha256", "_digest")) and re.fullmatch(
+                "[0-9a-f]{64}", value
+            ):
+                shown = f"{value[:8]}…{value[-8:]}"
+        else:
+            shown = json.dumps(value)
+        yield name, shown
 
 
 # -- publishing ---------------------------------------------------------------
@@ -567,7 +610,7 @@ def publish(
 ) -> Optional[str]:
     """Build, show, ask, upload. Returns the link, or None when nothing was sent.
 
-    The full public Seal is always printed before anything is asked or sent;
+    All public fields are shown before anything is asked or sent;
     ``yes`` skips the question, never the preview. Raises :class:`PublishError`
     with an exit code for each refusal.
     """
@@ -580,6 +623,10 @@ def publish(
         return str(existing["url"])
     doc = build(run_dir, names=names, github=github, provenance=provenance)
     say(card_text(doc))
+    public_file = run_dir / "public-seal.json"
+    if public_file.is_relative_to(Path.cwd()):
+        public_file = public_file.relative_to(Path.cwd())
+    say(f"Exact upload: {public_file} (or add --show to the same publish command).")
     say(
         "Anyone who sees two Seals can compare their key IDs to see "
         "if the same key signed both."
@@ -595,6 +642,7 @@ def publish(
         interactive=interactive,
         ask=ask,
         host=host_of(origin),
+        show=lambda: say(public_bytes(doc).decode("utf-8")),
     ):
         say("Not published.")
         return None

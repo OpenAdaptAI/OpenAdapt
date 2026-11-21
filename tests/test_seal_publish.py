@@ -152,6 +152,33 @@ def _publish(run: Path, transport: Recorder, **kwargs) -> tuple[str | None, list
 # -- upload --------------------------------------------------------------------
 
 
+def _assert_preview_covers_document(preview: str, doc: dict) -> None:
+    def fields(value, path):
+        if isinstance(value, dict) and value:
+            return set().union(
+                *(fields(child, f"{path}.{key}") for key, child in value.items())
+            )
+        if isinstance(value, list) and value:
+            return set().union(*(fields(child, f"{path}[]") for child in value))
+        return {path}
+
+    found = []
+    for line in preview.splitlines():
+        if not line.startswith("  "):
+            section = line.lower()
+        else:
+            field, value = line.strip().split(": ", 1)
+            assert value
+            wire = (
+                field.lower().replace("sha-256", "sha256").replace(" (in order)", "[]")
+            )
+            wire = wire.replace(" / ", ".").replace(" ", "_")
+            found.append(f"{section}.{wire}")
+    assert len(found) == len(set(found))
+    expected = set().union(*(fields(value, key) for key, value in doc.items()))
+    assert set(found) == expected
+
+
 def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp_path):
     run = make_run()
     transport = Recorder(created())
@@ -167,8 +194,11 @@ def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp
     assert record == {"id": SEAL_ID, "url": url, "delete_token": TOKEN}
     assert stat.S_IMODE((run / "seal.publish.json").stat().st_mode) == 0o600
     assert f"Published: {url}" in said
-    assert json.loads(said[0]) == json.loads(body)
-    assert "the same key signed both" in said[1]
+    doc = json.loads(body)
+    _assert_preview_covers_document(said[0], doc)
+    assert doc["card"]["report_sha256"] not in said[0]
+    assert f"  Signature: {doc['seal']['signature']}" in said[0].splitlines()
+    assert any("the same key signed both" in line for line in said)
 
 
 @needs_engine
@@ -186,11 +216,14 @@ def test_authorized_run_previews_scope_digest_and_issue_time_before_consent(make
     shown = []
 
     def decline(_question):
-        seal = json.loads(shown[0])["seal"]
-        assert seal["authorization_sha256"] == "a" * 64
-        assert seal["scope_item"] == "r3"
         saved = json.loads((run / "public-seal.json").read_text())
-        assert seal["issued_at"] == saved["seal"]["issued_at"]
+        _assert_preview_covers_document(shown[0], saved)
+        rows = shown[0].splitlines()
+        assert "  Authorization SHA-256: aaaaaaaa…aaaaaaaa" in rows
+        assert "  Scope item: r3" in rows
+        assert f"  Issued at: {saved['seal']['issued_at']}" in rows
+        assert "  Program name: null" in rows
+        assert "Identity claim" not in shown[0]
         return "no"
 
     url = publish(
@@ -236,9 +269,9 @@ def test_the_prompt_defaults_to_no(make_run, tmp_path, answer):
 
 def test_the_prompt_text_is_the_agreed_one():
     assert PROMPT.format(host="app.openadapt.ai") == (
-        "This uploads the signed Seal above to app.openadapt.ai and gives you a link. "
+        "This uploads the signed Seal to app.openadapt.ai and gives you a link. "
         "Anyone with the link can see it. It does not upload your inputs, "
-        "screenshots or records. Publish? [y/N] "
+        "screenshots or records. Type show for the exact bytes. Publish? [y/N] "
     )
 
 
@@ -405,7 +438,11 @@ def test_cli_dry_run_defaults_to_the_newest_quickstart_run(
     result = CliRunner().invoke(cli.main, ["seal", "publish", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert (newest / "public-seal.json").is_file()
-    assert '"steps_total":' in result.output
+    newest_doc = json.loads((newest / "public-seal.json").read_bytes())
+    assert (
+        f"  Steps total: {newest_doc['card']['steps_total']}"
+        in result.output.splitlines()
+    )
 
 
 def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch):
@@ -417,9 +454,32 @@ def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch
     )
     assert result.exit_code == 0, result.output
     assert f"Published: {ORIGIN}/seal#{SEAL_ID}" in result.output
-    # --yes skips the question, not the card: it is printed before the upload.
-    assert result.output.index('"card"') < result.output.index("Published:")
+    assert result.output.index("Card\n") < result.output.index("Published:")
+    assert '{"card"' not in result.output
     assert "Publish? [y/N]" not in result.output
+
+
+def test_cli_show_stdout_is_the_exact_upload_and_never_publishes(make_run, monkeypatch):
+    run = make_run()
+    transport = Recorder(created())
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    args = ["seal", "publish", str(run), "--github", "sample-org", "--names"]
+    result = CliRunner().invoke(cli.main, [*args, "--show", "--yes"])
+    assert result.exit_code == 0, result.output
+    exact = (run / "public-seal.json").read_bytes()
+    assert result.stdout_bytes == exact
+    assert transport.requests == []
+
+    posted = CliRunner().invoke(cli.main, [*args, "--yes", "--endpoint", ORIGIN])
+    assert posted.exit_code == 0, posted.output
+    assert transport.requests[0][2] == exact
+    if ENGINE:
+        assert "  Identity claim / login: sample-org" in posted.output.splitlines()
+
+    # Reading an already published Seal still writes only the upload bytes.
+    again = CliRunner().invoke(cli.main, [*args, "--show"])
+    assert again.exit_code == 0 and again.stdout_bytes == exact
+    assert len(transport.requests) == 1
 
 
 def test_cli_publish_help_runs_nothing(tmp_path):
@@ -740,16 +800,52 @@ def test_the_quickstart_offer_shows_the_card_then_asks_once(
     assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
     # The complete document and key disclosure precede consent, even on refusal.
     doc = json.loads((run / "public-seal.json").read_text())
-    shown = [
-        json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
-    ]
-    assert shown == [doc]
+    preview = next(line for _, line in events[: asks[0]] if line.startswith("Card\n"))
+    _assert_preview_covers_document(preview, doc)
+    assert not any(line.startswith("{") for _, line in events[: asks[0]])
     assert any("the same key signed both" in line for _, line in events[: asks[0]])
     assert doc["card"]["provenance"] == "synthetic-tutorial"
     assert events[-1] == ("say", "Not published.")
     assert not (run / "seal.publish.json").exists()
     # Only the status check was sent; a No uploads nothing.
     assert [r[0] for r in transport.requests] == ["GET"]
+
+
+def test_show_at_the_quickstart_question_displays_exact_upload_then_asks_again(
+    make_run, monkeypatch
+):
+    run = make_run()
+    _terminal(monkeypatch)
+    transport = Recorder(_status(True))
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    events = []
+    answers = iter(["show", "n"])
+    cli._quickstart_publish_offer()(
+        run,
+        lambda line: events.append(("say", line)),
+        lambda prompt: events.append(("ask", prompt)) or next(answers),
+    )
+    asks = [i for i, (event, _) in enumerate(events) if event == "ask"]
+    assert len(asks) == 2
+    assert events[asks[0] + 1 : asks[1]] == [
+        ("say", (run / "public-seal.json").read_bytes().decode("utf-8"))
+    ]
+    assert events[-1] == ("say", "Not published.")
+    assert [request[0] for request in transport.requests] == ["GET"]
+
+
+def test_compact_preview_keeps_empty_lists_and_groups_repeated_step_values():
+    doc = _golden_doc()
+    doc["card"]["steps"] = []
+    empty = seal_publish.card_text(doc)
+    _assert_preview_covers_document(empty, doc)
+    assert "  Steps: []" in empty.splitlines()
+    step = {"ok": True, "rung": "api", "evidence_class": "effect"}
+    doc["card"]["steps"] = [step, step, {**step, "ok": False}]
+    preview = seal_publish.card_text(doc)
+    _assert_preview_covers_document(preview, doc)
+    assert "  Steps (in order) / ok: true × 2, false" in preview.splitlines()
+    assert "  Steps (in order) / rung: api × 3" in preview.splitlines()
 
 
 @needs_engine
