@@ -2283,7 +2283,7 @@ def _dynamic_problems(graph: Graph, contract: dict, *, transitive: bool) -> list
 # The baseline file carries no line numbers, so this pins only the reviewed
 # membership: moving a known site within its file leaves the bytes unchanged.
 DEBT_BASELINE_SHA256 = (
-    "d8c5aa0c76e59707756dcd06e489eb7385489b872b6416ef48bbd92e0feb11cf"
+    "66f9bbce69bb2017e83ac894f6391561f06c1ba4f8b235157c13e91c3587f56a"
 )
 
 
