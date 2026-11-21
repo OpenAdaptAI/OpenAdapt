@@ -916,7 +916,7 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     )
     assert calls == [[root / "run-1"]]
     text = stream.getvalue()
-    assert text.index("Your Seal:") < text.index("offer shown") < text.index("Next:")
+    assert text.index("Your receipt:") < text.index("offer shown") < text.index("Next:")
     assert "seal publish" not in text
 
 
@@ -971,7 +971,7 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
 
     text = _rich_finale(tmp_path, offer)
     assert calls == [[tmp_path / "openadapt-quickstart" / "run-1"]]
-    assert text.index("Your Seal") < text.index("offer shown") < text.index("Next  ")
+    assert text.index("Your receipt") < text.index("offer shown") < text.index("Next  ")
     assert "Put it online" not in text
 
 

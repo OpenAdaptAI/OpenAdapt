@@ -29,9 +29,10 @@ Synthetic data only. Files go to openadapt-quickstart
 
 The demonstration clicked Confirm Create New Patient here. Replaying those clicks would have saved a possible duplicate. OpenAdapt stopped.
 
-Your Seal: Signed
+Your receipt: Signed
+  Signed by this computer
   key seal-ed25519-0123456789abcdef · 5 reports signed
-  Real Seals from OpenEMR runs: https://openadapt.ai/seals
+  Real receipts from OpenEMR runs: https://openadapt.ai/seals
 
 Next: Give your agent this task as a tool
   claude mcp add openadapt -- openadapt agent serve --bundles openadapt-quickstart/bundle
