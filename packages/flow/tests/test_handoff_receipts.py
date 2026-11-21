@@ -308,6 +308,20 @@ def test_sign_updates_refuses_a_receipt_it_cannot_verify_or_did_not_sign(tmp_pat
     with pytest.raises(ValueError, match="does not verify"):
         followup.sign_updates(run_dir, [referrals], signer=stranger)
     assert not (run_dir / "receipt.update-3.json").exists()
+    # An update past a gap is never ignored: the history fails closed.
+    one_path = run_dir / "receipt.update-1.json"
+    saved = one_path.read_text()
+    one_path.rename(run_dir / "receipt.update-9.json")
+    with pytest.raises(ValueError, match="skip a number"):
+        followup.verify_history(run_dir, _registry(tmp_path))
+    with pytest.raises(ValueError, match="skip a number"):
+        followup.sign_updates(run_dir, [referrals], signer=signer)
+    (run_dir / "receipt.update-9.json").unlink()
+    one_path.write_text(saved)
+    (run_dir / "receipt.update-x.json").write_text("{}")
+    with pytest.raises(ValueError, match="unexpected update file"):
+        followup.updates(run_dir)
+    (run_dir / "receipt.update-x.json").unlink()
     # A tampered update already in the chain is never extended.
     update = run_dir / "receipt.update-2.json"
     good_update = update.read_text()

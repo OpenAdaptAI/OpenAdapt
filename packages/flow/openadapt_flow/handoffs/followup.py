@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
@@ -98,13 +99,37 @@ def last_signed(run_dir: Path) -> dict[str, dict[str, Any]]:
     return latest
 
 
+_UPDATE_NAME = re.compile(r"^receipt\.update-(.*)\.json$")
+
+
 def updates(run_dir: Path) -> list[Path]:
-    found = []
-    sequence = 1
-    while (run_dir / update_file(sequence)).is_file():
-        found.append(run_dir / update_file(sequence))
-        sequence += 1
-    return found
+    """Every ``receipt.update-N.json`` in the run, in order.
+
+    Fails closed (ValueError) on a gap in the numbering or a name that isn't
+    ``receipt.update-<N>.json`` / ``.private.json`` with N counted from 1, so
+    no update file is ever silently left out of the history.
+    """
+    numbers: list[int] = []
+    private_numbers: set[int] = set()
+    for path in Path(run_dir).iterdir():
+        match = _UPDATE_NAME.match(path.name)
+        if not match:
+            continue
+        stem = match.group(1)
+        if stem.endswith(".private"):
+            stem = stem[: -len(".private")]
+            private = True
+        else:
+            private = False
+        if not re.fullmatch(r"[1-9][0-9]{0,5}", stem):
+            raise ValueError(f"unexpected update file {path.name}")
+        (private_numbers.add if private else numbers.append)(int(stem))
+    numbers.sort()
+    if numbers != list(range(1, len(numbers) + 1)):
+        raise ValueError("the run's update files skip a number")
+    if not private_numbers <= set(numbers):
+        raise ValueError("a private update file has no update beside it")
+    return [Path(run_dir) / update_file(n) for n in numbers]
 
 
 def sign_updates(
