@@ -660,11 +660,19 @@
     gap: 6px;
     margin-top: 10px;
 }
+.another[hidden] {
+    display: none;
+}
 .anotherHead {
     flex-basis: 100%;
     color: var(--muted);
     font-size: 12.5px;
 }
+.changeHead {
+    margin: 0 0 6px;
+    overflow-wrap: anywhere;
+}
+
 .change {
     margin: 6px 0 0;
     color: var(--muted);

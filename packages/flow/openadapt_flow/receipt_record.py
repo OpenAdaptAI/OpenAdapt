@@ -502,6 +502,18 @@ def receipt_after_run(
     return f"receipt: {Path(run_dir) / RECEIPT_FILE}"
 
 
+def after_run_notes(
+    run_dir: Optional[Path], *, include_receipt: bool = True
+) -> list[str]:
+    """Return the legacy Seal note and, when requested, the signed receipt note."""
+    from openadapt_flow.offline_seal import seal_after_run
+
+    notes = [seal_after_run(run_dir)]
+    if include_receipt:
+        notes.append(receipt_after_run(run_dir))
+    return [note for note in notes if note]
+
+
 # -- verifying -------------------------------------------------------------------
 
 

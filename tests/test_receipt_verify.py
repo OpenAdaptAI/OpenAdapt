@@ -367,9 +367,10 @@ def test_new_finalizer_requires_explicit_opt_in_and_waits_for_settlement(tmp_pat
 def test_completed_unverified_no_write_uses_actual_report_serialization(
     tmp_path, monkeypatch, finalizer
 ):
-    from argparse import Namespace
+    from unittest.mock import patch
 
-    from openadapt_flow.__main__ import _finish_replay
+    import openadapt_flow.__main__ as cli
+    from openadapt_flow import receipt_record
     from openadapt_flow.ir import RunReport, Workflow
     from openadapt_flow.offline_seal import public_key_entry
     from openadapt_flow.transaction import stamp_transaction_outcome
@@ -386,7 +387,14 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(
     assert report.transaction_outcome == "COMPLETED_UNVERIFIED"
     path = report.save(tmp_path)
     if finalizer == "cli":
-        _finish_replay(tmp_path, report, Namespace())
+        monkeypatch.setattr(
+            cli, "_cmd_replay", lambda args: cli._finish_replay(tmp_path, report, args)
+        )
+        with patch.object(
+            receipt_record, "receipt_after_run", wraps=receipt_record.receipt_after_run
+        ) as sign:
+            cli.main(["replay", str(tmp_path / "unused"), "--run-dir", str(tmp_path)])
+        sign.assert_called_once_with(tmp_path, require_opt_in=False, expected_report=report)
     else:
         from openadapt_flow.cli_worklist_pool import _item_run
 
@@ -411,12 +419,18 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(
 
 
 def test_cli_refusal_cannot_sign_a_prior_report(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
     import openadapt_flow.__main__ as cli
+    from openadapt_flow import offline_seal
 
     run = _run(tmp_path)
     monkeypatch.setattr(cli, "_cmd_replay", lambda args: 2)
+    legacy = Mock(return_value=None)
+    monkeypatch.setattr(offline_seal, "seal_after_run", legacy)
     result = cli.main(["replay", str(tmp_path / "unused"), "--run-dir", str(run)])
     assert result == 2
+    legacy.assert_called_once_with(run)
     assert not (run / r.RECEIPT_FILE).exists()
 
 
