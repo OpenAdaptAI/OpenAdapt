@@ -652,10 +652,11 @@ def _open_v3(header: dict[str, object]) -> V3Key:
         raise
     if bucket.fpr != key_ref.get("bucket_pub_fpr"):
         raise SealedSetError("the bucket record does not match the set's key reference")
+    stanzas = header.get("stanzas")
     stanza = next(
         (
             s
-            for s in header.get("stanzas") or []  # type: ignore[union-attr]
+            for s in (stanzas if isinstance(stanzas, list) else [])
             if isinstance(s, dict) and s.get("fpr") == bucket.fpr
         ),
         None,
@@ -998,7 +999,7 @@ class SealedSetWriter:
         self.root.mkdir(parents=True, exist_ok=True)
         created = _new_v3(kind, passphrase)
         if created is not None:
-            self._header, self._key = created
+            self._header, self._key = created[0], created[1]  # type: ignore[assignment]
             self._new = True
             self._write_header()
             return
@@ -1191,7 +1192,7 @@ class SealedSetWriter:
         A bundle keeps it: programs replay unattended."""
         from openadapt_flow import key_hierarchy as kh
 
-        bucket = self._key.bucket  # type: ignore[union-attr]
+        bucket = getattr(self._key, "bucket", None)
         if bucket is None:
             return
         kh.close(bucket)

@@ -399,11 +399,11 @@ class KeychainStore(KeyStore):
                 f"the OS keychain did not answer a {what} within "
                 f"{_KEYCHAIN_TIMEOUT_S:.0f} s"
             )
-        if "error" in result:
-            exc = result["error"]
+        failure = result.get("error")
+        if isinstance(failure, BaseException):
             raise KeyStoreUnavailable(
-                f"the OS keychain refused a {what} ({type(exc).__name__})"
-            ) from exc  # type: ignore[misc]
+                f"the OS keychain refused a {what} ({type(failure).__name__})"
+            ) from failure
         value = result.get("value")
         return value if isinstance(value, str) else None
 

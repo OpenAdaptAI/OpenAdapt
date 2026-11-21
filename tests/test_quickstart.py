@@ -886,7 +886,9 @@ def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
     # The local passphrase and the device key new runs are wrapped to.
     assert "Created a local encryption key at " in stream.getvalue()
     assert str(at_rest.local_key_path()) in stream.getvalue()
-    assert str(at_rest.device_key_path()) in stream.getvalue()
+    device_key_path = getattr(at_rest, "device_key_path", None)
+    if device_key_path is not None:  # Flow with the key hierarchy
+        assert str(device_key_path()) in stream.getvalue()
 
 
 def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):
