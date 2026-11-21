@@ -20,7 +20,7 @@ from openadapt_flow.form_tx.codecs import (
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
-    is_native_radio,
+    is_radio,
     match_anchor_in_snapshot,
 )
 from openadapt_flow.form_tx.types import (
@@ -129,7 +129,7 @@ def _observed_control_matches(
     if (
         binding.control_kind == ControlKind.CHECKBOX
         and ctrl.checked is not None
-        and (not ctrl.current_value.strip() or is_native_radio(ctrl))
+        and (not ctrl.current_value.strip() or is_radio(ctrl))
     ):
         return values_equivalent(expected_val, ctrl.checked, binding.codec)
 

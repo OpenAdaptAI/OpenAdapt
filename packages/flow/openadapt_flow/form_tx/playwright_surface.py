@@ -44,6 +44,14 @@ class SurfaceSettleTimeoutError(TimeoutError):
     """Raised when a form surface remains busy past ``ui_profile.max_settle_ms``."""
 
 
+class SurfaceStateError(RuntimeError):
+    """A control did not take the state the surface set; the run must stop."""
+
+
+def _css_string(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 class PopupContractError(RuntimeError):
     """Raised when a child popup window fails to open or violates URL/title contracts."""
 
@@ -146,6 +154,11 @@ _SNAPSHOT_WALKER_JS = r"""
         'select an option',
         'please select',
         'none selected',
+        'select one',
+        '-- select one --',
+        'select',
+        'choose one',
+        'please choose',
     ]);
     const isPlaceholderText = (s) => PLACEHOLDERS.has(cleanText(s).toLowerCase());
 
@@ -385,6 +398,62 @@ _SNAPSHOT_WALKER_JS = r"""
                 }
             }
         }
+        // An ARIA radio, checkbox or switch named only by its own text.
+        if (tag !== 'input' && (role === 'radio' || role === 'checkbox' || role === 'switch')) {
+            const own = cleanText(el.textContent);
+            if (own) return own;
+        }
+        // A native radio or checkbox followed by bare text ("<input> Yes").
+        if (tag === 'input' && (inputType === 'radio' || inputType === 'checkbox')) {
+            let node = el.nextSibling;
+            let text = '';
+            while (node) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    text += node.textContent;
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (isInteractiveElement(node) || node.tagName === 'BR' ||
+                            node.tagName === 'LABEL' ||
+                            safeQueryAll(node, 'input, select, textarea, button').length) {
+                        break;
+                    }
+                    text += node.textContent;
+                }
+                if (cleanText(text) && node.nextSibling &&
+                        node.nextSibling.nodeType === Node.ELEMENT_NODE &&
+                        isInteractiveElement(node.nextSibling)) {
+                    break;
+                }
+                node = node.nextSibling;
+            }
+            const t = cleanText(text);
+            if (t) return t;
+        }
+        return '';
+    };
+
+    // The visible name of a radio group: its radiogroup's aria-labelledby or
+    // aria-label, else the legend of its fieldset.
+    const groupLabelFor = (el) => {
+        const rg = el.closest('[role="radiogroup"]');
+        if (rg) {
+            const lby = cleanText(rg.getAttribute('aria-labelledby'));
+            if (lby) {
+                const root = rg.getRootNode();
+                const txt = lby.split(/\s+/).map((id) => {
+                    const ref = (root.getElementById ? root.getElementById(id) : null) ||
+                        document.getElementById(id);
+                    return ref ? cleanText(ref.textContent) : '';
+                }).filter(Boolean).join(' ');
+                if (txt) return txt;
+            }
+            const al = cleanText(rg.getAttribute('aria-label'));
+            if (al) return al;
+        }
+        const fs = el.closest('fieldset');
+        if (fs) {
+            const legend = Array.from(fs.children).find((c) => c.tagName === 'LEGEND');
+            if (legend) return cleanText(legend.textContent);
+        }
         return '';
     };
 
@@ -542,6 +611,8 @@ _SNAPSHOT_WALKER_JS = r"""
         let currentValue = '';
         let options = [];
         let radioValue = '';
+        let radioGroup = '';
+        let groupLabel = '';
 
         if (tag === 'select') {
             options = Array.from(el.options).map((opt) => ({
@@ -582,7 +653,9 @@ _SNAPSHOT_WALKER_JS = r"""
             checked = Boolean(el.checked);
             radioValue = String(el.value || '');
             currentValue = checked ? radioValue : '';
+            groupLabel = groupLabelFor(el);
             if (nameAttr) {
+                radioGroup = 'name:' + nameAttr;
                 const scope = el.form || el.getRootNode() || document;
                 const peers = safeQueryAll(scope, 'input[type="radio"]').filter(
                     (r) => r.name === nameAttr && (r.form || null) === (el.form || null)
@@ -596,8 +669,20 @@ _SNAPSHOT_WALKER_JS = r"""
             checked = el.getAttribute('aria-checked') === 'true';
             currentValue = checked ? 'true' : 'false';
         } else if (role === 'radio') {
+            // Like a native radio: unchecked reads as empty; options list the
+            // radios of its radiogroup (or, without one, its parent).
             checked = el.getAttribute('aria-checked') === 'true';
-            currentValue = cleanText(el.getAttribute('data-value') || el.textContent || '');
+            radioValue = cleanText(el.getAttribute('data-value') || el.textContent || '');
+            currentValue = checked ? radioValue : '';
+            groupLabel = groupLabelFor(el);
+            const container = el.closest('[role="radiogroup"]') || el.parentElement;
+            if (container) {
+                radioGroup = 'aria:' + computeDomSelector(container);
+                options = safeQueryAll(container, '[role="radio"]').map((r) => ({
+                    value: cleanText(r.getAttribute('data-value') || r.textContent || ''),
+                    label: resolveLabelText(r, r.tagName.toLowerCase(), '', 'radio'),
+                }));
+            }
         } else if (tag === 'button') {
             currentValue = '';
         } else if (tag === 'output' || el.hasAttribute('data-readonly-output')) {
@@ -655,6 +740,8 @@ _SNAPSHOT_WALKER_JS = r"""
             options,
             is_secret: isSecret,
             radio_value: radioValue,
+            radio_group: radioGroup,
+            group_label: groupLabel,
         });
     }
 
@@ -1318,6 +1405,8 @@ class PlaywrightFormSurface:
                     options=opts,
                     is_secret=is_secret,
                     radio_value=str(item.get("radio_value") or ""),
+                    radio_group=str(item.get("radio_group") or ""),
+                    group_label=str(item.get("group_label") or ""),
                 )
             )
 
@@ -1459,43 +1548,82 @@ class PlaywrightFormSurface:
             pass
         self.wait_for_quiescence()
 
-    def set_checkbox_or_radio(self, dom_selector: str, checked: bool = True) -> None:
-        """Set a checkbox or radio control and wait for settle."""
-        loc = self._resolve_live_locator(dom_selector)
-        meta = loc.evaluate(
-            "(el) => ({ tag: el.tagName.toLowerCase(), type: (el.getAttribute('type') || '').toLowerCase(), role: (el.getAttribute('role') || '').toLowerCase(), ariaChecked: el.getAttribute('aria-checked'), propChecked: Boolean(el.checked) })"
-        )
-        tag = meta.get("tag")
-        inp_type = meta.get("type")
-        role = meta.get("role")
+    _CHECK_STATE_JS = (
+        "(el) => ({ tag: el.tagName.toLowerCase(), "
+        "type: (el.getAttribute('type') || '').toLowerCase(), "
+        "role: (el.getAttribute('role') || '').toLowerCase(), "
+        "name: el.getAttribute('name') || '', value: el.getAttribute('value'), "
+        "ariaChecked: el.getAttribute('aria-checked'), "
+        "propChecked: Boolean(el.checked) })"
+    )
 
-        if tag == "input" and inp_type == "radio":
-            if not checked:
-                if meta.get("propChecked"):
-                    raise ValueError(
-                        f"Cannot uncheck native radio {dom_selector!r} directly"
-                    )
-            else:
-                loc.check(timeout=self._ui_profile.max_settle_ms)
-        elif tag == "input" and inp_type == "checkbox":
-            if checked:
-                loc.check(timeout=self._ui_profile.max_settle_ms)
-            else:
-                loc.uncheck(timeout=self._ui_profile.max_settle_ms)
-        elif role in ("checkbox", "radio"):
-            currently_checked = meta.get("ariaChecked") == "true"
-            if currently_checked != checked:
-                loc.click(timeout=self._ui_profile.max_settle_ms)
-        else:
+    def _read_check_state(self, dom_selector: str) -> dict[str, Any]:
+        loc = self._resolve_live_locator(dom_selector)
+        return dict(loc.evaluate(self._CHECK_STATE_JS))
+
+    def set_checkbox_or_radio(self, dom_selector: str, checked: bool = True) -> None:
+        """Set a checkbox or radio by clicking it, then confirm the state took.
+
+        A click, not ``Locator.check``: many pages replace the element on
+        change, and ``check`` waits on the original element until it times
+        out. After the click the control is found again by a stable selector
+        (``name`` plus ``value`` for a native radio or checkbox, else the
+        original selector) and its state is re-read. If the state did not
+        take, a ``SurfaceStateError`` is raised, which stops the run.
+        """
+        meta = self._read_check_state(dom_selector)
+        tag, inp_type, role = meta.get("tag"), meta.get("type"), meta.get("role")
+        native = tag == "input" and inp_type in ("radio", "checkbox")
+        if not native and role not in ("checkbox", "radio", "switch"):
             raise ValueError(
                 f"Element {dom_selector!r} is not a checkbox or radio control"
             )
+        if native:
+            current = bool(meta.get("propChecked"))
+        else:
+            current = meta.get("ariaChecked") == "true"
+        if native and inp_type == "radio" and not checked:
+            if current:
+                raise ValueError(
+                    f"Cannot uncheck native radio {dom_selector!r} directly"
+                )
+            return
+
+        # Where to find the control again if the page re-renders it.
+        recheck_selector = dom_selector
+        name, value = meta.get("name") or "", meta.get("value")
+        if native and name:
+            stable = f'input[type="{inp_type}"][name={_css_string(name)}]'
+            if value is not None:
+                stable += f"[value={_css_string(str(value))}]"
+            if " >> " in dom_selector:
+                stable = dom_selector.rsplit(" >> ", 1)[0] + " >> " + stable
+            recheck_selector = stable
+
+        if current != checked:
+            loc = self._resolve_live_locator(dom_selector)
+            loc.click(timeout=self._ui_profile.max_settle_ms)
+            try:
+                loc.blur(timeout=500)
+            except Exception:
+                pass
+        self.wait_for_quiescence()
 
         try:
-            loc.blur(timeout=500)
-        except Exception:
-            pass
-        self.wait_for_quiescence()
+            after = self._read_check_state(recheck_selector)
+        except (MissingAnchorError, AmbiguousAnchorError) as exc:
+            raise SurfaceStateError(
+                f"Could not find {dom_selector!r} again after setting it: {exc}"
+            ) from exc
+        if native:
+            now = bool(after.get("propChecked"))
+        else:
+            now = after.get("ariaChecked") == "true"
+        if now != checked:
+            raise SurfaceStateError(
+                f"{dom_selector!r} did not become "
+                f"{'checked' if checked else 'unchecked'} after a click"
+            )
 
     def click(self, dom_selector: str) -> None:
         """Click ``dom_selector`` and wait for settle."""
@@ -1720,5 +1848,6 @@ __all__ = [
     "KeepaliveMutationError",
     "PlaywrightFormSurface",
     "PopupContractError",
+    "SurfaceStateError",
     "SurfaceSettleTimeoutError",
 ]

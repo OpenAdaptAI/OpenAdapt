@@ -87,6 +87,11 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "-- Select --",
     "Select...",
     "Choose...",
+    "Select one",
+    "-- Select one --",
+    "Select",
+    "Choose one",
+    "Please choose",
 )
 
 
@@ -767,13 +772,13 @@ class FormReconciler:
                     opt = resolve_unique_option(
                         intended_value, ctrl.options, codec, placeholder_values
                     )
+                    group = radio_group_key(ctrl)
                     radio_peers = [
                         c
                         for c in snapshot.controls
                         if c.visible
-                        and c.input_type.casefold() == "radio"
-                        and c.name_attr
-                        and c.name_attr == ctrl.name_attr
+                        and group is not None
+                        and radio_group_key(c) == group
                         and (c.radio_value or c.current_value) == opt.value
                     ]
                     if len(radio_peers) == 1:
@@ -794,7 +799,13 @@ class FormReconciler:
             raise CodecValueError(
                 f"Control kind {control_kind.value!r} cannot be directly actuated as an input"
             )
-        except CodecValueError as exc:
+        except Exception as exc:
+            # A codec mismatch, or a control that did not take the state the
+            # surface set (``SurfaceStateError``), stops for a person.
+            if not isinstance(exc, CodecValueError) and (
+                type(exc).__name__ != "SurfaceStateError"
+            ):
+                raise
             sig = compute_field_signature(ctrl)
             halt_id = _deterministic_halt_id(
                 run_id,

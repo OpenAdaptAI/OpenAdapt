@@ -303,7 +303,17 @@ class FieldBindingSpec(BaseModel):
     prefill_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT
     triggers_re_render: bool = False
     required_in_pack: bool = False
-    placeholder_values: tuple[str, ...] = ("", "-- Select --", "Select...", "Choose...")
+    placeholder_values: tuple[str, ...] = (
+        "",
+        "-- Select --",
+        "Select...",
+        "Choose...",
+        "Select one",
+        "-- Select one --",
+        "Select",
+        "Choose one",
+        "Please choose",
+    )
 
 
 class EntityTableSpec(BaseModel):
@@ -447,6 +457,10 @@ class ObservedControl(BaseModel):
     # A native radio's own value attribute. ``current_value`` holds it only
     # while the radio is checked; an unchecked radio reads as empty.
     radio_value: str = ""
+    # The radio group this radio belongs to (native: its name; ARIA: its
+    # radiogroup container), and the group's visible label, if any.
+    radio_group: str = ""
+    group_label: str = ""
 
     @model_validator(mode="after")
     def _scrub_secret_fields(self) -> "ObservedControl":
