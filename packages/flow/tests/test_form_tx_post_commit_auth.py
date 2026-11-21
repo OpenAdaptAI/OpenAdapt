@@ -224,7 +224,10 @@ def test_sign_in_page_after_submit_without_a_banner_is_delivery_uncertain(
     ctx, page, posts = _serve(browser, {"/q": THEN_LOGIN, "/login": LOGIN})
     try:
         result = _run(
-            page, f"{ORIGIN}/q", _name_pack(), _dossier(**{"applicant.name": "Ana Ruiz"})
+            page,
+            f"{ORIGIN}/q",
+            _name_pack(),
+            _dossier(**{"applicant.name": "Ana Ruiz"}),
         )
     finally:
         ctx.close()
