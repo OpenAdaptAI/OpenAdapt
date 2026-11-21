@@ -151,6 +151,7 @@ environment-assigned surrogate key is the right choice for it.
 | `email` | `MaildirDeliveryVerifier` | maildir / SMTP-capture directory → one record per message (`to`, `subject`, `message_id`, body probe, freshness); verifies delivery TO THE CAPTURE POINT, not end-to-end receipt | **contract-proven in CI against maildir/tmp-dir fixtures** (wrong recipient, duplicate send, leak-to-other-recipient collateral hook) -- not live-proven against a production MTA |
 | `document` | `DocumentArrivalVerifier` | report arrival + **parseable-content assertion**: each candidate parses (JSON dotted paths or named-regex groups) into judgeable fields; a corrupt report REFUTEs a `parseable: True` contract | **contract-proven in CI against temp-dir fixtures** (corrupt report, wrong entity, duplicates, stale mtime) |
 | `document-hash` | `DocumentHashVerifier` | SHA-256 of each document in a store | live in CI (no external service) |
+| `local-state` | `LocalStateVerifier` | typed, read-only sources on this computer: a file (contents, SHA-256), a macOS preference key, a Windows registry value; one record per source ([LOCAL_STATE_CHECKS.md](LOCAL_STATE_CHECKS.md)) | unit tests with stand-ins in CI; lab-proven on Windows 11 (Notepad file save, registry reads); macOS source unit-tested only |
 
 All substrates share one judge (`runtime/effects/_common.py`), so
 at-most-once counting, idempotency-key de-duplication, field read-back,
@@ -1233,6 +1234,7 @@ Per-kind required fields:
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
 | `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
+| `local-state` | `local_state`: a list of `file`, `macos_defaults` or `windows_registry` sources | `poll_interval_s` |
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
 
 A paged list is read whole or not at all. `fhir` follows the Bundle's `next`
@@ -1473,7 +1475,7 @@ profiles gate on the tier, never on prose:
 
 | Tier | Label | What it proves | Adapters |
 |---|---|---|---|
-| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
+| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash`, `local-state` |
 | 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; a plugin may also declare it |
 | 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back; `desktop_readback` without its own sign-in |
 | 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |

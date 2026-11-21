@@ -2680,6 +2680,7 @@ def _external_network_call_state(
         "onscreen",
         "file",
         "document_hash",
+        "local_state",
         "snapshot",
         "test",
         "fake",
