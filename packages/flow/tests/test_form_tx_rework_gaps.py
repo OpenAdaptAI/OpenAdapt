@@ -246,13 +246,14 @@ show('app');
 """
 
 
-def _tabbed_pack(*, revisit: bool) -> FormPack:
+def _tabbed_pack(*, revisit: bool, first_revisit: bool = True) -> FormPack:
     def screen(sid: str, landmark: str, tab: str) -> WizardScreenSpec:
+        on = revisit and (first_revisit or sid != "app")
         return WizardScreenSpec(
             screen_id=sid,
             landmark_selector=landmark,
             next_button_anchor=FieldAnchorSpec(label_patterns=("^Save and continue$",)),
-            revisit_selector=tab if revisit else None,
+            revisit_selector=tab if on else None,
         )
 
     return FormPack(
@@ -320,16 +321,19 @@ def test_sign_in_mid_quote_rewalks_and_refills_before_submit(
     assert s.records[0]["deductible"] == "2500"
 
 
+@pytest.mark.parametrize("later_only", [False, True])
 def test_sign_in_mid_quote_without_a_way_back_stops_naming_fields(
-    site: tuple[_Site, str], browser: Any
+    site: tuple[_Site, str], browser: Any, later_only: bool
 ) -> None:
+    # later_only: only a screen after the first can be revisited, so a walk
+    # from there would skip the first screen's fields; it must stop instead.
     s, base = site
     s.pages["/"] = _TABBED
     page, _, reconciler, session = _start(
         browser,
         base,
         "/",
-        _tabbed_pack(revisit=False),
+        _tabbed_pack(revisit=later_only, first_revisit=False),
         _dossier(**{"applicant.first_name": "Avery", "coverage.deductible": "2500"}),
     )
     first = reconciler.run_until_halt_or_done(session)

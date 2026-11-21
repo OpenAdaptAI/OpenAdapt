@@ -641,7 +641,7 @@ class SummaryJudge:
                     )
                 )
 
-        # A date typed in day, month and year boxes, shown as one value.
+        # A date typed in day, month and year boxes, shown_date as one value.
         for sd in summary_check.split_date_readbacks:
             keys = (sd.day_key, sd.month_key, sd.year_key)
             facts3 = [expected_facts.get(k) for k in keys]
@@ -652,23 +652,23 @@ class SummaryJudge:
                 for f in facts3
             ]
             expected_iso = (
-                _split_date_expected(*(f.value for f in facts3))
+                _split_date_expected(*(f.value for f in facts3 if f is not None))
                 if all(f is not None for f in facts3)
                 else None
             )
-            shown: Optional[str] = None
+            shown_date: Optional[str] = None
             reason = ""
             try:
                 ctrl = match_anchor_in_snapshot(
                     sd.anchor, snapshot, include_readonly=True
                 )
                 if ctrl is not None:
-                    shown = ctrl.current_value
+                    shown_date = ctrl.current_value
                 else:
                     pair = match_text_pair_in_snapshot(sd.anchor, snapshot)
-                    shown = pair.value if pair is not None else None
+                    shown_date = pair.value if pair is not None else None
             except AmbiguousAnchorError as exc:
-                reason = f"Date is shown more than once: {exc}"
+                reason = f"Date is shown_date more than once: {exc}"
             if expected_iso is None:
                 for k, prov in zip(keys, provs):
                     verdicts.append(
@@ -677,7 +677,7 @@ class SummaryJudge:
                         )
                     )
                 continue
-            if shown is None or not shown.strip():
+            if shown_date is None or not shown_date.strip():
                 for k, prov in zip(keys, provs):
                     verdicts.append(
                         _not_checked(
@@ -686,7 +686,7 @@ class SummaryJudge:
                     )
                 continue
             try:
-                shown_iso = parse_iso_date_strict(shown, date_order=sd.date_order)
+                shown_iso = parse_iso_date_strict(shown_date, date_order=sd.date_order)
             except CodecValueError:
                 shown_iso = None
             for k, prov in zip(keys, provs):
@@ -703,7 +703,9 @@ class SummaryJudge:
                     )
                 elif shown_iso is None:
                     verdicts.append(
-                        _not_checked(k, prov, f"Shown date {shown!r} could not be read")
+                        _not_checked(
+                            k, prov, f"Shown date {shown_date!r} could not be read"
+                        )
                     )
                 else:
                     verdicts.append(

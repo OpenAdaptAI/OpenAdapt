@@ -72,6 +72,7 @@ from openadapt_flow.form_tx.types import (
     PrefillPolicy,
     ProvenanceKind,
     UIProfileSpec,
+    UnboundControlSpec,
     WizardScreenSpec,
     canonical_sha256,
 )
@@ -1595,25 +1596,10 @@ class FormReconciler:
         if not earlier and not elsewhere:
             session._interrupted = False
             return None
-        target = next(
-            (
-                specs[sid]
-                for sid in earlier
-                if sid in specs and specs[sid].revisit_selector
-            ),
-            None,
-        )
-        if target is None:
-            target = next(
-                (
-                    spec
-                    for spec in session.pack.screens
-                    if spec.revisit_selector
-                    and spec.screen_id != current_screen.screen_id
-                    and not spec.is_commit_screen
-                ),
-                None,
-            )
+        # Only a walk from the first screen the run visited re-checks every
+        # earlier field; starting later would skip the first screen's fields.
+        first = specs.get(earlier[0]) if earlier else None
+        target = first if first is not None and first.revisit_selector else None
         if target is not None and session._rewalks < 2:
             session._rewalks += 1
             try:
@@ -1792,14 +1778,14 @@ class FormReconciler:
                     opt = [o for o in ctrl.options if o.value == ctrl.current_value]
                     if len(opt) == 1 and opt[0].label:
                         shown = opt[0].label
-            spec = declared.get(ctrl.dom_selector) or (
-                declared.get(f"group|{group}") if group is not None else None
-            )
-            if spec is not None:
-                blank = (empty and "" in spec.blank_values) or any(
+            declared_spec: Optional[UnboundControlSpec] = declared.get(
+                ctrl.dom_selector
+            ) or (declared.get(f"group|{group}") if group is not None else None)
+            if declared_spec is not None:
+                blank = (empty and "" in declared_spec.blank_values) or any(
                     values_equivalent(b, shown, fold)
                     or values_equivalent(b, ctrl.current_value, fold)
-                    for b in spec.blank_values
+                    for b in declared_spec.blank_values
                     if b
                 )
                 if blank:
