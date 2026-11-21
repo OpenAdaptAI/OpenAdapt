@@ -60,6 +60,7 @@ FLOW_NAMES = {
     "disambiguate": "compile --disambiguate",
     "emit-mcp": "workflow emit-mcp",
     "emit-skill": "workflow emit-skill",
+    "exceptions": "approve exceptions",
     "explain": "inspect explain",
     "fleet": "services fleet",
     "for-each": "run --for-each",

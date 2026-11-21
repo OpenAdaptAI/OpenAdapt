@@ -646,6 +646,7 @@ improvising or retrying when something is off.
 | Admit once, then stop only on problems | Released ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), behind a readiness gate | Synthetic | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
 | Show the field values a save writes on the phone | Released ([#1257](https://github.com/OpenAdaptAI/OpenAdapt/pull/1257)) | Unit tests | `console/save_approvals.py` |
 | Show why an agent asked for a save: who asked, its own reason (as a quote), the screen text it saw, and any of that text that reads like an instruction to an agent | Released ([#1359](https://github.com/OpenAdaptAI/OpenAdapt/pull/1359)) | Unit tests, synthetic | `ApprovalProvenance` in `approval_mode/item_approval.py`; the phone card in openadapt-desktop `portal/shell` |
+| Let any agent stop and ask a person, with one closed question and one signed answer: seven kinds (`second_factor`, `unexpected_dialog`, `session_expired`, `timeout_or_stall`, `possible_duplicate`, `ambiguous_record`, `cannot_complete`), five answers, a `raise_exception` MCP tool that blocks until answered, cards from any run in Desktop's stop queue and on a paired phone, and detectors that say when to ask. Only a verified `continue` or `done_by_person` lets the run go on; a decline, an expiry or an unverifiable answer stops it before any write. The tool can't make an agent that ignores it stop. The share of cases that need a person is unmeasured | On main | Unit tests and a synthetic end-to-end test (a scripted agent on a one-time-code page over real MCP stdio: one write after `done_by_person`, zero after `abort`, `skip`, an expiry or a key off the roster, read from the app's own state) | `openadapt-flow exceptions`, [EXCEPTION_QUEUE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EXCEPTION_QUEUE.md), openadapt-desktop `exception_queue.py` |
 
 ## Branching work, not one linear path
 
@@ -848,6 +849,7 @@ A test fails when a command has no file or this list is out of date.
 - `business-decisions`
 - `console`
 - `deferred`
+- `exceptions`: Let any agent stop and ask a person: `serve` runs the `raise_exception` MCP tool, `list` shows waiting cards, and `answer` writes one closed answer signed with an approver key. A run goes on only after a verified `continue` or `done_by_person`. See [EXCEPTION_QUEUE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EXCEPTION_QUEUE.md).
 - `explain`
 - `item-approval`
 - `replay`
