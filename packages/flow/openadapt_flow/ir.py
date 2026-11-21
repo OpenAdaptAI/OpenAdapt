@@ -65,6 +65,7 @@ from openadapt_flow.records.schema import (
     GradeGate,
     ReadProof,
 )
+from openadapt_flow.second_factor import check_step_shape as _check_one_time_shape
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -2364,6 +2365,8 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    one_time: Optional[Literal["code", "approval"]] = None  # second_factor.py
+    _validate_one_time = model_validator(mode="after")(_check_one_time_shape)
     native_selection: Optional[NativeSelectContract] = None
     choice: Optional[OptionChoice] = Field(
         default=None,
@@ -2573,12 +2576,9 @@ class Step(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep steps without a selected-record parameter byte-identical."""
         data: dict[str, Any] = handler(self)
-        if self.target_param is None:
-            data.pop("target_param", None)
-        if self.native_selection is None:
-            data.pop("native_selection", None)
-        if self.choice is None:
-            data.pop("choice", None)
+        for key in ("target_param", "one_time", "native_selection", "choice"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
 
     @model_validator(mode="after")
