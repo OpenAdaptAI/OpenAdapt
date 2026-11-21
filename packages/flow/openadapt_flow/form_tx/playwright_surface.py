@@ -1499,6 +1499,7 @@ class PlaywrightFormSurface:
         self._scoped_to_page_only = _scoped_to_page_only
 
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -1524,6 +1525,7 @@ class PlaywrightFormSurface:
             self._event_target.on("request", self._on_request)
             self._event_target.on("requestfinished", self._on_request_done)
             self._event_target.on("requestfailed", self._on_request_done)
+            self._event_target.on("response", self._on_response)
         except Exception:
             pass
 
@@ -1607,6 +1609,11 @@ class PlaywrightFormSurface:
         return self._mutation_count
 
     @property
+    def confirmed_mutation_count(self) -> int:
+        """Non-ignored state-changing requests the server answered with 2xx/3xx."""
+        return self._confirmed_mutation_count
+
+    @property
     def total_mutation_count(self) -> int:
         """Count of all state-changing HTTP requests (including ignored UI PPR paths)."""
         return self._total_mutation_count
@@ -1632,6 +1639,7 @@ class PlaywrightFormSurface:
             ("request", self._on_request),
             ("requestfinished", self._on_request_done),
             ("requestfailed", self._on_request_done),
+            ("response", self._on_response),
         ):
             try:
                 self._event_target.remove_listener(ev_name, cb)
@@ -1676,6 +1684,22 @@ class PlaywrightFormSurface:
 
     def _on_request_done(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+
+    def _on_response(self, response: Any) -> None:
+        """Count state-changing requests the server answered with success."""
+        try:
+            request = response.request
+            if self._detached or not self._request_belongs_to_surface(request):
+                return
+            method = str(request.method or "").upper()
+            status = int(response.status)
+            path = urlsplit(str(request.url or "")).path or "/"
+        except Exception:
+            return
+        if method not in _MUTATION_METHODS or self._is_ignored_mutation_path(path):
+            return
+        if 200 <= status < 400:
+            self._confirmed_mutation_count += 1
 
     def _is_page_closed(self) -> bool:
         try:

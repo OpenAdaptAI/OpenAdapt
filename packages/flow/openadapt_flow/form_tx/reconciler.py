@@ -185,6 +185,8 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
+        # Successful-save count when the commit control was clicked.
+        self._pre_commit_confirmed: Optional[int] = None
         # Surface mutation count when this run first started.
         self._mutations_at_start: Optional[int] = None
         # True only while apply_human_resolution resumes the run.
@@ -3018,7 +3020,17 @@ class FormReconciler:
                 ),
             )
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
-        if delta_mutations == 0:
+        confirmed_now = getattr(surface, "confirmed_mutation_count", None)
+        confirmed_before = session._pre_commit_confirmed
+        no_confirmed_save = (
+            confirmed_now is not None
+            and confirmed_before is not None
+            and confirmed_now - confirmed_before <= 0
+        )
+        still_on_commit_screen = self._is_still_on_uncommitted_commit_screen(
+            post_commit_snapshot, pack
+        )
+        if delta_mutations == 0 or no_confirmed_save or still_on_commit_screen:
             # absent-evidence-as-success: a commit click that sent no save
             # request is no evidence the record exists; reading the form back
             # would only read the run's own edits.
@@ -3030,7 +3042,13 @@ class FormReconciler:
                 pack.pack_id,
                 sig,
             )
-            msg = "The commit control was clicked but no save request was seen"
+            msg = (
+                "The commit control was clicked but no save request was seen"
+                if delta_mutations == 0
+                else "No save request was answered with success"
+                if no_confirmed_save
+                else "The page is still on the commit screen after the commit click"
+            ) + "; there is no evidence the record was saved"
             halt = FormHaltItem(
                 halt_id=halt_id,
                 kind=FormHaltKind.MUTATION_BUDGET_EXCEEDED,
@@ -3149,6 +3167,7 @@ class FormReconciler:
                 *(f"optional-blank:{k}" for k in sorted(session._optional_blank)),
                 *(f"intake:{k}" for k in self._unconsumed_intake_keys(session)),
             ),
+            writes=session.writes,
         )
         return self._build_result(
             session,
@@ -3650,6 +3669,9 @@ class FormReconciler:
 
                 pre_commit_mutations = active_surface.mutation_count
                 session._pre_commit_mutations = pre_commit_mutations
+                session._pre_commit_confirmed = getattr(
+                    active_surface, "confirmed_mutation_count", None
+                )
                 session._commit_in_progress = True
                 session._commit_clicked = True
 

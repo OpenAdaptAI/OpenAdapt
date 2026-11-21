@@ -1905,6 +1905,7 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
         summary_verdict=_all_bound_passed(pack, dossier),
+        writes=(),
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
@@ -2260,6 +2261,7 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
         summary_verdict=_all_bound_passed(pack, dossier),
+        writes=(),
         pack=pack,
         dossier=dossier,
         signing_key=(priv, pub),
