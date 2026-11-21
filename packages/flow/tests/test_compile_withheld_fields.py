@@ -23,7 +23,9 @@ USERNAME_BOX = (20, 10, 120, 20)  # withheld, blacked out by the recorder
 PASSWORD_BOX = (20, 45, 120, 20)
 
 
-def _frame(*, black: tuple[int, int, int, int] | None = None, whole: bool = False) -> bytes:
+def _frame(
+    *, black: tuple[int, int, int, int] | None = None, whole: bool = False
+) -> bytes:
     image = Image.new("RGB", (200, 100), "white")
     draw = ImageDraw.Draw(image)
     draw.rectangle((20, 45, 140, 65), outline=(30, 90, 200), width=2)
@@ -73,7 +75,9 @@ def test_a_check_over_the_black_box_is_clipped_and_recropped(tmp_path: Path):
     changes = _checks_without_withheld_fields(
         step, _frame(black=USERNAME_BOX), [USERNAME_BOX], tmp_path
     )
-    region_checks = [pc for pc in step.expect if pc.kind is PostconditionKind.REGION_STABLE]
+    region_checks = [
+        pc for pc in step.expect if pc.kind is PostconditionKind.REGION_STABLE
+    ]
     assert [pc.region for pc in region_checks] == [(10, 30, 160, 50)]
     assert region_checks[0].phash != "0" * 16
     template = Image.open(tmp_path / "templates/step_002_expect.png").convert("L")
@@ -98,14 +102,19 @@ def test_a_check_inside_the_black_box_is_dropped_and_recorded(tmp_path: Path):
 
 def test_a_frame_from_before_the_field_was_typed_keeps_its_check(tmp_path: Path):
     step = _step((10, 0, 160, 80))
-    assert _checks_without_withheld_fields(step, _frame(), [USERNAME_BOX], tmp_path) == []
+    assert (
+        _checks_without_withheld_fields(step, _frame(), [USERNAME_BOX], tmp_path) == []
+    )
     assert step.expect[0].region == (10, 0, 160, 80)
 
 
 def test_a_check_clear_of_every_box_is_untouched(tmp_path: Path):
     step = _step(PASSWORD_BOX)
     before = step.model_copy(deep=True)
-    assert _checks_without_withheld_fields(
-        step, _frame(black=USERNAME_BOX), [USERNAME_BOX], tmp_path
-    ) == []
+    assert (
+        _checks_without_withheld_fields(
+            step, _frame(black=USERNAME_BOX), [USERNAME_BOX], tmp_path
+        )
+        == []
+    )
     assert step == before

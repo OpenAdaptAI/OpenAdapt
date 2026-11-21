@@ -992,19 +992,33 @@ def _checks_without_withheld_fields(
             region = None
         note = {"step": step.id, "region": list(pc.region or ())}
         if region is None:
-            notes.append({**note, "change": "drop_region_stable_over_withheld_field",
-                          "evidence": "the recorded crop holds a withheld field's black box"})
+            notes.append(
+                {
+                    **note,
+                    "change": "drop_region_stable_over_withheld_field",
+                    "evidence": "the recorded crop holds a withheld field's black box",
+                }
+            )
             continue
         rel = pc.template or f"templates/{step.id}_expect.png"
         _sealed.write_bytes(bundle / rel, _crop_png(after_png, region))
-        kept.append(pc.model_copy(update={
-            "region": region,
-            "phash": phash_png(after_png, region=region),
-            "template": rel,
-        }))
-        notes.append({**note, "change": "clip_region_stable_off_withheld_field",
-                      "evidence": "the recorded crop held a withheld field's black box",
-                      "clipped_region": list(region)})
+        kept.append(
+            pc.model_copy(
+                update={
+                    "region": region,
+                    "phash": phash_png(after_png, region=region),
+                    "template": rel,
+                }
+            )
+        )
+        notes.append(
+            {
+                **note,
+                "change": "clip_region_stable_off_withheld_field",
+                "evidence": "the recorded crop held a withheld field's black box",
+                "clipped_region": list(region),
+            }
+        )
     step.expect = kept
     return notes
 
