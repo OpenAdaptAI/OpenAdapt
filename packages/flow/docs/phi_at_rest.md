@@ -176,8 +176,10 @@ machine one:
 3. Linux: `/etc/openadapt/policy.json`, owned by root and writable by root
    only;
 4. `OPENADAPT_POLICY=<file>`. It may set organization mode only when it is
-   owned by root (`OPENADAPT_POLICY_TRUST_USER_FILE=1` lifts that for
-   development, and status says so).
+   owned by root, so on Windows only Group Policy or the registry can set it
+   (`OPENADAPT_POLICY_TRUST_USER_FILE=1` lifts that for development, and
+   status says so). A named file that is missing or unreadable stops the
+   command; it never falls back to solo mode.
 
 ```json
 {
@@ -201,6 +203,12 @@ machine one:
   organization recipient, or no `key_archive` stops recording and running.
 - If the archive is unreachable, records stay local as "not yet archived"
   (`at-rest status` counts them), and new sets stop after `max_unarchived`.
+  `openadapt-flow at-rest archive` sends them once it is back (and the next
+  new set tries that first), so recording resumes.
+- `records: inline` in organization mode is the choice of recovery over
+  shredding: every header carries the record, wrapped to the organization's
+  keys, so the organization can open any copy, but shredding reaches only
+  copies you can delete, as in solo mode.
 - Only a local or mounted path (`file://`) is supported as `key_archive` so
   far; `s3://` and `smb://` refuse.
 - OpenAdapt Cloud never distributes the organization's key or holds any key.
@@ -236,7 +244,10 @@ count. It prints no key material.
 ## Crypto-shredding
 
 `openadapt-flow at-rest shred DIR --yes` destroys the set's bucket key: the
-local record is overwritten and deleted, and the archive copy deleted. It
+local record is overwritten and deleted, and the archive copy deleted. If the
+archive copy can't be deleted (an offline or read-only archive), the command
+says the shred is not complete and exits non-zero; running it again, or
+`at-rest archive`, finishes it once the archive is reachable. It
 also drops the record from the header, and deletes the durable checkpoints
 and other stores' ciphertext inside the set. It returns a shred record
 (bucket id, time, copies destroyed). The library call is

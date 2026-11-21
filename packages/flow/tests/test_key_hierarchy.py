@@ -534,3 +534,83 @@ def test_recovery_key_derivation_matches_rfc_9180() -> None:
     assert private.private_numbers().private_value.to_bytes(32, "big").hex() == (
         "4995788ef4b9d6132b249ce59a77281493eb39af373d236a1fe415cb0c2d7beb"
     )
+
+
+# -- review fixes: shred completeness, archive recovery, policy loading -----------
+
+
+def test_a_shred_with_an_unreachable_archive_is_not_complete_until_retried(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    key_file, _org = _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    bucket_id = _header(run)["key_ref"]["bucket_id"]
+    archived = tmp_path / "archive" / f"{bucket_id}.json"
+    assert archived.is_file()
+    os.chmod(tmp_path / "archive", 0o500)  # the archive goes read-only
+    try:
+        record = sealed_set.shred(run)
+        assert record["complete"] is False and archived.is_file()
+        assert kh.pending_shreds() == [bucket_id]
+        assert sealed_set.shred(run)["complete"] is False  # still read-only
+    finally:
+        os.chmod(tmp_path / "archive", 0o700)
+    assert sealed_set.shred(run)["complete"] is True
+    assert not archived.exists() and kh.pending_shreds() == []
+
+
+def test_the_cli_reports_an_incomplete_shred(
+    home, tmp_path, monkeypatch, capsys
+) -> None:
+    from openadapt_flow.__main__ import main
+
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    os.chmod(tmp_path / "archive", 0o500)
+    try:
+        assert main(["at-rest", "shred", str(run), "--yes"]) == 1
+        assert "NOT COMPLETE" in capsys.readouterr().err
+    finally:
+        os.chmod(tmp_path / "archive", 0o700)
+    assert main(["at-rest", "shred", str(run), "--yes"]) == 0
+
+
+def test_after_an_outage_the_pending_records_archive_and_recording_resumes(
+    home, tmp_path, monkeypatch
+) -> None:
+    blocker = tmp_path / "archive"
+    blocker.write_text("")  # unreachable: a file where the folder should be
+    _p256_policy(tmp_path, monkeypatch, max_unarchived=1)
+    _seal(home[0].parent / "a", {"report.json": b"{}"})
+    assert kh.unarchived_count() == 1
+    with pytest.raises(sealed_set.SealedSetError, match="not reached the organization"):
+        _seal(home[0].parent / "b", {"report.json": b"{}"})
+    blocker.unlink()  # the archive is back
+    assert kh.archive_pending()["archived"] == 1
+    assert kh.unarchived_count() == 0
+    _seal(home[0].parent / "c", {"report.json": b"{}"})
+    assert len(list((tmp_path / "archive").glob("*.json"))) == 2
+
+
+def test_the_next_set_archives_pending_records_itself(
+    home, tmp_path, monkeypatch
+) -> None:
+    blocker = tmp_path / "archive"
+    blocker.write_text("")
+    _p256_policy(tmp_path, monkeypatch, max_unarchived=1)
+    _seal(home[0].parent / "a", {"report.json": b"{}"})
+    blocker.unlink()
+    _seal(home[0].parent / "b", {"report.json": b"{}"})  # no refusal
+    assert kh.unarchived_count() == 0
+
+
+def test_a_named_policy_file_that_is_missing_refuses(
+    home, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(kh.POLICY_ENV, str(tmp_path / "gone.json"))
+    with pytest.raises(sealed_set.SealedSetError, match="never falls back"):
+        _seal(home[0].parent / "run", {"report.json": b"{}"})

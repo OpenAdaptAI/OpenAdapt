@@ -85,6 +85,21 @@ def _cmd_recovery_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_archive(args: argparse.Namespace) -> int:
+    from openadapt_flow import key_hierarchy as kh
+
+    try:
+        result = kh.archive_pending()
+    except kh.KeyHierarchyError as exc:
+        print(f"at-rest archive: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Archived {result['archived']} key record(s); {result['failed']} could "
+        f"not reach the archive; {result['shreds_pending']} shred(s) still pending."
+    )
+    return 0 if not (result["failed"] or result["shreds_pending"]) else 1
+
+
 def _cmd_shred(args: argparse.Namespace) -> int:
     from openadapt_flow import sealed_set
 
@@ -105,6 +120,15 @@ def _cmd_shred(args: argparse.Namespace) -> int:
         print(f"at-rest shred: {exc}", file=sys.stderr)
         return 2
     copies = ", ".join(record.get("copies_destroyed") or []) or "none tracked"  # type: ignore[arg-type]
+    if record.get("complete") is False:
+        print(
+            f"at-rest shred: NOT COMPLETE for {root}: destroyed {copies}, but the "
+            "organization archive's copy of its key could not be deleted (offline "
+            "or read-only?). Run this again, or `openadapt-flow at-rest archive`, "
+            "once the archive is reachable.",
+            file=sys.stderr,
+        )
+        return 1
     print(f"Shredded {root}: bucket key copies destroyed: {copies}.")
     if record.get("records") == "inline":
         print(
@@ -127,6 +151,7 @@ STRICT_SAFE: frozenset[str] = frozenset(
     {
         "openadapt_flow.cli_at_rest:_cmd_status",
         "openadapt_flow.cli_at_rest:_cmd_recovery_create",
+        "openadapt_flow.cli_at_rest:_cmd_archive",
     }
 )
 
@@ -153,6 +178,16 @@ def lacks_key(root: object, kind: str) -> bool:
     if sealed_set.read_header(root).get("version") == sealed_set.ENVELOPE_VERSION:  # type: ignore[arg-type]
         return False
     return not (sealed_set.passphrase_for(kind) or crypto.resolve_read_key(None))
+
+
+def precheck_open(root: object) -> None:
+    """Open ``root`` before a command runs, to tell a missing key apart. A
+    shredded set opens for nobody by design; ``at-rest shred`` retries it."""
+    from openadapt_flow import sealed_set
+
+    if sealed_set.read_header(root).get("shredded"):  # type: ignore[arg-type]
+        return
+    sealed_set.open_set(root)  # type: ignore[arg-type]
 
 
 def add_no_encrypt(p: argparse.ArgumentParser) -> None:
@@ -209,6 +244,12 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=_cmd_status)
+    s = rsub.add_parser(
+        "archive",
+        help="Send key records and pending shreds to the organization archive",
+        allow_abbrev=False,
+    )
+    s.set_defaults(func=_cmd_archive)
     s = rsub.add_parser("recovery", help="The solo recovery key", allow_abbrev=False)
     rec = s.add_subparsers(dest="recovery_cmd", required=True)
     c = rec.add_parser(

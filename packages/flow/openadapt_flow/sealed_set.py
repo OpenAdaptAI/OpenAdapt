@@ -1530,6 +1530,20 @@ def shred(root: Path | str) -> dict[str, object]:
     removed: list[str] = []
     with mutation_lock(base):
         header = read_header(base)
+        previous = header.get("shred_record")
+        if header.get("shredded") and isinstance(previous, dict):
+            # Shredded before, with the archive copy still outstanding: retry.
+            if previous.get("complete") is False:
+                done = kh.retry_shred(str(previous.get("bucket_id")))
+                previous["complete"] = done
+                if done:
+                    previous["copies_destroyed"] = [
+                        *previous.get("copies_destroyed", []),  # type: ignore[list-item]
+                        "archive",
+                    ]
+                header["shred_record"] = previous
+                _replace_header(base, header)
+            return previous
         shred_record: dict[str, object] = {"schema": kh.SHRED_SCHEMA}
         if header.get("version") == ENVELOPE_VERSION and not header.get("shredded"):
             inline = header.get("bucket_record")
@@ -1540,7 +1554,16 @@ def shred(root: Path | str) -> dict[str, object]:
                 )
                 shred_record = kh.shred(record)
             except kh.KeyHierarchyError:
-                shred_record["copies_destroyed"] = []
+                # No record on this computer: still delete the archive copy
+                # (tracked as pending when the archive can't be reached).
+                key_ref = header.get("key_ref")
+                bucket_id = (
+                    key_ref.get("bucket_id") if isinstance(key_ref, dict) else None
+                )
+                if isinstance(bucket_id, str):
+                    shred_record = kh.shred({"bucket_id": bucket_id})
+                else:
+                    shred_record["copies_destroyed"] = []
         for name in (
             "bucket_record",
             "stanzas",

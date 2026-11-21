@@ -244,6 +244,11 @@ def _wait_for_stop(stop: Optional[Callable[[], bool]]) -> None:
             print("[record] If you set --until-cmd, run that check before compile.")
 
 
+#: ``encryption_key=POLICY``: decide from the at-rest policy, as ``record``
+#: does (encrypted by default; strict mode holds the raw capture back).
+POLICY: object = object()
+
+
 def record_desktop_capture(
     out_dir: Path | str,
     *,
@@ -260,7 +265,7 @@ def record_desktop_capture(
     recorder_factory: Optional[RecorderFactory] = None,
     convert: Optional[ConvertFn] = None,
     stop: Optional[Callable[[], bool]] = None,
-    encryption_key: Optional[str] = None,
+    encryption_key: Optional[str] | object = POLICY,
     announce: bool = True,
 ) -> Path:
     """Record a live desktop demonstration and convert it to a recording.
@@ -338,6 +343,16 @@ def record_desktop_capture(
         # backstop.
         _require_capture_extra()
 
+    if encryption_key is POLICY:
+        encryption_key = _policy_key(out_dir)
+    if encryption_key and capture_dir is not None:
+        # The raw session would sit outside the private staging folder that
+        # is deleted after sealing, and stay plaintext. Refuse before recording.
+        raise SystemExit(
+            "record: capture_dir can't be combined with an encrypted desktop "
+            "recording: the raw capture session would be left in plaintext at "
+            f"{capture_dir}. Nothing was recorded. Omit capture_dir."
+        )
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     final_dir = out_dir
@@ -383,6 +398,16 @@ def record_desktop_capture(
             import shutil
 
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def _policy_key(out_dir: Path | str) -> Optional[str]:
+    from openadapt_flow import at_rest, sealed_set
+
+    if at_rest.strict():
+        at_rest.unsealed_write("a desktop raw capture session", str(out_dir))
+    if not at_rest.seal_new("a desktop recording", out_dir):
+        return None
+    return sealed_set.recording_key()
 
 
 def _seal_recording(plain: Path, dest: Path, key: str) -> None:

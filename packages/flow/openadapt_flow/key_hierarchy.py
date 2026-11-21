@@ -603,13 +603,18 @@ def load_policy() -> Policy:
         return Policy()
     path = Path(configured)
     if not path.is_file():
-        return Policy(source=f"{POLICY_ENV} names no file")
+        raise KeyHierarchyError(
+            f"{POLICY_ENV} names {path}, which is not a file. A configured policy "
+            "that can't be read never falls back to solo mode. Nothing was written."
+        )
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise KeyHierarchyError(f"{path} is not a readable policy file") from exc
     policy = _parse_policy(raw, f"file: {path}")
-    if policy.mode == "org" and os.name == "posix" and path.stat().st_uid != 0:
+    # Ownership proves only on POSIX; elsewhere an org policy must come from
+    # a machine source (Group Policy, the registry), never a user file.
+    if policy.mode == "org" and (os.name != "posix" or path.stat().st_uid != 0):
         if os.environ.get(TRUST_USER_POLICY_ENV) != "1":
             raise KeyHierarchyError(
                 f"{path} sets organization mode but is not owned by root, so it "
@@ -732,6 +737,9 @@ def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
         )
     if policy.mode == "org" and policy.records == "archive":
         pending = unarchived_count()
+        if pending >= policy.max_unarchived:
+            archive_pending(policy)  # the archive may be back
+            pending = unarchived_count()
         if pending >= policy.max_unarchived:
             raise KeyHierarchyError(
                 f"{pending} encrypted sets have not reached the organization key "
@@ -929,10 +937,31 @@ def open_bucket(record: dict[str, Any], *, prefer_runtime: bool = True) -> Bucke
     )
 
 
+def _pending_dir() -> Path:
+    return _home() / "keys" / "shred-pending"
+
+
+def _delete_archive_copy(bucket_id: str, policy: Policy) -> bool:
+    """Delete the archive's copy; True when it is gone (or never existed)."""
+    try:
+        target = _archive_dir(policy) / f"{bucket_id}.json"
+        if target.is_file():
+            target.unlink()
+        return not target.exists()
+    except (OSError, KeyHierarchyError):
+        return False
+
+
 def shred(record: dict[str, Any], policy: Optional[Policy] = None) -> dict[str, Any]:
     """Destroy every tracked copy of a bucket record: the local one
-    (overwritten, then deleted) and the archive copy. Returns the shred
-    record, which names the bucket and time and holds no key."""
+    (overwritten, then deleted) and the archive copy.
+
+    Returns the shred record (bucket id, time, copies destroyed; no key).
+    ``complete`` is False while the archive copy could not be deleted (an
+    offline or read-only archive): a pending marker keeps the bucket id, and
+    :func:`retry_shred` (``at-rest shred`` again, or ``at-rest archive``)
+    finishes it.
+    """
     policy = policy or load_policy()
     bucket_id = str(record["bucket_id"])
     removed: list[str] = []
@@ -945,21 +974,74 @@ def shred(record: dict[str, Any], policy: Optional[Policy] = None) -> dict[str, 
             os.fsync(handle.fileno())
         path.unlink()
         removed.append("local")
-    if policy.records == "archive" and policy.key_archive:
-        try:
-            target = _archive_dir(policy) / f"{bucket_id}.json"
-            if target.is_file():
-                target.unlink()
-                removed.append("archive")
-        except (OSError, KeyHierarchyError):
-            pass
+    complete = True
+    if policy.records == "archive":
+        if _delete_archive_copy(bucket_id, policy):
+            removed.append("archive")
+        else:
+            complete = False
+            _write_private(
+                _pending_dir() / f"{bucket_id}.json",
+                json.dumps(
+                    {"bucket_id": bucket_id, "archive": policy.key_archive}
+                ).encode(),
+            )
     return {
         "schema": SHRED_SCHEMA,
         "bucket_id": bucket_id,
         "shredded_at": time.time(),
         "copies_destroyed": removed,
         "records": record.get("records"),
+        "complete": complete,
     }
+
+
+def retry_shred(bucket_id: str, policy: Optional[Policy] = None) -> bool:
+    """Finish a shred whose archive deletion failed. True when done."""
+    policy = policy or load_policy()
+    marker = _pending_dir() / f"{_record_path(bucket_id).stem}.json"
+    if not marker.is_file():
+        return True
+    if not _delete_archive_copy(bucket_id, policy):
+        return False
+    marker.unlink()
+    return True
+
+
+def pending_shreds() -> list[str]:
+    folder = _pending_dir()
+    return sorted(p.stem for p in folder.glob("*.json")) if folder.is_dir() else []
+
+
+def archive_pending(policy: Optional[Policy] = None) -> dict[str, int]:
+    """Archive every local record not yet archived, and finish pending shreds.
+    Idempotent: run it after the archive comes back."""
+    policy = policy or load_policy()
+    done = failed = 0
+    if policy.records != "archive":
+        return {"archived": 0, "failed": 0, "shreds_pending": len(pending_shreds())}
+    folder = buckets_dir()
+    for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            failed += 1
+            continue
+        if record.get("archived"):
+            continue
+        bucket = Bucket(
+            str(record["bucket_id"]),
+            None,
+            serialization.load_der_public_key(_unb64(record["bucket_pub"])),  # type: ignore[arg-type]
+            record,
+        )
+        if archive(bucket, policy):
+            done += 1
+        else:
+            failed += 1
+    for bucket_id in pending_shreds():
+        retry_shred(bucket_id, policy)
+    return {"archived": done, "failed": failed, "shreds_pending": len(pending_shreds())}
 
 
 def describe(policy: Policy) -> dict[str, Any]:

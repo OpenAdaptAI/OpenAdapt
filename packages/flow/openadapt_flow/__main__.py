@@ -14198,7 +14198,7 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         try:
             # With no key configured the local key resolves; opening the set
             # tells "sealed with a key that isn't set" apart before any work.
-            sealed_set.open_set(root)
+            _at_rest_cli.precheck_open(root)
         except sealed_set.SealedSetKeyError as exc:
             return str(exc)
     return None
