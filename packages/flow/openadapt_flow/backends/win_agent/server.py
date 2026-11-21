@@ -1225,12 +1225,12 @@ def _find_candidates(
             # turn a partial query into unique value authority.
             try:
                 native_api = _native_value_api()
-                native_api.require_non_sensitive_value(control)
+                native_api.require_non_sensitive_structure(control)
                 facts = {
                     key: _read_control_value(control, key, None)
                     for key in ("AutomationId", "Name", "ControlTypeName")
                 }
-                _native_value_api().require_non_sensitive_value(control)
+                _native_value_api().require_non_sensitive_structure(control)
                 if any(not isinstance(value, str) for value in facts.values()):
                     return incomplete("selector_property")
                 possible = all(
@@ -1625,7 +1625,7 @@ def _native_value_api() -> Any:
 
 def _read_control_value(control: object, name: str, default: Any) -> Any:
     """Metadata for a semantic value read, without a sensitivity-order gap."""
-    guard = _native_value_api().require_non_sensitive_value
+    guard = _native_value_api().require_non_sensitive_structure
     guard(control)
     value = _control_value(control, name, default)
     guard(control)
@@ -2788,7 +2788,7 @@ def _form_boolean_observation(
         return _FormBooleanObservation(None, _FormPropertyDetail(name, phase, outcome))
 
     try:
-        guard = _native_value_api().require_non_sensitive_value
+        guard = _native_value_api().require_non_sensitive_structure
         guard(control)
     except Exception:  # noqa: BLE001 - no provider exception data
         return refused("guard_before_lookup", "guard_refused")
@@ -2812,6 +2812,8 @@ def _form_boolean_observation(
         # itself: UIA's GetCurrentPattern returns the pattern exactly when it
         # is supported. Only that exact answer counts; anything else refuses.
         outcome = "none" if available is None else "non_bool"
+        if not _native_value_api().is_uia_not_supported(available):
+            return refused("result_kind", outcome)
         available = _form_pattern_support(control, property_id, guard)
         if available is None:
             return refused("result_kind", outcome)
@@ -2844,7 +2846,7 @@ def _form_pattern_support(
         pattern = method(pattern_id)
         guard(control)
         # comtypes answers a NULL interface pointer for an unsupported pattern.
-        return bool(pattern)
+        return _native_value_api().pattern_presence(pattern)
     except Exception:  # noqa: BLE001 - no provider exception data
         return None
 
@@ -2936,9 +2938,11 @@ class _FormStateObservation:
 
 def _form_field_state(control: object) -> _FormStateObservation:
     """Known absent patterns differ from unknown, with first-refusal detail."""
-    guard = _native_value_api().require_non_sensitive_value
 
     def read(capability: str, attribute: str) -> Any:
+        # A structural guard can inspect availability, never a toggle or
+        # selection value. Keep the full guard adjacent to each state read.
+        guard = _native_value_api().require_non_sensitive_value
         guard(control)
         method = _control_value(control, capability, None)
         guard(control)
@@ -3234,7 +3238,7 @@ def _window_form_fields(
         return _form_refused("uia_setup", "uia", "root_unavailable")
     if window is None:
         return _form_refused("uia_setup", "uia", "root_unavailable")
-    guard = _native_value_api().require_non_sensitive_value
+    guard = _native_value_api().require_non_sensitive_structure
     try:
         guard(window)
         title = " ".join(str(_control_value(window, "Name", "") or "").split())

@@ -152,7 +152,10 @@ class Win32TextReader:
             return False
         if not _edit_class(name.value):
             return False
-        if self._user.GetWindowLongW(hwnd, -16) & ES_PASSWORD:  # GWL_STYLE
+        # A zero GWL_STYLE is valid only when the call left no Win32 error.
+        ctypes.set_last_error(0)
+        style = self._user.GetWindowLongW(hwnd, -16)  # GWL_STYLE
+        if (style == 0 and ctypes.get_last_error() != 0) or style & ES_PASSWORD:
             return False
         return self._message(hwnd, EM_GETPASSWORDCHAR) == 0
 
@@ -225,33 +228,94 @@ def _identity(control: Any) -> tuple[int, int, tuple[int, ...]]:
     return hwnd, pid, tuple(runtime)
 
 
-def require_non_sensitive_value(control: Any) -> None:
-    """Refuse text access unless the current password status is exactly False.
-
-    Missing, exceptional and non-boolean states do not authorize a getter.
-    All value, capability and preview consumers share this rule. Call again
-    after any provider call and immediately before each text getter; a prior
-    result or negotiated protocol version is never authority for a later read.
-    """
+def is_uia_not_supported(raw: object) -> bool:
+    """Accept only UI Automation's reserved NotSupported COM object."""
+    if raw is None:
+        return False
     try:
-        # CurrentIsPassword/Control.IsPassword can return a default FALSE for
-        # unsupported status. Request the raw property with defaults ignored;
-        # a reserved unsupported object is unknown, not non-sensitive. Some
-        # providers (the WinForms TextBox proxies) do not support IsPassword
-        # at all; then only Win32 evidence from the control's own EDIT window
-        # (no ES_PASSWORD style, no password character) allows the read.
-        method = getattr(control, "GetPropertyValueEx", None)
-        if not callable(method):
-            raise ValueUnavailable("password_status_unavailable")
+        from comtypes import IUnknown
+
+        if not isinstance(raw, ctypes.POINTER(IUnknown)) or not raw:
+            return False
+        from uiautomation.uiautomation import _AutomationClient
+
+        # Compare through UIA. An arbitrary VT_UNKNOWN is not the sentinel.
+        answer = _AutomationClient.instance().IUIAutomation.CheckNotSupported(raw)
+        return type(answer) in (int, bool) and answer == 1
+    except Exception:
+        return False
+
+
+def pattern_presence(pattern: object) -> bool | None:
+    """Interpret the typed COM output from a successful GetCurrentPattern."""
+    if pattern is None:
+        return False
+    try:
+        from comtypes import IUnknown
+
+        if isinstance(pattern, ctypes.POINTER(IUnknown)):
+            return bool(pattern)
+    except Exception:
+        pass
+    return None
+
+
+# These UIA node types can carry a caption or structural metadata. A type
+# alone never establishes that its value pattern is absent.
+_STRUCTURAL_TYPES = frozenset({
+    "WindowControl", "PaneControl", "GroupControl", "TitleBarControl",
+    "ButtonControl", "SplitButtonControl", "TextControl", "ToolBarControl",
+    "MenuBarControl", "MenuControl", "MenuItemControl", "StatusBarControl",
+    "CheckBoxControl", "RadioButtonControl", "TabControl", "TabItemControl",
+})
+
+
+def _known_non_value_structure(control: Any, get_property: Callable[..., Any]) -> bool:
+    if control.ControlTypeName not in _STRUCTURAL_TYPES:
+        return False
+    available = get_property(30043, 1)  # UIA_IsValuePatternAvailablePropertyId
+    if available is not False:
+        if not is_uia_not_supported(available):
+            return False
+        # A successful null ValuePattern is absence. Errors and malformed
+        # answers cannot authorize even a caption.
+        if pattern_presence(control.Element.GetCurrentPattern(10002)) is not False:
+            return False
+    # The capability/type lookup was a provider call: recheck sensitivity
+    # immediately before allowing the caller's structural metadata access.
+    status = get_property(IS_PASSWORD_PROPERTY, 1)
+    if status is False or is_uia_not_supported(status):
+        return True
+    raise ValueUnavailable("password_or_password_status_unavailable")
+
+
+def _require_non_sensitive(control: Any, *, structural: bool) -> None:
+    try:
+        method = control.GetPropertyValueEx
         raw = method(IS_PASSWORD_PROPERTY, 1)
         if type(raw) is bool:
-            allowed = raw is False
-        else:
-            allowed = _native_plain_edit(control)
+            if raw is False:
+                return
+        elif is_uia_not_supported(raw):
+            if structural and _known_non_value_structure(control, method):
+                return
+            if _native_plain_edit(control):
+                status = method(IS_PASSWORD_PROPERTY, 1)
+                if status is False or is_uia_not_supported(status):
+                    return
     except Exception:
-        allowed = False
-    if not allowed:
-        raise ValueUnavailable("password_or_password_status_unavailable")
+        pass
+    raise ValueUnavailable("password_or_password_status_unavailable")
+
+
+def require_non_sensitive_value(control: Any) -> None:
+    """Require affirmative non-sensitive evidence before any semantic value read."""
+    _require_non_sensitive(control, structural=False)
+
+
+def require_non_sensitive_structure(control: Any) -> None:
+    """Allow proven non-value structural metadata; never grants a value read."""
+    _require_non_sensitive(control, structural=True)
 
 
 def observe_complete_value(

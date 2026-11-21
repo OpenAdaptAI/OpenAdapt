@@ -443,6 +443,10 @@ class _Rect:
         self.left, self.top, self.right, self.bottom = left, top, right, bottom
 
 
+_UNSUPPORTED_PROPERTY = object()
+_DEFAULT_PASSWORD = object()
+
+
 class _Control:
     next_hwnd = 100
 
@@ -457,7 +461,7 @@ class _Control:
         children=(),
         selected=None,
         toggle=None,
-        password=False,
+        password=_DEFAULT_PASSWORD,
     ):
         self.NativeWindowHandle = _Control.next_hwnd
         _Control.next_hwnd += 1
@@ -466,6 +470,14 @@ class _Control:
         self.ClassName = "SyntheticNativeControl"
         self.parent = None
         self.native_override = None
+        if password is _DEFAULT_PASSWORD:
+            # Non-value providers need not implement IsPassword, even on the
+            # window root. A synthetic value provider answers explicitly.
+            password = (
+                _UNSUPPORTED_PROPERTY
+                if value is None and control_type in {"WindowControl", "ButtonControl", "PaneControl", "TextControl"}
+                else False
+            )
         self.IsPassword = password
         self._selected = selected
         self._toggle = toggle
@@ -574,6 +586,7 @@ def _agent(monkeypatch, window, desktop=None):
     monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop or _Desktop())
     import openadapt_flow.backends.win_agent.native_value as native
 
+    monkeypatch.setattr(native, "is_uia_not_supported", lambda raw: raw is _UNSUPPORTED_PROPERTY)
     controls = {}
 
     def attach(control, parent=None):
@@ -831,6 +844,71 @@ def test_a_failed_child_read_never_turns_an_unknown_subtree_into_a_mask(
     (window if failed_at == "window" else control).GetChildren = failed
     perform = _agent(monkeypatch, window)
     assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
+
+
+def test_unsupported_password_on_nonvalue_root_and_button_keeps_real_fields(monkeypatch):
+    class CaptionOnly(_Control):
+        value_calls = 0
+
+        def GetValuePattern(self):
+            self.value_calls += 1
+            raise AssertionError("a structural button has no value")
+
+    button = CaptionOnly("ButtonControl", name="Synthetic caption")
+    field = _Control("EditControl", value="synthetic field")
+    field.AutomationId = "field"
+    root = _window(button, field)
+    perform = _agent(monkeypatch, root)
+    assert root.GetPropertyValueEx(30019, 1) is _UNSUPPORTED_PROPERTY
+    assert button.GetPropertyValueEx(30019, 1) is _UNSUPPORTED_PROPERTY
+    projection = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert [(f["kind"], f["text"]) for f in projection["fields"]] == [
+        ("text", "Synthetic caption"), ("edit", "synthetic field")
+    ]
+    sys.modules["uiautomation"].GetRootControl = lambda: root
+    read = perform("read", {"locator": {"automation_id": "field"}})
+    assert read["complete"] and read["text"] == "synthetic field"
+    assert button.value_calls == 0
+
+
+@pytest.mark.parametrize("capability", [True, None, "malformed"])
+def test_unproved_value_or_capability_on_structural_type_blocks_projection(monkeypatch, capability):
+    class Container(_Control):
+        content_reads = 0
+
+        @property
+        def Name(self):
+            self.content_reads += 1
+            return "private fixture label"
+
+        @Name.setter
+        def Name(self, ignored):
+            pass
+
+        def GetValuePattern(self):
+            self.content_reads += 1
+            raise AssertionError("an unknown value must remain unread")
+
+        def GetPropertyValueEx(self, prop, ignore):
+            if prop == 30043:
+                return capability
+            return super().GetPropertyValueEx(prop, ignore)
+
+    pane = Container("PaneControl", children=[_Control("EditControl", value="child")])
+    perform = _agent(monkeypatch, _window(pane))
+    answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert answer["window"] is None and answer["fields"] == []
+    assert pane.content_reads == 0
+
+
+def test_nonvalue_structural_permission_never_reads_a_toggle_value(monkeypatch):
+    calls = []
+    button = _Control("ButtonControl", name="Toggle", toggle=1)
+    button.GetTogglePattern = lambda: calls.append("toggle")
+    perform = _agent(monkeypatch, _window(button))
+    answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert answer["window"] is None and answer["fields"] == []
+    assert calls == []
 
 
 def test_a_value_container_does_not_hide_its_descendant_fields(monkeypatch):

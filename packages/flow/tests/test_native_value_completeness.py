@@ -401,12 +401,8 @@ def test_shared_sensitive_guard_refuses_before_any_source_or_capability_getter(s
         not result.complete
         and result.reason == "password_or_password_status_unavailable"
     )
-    # An unsupported (non-boolean) status asks only for the control's own
-    # window handle, for Win32 EDIT password evidence; nothing else is read.
-    if status is True or status == "error":
-        assert target.calls == []
-    else:
-        assert set(target.calls) == {"NativeWindowHandle"}
+    # These are missing or malformed statuses rather than UIA's sentinel.
+    assert target.calls == []
 
 
 @pytest.mark.parametrize("stage", ["pattern_lookup", "pattern_call", "readability"])
