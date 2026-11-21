@@ -210,6 +210,7 @@ def encrypt_bytes(
     *,
     aad: bytes,
     salt: Optional[bytes] = None,
+    keys: Optional["ContainerKeys"] = None,
 ) -> bytes:
     """Seal ``plaintext`` into a self-describing AES-256-GCM container.
 
@@ -222,6 +223,9 @@ def encrypt_bytes(
     ``salt`` lets one writer seal containers under the same salt. Each call
     still runs scrypt and uses a fresh random nonce; sharing a salt does not
     create a process-global key cache. Default: a fresh salt per container.
+    ``keys`` is a caller-owned :class:`ContainerKeys` handle; with it, a salt
+    the handle has already stretched for this passphrase is not stretched
+    again.
     """
     passphrase = require_key(key)
     if salt is None:
@@ -229,7 +233,7 @@ def encrypt_bytes(
     elif len(salt) != _SALT_LEN:
         raise CryptoError("a container salt must be 16 bytes")
     nonce = secrets.token_bytes(_NONCE_LEN)
-    dek = _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
+    dek = _container_key(keys, passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
     ciphertext = AESGCM(dek).encrypt(nonce, plaintext, aad)
     container = {
         "format": _MAGIC,
@@ -247,7 +251,13 @@ def encrypt_bytes(
     return json.dumps(container, indent=2).encode("utf-8")
 
 
-def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
+def decrypt_bytes(
+    container: bytes,
+    key: Optional[str],
+    *,
+    aad: bytes,
+    keys: Optional["ContainerKeys"] = None,
+) -> bytes:
     """Authenticate and decrypt a container produced by :func:`encrypt_bytes`.
 
     Raises :class:`MissingKeyError` when no passphrase is configured,
@@ -269,7 +279,7 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
         raise
     except (ValueError, TypeError, KeyError) as exc:
         raise DecryptionError(f"malformed encrypted container: {exc}") from exc
-    dek = _derive(passphrase, salt, n=n, r=r, p=p)
+    dek = _container_key(keys, passphrase, salt, n=n, r=r, p=p)
     try:
         return AESGCM(dek).decrypt(nonce, ciphertext, aad)
     except InvalidTag as exc:
@@ -277,6 +287,65 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
             "decryption failed: wrong key or the ciphertext was tampered with "
             "(authentication tag mismatch). The payload was NOT loaded."
         ) from exc
+
+
+class ContainerKeys:
+    """Derived container keys owned by one caller, such as a checkpoint store.
+
+    A run's checkpoint store reads its own sealed checkpoints back many times
+    per run. Without a handle each read runs scrypt again (131 derivations,
+    about 20 s, on one tutorial run). The handle keeps the keys it derived,
+    by salt and work factors, for its owner's lifetime only. It makes no copy
+    of the passphrase and keeps no verifier: the owner passes its passphrase
+    on every call, and :meth:`rebind` keeps only a reference to the key object
+    the owner already holds, dropping every key when that object changes.
+    Every read still authenticates the container's bytes with AES-GCM, so a
+    wrong key or a tampered file is refused as before. Nothing is module-level
+    and nothing is written anywhere.
+    """
+
+    __slots__ = ("_bound", "_keys", "_lock")
+
+    _LIMIT: Final[int] = 32
+
+    def __init__(self) -> None:
+        self._bound: object = None
+        self._keys: dict[tuple[bytes, int, int, int], bytes] = {}
+        self._lock = threading.Lock()
+
+    def rebind(self, owner_key: object) -> None:
+        """Drop every key unless ``owner_key`` is the object last bound."""
+        with self._lock:
+            if owner_key is not self._bound:
+                self._keys.clear()
+                self._bound = owner_key
+
+    def derive(self, passphrase: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
+        slot = (bytes(salt), int(n), int(r), int(p))
+        with self._lock:
+            cached = self._keys.get(slot)
+        if cached is not None:
+            return cached
+        key = _derive(passphrase, salt, n=n, r=r, p=p)
+        with self._lock:
+            if len(self._keys) >= self._LIMIT:
+                self._keys.clear()
+            self._keys[slot] = key
+        return key
+
+
+def _container_key(
+    keys: Optional[ContainerKeys],
+    passphrase: str,
+    salt: bytes,
+    *,
+    n: int,
+    r: int,
+    p: int,
+) -> bytes:
+    if keys is None:
+        return _derive(passphrase, salt, n=n, r=r, p=p)
+    return keys.derive(passphrase, salt, n=n, r=r, p=p)
 
 
 # -- one derived key for a whole sealed set ----------------------------------
