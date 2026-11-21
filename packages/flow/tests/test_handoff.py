@@ -131,6 +131,24 @@ def test_binding_refuses_this_keyid_with_a_bad_signature(run_dir, signer):
             h.make_handoff({"x": 1}, forged, signer=signer)
 
 
+def test_a_card_that_does_not_match_its_receipt_never_leaves(run_dir, signer):
+    receipt = h.receipt_for_run(run_dir)
+    statement = json.loads(base64.b64decode(receipt["payload"]))
+    commitments = statement["predicate"]["disclosure"]["commitments"]
+    assert "flow_version" in commitments
+    private = json.loads((run_dir / PRIVATE_FILE).read_text())
+    good = r.public_card(receipt, private["openings"], reveal=["flow_version"])
+    h.make_handoff({"x": 1}, good)  # a matching card travels
+    bad_value = json.loads(json.dumps(good))
+    bad_value["openings"]["flow_version"]["value"] = "9.9.9"
+    extra_field = {**good, "note": "x"}
+    unknown_version = {**good, "disclosure_version": "openadapt.public-disclosure/v0"}
+    for card in (bad_value, extra_field, unknown_version):
+        for kwargs in ({}, {"signer": signer}):  # unbound and bound senders
+            with pytest.raises(h.HandoffError):
+                h.make_handoff({"x": 1}, card, **kwargs)
+
+
 def test_a_post_is_never_redirected(monkeypatch):
     import urllib.error
     from http.server import BaseHTTPRequestHandler, HTTPServer

@@ -89,7 +89,37 @@ def _check_receipt_document(receipt: Any) -> dict[str, Any]:
         )
     if not (r.is_receipt_envelope(receipt) or r.is_receipt_card(receipt)):
         raise HandoffError("the receipt is a record/run/v1 envelope or card")
+    if r.is_receipt_card(receipt):
+        _check_card(receipt)
     return dict(receipt)
+
+
+def _check_card(card: Mapping[str, Any]) -> None:
+    """Unbound-evidence class: a card leaves this computer only if its shape,
+    disclosure version and every opening match what the receipt committed."""
+    from openadapt_types import receipt as r
+
+    if set(card) != {"schema", "disclosure_version", "envelope", "openings"}:
+        raise HandoffError("a receipt card has exactly four fields")
+    allowed = r.PUBLIC_DISCLOSURE.get(str(card.get("disclosure_version")))
+    openings = card.get("openings")
+    envelope = card.get("envelope")
+    if allowed is None or not isinstance(openings, Mapping):
+        raise HandoffError("the receipt card's disclosure is not a known version")
+    if not (isinstance(envelope, Mapping) and r.is_receipt_envelope(envelope)):
+        raise HandoffError("the receipt card holds no record/run/v1 envelope")
+    try:
+        statement = r.loads_strict(
+            base64.b64decode(str(envelope["payload"]), validate=True)
+        )
+        commitments = statement["predicate"]["disclosure"]["commitments"]
+    except (KeyError, TypeError, ValueError):
+        raise HandoffError("the receipt card's statement is not readable") from None
+    checked = r._check_openings(openings, commitments, allowed)
+    if isinstance(checked, r.ReceiptVerification):
+        raise HandoffError(
+            f"the receipt card doesn't match its receipt: {checked.reason}"
+        )
 
 
 def payload_bytes(payload: Any) -> tuple[bytes, str]:
