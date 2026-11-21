@@ -344,39 +344,23 @@ class IdentityTemplate(BaseModel):
         ),
     )
     structured: Optional[str] = Field(
-        default=None, description="salted hash of the structured identity string"
+        default=None, description="salted hash of structured identity"
     )
     structured_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters embedded in the structured identity. Their "
-            "demonstrated values are replaced by fixed sentinels before "
-            "hashing; replay substitutes the run's value before exact compare."
-        ),
+        description="Workflow params replaced by fixed sentinels in structured identity.",
     )
     signal_hashes: dict[str, str] = Field(
         default_factory=dict,
-        description=(
-            "Salted hashes of strict exact/explicitly-normalized identity "
-            "evidence, including operator-selected extracted fields. Keys are "
-            "produced by identity_signals."
-        ),
+        description="Salted hashes of strict identity_signals evidence.",
     )
     context_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters replaced by fixed sentinels before the "
-            "captured-context signal hashes were computed."
-        ),
+        description="Workflow params replaced by sentinels in captured-context signal hashes.",
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
     sibling_generic_hashes: list[str] = Field(
-        default_factory=list,
-        exclude_if=lambda value: not value,
-        description=(
-            "Salted hashes of OCR-canonical non-identifying chrome tokens "
-            "derived from sibling rows (opt-in). Omitted when empty."
-        ),
+        default_factory=list, exclude_if=lambda value: not value
     )
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
