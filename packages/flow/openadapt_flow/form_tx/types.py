@@ -320,6 +320,15 @@ class PopupSubroutineSpec(BaseModel):
     popup_url_pattern: Optional[str] = None
     popup_title_pattern: Optional[str] = None
     bindings: tuple[FieldBindingSpec, ...] = ()
+    # Buttons clicked in order after the bindings are filled and before
+    # ``commit_anchor``, for estimators that need, say, Calculate before the
+    # result can be applied. Each one must match exactly one control.
+    compute_anchors: tuple[FieldAnchorSpec, ...] = ()
+    # "window": the trigger opens a child window. "in_page": the trigger opens
+    # a dialog in the same page; only controls that were not on the page
+    # before the trigger count as the dialog's, and the commit button must be
+    # gone afterwards.
+    popup_mode: Literal["window", "in_page"] = "window"
     commit_anchor: FieldAnchorSpec
     parent_return_anchor: FieldAnchorSpec
     return_output_key: str = Field(min_length=1)
