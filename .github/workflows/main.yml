@@ -31,8 +31,8 @@ jobs:
         # 3.12), which the queue needs to report. A push to main runs every
         # supported Python on Linux and Python 3.12 on macOS. A dispatch and
         # the nightly run (a schedule) run every Python on both. The org has
-        # five macOS runners; on 2026-11-20 macOS 3.10 and 3.11 took 70 of
-        # them a day on main, for 279 minutes, and never failed.
+        # five macOS runners. In 20.7 hours on 2026-11-20, macOS 3.10 and
+        # 3.11 ran 67 jobs on main, for 262 runner-minutes, and never failed.
         os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
         python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
         exclude: ${{ fromJSON(github.event_name == 'push' && '[{"os":"macos-latest","python-version":"3.10"},{"os":"macos-latest","python-version":"3.11"}]' || '[]') }}

@@ -41,7 +41,8 @@ permissions:
 
 # A pull request's newer push cancels its older run. On main one run goes at
 # a time and the newest waiting push replaces an older waiting one: it tests
-# a tree that contains the older one. No release reads this workflow.
+# a tree that contains the older one. No release reads this workflow. A
+# cancelled run on main means a newer push replaced it, not a failure.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

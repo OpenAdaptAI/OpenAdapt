@@ -169,36 +169,36 @@ should get its own serial step rather than turning xdist off.
 
 Measured over 20.7 hours of OpenAdapt Actions history (2026-11-20 05:55 to
 2026-11-21 02:38 UTC): 2,000 workflow runs and 10,522 jobs, covering 119
-pull-request commits and 35 merges. The repository used about 15,700
-runner-minutes: 61% on pull requests, 34% on pushes to main, the rest on
-schedules and the protected-path review. Running jobs had a median of 13 and
-reached 42. At the 90th percentile, 72 jobs were waiting for a runner. A
-typical pull-request commit ran 28 jobs (90th percentile 44) and used 84
-runner-minutes.
+pull-request commits and 35 merges. Counting only jobs that ran to a pass or
+a failure, the repository used about 13,600 runner-minutes: 57% on pull
+requests and 39% on pushes to main. Running jobs had a median of 12, and at
+the 90th percentile they filled the org's 20 runners. A sample on
+2026-11-21 from 02:56 to 03:02 UTC found 16 to 21 jobs running and 102 to 121
+waiting across the org. A typical pull-request commit ran 29 jobs (90th
+percentile 39) and used 79 runner-minutes.
 
 Pull-request jobs by runner-minutes:
 
 | Job | Runs | Median min | p90 min | Runner-min | Failed commits (only failing job) |
 |---|---|---|---|---|---|
-| `flow core unit` (3 shards) | 218 | 14.8 | 19.4 | 3,867 | 24 (16) |
-| `flow core critical` | 78 | 6.7 | 8.2 | 608 | 0 |
-| `flow on-prem offline` | 82 | 4.2 | 4.5 | 492 | 0 |
-| Desktop replay `windows replay` | 85 | 5.5 | 7.6 | 484 | 9 (6) |
-| CodeQL `Analyze (python)` | 108 | 2.7 | 8.1 | 464 | 0 |
-| `verify facade` | 88 | 3.7 | 4.1 | 369 | 1 (1) |
-| `flow agent frameworks` | 83 | 3.0 | 3.5 | 360 | 0 |
-| Protected safety review | 271 | 0.3 | 0.3 | 331 | not a test |
-| `verify clean install` py3.10 | 88 | 1.9 | 2.1 | 240 | 0 |
-| `flow core lint` | 87 | 1.9 | 2.3 | 236 | 5 (3) |
-| `launcher / run-ci` | 112 | 2.5 | 2.8 | 206 | 7 (2) |
+| `flow core unit` (3 shards) | 218 | 14.8 | 19.4 | 3,280 | 24 (16) |
+| `flow core critical` | 78 | 6.7 | 8.2 | 528 | 0 |
+| Desktop replay `windows replay` | 85 | 5.5 | 7.6 | 474 | 9 (6) |
+| CodeQL `Analyze (python)` | 108 | 2.7 | 8.1 | 405 | 0 |
+| `flow on-prem offline` | 82 | 4.2 | 4.5 | 333 | 0 |
+| `verify facade` | 88 | 3.7 | 4.1 | 325 | 1 (1) |
+| `flow agent frameworks` | 83 | 3.0 | 3.5 | 249 | 0 |
+| `launcher / run-ci` | 112 | 2.5 | 2.8 | 201 | 7 (2) |
+| `verify clean install` py3.10 | 88 | 1.9 | 2.1 | 168 | 0 |
+| `flow core lint` | 87 | 1.9 | 2.3 | 166 | 5 (3) |
 | Flow MCP compatibility (2 SDKs) | 214 | 0.5 | 0.6 | 114 | 0 |
 
 On main, every merge ran the full post-merge tier: Flow's two unit shards
-(about 27 minutes each, 1,560 runner-minutes a day), CodeQL on all three
-languages (564), and the launcher on six Python and OS lanes, three of them
-on macOS (401 macOS minutes).
+(about 27 minutes each), CodeQL on all three languages (563 runner-minutes
+in the window), and the launcher on six Python and OS lanes, three of them on
+macOS.
 
-`flow core unit` takes 40% of pull-request runner time, and it sets how long
+`flow core unit` takes 42% of pull-request runner time, and it sets how long
 `ci` takes. Its shards take about 15 minutes, against the five this file
 planned for. Of the fast lane's 128 worker-minutes, 56 are cases over 5 s
 outside the safety exemptions in `packages/flow/tests/nightly_only.txt`,
