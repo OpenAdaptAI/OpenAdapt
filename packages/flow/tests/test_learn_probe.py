@@ -175,9 +175,9 @@ def test_probe_learns_the_actors_bookkeeping_and_a_correct_write_passes(
         ("app_user", "changed", ("last_login",)),
         ("api_token", "changed", ("last_seen",)),
     }
-    # The first-login row the probe saw is an added row: held for a person.
-    held = proposal["kinds"]["read_only_probe"]["needs_approval"]
-    assert [(x["table"], x["change"]) for x in held] == [("user_property", "added")]
+    # The first-login row showed in one round only: not bookkeeping, so it is
+    # neither excused nor held for approval; it stays a stop.
+    assert proposal["kinds"]["read_only_probe"]["needs_approval"] == []
     contract = write_contract(engine, tmp_path, proposal)
     t = _title()
     after = check(engine, contract, {"title": t, "body": "Body text"}, write, tmp_path)
@@ -393,3 +393,69 @@ def test_an_update_without_a_version_source_gets_no_probe_excuse(
             tmp_path,
         )  # fmt: skip
     )
+
+
+def test_a_move_in_one_round_only_is_not_excused(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A person editing the acting user's own row during one probe round
+    is not per-request bookkeeping: only moves every round shows are."""
+
+    rounds = [0]
+
+    def send() -> set[str]:
+        app_reads(engine, first=False)
+        if rounds[0] == 0:
+            engine.run(
+                "UPDATE app_user SET email = %s WHERE id = %s",
+                f"{_stamp()}@example.test",
+                int(ACTOR),
+            )
+        rounds[0] += 1
+        return {"q"}
+
+    got = {
+        (x["table"], tuple(x["columns"]))
+        for x in excuses_of(run_probe(engine, tmp_path, send))
+    }
+    assert not any(t == "app_user" and "email" in cols for t, cols in got)
+    # The token row moved the same way every round: still bookkeeping.
+    assert ("api_token", ("last_seen",)) in got
+
+
+def test_one_round_learns_nothing(engine: Engine, tmp_path: Path) -> None:
+    with pytest.raises(learn_probe.ProbeError):
+        run_probe(engine, tmp_path, first_once(engine), rounds=1)
+
+
+def test_a_create_plus_an_update_gets_no_probe_excuse(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """``record_written`` with ``count_new_only`` beside a ``field_equals``
+    update is not create-only: the update can't see a lost update."""
+
+    proposal = run_probe(engine, tmp_path, first_once(engine))
+    doc = note_contract(engine)
+    doc["effects"].append(
+        {"kind": "field_equals", "match": {"id": {"literal": "1"}},
+         "field": "title", "value": {"param": "title"}}
+    )  # fmt: skip
+    path = tmp_path / "mixed.yaml"
+    path.write_text(yaml.safe_dump(doc))
+    assert learn_probe.apply(proposal, [path]) == []
+    assert "learned" not in yaml.safe_load(path.read_text())["frame"]
+
+
+def test_versions_on_another_surface_do_not_cover_an_update() -> None:
+    from types import SimpleNamespace as NS
+
+    from openadapt_flow.runtime.effects.effect import EffectKind
+    from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+    update = NS(kind=EffectKind.FIELD_EQUALS, probe=surface_probe("secondary"),
+                expected_count=1, count_new_only=False)  # fmt: skip
+    versions = NS(target_surface="primary")
+    contract = NS(config=NS(frame=NS(versions=versions), effects=[update]))
+    assert learn_probe._sees_its_own_harm(contract) is False
+    contract.config.frame.versions = NS(target_surface=None)
+    assert learn_probe._sees_its_own_harm(contract) is True
