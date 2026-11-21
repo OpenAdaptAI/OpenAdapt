@@ -346,6 +346,18 @@ def receipt_after_run(
     return f"receipt: {Path(run_dir) / RECEIPT_FILE}"
 
 
+def after_run_notes(run_dir: Optional[Path]) -> list[str]:
+    """CLI hook after ``run`` and ``replay``: the older offline Seal, then the receipt.
+
+    ``OPENADAPT_LOCAL_SEAL=off`` and ``OPENADAPT_RECEIPT=off`` turn each off.
+    Returns the status lines for stderr; never raises.
+    """
+    from openadapt_flow.offline_seal import seal_after_run
+
+    notes = [seal_after_run(run_dir), receipt_after_run(run_dir)]
+    return [note for note in notes if note]
+
+
 # -- verifying -------------------------------------------------------------------
 
 
