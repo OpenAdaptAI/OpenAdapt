@@ -199,6 +199,7 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind("qualification/*", "phi", "qualification cases, inputs and reports"),
     FileKind("evidence/*", "phi", "run evidence a command copied into the bundle"),
+    FileKind("narration.json", "phi", "the recording's scrubbed narration"),
 )
 
 RECORDING_FILES: Final[tuple[FileKind, ...]] = (
@@ -248,6 +249,7 @@ RECORDING_FILES: Final[tuple[FileKind, ...]] = (
         "a scaffolded effect contract with observed values",
     ),
     FileKind("distill.json", "phi", "a distillation report"),
+    FileKind("narration.json", "phi", "what the person said, scrubbed"),
     FileKind(
         ".openadapt-approval.json", "phi", "approval answers about recorded steps"
     ),

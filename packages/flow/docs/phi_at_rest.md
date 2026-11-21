@@ -351,7 +351,7 @@ step with them.
 | `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |
 | `admission-decision.json`, `admission.json`, `admit.json`, `jit_draft.json` | Admission records; some carry read-back values or a login name | Encrypted |
 | `teach-authorization/*` | The person-signed teach authorization the program was taught under; a spelled-out input or record value is in it | Encrypted |
-| `openadapt-card.json`, `repair/*`, `evidence/*` | Operator card, repair candidates with anchor text, copied evidence | Encrypted |
+| `openadapt-card.json`, `repair/*`, `evidence/*`, `narration.json` | Operator card, repair candidates with anchor text, copied evidence, scrubbed narration | Encrypted |
 | Anything else | Unknown | `seal` refuses |
 
 ### Recording
@@ -364,7 +364,7 @@ step with them.
 | `network.jsonl` | Request URLs, form fields and bodies, response bodies (`--capture-network`) | Encrypted |
 | `sor_snapshots.json`, `verify.proposed.yaml` | System-of-record rows read by `record --verify`, and the effects proposed from them | Encrypted |
 | `check.json`, `check.proposed.json`, `readback.proposed.yaml`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
-| `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
+| `distill.json`, `narration.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports, scrubbed narration, approvals | Encrypted |
 | Anything else | Unknown | Refused |
 
 ### Skill library
@@ -417,12 +417,17 @@ still read.
 `tests/test_attended_at_rest.py` runs attended decisions under the same disk
 audit hook and checks that no attended file or journal row holds plaintext.
 
-### Run directory of a sealed bundle
+### Run directory
 
 Every file is encrypted except these structural ones: `.durable_run.claim`
 (run id and namespace), the empty `*.lock` files, `.attended_action.lease`
-(nonce digests and times) and `.attended_capability.key` (a random per-run
-secret, no recorded data). The durable store's checkpoints, pauses and
+(nonce digests and times), `.attended_capability.key` (a random per-run
+secret, no recorded data), and the receipt files (`seal.json`,
+`seal.anchor.json`, `seal.tsa.json`, `seal.tsr`, `seal.publish.json`,
+`public-seal.json`, `receipt.json`, `receipt.md`, `receipt.png`; see
+[Receipts](#receipts)). `seal.html`, the receipt page, is an export: it is
+plaintext and logged. Undo's prior record values (`undo/prior/*`) are
+encrypted with the run. The durable store's checkpoints, pauses and
 approvals are sealed under the same key with their own AES-256-GCM containers,
 and the run set adopts them as ciphertext. A file written in plaintext by any
 other component makes the run refuse to seal its index.
