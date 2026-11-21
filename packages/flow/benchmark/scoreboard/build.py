@@ -225,6 +225,10 @@ def build() -> dict[str, Any]:
     return out
 
 
+#: The clean-save controls of the claims runs (``claims_openemr.py``).
+CONTROLS = ("ok", "h_ok")
+
+
 def claims() -> dict[str, Any]:
     """The agent's claims versus verify-run, per task and run (``claims.py``)."""
 
@@ -267,7 +271,7 @@ def claims() -> dict[str, Any]:
             )
             bad = r["ground_truth"] != "correct"
             f["n"] += 1
-            if r["fault"] != "ok" and r.get("fault_applied", "x") == "":
+            if r["fault"] not in CONTROLS and r.get("fault_applied", "x") == "":
                 # The agent stopped before any chart was written, so the
                 # injected fault never fired: neither a bad save nor a clean one.
                 f["fault_not_reached"] += 1
@@ -467,10 +471,18 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
         "`wrong_value`: postal code changed) or by a poller after the chart is "
         "written (`duplicate`, `no_persist`, `collateral_loss`: another chart "
         "deleted, `collateral_edit`: another chart's phone changed). One existing "
-        "chart is seeded before every item. verify-run's collateral check covers "
-        "a chart that vanished; a changed chart that is not the target is outside "
-        'its contract, which `collateral_edit` measures. "Fault not reached": '
+        "chart is seeded before every item. In run `2026-10-19-a`, verify-run's "
+        "collateral check covered a chart that vanished, not one that changed "
+        '(`collateral_edit`); #1375 added the second. "Fault not reached": '
         "the agent stopped before any chart was written.",
+        "- OpenEMR held-out (`heldout-*`, Amendment 15): faults written after "
+        "the first set's results were known, with three existing charts: "
+        "`h_partial` street blanked, `h_wrong_value` date of birth moved a day "
+        "(triggers); `h_duplicate` a second chart with the new chart's name and "
+        "another email, `h_no_persist` the new chart's last name and email "
+        "overwritten, `h_collateral_loss` the newest existing chart deleted, "
+        "`h_collateral_edit` one field of another chart changed (pollers). "
+        "`h_ok` is the clean control.",
         "",
     ]
     for key, c in cl.items():

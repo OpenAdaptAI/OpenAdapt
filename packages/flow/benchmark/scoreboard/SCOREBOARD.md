@@ -82,7 +82,8 @@ One referral, entered by the agent alone, by the compiled program on the screen,
 Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 computer use works alone while the save is broken. A bad save is one where the store, compared before and after, does not hold exactly the intended record, or another record was lost or changed. `verify-run` then judges the same write from the system of record, with a baseline taken before the agent started. Untimed.
 
 - MockMed: the fault server breaks the write, and the screen shows the save as done under every fault (the app updates the page before the server answers). `duplicate_keyed` is a double send the server de-duplicated on an idempotency key, so a clean save (the run's meta.json).
-- OpenEMR: OpenEMR is unchanged; the faults are injected only in the fixture's database, by a trigger (`partial`: home phone blanked; `wrong_value`: postal code changed) or by a poller after the chart is written (`duplicate`, `no_persist`, `collateral_loss`: another chart deleted, `collateral_edit`: another chart's phone changed). One existing chart is seeded before every item. verify-run's collateral check covers a chart that vanished; a changed chart that is not the target is outside its contract, which `collateral_edit` measures. "Fault not reached": the agent stopped before any chart was written.
+- OpenEMR: OpenEMR is unchanged; the faults are injected only in the fixture's database, by a trigger (`partial`: home phone blanked; `wrong_value`: postal code changed) or by a poller after the chart is written (`duplicate`, `no_persist`, `collateral_loss`: another chart deleted, `collateral_edit`: another chart's phone changed). One existing chart is seeded before every item. In run `2026-10-19-a`, verify-run's collateral check covered a chart that vanished, not one that changed (`collateral_edit`); #1375 added the second. "Fault not reached": the agent stopped before any chart was written.
+- OpenEMR held-out (`heldout-*`, Amendment 15): faults written after the first set's results were known, with three existing charts: `h_partial` street blanked, `h_wrong_value` date of birth moved a day (triggers); `h_duplicate` a second chart with the new chart's name and another email, `h_no_persist` the new chart's last name and email overwritten, `h_collateral_loss` the newest existing chart deleted, `h_collateral_edit` one field of another chart changed (pollers). `h_ok` is the clean control.
 
 ### mockmed/2026-10-19-b
 
@@ -119,6 +120,40 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 - Hand check of every item where the agent claimed success: 35 of 35 checked against the ledger; the ledger agrees with the row on 35 (evidence in hand_check.json).
 - Model spend: $2.733659.
 
+### openemr_referral/2026-11-20-a
+
+
+| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
+| partial | 5 | 5 | 4 | 4 | 4 | 5 | 0 | 0 | 0 | 0 |
+| wrong_value | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| duplicate | 6 | 5 | 5 | 4 | 4 | 5 | 0 | 0 | 0 | 1 |
+| no_persist | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| collateral_loss | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| collateral_edit | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| all | 36 | 30 | 34 | 28 | 28 | 30 | 5 | 5 | 0 | 1 |
+
+- Hand check of every item where the agent claimed success: 34 of 34 checked against the ledger; the ledger agrees with the row on 34 (evidence in hand_check.json).
+- Model spend: $2.930194.
+
+### openemr_referral/heldout-2026-11-20-a
+
+
+| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
+|---|---|---|---|---|---|---|---|---|---|---|
+| h_ok | 6 | 1 | 4 | 0 | 0 | 1 | 5 | 5 | 0 | 0 |
+| h_partial | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| h_wrong_value | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| h_duplicate | 5 | 5 | 4 | 4 | 4 | 5 | 0 | 0 | 0 | 0 |
+| h_no_persist | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| h_collateral_loss | 6 | 5 | 4 | 4 | 4 | 5 | 0 | 0 | 0 | 1 |
+| h_collateral_edit | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| all | 37 | 31 | 32 | 28 | 28 | 31 | 5 | 5 | 0 | 1 |
+
+- Hand check of every item where the agent claimed success: 32 of 32 checked against the ledger; the ledger agrees with the row on 32 (evidence in hand_check.json).
+- Model spend: $3.168927.
+
 ### openemr_referral/rejudge-1375-2026-10-19 (rebuilt state, judged by fixed verify-run)
 
 **Rebuilt state, judged by fixed verify-run.** Not the original run and not a new agent run: each item of run `2026-10-19-a` had its database state rebuilt without the agent (the item's chart saved through the API, the same fault applied), then judged by verify-run at 9850b627 (#1375, the collateral-change check). The agent's claims are the source run's.
@@ -131,4 +166,4 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 
 - The agent's claims are the source run's, hand-checked there (`2026-10-19-a`).
 
-Claude API spend so far: $12.975542.
+Claude API spend so far: $19.074663.

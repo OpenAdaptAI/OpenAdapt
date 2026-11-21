@@ -503,3 +503,27 @@ experiment with an agent, and then a second set of faults written for it.
 - **Fixture.** The pinned 8.0.0.3 fixture (`benchmark/openemr_local`) on the
   podman VM, ports 9981/9980 (the throughput project's volumes, so the
   baseline's keys match), lane 1.
+
+## Amendment 16 (2026-11-21, after the runs of Amendment 15)
+
+- **Fixture.** `heldout-2026-11-20-a` ran at the same time as `2026-11-20-a`,
+  on a second copy of the same fixture (the throughput2 project, ports
+  9983/9982), not after it on the first. Both restore the same baseline
+  (a1b14e00) before every item.
+- **Fault not reached, and replacements.** In items 1120 (`duplicate`) and
+  1230 (`h_collateral_loss`) the agent saved a chart whose email was not
+  the one asked for. The poller finds the new chart by its email, so it
+  never fired. The build counts both as "fault not reached", as in
+  Amendment 7, and items 1136 and 1236 were run in their place. verify-run
+  flagged both charts. In control item 1205 (`h_ok`) the agent made the
+  same mistake: no fault was injected, so it counts as a bad save the agent
+  made itself, which verify-run flagged. Item 1237 was run as an extra
+  clean control, so the held-out run has 5 clean saves.
+- **Claims.** The success rule (`run.reported_success`) reads a final
+  answer that contains "couldn't" or "can't" as not claiming success. In
+  items 1107, 1136, 1205, 1216, 1227 and 1237 the agent said it had saved the
+  chart, then that it couldn't see the whole email field. The rows keep the
+  rule's verdict; hand_check.json quotes each answer.
+- **Controls.** `h_ok` starts a poller that only records when the new chart
+  appeared, so its `fault_applied` is set. The build now treats `ok` and
+  `h_ok` alike as controls (`build.CONTROLS`).
