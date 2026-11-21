@@ -200,3 +200,61 @@ def test_an_unreadable_base_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="not a commit"):
         ratchet.check(root, "no-such-ref")
     assert ratchet.main(["--root", str(root), "--base", "no-such-ref"]) == 2
+
+
+def test_raising_a_budget_fails(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 10}))
+    doc = root / ratchet.DOC
+    doc.write_text(doc.read_text().replace("| 10 |", "| 12 |"))
+    _write(root, "a.py", 12)
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert failures == [
+        "a.py: budget raised from 10 to 12. Budgets never rise: put new code "
+        "in a new module and keep only the call site here."
+    ]
+    assert ratchet.main(["--root", str(root), "--base", "HEAD"]) == 1
+
+
+def test_lowering_a_budget_passes(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 10}))
+    doc = root / ratchet.DOC
+    doc.write_text(doc.read_text().replace("| 10 |", "| 8 |"))
+    _write(root, "a.py", 8)
+    assert ratchet.check(root, "HEAD")[0] == []
+
+
+def test_dropping_the_row_of_a_file_that_still_exists_fails(tmp_path: Path) -> None:
+    root = _base(
+        _repo(tmp_path, "| `a.py` | 10 |\n| `b.py` | 10 |\n", {"a.py": 10, "b.py": 9})
+    )
+    doc = root / ratchet.DOC
+    doc.write_text(doc.read_text().replace("| `b.py` | 10 |\n", ""))
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert len(failures) == 1 and "b.py: its budget row was removed" in failures[0]
+
+
+def test_dropping_the_row_of_a_removed_file_passes(tmp_path: Path) -> None:
+    root = _base(
+        _repo(tmp_path, "| `a.py` | 10 |\n| `b.py` | 10 |\n", {"a.py": 10, "b.py": 9})
+    )
+    doc = root / ratchet.DOC
+    doc.write_text(doc.read_text().replace("| `b.py` | 10 |\n", ""))
+    (root / "b.py").unlink()
+    assert ratchet.check(root, "HEAD")[0] == []
+
+
+@pytest.mark.parametrize("new_budget, fails", [(12, True), (10, False), (9, False)])
+def test_a_renamed_file_keeps_its_budget(
+    tmp_path: Path, new_budget: int, fails: bool
+) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 9}))
+    _git(root, "mv", "a.py", "b.py")
+    _write(root, "b.py", min(new_budget, 12))
+    doc = root / ratchet.DOC
+    doc.write_text(
+        doc.read_text().replace("| `a.py` | 10 |", f"| `b.py` | {new_budget} |")
+    )
+    _git(root, "add", "-A")
+    failures, _notes = ratchet.check(root, "HEAD")
+    renamed = [f for f in failures if "renamed from a.py" in f]
+    assert bool(renamed) is fails

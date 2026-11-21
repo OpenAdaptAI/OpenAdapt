@@ -568,6 +568,15 @@ def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> boo
         return True
     if (
         len(path) >= 2
+        and path[-2] == "punctuation_body_keys"
+        and re.fullmatch(r"[0-9]+", key)
+        and re.fullmatch(r"[0-9a-f]{16,}", value)
+    ):
+        # The identity template's salted token hashes, keyed by token index:
+        # the same generated shape as "c" and "r" above, never app text.
+        return True
+    if (
+        len(path) >= 2
         and path[-2] == "file_hashes"
         and re.fullmatch(r"[0-9a-f]{64}", value)
     ):

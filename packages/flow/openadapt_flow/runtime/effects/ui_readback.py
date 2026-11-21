@@ -64,7 +64,6 @@ from urllib.parse import quote, urljoin, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from openadapt_flow._browser_readiness import launch_rendering_ready
 from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
@@ -815,6 +814,8 @@ class _PlaywrightSession:
             launch_args: dict[str, Any] = {"headless": spec.headless}
             if self._driver.executable_path:
                 launch_args["executable_path"] = self._driver.executable_path
+            from openadapt_flow._browser_readiness import launch_rendering_ready
+
             self._browser = launch_rendering_ready(launcher, **launch_args)
             self._context = self._browser.new_context(
                 service_workers="block", accept_downloads=False
@@ -2520,3 +2521,14 @@ __all__ = [
     "resolve_spec",
     "settle_ui_readback",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    # ``launch_rendering_ready`` is imported where it is used, so importing
+    # ``openadapt_flow.ir`` does not load the browser-launch helper. The name
+    # stays available from this module.
+    if name == "launch_rendering_ready":
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        return launch_rendering_ready
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
