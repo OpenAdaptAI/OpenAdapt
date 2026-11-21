@@ -79,3 +79,8 @@ signs the report. The tests cover:
 - a follow-up message that can't approve a run.
 
 The same file covers the MCP tools.
+
+The official A2A TCK was run against the sandbox server. 110 automated checks
+passed and 11 failed. The Agent Card checks passed 9 of 11, with 0 failed and
+2 skipped. For what failed and why, see
+[benchmark/a2a_tck](../benchmark/a2a_tck/README.md).

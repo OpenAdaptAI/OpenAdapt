@@ -639,8 +639,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--a2a-host",
-        default="127.0.0.1",
-        help="Address to listen on (default 127.0.0.1). Any other needs --a2a-token-file.",
+        default=None,
+        help=(
+            "Address to listen on (default: this computer's loopback address "
+            "only). Any other needs --a2a-token-file."
+        ),
     )
     p.add_argument("--a2a-port", type=int, default=8770, help="Port (default 8770)")
     p.add_argument(
@@ -856,7 +859,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
         try:
             a2a_config = a2a_server.A2AConfig(
-                host=args.a2a_host,
+                host=args.a2a_host or a2a_server.DEFAULT_HOST,
                 port=args.a2a_port,
                 public_url=args.a2a_public_url,
                 token=a2a_server.read_token(args.a2a_token_file),

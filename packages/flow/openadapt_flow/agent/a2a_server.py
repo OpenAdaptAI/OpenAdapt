@@ -41,6 +41,8 @@ from openadapt_flow.handoff import EXTENSION_URI, MEDIA_TYPE, SCHEMA, VERDICT_SC
 
 _LOG = logging.getLogger(__name__)
 
+#: The A2A listener binds loopback unless the operator names another address.
+DEFAULT_HOST = "127.0.0.1"
 PROTOCOL_VERSION = "1.0"
 JSONRPC_PATH = "/a2a/jsonrpc"
 REST_PATH = "/a2a/rest"
@@ -75,7 +77,7 @@ def is_loopback(host: str) -> bool:
 
 @dataclass
 class A2AConfig:
-    host: str = "127.0.0.1"
+    host: str = DEFAULT_HOST
     port: int = 8770
     #: The URL other agents reach this server at (the Agent Card's interfaces).
     public_url: Optional[str] = None
@@ -538,10 +540,16 @@ def build_app(bridge: AgentBridge, config: A2AConfig) -> Any:
         task_store=InMemoryTaskStore(),
         agent_card=card,
         extended_agent_card=extended,
+        # Refuse a part whose stated media type no skill takes
+        # (ContentTypeNotSupportedError), as the spec requires.
+        validate_input_modes=True,
     )
     routes = [
-        *create_agent_card_routes(agent_card=card),
+        # The card changes only when the server restarts with other bundles.
+        *create_agent_card_routes(agent_card=card, cache_control="private, max-age=300"),
         *create_jsonrpc_routes(request_handler=handler, rpc_url=JSONRPC_PATH),
+        # Clients that join "/" to the interface URL post here.
+        *create_jsonrpc_routes(request_handler=handler, rpc_url=JSONRPC_PATH + "/"),
         *create_rest_routes(request_handler=handler, path_prefix=REST_PATH),
     ]
     app = Starlette(routes=routes)
