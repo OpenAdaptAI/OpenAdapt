@@ -93,9 +93,12 @@ def _screen(screen_id: str, landmark: str) -> WizardScreenSpec:
     )
 
 
+# The lookup window opens as its own page; its surface uses this same profile
+# and routing, so its path is listed too (the engine applies the parent's
+# frame routing to a child popup window).
 PROFILE = UIProfileSpec(
     profile_id="okelund",
-    frame_path_patterns=(r"/an/app", r"/an/login"),
+    frame_path_patterns=(r"/an/app", r"/an/login", r"/an/vehsearch"),
     max_settle_ms=15000,
 )
 
