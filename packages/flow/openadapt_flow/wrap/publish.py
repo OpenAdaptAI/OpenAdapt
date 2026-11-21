@@ -74,6 +74,10 @@ _SHELL_SAFE = re.compile(r"[A-Za-z0-9._:/+=-]{1,256}\Z")
 _CODE = re.compile(r"[a-z0-9_]{1,64}\Z")
 _PUBLIC_KEY_HEX = re.compile(r"[0-9a-f]{64}\Z")
 _API_TIMEOUT = 15.0
+#: Admission modes a hosted run can verify: a named person, or a CI admitter
+#: key the organization registered (``admitter-keys``). An agent under a
+#: signed policy and a repair need registries the hosted runner does not hold.
+HOSTED_ADMISSION_MODES = ("person", "admitter_key")
 
 
 class PublishError(Exception):
@@ -264,6 +268,26 @@ def _stage_hosted_admission(
         ) from None
 
 
+def hosted_admission_mode(admission: Any) -> str:
+    """The admission's mode, refused unless a hosted run can verify it."""
+
+    mode = (
+        admission.get("admission_mode", "person")
+        if isinstance(admission, Mapping)
+        else None
+    )
+    if mode not in HOSTED_ADMISSION_MODES:
+        raise PublishError(
+            "ADMISSION_MODE_UNSUPPORTED",
+            f"this program was admitted in {mode!r} mode, which a hosted run "
+            "cannot verify. Hosted endpoints accept a program a person admitted "
+            "(--person) or one admitted with a CI admitter key the organization "
+            "registered (--admit-key). Admit it again in one of those modes, "
+            "then publish. Nothing was uploaded",
+        )
+    return str(mode)
+
+
 def stage(
     cache: Any,
     instruction: str,
@@ -315,6 +339,7 @@ def stage(
             "the program's admission does not verify with the local admission "
             "key. Pass the --key-dir that admitted it, or admit it again",
         ) from None
+    hosted_admission_mode(admission)
     _readback_config(checks)
     check, check_digest, content_digest = _record_check(bundle)
     if any(path.is_symlink() for path in bundle.rglob("*")):
@@ -631,6 +656,55 @@ def register_admission_key(
     raise PublishError(
         "ADMISSION_KEY_UNREGISTERED",
         "the cloud did not register this machine's admission key. Nothing was uploaded",
+    )
+
+
+def check_admitter_key(
+    client: CloudClient, org_id: str, admission: Mapping[str, Any]
+) -> None:
+    """Refuse an admitter-key admission whose key the org has not registered.
+
+    A hosted run verifies such an admission against the admitter keys an
+    owner or admin of the organization registered. Only the public key and
+    its principal id are compared; nothing is uploaded here.
+    """
+    if admission.get("admission_mode", "person") != "admitter_key":
+        return
+    principal = admission.get("admitted_by_principal_id")
+    public_key = admission.get("admitter_public_key")
+    if not isinstance(principal, str) or not (
+        isinstance(public_key, str) and _PUBLIC_KEY_HEX.fullmatch(public_key)
+    ):
+        raise PublishError(
+            "ADMISSION_INVALID",
+            "the admission names no admitter principal or public key",
+        )
+    fingerprint = "sha256:" + hashlib.sha256(bytes.fromhex(public_key)).hexdigest()
+    status, body = client.request("GET", org_route("", org_id, "admitter-keys"))
+    if status == 401:
+        raise _key_rejected()
+    if status == 404:
+        raise _workflow_api_unavailable(client.host)
+    rows = body.get("admitter_keys") if isinstance(body, dict) else None
+    if status != 200 or not isinstance(rows, list):
+        raise PublishError(
+            "ADMITTER_KEY_UNREGISTERED",
+            "the organization's admitter keys could not be read. Nothing was uploaded",
+        )
+    if any(
+        isinstance(row, dict)
+        and row.get("principal_id") == principal
+        and row.get("fingerprint") == fingerprint
+        for row in rows
+    ):
+        return
+    raise PublishError(
+        "ADMITTER_KEY_UNREGISTERED",
+        f"the admitter key {principal} ({public_key}) is not registered with "
+        "the organization, so a hosted run could not verify this program's "
+        "admission. An owner or admin of the organization registers it in the "
+        "dashboard (Settings, Admitter keys) or with POST /api/admitter-keys, "
+        "then you publish again. Nothing was uploaded",
     )
 
 
@@ -1221,6 +1295,9 @@ def run(args: argparse.Namespace) -> int:
         # Read-only: which organization this key publishes to. Nothing about
         # the program is sent before the confirmation below.
         org_id = resolve_org(client, args.org)
+        # Read-only: an admitter-key admission needs its key registered with
+        # the organization before a hosted run can verify it.
+        check_admitter_key(client, org_id, program.admission)
         route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"

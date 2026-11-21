@@ -386,7 +386,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 98, "all independent-store controls must run"
+          assert len(cases) == 105, "all independent-store controls must run"
           # The PostgreSQL and MySQL quickstart controls need the database
           # services of verify-clean-install, which runs them; nothing else skips.
           skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
@@ -495,9 +495,17 @@ jobs:
         # database drivers. The MySQL charset guard must refuse a latin1
         # result charset before anything is written.
         run: |
+          verify_wheels=("$RUNNER_TEMP"/dist/openadapt_verify-*.whl)
+          if [[ ${#verify_wheels[@]} -ne 1 || ! -f ${verify_wheels[0]} ]]; then
+            echo "Expected exactly one built openadapt-verify wheel" >&2
+            exit 1
+          fi
           python -m venv "$RUNNER_TEMP/tests"
           "$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir \
-            --find-links "$RUNNER_TEMP/dist" 'openadapt-verify[mysql]' 'psycopg[binary]' pytest==9.2.0
+            --find-links "$RUNNER_TEMP/dist" "${verify_wheels[0]}[mysql]" \
+            "$RUNNER_TEMP"/dist/openadapt_types-*.whl \
+            "$RUNNER_TEMP"/dist/openadapt_flow-*.whl \
+            'psycopg[binary]' pytest==9.2.0
           cd packages/verify
           "$RUNNER_TEMP/tests/bin/python" -m pytest -q -p no:cacheprovider \
             tests/test_quickstart.py tests/test_guard.py tests/test_import_boundary.py \
@@ -776,9 +784,44 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # Wall-clock bounds need an uncontended worker. The owning shard
+          # runs this unchanged case once after its parallel tests, then keeps
+          # both reports in the same required artifact and coverage file.
+          serial_case=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency
+          run_serial=false
+          for file in "${files[@]}"; do
+            if [ "$file" = "${serial_case%%::*}" ]; then run_serial=true; fi
+          done
+          unit_rc=0
           # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
           pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
-            $COVERAGE_ARGS --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
+            --deselect="$serial_case" $COVERAGE_ARGS \
+            --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}" || unit_rc=$?
+          if "$run_serial"; then
+            serial_coverage=()
+            if [ -n "$COVERAGE_ARGS" ]; then serial_coverage=(--cov-append); fi
+            serial_rc=0
+            # shellcheck disable=SC2086 # Preserve the nightly coverage scope.
+            pytest -n 0 -v --basetemp=runs/ci-serial $COVERAGE_ARGS "${serial_coverage[@]}" \
+              --junitxml=runs/flow-serial.xml "$serial_case" || serial_rc=$?
+            python - "runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml" <<'PYTHON'
+          import sys
+          import xml.etree.ElementTree as ET
+          report = ET.parse(sys.argv[1])
+          serial = ET.parse("runs/flow-serial.xml").getroot()
+          name = "test_50k_seed_speed_and_8_worker_background_concurrency"
+          cases = list(serial.iter("testcase"))
+          assert len(cases) == 1, "serial seed case must run exactly once"
+          assert cases[0].get("name") == name
+          assert cases[0].get("classname") == "tests.test_tx_acid_servers"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          assert not any(c.get("name") == name for c in report.getroot().iter("testcase"))
+          report.getroot().extend(serial)
+          report.write(sys.argv[1], encoding="utf-8", xml_declaration=True)
+          PYTHON
+            if [ "$serial_rc" -ne 0 ]; then exit "$serial_rc"; fi
+          fi
+          exit "$unit_rc"
       # Before the claims upload, which tests expect to be the last step.
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
