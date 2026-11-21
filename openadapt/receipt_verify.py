@@ -162,12 +162,13 @@ def _verify_folder(
     say: Say,
     legacy_folder: Callable[[Path, list[str]], int],
 ) -> int:
+    def signed(d: Path) -> bool:
+        return (d / "receipt.json").is_file() or (d / "seal.json").is_file()
+
     runs = (
         [folder]
-        if (folder / "report.json").is_file()
-        else sorted(
-            c for c in folder.iterdir() if c.is_dir() and (c / "report.json").is_file()
-        )
+        if signed(folder)
+        else sorted(c for c in folder.iterdir() if c.is_dir() and signed(c))
     )
     with_receipt = [r for r in runs if _is_record(r / "receipt.json")]
     sealed_only = [

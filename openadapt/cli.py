@@ -1973,7 +1973,7 @@ def receipt(command_ctx: click.Context) -> None:
 
 def _verify_receipts(argv: list[str], agent: Callable[[list[str]], int]) -> int:
     """`openadapt verify <file|folder|link> [--keys FILE]`: any receipt, any format."""
-    if not argv or argv[0] in ("-h", "--help"):
+    if not argv or any(arg in ("-h", "--help") for arg in argv):
         click.echo(
             "Usage: openadapt verify <file|folder|link> [--keys FILE]\n\n"
             "Checks a receipt and prints who signed it. Fails closed on an "
