@@ -48,7 +48,11 @@ def _fill(p: argparse.ArgumentParser) -> None:
             help="the project folder (default: the current folder)",
         )
 
-    q = verbs.add_parser("install", help="write the hook settings into the project")
+    q = verbs.add_parser(
+        "install",
+        help="write the hook settings into the project",
+        allow_abbrev=False,
+    )
     q.add_argument("--agent", required=True, choices=AGENTS)
     q.add_argument(
         "--strict",
@@ -56,19 +60,29 @@ def _fill(p: argparse.ArgumentParser) -> None:
         help="require the credential broker (refused: not available yet)",
     )
     project(q)
-    q = verbs.add_parser("status", help="show what is installed, held and signed")
+    q = verbs.add_parser(
+        "status",
+        help="show what is installed, held and signed",
+        allow_abbrev=False,
+    )
     q.add_argument("--json", action="store_true", help="print JSON")
     project(q)
-    q = verbs.add_parser("uninstall", help="remove OpenAdapt's hook entries")
+    q = verbs.add_parser(
+        "uninstall",
+        help="remove OpenAdapt's hook entries",
+        allow_abbrev=False,
+    )
     q.add_argument("--agent", choices=AGENTS, help="only this agent (default: both)")
     project(q)
     q = verbs.add_parser(
-        "approve", help="approve a held call once, or release a held write"
+        "approve",
+        help="approve a held call once, or release a held write",
+        allow_abbrev=False,
     )
     q.add_argument("id", help="an approval id (ap-...) or a write id (hk-...)")
     q.add_argument("--deny", action="store_true", help="decline the call instead")
     project(q)
-    q = verbs.add_parser("run", help=argparse.SUPPRESS)
+    q = verbs.add_parser("run", help=argparse.SUPPRESS, allow_abbrev=False)
     q.add_argument("--agent", required=True, choices=AGENTS)
     q.add_argument("--event", required=True)
     project(q)
