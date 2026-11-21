@@ -217,6 +217,8 @@ def load_systems(path: Path) -> SystemsFile:
     try:
         parsed = SystemsFile.model_validate(data)
     except ValidationError as exc:
-        raise SystemsError(f"{path} is not a valid {SYSTEMS_SCHEMA} file: {exc}") from exc
+        raise SystemsError(
+            f"{path} is not a valid {SYSTEMS_SCHEMA} file: {exc}"
+        ) from exc
     parsed.source = path.resolve()
     return parsed

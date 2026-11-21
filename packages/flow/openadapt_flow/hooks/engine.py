@@ -257,6 +257,7 @@ class Engine:
                     "in their own terminal, then make the same call again.",
                 )
             granted.unlink(missing_ok=True)
+            mode = "allow"  # a person approved this one call
         refusal = self._begin(inp, intent, digest)
         if refusal is not None:
             run = self._finish(inp, intent, digest, "BLOCKED", [refusal])
@@ -302,13 +303,13 @@ class Engine:
                 contract = Contract.load(path)
             except (VerifierError, OSError) as exc:
                 return f"the contract for write {intent.write.name} can't be loaded ({exc})"
-            missing = [p for p in contract.params() if p not in intent.params]
+            missing = [p for p in contract.params if p not in intent.params]
             if missing:
                 return (
                     f"the call doesn't name the values contract "
                     f"{intent.write.name} needs: {', '.join(missing)}"
                 )
-            params = {p: intent.params[p] for p in contract.params()}
+            params = {p: intent.params[p] for p in contract.params}
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", DeprecationWarning)
@@ -325,7 +326,9 @@ class Engine:
             pending.update(
                 {"contract": str(path), "snapshot": str(snap), "params": params}
             )
-        _write_json(self._sub("pending") / f"{self._pending_key(inp, digest)}.json", pending)
+        _write_json(
+            self._sub("pending") / f"{self._pending_key(inp, digest)}.json", pending
+        )
         return None
 
     def _systems_contract(self, intent: Intent) -> Path:
@@ -349,7 +352,9 @@ class Engine:
         pending = self._claim(path) if path.is_file() else None
         if pending is None:
             try:
-                intent = classify(inp.tool_name, inp.tool_input, self._systems(), self.root)
+                intent = classify(
+                    inp.tool_name, inp.tool_input, self._systems(), self.root
+                )
             except SystemsError:
                 return HookOutput()
             if not intent.touches_system:
@@ -361,12 +366,16 @@ class Engine:
                 "UNCERTAIN",
                 ["no pre-check ran for this call, so nothing was read before it"],
             )
-            return self._tell(intent.system.name if intent.system else "", "", "UNCERTAIN", run, [])
+            return self._tell(
+                intent.system.name if intent.system else "", "", "UNCERTAIN", run, []
+            )
         label, reasons, result = self._read_back(pending)
         if inp.event == "PostToolUseFailure":
             reasons = ["the tool call reported a failure", *reasons]
         run = self._settle(pending, label, reasons, result)
-        return self._tell(pending.get("system") or "", pending.get("write") or "", label, run, reasons)
+        return self._tell(
+            pending.get("system") or "", pending.get("write") or "", label, run, reasons
+        )
 
     def _read_back(self, pending: Mapping[str, Any]) -> tuple[str, list[str], Any]:
         if not pending.get("contract"):
@@ -380,7 +389,9 @@ class Engine:
         try:
             contract = Contract.load(pending["contract"])
             snapshot = Snapshot.load(pending["snapshot"])
-            actor = Actor("agent", f"{pending['agent']}-{pending['session_sha256'][:12]}")
+            actor = Actor(
+                "agent", f"{pending['agent']}-{pending['session_sha256'][:12]}"
+            )
             result = verify_write(
                 contract,
                 snapshot,
@@ -390,7 +401,11 @@ class Engine:
                 authorization_ref=pending["write_id"],
             )
         except Exception as exc:  # noqa: BLE001 - any failure is UNCERTAIN, never a pass
-            return "UNCERTAIN", [f"the read-back failed ({type(exc).__name__}: {exc})"], None
+            return (
+                "UNCERTAIN",
+                [f"the read-back failed ({type(exc).__name__}: {exc})"],
+                None,
+            )
         finally:
             Path(str(pending.get("snapshot"))).unlink(missing_ok=True)
         return _LABEL[result.outcome.value], list(result.reasons), result

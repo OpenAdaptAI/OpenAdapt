@@ -100,7 +100,10 @@ def render(agent: Agent, event: str, out: HookOutput) -> tuple[Optional[dict], i
         if not out.context:
             return None, 0
         doc: dict[str, Any] = {
-            "hookSpecificOutput": {"hookEventName": event, "additionalContext": out.context}
+            "hookSpecificOutput": {
+                "hookEventName": event,
+                "additionalContext": out.context,
+            }
         }
         if out.flag and event == "PostToolUse":
             doc["decision"] = "block"

@@ -40,7 +40,9 @@ SHELL_TOOLS = ("Bash", "exec_command", "shell", "local_shell")
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit", "apply_patch")
 DB_COMMANDS = ("sqlite3", "psql", "mysql", "mariadb")
 _OPERATORS = set(";&|<>()")
-_READ_SQL = re.compile(r"^\s*(select|explain\s+(query\s+plan\s+)?select|values)\b", re.I)
+_READ_SQL = re.compile(
+    r"^\s*(select|explain\s+(query\s+plan\s+)?select|values)\b", re.I
+)
 _WRITE_WORDS = re.compile(
     r"\b(insert|update|delete|replace|upsert|merge|create|drop|alter|truncate|"
     r"attach|detach|pragma|vacuum|reindex|grant|revoke|copy|call|do|lock|"
@@ -51,15 +53,53 @@ _READ_DOT = re.compile(r"^\s*\.(tables|schema|indexes|indices|headers|mode)\b[^;
 _READ_SHELL = ("cat", "ls", "head", "tail", "grep", "rg", "wc", "less", "stat", "file")
 _PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.M)
 _CURL_VALUE = {
-    "-X", "--request", "-d", "--data", "--data-raw", "--data-binary",
-    "--data-ascii", "--data-urlencode", "--json", "-H", "--header", "-o",
-    "--output", "-u", "--user", "-A", "--user-agent", "-e", "--referer", "-b",
-    "--cookie", "-c", "--cookie-jar", "-w", "--write-out", "-m", "--max-time",
-    "--connect-timeout", "--retry", "--url", "-F", "--form", "-T",
-    "--upload-file", "--cacert", "--cert", "--key", "-x", "--proxy",
+    "-X",
+    "--request",
+    "-d",
+    "--data",
+    "--data-raw",
+    "--data-binary",
+    "--data-ascii",
+    "--data-urlencode",
+    "--json",
+    "-H",
+    "--header",
+    "-o",
+    "--output",
+    "-u",
+    "--user",
+    "-A",
+    "--user-agent",
+    "-e",
+    "--referer",
+    "-b",
+    "--cookie",
+    "-c",
+    "--cookie-jar",
+    "-w",
+    "--write-out",
+    "-m",
+    "--max-time",
+    "--connect-timeout",
+    "--retry",
+    "--url",
+    "-F",
+    "--form",
+    "-T",
+    "--upload-file",
+    "--cacert",
+    "--cert",
+    "--key",
+    "-x",
+    "--proxy",
 }
 _CURL_BODY = {
-    "-d", "--data", "--data-raw", "--data-binary", "--data-ascii", "--json",
+    "-d",
+    "--data",
+    "--data-raw",
+    "--data-binary",
+    "--data-ascii",
+    "--json",
     "--data-urlencode",
 }
 _CURL_UPLOAD = {"-F", "--form", "-T", "--upload-file"}
@@ -248,7 +288,9 @@ def _database(system: System, segments: list[list[str]], text: str) -> Intent:
                 "write", system, write, dict(found.groupdict()), f"write {write.name}"
             )
     return Intent(
-        "unknown_write", system, detail=f"a SQL write to {system.name} no entry declares"
+        "unknown_write",
+        system,
+        detail=f"a SQL write to {system.name} no entry declares",
     )
 
 
@@ -269,7 +311,9 @@ def _curl(system: System, segments: list[list[str]]) -> Intent:
     while i < len(args):
         arg = args[i]
         value = args[i + 1] if i + 1 < len(args) else None
-        long_value = arg.split("=", 1)[1] if arg.startswith("--") and "=" in arg else None
+        long_value = (
+            arg.split("=", 1)[1] if arg.startswith("--") and "=" in arg else None
+        )
         flag = arg.split("=", 1)[0] if long_value is not None else arg
         if flag in _CURL_UPLOAD:
             return Intent("unknown_write", system, detail="a curl upload")
@@ -280,13 +324,17 @@ def _curl(system: System, segments: list[list[str]]) -> Intent:
         if flag in _CURL_VALUE:
             got = long_value if long_value is not None else value
             if got is None:
-                return Intent("unknown_write", system, detail="a curl flag without a value")
+                return Intent(
+                    "unknown_write", system, detail="a curl flag without a value"
+                )
             if flag in ("-X", "--request"):
                 method = got.upper()
             elif flag in _CURL_BODY:
                 if body is not None or got.startswith("@"):
                     return Intent(
-                        "unknown_write", system, detail="a curl body from a file or in parts"
+                        "unknown_write",
+                        system,
+                        detail="a curl body from a file or in parts",
                     )
                 body = got
             elif flag == "--url":
@@ -295,14 +343,22 @@ def _curl(system: System, segments: list[list[str]]) -> Intent:
             continue
         if not arg.startswith("-"):
             urls.append(arg)
-        elif re.fullmatch(r"-[a-zA-Z]{2,}", arg) and set(arg[1:]) & set("XdHouAebcwmFTx"):
+        elif re.fullmatch(r"-[a-zA-Z]{2,}", arg) and set(arg[1:]) & set(
+            "XdHouAebcwmFTx"
+        ):
             return Intent("unknown_write", system, detail="combined curl flags")
         i += 1
     base = urlsplit(system.base_url or "")
-    mine = [u for u in urls if urlsplit(u if "://" in u else "http://" + u).netloc in _netlocs(base)]
+    mine = [
+        u
+        for u in urls
+        if urlsplit(u if "://" in u else "http://" + u).netloc in _netlocs(base)
+    ]
     if len(urls) != 1 or len(mine) != 1:
         return Intent(
-            "unknown_write", system, detail=f"a curl call that reaches {system.name} unclearly"
+            "unknown_write",
+            system,
+            detail=f"a curl call that reaches {system.name} unclearly",
         )
     if method is None:
         method = "GET" if (body is None or get) else "POST"
@@ -368,7 +424,9 @@ def _shell(text: str, systems: SystemsFile, root: Path) -> Intent:
         return Intent("none")
     if len(hits) > 1:
         return Intent(
-            "unknown_write", hits[0], detail="a command that reaches more than one system"
+            "unknown_write",
+            hits[0],
+            detail="a command that reaches more than one system",
         )
     system = hits[0]
     segments = _split(text)
@@ -379,13 +437,17 @@ def _shell(text: str, systems: SystemsFile, root: Path) -> Intent:
             detail=f"a compound command that reaches {system.name}",
         )
     if any(m in " ".join(seg) for seg in segments[1:] for m in system.markers(root)):
-        return Intent("unknown_write", system, detail="a pipeline that names the system twice")
+        return Intent(
+            "unknown_write", system, detail="a pipeline that names the system twice"
+        )
     if system.kind == "database":
         return _database(system, segments, text)
     return _curl(system, segments)
 
 
-def _file_paths(tool_name: str, tool_input: Mapping[str, Any], root: Path) -> list[Path]:
+def _file_paths(
+    tool_name: str, tool_input: Mapping[str, Any], root: Path
+) -> list[Path]:
     paths: list[str] = []
     for key in ("file_path", "path", "notebook_path"):
         value = tool_input.get(key)
@@ -459,8 +521,9 @@ def classify(
             if sqlite is None:
                 continue
             for path in paths:
-                if path.resolve().parent == sqlite.resolve().parent and path.name.startswith(
-                    sqlite.name
+                if (
+                    path.resolve().parent == sqlite.resolve().parent
+                    and path.name.startswith(sqlite.name)
                 ):
                     return Intent(
                         "unknown_write", system, detail=f"a file edit of {system.name}"

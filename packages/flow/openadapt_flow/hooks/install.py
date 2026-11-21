@@ -104,7 +104,9 @@ def _entry(agent: str, event: str, launcher: Path) -> dict[str, Any]:
 
 
 def _ours(handler: Any, launcher: Path) -> bool:
-    return isinstance(handler, dict) and str(launcher) in str(handler.get("command", ""))
+    return isinstance(handler, dict) and str(launcher) in str(
+        handler.get("command", "")
+    )
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -181,7 +183,11 @@ def _manifest(project: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"schema_version": MANIFEST_SCHEMA, "agents": {}}
-    return data if isinstance(data, dict) else {"schema_version": MANIFEST_SCHEMA, "agents": {}}
+    return (
+        data
+        if isinstance(data, dict)
+        else {"schema_version": MANIFEST_SCHEMA, "agents": {}}
+    )
 
 
 def install(
@@ -210,7 +216,9 @@ def install(
         encoding="utf-8",
     )
     launcher = launcher_path(project)
-    launcher.write_text(_launcher_text(project, python or sys.executable), encoding="utf-8")
+    launcher.write_text(
+        _launcher_text(project, python or sys.executable), encoding="utf-8"
+    )
     launcher.chmod(0o755)
     path = project / CONFIG_FILES[agent]
     existed = path.exists()
@@ -234,7 +242,9 @@ def install(
     }
     manifest["python"] = python or sys.executable
     manifest["schema_version"] = MANIFEST_SCHEMA
-    _manifest_path(project).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    _manifest_path(project).write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     return {
         "agent": agent,
         "file": str(path),
@@ -297,7 +307,9 @@ def status(project: Path) -> dict[str, Any]:
             for event, groups in hooks.items() if isinstance(hooks, dict) else []:
                 for group in groups if isinstance(groups, list) else []:
                     handlers = group.get("hooks") if isinstance(group, dict) else None
-                    if isinstance(handlers, list) and any(_ours(h, launcher) for h in handlers):
+                    if isinstance(handlers, list) and any(
+                        _ours(h, launcher) for h in handlers
+                    ):
                         found.append(event)
         missing = [e for e in EVENTS[name] if e not in found]
         agents[name] = {

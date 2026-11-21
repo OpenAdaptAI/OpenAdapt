@@ -97,7 +97,9 @@ def project(tmp_path: Path, api: str, monkeypatch: pytest.MonkeyPatch) -> Path:
     (root / "contracts").mkdir()
     db = root / "data" / "clinic.sqlite"
     con = sqlite3.connect(db)
-    con.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, patient_id TEXT, note TEXT)")
+    con.execute(
+        "CREATE TABLE notes (id INTEGER PRIMARY KEY, patient_id TEXT, note TEXT)"
+    )
     con.execute("INSERT INTO notes (patient_id, note) VALUES ('p0', 'older note')")
     con.commit()
     con.close()
@@ -213,7 +215,9 @@ class Harness:
         self.session = session
         self.n = 0
 
-    def hook(self, event: str, extra: dict[str, Any]) -> tuple[int, Optional[dict], str]:
+    def hook(
+        self, event: str, extra: dict[str, Any]
+    ) -> tuple[int, Optional[dict], str]:
         payload = {
             "session_id": self.session,
             "transcript_path": str(self.root / "t.jsonl"),
@@ -235,7 +239,9 @@ class Harness:
         doc = json.loads(proc.stdout) if proc.stdout.strip() else None
         return proc.returncode, doc, proc.stderr
 
-    def call(self, command: str, *, person_says: str = "yes", post: bool = True) -> dict:
+    def call(
+        self, command: str, *, person_says: str = "yes", post: bool = True
+    ) -> dict:
         self.n += 1
         tool = {
             "tool_name": "Bash",
@@ -245,7 +251,11 @@ class Harness:
         code, doc, err = self.hook("PreToolUse", tool)
         assert code == 0, err
         decision = (doc or {}).get("hookSpecificOutput", {}).get("permissionDecision")
-        reason = (doc or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+        reason = (
+            (doc or {})
+            .get("hookSpecificOutput", {})
+            .get("permissionDecisionReason", "")
+        )
         out: dict[str, Any] = {"decision": decision or "pass", "reason": reason}
         if decision == "deny" or (decision == "ask" and person_says != "yes"):
             return out
@@ -255,7 +265,9 @@ class Harness:
         code, doc, err = self.hook("PostToolUse", {**tool, "tool_response": response})
         assert code == 0, err
         out["post"] = doc or {}
-        out["context"] = (doc or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+        out["context"] = (
+            (doc or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+        )
         return out
 
     def stop(self) -> Optional[dict]:
@@ -287,7 +299,7 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
 
     # 1. An allowed, declared write: read back, VERIFIED, signed receipt.
     ok = agent.call(
-        f"sqlite3 data/clinic.sqlite \"INSERT INTO notes (patient_id, note) "
+        f'sqlite3 data/clinic.sqlite "INSERT INTO notes (patient_id, note) '
         f"VALUES ('p1', '{NOTE}')\""
     )
     assert ok["decision"] == "pass"  # in scope: Claude Code's own prompt still applies
@@ -296,7 +308,7 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
     run_dir, verified = _receipt(project, ok["context"])
     assert verified.ok, verified
     assert verified.outcome == "VERIFIED"
-    assert verified.signer_lines == ["Signed by this computer"]
+    assert list(verified.signer_lines) == ["Signed by this computer"]
     report = json.loads((run_dir / "report.json").read_text())
     assert report["outcome"] == "VERIFIED" and report["checked"]["delta"] == "held"
     # The receipt names no value, path or URL from the call.
@@ -313,11 +325,18 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
     assert verified.ok and verified.outcome == "STOPPED"
 
     # Reads pass through unchecked; the agent can't edit its own scope.
-    assert agent.call('sqlite3 data/clinic.sqlite "SELECT count(*) FROM notes"', post=False)[
-        "decision"
-    ] == "pass"
-    assert agent.call("openadapt hooks approve hk-0000", post=False)["decision"] == "deny"
-    assert agent.call("echo x >> openadapt.systems.yaml", post=False)["decision"] == "deny"
+    assert (
+        agent.call(
+            'sqlite3 data/clinic.sqlite "SELECT count(*) FROM notes"', post=False
+        )["decision"]
+        == "pass"
+    )
+    assert (
+        agent.call("openadapt hooks approve hk-0000", post=False)["decision"] == "deny"
+    )
+    assert (
+        agent.call("echo x >> openadapt.systems.yaml", post=False)["decision"] == "deny"
+    )
 
     # 3. A write whose read-back fails: UNCERTAIN, never a pass, and held.
     _Api.break_after_write = True
@@ -360,7 +379,7 @@ def test_codex_asks_by_denying_until_a_person_approves(project: Path, api: str) 
     print(hooks_engine.approve(project, request))
 
     second = agent.call(command)
-    assert second["decision"] == "pass"
+    assert second["decision"] == "pass", second["reason"]
     assert "VERIFIED" in second["context"], second
     _, verified = _receipt(project, second["context"])
     assert verified.ok and verified.outcome == "VERIFIED"
@@ -372,7 +391,7 @@ def test_a_write_with_no_post_event_is_read_back_at_stop(project: Path) -> None:
     install(project, "claude-code")
     agent = Harness(project, "claude-code", session="session-2")
     command = (
-        "sqlite3 data/clinic.sqlite \"INSERT INTO notes (patient_id, note) "
+        'sqlite3 data/clinic.sqlite "INSERT INTO notes (patient_id, note) '
         "VALUES ('p4', 'never sent')\""
     )
     assert agent.call(command, post=False)["decision"] == "pass"
