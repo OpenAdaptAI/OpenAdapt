@@ -16,7 +16,6 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
-from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
     build_statement,
     local_registry,
@@ -25,6 +24,8 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
+
+from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
@@ -453,3 +454,39 @@ def test_a_receipt_names_both_report_digests(tmp_path):
     report["model_calls"] = 3
     (run / "report.json").write_text(json.dumps(report, indent=4))
     assert not verify_run_receipt(run, local_registry()).ok
+
+
+def test_transaction_receipts_become_lines(tmp_path):
+    from openadapt_flow.tx.receipt import issue_tx_receipt
+
+    run = _run(tmp_path, "VERIFIED", "tx")
+    _, tx_path = issue_tx_receipt(
+        run / "tx",
+        task_id="task-1",
+        entity_name="referral",
+        operation="create",
+        outcome="CONFIRMED",
+    )
+    assert tx_path.name == "tx-receipt.cose"
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    tx_lines = [x for x in result.statement["predicate"]["lines"] if "evidence" in x]
+    assert len(tx_lines) == 1
+    line = tx_lines[0]
+    assert line["evidence"]["kind"] == "tx_receipt"
+    assert line["evidence"]["sha256"] == __import__("hashlib").sha256(tx_path.read_bytes()).hexdigest()
+    assert (line["check"], line["strength"]) == ("confirmed", "read_back")
+    assert line["step"] >= 3  # after the run's own steps
+
+
+def test_the_public_card_is_written_and_verifies(tmp_path):
+    run = _run(tmp_path, "HALTED", "card")
+    write_receipt_record(run)
+    card = json.loads((run / "receipt.card.json").read_text())
+    assert card["schema"] == r.CARD_SCHEMA
+    assert set(card["openings"]) == {"flow_version"}
+    assert "MockMed" not in json.dumps(card)
+    result = r.verify_receipt(card, local_registry())
+    assert result.ok and result.outcome == "STOPPED"
+    assert _verify(str(run / "receipt.card.json")).exit_code == 0

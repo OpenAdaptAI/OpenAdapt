@@ -115,6 +115,9 @@ _RECORD_FIELDS = (
     ("seal_sha256",),
     ("run_authorization_sha256", "signature_sha256"),
     ("write_receipt_sha256",),
+    # A receipt (record/run/v1): the SHA-256 of its DSSE payload bytes, so
+    # a countersignature added later doesn't change what was logged.
+    ("receipt_payload_sha256",),
 )
 
 
@@ -648,6 +651,69 @@ def anchor_seal(
         log_keys=log_keys,
         submit=submit,
         env=env,
+    )
+
+
+def receipt_payload_sha256(envelope: Mapping[str, Any]) -> str:
+    """The digest a receipt's anchor names: SHA-256 of its exact payload bytes."""
+    return hashlib.sha256(
+        base64.b64decode(str(envelope["payload"]), validate=True)
+    ).hexdigest()
+
+
+def anchor_receipt(
+    receipt_path: Path,
+    signer: "SealSigner",
+    *,
+    log_url: str = REKOR_URL,
+    log_keys: Optional[Sequence[LogKey]] = None,
+    submit: Callable[[str, str, bytes, bytes], Mapping[str, Any]] = submit_hashedrekord,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
+    """Anchor a receipt (``receipt.json`` -> ``receipt.anchor.json``). Idempotent.
+
+    Sends what a Seal anchor sends: one SHA-512 digest of a statement over the
+    receipt's payload digest and a nonce, the key's public key and a
+    signature. Refuses when ``signer`` didn't sign the receipt.
+    """
+    from openadapt_flow.offline_seal import loads_strict
+
+    receipt_path = Path(receipt_path)
+    try:
+        envelope = loads_strict(receipt_path.read_text(encoding="utf-8"))
+        signed_by = {str(sig["keyid"]) for sig in envelope["signatures"]}
+        digest = receipt_payload_sha256(envelope)
+    except Exception as exc:
+        raise AnchorError("receipt_unreadable", str(receipt_path)) from exc
+    if signer.key_id not in signed_by:
+        raise AnchorError(
+            "anchor_key_mismatch", f"{signer.key_id} did not sign {receipt_path.name}"
+        )
+    return anchor_record(
+        {"receipt_payload_sha256": digest},
+        anchor_path(receipt_path),
+        signer,
+        log_url=log_url,
+        log_keys=log_keys,
+        submit=submit,
+        env=env,
+    )
+
+
+def verify_receipt_anchor(
+    envelope: Mapping[str, Any],
+    anchor: Any,
+    public_raw: bytes,
+    *,
+    log_keys: Optional[Sequence[LogKey]] = None,
+) -> AnchorVerification:
+    """Check that ``anchor`` logs exactly this receipt's payload, signed by ``public_raw``."""
+    try:
+        digest = receipt_payload_sha256(envelope)
+    except _MALFORMED:
+        return AnchorVerification(False, reason="anchor_malformed")
+    return verify_record_anchor(
+        {"receipt_payload_sha256": digest}, anchor, public_raw, log_keys=log_keys
     )
 
 

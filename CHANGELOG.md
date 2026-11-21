@@ -19,6 +19,11 @@
   screenshots, typed values, URLs or page text.
 - `openadapt flow encrypt` replaces `flow seal` (a hidden alias for one release).
   Desktop's "Seal and encrypt version" is now "Encrypt version".
+- Each run also writes `receipt.card.json`, its public card. Transaction and
+  write receipts in a run folder become lines of the run's receipt, by digest.
+  `local-seal anchor` logs the receipt in Rekor too, and `openadapt verify`
+  then says "Logged publicly at <time>". The offline receipt page checks
+  `receipt.json` first.
 - The run summary (`run-receipt/v2`) moves from `receipt.json` to
   `run-summary.json`, `.md` and `.png`. Older run folders still read.
 

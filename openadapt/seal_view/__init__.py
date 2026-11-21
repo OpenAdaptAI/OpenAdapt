@@ -194,6 +194,33 @@ def local_keys(home: Optional[Path] = None) -> list[dict[str, str]]:
     return [public_key_entry(home or seal_home())]
 
 
+def receipt_registry(keys: Any) -> dict[str, Any]:
+    """The keys as an ``openadapt.receipt-keys/v1`` registry for the receipt check.
+
+    A registry that already names roles is used as it is. An older Seal key
+    registry holds the keys of machines that sign their own runs, so each of
+    its keys is ``this_computer``.
+    """
+
+    if isinstance(keys, Mapping) and keys.get("schema") == "openadapt.receipt-keys/v1":
+        return dict(keys)
+    entries = keys.get("keys") if isinstance(keys, Mapping) else keys
+    out = []
+    for entry in entries or []:
+        if not isinstance(entry, Mapping):
+            continue
+        item = {
+            "key_id": entry.get("key_id"),
+            "public_key": entry.get("public_key"),
+            "role": "this_computer",
+            "status": entry.get("status", "active"),
+        }
+        if item["status"] == "revoked":
+            item["revoked_at"] = entry.get("revoked_at")
+        out.append(item)
+    return {"schema": "openadapt.receipt-keys/v1", "keys": out}
+
+
 def page_data(
     run_dir: Path,
     *,
@@ -211,6 +238,9 @@ def page_data(
     if seal is None:
         raise SealViewError(f"{run_dir} has no seal.json")
     present = [name for name in RUN_FILES if (run_dir / name).is_file()]
+    receipt = _text(run_dir / "receipt.json")
+    if receipt is not None and '"payloadType"' not in receipt:
+        receipt = None  # an older run summary under the receipt's name
     return {
         "report_b64": base64.b64encode(report).decode("ascii"),
         "seal_text": seal,
@@ -218,6 +248,10 @@ def page_data(
         "tsa_text": _text(run_dir / "seal.tsa.json"),
         "tsr_b64": _b64(run_dir / "seal.tsr"),
         "keys": keys,
+        # The receipt (record/run/v1), checked first; seal.json is the older format.
+        "receipt_text": receipt,
+        "receipt_anchor_text": _text(run_dir / "receipt.anchor.json"),
+        "receipt_keys": receipt_registry(keys),
         "program": {"spec": dict(program)},
         "about": dict(about or {}),
         "host": {"files": present, **dict(host or {})},
