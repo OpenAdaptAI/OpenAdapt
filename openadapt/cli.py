@@ -1464,6 +1464,26 @@ for _verb, _help in (
 
 
 @main.command(
+    "login",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def login(command_ctx: click.Context) -> None:
+    """Sign in to OpenAdapt Cloud: `openadapt login` (same as `setup login`).
+
+    Every argument passes to `openadapt-flow login` unchanged. After a
+    successful sign-in, Seals this computer published are claimed into your
+    workspace when Cloud supports it.
+    """
+    _require_supported_python()
+    _run_flow(["login", *command_ctx.args])
+
+
+@main.command(
     "pull",
     context_settings={
         "ignore_unknown_options": True,
