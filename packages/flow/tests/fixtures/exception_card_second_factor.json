@@ -1,1 +1,28 @@
-{}
+{
+  "card_id": "sha256:789e54fd7198a18087709380c8db637b843b28fb2d1d04f1247e5ac8026097ce",
+  "choices": [
+    {
+      "consequence": "You type the code in the live browser yourself. The run then goes on from the same screen. OpenAdapt never sees the code.",
+      "id": "done_by_person",
+      "label": "I entered the code in the browser"
+    },
+    {
+      "consequence": "Nothing is saved. The run moves to the next item.",
+      "id": "skip",
+      "label": "Skip this item"
+    },
+    {
+      "consequence": "Nothing more is saved. The whole run stops.",
+      "id": "abort",
+      "label": "Stop the run"
+    }
+  ],
+  "deadline_at": "2026-11-21T12:15:00Z",
+  "kind": "second_factor",
+  "opened_at": "2026-11-21T12:00:00Z",
+  "run_ref": "fixture-run",
+  "schema": "openadapt.exception-card/v1",
+  "screenshot_ref": null,
+  "summary": "The sign-in page asks for a six-digit code",
+  "task_id": "intake"
+}
