@@ -154,6 +154,9 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         self.independent_system_of_record = (
             self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
         )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     # -- scanning -----------------------------------------------------------
 
@@ -210,6 +213,9 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         files = self._candidate_files()
         if files is None:
             return None
+        self._refused = self.provenance.acting_artifact(files)
+        if self._refused:
+            return None
         records: list[dict[str, Any]] = []
         for path in files:
             record = self._flatten(path)
@@ -249,5 +255,5 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
             )
         from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
 
-        verdict = with_provenance(verdict, self.provenance)
+        verdict = with_provenance(verdict, self.provenance, self._refused)
         return redact_verdict(verdict, self.redaction, field=expected.field)

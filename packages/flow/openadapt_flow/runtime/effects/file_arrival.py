@@ -140,6 +140,9 @@ class FileArrivalVerifier(VerifierAdapterBase):
         self.independent_system_of_record = (
             self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
         )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     # -- listing ------------------------------------------------------------
 
@@ -155,6 +158,9 @@ class FileArrivalVerifier(VerifierAdapterBase):
         try:
             paths = sorted(p for p in root.glob(self.pattern) if p.is_file())
         except OSError:
+            return None
+        self._refused = self.provenance.acting_artifact(paths)
+        if self._refused:
             return None
         now = time.time()
         records: list[dict[str, Any]] = []
@@ -285,5 +291,5 @@ class FileArrivalVerifier(VerifierAdapterBase):
             current = self._scan()
             last = judge_records(expected, before, current, substrate=self.substrate)
             if last.confirmed or time.monotonic() >= deadline:
-                return with_provenance(last, self.provenance)
+                return with_provenance(last, self.provenance, self._refused)
             time.sleep(0.2)

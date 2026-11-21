@@ -26,9 +26,15 @@
   `separate_session` is at most `separate_session`; `system_of_record` keeps
   tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
   folder or a Playwright download folder is graded as the acting session's.
-  Each verdict records the producer in `read_evidence.provenance`. A
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder or an acting folder
+  beneath the store, or a file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a
   deployment that relied on the old tier 1 for these kinds must now declare
-  `artifact_producer: system_of_record`; until it does, runs that need a
+  `artifact_producer: system_of_record` (one line in its `effects:` or
+  `verifier:` section, including a `record --verify` file); until it does, runs that need a
   separate-session or system-of-record check are not `VERIFIED`. Verifier
   identities of configs that leave both new fields unset are unchanged.
 - `wrap publish` no longer refuses programs whose identity templates carry

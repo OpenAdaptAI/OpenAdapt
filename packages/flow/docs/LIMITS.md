@@ -702,9 +702,9 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-or a file the system itself wrote; tier 1) or the application's own screens read in a separate signed-in
-session (tier 2): a record page in a separate browser (`ui_readback`), a
-relaunched desktop app or a second RDP session (`fresh_session`, tested on
+or a file the system itself wrote; tier 1) or the application's own screens
+read in a separate signed-in session (tier 2): a record page in a separate
+browser (`ui_readback`), a relaunched desktop app or a second RDP session (`fresh_session`, tested on
 mocks only), or a look-up in a separate desktop, RDP or Citrix session
 (`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
 the application, so none is a system-of-record read, and each has its own
@@ -728,6 +728,14 @@ never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
 Production evidence; a live ICA/HDX session is a deployment-specific
 qualification. Wire the independent read before paying a sprint for a
 `VERIFIED` outcome.
+
+**A file's producer is declared, not proven.** File, PDF and email checks
+reach tier 1 or 2 only when the configuration declares who wrote the store
+(`artifact_producer`). Flow lowers that claim when it sees a browser download
+folder or a declared acting folder in or around the store, or a symlink out
+of it. It cannot tell a file the acting session saved straight into the store
+under an ordinary name from one the system wrote. The evidence then says
+`producer_source: declared`: the level rests on the configuration.
 
 The reopen itself has limits. It earns the `reopened` level only when its
 navigation contains a recognized state reset; without one it is

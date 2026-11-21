@@ -1382,6 +1382,7 @@ effects:
       root: /secure/exports
       file_pattern: "confirmation-*.json"
       document_format: json
+      artifact_producer: system_of_record   # the export job wrote it
     - kind: onscreen             # persisted-state read-back
 ```
 

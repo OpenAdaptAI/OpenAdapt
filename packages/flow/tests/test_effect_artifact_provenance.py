@@ -186,6 +186,7 @@ def test_evidence_names_the_producer_and_no_path(tmp_path: Path):
         "producer": "separate_session",
         "declared_producer": "separate_session",
         "check_level": "separate_session",
+        "producer_source": "declared",
     }
     assert str(tmp_path) not in repr(block)
     assert before.detail["provenance"]["producer"] == "separate_session"
@@ -253,6 +254,25 @@ def test_deployment_config_passes_the_producer(tmp_path: Path):
             )
         )
         assert spoofed.verification_tier is VerificationTier.IMMEDIATE_SCREEN
+
+
+def test_the_redacting_wrapper_keeps_the_provenance_tier(tmp_path: Path):
+    for producer, tier in (
+        (None, VerificationTier.IMMEDIATE_SCREEN),
+        ("system_of_record", VerificationTier.INDEPENDENT_SYSTEM),
+    ):
+        verifier = build_effect_verifier(
+            EffectsConfig(
+                kind="document-hash",
+                root=str(tmp_path),
+                artifact_producer=producer,
+                evidence_redact_fields=["name"],
+            )
+        )
+        assert verifier_effect_tier(verifier, None) is tier
+        assert getattr(verifier, "independent_system_of_record", None) is (
+            tier is VerificationTier.INDEPENDENT_SYSTEM
+        )
 
 
 # -- a real PDF downloaded by a headless browser --------------------------------
@@ -346,6 +366,7 @@ def test_a_pdf_the_acting_browser_downloaded_is_not_verified(tmp_path: Path):
         assert verdict.read_evidence["provenance"]["declared_producer"] == (
             "system_of_record"
         )
+        assert verdict.read_evidence["provenance"]["producer_source"] == "observed"
         readback = _run_readback(acting_verifier, verdict)
         assert readback["checked_how"] == "same_screen"
         assert readback["below_minimum"] is True  # not VERIFIED
@@ -376,3 +397,186 @@ def test_a_pdf_the_acting_browser_downloaded_is_not_verified(tmp_path: Path):
         assert verdict.verdict is Verdict.CONFIRMED
         readback = _run_readback(store_verifier, verdict)
         assert readback["checked_how"] == "system_of_record"
+
+
+# -- the grade is bound to each artifact a check reads ---------------------------
+
+_EML = b"To: a@example.test\r\nFrom: b@example.test\r\nSubject: s\r\n\r\nbody\r\n"
+
+#: Each local reader, built from configuration over a recursive store, with
+#: the artifact it reads and an effect that the artifact satisfies.
+_READERS = {
+    "document-hash": (
+        {"glob": "**/*.pdf"},
+        "claim.pdf",
+        PDF_BYTES,
+        _hash_effect(),
+    ),
+    "file": (
+        {"file_pattern": "**/*.csv"},
+        "batch.csv",
+        b"row\n",
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"arrived": "True"},
+            expected_count=1,
+            count_new_only=True,
+            forbid_collateral_loss=False,
+            timeout_s=0.05,
+        ),
+    ),
+    "document": (
+        {"file_pattern": "**/*.json", "document_format": "json"},
+        "report.json",
+        b'{"id": "r1"}',
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"parseable": "True"},
+            expected_count=1,
+            count_new_only=True,
+            forbid_collateral_loss=False,
+            timeout_s=0.05,
+        ),
+    ),
+    "email": (
+        {"mail_pattern": "**/*.eml"},
+        "1.eml",
+        _EML,
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"to": "a@example.test"},
+            expected_count=1,
+            count_new_only=True,
+            forbid_collateral_loss=False,
+            timeout_s=0.05,
+        ),
+    ),
+}
+
+
+def _reader(kind: str, store: Path, producer: str = "system_of_record"):
+    options, _name, _raw, _effect = _READERS[kind]
+    return build_effect_verifier(
+        EffectsConfig(kind=kind, root=str(store), artifact_producer=producer, **options)
+    )
+
+
+@pytest.mark.parametrize("kind", sorted(_READERS))
+def test_a_system_owned_artifact_in_a_recursive_store_is_verified(
+    tmp_path: Path, kind: str
+):
+    _options, name, raw, effect = _READERS[kind]
+    store = tmp_path / "store"
+    (store / "reports").mkdir(parents=True)
+    verifier = _reader(kind, store)
+    before = verifier.capture_pre_state()
+    (store / "reports" / name).write_bytes(raw)
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verdict.read_evidence["provenance"]["check_level"] == "system_of_record"
+    assert verdict.read_evidence["provenance"]["producer_source"] == "declared"
+    assert verifier_effect_tier(verifier, None) is VerificationTier.INDEPENDENT_SYSTEM
+
+
+@pytest.mark.parametrize("kind", sorted(_READERS))
+def test_a_browser_download_beneath_a_strong_store_is_refused(
+    tmp_path: Path, kind: str
+):
+    _options, name, raw, effect = _READERS[kind]
+    store = tmp_path / "store"
+    (store / "reports").mkdir(parents=True)
+    verifier = _reader(kind, store)
+    before = verifier.capture_pre_state()
+    downloads = store / "playwright-artifacts-abc123"
+    downloads.mkdir()
+    (downloads / name).write_bytes(raw)
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert not verdict.confirmed
+    assert verdict.matched_records == []
+    assert "browser download folder" in verdict.reason
+    block = verdict.read_evidence["provenance"]
+    assert block["producer"] == "acting_session"
+    assert block["declared_producer"] == "system_of_record"
+    assert block["check_level"] == "same_screen"
+    assert block["producer_source"] == "observed"
+    assert str(tmp_path) not in repr(block)
+
+
+@pytest.mark.parametrize("kind", sorted(_READERS))
+def test_a_symlink_out_of_a_strong_store_is_refused(tmp_path: Path, kind: str):
+    _options, name, raw, effect = _READERS[kind]
+    store = tmp_path / "store"
+    (store / "reports").mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / name).write_bytes(raw)
+    verifier = _reader(kind, store)
+    before = verifier.capture_pre_state()
+    (store / "reports" / name).symlink_to(elsewhere / name)
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "outside the store" in verdict.reason
+
+
+def test_a_weak_producer_reads_the_same_store_unchanged(tmp_path: Path):
+    _options, name, raw, effect = _READERS["document-hash"]
+    store = tmp_path / "store"
+    (store / "playwright-artifacts-abc123").mkdir(parents=True)
+    verifier = _reader("document-hash", store, producer="acting_session")
+    before = verifier.capture_pre_state()
+    (store / "playwright-artifacts-abc123" / name).write_bytes(raw)
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.CONFIRMED
+    assert verdict.read_evidence["provenance"]["check_level"] == "same_screen"
+
+
+def test_a_real_download_beneath_a_mixed_store_is_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The acting browser downloads into a folder beneath a broad store."""
+
+    sync_api = pytest.importorskip("playwright.sync_api")
+    store = tmp_path / "store"
+    (store / "reports").mkdir(parents=True)
+    # Playwright makes its download folder under the temporary directory, so
+    # pointing that at the store puts the acting browser's copy inside it.
+    monkeypatch.setenv("TMPDIR", str(store))
+    monkeypatch.setenv("TMP", str(store))
+    monkeypatch.setenv("TEMP", str(store))
+    verifier = DocumentHashVerifier(store, glob="**/*.pdf", producer="system_of_record")
+    before = verifier.capture_pre_state()
+    with _ClaimServer(tmp_path / "app-store") as app:
+        with sync_api.sync_playwright() as pw:
+            try:
+                browser = pw.chromium.launch(headless=True)
+            except Exception as exc:  # noqa: BLE001 - no browser installed
+                pytest.skip(f"headless Chromium unavailable: {exc}")
+            try:
+                context = browser.new_context(accept_downloads=True)
+                page = context.new_page()
+                page.goto(app.url + "/")
+                with page.expect_download() as info:
+                    page.click("#get")
+                downloaded = Path(info.value.path()).resolve()
+                if not downloaded.is_relative_to(store.resolve()):
+                    pytest.skip("this Playwright build ignores TMPDIR for downloads")
+                # Read while the acting browser's copy is still in the store.
+                verdict = verifier.verify(_hash_effect(), before)
+                context.close()
+            finally:
+                browser.close()
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "browser download folder" in verdict.reason
+    assert verdict.read_evidence["provenance"]["producer"] == "acting_session"
+
+    # The positive case: the system writes the same bytes into the store.
+    for leftover in store.glob("playwright-artifacts-*"):
+        for child in leftover.rglob("*"):
+            if child.is_file():
+                child.unlink()
+    (store / "reports" / "claim.pdf").write_bytes(PDF_BYTES)
+    fresh = DocumentHashVerifier(store, glob="**/*.pdf", producer="system_of_record")
+    verdict = fresh.verify(_hash_effect(), before)
+    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verdict.read_evidence["provenance"]["check_level"] == "system_of_record"

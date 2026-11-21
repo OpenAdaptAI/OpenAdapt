@@ -151,6 +151,9 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         self.independent_system_of_record = (
             self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
         )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     # -- parsing ------------------------------------------------------------
 
@@ -183,10 +186,12 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
     def _scan(self) -> Optional[list[dict[str, Any]]]:
         if not self.root.is_dir():
             return None
+        paths = sorted(p for p in self.root.glob(self.pattern) if p.is_file())
+        self._refused = self.provenance.acting_artifact(paths)
+        if self._refused:
+            return None
         records: list[dict[str, Any]] = []
-        for path in sorted(self.root.glob(self.pattern)):
-            if not path.is_file():
-                continue
+        for path in paths:
             try:
                 with path.open("rb") as stream:
                     raw = stream.read(DOCUMENT_READ_LIMIT + 1)
@@ -245,5 +250,5 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
             )
         from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
 
-        verdict = with_provenance(verdict, self.provenance)
+        verdict = with_provenance(verdict, self.provenance, self._refused)
         return redact_verdict(verdict, self.redaction, field=expected.field)

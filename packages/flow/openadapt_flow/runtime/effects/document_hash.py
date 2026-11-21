@@ -92,6 +92,9 @@ class DocumentHashVerifier(VerifierAdapterBase):
         self.independent_system_of_record = (
             self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
         )
+        #: Why the last scan was refused (an acting-session artifact under a
+        #: strong declared producer); empty when it was not.
+        self._refused = ""
 
     def _scan(self) -> Optional[list[dict[str, Any]]]:
         """List the store's documents as flat records.
@@ -105,6 +108,9 @@ class DocumentHashVerifier(VerifierAdapterBase):
         try:
             paths = sorted(p for p in self.root.glob(self.glob) if p.is_file())
         except OSError:
+            return None
+        self._refused = self.provenance.acting_artifact(paths)
+        if self._refused:
             return None
         records: list[dict[str, Any]] = []
         for p in paths:
@@ -145,4 +151,4 @@ class DocumentHashVerifier(VerifierAdapterBase):
 
         current = self._scan()
         verdict = judge_records(expected, before, current, substrate=self.substrate)
-        return with_provenance(verdict, self.provenance)
+        return with_provenance(verdict, self.provenance, self._refused)
