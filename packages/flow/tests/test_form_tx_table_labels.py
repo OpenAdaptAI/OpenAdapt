@@ -15,21 +15,8 @@ import pytest
 sync_api = pytest.importorskip("playwright.sync_api")
 
 from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface  # noqa: E402
-from openadapt_flow.form_tx.reconciler import FormReconciler  # noqa: E402
 from openadapt_flow.form_tx.types import (  # noqa: E402
-    ControlKind,
-    DossierFact,
-    FieldAnchorSpec,
-    FieldBindingSpec,
-    FieldCodecSpec,
-    FormCodecKind,
-    FormHaltKind,
-    FormPack,
-    InputDossier,
-    PopupSubroutineSpec,
-    ProvenanceKind,
     UIProfileSpec,
-    WizardScreenSpec,
 )
 
 ORIGIN = "http://layout.local"
