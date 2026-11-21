@@ -119,3 +119,12 @@ ignore = ["BLE001"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv]
+# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
+# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
+# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
+# keeps the last compatible release until the 3.10 floor is dropped.
+constraint-dependencies = [
+    "pillow>=13.0.0; python_full_version >= '3.11'",
+]
