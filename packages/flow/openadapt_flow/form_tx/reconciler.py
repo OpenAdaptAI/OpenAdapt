@@ -181,7 +181,9 @@ class ReconcilerSession:
         self._bound_surface: Optional[FormSurfaceBackend] = None
         # Every field typed, selected or kept, keyed by field identity. The
         # read-back judge must give each one a verdict.
-        self._writes: dict[str, FieldWriteRecord] = {}
+        # Keyed by field, selector and popup, so a popup input never hides a
+        # main-form write of the same dossier key.
+        self._writes: dict[tuple[str, str, str], FieldWriteRecord] = {}
 
     def record_write(
         self,
@@ -198,13 +200,15 @@ class ReconcilerSession:
         else:
             dossier_key = None
             field_key = f"control:{label or selector or 'unlabelled'}"
-        self._writes[field_key] = FieldWriteRecord(
-            field_key=field_key,
-            dossier_key=dossier_key,
-            label=label,
-            selector=selector,
-            source=source,  # type: ignore[arg-type]
-            in_popup_subroutine=in_popup_subroutine,
+        self._writes[(field_key, selector or "", in_popup_subroutine or "")] = (
+            FieldWriteRecord(
+                field_key=field_key,
+                dossier_key=dossier_key,
+                label=label,
+                selector=selector,
+                source=source,  # type: ignore[arg-type]
+                in_popup_subroutine=in_popup_subroutine,
+            )
         )
 
     @property
@@ -1342,12 +1346,14 @@ class FormReconciler:
 
         A popup's inputs are often not stored with the record, so the summary
         cannot show them. Reading them back here, before they are used, is the
-        only check they can get. A mismatch or a missing control stops the run
-        before apply; a match marks the write as checked before apply.
+        only check they can get before use. A mismatch or a missing control
+        stops the run before apply. A match is noted on the write, but the
+        field is still reported as not_checked: a re-read of the popup is not a
+        read-back of what the application recorded.
         """
         snap = popup_surface.snapshot()
         problems: list[str] = []
-        for write in list(session.writes):
+        for ledger_key, write in list(session._writes.items()):
             if write.in_popup_subroutine != subroutine.subroutine_id:
                 continue
             binding = next(
@@ -1391,7 +1397,7 @@ class FormReconciler:
                     )
                 )
             if ok:
-                session._writes[write.field_key] = write.model_copy(
+                session._writes[ledger_key] = write.model_copy(
                     update={"checked_before_apply": True}
                 )
             else:

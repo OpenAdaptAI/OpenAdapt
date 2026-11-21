@@ -567,8 +567,9 @@ class FieldWriteRecord(BaseModel):
     ]
     in_popup_subroutine: Optional[str] = None
     # Set when a popup input was re-read from its control and matched just
-    # before the popup's apply button. Popup inputs are often not stored with
-    # the record, so this is the read-back they get.
+    # before the popup's apply button. This guards the apply; it is not a
+    # read-back of the application's record, so the field stays not_checked
+    # unless the summary shows it.
     checked_before_apply: bool = False
 
 

@@ -349,8 +349,14 @@ class SummaryJudge:
         for subroutine in active_pack.popup_subroutines:
             if subroutine.return_output_key in expected_facts:
                 expected_keys.add(subroutine.return_output_key)
-        written_by_key = {w.dossier_key: w for w in writes if w.dossier_key}
-        unbound_writes = [w for w in writes if not w.dossier_key]
+        written_by_key: dict[str, list[FieldWriteRecord]] = {}
+        for write in writes:
+            if write.dossier_key:
+                written_by_key.setdefault(write.dossier_key, []).append(write)
+        unbound_writes: dict[str, list[FieldWriteRecord]] = {}
+        for write in writes:
+            if not write.dossier_key:
+                unbound_writes.setdefault(write.field_key, []).append(write)
         unbound_human_fact = any(
             resolution.halt_kind == FormHaltKind.UNGROUNDED_REQUIRED_FIELD
             and resolution.action in _OVERRIDE_PROVENANCE
@@ -358,64 +364,39 @@ class SummaryJudge:
             for resolution in active_resolutions
         )
 
+        def _where(field_writes: Sequence[FieldWriteRecord]) -> str:
+            popups = sorted(
+                {w.in_popup_subroutine for w in field_writes if w.in_popup_subroutine}
+            )
+            if not popups:
+                return ""
+            guarded = all(
+                w.checked_before_apply for w in field_writes if w.in_popup_subroutine
+            )
+            note = f" (entered in popup {', '.join(popups)}"
+            if guarded:
+                note += "; it matched when re-read before apply, but the record does not show it"
+            return note + ")"
+
         for key in sorted((expected_keys | set(written_by_key)) - declared_keys):
             fact = expected_facts.get(key)
-            write = written_by_key.get(key)
-            if write is not None and write.checked_before_apply:
-                verdicts.append(
-                    ReadbackFieldVerdict(
-                        dossier_key=key,
-                        codec_kind=_codec_for(key),
-                        passed=True,
-                        status=ReadbackStatus.PASSED,
-                        provenance=(
-                            fact.provenance
-                            if fact is not None
-                            else ProvenanceKind.INTAKE_DOCUMENT
-                        ),
-                        reason=(
-                            f"Read back in popup {write.in_popup_subroutine!r} "
-                            "before apply; the summary does not show it"
-                        ),
-                    )
-                )
-                continue
-            where = (
-                f" (entered in popup {write.in_popup_subroutine!r})"
-                if write is not None and write.in_popup_subroutine
-                else ""
-            )
             verdicts.append(
                 _not_checked(
                     key,
                     fact.provenance
                     if fact is not None
                     else ProvenanceKind.INTAKE_DOCUMENT,
-                    f"No read-back is declared for this field{where}",
+                    "No read-back is declared for this field"
+                    + _where(written_by_key.get(key, ())),
                 )
             )
-        for write in unbound_writes:
-            if write.checked_before_apply:
-                verdicts.append(
-                    ReadbackFieldVerdict(
-                        dossier_key=write.field_key,
-                        codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
-                        passed=True,
-                        status=ReadbackStatus.PASSED,
-                        provenance=ProvenanceKind.HUMAN_OPERATOR,
-                        reason=(
-                            f"Read back in popup {write.in_popup_subroutine!r} "
-                            "before apply; the summary does not show it"
-                        ),
-                    )
-                )
-                continue
+        for field_key in sorted(unbound_writes):
             verdicts.append(
                 _not_checked(
-                    write.field_key,
+                    field_key,
                     ProvenanceKind.HUMAN_OPERATOR,
                     "Operator entered a value on a control with no binding, so "
-                    "no read-back can cover it",
+                    "no read-back can cover it" + _where(unbound_writes[field_key]),
                 )
             )
         if unbound_human_fact and not unbound_writes:

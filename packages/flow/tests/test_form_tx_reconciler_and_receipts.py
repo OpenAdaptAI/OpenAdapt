@@ -1751,15 +1751,16 @@ def test_auth_wall_popup_failures_ambiguous_anchor_and_mutation_budget() -> None
         ),
     )
     # The operator's popup answer is not stored with the quote, so the summary
-    # cannot show it. It is re-read in the popup before apply instead, and
-    # its verdict says so.
+    # cannot show it. It matched when re-read before apply, but that is not a
+    # read-back of the record: it stays not_checked and no proof is issued.
+    assert done_pop_ug.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done_pop_ug.receipt is None
     assert done_pop_ug.summary_verdict is not None
     garage = {v.dossier_key: v for v in done_pop_ug.summary_verdict.field_verdicts}[
         "control:Attached Garage Bays"
     ]
-    assert garage.status == ReadbackStatus.PASSED
-    assert "before apply" in garage.reason
-    assert done_pop_ug.outcome == FormTxOutcome.VERIFIED_DONE
+    assert garage.status == ReadbackStatus.NOT_CHECKED
+    assert "re-read before apply" in garage.reason
 
     # 5. Ambiguous anchor match -> AMBIGUOUS_OPTION_OR_TARGET
     surface_amb = FakeStatefulFormSurface(duplicate_ambiguous_first_name=True)
@@ -2642,17 +2643,24 @@ def _run_pool_case(pack: FormPack) -> tuple[Any, ReconcilerSession, _SpySurface]
     return done, session, spy
 
 
-def test_popup_inputs_get_a_verdict_even_when_the_summary_omits_them() -> None:
-    # Old bug: these two fields were typed but had no verdict at all.
+def test_popup_inputs_the_summary_omits_are_not_checked_and_never_verified() -> None:
+    # Old bug: these two fields were typed but had no verdict at all, and the
+    # run ended verified with a signed receipt.
     done, session, _ = _run_pool_case(_build_pack(readback_popup_inputs=False))
+    assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done.receipt is None
+    assert done.safe_to_retry is False
     verdict = done.summary_verdict
     assert verdict is not None
+    assert verdict.passed is False
+    assert verdict.failed_keys == ()
+    assert verdict.not_checked_keys == ("construction_year", "living_area_sqft")
     by_key = {v.dossier_key: v for v in verdict.field_verdicts}
-    for key in ("living_area_sqft", "construction_year"):
-        assert key in by_key, key
-        assert by_key[key].status == ReadbackStatus.PASSED
-        assert "before apply" in by_key[key].reason
-    assert done.outcome == FormTxOutcome.VERIFIED_DONE
+    for key in verdict.not_checked_keys:
+        assert by_key[key].status == ReadbackStatus.NOT_CHECKED
+        assert by_key[key].passed is False
+        assert "re-read before apply" in by_key[key].reason
+    assert verdict.checked_count == len(verdict.field_verdicts) - 2
 
 
 def test_popup_input_that_does_not_hold_its_value_stops_before_apply() -> None:
@@ -2667,27 +2675,6 @@ def test_popup_input_that_does_not_hold_its_value_stops_before_apply() -> None:
     # Nothing was applied or submitted.
     assert surface.values["replacement_cost"] == "$0.00"
     assert surface.committed_record is None
-
-
-def test_unchecked_popup_input_is_never_passed() -> None:
-    """With the pre-apply re-read removed, popup inputs are not_checked."""
-    from openadapt_flow.form_tx import reconciler as reconciler_module
-
-    original = reconciler_module.FormReconciler._check_popup_entries_before_apply
-    reconciler_module.FormReconciler._check_popup_entries_before_apply = (  # type: ignore[method-assign]
-        lambda self, *args, **kwargs: None
-    )
-    try:
-        done, _, _ = _run_pool_case(_build_pack(readback_popup_inputs=False))
-    finally:
-        reconciler_module.FormReconciler._check_popup_entries_before_apply = original  # type: ignore[method-assign]
-    assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE
-    assert done.receipt is None
-    verdict = done.summary_verdict
-    assert verdict is not None
-    assert verdict.passed is False
-    assert verdict.failed_keys == ()
-    assert verdict.not_checked_keys == ("construction_year", "living_area_sqft")
 
 
 def test_every_written_selector_is_in_the_ledger_and_every_ledger_entry_has_a_verdict() -> (
@@ -2805,7 +2792,8 @@ def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> Non
     assert halt is not None
     assert halt.kind == FormHaltKind.POPUP_CONTRACT_FAILED
     assert "before apply" in halt.message
-    assert not session._writes["living_area_sqft"].checked_before_apply
+    (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
+    assert not write.checked_before_apply
 
     popup_ok = FakePopupFormSurface(parent=parent, living_area_sqft="2425")
     assert (
@@ -2814,4 +2802,5 @@ def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> Non
         )
         is None
     )
-    assert session._writes["living_area_sqft"].checked_before_apply
+    (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
+    assert write.checked_before_apply
