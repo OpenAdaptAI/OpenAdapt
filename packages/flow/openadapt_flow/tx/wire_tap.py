@@ -126,6 +126,10 @@ def relay_redirect_location(
     # even though URL parsers here treat it as a relative path.
     if not raw or any(ch in raw for ch in "\r\n\\"):
         return None
+    # Browsers drop tabs and newlines inside a URL; refuse any control
+    # character or space rather than guess how a client will read it.
+    if any(ord(ch) <= 0x20 or ord(ch) == 0x7F for ch in raw):
+        return None
     resolved = urljoin(request_url, raw)
     origin = _normalize_origin(resolved)
     if not origin or origin not in allowed_origins:
@@ -143,7 +147,11 @@ def relay_redirect_location(
         if target.fragment:
             rewritten += "#" + target.fragment
         return rewritten
-    return raw
+    # Relay the URL as resolved here, never the raw text: a browser reads
+    # ``http:/evil.test`` as the host evil.test, while urljoin resolves it
+    # onto the request's own origin, so relaying the raw value would send
+    # the client to an origin that was never checked.
+    return resolved
 
 
 class _ResolvedTarget(NamedTuple):

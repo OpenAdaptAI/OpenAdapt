@@ -180,6 +180,36 @@ def test_relay_helper_refuses_malformed_or_non_http_targets(location):
     )
 
 
+@pytest.mark.parametrize(
+    "location",
+    ["http:/evil.test/x", "https:/evil.test/x", "http:evil.test", "http:///evil.test"],
+)
+def test_relay_helper_never_relays_text_a_browser_reads_as_another_host(location):
+    # A browser resolves "http:/evil.test" to the host evil.test, while urljoin
+    # puts it on the request's origin. The relayed value must be the URL that
+    # was checked, so the client cannot land anywhere else.
+    origin = "http://127.0.0.1:8000"
+    relayed = relay_redirect_location(
+        location,
+        request_url=f"{origin}/form",
+        allowed_origins=frozenset({origin}),
+    )
+    assert relayed is None or relayed.startswith(origin + "/")
+
+
+@pytest.mark.parametrize("location", ["/\t/evil.test", "/ok\tx", " /ok x"])
+def test_relay_helper_refuses_control_characters_and_spaces(location):
+    origin = "http://127.0.0.1:8000"
+    assert (
+        relay_redirect_location(
+            location,
+            request_url=f"{origin}/form",
+            allowed_origins=frozenset({origin}),
+        )
+        is None
+    )
+
+
 def test_browser_route_relays_same_origin_redirect_and_aborts_foreign():
     origin = "http://127.0.0.1:8000"
 
