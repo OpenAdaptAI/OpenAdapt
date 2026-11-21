@@ -4,8 +4,9 @@
 The budgets live in one table in packages/flow/docs/design/DECOMPOSITION.md,
 between the ``size-ratchet:begin`` and ``size-ratchet:end`` markers. A file may
 shrink; it may not grow. When a change shrinks a file, lower its budget in the
-same change so the gain is kept. Raising a budget is a reviewed edit to that
-table.
+same change so the gain is kept. With ``--base``, a change that raises a
+budget, or removes the row of a file that still exists, fails: budgets never
+rise, so new code goes in a new module (founder decision, 2026-11-21).
 
 With ``--base REF`` (a pull request or the merge queue compares against the
 base it merges into), a file over budget fails only when this change grew it
@@ -123,16 +124,30 @@ def check(root: Path, base: str | None = None) -> tuple[list[str], list[str]]:
     """Return (failures, notes) for the budgets in ``root``'s plan.
 
     With ``base``, an over-budget or missing file fails only when the change
-    from ``base`` grew it, removed it or changed its budget row.
+    from ``base`` grew it, removed it or changed its budget row, and raising a
+    budget or dropping the row of a file that still exists always fails.
     """
     budgets = parse_budgets((root / DOC).read_text(encoding="utf-8"))
     before = base_budgets(root, base) if base else {}
     failures: list[str] = []
     notes: list[str] = []
+    listed = {budget.path for budget in budgets}
+    for gone in sorted(set(before) - listed):
+        if (root / gone).is_file():
+            failures.append(
+                f"{gone}: its budget row was removed but the file still exists. "
+                "Budgets never rise; keep the row."
+            )
     for budget in budgets:
         path = root / budget.path
         old = read_at(root, base, budget.path) if base else None
         row_changed = base is not None and before.get(budget.path) != budget.lines
+        if budget.path in before and budget.lines > before[budget.path]:
+            failures.append(
+                f"{budget.path}: budget raised from {before[budget.path]} to "
+                f"{budget.lines}. Budgets never rise: put new code in a new "
+                "module and keep only the call site here."
+            )
         if not path.is_file():
             message = (
                 f"{budget.path}: listed in {DOC} but missing. If it was split or "
@@ -147,8 +162,8 @@ def check(root: Path, base: str | None = None) -> tuple[list[str], list[str]]:
         if lines > budget.lines:
             message = (
                 f"{budget.path}: {lines} lines, budget {budget.lines} "
-                f"(+{lines - budget.lines}). Move code out instead of adding it, "
-                f"or raise the budget in {DOC} with a reason in the pull request."
+                f"(+{lines - budget.lines}). Put new code in a new module and keep "
+                "only the call site here; budgets never rise."
             )
             grew = old is None or lines > old.count(b"\n")
             if base is None or grew or row_changed:
