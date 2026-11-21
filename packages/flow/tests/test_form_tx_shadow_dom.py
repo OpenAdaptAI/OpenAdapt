@@ -313,16 +313,41 @@ def test_shadow_selector_is_unique_across_slotted_light_dom(app: Any) -> None:
     snap = surface.snapshot()
     shadow = _by_label(snap, "^Shadow amount$")
     slotted = _by_label(snap, "^Slotted amount$")
-    # The shadow input shares id and name with a slotted light-DOM input, so
-    # "#host >> #amount" would match both: the selector must be longer.
+    # The shadow input shares id, name and position with light-DOM inputs of
+    # its host, so no selector inside the shadow root is unique across the
+    # host's subtree. Acting on it must refuse, never reach a light-DOM input.
     assert shadow.dom_selector.startswith("#host >> ")
-    assert shadow.dom_selector != "#host >> #amount"
-    assert app.page.locator(shadow.dom_selector).count() == 1
-    surface.fill_text(shadow.dom_selector, "250000")
+    assert app.page.locator(shadow.dom_selector).count() > 1
+    with pytest.raises(AmbiguousAnchorError):
+        surface.fill_text(shadow.dom_selector, "250000")
+    # The slotted light-DOM input has its own unique selector and is filled.
+    assert " >> " not in slotted.dom_selector
     surface.fill_text(slotted.dom_selector, "1000")
     after = surface.snapshot()
-    assert _by_label(after, "^Shadow amount$").current_value == "250000"
+    assert _by_label(after, "^Shadow amount$").current_value == ""
     assert _by_label(after, "^Slotted amount$").current_value == "1000"
+
+
+SHADOW_ONLY_DUPLICATE = SLOTTED_PAGE.replace(
+    '<input id="ghost" name="ghost" style="display:none">', ""
+).replace(
+    '<span slot="extra"><label for="amount">Slotted amount</label>'
+    '<input id="amount" name="amount"></span>',
+    '<span slot="extra"><label for="tip">Slotted tip</label>'
+    '<input id="tip" name="tip"></span>',
+)
+
+
+def test_shadow_selector_skips_light_dom_but_stays_short_when_unique(
+    app: Any,
+) -> None:
+    _serve_one(app, SHADOW_ONLY_DUPLICATE)
+    surface = PlaywrightFormSurface(app.page, _profile(), base_origin=app.origin)
+    snap = surface.snapshot()
+    shadow = _by_label(snap, "^Shadow amount$")
+    assert shadow.dom_selector == "#host >> #amount"
+    surface.fill_text(shadow.dom_selector, "250000")
+    assert _by_label(surface.snapshot(), "^Shadow amount$").current_value == "250000"
 
 
 def test_shadow_selector_with_a_hidden_light_dom_duplicate_is_refused(
