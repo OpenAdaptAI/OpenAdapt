@@ -114,6 +114,47 @@ def _cmd_shred(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Commands that read sealed input without decrypting it to disk:
+#: ``inspect report-run`` reads the report in memory; ``shred`` touches keys.
+SEALED_READY: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_report_run",
+        "openadapt_flow.cli_at_rest:_cmd_shred",
+    }
+)
+#: Commands that write no recorded data.
+STRICT_SAFE: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.cli_at_rest:_cmd_status",
+        "openadapt_flow.cli_at_rest:_cmd_recovery_create",
+    }
+)
+
+
+def desktop_recording_key(backend: str, out: object, explicit: object) -> object:
+    """The key for a desktop recording: its raw capture is plaintext while it
+    records and the converted recording is sealed (docs/phi_at_rest.md).
+    Strict mode holds the raw window back; the opt-out records plaintext."""
+    from openadapt_flow import at_rest, sealed_set
+
+    if at_rest.strict():
+        at_rest.unsealed_write(f"a {backend} raw capture session", str(out))
+    if at_rest.opt_out_reason() is not None:
+        at_rest.plaintext_allowed(f"a desktop recording at {out}")
+        return None
+    return explicit or sealed_set.recording_key()
+
+
+def lacks_key(root: object, kind: str) -> bool:
+    """Whether no key is configured to open ``root``. A version 3 set needs
+    none: a key this computer holds may open it."""
+    from openadapt_flow import crypto, sealed_set
+
+    if sealed_set.read_header(root).get("version") == sealed_set.ENVELOPE_VERSION:  # type: ignore[arg-type]
+        return False
+    return not (sealed_set.passphrase_for(kind) or crypto.resolve_read_key(None))
+
+
 def add_no_encrypt(p: argparse.ArgumentParser) -> None:
     """``--no-encrypt`` on ``compile``, ``run`` and ``replay``."""
     p.add_argument(

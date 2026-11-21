@@ -504,15 +504,9 @@ def _enforce_surface_binding(
 def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
-    The web recorder encrypts every file from the first frame under
-    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
-    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
-    plaintext recording is logged. ``--no-encrypt`` and
-    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
-    line. The desktop recorders write a raw capture session through
-    openadapt-capture that Flow cannot encrypt yet: by default they record in
-    plaintext and name the directory on stderr and in the ledger;
-    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
+    Recordings are encrypted by default (docs/phi_at_rest.md): the web
+    recorder from the first frame, a desktop recording once converted.
+    ``--no-encrypt`` and the opt-out record plaintext, with a warning.
     """
     import os
 
@@ -527,14 +521,7 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
             return None
         explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
         if backend != "web":
-            # The raw capture is plaintext while recording; the converted
-            # recording is sealed (docs/phi_at_rest.md). Strict holds it back.
-            if at_rest.strict():
-                at_rest.unsealed_write(f"a {backend} raw capture session", out)
-            if at_rest.opt_out_reason() is not None:
-                at_rest.plaintext_allowed(f"a desktop recording at {out}")
-                return None
-            return explicit or sealed_set.recording_key()
+            return _at_rest_cli.desktop_recording_key(backend, out, explicit)
     except at_rest.AtRestRefused as exc:
         raise SystemExit(f"record: {exc}") from exc
     if explicit or os.environ.get(crypto.ENV_KEY):
@@ -1480,7 +1467,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
-    recording_key = _recording_encryption_key(args, backend)
+    recording_key = args._recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1492,7 +1479,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
                 "record: --browser-cdp-endpoint and --browser-page-url apply "
                 "only to --backend web"
             )
-        return _cmd_record_desktop(args, backend, recording_key)
+        return _cmd_record_desktop(args, backend)
 
     if (
         getattr(args, "window", None)
@@ -1870,9 +1857,7 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_record_desktop(
-    args: argparse.Namespace, backend: str, recording_key: Optional[str] = None
-) -> int:
+def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
     """Record a live desktop demonstration for a native/pixel desktop backend.
 
     Reuses the tested capture stack: an ``openadapt-capture`` session captures
@@ -1944,7 +1929,7 @@ def _cmd_record_desktop(
         replay_window_title=getattr(args, "rdp_window_title", None),
         readiness_text=getattr(args, "rdp_readiness_text", None),
         stop=_record_until_stop(args),
-        encryption_key=recording_key,
+        encryption_key=getattr(args, "_recording_key", None),
     )
     _stamp_recording_surface(out, backend)
     print(f"Recording written to {out}")
@@ -8444,7 +8429,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     ``openadapt_flow.receipt``; the rich local ``REPORT.md`` -- screenshots,
     typed values, OCR identity text, parameters -- is never the source.
     """
-    from openadapt_flow import artifacts, sealed_set
+    from openadapt_flow import artifacts
     from openadapt_flow.ir import RunReport
     from openadapt_flow.receipt import ReceiptError, build_receipt, write_receipt
 
@@ -8455,7 +8440,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
         return 1
     try:
         report = RunReport.model_validate_json(artifacts.read_text(report_path))
-    except (OSError, ValueError, sealed_set.SealedSetError):
+    except (OSError, ValueError):  # a SealedSetError is a ValueError
         print("report-run failed: report.json is unreadable or invalid")
         return 1
 
@@ -10605,7 +10590,6 @@ def build_parser() -> argparse.ArgumentParser:
     _register_no_outbound(sub)
 
     _at_rest_cli.register(sub)
-
     from openadapt_flow.cli_service import register as _register_service
 
     _register_service(sub)
@@ -13692,10 +13676,8 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_undo:_cmd_undo_list",
         "openadapt_flow.cli_undo:_cmd_undo_approve",
         "openadapt_flow.cli_undo:_cmd_undo_run",
-        # Shreds a set's key only; no file is decrypted to disk.
-        "openadapt_flow.__main__:_cmd_report_run",
-        "openadapt_flow.cli_at_rest:_cmd_shred",
     }
+    | _at_rest_cli.SEALED_READY
 )
 
 
@@ -13741,8 +13723,6 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_service:_cmd_pf_render",
         "openadapt_flow.cli_service:_cmd_restart",
         "openadapt_flow.cli_service:_cmd_run",
-        "openadapt_flow.cli_at_rest:_cmd_status",
-        "openadapt_flow.cli_at_rest:_cmd_recovery_create",
         "openadapt_flow.cli_no_outbound:_cmd_add",
         "openadapt_flow.cli_no_outbound:_cmd_derive",
         "openadapt_flow.cli_no_outbound:_cmd_list",
@@ -13755,6 +13735,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.agent.seal_cli:cmd_keys_show",
         "openadapt_flow.agent.seal_cli:cmd_verify",
     }
+    | _at_rest_cli.STRICT_SAFE
 )
 
 
@@ -14190,7 +14171,7 @@ def _private_input(args: argparse.Namespace) -> bool:
 def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     """Refuse a sealed path in a command that cannot keep it sealed, and a
     sealed path whose key is not configured, before the command runs."""
-    from openadapt_flow import crypto, sealed_set
+    from openadapt_flow import sealed_set
 
     sealed = _sealed_paths_in(args)
     if not sealed:
@@ -14212,10 +14193,7 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
-        version = sealed_set.read_header(root).get("version")
-        if version != sealed_set.ENVELOPE_VERSION and not (
-            sealed_set.passphrase_for(kind) or crypto.resolve_read_key(None)
-        ):
+        if _at_rest_cli.lacks_key(root, kind):
             return sealed_set.missing_key_message(root, kind)
         try:
             # With no key configured the local key resolves; opening the set
