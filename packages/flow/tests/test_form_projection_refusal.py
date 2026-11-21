@@ -399,6 +399,11 @@ def test_raw_boolean_failure_detail_uses_only_original_reads(
             raise _OpaquePropertyError()
 
     class Target:
+        # An unsupported availability answer consults the raw pattern once
+        # (server._form_pattern_support); this element exposes no pattern
+        # getter, so the original refusal detail is kept.
+        Element = None
+
         @property
         def GetPropertyValueEx(self):
             calls["lookup"] += 1
@@ -434,6 +439,8 @@ def test_raw_boolean_failure_detail_uses_only_original_reads(
         "phase": phase,
         "outcome": outcome,
     }
+    if phase == "result_kind" and property_id in server._FORM_PATTERN_IDS:
+        guards += 1  # the guard before the pattern-support lookup
     assert calls == {"guard": guards, "lookup": lookups, "query": queries}
     assert MARKER not in json.dumps(observation.detail.payload())
 

@@ -15,6 +15,10 @@ from typing import Any, Callable, Protocol
 MAX_UTF16_UNITS = 65536
 PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
 IS_PASSWORD_PROPERTY = 30019
+# Win32 EDIT password evidence: the ES_PASSWORD style and EM_GETPASSWORDCHAR.
+ES_PASSWORD = 0x0020
+EM_GETPASSWORDCHAR = 0x00D2
+_EDIT_CLASSES = frozenset({"edit", "richedit20w", "richedit50w", "richedit60w"})
 
 
 def utf16_bytes(value: str) -> bytes:
@@ -103,6 +107,14 @@ class Win32TextReader:
             ctypes.POINTER(ctypes.c_size_t),
         ]
         self._user.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+        self._user.GetClassNameW.argtypes = [
+            wintypes.HWND,
+            wintypes.LPWSTR,
+            ctypes.c_int,
+        ]
+        self._user.GetClassNameW.restype = ctypes.c_int
+        self._user.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+        self._user.GetWindowLongW.restype = wintypes.LONG
 
     def owner(self, hwnd: int) -> NativeOwner:
         from ctypes import wintypes
@@ -126,6 +138,23 @@ class Win32TextReader:
         if not accepted:
             raise ValueUnavailable("native_text_timeout_or_failure")
         return int(result.value)
+
+    def plain_edit(self, hwnd: int) -> bool:
+        """True only for a Unicode EDIT window that shows its text.
+
+        Its class is a Win32 or WinForms EDIT/RichEdit class, its style has no
+        ES_PASSWORD, and EM_GETPASSWORDCHAR answers 0 within the timeout. Any
+        other class, a failed call or a password character is False.
+        """
+        self.owner(hwnd)
+        name = ctypes.create_unicode_buffer(257)
+        if not 0 < self._user.GetClassNameW(hwnd, name, 257) < 257:
+            return False
+        if not _edit_class(name.value):
+            return False
+        if self._user.GetWindowLongW(hwnd, -16) & ES_PASSWORD:  # GWL_STYLE
+            return False
+        return self._message(hwnd, EM_GETPASSWORDCHAR) == 0
 
     def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead:
         def unchanged() -> None:
@@ -153,6 +182,29 @@ class Win32TextReader:
         if len(utf16_bytes(value)) // 2 != extent or "\x00" in value:
             raise ValueUnavailable("native_extent_or_copy_incomplete")
         return NativeRead(owner, extent, copied, value)
+
+
+def _edit_class(name: str) -> bool:
+    """A Win32 EDIT/RichEdit class, or WinForms' ``WindowsForms10.EDIT.app...``."""
+    parts = name.casefold().split(".")
+    if len(parts) > 2 and parts[0].startswith("windowsforms") and parts[2] == "app":
+        return parts[1] in _EDIT_CLASSES
+    return len(parts) == 1 and parts[0] in _EDIT_CLASSES
+
+
+_PASSWORD_EVIDENCE: list[Any] = []
+
+
+def _native_plain_edit(control: Any) -> bool:
+    """Win32 evidence for a provider that does not support IsPassword."""
+    hwnd = control.NativeWindowHandle
+    if not _positive_int(hwnd):
+        return False
+    if not _PASSWORD_EVIDENCE:
+        _PASSWORD_EVIDENCE.append(Win32TextReader())
+    reader = _PASSWORD_EVIDENCE[0]
+    plain = getattr(reader, "plain_edit", None)
+    return callable(plain) and plain(hwnd) is True
 
 
 def _positive_int(value: object) -> bool:
@@ -184,10 +236,18 @@ def require_non_sensitive_value(control: Any) -> None:
     try:
         # CurrentIsPassword/Control.IsPassword can return a default FALSE for
         # unsupported status. Request the raw property with defaults ignored;
-        # a reserved unsupported object is unknown, not non-sensitive.
+        # a reserved unsupported object is unknown, not non-sensitive. Some
+        # providers (the WinForms TextBox proxies) do not support IsPassword
+        # at all; then only Win32 evidence from the control's own EDIT window
+        # (no ES_PASSWORD style, no password character) allows the read.
         method = getattr(control, "GetPropertyValueEx", None)
-        raw = method(IS_PASSWORD_PROPERTY, 1) if callable(method) else None
-        allowed = type(raw) is bool and raw is False
+        if not callable(method):
+            raise ValueUnavailable("password_status_unavailable")
+        raw = method(IS_PASSWORD_PROPERTY, 1)
+        if type(raw) is bool:
+            allowed = raw is False
+        else:
+            allowed = _native_plain_edit(control)
     except Exception:
         allowed = False
     if not allowed:

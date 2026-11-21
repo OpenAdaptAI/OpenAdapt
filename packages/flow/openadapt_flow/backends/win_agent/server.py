@@ -2774,7 +2774,9 @@ def _form_boolean_observation(
     """One existing raw-property probe, with closed failure attribution only.
 
     This never queries again to diagnose an unknown. Each guard/lookup/query
-    runs at most once; an already-unknown lookup/result stops immediately.
+    runs at most once; an already-unknown lookup/result stops immediately,
+    except that an unsupported pattern-availability answer asks the raw
+    element for that pattern once (``_form_pattern_support``).
     No provider text, type name, exception
     value or representation enters the request-local result.
     """
@@ -2805,12 +2807,46 @@ def _form_boolean_observation(
     except Exception:  # noqa: BLE001 - do not stringify COM/provider errors
         return refused("query", "query_error")
     if type(available) is not bool:
-        return refused("result_kind", "none" if available is None else "non_bool")
+        # A provider that does not support a pattern-availability property
+        # (the WinForms proxies answer VT_UNKNOWN) still answers the pattern
+        # itself: UIA's GetCurrentPattern returns the pattern exactly when it
+        # is supported. Only that exact answer counts; anything else refuses.
+        outcome = "none" if available is None else "non_bool"
+        available = _form_pattern_support(control, property_id, guard)
+        if available is None:
+            return refused("result_kind", outcome)
     try:
         guard(control)
     except Exception:  # noqa: BLE001 - no post-refusal diagnostic getter
         return refused("guard_after_query", "guard_refused")
     return _FormBooleanObservation(available)
+
+
+# UIA pattern ids for the availability properties in _FORM_PROPERTY_NAMES.
+_FORM_PATTERN_IDS = {30041: 10015, 30036: 10010, 30043: 10002}
+
+
+def _form_pattern_support(
+    control: object, property_id: int, guard: Callable[[object], None]
+) -> Optional[bool]:
+    """Whether the control supports the pattern, or None when not answerable."""
+    pattern_id = _FORM_PATTERN_IDS.get(property_id)
+    if pattern_id is None:
+        return None
+    try:
+        # The raw IUIAutomationElement, not uiautomation's GetPattern, which
+        # turns a COM error into the same None as an unsupported pattern.
+        guard(control)
+        method = getattr(getattr(control, "Element", None), "GetCurrentPattern", None)
+        if not callable(method):
+            return None
+        guard(control)
+        pattern = method(pattern_id)
+        guard(control)
+        # comtypes answers a NULL interface pointer for an unsupported pattern.
+        return bool(pattern)
+    except Exception:  # noqa: BLE001 - no provider exception data
+        return None
 
 
 def _form_boolean_property(control: object, property_id: int) -> Optional[bool]:

@@ -697,3 +697,158 @@ def test_client_contract_does_not_follow_local_server_metadata(monkeypatch):
     assert backend.approval_form_fields() is None
     assert calls == [CLIENT_VALUE_READ_CONTRACT, CLIENT_VALUE_READ_CONTRACT]
     assert content_reads == []
+
+
+# Providers that do not support IsPassword or a pattern-availability property
+# (the WinForms TextBox proxies on the hosted runner answer VT_UNKNOWN).
+from openadapt_flow.backends.win_agent import native_value  # noqa: E402
+
+_UNSUPPORTED = object()
+
+
+class _Evidence:
+    def __init__(self, plain):
+        self.plain = plain
+        self.hwnds = []
+
+    def plain_edit(self, hwnd):
+        self.hwnds.append(hwnd)
+        if isinstance(self.plain, Exception):
+            raise self.plain
+        return self.plain
+
+
+def _unsupported_status_control(raw=_UNSUPPORTED, hwnd=4242):
+    return SimpleNamespace(
+        GetPropertyValueEx=lambda prop, ignore: raw, NativeWindowHandle=hwnd
+    )
+
+
+@pytest.mark.parametrize(
+    "raw,hwnd,plain,allowed",
+    [
+        (_UNSUPPORTED, 4242, True, True),
+        (None, 4242, True, True),
+        (_UNSUPPORTED, 4242, False, False),
+        (_UNSUPPORTED, 4242, RuntimeError("timeout"), False),
+        (_UNSUPPORTED, 0, True, False),
+        (_UNSUPPORTED, None, True, False),
+        (True, 4242, True, False),
+        (False, 4242, False, True),
+        ("False", 4242, False, False),
+    ],
+)
+def test_unsupported_password_status_needs_win32_edit_evidence(
+    monkeypatch, raw, hwnd, plain, allowed
+):
+    evidence = _Evidence(plain)
+    monkeypatch.setattr(native_value, "_PASSWORD_EVIDENCE", [evidence])
+    control = _unsupported_status_control(raw, hwnd)
+    if allowed:
+        native_value.require_non_sensitive_value(control)
+    else:
+        with pytest.raises(native_value.ValueUnavailable):
+            native_value.require_non_sensitive_value(control)
+    # A supported boolean is the provider's answer; no Win32 fallback for it.
+    fallback = type(raw) is not bool and isinstance(hwnd, int) and hwnd > 0
+    assert evidence.hwnds == ([hwnd] if fallback else [])
+
+
+def test_password_status_query_error_never_falls_back(monkeypatch):
+    evidence = _Evidence(True)
+    monkeypatch.setattr(native_value, "_PASSWORD_EVIDENCE", [evidence])
+
+    def query(prop, ignore):
+        raise RuntimeError("provider error")
+
+    control = SimpleNamespace(GetPropertyValueEx=query, NativeWindowHandle=4242)
+    with pytest.raises(native_value.ValueUnavailable):
+        native_value.require_non_sensitive_value(control)
+    missing = SimpleNamespace(NativeWindowHandle=4242)
+    with pytest.raises(native_value.ValueUnavailable):
+        native_value.require_non_sensitive_value(missing)
+    assert evidence.hwnds == []
+
+
+@pytest.mark.parametrize(
+    "name,edit",
+    [
+        ("Edit", True),
+        ("RichEdit50W", True),
+        ("WindowsForms10.EDIT.app.0.141b42a_r6_ad1", True),
+        ("WindowsForms10.RichEdit20W.app.0.2bf8098_r6_ad1", True),
+        ("WindowsForms10.BUTTON.app.0.141b42a_r6_ad1", False),
+        ("Button", False),
+        ("NotEdit", False),
+        ("Edit.app", False),
+        ("", False),
+    ],
+)
+def test_edit_class_names(name, edit):
+    assert native_value._edit_class(name) is edit
+
+
+@pytest.mark.parametrize(
+    "pattern,expected", [(object(), True), (None, False), (0, False)]
+)
+def test_unsupported_availability_uses_the_exact_pattern_answer(
+    monkeypatch, pattern, expected
+):
+    calls = []
+    element = SimpleNamespace(
+        GetCurrentPattern=lambda pattern_id: calls.append(pattern_id) or pattern
+    )
+    target = SimpleNamespace(
+        GetPropertyValueEx=lambda prop, ignore: _UNSUPPORTED, Element=element
+    )
+    monkeypatch.setattr(
+        server,
+        "_native_value_api",
+        lambda: SimpleNamespace(require_non_sensitive_value=lambda _: None),
+    )
+    observed = server._form_boolean_observation(target, 30041)
+    assert observed.value is expected and observed.detail is None
+    assert calls == [10015]
+
+
+@pytest.mark.parametrize("property_id", [30041, 30022])
+def test_unanswerable_availability_still_refuses(monkeypatch, property_id):
+    def fail(pattern_id):
+        raise RuntimeError("COM error")
+
+    target = SimpleNamespace(
+        GetPropertyValueEx=lambda prop, ignore: _UNSUPPORTED,
+        Element=SimpleNamespace(GetCurrentPattern=fail),
+    )
+    monkeypatch.setattr(
+        server,
+        "_native_value_api",
+        lambda: SimpleNamespace(require_non_sensitive_value=lambda _: None),
+    )
+    observed = server._form_boolean_observation(target, property_id)
+    assert observed.value is None
+    assert observed.detail.payload()["outcome"] == "non_bool"
+
+
+def test_availability_fallback_stops_when_the_guard_refuses(monkeypatch):
+    calls = []
+    element = SimpleNamespace(
+        GetCurrentPattern=lambda pattern_id: calls.append(pattern_id) or object()
+    )
+    target = SimpleNamespace(
+        GetPropertyValueEx=lambda prop, ignore: _UNSUPPORTED, Element=element
+    )
+    count = []
+
+    def guard(_):
+        count.append(1)
+        if len(count) > 2:
+            raise native_value.ValueUnavailable("password_status_unavailable")
+
+    monkeypatch.setattr(
+        server,
+        "_native_value_api",
+        lambda: SimpleNamespace(require_non_sensitive_value=guard),
+    )
+    observed = server._form_boolean_observation(target, 30041)
+    assert observed.value is None and calls == []
