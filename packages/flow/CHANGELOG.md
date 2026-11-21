@@ -27,7 +27,7 @@
   Only an index key with a hex hash of 16 or more characters is kept. Free
   text in that slot is still scrubbed.
 
-## v3.4.0 (2026-11-20)
+## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
 ### Features
 
