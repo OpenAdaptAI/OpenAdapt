@@ -2219,6 +2219,11 @@ LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
 }
 
 
+#: Fields added after verifier identities and check digests were first issued.
+#: Left unset they are not hashed, so every earlier digest stays the same.
+_HASHED_ONLY_WHEN_SET: Final[tuple[str, ...]] = ("artifact_producer", "acting_roots")
+
+
 def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
     """Make a config dump hash as it did when those fields had defaults.
 
@@ -2227,6 +2232,10 @@ def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None
     takes its old default.
     """
 
+    # Added after digests were first issued: hashed only when set.
+    for name in _HASHED_ONLY_WHEN_SET:
+        if not dumped.get(name):
+            dumped.pop(name, None)
     for name, legacy in LEGACY_HASHED_DEFAULTS.items():
         if defaults_excluded:
             if dumped.get(name) == legacy:
@@ -2257,9 +2266,6 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
         # Added after identities were first issued: present only when set.
         if not dumped.get("records_drop_fields"):
             dumped.pop("records_drop_fields", None)
-        for added in ("artifact_producer", "acting_roots"):
-            if not dumped.get(added):
-                dumped.pop(added, None)
         surfaces = dumped.pop("surfaces", None) or {}
         if surfaces:
             dumped["surfaces"] = {
