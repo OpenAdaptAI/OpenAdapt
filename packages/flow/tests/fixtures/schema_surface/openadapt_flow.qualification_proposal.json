@@ -1,0 +1,221 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "QualificationProposal": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Draft contract the operator confirms in one command.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-proposal/v1",
+      "default": "openadapt.qualification-proposal/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "draft",
+       "halted",
+       "accepted"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "halt_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Halt Reason"
+     },
+     "bundle_name": {
+      "title": "Bundle Name",
+      "type": "string"
+     },
+     "policy_pack": {
+      "enum": [
+       "community",
+       "cloud",
+       "regulated"
+      ],
+      "title": "Policy Pack",
+      "type": "string"
+     },
+     "recording_present": {
+      "title": "Recording Present",
+      "type": "boolean"
+     },
+     "has_parameters": {
+      "title": "Has Parameters",
+      "type": "boolean"
+     },
+     "pins": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Pins",
+      "type": "array"
+     },
+     "failure_matrix": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Failure Matrix",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "oracle_gate": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Oracle Gate"
+     },
+     "suggestions": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Suggestions",
+      "type": "array"
+     }
+    },
+    "required": [
+     "status",
+     "bundle_name",
+     "policy_pack",
+     "recording_present",
+     "has_parameters",
+     "pins",
+     "failure_matrix",
+     "created_at"
+    ],
+    "title": "QualificationProposal",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Draft contract the operator confirms in one command.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-proposal/v1",
+      "default": "openadapt.qualification-proposal/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "draft",
+       "halted",
+       "accepted"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "halt_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Halt Reason"
+     },
+     "bundle_name": {
+      "title": "Bundle Name",
+      "type": "string"
+     },
+     "policy_pack": {
+      "enum": [
+       "community",
+       "cloud",
+       "regulated"
+      ],
+      "title": "Policy Pack",
+      "type": "string"
+     },
+     "recording_present": {
+      "title": "Recording Present",
+      "type": "boolean"
+     },
+     "has_parameters": {
+      "title": "Has Parameters",
+      "type": "boolean"
+     },
+     "pins": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Pins",
+      "type": "array"
+     },
+     "failure_matrix": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Failure Matrix",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "oracle_gate": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Oracle Gate"
+     },
+     "suggestions": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Suggestions",
+      "type": "array"
+     }
+    },
+    "required": [
+     "status",
+     "bundle_name",
+     "policy_pack",
+     "recording_present",
+     "has_parameters",
+     "pins",
+     "failure_matrix",
+     "created_at"
+    ],
+    "title": "QualificationProposal",
+    "type": "object"
+   }
+  }
+ }
+}
