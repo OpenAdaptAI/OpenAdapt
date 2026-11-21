@@ -9,16 +9,26 @@ from types import SimpleNamespace
 
 import pytest
 
-from openadapt_flow.backends.win_agent import server
+from openadapt_flow.backends.win_agent import native_value, server
 from tests.test_approval_form_fields import (
     _Control,
     _Desktop,
     _Init,
+    _UNSUPPORTED_PROPERTY,
     _window,
     _windows_backend,
 )
 
 MARKER = "fixture-content-must-not-be-returned"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_uia_sentinel(monkeypatch):
+    # These tests call the server directly. Authenticate the same synthetic
+    # NotSupported object as the shared agent fixture does.
+    monkeypatch.setattr(
+        native_value, "is_uia_not_supported", lambda raw: raw is _UNSUPPORTED_PROPERTY
+    )
 
 
 def context(*children, hwnd=7, pid=10, cleanup_error=False):
@@ -81,7 +91,9 @@ def test_closed_refusal_discards_partial_fields_and_provider_content(
     fault, channel, reason
 ):
     target = _Control(
-        "EditControl" if fault == "required_value" else "TextControl", name=MARKER
+        "EditControl" if fault == "required_value" else "TextControl",
+        name=MARKER,
+        password=False,
     )
     original = target.GetPropertyValueEx
 
@@ -248,7 +260,7 @@ def test_limit_receipt_discards_partial_fields_without_a_recovery_walk(
 
 def test_interleaved_requests_cannot_share_or_overwrite_refusal_identity():
     def request(number):
-        target = _Control("TextControl")
+        target = _Control("TextControl", password=False)
         original = target.GetPropertyValueEx
         property_id = (30022, 30041, 30036, 30043)[number % 4]
         category = {
@@ -528,7 +540,7 @@ def test_state_recheck_unknown_stops_before_the_next_property(monkeypatch):
 def test_request_refusal_preserves_property_detail_with_ordinal_without_content(
     property_id, channel, reason
 ):
-    target = _Control("TextControl", name=MARKER)
+    target = _Control("TextControl", name=MARKER, password=False)
     original = target.GetPropertyValueEx
     target.GetPropertyValueEx = lambda prop, ignore: (
         None if prop == property_id else original(prop, ignore)
