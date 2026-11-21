@@ -577,3 +577,78 @@ def test_a_phone_gets_one_column_with_the_map_as_a_tab(browser, runs):
         assert [u for u in requests if not u.startswith("file:")] == []
     finally:
         context.close()
+
+
+def _with_receipt(run_dir: Path, home: Path) -> dict:
+    """Sign the run's receipt (record/run/v1) with a throwaway key under ``home``.
+
+    Returns a registry that names the key's role: a supplied older Seal
+    registry names none, so the page never calls its keys this computer's."""
+    from openadapt_flow.offline_seal import public_key_entry, signer_for
+    from openadapt_flow.receipt_record import write_receipt_record
+
+    write_receipt_record(run_dir, signer=signer_for(home), home=home)
+    entry = public_key_entry(home)
+    return {
+        "schema": "openadapt.receipt-keys/v1",
+        "keys": [{**entry, "role": "this_computer"}],
+    }
+
+
+def test_the_page_checks_the_receipt_first(browser, runs, tmp_path):
+    keys = _with_receipt(runs / "run-1", tmp_path / "home")
+    page = write_seal_page(runs / "run-1", keys=keys, program=PROGRAM)
+    assert _data(page)["receipt_text"]
+    reader = Reader(browser, page)
+    try:
+        reader.verdict("Valid")
+        signer = reader.page.locator("[data-signer]")
+        assert signer.inner_text().strip() == "Signed by this computer"
+        assert "older format" not in signer.inner_text().lower()
+        reader.page.locator("[data-tab='raw']").click()
+        assert (
+            reader.page.locator("[data-format]").inner_text() == "Format: record/run/v1"
+        )
+        reader.page.locator("[data-tab='summary']").click()
+        # A changed copy of the report no longer matches the receipt.
+        reader.page.get_by_role("button", name="Try changing it").click()
+        assert "subject_mismatch" in reader.verdict("Fails")
+        # The same outcome flipped inside the signed receipt fails its signature.
+        reader.page.get_by_role("button", name="Try another change").click()
+        reader.page.get_by_role(
+            "button", name="Change the outcome in the receipt"
+        ).click()
+        reader.verdict("Fails")
+        assert (
+            "changed after it was signed"
+            in reader.page.locator("[data-signer]").inner_text()
+        )
+        reader.page.get_by_role("button", name="Restore", exact=True).click()
+        reader.verdict("Valid")
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_a_supplied_older_registry_never_vouches_for_a_receipt(runs, tmp_path):
+    from openadapt.seal_view import receipt_registry
+
+    _with_receipt(runs / "run-1", tmp_path / "home")
+    assert _data(_page(runs / "run-1"))["receipt_keys"] is None
+    assert receipt_registry(KEYS) is None
+    assert receipt_registry(KEYS, own=True)["keys"][0]["role"] == "this_computer"
+
+
+def test_a_receipt_from_an_unpinned_key_is_not_verified(browser, runs, tmp_path):
+    _with_receipt(runs / "run-1", tmp_path / "home")
+    reader = Reader(
+        browser, _page(runs / "run-1")
+    )  # the fixture key, not the receipt's
+    try:
+        reader.verdict("Fails")
+        assert reader.page.locator("[data-signer]").inner_text().strip() == (
+            "Not verified: unknown signer"
+        )
+    finally:
+        reader.close()
