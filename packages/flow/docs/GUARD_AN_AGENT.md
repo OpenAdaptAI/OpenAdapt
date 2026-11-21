@@ -177,9 +177,13 @@ After each read-back or blocked save, the guard writes two files in `--out`:
 
 `verdict` is `VERIFIED`, `CAUGHT_ERROR` (a blocked save, a declined approval,
 or a read-back that shows another value or another write), `ESCALATED` (the
-save went through and couldn't be confirmed) or `FAILED` (the guard couldn't
-do its job, for example the system of record couldn't be read before the
-save).
+save went through and couldn't be confirmed, or nobody answered the approval
+before it expired) or `FAILED` (the guard couldn't do its job, for example the
+system of record couldn't be read before the save, or the approval's answer
+was unusable).
+
+There is one row per run. A blocked second save after a read-back keeps the
+read-back's row; a read-back after a blocked save replaces the blocked row.
 
 `openadapt-flow redact-report RUN_DIR` writes `guard_diff.scrubbed.json`: the
 same rows with each value replaced by a salted digest. `--no-ledger-row`
@@ -325,7 +329,7 @@ GUI steps, and the run-2 times are GUI times.
   keep exactly (an agent that acts faster than a frame can be kept). The
   guard keeps guarding; only run 2 is missing.
 - The card's Now column and the diff's saved value come from one more read
-  of the record. When the task's record can't be told apart in that read (no
+  of the record (the guard's baseline holds keyed digests, not values). When the task's record can't be told apart in that read (no
   `expected_record` field is in the effect contract), or two records changed,
   they show `not read`.
 - The phone portal shows a guard's approval only when the guard's state is
