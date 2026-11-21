@@ -296,6 +296,8 @@ def test_field_equals_empty_text_is_not_a_stored_null() -> None:
         "SELECT * FROM issue WHERE subject = :subject AND :ref = ref",
         'SELECT * FROM issue WHERE subject = :subject AND "issue"."ref" = :ref',
         "SELECT * FROM issue WHERE subject = :subject AND (ref = :ref)",
+        "SELECT * FROM issue WHERE (ref = :ref) AND subject = :subject",
+        "SELECT * FROM issue WHERE (subject = :subject AND ref = :ref)",
         "SELECT * FROM issue WHERE subject = :subject AND ref IS NOT DISTINCT FROM :ref",
     ],
 )

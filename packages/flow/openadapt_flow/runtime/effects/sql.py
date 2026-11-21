@@ -803,9 +803,7 @@ def _token_clauses(spans: list[tuple[str, str, int, int]]) -> list[str]:
             kind == "word"
             and value in _CLAUSE_KEYWORDS
             and not (idx > 0 and spans[idx - 1][0:2] == ("punct", "."))
-            and not (
-                idx + 1 < n and spans[idx + 1][0:2] in (("punct", "."), ("punct", "("))
-            )
+            and not (idx + 1 < n and spans[idx + 1][0:2] == ("punct", "."))
             and not (
                 value == "from"
                 and idx > 0
