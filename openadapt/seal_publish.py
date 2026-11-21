@@ -448,6 +448,9 @@ def unpublish(run_dir: Path, *, origin: Optional[str], transport: Transport) -> 
         )
     if response.status in (204, 410):
         (run_dir / PUBLISH_FILE).unlink(missing_ok=True)
+        from openadapt.seal_claim import forget
+
+        forget([seal_id])
         if response.status == 204:
             return f"Unpublished. {link_for(origin, seal_id)} no longer shows the Seal."
         return f"Already gone: {link_for(origin, seal_id)} shows no Seal."
