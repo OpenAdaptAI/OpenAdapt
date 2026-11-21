@@ -1268,7 +1268,9 @@ class SessionWireTap:
             ):
                 return "secret_in_url"
 
-        if target_origin and target_origin not in self._allowed_origins:
+        # A target with no parseable origin (for example an invalid port) is
+        # never forwarded: an empty origin must not skip the allowlist.
+        if not target_origin or target_origin not in self._allowed_origins:
             return "disallowed_origin"
 
         if not is_mutation:
