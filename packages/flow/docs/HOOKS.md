@@ -288,5 +288,19 @@ advisory hooks under a strict name.
   `UNCERTAIN`. They don't use the uncertain-write ledger, so another process
   writing the same record isn't held.
 - Tested with a scripted harness that sends each agent's documented hook
-  input, against a local SQLite file and a local HTTP API. Not yet run in a
-  live Claude Code or Codex session.
+  input, and in one run of live headless Claude Code and Codex sessions, both
+  against a local synthetic SQLite file and HTTP API (see Evidence).
+
+## Evidence
+
+[`benchmark/hooks_live/`](../benchmark/hooks_live/README.md) records one run
+of real, headless `claude -p` (Claude Code 2.1.305) and `codex exec` (Codex
+CLI 0.144.4) sessions on 2026-11-21:
+
+- **Declared write:** `VERIFIED` with a receipt that verifies, in both agents.
+- **Out-of-scope delete:** blocked, with the database unchanged.
+- **Write whose read endpoint broke:** `UNCERTAIN`, and the agent was told not
+  to retry.
+- **Python heredoc that names the database file:** blocked.
+- **Python heredoc that builds the path at run time:** not seen. The row was
+  added unchecked. That is the advisory limit at the top of this page.
