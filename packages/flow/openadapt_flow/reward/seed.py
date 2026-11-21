@@ -44,7 +44,27 @@ class _BundleIds(TypedDict):
     task_id: str
     environment_id: str
     certificate_id: str
+    required_effects: list[dict[str, Any]]
+    forbidden_effects: list[dict[str, Any]]
+    identity_keys: list[str]
 
+
+_DEMO_REQUIRED_EFFECTS: list[dict[str, Any]] = [
+    {
+        "kind": "record_written",
+        "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
+        "expected_count": 1,
+        "count_new_only": True,
+    }
+]
+
+_DEMO_FORBIDDEN_EFFECTS: list[dict[str, Any]] = [
+    {
+        "kind": "record_written",
+        "match": {"patient_id": {"param": "patient_id"}, "type": "Discharge"},
+        "expected_count": 1,
+    }
+]
 
 MOCKMED_TASK_ID = "task_mockmed_encounter_note"
 MOCKMED_ENVIRONMENT_ID = "environment_mockmed_synthetic"
@@ -52,6 +72,9 @@ _SEED_BUNDLE_IDS: _BundleIds = {
     "task_id": MOCKMED_TASK_ID,
     "environment_id": MOCKMED_ENVIRONMENT_ID,
     "certificate_id": "reward_certificate_mockmed",
+    "required_effects": _DEMO_REQUIRED_EFFECTS,
+    "forbidden_effects": _DEMO_FORBIDDEN_EFFECTS,
+    "identity_keys": ["patient_id"],
 }
 MOCKMED_CONTRACT_ID = "reward_contract_mockmed"
 MOCKMED_TIER0_CONTRACT_ID = "reward_contract_mockmed_tier0"

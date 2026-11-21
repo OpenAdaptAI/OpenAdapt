@@ -611,37 +611,46 @@ class TestContextFromLines:
 
 
 class TestSiblingChromeDerivation:
-    def test_generic_identity_words_exclude_domain_specific_terms(self):
-        from openadapt_flow.runtime.identity import _GENERIC_IDENTITY_WORDS
+    def test_heading_only_band_abstains_without_sibling_rows(self):
+        # Single-band heading-only verification preserves abstention when
+        # sibling-row evidence is unavailable.
+        check = verify_target_identity(
+            "Patient Chart Appointment 01/15/1980",
+            "Patient Chart Appointment 01/15/1980",
+        )
+        assert check.status == "abstain"
 
-        for domain_term in (
-            "patient",
-            "chart",
-            "charts",
-            "discharged",
-            "admitted",
-            "appointment",
-            "demo",
-        ):
-            assert domain_term not in _GENERIC_IDENTITY_WORDS
-
-    def test_derive_sibling_chrome_words_across_domains(self):
+    def test_shared_heading_across_records_abstains_plain_and_template(self):
         from openadapt_flow.runtime.identity import derive_sibling_chrome_words
+        from openadapt_flow.runtime.identity_template import (
+            build_identity_template,
+            verify_template_identity,
+        )
 
-        # Non-healthcare CRM / ERP invoice rows sharing chrome words
-        rows = [
+        # Non-healthcare ERP invoice rows sharing chrome words ("Invoice",
+        # "Approved", "View") across separate records.
+        sibling_rows = [
             "INV-1001 Acme Corp Invoice Approved View",
             "INV-1002 Globex Ltd Invoice Approved View",
-            "INV-1003 Initech LLC Invoice Pending View",
+            "INV-1003 Initech LLC Invoice Approved View",
         ]
-        chrome = derive_sibling_chrome_words(rows)
-        assert "lnvolce" in chrome or "invoice" in chrome
-        assert "vlew" in chrome or "view" in chrome
+        chrome = derive_sibling_chrome_words(sibling_rows)
         assert "approved" in chrome
-        # Entity-discriminating names are not shared chrome
         assert "acme" not in chrome
         assert "globex" not in chrome
-        assert "lnltech" not in chrome and "initech" not in chrome
+
+        # A heading-only band containing only shared chrome words + a date
+        # must ABSTAIN in both plaintext and hashed-template verification.
+        heading_band = "Invoice Approved View 2026-08-15"
+        plain = verify_target_identity(
+            heading_band, heading_band, sibling_rows=sibling_rows
+        )
+        assert plain.status == "abstain"
+
+        tmpl = build_identity_template(heading_band, sibling_rows=sibling_rows)
+        assert tmpl is not None
+        hashed = verify_template_identity(tmpl, heading_band)
+        assert hashed.status == "abstain"
 
     def test_derive_sibling_chrome_words_requires_multiple_rows(self):
         from openadapt_flow.runtime.identity import derive_sibling_chrome_words

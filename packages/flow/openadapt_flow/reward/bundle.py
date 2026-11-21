@@ -55,11 +55,12 @@ CALIBRATION_TRIALS = 300
 CALIBRATION_SEED = 20260901
 CALIBRATION_CONFIDENCE = 0.95
 
-#: Effects a bundle requires and forbids when the caller passes none.
+#: Domain-neutral effects a synthetic bundle requires and forbids when the
+#: caller does not supply its own.
 DEFAULT_REQUIRED_EFFECTS: list[dict[str, Any]] = [
     {
         "kind": "record_written",
-        "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
+        "match": {"record_id": {"param": "record_id"}, "status": "committed"},
         "expected_count": 1,
         # The claim is about what this episode added, not about what the
         # store happens to hold. Without it a rollout that did nothing
@@ -71,10 +72,12 @@ DEFAULT_REQUIRED_EFFECTS: list[dict[str, Any]] = [
 DEFAULT_FORBIDDEN_EFFECTS: list[dict[str, Any]] = [
     {
         "kind": "record_written",
-        "match": {"patient_id": {"param": "patient_id"}, "type": "Discharge"},
+        "match": {"record_id": {"param": "record_id"}, "status": "voided"},
         "expected_count": 1,
     }
 ]
+
+DEFAULT_IDENTITY_KEYS: list[str] = ["record_id"]
 
 
 def write_bundle(
@@ -99,11 +102,27 @@ def write_bundle(
     required = _canonical(
         DEFAULT_REQUIRED_EFFECTS if required_effects is None else required_effects
     )
-    forbidden = _canonical(
-        DEFAULT_FORBIDDEN_EFFECTS if forbidden_effects is None else forbidden_effects
-    )
+    if forbidden_effects is None:
+        forbidden = _canonical(
+            DEFAULT_FORBIDDEN_EFFECTS if required_effects is None else []
+        )
+    else:
+        forbidden = _canonical(forbidden_effects)
     oracle_doc = _canonical(oracle)
-    keys = ["patient_id"] if identity_keys is None else list(identity_keys)
+    if identity_keys is None:
+        if required_effects is not None:
+            derived_keys = sorted(
+                {
+                    param
+                    for item in (*required, *forbidden)
+                    for param in Effect.model_validate(item).referenced_params()
+                }
+            )
+            keys = derived_keys or list(DEFAULT_IDENTITY_KEYS)
+        else:
+            keys = list(DEFAULT_IDENTITY_KEYS)
+    else:
+        keys = list(identity_keys)
     # The corpus a certificate is calibrated on comes from the contract's own
     # effects, so its digest is computed here and not chosen.
     corpus_digest = corpus_digest_for(

@@ -408,3 +408,96 @@ def test_generic_seed_admissions_writes_non_demo_bundle(tmp_path: Path) -> None:
         minimum_effect_strength=custom.minimum_effect_strength,
     )
     assert loaded == custom
+
+
+def test_non_synthetic_admission_without_bundle_dir_refuses_pre_effect(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    incomplete = AdmittedBundle(
+        qualification_id="qualification_erp_missing_bundle",
+        workflow_version="workflow_invoice_post",
+        workflow_digest="sha256:" + "e" * 64,
+        environment_id="environment_erp_prod",
+        minimum_effect_strength="independent_system_of_record",
+    )
+    assert incomplete.synthetic is False
+    assert incomplete.bundle_dir is None
+    store = ExecuteService(tmp_path, token="t", seed_admissions=(incomplete,))
+    accepted = store.create_execution(
+        _request(
+            qualification_id=incomplete.qualification_id,
+            workflow_version=incomplete.workflow_version,
+            workflow_digest=incomplete.workflow_digest,
+            environment_id=incomplete.environment_id,
+            minimum_effect_strength=incomplete.minimum_effect_strength,
+        )
+    )
+    receipt = store.get_receipt(accepted.execution_id)
+    assert receipt.outcome is ExecuteTerminalOutcomeV1.FAILED_PLATFORM
+    assert receipt.delivery_uncertain is False
+
+
+def test_worker_wide_desktop_deployment_does_not_reject_web_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_types.execute import EffectStrengthV1
+
+    import openadapt_flow.emit.skill as skill_mod
+    import openadapt_flow.execute.dispatch as dispatch_mod
+    import openadapt_flow.ir as ir_mod
+    import openadapt_flow.jit.lifecycle as lifecycle_mod
+    import openadapt_flow.tutorial as tutorial_mod
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    bundle_dir = tmp_path / "web-bundle"
+    bundle_dir.mkdir()
+    desktop_deploy = tmp_path / "desktop.yaml"
+    desktop_deploy.write_text("backend:\n  kind: macos\n", encoding="utf-8")
+
+    monkeypatch.setattr(lifecycle_mod, "ensure_runnable", lambda _b: None)
+    monkeypatch.setattr(ir_mod.Workflow, "load", staticmethod(lambda _b: object()))
+    monkeypatch.setattr(skill_mod, "bundle_surface", lambda _w: "web")
+
+    called: list[str] = []
+
+    def fake_demo_replay(**_kw: Any) -> Any:
+        called.append("demo")
+        return object()
+
+    monkeypatch.setattr(tutorial_mod, "run_demo_workflow_replay", fake_demo_replay)
+    monkeypatch.setattr(
+        dispatch_mod,
+        "project_run_report",
+        lambda _r, *, workflow_digest: DispatchResult(
+            outcome=ExecuteTerminalOutcomeV1.VERIFIED,
+            authorization_passed=True,
+            identity_passed=True,
+            postcondition_passed=True,
+            effect_passed=True,
+            minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+            observed_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+            model_used=False,
+            external_network_used=False,
+            delivery_uncertain=False,
+            compensation_effect_verified=False,
+            workflow_digest=workflow_digest,
+            evidence_digest="sha256:" + "0" * 64,
+        ),
+    )
+
+    admission = AdmittedBundle(
+        qualification_id=MOCKMED_QUALIFICATION_ID,
+        workflow_version=MOCKMED_WORKFLOW_VERSION,
+        workflow_digest=MOCKMED_WORKFLOW_DIGEST,
+        environment_id=MOCKMED_ENVIRONMENT_OK,
+        minimum_effect_strength=MOCKMED_EFFECT_STRENGTH,
+        bundle_dir=str(bundle_dir),
+    )
+    request = ExecuteRequestV1.model_validate(_request())
+    result = dispatch_mod.live_replay(
+        admission, request, tmp_path / "run", deployment=desktop_deploy
+    )
+    assert called == ["demo"]
+    assert result.outcome is ExecuteTerminalOutcomeV1.VERIFIED

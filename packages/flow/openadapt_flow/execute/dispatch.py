@@ -79,8 +79,13 @@ def default_runner(
             "a synthetic admission can't name a target_url; nothing was executed",
             pre_effect=True,
         )
-    if admission.synthetic or not admission.bundle_dir:
+    if admission.synthetic:
         return synthetic_runner(admission, request)
+    if not admission.bundle_dir:
+        raise DispatchError(
+            "non-synthetic admission is missing bundle_dir; nothing was executed",
+            pre_effect=True,
+        )
     return live_replay(admission, request, run_dir, deployment=deployment)
 
 
@@ -181,13 +186,23 @@ def live_replay(
     from openadapt_flow.emit.skill import bundle_surface
 
     surface = bundle_surface(workflow)
-    chosen = admission.deployment or deployment
-    if surface != "web" or chosen is not None:
+    if surface != "web":
+        chosen = admission.deployment or deployment
         return _surface_replay(
             bundle,
             workflow,
             surface,
             Path(chosen) if chosen else None,
+            request,
+            run_dir,
+            authority=admission.qualification_authority_file,
+        )
+    if admission.deployment is not None:
+        return _surface_replay(
+            bundle,
+            workflow,
+            surface,
+            Path(admission.deployment),
             request,
             run_dir,
             authority=admission.qualification_authority_file,
