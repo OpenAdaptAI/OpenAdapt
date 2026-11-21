@@ -279,6 +279,37 @@ def test_a_broken_chain_is_refused(tmp_path, env):
         resign(empty)
 
 
+def test_sign_updates_refuses_a_receipt_it_cannot_verify_or_did_not_sign(tmp_path, env):
+    from openadapt_flow.offline_seal import signer_for
+
+    run_dir, signer = _chain_setup(tmp_path, env)
+    referrals = HandoffLedger(tmp_path / "referrals")
+    (referral,) = referrals.entries()
+    intake.check(referrals, referral.id, "REF-1", Fake(_found()))
+    receipt = run_dir / "receipt.json"
+    good = receipt.read_text()
+    envelope = json.loads(good)
+    other = _payload(receipt)
+    other["predicate"]["model_calls"] = 9
+    receipt.write_text(
+        json.dumps(
+            dict(
+                envelope,
+                payload=r.sign_statement(
+                    other, [(r.key_id(signer.public_raw()), signer.sign)]
+                )["payload"],
+            )
+        )
+    )
+    with pytest.raises(ValueError, match="does not verify"):
+        followup.sign_updates(run_dir, [referrals], signer=signer)
+    receipt.write_text(good)
+    stranger = signer_for(tmp_path / "stranger-seal")
+    with pytest.raises(ValueError, match="does not verify"):
+        followup.sign_updates(run_dir, [referrals], signer=stranger)
+    assert not (run_dir / "receipt.update-3.json").exists()
+
+
 def test_handoff_list_signs_updates_and_shows_the_history(tmp_path, env, capsys):
     from openadapt_flow.__main__ import main
     from openadapt_flow.receipt_record import receipt_after_run

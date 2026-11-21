@@ -330,8 +330,13 @@ def write_receipt_record(
 
         handoffs = handoffs_for_run(report, list(handoff_ledgers), run_dir)
         if handoffs:
-            placed = place(statement, handoffs)
-            statement, openings = attach_confirmations(statement, openings, handoffs)
+            try:
+                placed = place(statement, handoffs)
+                statement, openings = attach_confirmations(
+                    statement, openings, handoffs
+                )
+            except ValueError as exc:
+                raise ReceiptRecordError("handoff_unplaceable", str(exc)) from exc
     chosen = signer or signer_for(home)
     try:
         kid = r.key_id(chosen.public_raw())

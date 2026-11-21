@@ -111,7 +111,15 @@ def to_line(handoff: Handoff) -> ConfirmationLine:
     field_ids: list[str] = []
     differing = 0
     if last is not None and last.strength == "field_readback" and state != "sent":
-        for index, field_id in enumerate(sorted(handoff.fields)[:_MAX_FIELDS]):
+        # Fail closed: every compared field must fit on the line, and every
+        # differing field must be one of them, so differing_count is never
+        # short of what judge() found.
+        if len(handoff.fields) > _MAX_FIELDS:
+            raise ValueError(f"a handoff line holds at most {_MAX_FIELDS} fields")
+        unknown = set(last.differing_fields) - set(handoff.fields)
+        if unknown:
+            raise ValueError("a differing field is not one the handoff compared")
+        for index, field_id in enumerate(sorted(handoff.fields)):
             seen = (
                 last.observed_digests.get(field_id) or handoff.fields[field_id].digest
             )
@@ -123,6 +131,10 @@ def to_line(handoff: Handoff) -> ConfirmationLine:
                 ":differs" if differs else ""
             )
             field_ids.append(field_id)
+        if state == "recorded_differently" and not differing:
+            raise ValueError(
+                "a recorded_differently read-back names no differing field"
+            )
     line = {
         "kind": KIND,
         "for_step": handoff.step,
@@ -171,22 +183,33 @@ def handoffs_for_run(
 
     A deferred claim check is found by the ``deferred_check`` id on the
     step's effect evidence; any other handoff by its ``run_id``, which names
-    the report's ``run_id`` or the run directory (its path or its name).
+    the report's ``run_id`` or the run directory's resolved path.
     """
 
     by_source: dict[str, Handoff] = {}
     by_run: list[Handoff] = []
-    names = {report.get("run_id")}
-    if run_dir is not None:
-        from pathlib import Path
+    from pathlib import Path
 
-        names |= {str(Path(run_dir)), str(Path(run_dir).resolve()), Path(run_dir).name}
-    names.discard(None)
+    run_id = report.get("run_id")
+    # The resolved directory only, never its bare name: two runs can share a
+    # folder name.
+    directory = Path(run_dir).resolve() if run_dir is not None else None
+
+    def ours(value: Optional[str]) -> bool:
+        if not value:
+            return False
+        if isinstance(run_id, str) and run_id and value == run_id:
+            return True
+        path = Path(value)
+        return (
+            directory is not None and path.is_absolute() and path.resolve() == directory
+        )
+
     for ledger in ledgers:
         for handoff in ledger.entries():
             if handoff.source:
                 by_source[handoff.source] = handoff
-            if handoff.run_id and handoff.run_id in names:
+            if ours(handoff.run_id):
                 by_run.append(handoff)
     found: dict[str, Handoff] = {h.id: h for h in by_run}
     results = report.get("results")

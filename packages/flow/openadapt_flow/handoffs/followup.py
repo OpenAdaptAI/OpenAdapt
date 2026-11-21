@@ -123,6 +123,15 @@ def sign_updates(
 
     run_dir = Path(run_dir)
     original = loads_strict((run_dir / r.RECEIPT_FILE).read_text("utf-8"))
+    # Copy only a receipt that verifies, and only extend one this key signed:
+    # verify_chain refuses a follow-up from any other key.
+    kid = r.key_id(signer.public_raw())
+    own = r.RoleKey(
+        kid, base64.b64encode(signer.public_raw()).decode("ascii"), "this_computer"
+    )
+    checked = r.verify_receipt(original, [own])
+    if not checked.ok:
+        raise ValueError(f"the run's receipt does not verify: {checked.reason}")
     report = loads_strict((run_dir / "report.json").read_text("utf-8"))
     signed = last_signed(run_dir)
     statement = r.loads_strict(base64.b64decode(original["payload"]))
@@ -135,7 +144,6 @@ def sign_updates(
     sequence = len(updates(run_dir)) + 1
     lines, openings = build_confirmations(changed)
     follow_up = r.follow_up_statement(original, sequence, lines)
-    kid = r.key_id(signer.public_raw())
     envelope = r.sign_statement(follow_up, [(kid, signer.sign)])
     out = run_dir / update_file(sequence)
     _write_json(

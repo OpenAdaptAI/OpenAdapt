@@ -136,7 +136,8 @@ class Handoff(_Closed):
     #: Who follows up when it is overdue or differs ("billing", "referrals desk").
     follow_up: str = Field(default="the sender", max_length=_LABEL_MAX)
     key_digest: str = Field(pattern=_DIGEST)
-    fields: dict[str, FieldSpec] = Field(default_factory=dict, max_length=64)
+    #: At most 31 fields: every compared field must fit on the receipt line.
+    fields: dict[str, FieldSpec] = Field(default_factory=dict, max_length=31)
     #: Where it came from: a deferred check's id, or a run's id.
     source: Optional[str] = Field(default=None, max_length=128)
     run_id: Optional[str] = Field(default=None, max_length=128)

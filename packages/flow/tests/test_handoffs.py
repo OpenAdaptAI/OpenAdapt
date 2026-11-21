@@ -427,6 +427,48 @@ def test_lines_follow_the_schema_rules(tmp_path):
     assert rejected.values["reason"] == "rejected_by_counterparty"
 
 
+def test_a_line_fails_closed_when_a_compared_field_would_not_fit(tmp_path):
+    ledger, h = _referral(tmp_path)
+    h = intake.check(ledger, h.id, "REF-0001", Fake(_found(birth_date="1984-03-10")))
+    spec = next(iter(h.fields.values()))
+    wide = h.model_construct(
+        **{**dict(h), "fields": {f"f{i:02d}": spec for i in range(32)}}
+    )
+    with pytest.raises(ValueError, match="at most 31 fields"):
+        line.to_line(wide)
+    with pytest.raises(ValueError):
+        type(h).model_validate({**h.model_dump(), "fields": dict(wide.fields)})
+    last = h.observations[-1].model_copy(update={"differing_fields": ["not_sent"]})
+    stray = h.model_copy(update={"observations": [*h.observations[:-1], last]})
+    with pytest.raises(ValueError, match="not one the handoff compared"):
+        line.to_line(stray)
+
+
+def test_run_match_never_by_folder_name(tmp_path):
+    """A handoff belongs to a run by its run_id or resolved path only."""
+    ledger = HandoffLedger(tmp_path / "handoffs")
+    run_dir = tmp_path / "r" / "run-a"
+    run_dir.mkdir(parents=True)
+    for run_id, key in [
+        ("run-a", "REF-0001"),  # the folder's bare name: another run's id
+        (str(tmp_path / "o" / "run-a"), "REF-0002"),  # same name, other folder
+        (str(run_dir), "REF-0003"),
+        ("rpt-1", "REF-0004"),
+    ]:
+        ledger.send(
+            key,
+            FIELDS,
+            counterparty="receiving clinic",
+            system_kind="ehr",
+            follow_up="referrals desk",
+            follow_up_hours=24,
+            run_id=run_id,
+            step=0,
+        )
+    found = line.handoffs_for_run({"run_id": "rpt-1"}, [ledger], run_dir)
+    assert sorted(h.run_id for h in found) == sorted(["rpt-1", str(run_dir)])
+
+
 def test_lines_validate_against_the_receipt_schema_and_sign(tmp_path):
     r = pytest.importorskip("openadapt_types.receipt")
     if not hasattr(r, "Confirmation"):
