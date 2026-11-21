@@ -10,10 +10,10 @@ ledgers and shows which ones still need someone to follow up:
 
 A deferred-check ledger (``effects.deferred_report.ledger``) is read as the
 payer handoffs beside it (``<ledger>/handoffs``), created on first read. Any
-other directory is read as a handoff ledger. See ``docs/HANDOFFS.md``.
+other directory is read as a handoff ledger. See ``docs/COUNTERPARTY_CONFIRMATIONS.md``.
 
-The ``send`` and ``verify`` subcommands belong to the handoff group too;
-this module registers only ``list``.
+The ``send`` and ``verify`` subcommands belong to the same group and are
+registered elsewhere; this module adds only ``list``.
 """
 
 from __future__ import annotations
@@ -49,13 +49,29 @@ _GROUPS = (
 )
 
 
-def register_handoff_parser(sub: argparse._SubParsersAction) -> None:
-    parser = sub.add_parser(
-        "handoff",
-        help="Handoffs to other parties: what they recorded, and who follows up",
-        allow_abbrev=False,
-    )
-    verbs = parser.add_subparsers(dest="handoff_cmd", required=True)
+def _handoff_verbs(sub: argparse._SubParsersAction) -> argparse._SubParsersAction:
+    """The ``handoff`` group's subcommands, made if no one registered it yet.
+
+    ``handoff send`` and ``handoff verify`` live in another module; whichever
+    registers first makes the group, and the other adds its verbs to it.
+    """
+
+    parser = sub.choices.get("handoff")
+    if parser is None:
+        parser = sub.add_parser(
+            "handoff",
+            help="Handoffs to other parties: what they recorded, and who follows up",
+            allow_abbrev=False,
+        )
+        return parser.add_subparsers(dest="handoff_command", required=True)
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action
+    return parser.add_subparsers(dest="handoff_command", required=True)
+
+
+def register_handoff_list(sub: argparse._SubParsersAction) -> None:
+    verbs = _handoff_verbs(sub)
     listing = verbs.add_parser(
         "list",
         help="Open handoffs by state, with who still needs to follow up",
@@ -130,6 +146,8 @@ def _describe(handoff: "Handoff") -> str:
         words += ": " + ", ".join(last.differing_fields)
     latest = handoff.last
     if latest is not None and latest.reason is not None:
+        if handoff.state == "sent":
+            words = "sent"
         words += f"; {_REASON_WORDS[latest.reason]}"
     return words
 
@@ -203,4 +221,4 @@ def cmd_handoff_list(args: argparse.Namespace) -> int:
     return 0
 
 
-__all__ = ["register_handoff_parser"]
+__all__ = ["register_handoff_list"]

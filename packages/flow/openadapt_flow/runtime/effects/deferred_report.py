@@ -411,8 +411,7 @@ class PendingLedger:
                             entry.id, "reconciliation_required", "deadline", reason
                         )
                     )
-                    if observer is not None:
-                        observer(entry, None, 0)
+                    _notify(observer, entry, None, 0)
                 else:
                     still.append(entry)
             if report_text is None or fmt is None:
@@ -439,9 +438,9 @@ class PendingLedger:
                 by_digest.setdefault(entry.key_digest, []).append(entry)
             for digest, entries in by_digest.items():
                 row = rows.get(digest)
-                if row is not None and observer is not None:
+                if row is not None:
                     for entry in entries:
-                        observer(entry, row, len(entries))
+                        _notify(observer, entry, row, len(entries))
                 if row is None or row.status == "pending":
                     continue
                 if len(entries) > 1:
@@ -475,6 +474,23 @@ class PendingLedger:
                     )
                     settled.append(Settlement(entry.id, state, code, reason))
         return settled
+
+
+def _notify(
+    observer: Optional[SettleObserver],
+    entry: PendingCheck,
+    row: Optional[ReportRow],
+    count: int,
+) -> None:
+    """Tell the observer, which never changes what settles: its failure is
+    swallowed (it can catch up later from the settled entries)."""
+
+    if observer is None:
+        return
+    try:
+        observer(entry, row, count)
+    except Exception:  # noqa: BLE001 - an observer must never stop a settlement
+        return
 
 
 def _issued_after(stamp: datetime, created: datetime) -> bool:

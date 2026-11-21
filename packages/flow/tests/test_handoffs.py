@@ -555,3 +555,50 @@ def test_handoff_list_for_one_run_sets_the_claims_step(tmp_path, capsys):
     data = json.loads(capsys.readouterr().out)
     assert [d["receipt_line"]["for_step"] for d in data] == [1]
     assert data[0]["state"] == "sent"
+
+
+def test_a_failing_observer_never_changes_what_settles(tmp_path):
+    pending, e = _claims(tmp_path, FMT_277, ["CLM-1001", "CLM-1002", "CLM-1003"])
+
+    def broken(entry, row, count):
+        raise OSError("disk full")
+
+    settled = pending.settle(ACK_277CA, FMT_277, now=SETTLE_AT, observer=broken)
+    assert {s.id: s.state for s in settled} == {
+        e["CLM-1001"].id: "verified",
+        e["CLM-1002"].id: "reconciliation_required",
+    }
+    # The handoffs catch up from the settled entries.
+    handoffs = payer.sync(pending)
+    assert _h(handoffs, e["CLM-1001"]).last.counterparty_accepted
+    assert _h(handoffs, e["CLM-1002"]).last.reason == "rejected_by_counterparty"
+
+
+def test_sync_catches_up_a_settlement_the_observer_missed(tmp_path):
+    pending, e = _claims(tmp_path, FMT_277, ["CLM-1003"], hours=8)
+    _settle(pending, ACK_277CA, FMT_277)  # A1: acknowledged
+    pending.settle(None, None, now=LATER)  # expired by a caller with no observer
+    handoffs = payer.sync(pending)
+    h = _h(handoffs, e["CLM-1003"])
+    assert (h.state, h.last.reason) == ("acknowledged", "no_answer_by_deadline")
+    before = len(h.observations)
+    assert len(_h(payer.sync(pending), e["CLM-1003"]).observations) == before
+
+
+def test_sync_adds_nothing_after_the_observer_recorded_it(tmp_path):
+    pending, e = _claims(tmp_path, FMT_277, ["CLM-1001", "CLM-1002"])
+    _, handoffs = _settle(pending, ACK_277CA, FMT_277)
+    counts = {k: len(_h(handoffs, v).observations) for k, v in e.items()}
+    handoffs = payer.sync(pending)
+    assert {k: len(_h(handoffs, v).observations) for k, v in e.items()} == counts
+
+
+def test_a_refused_claim_reads_as_refused_not_unanswered(tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+
+    pending, _ = _claims(tmp_path, FMT_277, ["CLM-1002"])
+    _settle(pending, ACK_277CA, FMT_277)
+    assert main(["handoff", "list", "--ledger", str(pending.directory)]) == 0
+    out = capsys.readouterr().out
+    assert "sent; they refused it" in out
+    assert "no answer yet" not in out

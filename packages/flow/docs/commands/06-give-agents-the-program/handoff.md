@@ -1,0 +1,1 @@
+Handoffs to other parties. `list` shows open handoffs by state (sent, acknowledged, recorded as intended, recorded differently) and who still needs to follow up, from local ledgers only (`packages/flow/docs/COUNTERPARTY_CONFIRMATIONS.md`).

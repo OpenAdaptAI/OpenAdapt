@@ -13169,10 +13169,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_deferred_parser(sub)
 
-    from openadapt_flow.cli_handoff import register_handoff_parser
-
-    register_handoff_parser(sub)
-
     from openadapt_flow.cli_undo import register as _register_undo
 
     _register_undo(
@@ -13225,6 +13221,11 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
+
+    # After any other ``handoff`` verbs: it adds ``list`` to the same group.
+    from openadapt_flow.cli_handoff_list import register_handoff_list
+
+    register_handoff_list(sub)
 
     parser.add_task_help()
     return parser

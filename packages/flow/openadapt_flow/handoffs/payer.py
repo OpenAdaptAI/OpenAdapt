@@ -134,8 +134,10 @@ def observation_for(
     )
 
 
-def _same(a: Observation, b: Observation) -> bool:
-    keep = ("state", "reason", "counterparty_accepted", "evidence_sha256")
+def _same(a: Observation, b: Observation, *, evidence: bool = True) -> bool:
+    keep = ("state", "reason", "counterparty_accepted") + (
+        ("evidence_sha256",) if evidence else ()
+    )
     return all(getattr(a, k) == getattr(b, k) for k in keep)
 
 
@@ -183,11 +185,13 @@ class SettleRecorder:
 def sync(
     pending: PendingLedger, *, exports: bool = False, follow_up: str = "billing"
 ) -> HandoffLedger:
-    """Make sure every deferred claim check has its handoff.
+    """Make sure every deferred claim check has its handoff, up to date.
 
-    A claim that settled before its handoff existed gets one observation from
-    the settlement (accepted, rejected, expired); the settlement's reason
-    text names which.
+    A claim that settled without the observer hearing it (before handoffs
+    existed, or expired by another caller of ``settle``) gets one observation
+    from the settlement (accepted, rejected, expired); the settlement's
+    reason text names which. A settlement the observer already recorded adds
+    nothing.
     """
 
     handoffs = handoff_ledger(pending)
@@ -195,7 +199,7 @@ def sync(
         if not _is_handoff(entry, exports):
             continue
         current = handoffs.adopt(as_handoff(entry, follow_up=follow_up))
-        if current.observations or entry.state == "waiting":
+        if entry.state == "waiting":
             continue
         method = _METHOD.get(entry.report_format, "report_text")
         at = parse_iso(entry.settled_at) if entry.settled_at else None
@@ -211,12 +215,15 @@ def sync(
             row, count = ReportRow("", "rejected", entry.code or ""), 1
         else:
             row, count = ReportRow("", "conflicting", entry.code or ""), 1
-        handoffs.observe(
-            current.id,
-            observation_for(
-                current, row, count, method, evidence_sha256=entry.settled_by, now=at
-            ),
+        observation = observation_for(
+            current, row, count, method, evidence_sha256=entry.settled_by, now=at
         )
+        # Already recorded by ``deferred settle``'s observer: nothing new.
+        if current.last is not None and _same(
+            current.last, observation, evidence=False
+        ):
+            continue
+        handoffs.observe(current.id, observation)
     return handoffs
 
 

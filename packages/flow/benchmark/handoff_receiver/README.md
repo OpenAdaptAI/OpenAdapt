@@ -1,7 +1,7 @@
 # Referral intake: a real, synthetic OpenEMR as the receiving clinic
 
 These are the real-app cases for counterparty confirmations by read-back
-(see [HANDOFFS.md](../../docs/HANDOFFS.md)). A synthetic referring clinic
+(see [COUNTERPARTY_CONFIRMATIONS.md](../../docs/COUNTERPARTY_CONFIRMATIONS.md)). A synthetic referring clinic
 sends referrals to a **second, separate OpenEMR 7.0.3** that plays the
 receiving clinic. OpenAdapt reads the receiver back and says whether each
 referral was recorded as intended, recorded differently, or never arrived.
