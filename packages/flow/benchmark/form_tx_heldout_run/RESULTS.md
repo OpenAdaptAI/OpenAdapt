@@ -33,13 +33,13 @@ and was wrong; under D1 the answer key's counts are used.
 
 | Metric | A: unguarded filler | B: layer, learning off | C: layer, learning on |
 | --- | ---: | ---: | ---: |
-| Correct submissions (of 32) | ARM_A_CORRECT | 6 | 6 |
+| Correct submissions (of 32) | 12 | 6 | 6 |
 | Correct and `verified_done` | n/a | 0 | 0 |
-| Wrong submitted | ARM_A_WRONG | 0 | 0 |
+| Wrong submitted | 18 | 0 | 0 |
 | - with `verified_done` (false proof) | n/a | 0 | 0 |
 | - flagged after submit | n/a | 0 | 0 |
-| - silent | ARM_A_WRONG | 0 | 0 |
-| Unsubmitted | ARM_A_UNSUB | 26 | 26 |
+| - silent | 18 | 0 | 0 |
+| Unsubmitted | 2 | 26 | 26 |
 | Trap cases stopped before submit (of 18) | 0 | 6 | 6 |
 | - then submitted correctly | n/a | 4 | 4 |
 | Clean cases with a false stop (of 14) | 0 | 3 (3 halts) | 3 (3 halts) |
@@ -63,6 +63,13 @@ never got that far.
 | tidewater (shadow DOM) | 7 | 0 | 0 | 0 | 0 | 7 `readback_refuted` with nothing submitted |
 
 Arm C matched arm B case for case.
+
+Arm A (the portal author's unguarded filler, re-run once unchanged): 12
+correct, 18 wrong values submitted with no flag, 2 not submitted (one
+browser error on hl-s04, one stuck on cobalt). Per portal: harborline 2 of
+9 correct, cobalt 3 of 8, pinecrest 4 of 8, tidewater 3 of 7. The portal
+author's own earlier run gave 13 / 18 / 1. The traps are real: an unguarded
+filler gets more than half the quotes wrong, silently.
 
 ## Reject criteria
 
@@ -126,7 +133,11 @@ that stop, per case (post-hoc reading of the same rows, not a new run):
 
 ## Post-hoc row (labelled, not part of the frozen result)
 
-POSTHOC_SECTION
+None has run. `run.py --posthoc` defines one (harborline pack P1, which
+overwrites the estimator's pre-set Quality Grade, plus an operator sign-in
+when a stop says the session expired). It was queued on the lab and stopped
+unrun when the lab had no free memory slot. Any post-hoc result goes in its
+own labelled row and never replaces the frozen one.
 
 ## What this cannot show
 
