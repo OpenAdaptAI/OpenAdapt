@@ -30,6 +30,12 @@ CI, not live-proven against a real SFTP server.
 Fail-safe: a missing root, a transport error, or an unreadable candidate file
 reads as *unreadable* -> INDETERMINATE -> HALT (the interface folder being
 gone is never "no file expected").
+
+Strength follows who wrote the file (:mod:`.artifact_provenance`): a file the acting
+session wrote or downloaded is at most ``same_screen``, one a separate session
+fetched at most ``separate_session``, and only a declared
+``system_of_record`` producer (an export job, an SFTP drop the system made)
+reaches ``system_of_record``.
 """
 
 from __future__ import annotations
@@ -39,7 +45,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Iterable, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -91,6 +97,12 @@ class FileArrivalVerifier(VerifierAdapterBase):
         transport: Optional :class:`ArrivalTransport` (e.g. a paramiko
             ``SFTPClient``) for a remote endpoint; ``None`` -> local
             filesystem.
+        producer: Who wrote the file (an
+            :class:`.artifact_provenance.ArtifactProducer` or its name). ``None`` is ``unknown``, graded like the acting
+            session.
+        acting_roots: Local folders the acting session writes or downloads
+            into; a local ``root`` overlapping one is graded as the acting
+            session's.
     """
 
     substrate = "file"
@@ -105,7 +117,11 @@ class FileArrivalVerifier(VerifierAdapterBase):
         mtime_window_s: Optional[float] = None,
         content_probe: Optional[str] = None,
         transport: Optional[ArrivalTransport] = None,
+        producer: Any = None,
+        acting_roots: Optional[Iterable[Path | str]] = None,
     ) -> None:
+        from openadapt_flow.runtime.effects.artifact_provenance import grade_artifact
+
         self.root = str(root)
         self.pattern = pattern
         self.min_size = int(min_size)
@@ -114,6 +130,16 @@ class FileArrivalVerifier(VerifierAdapterBase):
             re.compile(content_probe) if content_probe is not None else None
         )
         self.transport = transport
+        self.provenance = grade_artifact(
+            producer,
+            root=self.root,
+            acting_roots=acting_roots,
+            observe_local=transport is None,
+        )
+        self.verification_tier = self.provenance.verification_tier
+        self.independent_system_of_record = (
+            self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
+        )
 
     # -- listing ------------------------------------------------------------
 
@@ -245,16 +271,19 @@ class FileArrivalVerifier(VerifierAdapterBase):
                 "root": self.root,
                 "pattern": self.pattern,
                 "remote": self.transport is not None,
+                "provenance": self.provenance.evidence(),
             },
         )
 
     def verify(
         self, expected: Effect, before: EffectState, context: Any = None
     ) -> EffectVerdict:
+        from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
+
         deadline = time.monotonic() + max(0.0, expected.timeout_s)
         while True:
             current = self._scan()
             last = judge_records(expected, before, current, substrate=self.substrate)
             if last.confirmed or time.monotonic() >= deadline:
-                return last
+                return with_provenance(last, self.provenance)
             time.sleep(0.2)

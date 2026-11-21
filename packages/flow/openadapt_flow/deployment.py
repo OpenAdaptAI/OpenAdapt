@@ -538,6 +538,16 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
+    # -- artifact provenance (file, document, document-hash, email) ----------
+    #: Who wrote what ``root`` holds: ``acting_session``, ``separate_session``,
+    #: ``system_of_record`` or ``unknown`` (the default, graded like the acting
+    #: session). Sets the strongest check level; see
+    #: ``runtime/effects/artifact_provenance.py``.
+    artifact_producer: Optional[str] = None
+    #: Folders the acting session writes or downloads into. A ``root`` that
+    #: overlaps one is graded as the acting session's whatever is declared.
+    acting_roots: list[str] = Field(default_factory=list)
+
     # -- plugin record-check packs (registered kinds only) --------------------
     #: Non-secret settings for a PLUGIN verifier kind: the per-system record
     #: check a private pack implements (which read endpoint, which record
@@ -2247,6 +2257,9 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
         # Added after identities were first issued: present only when set.
         if not dumped.get("records_drop_fields"):
             dumped.pop("records_drop_fields", None)
+        for added in ("artifact_producer", "acting_roots"):
+            if not dumped.get(added):
+                dumped.pop(added, None)
         surfaces = dumped.pop("surfaces", None) or {}
         if surfaces:
             dumped["surfaces"] = {
@@ -2597,6 +2610,8 @@ def _build_effect_verifier_unredacted(
             min_size=cfg.file_min_size,
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind in ("document-hash", "document_hash", "doc-hash"):
@@ -2604,7 +2619,12 @@ def _build_effect_verifier_unredacted(
             raise ValueError("effects.kind 'document-hash' requires effects.root")
         from openadapt_flow.runtime.effects import DocumentHashVerifier
 
-        return DocumentHashVerifier(cfg.root, glob=cfg.glob)
+        return DocumentHashVerifier(
+            cfg.root,
+            glob=cfg.glob,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
+        )
 
     if kind == "graphql":
         if not cfg.base_url:
@@ -2643,6 +2663,8 @@ def _build_effect_verifier_unredacted(
             mtime_window_s=cfg.file_mtime_window_s,
             content_probe=cfg.file_content_probe,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     if kind == "document":
@@ -2666,6 +2688,8 @@ def _build_effect_verifier_unredacted(
             text_pattern=cfg.document_text_pattern,
             mtime_window_s=cfg.file_mtime_window_s,
             poll_interval_s=cfg.poll_interval_s,
+            producer=cfg.artifact_producer,
+            acting_roots=cfg.acting_roots,
         )
 
     # Plugin seam: a customer adapter registered programmatically or under the

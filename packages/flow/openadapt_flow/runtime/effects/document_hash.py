@@ -22,13 +22,18 @@ decides:
 Fail-safe: a missing or unreadable ``root`` reads as *unreadable* ->
 INDETERMINATE -> HALT (the export target being gone is never "no document
 expected"). This substrate runs live in CI (no external service).
+
+Strength follows who wrote the documents (:mod:`.artifact_provenance`): a store the
+acting session wrote or downloaded into is at most ``same_screen``; only a
+declared ``system_of_record`` producer whose store does not overlap the
+acting session's folders reaches ``system_of_record``.
 """
 
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -57,6 +62,11 @@ class DocumentHashVerifier(VerifierAdapterBase):
         glob: Glob (relative to ``root``, recursive patterns allowed) of the
             documents that count as records.
         session: Unused; present for protocol symmetry.
+        producer: Who wrote the documents (an
+            :class:`.artifact_provenance.ArtifactProducer` or its name). ``None`` is ``unknown``, graded like the acting
+            session.
+        acting_roots: Folders the acting session writes or downloads into; a
+            store overlapping one is graded as the acting session's.
     """
 
     substrate = "fs"
@@ -68,9 +78,20 @@ class DocumentHashVerifier(VerifierAdapterBase):
         *,
         glob: str = "*",
         session: Any = None,
+        producer: Any = None,
+        acting_roots: Optional[Iterable[Path | str]] = None,
     ) -> None:
+        from openadapt_flow.runtime.effects.artifact_provenance import grade_artifact
+
         self.root = Path(root)
         self.glob = glob
+        self.provenance = grade_artifact(
+            producer, root=self.root, acting_roots=acting_roots
+        )
+        self.verification_tier = self.provenance.verification_tier
+        self.independent_system_of_record = (
+            self.verification_tier is VerificationTier.INDEPENDENT_SYSTEM
+        )
 
     def _scan(self) -> Optional[list[dict[str, Any]]]:
         """List the store's documents as flat records.
@@ -110,11 +131,18 @@ class DocumentHashVerifier(VerifierAdapterBase):
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
-            detail={"root": str(self.root), "glob": self.glob},
+            detail={
+                "root": str(self.root),
+                "glob": self.glob,
+                "provenance": self.provenance.evidence(),
+            },
         )
 
     def verify(
         self, expected: Effect, before: EffectState, context: Any = None
     ) -> EffectVerdict:
+        from openadapt_flow.runtime.effects.artifact_provenance import with_provenance
+
         current = self._scan()
-        return judge_records(expected, before, current, substrate=self.substrate)
+        verdict = judge_records(expected, before, current, substrate=self.substrate)
+        return with_provenance(verdict, self.provenance)

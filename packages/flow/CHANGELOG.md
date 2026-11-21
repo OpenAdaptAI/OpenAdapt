@@ -19,6 +19,18 @@
 
 ### Fixes
 
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Each verdict records the producer in `read_evidence.provenance`. A
+  deployment that relied on the old tier 1 for these kinds must now declare
+  `artifact_producer: system_of_record`; until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same
   generated shape as the `c` and `r` keys, but the sanitizer sent them to
