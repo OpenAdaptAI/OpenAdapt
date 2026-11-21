@@ -13192,12 +13192,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_jit_parser(sub)
 
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
     from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
 
     _add_compile_agent_parser(sub)
+
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+
     _add_guard_parser(sub)
+    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
+
     _add_flight_parser(sub)
 
     from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser

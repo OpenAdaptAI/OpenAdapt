@@ -457,6 +457,42 @@ def test_prices_come_from_the_table_and_dated_ids_resolve():
     assert price_usd("gpt-unknown", usage) is None
 
 
+def test_openai_cached_tokens_are_priced_once():
+    from openadapt_flow.flight.proxy import _usage
+
+    usage = _usage(
+        {
+            "input_tokens": 900,
+            "output_tokens": 40,
+            "input_tokens_details": {"cached_tokens": 100},
+        }
+    )
+    assert usage["input_tokens"] == 800
+    assert usage["cache_read_input_tokens"] == 100
+    row = PRICES_PER_MTOK["claude-opus-5-5"]
+    expected = (800 * row["input"] + 40 * row["output"] + 100 * row["cache_read"]) / 1e6
+    assert price_usd("claude-opus-5-5", usage) == pytest.approx(expected)
+    # Anthropic's input_tokens already exclude the cache: left as they are.
+    anthropic = _usage({"input_tokens": 900, "cache_read_input_tokens": 100})
+    assert anthropic["input_tokens"] == 900
+
+
+def test_no_scrub_is_refused_without_the_acceptance_flag(tmp_path, provider, capsys):
+    import argparse
+
+    from openadapt_flow.flight.cli import add_parser
+
+    parser = argparse.ArgumentParser()
+    add_parser(parser.add_subparsers())
+    args = parser.parse_args(
+        ["flight", "--out", str(tmp_path / "run"), "--no-scrub", "--", "true"]
+    )
+    assert args.func(args) == 2
+    assert "--i-accept-unscrubbed" in capsys.readouterr().err
+    assert provider.requests == []
+    assert not (tmp_path / "run" / "flight.json").exists()
+
+
 def _real_scrubber():
     pytest.importorskip("presidio_analyzer")
     pytest.importorskip("presidio_image_redactor")
