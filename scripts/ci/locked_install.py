@@ -131,10 +131,14 @@ def main(argv: list[str] | None = None) -> int:
             requirements = Path(temp) / f"layer-{index}.txt"
             _run(_export_command(spec, skip, requirements))
             installed |= _requirement_names(requirements)
-            _run(["uv", "pip", "install", *target, "--require-hashes", "--no-deps",
-                  "--requirement", str(requirements)])  # fmt: skip
+            # --no-config: the exported file already pins every version with
+            # hashes. Without it, uv pip also applies the [tool.uv]
+            # constraint-dependencies of the pyproject.toml in the working
+            # directory, and --require-hashes rejects an unpinned constraint.
+            _run(["uv", "pip", "install", *target, "--no-config", "--require-hashes",
+                  "--no-deps", "--requirement", str(requirements)])  # fmt: skip
     if editables:
-        command = ["uv", "pip", "install", *target, "--no-deps"]
+        command = ["uv", "pip", "install", *target, "--no-config", "--no-deps"]
         for path in editables:
             command += ["--editable", str(path)]
         _run(command)

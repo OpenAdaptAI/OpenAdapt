@@ -141,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           # Both the matrix and the claims consumer use this exact count.
-          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi
+          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi
           echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
             for pkg in flow types agent verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
@@ -437,7 +437,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
+        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # every one of its 88 pull-request runs and used 168 runner-minutes.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -588,11 +591,12 @@ jobs:
             --disallow-untyped-decorators --extra-checks \
             openadapt_flow/identity_signals.py \
             openadapt_flow/policy.py \
-            openadapt_flow/qualification.py \
+            openadapt_flow/qualification/ \
             openadapt_flow/runtime/identity.py \
             openadapt_flow/runtime/identity_template.py \
             openadapt_flow/runtime/identity_vlm.py \
             openadapt_flow/runtime/replayer.py \
+            openadapt_flow/runtime/replay/ \
             openadapt_flow/runtime/resolver.py \
             openadapt_flow/submit_binding.py \
             openadapt_flow/runtime/effects/effect.py \
@@ -637,10 +641,11 @@ jobs:
         # Each shard runs one pytest-xdist worker per vCPU (four on
         # ubuntu-latest) and pays about 35 s of setup. Files are packed by
         # measured time (scripts/ci/flow_shards.py), so the shards finish
-        # together: a pull request's fast lane takes three shards, about five
-        # minutes each, to fit `ci` in ten minutes. The full suite on main and
-        # nightly takes two.
-        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '3' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        # together. A pull request's fast lane takes four shards: with three,
+        # the identity, wire and verifier tests it must keep held each shard
+        # near 12 minutes of tests (run 44684203094). The full suite on main
+        # and nightly takes two.
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '4' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -1106,7 +1111,7 @@ jobs:
         # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
-        run: uv pip install --require-hashes -r ci/crewai-1.6.1.txt
+        run: uv pip install --no-config --require-hashes -r ci/crewai-1.6.1.txt
       - name: Install and launch Playwright browser
         timeout-minutes: 12
         run: >-
