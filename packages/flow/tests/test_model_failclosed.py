@@ -256,9 +256,7 @@ def _wired_appliance_handles(captured: dict) -> list[str]:
     wired = [
         name
         for name in ("identity_vlm", "state_verifier")
-        if isinstance(
-            kwargs.get(name), (RemoteIdentityVLM, RemoteStateVerifier)
-        )
+        if isinstance(kwargs.get(name), (RemoteIdentityVLM, RemoteStateVerifier))
     ]
     if isinstance(captured.get("fallback"), RemoteGrounder):
         wired.append("grounder")
