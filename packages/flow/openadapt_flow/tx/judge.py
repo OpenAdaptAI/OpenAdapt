@@ -154,6 +154,27 @@ def strict_equal(left: Any, right: Any) -> bool:
     return type(left) is type(right) and bool(left == right)
 
 
+def is_null_or_empty(value: Any) -> bool:
+    """``None`` or the empty string, and nothing else (not 0, False or [])."""
+    return value is None or (isinstance(value, str) and value == "")
+
+
+def null_empty_equivalent(
+    path: str,
+    v0: Any,
+    v1: Any,
+    field_codecs: Optional[Mapping[str, FieldCodec]],
+) -> bool:
+    """True when ``path`` declares ``null_empty`` and both values are empty."""
+    codec = _lookup_field_codec(path, field_codecs)
+    return (
+        codec is not None
+        and codec.kind == "null_empty"
+        and is_null_or_empty(v0)
+        and is_null_or_empty(v1)
+    )
+
+
 def _is_empty_server_default_value(value: Any) -> bool:
     """Return True if ``value`` is a benign empty/zero default on record creation."""
     if value is None:
@@ -601,6 +622,16 @@ def apply_field_codec(
 ) -> tuple[bool, str]:
     """Evaluate Tier-1 ``FieldCodec`` normalization or bijection between two values."""
     kind = codec.kind
+    if kind == "null_empty":
+        ok = strict_equal(intended_val, stored_val) or (
+            is_null_or_empty(intended_val) and is_null_or_empty(stored_val)
+        )
+        return (
+            ok,
+            "null_empty codec match"
+            if ok
+            else f"null_empty mismatch ({intended_val!r} != {stored_val!r})",
+        )
     if kind == "exact":
         ok = strict_equal(intended_val, stored_val)
         return (
@@ -1403,6 +1434,22 @@ class FrameAndIntentJudge(JudgeProtocol):
                 )
                 extra.append(path)
                 reasons.append(inject_reason)
+                return
+
+            if (
+                v0 is not _MISSING
+                and v1 is not _MISSING
+                and null_empty_equivalent(path, v0, v1, field_codecs)
+            ):
+                verdicts.append(
+                    FieldVerdict(
+                        field_path=path,
+                        category="frame",
+                        passed=True,
+                        tier_used="codec",
+                        reason="null and empty string are one value (null_empty codec)",
+                    )
+                )
                 return
 
             if v1 is _MISSING:
