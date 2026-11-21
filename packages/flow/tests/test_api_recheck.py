@@ -39,13 +39,19 @@ class Record:
         self.version = version
         self.found = True
         self.fail = False
+        self.identity: Any = "7"
 
     def read(self) -> Readback:
         if self.fail:
             raise ReadFailed("503")
         if not self.found:
             return Readback(found=False)
-        return Readback(found=True, fields=dict(self.fields), version=self.version)
+        return Readback(
+            found=True,
+            fields=dict(self.fields),
+            version=self.version,
+            identity=self.identity,
+        )
 
 
 class Log:
@@ -132,10 +138,16 @@ def test_unchanged_record_and_quiet_log_verify_as_of_the_recheck() -> None:
 
 
 def test_state_and_schedule_hold_no_values() -> None:
-    _, state, sched = _setup(Log())
+    log = Log()
+    rec = Record({"name.family": "Lovelace-Q", "birthDate": "1815-12-10 (q)"})
+    rec.identity = "Patient-Qz"
+    state = begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5, log=log)
+    sched = schedule(state)
     text = json.dumps(state) + json.dumps(sched)
-    assert "Lovelace" not in text and "1815" not in text and TARGET not in text
-    assert "salt" not in sched and state_problem(state) is None
+    for value in ("Lovelace-Q", "1815-12-10 (q)", "Patient-Qz", TARGET):
+        assert value not in text
+    assert state["salt"] not in json.dumps(sched) and "salt" not in sched
+    assert state_problem(state) is None
 
 
 def test_recheck_before_the_due_time_is_not_checked() -> None:
@@ -208,13 +220,14 @@ def test_own_late_collateral_refutes_unless_a_later_write_accounts_for_it() -> N
     rec, state, sched = _setup(log)
     log.add("d1", "delete", "self", False)
     assert _run(state, rec, sched, log).outcome == "REFUTED"
-    assert _run(state, rec, sched, log, excused_event_ids=["d1"]).outcome == "VERIFIED"
+    excused = {"d1": "delete"}
+    assert _run(state, rec, sched, log, excused_events=excused).outcome == "VERIFIED"
 
 
 def test_the_writes_own_lagging_entry_is_not_a_change() -> None:
     log = Log()
     log.entries = []
-    rec, state, sched = _setup(log, own_event_ids=["mine"])
+    rec, state, sched = _setup(log, own_events={"mine": "create"})
     log.add("mine", "create", "self", True)
     assert _run(state, rec, sched, log).outcome == "VERIFIED"
 
@@ -478,5 +491,239 @@ def test_missing_named_version_fails_the_read() -> None:
     source = VerifierReadback(verifier, _Effect(), None, version_path="meta.versionId")
     assert source.read().version == "1"
     verifier.record = {"id": "7"}
+    with pytest.raises(ReadFailed):
+        source.read()
+
+
+# -- review round 1: fail-closed cases ------------------------------------------
+
+
+def test_begin_refuses_an_absent_record() -> None:
+    rec = Record({"birthDate": "1815-12-10"})
+    rec.found = False
+    with pytest.raises(ReadFailed):
+        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+
+
+def test_begin_refuses_a_read_back_with_no_identity() -> None:
+    rec = Record({"birthDate": "1815-12-10"})
+    rec.identity = None
+    with pytest.raises(ReadFailed):
+        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+
+
+def test_a_read_back_landing_on_another_record_is_not_checked() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    rec.identity = "8"  # same declared values and version, another record
+    out = _run(state, rec, sched, log)
+    assert out.outcome == "NOT_CHECKED" and "different record" in out.reason
+
+
+def test_no_log_verified_lists_other_records_as_not_covered() -> None:
+    rec, state, sched = _setup()
+    out = _run(state, rec, sched)
+    assert out.outcome == "VERIFIED"
+    assert any("other records" in line for line in out.not_covered)
+    assert "log since the checkpoint" not in out.reason
+
+
+def test_a_log_that_records_nothing_gives_no_log_basis() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    log.logs = ()
+    out = _run(state, rec, sched, log)
+    assert out.scope()["bases"] == ["system_api"]
+    assert any("other records" in line for line in out.not_covered)
+    assert "log since the checkpoint" not in out.reason
+
+
+def test_missing_and_null_fields_and_version_types_differ() -> None:
+    rec, state, sched = _setup()
+    rec.version = 1  # was the string "1"
+    assert _run(state, rec, sched).outcome == "NOT_CHECKED"
+    rec.version = "1"
+    rec.fields["birthDate"] = None
+    assert _run(state, rec, sched).outcome == "REFUTED"
+
+
+def test_a_value_with_no_exact_json_form_fails_the_read() -> None:
+    from decimal import Decimal
+
+    with pytest.raises(ReadFailed):
+        begin(
+            Record({"amount": Decimal("1.0")}),
+            target=TARGET,
+            first_outcome="VERIFIED",
+            window_s=5,
+        )
+    rec, state, sched = _setup()
+    rec.fields["birthDate"] = Decimal("1815")
+    assert _run(state, rec, sched).outcome == "NOT_CHECKED"
+
+
+def test_exemptions_need_matching_attribution() -> None:
+    log = Log()
+    log.entries = []
+    rec, state, sched = _setup(log, own_events={"mine": "create"})
+    log.add("mine", "create", "other", True)  # own id, another author
+    assert _run(state, rec, sched, log).outcome == "NOT_CHECKED"
+
+    log = Log()
+    rec, state, sched = _setup(log)
+    log.add("q", "unknown", "unknown", True)
+    assert _run(state, rec, sched, log, excused_events={"q": "update"}).outcome == (
+        "NOT_CHECKED"
+    )
+    log = Log()
+    rec, state, sched = _setup(log)
+    log.add("d1", "update", "self", False)  # excused as a delete, logged an update
+    out = _run(state, rec, sched, log, excused_events={"d1": "delete"})
+    assert out.outcome == "NOT_CHECKED"
+
+
+def test_a_bare_string_is_not_a_set_of_event_ids() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    log.add("1", "delete", "self", False)
+    assert _run(state, rec, sched, log, excused_events="12").outcome == "NOT_CHECKED"
+    with pytest.raises(ValueError):
+        begin(
+            Record({}),
+            target=TARGET,
+            first_outcome="VERIFIED",
+            window_s=5,
+            own_events="12",  # type: ignore[arg-type]
+        )
+
+
+def test_a_proven_caller_mutation_refutes_despite_another_actor() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    rec.fields["birthDate"] = "1815-12-11"
+    log.add("o1", "update", "other", True)
+    log.add("d2", "delete", "self", False)
+    assert _run(state, rec, sched, log).outcome == "REFUTED"
+
+
+def test_a_changed_value_by_an_unknown_actor_is_not_checked() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    rec.fields["birthDate"] = "1815-12-11"
+    log.add("u1", "update", "unknown", True)
+    assert _run(state, rec, sched, log).outcome == "NOT_CHECKED"
+    log = Log()
+    rec, state, sched = _setup(log)
+    rec.fields["birthDate"] = "1815-12-11"
+    log.hidden = 1
+    assert _run(state, rec, sched, log).outcome == "NOT_CHECKED"
+
+
+def test_a_state_is_only_recheckable_with_the_same_host_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rec, state, sched = _setup()
+    monkeypatch.setenv("OPENADAPT_FRAME_SECRET", "22" * 32)
+    out = _run(state, rec, sched)
+    assert out.outcome == "NOT_CHECKED" and "frame secret" in out.reason
+
+
+def test_read_failure_reasons_carry_no_upstream_text() -> None:
+    class Leaky:
+        def read(self) -> Readback:
+            raise ReadFailed("GET https://sor.example/Patient/7 returned 500")
+
+    rec, state, sched = _setup()
+    out = _run(state, Leaky(), sched)
+    assert out.outcome == "NOT_CHECKED"
+    assert "Patient/7" not in json.dumps(out.to_json())
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda s: s.update(window_s=1e300),
+        lambda s: s.update(window_s="120"),
+        lambda s: s.update(read_at=s["salt"]),
+        lambda s: s.update(version_mac=1),
+        lambda s: s.update(own_events=["x"]),
+    ],
+)
+def test_malformed_state_is_refused_everywhere(edit: Any) -> None:
+    rec, state, sched = _setup()
+    edit(state)
+    assert state_problem(state) is not None
+    with pytest.raises(ValueError):
+        schedule(state)
+    assert _run(state, rec, sched).outcome == "NOT_CHECKED"
+
+
+def test_the_result_reports_the_observation_interval() -> None:
+    rec, state, sched = _setup()
+    out = _run(state, rec, sched)
+    assert out.scope()["observed_between"] == [
+        "2026-11-21T12:03:20Z",
+        "2026-11-21T12:03:20Z",
+    ]
+    assert "read between" in out.reason
+
+
+def test_an_ambiguous_match_fails_the_read() -> None:
+    verifier = _Verifier()
+    source = VerifierReadback(verifier, _Effect(), None, version_path="meta.versionId")
+    verifier.verify = lambda *a: _Verdict(  # type: ignore[method-assign]
+        "refuted", [{"id": "7"}, {"id": "9"}]
+    )
+    with pytest.raises(ReadFailed):
+        source.read()
+    verifier.verify = lambda *a: _Verdict("refuted", [])  # type: ignore[method-assign]
+    assert source.read().found is False
+
+
+def test_a_missing_declared_field_fails_the_read() -> None:
+    verifier = _Verifier()
+    source = VerifierReadback(
+        verifier, _Effect(), None, fields=["note"], version_path="meta.versionId"
+    )
+    with pytest.raises(ReadFailed):
+        source.read()
+
+
+def test_redacted_or_projected_verifiers_are_refused() -> None:
+    from openadapt_flow.runtime.effects.adapter import RedactionPolicy
+    from openadapt_flow.runtime.effects.fhir import FhirEffectVerifier
+    from openadapt_flow.runtime.effects.graphql import GraphQLRecordVerifier
+
+    class Note:
+        match = {"note": "A"}
+
+    gql = GraphQLRecordVerifier(
+        "https://sor.invalid/graphql",
+        query="query { notes { id note version } }",
+        redaction=RedactionPolicy(redact_fields=["note"]),
+    )
+    with pytest.raises(ValueError):
+        VerifierReadback(gql, Note(), None, version_path="version")
+    gql.redaction = None
+    with pytest.raises(ValueError):
+        VerifierReadback(gql, Note(), None)  # a projection with no version
+    VerifierReadback(gql, Note(), None, version_path="version")
+
+    fhir = FhirEffectVerifier(
+        "https://sor.invalid/fhir",
+        resource_type="Patient",
+        field_paths={"note": "note", "version": "meta.versionId"},
+    )
+    with pytest.raises(ValueError):
+        VerifierReadback(fhir, Note(), None)
+    VerifierReadback(fhir, Note(), None, version_path="version")
+
+
+def test_a_redacted_value_in_the_read_back_fails_the_read() -> None:
+    verifier = _Verifier()
+    verifier.record = {"id": "7", "meta": {"versionId": "1"}, "note": "[redacted]"}
+    source = VerifierReadback(
+        verifier, _Effect(), None, fields=["note"], version_path="meta.versionId"
+    )
     with pytest.raises(ReadFailed):
         source.read()
