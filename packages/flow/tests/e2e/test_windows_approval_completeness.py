@@ -4,7 +4,7 @@ This synthetic observation variant removes the grid from the visible form so
 virtual cells with no independent native value source do not obscure the
 specific field contract under test. The original SQLite data and save handler
 remain. Empty and short values use the modern WinForms accessibility provider,
-which supplies explicit pattern availability. The long-value negative uses
+to test its reported pattern availability. The long-value negative uses
 the legacy provider that returns a 4,096-unit prefix. The two processes share
 the original SQLite seed. Neither the virtual cells nor a full save is covered.
 """
@@ -126,6 +126,39 @@ def _check_stored(snapshot: dict, expected: str) -> None:
     assert actual["suffix"] == expected[-16:]
 
 
+def _first_toggle_property(window, pid: int) -> dict:
+    """Inspect one native VARIANT before Python unwraps it or approval reads it."""
+    from ctypes import byref
+
+    from comtypes.automation import VARIANT, VT_BOOL
+    from comtypes.client import CreateObject, GetModule
+
+    result = {"ordinal": 1, "property_id": 30041, "complete": False}
+    guard = server._native_value_api().require_non_sensitive_value
+    try:
+        guard(window)
+        first = window.GetFirstChildControl()
+        if first is None or first.ProcessId != pid:
+            return result
+        uia = GetModule("UIAutomationCore.dll")
+        client = CreateObject(uia.CUIAutomation, interface=uia.IUIAutomation)
+        raw = VARIANT()
+        guard(first)
+        getter = first.Element._IUIAutomationElement__com_GetCurrentPropertyValueEx
+        guard(first)
+        if getter(30041, 1, byref(raw)) != 0:
+            return result
+        guard(first)
+        result["vartype"] = int(raw.vt)
+        result["is_not_supported"] = bool(client.CheckNotSupported(raw))
+        if raw.vt == VT_BOOL:
+            result["boolean"] = raw.value
+        result["complete"] = True
+    except Exception:  # A failed diagnostic supplies no substitute for approval.
+        pass
+    return result
+
+
 def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkeypatch):
     import uiautomation as auto
 
@@ -215,6 +248,10 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
             # reader independently in this process as well as over HTTP.
             with auto.UIAutomationInitializerInThread():
                 window = auto.ControlFromHandle(payload["hwnd"])
+                if name == "empty":
+                    evidence["first_toggle_property"] = _first_toggle_property(
+                        window, managed["pid"]
+                    )
                 control = auto.ControlFromHandle(managed["fields"]["probe"]["hwnd"])
                 user32 = server._user32_factory()
                 initial = server._window_operation("window-bounds", payload, user32)[
