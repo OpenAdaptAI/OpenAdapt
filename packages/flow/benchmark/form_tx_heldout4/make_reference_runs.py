@@ -20,7 +20,8 @@ HERE = Path(__file__).resolve().parent
 def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     scored = [r for r in rows if r["case_id"] != PORTALS[r["portal"]].dev_case]
     dev = [r for r in rows if r["case_id"] == PORTALS[r["portal"]].dev_case]
-    clean = [r for r in scored if r["expected_behavior"] == "submit_clean"]
+    clean = [r for r in scored if "clean" in r["traps"]]
+    submit_clean = [r for r in scored if r["expected_behavior"] == "submit_clean"]
 
     def counts(rs: list[dict[str, Any]]) -> dict[str, int]:
         return {
@@ -34,6 +35,8 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     out.update(
         clean_cases=len(clean),
         clean_cases_correct=sum(r["correct"] for r in clean),
+        submit_clean_cases=len(submit_clean),
+        submit_clean_cases_correct=sum(r["correct"] for r in submit_clean),
         dev_correct=all(r["correct"] for r in dev),
         per_portal={p: counts([r for r in scored if r["portal"] == p]) for p in PORTALS},
     )

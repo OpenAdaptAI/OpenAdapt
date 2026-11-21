@@ -50,6 +50,13 @@
       "unit.wood_stove": {
         "type": "bool"
       },
+      "unit.seasonal_credit": {
+        "type": "enum",
+        "values": [
+          "Yes",
+          "No"
+        ]
+      },
       "unit.square_feet": {
         "type": "int"
       },
@@ -174,6 +181,9 @@
           "Leased"
         ]
       },
+      "motorcycles.lienholder": {
+        "type": "str"
+      },
       "usage.mileage": {
         "type": "int"
       },
@@ -276,6 +286,13 @@
       },
       "pet.outdoor_minutes_per_day": {
         "type": "int"
+      },
+      "pet.indoor_only": {
+        "type": "enum",
+        "values": [
+          "Yes",
+          "No"
+        ]
       },
       "pet.recent_illness": {
         "type": "bool"

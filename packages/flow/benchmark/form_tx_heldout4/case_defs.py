@@ -81,6 +81,7 @@ WF_VOCAB = {
     "unit.months_occupied_per_year": {"type": "int"},
     "unit.tenant_lease_end": {"type": "date"},
     "unit.wood_stove": {"type": "bool"},
+    "unit.seasonal_credit": {"type": "enum", "values": ["Yes", "No"]},
     "unit.square_feet": {"type": "int"},
     "unit.finish_level": {"type": "enum", "values": ["Builder grade", "Upgraded", "Custom luxury"]},
     "owner.first_name": {"type": "str"},
@@ -184,7 +185,8 @@ def _wrenfield_cases() -> list[dict[str, Any]]:
     out.append(_case(P, "wf-s05", "scored", "submit_clean", ASK_AGAIN, ["recurring_rule", "estimator_ok"], e,
                      _wf_facts(e, drop=("coverage.improvements",),
                                extra={"unit.months_occupied_per_year": 4, "unit.square_feet": 1100,
-                                      "unit.finish_level": "Builder grade"})))
+                                      "unit.finish_level": "Builder grade"}),
+                     operator=[_op("Seasonal occupancy credit", "unit.seasonal_credit", "Yes")]))
 
     e = _wf("Sablewood Flats Condominium Association (Spokane, WA)", "2400 W Sablewood Ave", "512", "Spokane",
             "WA", "99201", 2012, 5, OWN, "", "No", "Imani", "Okafor-Reyes", "1993-03-15", "imani.or@example.test",
@@ -214,7 +216,8 @@ def _wrenfield_cases() -> list[dict[str, Any]]:
             "WA", "98225", 1999, 3, SEAS, "No", "No", "Callum", "Ostrowski", "1962-05-09", "callum.o@example.test",
             "360-555-0145", 36000, 22000, "$1,000", "Not included", 1000, "2027-03-01")
     out.append(_case(P, "wf-s09", "scored", "submit_clean", ASK_AGAIN, ["recurring_rule", "rule_trap"], e,
-                     _wf_facts(e, extra={"unit.months_occupied_per_year": 11})))
+                     _wf_facts(e, extra={"unit.months_occupied_per_year": 11}),
+                     operator=[_op("Seasonal occupancy credit", "unit.seasonal_credit", "No")]))
 
     e = _wf("Copperline Station Lofts (Boise, ID)", "410 S Copperline St", "6A", "Boise", "ID", "83702", 2010, 6,
             OWN, "", "No", "Selin", "Marchetti", "1989-08-25", "selin.m@example.test", "208-555-0181", 52000,
@@ -272,6 +275,7 @@ CV_VOCAB = {
     "motorcycles": {"type": "list", "item_keys": {"vin": "str", "year": "int", "make": "str", "model": "str",
                                                   "ownership": "enum", "lienholder": "str"},
                     "ownership_values": ["Owned outright", "Financed", "Leased"]},
+    "motorcycles.lienholder": {"type": "str"},
     "usage.mileage": {"type": "int"},
     "usage.mileage_period": {"type": "enum", "values": ["per year", "per month"]},
     "coverage.liability_limits": {"type": "enum", "values": ["25/50/25", "50/100/50", "100/300/100", "250/500/100"]},
@@ -341,7 +345,7 @@ def _corvane_cases() -> list[dict[str, Any]]:
 
     e = _cv("2026-12-05", "Less than 6 months", "Ingrid", "Sorvald", "1992-07-24", "503-555-0177", 4, "No",
             "2280 SE Wexley Pl", "Portland", "OR", "97214",
-            [_bike("SM2CV6504PC118837", "Cove 650", "Financed", "Northfork Credit Union")], 4000, "50/100/50", 500,
+            [_bike("SM2CV6504PC118837", "Cove 650", "Financed", "Brannagh Valley Credit Union")], 4000, "50/100/50", 500,
             500, 0, "Not included")
     out.append(_case(P, "cv-s01", "scored", "submit_clean", [], ["clean"], e, _cv_facts(e)))
 
@@ -365,7 +369,7 @@ def _corvane_cases() -> list[dict[str, Any]]:
 
     e = _cv("2026-12-01", "6 months or more", "Henrik", "Valdane", "1970-01-08", "541-555-0129", 3, "Yes",
             "77 Carrow Rd", "Eugene", "OR", "97401",
-            [_bike("VH4GR9500NE630274", "Grisle 950", "Financed", "Willamette Shore Bank")], 6000, "100/300/100",
+            [_bike("VH4GR9500NE630274", "Grisle 950", "Financed", "Odelmere Savings Bank")], 6000, "100/300/100",
             500, 500, 1200, "Not included")
     pre = {k: e[k] for k in _RIDER}
     pre["years_endorsed"] = 12
@@ -392,7 +396,7 @@ def _corvane_cases() -> list[dict[str, Any]]:
 
     e = _cv("2026-12-08", "Less than 6 months", "Priyanka", "Wolde", "1990-12-19", "206-555-0193", 5, "Yes",
             "2205 Brenner Ave N", "Seattle", "WA", "98103",
-            [_bike("SM2RV1205MC388460", "Raven 1200", "Leased", "Pinecrest Motor Leasing")], 6500, "250/500/100",
+            [_bike("SM2RV1205MC388460", "Raven 1200", "Leased", "Quillfeather Motor Leasing")], 6500, "250/500/100",
             250, 250, 1800, "Roadside and trip interruption")
     out.append(_case(P, "cv-s08", "scored", "must_stop_before_submit", STOP_FIX, ["session_timeout"], e,
                      _cv_facts(e), config={"expire_on": "save:coverage"}))
@@ -411,11 +415,11 @@ def _corvane_cases() -> list[dict[str, Any]]:
 
     e = _cv("2026-12-28", "Less than 6 months", "Yusra", "Kalnins", "1996-10-03", "971-555-0115", 3, "Yes",
             "3500 SW Merriden St", "Beaverton", "OR", "97005",
-            [_bike("VH4TK6907PE215598", "Tarka 690", "Financed", "Cascade Ridge Credit Union")], 4000,
+            [_bike("VH4TK6907PE215598", "Tarka 690", "Financed", "Halvercrag Credit Union")], 4000,
             "100/300/100", 500, 500, 600, "Roadside assistance")
     out.append(_case(P, "cv-s11", "scored", "needs_operator_answer", [], ["unknown_question"], e,
                      _cv_facts(e, drop_lien=True),
-                     operator=[_op("Lienholder name", "motorcycle.lienholder", "Cascade Ridge Credit Union")]))
+                     operator=[_op("Lienholder name", "motorcycles.lienholder", "Halvercrag Credit Union")]))
     return out
 
 
@@ -447,6 +451,7 @@ TB_VOCAB = {
     "pet.spayed_neutered": {"type": "bool"},
     "pet.spay_neuter_date": {"type": "date"},
     "pet.outdoor_minutes_per_day": {"type": "int"},
+    "pet.indoor_only": {"type": "enum", "values": ["Yes", "No"]},
     "pet.recent_illness": {"type": "bool"},
     "pet.condition_notes": {"type": "str"},
     "plan.annual_limit": {"type": "enum", "values": ["$5,000", "$10,000", "$20,000", "Unlimited"]},
@@ -527,9 +532,9 @@ def _thistlebrook_cases() -> list[dict[str, Any]]:
                         operator=[_op("Indoor-only cat", "pet.indoor_only", "Yes")]))
 
     e = _tb("Saoirse", "Delacroix-Mbeki", "saoirse.dm@example.test", "206-555-0182", "98115", "Bruno", "Dog",
-            "German Shepherd Dog", 51, "2021-01-30", "No", "", "No", "", "$10,000", "70%", 500, False, "2026-12-01")
+            "German Shepherd Dog", 44, "2021-01-30", "No", "", "No", "", "$10,000", "70%", 500, False, "2026-12-01")
     out.append(_tb_case(P, "tb-s04", "scored", "submit_clean", [], ["unit_mismatch"], e,
-                        _tb_facts(e, extra={"pet.weight": 23, "pet.weight_unit": "kg"})))
+                        _tb_facts(e, extra={"pet.weight": 20, "pet.weight_unit": "kg"})))
 
     e = _tb("Thea", "Vandermolen", "thea.v@example.test", "773-555-0124", "60614", "Biscuit", "Dog", "Beagle", 27,
             "2020-04-11", "Yes", "", "No", "", "$10,000", "90%", 250, False, "2026-12-20")
@@ -543,7 +548,8 @@ def _thistlebrook_cases() -> list[dict[str, Any]]:
             "2018-12-05", "Yes", "Yes", "No", "", "$5,000", "80%", 250, False, "2027-01-01")
     out.append(_tb_case(P, "tb-s06", "scored", "submit_clean", ASK_AGAIN, ["recurring_rule", "prefill_agree"], e,
                         _tb_facts(e, extra={"pet.outdoor_minutes_per_day": 45}),
-                        config={"prefill": {k: e[k] for k in _TB_OWNER}}))
+                        config={"prefill": {k: e[k] for k in _TB_OWNER}},
+                        operator=[_op("Indoor-only cat", "pet.indoor_only", "Yes")]))
 
     e = _tb("Mireille", "Haskett", "mireille.h@example.test", "615-555-0166", "37209", "Clover", "Dog",
             "Golden Retriever", 58, "2024-02-14", "No", "", "No", "", "$20,000", "90%", 750, True, "2026-12-12")
@@ -559,7 +565,8 @@ def _thistlebrook_cases() -> list[dict[str, Any]]:
     e = _tb("Greta", "Lindahl", "greta.l@example.test", "612-555-0111", "55408", "Fennel", "Cat", "Maine Coon", 16,
             "2020-07-07", "Yes", "No", "No", "", "$10,000", "70%", 250, False, "2026-12-08")
     out.append(_tb_case(P, "tb-s09", "scored", "submit_clean", ASK_AGAIN, ["recurring_rule", "rule_trap"], e,
-                        _tb_facts(e, extra={"pet.outdoor_minutes_per_day": 180})))
+                        _tb_facts(e, extra={"pet.outdoor_minutes_per_day": 180}),
+                        operator=[_op("Indoor-only cat", "pet.indoor_only", "No")]))
 
     e = _tb("Ishaan", "Brookfield", "ishaan.b@example.test", "720-555-0145", "80203", "Maple", "Dog",
             "Australian Shepherd", 47, "2023-05-20", "Yes", "", "No", "", "Unlimited", "90%", 500, False,

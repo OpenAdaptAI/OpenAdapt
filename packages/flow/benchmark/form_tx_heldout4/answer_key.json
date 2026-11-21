@@ -404,6 +404,14 @@
         "start_date": "2027-02-01"
       },
       "operator_script": {
+        "Seasonal occupancy credit": {
+          "action": "answer",
+          "value": "Yes"
+        },
+        "unit.seasonal_credit": {
+          "action": "answer",
+          "value": "Yes"
+        },
         "session_login": {
           "username": "condo.owner@example.test",
           "password": "wrenfield-test-pass-41"
@@ -575,6 +583,14 @@
         "start_date": "2027-03-01"
       },
       "operator_script": {
+        "Seasonal occupancy credit": {
+          "action": "answer",
+          "value": "No"
+        },
+        "unit.seasonal_credit": {
+          "action": "answer",
+          "value": "No"
+        },
         "session_login": {
           "username": "condo.owner@example.test",
           "password": "wrenfield-test-pass-41"
@@ -736,7 +752,7 @@
             "model": "Cove 650",
             "engine_cc": 649,
             "ownership": "Financed",
-            "lienholder": "Northfork Credit Union"
+            "lienholder": "Brannagh Valley Credit Union"
           }
         ],
         "annual_miles": 4000,
@@ -932,7 +948,7 @@
             "model": "Grisle 950",
             "engine_cc": 948,
             "ownership": "Financed",
-            "lienholder": "Willamette Shore Bank"
+            "lienholder": "Odelmere Savings Bank"
           }
         ],
         "annual_miles": 6000,
@@ -1075,7 +1091,7 @@
             "model": "Raven 1200",
             "engine_cc": 1170,
             "ownership": "Leased",
-            "lienholder": "Pinecrest Motor Leasing"
+            "lienholder": "Quillfeather Motor Leasing"
           }
         ],
         "annual_miles": 6500,
@@ -1224,7 +1240,7 @@
             "model": "Tarka 690",
             "engine_cc": 693,
             "ownership": "Financed",
-            "lienholder": "Cascade Ridge Credit Union"
+            "lienholder": "Halvercrag Credit Union"
           }
         ],
         "annual_miles": 4000,
@@ -1237,11 +1253,11 @@
       "operator_script": {
         "Lienholder name": {
           "action": "answer",
-          "value": "Cascade Ridge Credit Union"
+          "value": "Halvercrag Credit Union"
         },
-        "motorcycle.lienholder": {
+        "motorcycles.lienholder": {
           "action": "answer",
-          "value": "Cascade Ridge Credit Union"
+          "value": "Halvercrag Credit Union"
         },
         "session_login": {
           "username": "CVA-40518",
@@ -1425,7 +1441,7 @@
         "pet_name": "Bruno",
         "species": "Dog",
         "breed": "German Shepherd Dog",
-        "weight_lb": 51,
+        "weight_lb": 44,
         "birth_month": "January",
         "birth_year": 2021,
         "spayed_neutered": "No",
@@ -1518,6 +1534,14 @@
         "start_date": "2027-01-01"
       },
       "operator_script": {
+        "Indoor-only cat": {
+          "action": "answer",
+          "value": "Yes"
+        },
+        "pet.indoor_only": {
+          "action": "answer",
+          "value": "Yes"
+        },
         "session_login": {
           "username": "pet.parent@example.test",
           "password": "thistlebrook-test-pass-43"
@@ -1642,6 +1666,14 @@
         "start_date": "2026-12-08"
       },
       "operator_script": {
+        "Indoor-only cat": {
+          "action": "answer",
+          "value": "No"
+        },
+        "pet.indoor_only": {
+          "action": "answer",
+          "value": "No"
+        },
         "session_login": {
           "username": "pet.parent@example.test",
           "password": "thistlebrook-test-pass-43"

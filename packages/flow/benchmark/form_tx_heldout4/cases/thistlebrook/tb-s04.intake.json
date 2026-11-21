@@ -10,7 +10,7 @@
     "pet.species": "Dog",
     "pet.breed": "German Shepherd Dog",
     "pet.mixed_breed": false,
-    "pet.weight": 23,
+    "pet.weight": 20,
     "pet.weight_unit": "kg",
     "pet.birth_date": "2021-01-30",
     "pet.spayed_neutered": false,
