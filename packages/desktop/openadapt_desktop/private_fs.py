@@ -15,6 +15,32 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+
+def open_binary(
+    path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    flags: int,
+    mode: int | None = None,
+    *,
+    dir_fd: int | None = None,
+) -> int:
+    """Open a raw-byte descriptor without CRT newline or Ctrl-Z translation.
+
+    Callers retain their creation, no-follow, inheritance and permission policy.
+    Python's ``os.read`` and ``os.write`` otherwise use text-mode descriptors on
+    Windows, even when their input and output are bytes.
+    """
+    if flags & getattr(os, "O_TEXT", 0):
+        raise ValueError("raw-byte descriptors cannot use text mode")
+    flags |= getattr(os, "O_BINARY", 0)
+    if dir_fd is None:
+        return os.open(path, flags) if mode is None else os.open(path, flags, mode)
+    return (
+        os.open(path, flags, dir_fd=dir_fd)
+        if mode is None
+        else os.open(path, flags, mode, dir_fd=dir_fd)
+    )
+
+
 PRIVATE_UMASK = 0o077
 PRIVATE_DIR_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600

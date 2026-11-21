@@ -20,6 +20,8 @@ real Ctrl+S through both installed libraries.
 from __future__ import annotations
 
 import inspect
+import subprocess
+import sys
 import tomllib
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
@@ -41,6 +43,9 @@ CAPTURE_ON_DEVICE_AUDIO_FLOOR = Version("1.2.1")
 #: The first capture release that ships ``openadapt_capture.shadow``, which
 #: Desktop's shadow mode imports.
 CAPTURE_SHADOW_MODE_FLOOR = Version("1.3.0")
+#: Core Recorder works without plotting, profiling, or microphone extras.
+#: Earlier profiling imports could load Tk even when recording no memory.
+CAPTURE_CORE_IMPORT_FLOOR = Version("1.4.0")
 
 
 def _canonical(name: str) -> str:
@@ -187,8 +192,7 @@ def test_resolved_capture_ships_shadow_mode() -> None:
     assert _desktop_declared_capture_floor() >= CAPTURE_SHADOW_MODE_FLOOR
     installed = _installed_capture_version()
     assert installed >= CAPTURE_SHADOW_MODE_FLOOR, (
-        f"openadapt-capture {installed} predates shadow mode, added in "
-        f"{CAPTURE_SHADOW_MODE_FLOOR}"
+        f"openadapt-capture {installed} predates shadow mode, added in {CAPTURE_SHADOW_MODE_FLOOR}"
     )
 
     import openadapt_capture.shadow  # noqa: F401
@@ -235,3 +239,49 @@ def test_demonstrated_modifier_chord_survives_conversion_to_flow() -> None:
     )
     assert events[0]["modifiers"] == ["ctrl"]
     assert events[0]["key"] == "s"
+
+
+def test_default_recorder_does_not_need_optional_or_gui_stacks(tmp_path: Path) -> None:
+    """Exercise the installed Recorder used by Desktop, without starting capture."""
+    assert _desktop_declared_capture_floor() >= CAPTURE_CORE_IMPORT_FLOOR
+    assert _installed_capture_version() >= CAPTURE_CORE_IMPORT_FLOOR
+    script = """
+import importlib.abc
+import os
+import sys
+from pathlib import Path
+
+os.chdir(sys.argv[1])
+for key in ("RECORD_AUDIO", "LOG_MEMORY", "PLOT_PERFORMANCE"):
+    os.environ[key] = "false"
+blocked = {
+    "tkinter", "_tkinter", "matplotlib", "pympler", "sounddevice", "soundfile",
+    "faster_whisper", "alembic",
+}
+class RefuseOptional(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {"tkinter", "_tkinter"}:
+            raise AssertionError("default Recorder attempted GUI import: " + fullname)
+        if fullname.split(".")[0] in blocked:
+            raise ModuleNotFoundError("optional stack is absent: " + fullname, name=fullname)
+        return None
+sys.meta_path.insert(0, RefuseOptional())
+from openadapt_capture import Recorder
+from openadapt_capture.config import config
+assert not config.RECORD_AUDIO
+assert not config.LOG_MEMORY
+assert not config.PLOT_PERFORMANCE
+recorder = Recorder(str(Path.cwd() / "synthetic-recording"))
+assert recorder._recording_config.capture_audio is None
+assert not any(name.split(".")[0] in blocked for name in sys.modules)
+print("CAPTURE_CORE_IMPORT_OK")
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CAPTURE_CORE_IMPORT_OK" in result.stdout

@@ -43,6 +43,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal
 
+from openadapt_desktop.private_fs import open_binary
+
 ANCHOR_NAME = "approver-root.json"
 #: The largest anchor file read; a root pin is about 100 bytes.
 _MAX_BYTES = 4096
@@ -265,7 +267,7 @@ def _open_folder(directory: Path, trusted_uids: frozenset[int]) -> int:
     world-writable, as /tmp is: other users can't replace root's entries."""
 
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    fd = os.open(directory.anchor, flags)
+    fd = open_binary(directory.anchor, flags)
     where = Path(directory.anchor)
     parts = directory.parts[1:]
     try:
@@ -273,7 +275,7 @@ def _open_folder(directory: Path, trusted_uids: frozenset[int]) -> int:
         for index, part in enumerate(parts):
             where = where / part
             try:
-                child = os.open(part, flags | getattr(os, "O_NOFOLLOW", 0), dir_fd=fd)
+                child = open_binary(part, flags | getattr(os, "O_NOFOLLOW", 0), dir_fd=fd)
             except OSError as exc:
                 raise AnchorError(
                     "approver_anchor_untrusted",
@@ -293,7 +295,7 @@ def _read_posix(path: Path, trusted_uids: frozenset[int]) -> bytes:
     try:
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NOCTTY", 0)
         try:
-            fd = os.open(path.name, flags, dir_fd=folder)
+            fd = open_binary(path.name, flags, dir_fd=folder)
         except OSError as exc:
             raise AnchorError(
                 "approver_anchor_untrusted", f"Can't open {path} without following links: {exc}"
@@ -337,7 +339,7 @@ def _write_posix(path: Path, payload: bytes, trusted_uids: frozenset[int]) -> No
     try:
         temp = f".{ANCHOR_NAME}.{os.getpid()}.tmp"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(temp, flags, 0o644, dir_fd=folder_fd)
+        fd = open_binary(temp, flags, 0o644, dir_fd=folder_fd)
         try:
             os.fchmod(fd, 0o644)
             os.write(fd, payload)

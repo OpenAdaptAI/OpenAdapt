@@ -36,6 +36,7 @@ from openadapt_desktop.auth.store import (
 )
 from openadapt_desktop.config import EngineConfig
 from openadapt_desktop.flow_bridge import HostedRunnerAdapterUnavailableError
+from openadapt_desktop.private_fs import open_binary
 
 REGISTER_PATH = "/api/runners/register"
 POLL_PATH = "/api/runners/poll"
@@ -300,7 +301,7 @@ class RunnerJournal:
         descriptor = -1
         try:
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
             opened = self._opened_metadata(path, descriptor, before)
             chunks: list[bytes] = []
             remaining = opened.st_size
@@ -372,7 +373,7 @@ class RunnerJournal:
                         "runner observation journal changed during the safe write"
                     )
                 if not _is_windows():
-                    directory_descriptor = os.open(self._dir, os.O_RDONLY)
+                    directory_descriptor = open_binary(self._dir, os.O_RDONLY)
                     try:
                         os.fsync(directory_descriptor)
                     finally:
@@ -401,7 +402,7 @@ class RunnerJournal:
                 descriptor = -1
                 try:
                     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-                    descriptor = os.open(path, flags)
+                    descriptor = open_binary(path, flags)
                     self._opened_metadata(path, descriptor, before)
                     os.unlink(path)
                 except RunnerJournalError:
@@ -414,7 +415,7 @@ class RunnerJournal:
                     if descriptor >= 0:
                         os.close(descriptor)
             if not _is_windows():
-                directory_descriptor = os.open(self._dir, os.O_RDONLY)
+                directory_descriptor = open_binary(self._dir, os.O_RDONLY)
                 try:
                     os.fsync(directory_descriptor)
                 finally:

@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.31.0 (2026-11-20)
+
+### Features
+
+- **design**: share Desktop overlay and phone theme roles
+
+### Bug Fixes
+
+- **ci**: qualify owned deadlines and pin helper outside subject checkout (#2333)
+- **desktop**: use native handlers for browser and external URLs
+- **desktop**: preserve pinned theme bytes on checkout
+- **desktop**: require Capture 1.4 for core recorder imports
+- preserve raw evidence bytes on Windows
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes

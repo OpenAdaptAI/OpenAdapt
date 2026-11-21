@@ -183,8 +183,8 @@ jobs:
           verify="$(hit "^packages/(verify|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          # Desktop bundles the program map from packages/program-graph.
-          desktop="$(hit "^packages/(desktop|program-graph)/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
+          # Desktop bundles the program map and shares the descriptor test model.
+          desktop="$(hit "^packages/(desktop|program-graph)/|^packages/flow/tests/_binary_descriptor_contract\.py$|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
           tray="$(hit "^packages/tray/|$wf")"
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"

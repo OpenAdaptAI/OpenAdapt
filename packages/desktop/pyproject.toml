@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.30.6"
+version = "0.31.0"
 description = "The OpenAdapt desktop app and local engine: record a data-entry task, run it on a list, and check each saved record"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,9 +39,12 @@ dependencies = [
     # ``openadapt_capture.shadow``: the recorder live tap, the consent notice,
     # the encrypted bounded buffer, and on-device motif mining. Below 1.3.0
     # the package is absent and shadow mode cannot start.
+    # 1.4.0 keeps plotting, profiling and microphone dependencies optional.
+    # The default Recorder path must not load Tk through a profiling import:
+    # native process startup can otherwise stall after that framework loads.
     # ``tests/test_capture_runtime_contract.py`` asserts this floor against the
     # bundled Flow distribution's own declared extra, so it cannot drift back.
-    "openadapt-capture>=1.3.0",
+    "openadapt-capture>=1.4.0",
     "openadapt-privacy>=1.0.0",
     # Cross-surface status/target contract used by the presentation exporter
     # and by the generated TypeScript projection checked into src/. 0.17.0
@@ -116,6 +119,9 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    # Keep the exact reviewed FreeType dual-license regression input in the
+    # test environment. Capture's default runtime no longer installs plots.
+    "matplotlib==3.11.1",
 ]
 
 [project.scripts]

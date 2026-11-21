@@ -50,6 +50,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from openadapt_desktop.private_fs import open_binary
+
 ENVELOPE_SCHEMA = "openadapt-desktop.approval-mode-switch/v1"
 #: Where a switch log goes when a switch-off couldn't be appended to it. Flow's
 #: gate reads a missing ``switch.log`` as off.
@@ -184,7 +186,7 @@ def _write_private_json(path: Path, payload: Mapping[str, Any]) -> None:
     data = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
     # O_BINARY keeps Windows from writing "\r\n" in text mode.
     flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | getattr(os, "O_BINARY", 0)
-    descriptor = os.open(temporary, flags, 0o600)
+    descriptor = open_binary(temporary, flags, 0o600)
     try:
         os.write(descriptor, data)
         os.fsync(descriptor)
