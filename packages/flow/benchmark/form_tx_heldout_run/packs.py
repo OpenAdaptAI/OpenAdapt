@@ -80,9 +80,6 @@ def _radio(key: str, name: str) -> FieldBindingSpec:
         anchor=_name(name),
         control_kind=ControlKind.RADIO_GROUP,
         codec=BOOL,
-        # Radios with no label element give options with an empty label; the
-        # default placeholder list ("") would drop every option.
-        placeholder_values=("-- Select --",),
     )
 
 
@@ -198,10 +195,14 @@ HARBORLINE_PACK = FormPack(
                 ),
             ),
             compute_anchors=(FieldAnchorSpec(label_patterns=(r"^Calculate$",)),),
+            # The figure the estimator shows; the value it puts back must match.
+            result_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Estimated Replacement Cost$",)
+            ),
             commit_anchor=FieldAnchorSpec(label_patterns=(r"^Use This Value$",)),
             parent_return_anchor=_name("cov_a"),
             return_output_key="coverage.dwelling_a",
-            return_codec=INT,
+            return_codec=MONEY,
         ),
     ),
     # The review page also holds a Back form that posts to step 4, so it is
@@ -278,12 +279,8 @@ HARBORLINE_PACK = FormPack(
 # ---------------------------------------------------------------- cobalt
 # A single-page app: the step is named by the progress bar, fields by their
 # aria-labelledby text. Type-ahead comboboxes fetch suggestions only after
-# text is typed. Its radio groups are ARIA radios (div role=radio) named only
-# by their own text, which the surface reports with an empty label; each
-# option is therefore bound by its position on the dev case's screens and
-# set as a yes/no choice from a fact restated from the intake
-# ("<key>==<option>"). A position that holds a different control on another
-# case does not match, so the portal's own required-field error stops the run.
+# text is typed. Its radio groups are ARIA radios (div role=radio) in a
+# labelled radiogroup, bound by the group's label.
 COBALT_PROFILE = UIProfileSpec(
     profile_id="heldout_spa_aria",
     error_banner_selectors=(".cr-error[role='alert']",),
@@ -292,24 +289,13 @@ COBALT_PROFILE = UIProfileSpec(
     modal_dialog_selectors=('[role="dialog"][aria-modal="true"]',),
 )
 
-COBALT_RADIOS: dict[str, tuple[int, int, tuple[str, ...], str]] = {
-    # dossier key: (step, field position in the step card, options, shown label)
-    "applicant.marital_status": (
-        1,
-        6,
-        ("Single", "Married", "Divorced", "Widowed"),
-        "Marital status",
-    ),
-    "vehicle.primary_use": (3, 4, ("Commute", "Pleasure", "Business"), "Primary use"),
-    "vehicle.ownership": (3, 8, ("Own", "Finance", "Lease"), "Ownership"),
-    "coverage.bi_limits": (
-        4,
-        1,
-        ("25/50", "50/100", "100/300", "250/500"),
-        "Bodily injury liability",
-    ),
+COBALT_RADIOS: dict[str, str] = {
+    # dossier key: the group's visible label
+    "applicant.marital_status": "Marital status",
+    "vehicle.primary_use": "Primary use",
+    "vehicle.ownership": "Ownership",
+    "coverage.bi_limits": "Bodily injury liability",
 }
-CHOICE_SEP = "=="
 
 
 def _cr_step(n: int, next_label: str) -> WizardScreenSpec:
@@ -334,58 +320,12 @@ def _label(
         anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
         control_kind=kind,
         codec=codec,
-        # The portal's selects start on "Select one", which has an empty value.
-        placeholder_values=("", "Select one"),
         prefill_policy=(
             PrefillPolicy.OVERWRITE_WITH_DOSSIER
             if portal_default
             else PrefillPolicy.HALT_ON_CONFLICT
         ),
     )
-
-
-def _cr_choice_bindings() -> tuple[FieldBindingSpec, ...]:
-    out: list[FieldBindingSpec] = []
-    for key, (_step, pos, options, _shown_label) in COBALT_RADIOS.items():
-        for j, opt in enumerate(options, start=1):
-            out.append(
-                FieldBindingSpec(
-                    binding_id=f"b_{key}_{j}",
-                    dossier_key=f"{key}{CHOICE_SEP}{opt}",
-                    anchor=FieldAnchorSpec(
-                        css_selector=(
-                            f"#app > section > div:nth-of-type({pos}) > "
-                            f"div:nth-of-type(2) > div:nth-of-type({j})"
-                        ),
-                        role="radio",
-                    ),
-                    control_kind=ControlKind.CHECKBOX,
-                    codec=BOOL,
-                    # The option's text is its value, so the surface reads every
-                    # option as non-empty; a checked state that disagrees with the
-                    # intake is set from the intake.
-                    prefill_policy=PrefillPolicy.OVERWRITE_WITH_DOSSIER,
-                )
-            )
-    return tuple(out)
-
-
-def _cr_choice_readbacks() -> tuple[FieldBindingSpec, ...]:
-    out: list[FieldBindingSpec] = []
-    for key, (_step, _pos, options, shown_label) in COBALT_RADIOS.items():
-        for opt in options:
-            others = tuple(o for o in options if o != opt)
-            out.append(
-                _shown(
-                    f"{key}{CHOICE_SEP}{opt}",
-                    shown_label,
-                    FieldCodecSpec(
-                        kind=FormCodecKind.ENUM_MAP,
-                        enum_aliases={"true": (opt,), "false": others},
-                    ),
-                )
-            )
-    return tuple(out)
 
 
 CR_STATES = {
@@ -469,7 +409,10 @@ COBALT_PACK = FormPack(
             INT,
             portal_default=True,
         ),
-        *_cr_choice_bindings(),
+        *(
+            _label(key, label, ControlKind.RADIO_GROUP, EXACT)
+            for key, label in COBALT_RADIOS.items()
+        ),
     ),
     screens=(
         WizardScreenSpec(
@@ -503,7 +446,7 @@ COBALT_PACK = FormPack(
             _shown(
                 "coverage.comprehensive_deductible", "Comprehensive deductible", CR_DED
             ),
-            *_cr_choice_readbacks(),
+            *(_shown(key, label, EXACT) for key, label in COBALT_RADIOS.items()),
         ),
         outputs=(
             OutputExtractionSpec(
@@ -903,11 +846,6 @@ def _derived_facts(raw: dict[str, Any]) -> dict[str, Any]:
         out["property.city_state"] = f"{raw['property.city']}, {raw['property.state']}"
     if raw.get("garaging.city") and raw.get("garaging.state"):
         out["garaging.city_state"] = f"{raw['garaging.city']}, {raw['garaging.state']}"
-    for key, (_s, _p, options, _l) in COBALT_RADIOS.items():
-        if raw.get(key) not in (None, ""):
-            picked = str(raw[key]).casefold()
-            for opt in options:
-                out[f"{key}{CHOICE_SEP}{opt}"] = opt.casefold() == picked
     if raw.get("property.square_feet") not in (None, ""):
         out["property.area_unit"] = "sq ft"
     return out
