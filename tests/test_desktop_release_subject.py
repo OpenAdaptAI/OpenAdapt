@@ -235,3 +235,31 @@ def test_tagging_still_requires_the_release_app_identity() -> None:
         for step in _workflow()["jobs"]["stage"]["steps"]
     }
     assert "openadapt-release" in stage["Require the exact release App identity"]["run"]
+
+
+def test_a_release_requires_macos_and_windows_on_the_oldest_python() -> None:
+    # desktop-test.yml trims these two jobs from a push whose version is
+    # already released; the release refuses a run that lacks either.
+    run = _gate_steps()[PACKAGES_STEP]["run"]
+    assert "for os in macos-latest windows-latest; do" in run
+    assert 'job="desktop test / Python engine tests (${os}, py3.11)"' in run
+    assert "grep -qxF \"$(printf 'success\\t%s' \"${job}\")\"" in run
+
+
+def test_the_push_matrix_keeps_the_oldest_python_while_a_version_is_unreleased() -> None:
+    path = Path(__file__).resolve().parents[1] / ".github/workflows/desktop-test.yml"
+    jobs = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
+    pending = jobs["release-pending"]
+    assert pending["if"] == "github.event_name == 'push'"
+    lookup = pending["steps"][-1]["run"]
+    assert 'tag="openadapt-desktop-v${version}"' in lookup
+    # Only a tag that is found trims the matrix; a missing version, a missing
+    # tag or a failed lookup all run it in full.
+    assert '[ -n "${version}" ] && [ "${rc}" -eq 0 ]' in lookup
+    tests = jobs["test-python"]
+    assert tests["needs"] == "release-pending"
+    assert tests["if"] == "${{ !cancelled() }}"
+    exclude = tests["strategy"]["matrix"]["exclude"]
+    assert "github.event_name == 'push' && needs.release-pending.outputs.pending == 'false'" in exclude
+    assert '{"os":"macos-latest","python-version":"3.11"}' in exclude
+    assert '{"os":"windows-latest","python-version":"3.11"}' in exclude
