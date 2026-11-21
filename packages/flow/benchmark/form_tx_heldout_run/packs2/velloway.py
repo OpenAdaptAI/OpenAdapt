@@ -39,6 +39,9 @@ _MONTHS = (
 )  # fmt: skip
 
 
+_PLACEHOLDERS = FieldBindingSpec.model_fields["placeholder_values"].default
+
+
 def _lab(
     key: str,
     label: str,
@@ -57,6 +60,9 @@ def _lab(
         control_kind=kind,
         codec=codec,
         prefill_policy=PrefillPolicy.HALT_ON_CONFLICT,
+        # Pack workaround: this portal's selects start on a "Choose" option,
+        # which the frozen engine's placeholder list does not include.
+        placeholder_values=(*_PLACEHOLDERS, "Choose"),
     )
 
 
