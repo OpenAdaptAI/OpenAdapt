@@ -305,7 +305,18 @@ def _workbench(
                         "path": "/login",
                         "form": {"username": "clinician", "password": "synthetic"},
                     },
-                }
+                },
+                # The workbench signs in one user, so the second actor is a
+                # second session of it: enough for a lost update, not for an
+                # actor axis.
+                "other": {
+                    "id": "clinician",
+                    "login": {
+                        "method": "POST",
+                        "path": "/login",
+                        "form": {"username": "clinician", "password": "synthetic"},
+                    },
+                },
             },
             "store": {
                 "dialect": "postgresql",
@@ -356,7 +367,7 @@ def _workbench(
         teardown=teardown,
         setup_seconds=round(time.monotonic() - started, 1),
         notes=[
-            "the workbench signs in one user only: no second actor, so no lost-update case and no actor axis"
+            "the workbench signs in one user only: the second actor is a second session of it, so the lost-update case runs but the attribution probe has no real actor axis"
         ],
     )
 
@@ -578,3 +589,242 @@ SETUPS: dict[str, Callable[[Path], AppRun]] = {
     "workbench": setup_workbench,
     "mealie": setup_mealie,
 }
+
+
+# -- Directus (second untuned app, on the lab) ------------------------------------
+
+
+DIRECTUS = os.environ.get("VD_DIRECTUS_URL", "http://127.0.0.1:9664")
+DIRECTUS_PG_PORT = int(os.environ.get("VD_DIRECTUS_PG_PORT", "9665"))
+
+
+def setup_directus(work: Path) -> AppRun:
+    """Directus 11.5.1 must be up (fresh volume) at VD_DIRECTUS_URL with its
+    PostgreSQL at VD_DIRECTUS_PG_PORT (the lab stack, tunnelled to loopback).
+    The operator creates a ``tickets`` collection, a second user and three
+    tickets, then records one update."""
+
+    import psycopg2
+
+    started = time.monotonic()
+    work.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("VD_DIRECTUS_PG_PW", "vd-synthetic-pg")
+    os.environ.setdefault("VD_DIRECTUS_READER_PW", "vd-synthetic-reader")
+    os.environ.setdefault("VD_DIRECTUS_ADMIN_PW", "vd-synthetic-admin")
+    os.environ.setdefault("VD_DIRECTUS_EDITOR_PW", "vd-synthetic-editor")
+
+    def token(email: str, pw: str) -> dict[str, str]:
+        r = requests.post(
+            DIRECTUS + "/auth/login", json={"email": email, "password": pw}, timeout=30
+        )
+        r.raise_for_status()
+        return {"Authorization": "Bearer " + r.json()["data"]["access_token"]}
+
+    admin = token("admin@example.org", os.environ["VD_DIRECTUS_ADMIN_PW"])
+    if (
+        requests.get(
+            DIRECTUS + "/collections/tickets", headers=admin, timeout=30
+        ).status_code
+        != 200
+    ):
+        r = requests.post(
+            DIRECTUS + "/collections",
+            headers=admin,
+            timeout=60,
+            json={
+                "collection": "tickets",
+                "meta": {"accountability": "all"},
+                "schema": {},
+                "fields": [
+                    {
+                        "field": "id",
+                        "type": "integer",
+                        "meta": {"hidden": True},
+                        "schema": {"is_primary_key": True, "has_auto_increment": True},
+                    },
+                    {"field": "title", "type": "string"},
+                    {"field": "status", "type": "string"},
+                    {"field": "priority", "type": "integer"},
+                    {"field": "note", "type": "text"},
+                ],
+            },
+        )
+        r.raise_for_status()
+    me = requests.get(DIRECTUS + "/users/me", headers=admin, timeout=30).json()["data"]
+    users = requests.get(
+        DIRECTUS + "/users?filter[email][_eq]=editor@example.org",
+        headers=admin,
+        timeout=30,
+    ).json()["data"]
+    if users:
+        editor = users[0]
+    else:
+        r = requests.post(
+            DIRECTUS + "/users",
+            headers=admin,
+            timeout=30,
+            json={
+                "email": "editor@example.org",
+                "password": os.environ["VD_DIRECTUS_EDITOR_PW"],
+                "role": me["role"],
+                "first_name": "Second",
+                "last_name": "Editor",
+            },
+        )
+        r.raise_for_status()
+        editor = r.json()["data"]
+    have = requests.get(
+        DIRECTUS + "/items/tickets?limit=-1", headers=admin, timeout=30
+    ).json()["data"]
+    if not have:
+        r = requests.post(
+            DIRECTUS + "/items/tickets",
+            headers=admin,
+            timeout=30,
+            json=[
+                {
+                    "title": "Printer jams on tray 2",
+                    "status": "open",
+                    "priority": 1,
+                    "note": "Seed one",
+                },
+                {
+                    "title": "VPN drops every hour",
+                    "status": "open",
+                    "priority": 1,
+                    "note": "Seed two",
+                },
+                {
+                    "title": "Badge reader offline",
+                    "status": "open",
+                    "priority": 1,
+                    "note": "Seed three",
+                },
+            ],
+        )
+        r.raise_for_status()
+        have = r.json()["data"]
+    ticket = str(have[1]["id"])
+    other_ticket = str(have[2]["id"])
+    con = psycopg2.connect(
+        host="127.0.0.1",
+        port=DIRECTUS_PG_PORT,
+        user="directus",
+        password=os.environ["VD_DIRECTUS_PG_PW"],
+        dbname="directus",
+    )
+    con.autocommit = True
+    cur = con.cursor()
+    cur.execute("SELECT 1 FROM pg_roles WHERE rolname='vd_reader'")
+    if not cur.fetchone():
+        cur.execute(
+            "CREATE ROLE vd_reader LOGIN PASSWORD %s",
+            (os.environ["VD_DIRECTUS_READER_PW"],),
+        )
+    cur.execute("GRANT USAGE ON SCHEMA public TO vd_reader")
+    cur.execute("GRANT SELECT ON ALL TABLES IN SCHEMA public TO vd_reader")
+    cur.execute("GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO vd_reader")
+    con.close()
+    # The demonstration: one PATCH, recorded, then undone (through the app).
+    before = requests.get(
+        DIRECTUS + f"/items/tickets/{ticket}", headers=admin, timeout=30
+    ).json()["data"]
+    params = {"ticket_id": ticket, "status": "in_progress", "priority": "3"}
+    rec = Recorder(admin)
+    rec.session.get(DIRECTUS + f"/items/tickets/{ticket}", timeout=30)
+    rec.session.patch(
+        DIRECTUS + f"/items/tickets/{ticket}",
+        json={"status": params["status"], "priority": 3},
+        timeout=30,
+    )
+    rec.save(work / "trace.har")
+    requests.patch(
+        DIRECTUS + f"/items/tickets/{ticket}",
+        headers=admin,
+        timeout=30,
+        json={"status": before["status"], "priority": before["priority"]},
+    )
+    (work / "openapi.json").write_text(
+        requests.get(DIRECTUS + "/server/specs/oas", headers=admin, timeout=60).text,
+        encoding="utf-8",
+    )
+    task = _write(
+        work / "task.yaml",
+        {
+            "instruction": f"Set ticket {ticket} to status 'in_progress' with priority 3.",
+            "params": params,
+        },
+    )
+    pg = {
+        "sql_driver": "psycopg2",
+        "sql_connect_args": {
+            "host": "127.0.0.1",
+            "port": DIRECTUS_PG_PORT,
+            "dbname": "directus",
+        },
+    }
+
+    def login(email: str, env: str) -> dict[str, Any]:
+        return {
+            "method": "POST",
+            "path": "/auth/login",
+            "token_field": "data.access_token",
+            "json": {"email": email, "password": "${" + env + "}"},
+        }
+
+    sandbox = _write(
+        work / "sandbox.yaml",
+        {
+            "schema_version": "openadapt.verify-sandbox/v1",
+            "app": {"base_url": DIRECTUS},
+            "actors": {
+                "agent": {
+                    "id": me["id"],
+                    "login": login("admin@example.org", "VD_DIRECTUS_ADMIN_PW"),
+                },
+                "other": {
+                    "id": editor["id"],
+                    "login": login("editor@example.org", "VD_DIRECTUS_EDITOR_PW"),
+                },
+            },
+            "store": {
+                "dialect": "postgresql",
+                "read": {
+                    **pg,
+                    "sql_connect_args": {**pg["sql_connect_args"], "user": "vd_reader"},
+                    "sql_password_env": "VD_DIRECTUS_READER_PW",
+                },
+                "admin": {
+                    **pg,
+                    "sql_connect_args": {**pg["sql_connect_args"], "user": "directus"},
+                    "sql_password_env": "VD_DIRECTUS_PG_PW",
+                },
+            },
+        },
+    )
+    return AppRun(
+        "directus",
+        True,
+        str(work / "openapi.json"),
+        work / "trace.har",
+        task,
+        sandbox,
+        heldout_payloads=[
+            {"status": "blocked", "priority": "5"},
+            {"status": "done", "priority": "4"},
+            {"status": "waiting", "priority": "7"},
+            {"status": "triage", "priority": "6"},
+            {"status": "closed", "priority": "9"},
+        ],
+        other_record={"ticket_id": other_ticket},
+        operator_inputs=[
+            "app base URL",
+            "two users' sign-in (email, password env)",
+            "read-only DB connection",
+            "admin DB connection",
+        ],
+        setup_seconds=round(time.monotonic() - started, 1),
+    )
+
+
+SETUPS["directus"] = setup_directus

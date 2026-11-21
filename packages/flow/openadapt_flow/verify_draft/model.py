@@ -19,7 +19,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, cast
 
 #: The pinned model. A change here is a new prompt version too.
 MODEL = "claude-opus-5-5"
@@ -27,7 +27,7 @@ EFFORT = "medium"
 MAX_TOKENS = 32_000
 #: USD per million tokens for MODEL (input, output, cache read, cache write).
 PRICE_PER_MTOK = {"input": 4.0, "output": 20.0, "cache_read": 0.2, "cache_write": 5.0}
-PROMPT_VERSION = "verify-draft-prompt/1"
+PROMPT_VERSION = "verify-draft-prompt/2"
 
 SYSTEM_PROMPT = """\
 You write record checks for OpenAdapt. A record check is an `openadapt.verify/v1`
@@ -41,7 +41,8 @@ clean writes as two different users with different values. It is admitted only
 if it refutes every fault and confirms every clean write. At run time it makes
 no model calls, so everything it needs must be in the contract.
 
-Write the contract in YAML with this shape. Leave out every connection key
+Write the contract as one JSON object. Its shape, shown here in YAML for
+brevity, is below. Leave out every connection key
 (sql_driver, sql_connect_args, sql_password_env, sqlite_database): OpenAdapt
 fills them in. Never write session, reset, command, python or hook keys.
 
@@ -116,7 +117,7 @@ Rules:
   effect and let the frame refute any other.
 
 Answer with one JSON object:
-{"contract_yaml": "<the YAML>",
+{"contract_json": "<the contract as JSON text>",
  "payloads": [ [{"param": "<name>", "value": "<value>"}, ...], ... ],
  "notes": "<one paragraph: what the check reads and why>"}
 `payloads` are 8 other valid sets of the task's VALUE parameters (not the
@@ -129,7 +130,7 @@ demonstrated write with them.
 OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
-        "contract_yaml": {"type": "string"},
+        "contract_json": {"type": "string"},
         "payloads": {
             "type": "array",
             "items": {
@@ -147,7 +148,7 @@ OUTPUT_SCHEMA = {
         },
         "notes": {"type": "string"},
     },
-    "required": ["contract_yaml", "payloads", "notes"],
+    "required": ["contract_json", "payloads", "notes"],
     "additionalProperties": False,
 }
 
@@ -278,11 +279,14 @@ class ClaudeDrafter:
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            messages=messages,
-            output_config={
-                "effort": EFFORT,
-                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
-            },
+            messages=cast(Any, messages),
+            output_config=cast(
+                Any,
+                {
+                    "effort": EFFORT,
+                    "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
+                },
+            ),
         ) as stream:
             response = stream.get_final_message()
         call = Call(
@@ -305,7 +309,9 @@ class ClaudeDrafter:
         if response.stop_reason == "refusal":
             return Draft("", [], "the model declined to draft", call)
         raw = "".join(
-            b.text for b in response.content if getattr(b, "type", "") == "text"
+            str(getattr(b, "text", ""))
+            for b in response.content
+            if getattr(b, "type", "") == "text"
         )
         return parse_answer(raw, call)
 
@@ -328,7 +334,7 @@ def parse_answer(raw: str, call: Optional[Call] = None) -> Draft:
                 {str(i.get("param")): i.get("value") for i in p if isinstance(i, dict)}
             )
     return Draft(
-        str(data.get("contract_yaml") or ""),
+        str(data.get("contract_json") or data.get("contract_yaml") or ""),
         payloads,
         str(data.get("notes") or ""),
         call,

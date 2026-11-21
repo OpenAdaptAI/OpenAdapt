@@ -97,11 +97,14 @@ no reset hook.
    once, between two reads of the store, to see which rows they move. The
    model gets the rows and columns that moved, with their values. The
    sandbox holds synthetic data only.
-2. **Draft.** The pinned model writes a contract that diffs the whole
-   database (`frame.database`). It also writes other valid values for the
-   task to test with. Connection keys are filled in from the sandbox. A
-   draft that sets a hook, a session, a reset or a command, or whose read is
-   not a plain SELECT, is refused without being run.
+2. **Draft.** The pinned model writes a contract, as JSON text, that diffs
+   the whole database (`frame.database`). It also writes other valid values
+   for the task to test with. The draft may only read the database with
+   plain SQL SELECTs: anything outside an allowlist of contract keys is
+   refused without being run. That includes a REST or FHIR read, a URL, a
+   credential, a hook, an app profile, an `admission` or `learned` section,
+   and any `${...}` reference. The connection keys are then filled in from
+   the sandbox.
 3. **Qualify.** Each case restores the store, takes the contract's
    baseline, replays the write through the app, and then plants one fault
    with the privileged connection:
@@ -116,6 +119,13 @@ no reset hook.
    | `lost_update` | updates only: the other user saves the record first, then the agent's save overwrites it, both through the app | refuted, or prevented by the app |
    | 5 clean writes | the write with other values, and a recheck of each | confirmed |
    | attribution probe | the write by two users with two sets of values (2 x 2), and the first of them again | confirmed |
+
+   A case the sandbox can't build is **untestable**, never a pass. Examples
+   are a lost update with no second user, or a sibling edit with no other
+   record. The command stops and names the sandbox fix, since no model
+   round can repair it. Only two cases are truly not applicable: a lost
+   update for a write that creates a record, and an app that refuses the
+   stale save itself.
 
    The **causal-attribution probe** sorts every column that moved by cause:
 

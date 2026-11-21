@@ -75,22 +75,74 @@ FAULTS: tuple[str, ...] = (
 CLEAN_PROBES = 5
 #: The recheck window admission cases use.
 ADMISSION_RECHECK_S = 2.0
-_FORBIDDEN_KEYS = frozenset(
+#: What a drafted contract may contain. Everything else is refused before
+#: the draft is run: the model read untrusted trace and row text, so a key it
+#: wrote must not choose a store, a URL, a credential or a hook.
+_TOP_KEYS = frozenset(
     {
-        "session",
-        "reset",
-        "command",
-        "python",
-        "hook",
-        "hooks",
-        "sql_driver",
-        "sql_connect_args",
-        "sql_password_env",
-        "sqlite_database",
-        "admission",
-        "owned_sqlite_insert",
-        "profile",
-        "profile_sha256",
+        "schema_version",
+        "verifier",
+        "effects",
+        "frame",
+        "environment_id",
+        "minimum_effect_strength",
+        "max_execution_window_s",
+    }
+)
+_READ_KEYS = frozenset({"kind", "sql_query", "records_drop_fields"})
+_FRAME_KEYS = frozenset(
+    {
+        "identity_field",
+        "ignore_fields",
+        "target_fields",
+        "target_fields_by_surface",
+        "attribution",
+        "side_records",
+        "database",
+        "versions",
+    }
+)
+_DATABASE_KEYS = frozenset(
+    {
+        "dialect",
+        "allow_tables",
+        "views",
+        "judged_by",
+        "new_row_fields",
+        "ignore_columns",
+        "max_rows",
+        "read_row_budget",
+        "settle_s",
+        "settle_attempts",
+        "recheck_after_s",
+        "schemas",
+    }
+)
+_VERSIONS_KEYS = frozenset(
+    {
+        "read",
+        "record_field",
+        "target_field",
+        "target_surface",
+        "version_field",
+        "author_field",
+        "self",
+    }
+)
+_ATTRIBUTION_KEYS = frozenset(
+    {
+        "kind",
+        "actor_field",
+        "record_field",
+        "record_key",
+        "self",
+        "read",
+        "event_field",
+        "write_events",
+        "insert_events",
+        "delete_events",
+        "table_field",
+        "server_set",
     }
 )
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
@@ -103,23 +155,46 @@ class DraftProblem(ValueError):
 # -- the contract --------------------------------------------------------------
 
 
-def _walk(value: Any, path: str = "") -> list[str]:
-    bad = []
-    if isinstance(value, dict):
-        for k, v in value.items():
-            if k in _FORBIDDEN_KEYS:
-                bad.append(f"{path}{k}")
-            if (
-                isinstance(v, str)
-                and re.fullmatch(r"[\w.]+:[\w]+", v)
-                and k not in ("probe",)
-            ):
-                if k in ("driver", "module", "function"):
-                    bad.append(f"{path}{k}")
-            bad += _walk(v, f"{path}{k}.")
-    elif isinstance(value, list):
-        for i, v in enumerate(value):
-            bad += _walk(v, f"{path}{i}.")
+def _sql_read(read: Any, where: str) -> list[str]:
+    if not isinstance(read, dict):
+        return [f"{where} must be a read"]
+    bad = [f"{where}.{k}" for k in read if k not in _READ_KEYS]
+    if read.get("kind") != "sql" or "sql_query" not in read:
+        bad.append(f"{where} must be kind: sql with a sql_query")
+    return bad
+
+
+def _disallowed(data: Mapping[str, Any]) -> list[str]:
+    """Keys a draft may not set (an allowlist, not a denylist)."""
+
+    bad = [k for k in data if k not in _TOP_KEYS]
+    verifier = data.get("verifier")
+    if not isinstance(verifier, dict):
+        return bad + ["verifier"]
+    if verifier.get("kind") == "surfaces":
+        bad += [f"verifier.{k}" for k in verifier if k not in ("kind", "surfaces")]
+        for name, sub in (verifier.get("surfaces") or {}).items():
+            bad += _sql_read(sub, f"verifier.surfaces.{name}")
+    else:
+        bad += _sql_read(verifier, "verifier")
+    frame = data.get("frame") or {}
+    if not isinstance(frame, dict):
+        return bad + ["frame"]
+    bad += [f"frame.{k}" for k in frame if k not in _FRAME_KEYS]
+    db = frame.get("database") or {}
+    if isinstance(db, dict):
+        bad += [f"frame.database.{k}" for k in db if k not in _DATABASE_KEYS]
+    versions = frame.get("versions")
+    if isinstance(versions, dict):
+        bad += [f"frame.versions.{k}" for k in versions if k not in _VERSIONS_KEYS]
+        bad += _sql_read(versions.get("read"), "frame.versions.read")
+    attribution = frame.get("attribution")
+    if isinstance(attribution, dict):
+        bad += [
+            f"frame.attribution.{k}" for k in attribution if k not in _ATTRIBUTION_KEYS
+        ]
+        if "read" in attribution:
+            bad += _sql_read(attribution["read"], "frame.attribution.read")
     return bad
 
 
@@ -150,13 +225,20 @@ def prepare(contract_yaml: str, sandbox: SandboxConfig) -> dict[str, Any]:
     try:
         data = yaml.safe_load(contract_yaml)
     except yaml.YAMLError as exc:
-        raise DraftProblem(f"the contract is not valid YAML: {exc}") from exc
+        raise DraftProblem(f"the contract is not valid JSON or YAML: {exc}") from exc
     if not isinstance(data, dict):
-        raise DraftProblem("the contract must be a YAML mapping")
+        raise DraftProblem("the contract must be one JSON object")
     data.pop("provenance", None)
-    bad = _walk(data)
+    if "${" in json.dumps(data, default=str):
+        raise DraftProblem(
+            "the contract may not reference environment variables (${...})"
+        )
+    bad = _disallowed(data)
     if bad:
-        raise DraftProblem("the contract may not set " + ", ".join(sorted(set(bad))))
+        raise DraftProblem(
+            "the contract may only read the database with plain SQL; it may not set "
+            + ", ".join(sorted(set(bad)))
+        )
     frame = data.get("frame") or {}
     database = frame.get("database") if isinstance(frame, dict) else None
     if not isinstance(database, dict):
@@ -325,6 +407,9 @@ class Case:
     recheck: str = ""
     passed: bool = False
     applicable: bool = True
+    #: The sandbox can't build this case (no other record, no second user):
+    #: never a pass, and an operator fix rather than the model's.
+    untestable: bool = False
     note: str = ""
     reasons: list[str] = field(default_factory=list)
     moved: list[dict[str, Any]] = field(default_factory=list)
@@ -334,7 +419,13 @@ class Case:
         return dict(self.__dict__)
 
     def line(self) -> str:
-        verdict = "ok" if self.passed else ("n/a" if not self.applicable else "FAILED")
+        verdict = (
+            "UNTESTABLE"
+            if self.untestable
+            else "ok"
+            if self.passed
+            else ("n/a" if not self.applicable else "FAILED")
+        )
         got = self.outcome + (f", recheck {self.recheck}" if self.recheck else "")
         why = "; ".join(self.reasons[:3])
         if self.moved and not self.passed:
@@ -383,8 +474,30 @@ class Admission:
             "attribution": [a.as_dict() for a in self.attribution],
         }
 
+    def untestable(self) -> list[Case]:
+        return [c for c in self.cases if c.untestable]
+
+    def only_untestable(self) -> bool:
+        """Every failure is the sandbox's, not the draft's."""
+
+        return bool(self.untestable()) and not (
+            self.problems
+            or any(a.problem for a in self.attribution)
+            or any(
+                not c.passed and not c.untestable and c.applicable for c in self.cases
+            )
+        )
+
     def feedback(self) -> str:
-        lines = [c.line() for c in self.cases if not c.passed and c.applicable]
+        lines = [
+            c.line()
+            for c in self.cases
+            if not c.passed and c.applicable and not c.untestable
+        ]
+        lines += [
+            c.line() + " (the sandbox can't build this case; not the contract's fault)"
+            for c in self.untestable()
+        ]
         lines += [
             f"[FAILED] attribution {a.table}.{a.column} ({a.cause}): {a.problem}"
             for a in self.attribution
@@ -510,15 +623,17 @@ class Qualifier:
             if before is not None:
                 note = before()
                 if note:
-                    case.applicable = False
+                    case.untestable = True  # the setup step itself failed
                     case.note = note
-                    case.passed = True
                     return None
             statuses = self.app.send(
                 self.demo.writes, actor, swap_map(self.demo.params, values)
             )
             if any(s >= 400 for s in statuses):
+                # For a clean write: the values were invalid (the caller
+                # skips them). For anything else the case can't be built.
                 case.applicable = False
+                case.untestable = case.group != "clean"
                 case.note = f"the app refused the write (HTTP {max(statuses)})"
                 return None
             pre = self.demo.base
@@ -563,6 +678,9 @@ class Qualifier:
 
     @staticmethod
     def _judge(case: Case) -> None:
+        if case.untestable:
+            case.passed = False
+            return
         if not case.applicable:
             case.passed = True
             return
@@ -717,7 +835,14 @@ class Qualifier:
     def _values(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         out = dict(self.demo.params)
         changed = False
+        # A value the demonstration shares with another parameter can't be
+        # swapped in the trace without changing both: it is not varied.
+        shared = {
+            k for k in out for j in out if k != j and text(out[k]) == text(out[j])
+        }
         for k, v in payload.items():
+            if k in shared:
+                continue
             if k in out and v is not None and text(v) != text(out[k]):
                 out[k] = v
                 changed = True
@@ -767,7 +892,7 @@ class Qualifier:
                         raise RuntimeError(
                             "the write moved no row holding a task value"
                         )
-                    self.store.update(m.table, m.key, {col: _perturb(m.after[col])})
+                    self.store.update(m.table, m.key, {col: _perturb(m.a[col])})
 
                 self.run(contract, case, values=values, fault=plant)
                 out.append(case)
@@ -784,23 +909,21 @@ class Qualifier:
                 if m.change == "changed":
                     others = [k for k in post[m.table] if k != m.key]
                     if not others:
-                        raise _NotApplicable("the table holds no other record")
+                        raise _Untestable("the table holds no other record")
                     other = others[self.seed % len(others)]
-                    moved = {c: m.after[c] for c in m.columns}
+                    moved = {c: m.a[c] for c in m.columns}
                     self.store.update(m.table, other, moved)
-                    self.store.update(
-                        m.table, m.key, {c: m.before[c] for c in m.columns}
-                    )
+                    self.store.update(m.table, m.key, {c: m.b[c] for c in m.columns})
                     case.detail = f"the update landed on another {m.table} row"
                     return
-                fk = [c for c in m.columns if c in t.fks and m.after.get(c) is not None]
+                fk = [c for c in m.columns if c in t.fks and m.a.get(c) is not None]
                 if fk:
                     col = fk[0]
                     ref = self.store.tables[t.fks[col]]
                     choices = [
                         k
                         for k in post.get(ref.name, {})
-                        if len(ref.pk) == 1 and text(k[0]) != text(m.after[col])
+                        if len(ref.pk) == 1 and text(k[0]) != text(m.a[col])
                     ]
                     if choices:
                         self.store.update(
@@ -814,8 +937,8 @@ class Qualifier:
                     if _IDENTIFIER.search(c) or _IDENTIFIER.search(p)
                 ]
                 if not ids:
-                    raise _NotApplicable("the new row names no parent record")
-                self.store.update(m.table, m.key, {ids[0]: _perturb(m.after[ids[0]])})
+                    raise _Untestable("the new row names no parent record")
+                self.store.update(m.table, m.key, {ids[0]: _perturb(m.a[ids[0]])})
                 case.detail = f"the new {m.table} row is filed under another {ids[0]}"
 
             self._planted(contract, case, values, plant_row)
@@ -830,9 +953,7 @@ class Qualifier:
                 m, _ = self._target(pre, post, values)
                 if m is None:
                     raise RuntimeError("the write moved no row holding a task value")
-                self.store.insert(
-                    m.table, self.store.new_key_row(m.table, m.after, post)
-                )
+                self.store.insert(m.table, self.store.new_key_row(m.table, m.a, post))
 
             self._planted(contract, case, values, plant_dup)
             return [case]
@@ -876,11 +997,11 @@ class Qualifier:
                 if hidden:
                     for h in hidden[:3]:
                         self.masked.append({"fault": "sibling_edit", "column": h})
-                    raise _NotApplicable(
+                    raise _Untestable(
                         "every editable column of the other records is excluded: "
                         + ", ".join(hidden[:3])
                     )
-                raise _NotApplicable("the store holds no other record to edit")
+                raise _Untestable("the store holds no other record to edit")
 
             self._planted(contract, case, values, plant_sib)
             return [case]
@@ -900,9 +1021,7 @@ class Qualifier:
                 if m.change == "added":
                     self.store.delete(m.table, m.key)
                 else:
-                    self.store.update(
-                        m.table, m.key, {c: m.before[c] for c in m.columns}
-                    )
+                    self.store.update(m.table, m.key, {c: m.b[c] for c in m.columns})
 
             self.run(contract, case, values=values, revert=undo, rechecks=True)
             if case.outcome == "CONFIRMED" and not case.recheck:
@@ -918,12 +1037,15 @@ class Qualifier:
                 )
                 return [case]
             if "other" not in self.sandbox.actors:
-                case.applicable, case.note = False, "the sandbox has no second user"
+                case.untestable, case.note = (
+                    True,
+                    "the sandbox has no second user (actors.other)",
+                )
                 return [case]
             other_values = accepted[0] if accepted else None
             if other_values is None:
-                case.applicable, case.note = (
-                    False,
+                case.untestable, case.note = (
+                    True,
                     "no accepted payload for the other user",
                 )
                 return [case]
@@ -941,6 +1063,9 @@ class Qualifier:
             )
             self.run(contract, case, values=values, before=first_save)
             if case.note.startswith("the app refused"):
+                # The app itself refuses a save from a stale copy: nothing to
+                # catch, a true not-applicable.
+                case.untestable = False
                 case.note = (
                     "the app refused the stale save: it prevents lost updates itself"
                 )
@@ -961,13 +1086,21 @@ class Qualifier:
                 case.applicable = False
                 case.note = str(exc)
                 raise
+            except _Untestable as exc:
+                case.untestable = True
+                case.note = str(exc)
+                raise
 
         try:
             self.run(contract, case, values=values, fault=guarded)
         finally:
-            if not case.applicable:
+            if not case.applicable or case.untestable:
                 case.outcome = case.outcome if case.outcome not in ("ERROR",) else ""
-                case.reasons = [r for r in case.reasons if "_NotApplicable" not in r]
+                case.reasons = [
+                    r
+                    for r in case.reasons
+                    if "_NotApplicable" not in r and "_Untestable" not in r
+                ]
 
     # -- causal attribution
 
@@ -1023,8 +1156,8 @@ class Qualifier:
                 a.problem = "excluded, but it moves with the values written: the exclusion hides the write"
             out.append(a)
         moved = {(a.table, a.column) for a in out}
-        for table, cols in mask.items():
-            for col in cols:
+        for table, masked_cols in mask.items():
+            for col in masked_cols:
                 if col == "*" and any(t == table for t, _ in moved):
                     continue
                 if col == "+" and (table, "+") in moved:
@@ -1084,6 +1217,10 @@ def _clockish(values: Sequence[str]) -> bool:
 
 
 class _NotApplicable(Exception):
+    pass
+
+
+class _Untestable(Exception):
     pass
 
 

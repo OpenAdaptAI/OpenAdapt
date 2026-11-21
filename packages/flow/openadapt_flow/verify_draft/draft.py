@@ -225,6 +225,13 @@ def run(
         if adm.admitted:
             break
         reason = adm.feedback()
+        if adm.only_untestable():
+            # No model round can fix the sandbox.
+            reason = (
+                "the sandbox can't build every case; fix it and run again:\n" + reason
+            )
+            log(f"round {used}: stopped: {reason}")
+            break
         messages.append(
             {
                 "role": "user",

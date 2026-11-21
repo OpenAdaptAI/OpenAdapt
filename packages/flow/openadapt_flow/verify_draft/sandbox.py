@@ -92,7 +92,8 @@ class Login(BaseModel):
     path: str
     form: Optional[dict[str, str]] = None
     json_body: Optional[dict[str, Any]] = Field(default=None, alias="json")
-    #: A JSON response field holding a bearer token (``access_token``).
+    #: A JSON response field holding a bearer token (``access_token``, or a
+    #: dotted path such as ``data.access_token``).
     token_field: Optional[str] = None
 
 
@@ -301,17 +302,17 @@ class Store:
                 t.columns.append(col)
                 t.types[col] = str(dtype).lower()
             for schema, table, col, kind, ref in cons:
-                t = out.get(self._name(schema, table))
-                if t is None:
+                found = out.get(self._name(schema, table))
+                if found is None:
                     continue
-                if kind == "PRIMARY KEY" and col not in t.pk:
-                    t.pk.append(col)
+                if kind == "PRIMARY KEY" and col not in found.pk:
+                    found.pk.append(col)
                 elif kind == "FOREIGN KEY" and ref:
-                    t.fks[col] = self._name(schema, ref)
+                    found.fks[col] = self._name(schema, ref)
                 elif kind == "UNIQUE":
-                    groups = getattr(t, "_ugroups", {})
+                    groups = getattr(found, "_ugroups", {})
                     groups.setdefault(ref, []).append(col)
-                    t._ugroups = groups  # type: ignore[attr-defined]
+                    found._ugroups = groups  # type: ignore[attr-defined]
             for t in out.values():
                 t.unique = [cols for cols in getattr(t, "_ugroups", {}).values()]
             return out
@@ -603,6 +604,16 @@ class Move:
     before: Optional[Row]
     after: Optional[Row]
 
+    @property
+    def a(self) -> Row:
+        """The row after (empty for a removed row)."""
+        return self.after or {}
+
+    @property
+    def b(self) -> Row:
+        """The row before (empty for an added row)."""
+        return self.before or {}
+
 
 def moves(before: Rows, after: Rows) -> list[Move]:
     out: list[Move] = []
@@ -671,7 +682,9 @@ class App:
             if r.status_code >= 400:
                 raise SandboxError(f"actor {actor} could not sign in ({r.status_code})")
             if login.token_field:
-                token = (r.json() or {}).get(login.token_field)
+                token: Any = r.json() or {}
+                for part in login.token_field.split("."):  # data.access_token
+                    token = token.get(part) if isinstance(token, dict) else None
                 if not token:
                     raise SandboxError(
                         f"sign-in for {actor} returned no {login.token_field}"

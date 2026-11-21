@@ -362,3 +362,84 @@ def test_run_path_makes_no_model_calls(mockloan: Path) -> None:
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() in ("REFUTED", "UNCERTAIN")  # no new record was written
+
+
+@pytest.mark.parametrize(
+    "edit, why",
+    [
+        # A REST read would point the check at a URL the model chose.
+        (
+            lambda c: c.update(
+                verifier={"kind": "rest", "base_url": "http://x", "records_path": "/a"}
+            ),
+            "verifier",
+        ),
+        (
+            lambda c: c["verifier"]["surfaces"]["record"].update(
+                auth={"bearer_env": "ANTHROPIC_API_KEY"}
+            ),
+            "auth",
+        ),
+        (
+            lambda c: c["effects"][0]["match"].update(
+                memo={"literal": "${ANTHROPIC_API_KEY}"}
+            ),
+            "environment",
+        ),
+        (lambda c: c["frame"]["database"].update(profile="openemr"), "profile"),
+        (lambda c: c.update(admission={"coverage": "x.json"}), "admission"),
+        (lambda c: c["frame"].update(learned={"excuses": []}), "learned"),
+    ],
+)
+def test_drafts_are_allowlisted(mockloan: Path, edit: Any, why: str) -> None:
+    contract = yaml.safe_load(GOOD)
+    edit(contract)
+    with pytest.raises(A.DraftProblem, match=why):
+        A.prepare(json.dumps(contract), load_sandbox(str(mockloan / "sandbox.yaml")))
+
+
+def test_good_draft_as_json_text_loads(mockloan: Path) -> None:
+    data = A.prepare(
+        json.dumps(yaml.safe_load(GOOD)), load_sandbox(str(mockloan / "sandbox.yaml"))
+    )
+    assert data["frame"]["database"]["read"]["sqlite_database"]
+
+
+def test_untestable_is_never_a_pass() -> None:
+    case = A.Case(
+        "fault", "lost_update", "", "refuted", untestable=True, note="no second user"
+    )
+    A.Qualifier._judge(case)
+    assert not case.passed
+    adm = A.Admission(False, "sha256:" + "0" * 64, [case], [], [])
+    assert adm.only_untestable() and "not the contract's fault" in adm.feedback()
+
+
+def test_one_question_at_most(mockloan: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A masked column is asked about once; the answer is a decision, and
+    'bookkeeping' lets the same draft be qualified again."""
+
+    calls: list[set[str]] = []
+
+    def fake_qualify(
+        self: A.Qualifier, contract: Any, payloads: Any, **kw: Any
+    ) -> A.Admission:
+        calls.append(set(self.bookkeeping))
+        ok = "records.memo" in self.bookkeeping
+        masked = [] if ok else [{"fault": "sibling_edit", "column": "records.memo"}]
+        return A.Admission(ok, "sha256:" + "0" * 64, [], [], [], masked)
+
+    monkeypatch.setattr(A.Qualifier, "qualify", fake_qualify)
+    asked: list[str] = []
+
+    def ask(question: str, columns: Any) -> dict[str, str]:
+        asked.append(question)
+        return {c: "bookkeeping" for c in columns}
+
+    outcome = _run(mockloan, Fixed(GOOD), rounds=3, ask=ask)
+    assert outcome.admitted and outcome.decisions == 1 and len(asked) == 1
+    assert calls == [set(), {"records.memo"}]
+    # Without an answer the draft is refused, never admitted on a guess.
+    calls.clear()
+    outcome = _run(mockloan, Fixed(GOOD), rounds=1, ask=lambda q, c: None)
+    assert not outcome.admitted and outcome.decisions == 0

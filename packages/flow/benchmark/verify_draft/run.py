@@ -14,7 +14,7 @@
 
 Person decisions are counted as the draft command counts them (answers to
 its one question). The sandbox file's facts are listed as operator inputs,
-not decisions, as in the Vikunja setup log the brief compares against.
+not decisions, as in the earlier setup log this is compared against.
 """
 
 from __future__ import annotations

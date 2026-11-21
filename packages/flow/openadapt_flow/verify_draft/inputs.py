@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -230,8 +231,8 @@ def load_trace(path: str | Path) -> list[Request]:
 
 
 def writes(
-    trace: list[Request], *, skip_paths: set[str] = frozenset()
-) -> list[Request]:  # type: ignore[assignment]
+    trace: list[Request], *, skip_paths: Collection[str] = frozenset()
+) -> list[Request]:
     """The trace's write requests (anything but GET, HEAD and OPTIONS),
     without sign-in requests."""
 
