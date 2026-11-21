@@ -405,6 +405,24 @@ def _source_binding(obj: Any, attr: str) -> Any:
     return raw
 
 
+def _nonempty_str(val: Any) -> bool:
+    return isinstance(val, str) and bool(val.strip())
+
+
+def _valid_source_scope(scope: Any) -> bool:
+    return isinstance(scope, Mapping) and any(
+        _nonempty_str(scope.get(k)) for k in ("account", "tenant", "principal")
+    )
+
+
+def _valid_log_scope(scope: Any) -> bool:
+    return (
+        isinstance(scope, Mapping)
+        and _nonempty_str(scope.get("stream"))
+        and _nonempty_str(scope.get("actor"))
+    )
+
+
 def begin(
     record: RecordSource,
     *,
@@ -421,8 +439,9 @@ def begin(
     ``target``: the record's reference (``Patient/123``); bound, never
     re-read from the state. ``first_outcome``: the first check's outcome; a
     recheck of anything but ``VERIFIED`` stays ``NOT_CHECKED``.
-    ``first_identity``: optional record id observed by the first check; when
-    supplied, the baseline read must land on the same record id.
+    ``first_identity``: record id observed by the first check; required when
+    ``first_outcome == "VERIFIED"``, and the baseline read must land on the
+    same record id.
     ``own_events``: ``{entry id: operation}`` for the write's own log
     entries, which the first check already judged; they may land after the
     checkpoint while the log lags. They are exempt only when the log
@@ -430,22 +449,27 @@ def begin(
 
     The log checkpoint is taken before the read, so an entry between the two
     reads shows up in the window rather than in the baseline. Raises
-    :class:`ReadFailed` when either source can't be read, lacks a source or
-    stream/actor binding, or the record is not there (a baseline of "absent"
-    would verify a deletion), and ``ValueError`` for a window that isn't a
-    positive number of seconds up to :data:`MAX_WINDOW_S` or for malformed
-    events.
+    :class:`ReadFailed` when either source can't be read, lacks a complete
+    account/source or stream-and-actor binding, lacks ``first_identity`` for a
+    ``VERIFIED`` first check, or the record is not there (a baseline of
+    "absent" would verify a deletion), and ``ValueError`` for a window that
+    isn't a positive number of seconds up to :data:`MAX_WINDOW_S` or for
+    malformed events.
     """
 
     if not _window_ok(window_s):
         raise ValueError("the recheck window must be a positive number of seconds")
     own = _events({} if own_events is None else own_events)
+    if str(first_outcome) == "VERIFIED" and first_identity is None:
+        raise ReadFailed(
+            "the first check's observed record identity is required for a VERIFIED recheck"
+        )
     source_scope = _source_binding(record, "source_scope")
-    if source_scope is None:
-        raise ReadFailed("the record source carries no source binding")
+    if not _valid_source_scope(source_scope):
+        raise ReadFailed("the record source carries no account/tenant source binding")
     log_scope = None if log is None else _source_binding(log, "stream_scope")
-    if log is not None and log_scope is None:
-        raise ReadFailed("the log source carries no stream and actor binding")
+    if log is not None and not _valid_log_scope(log_scope):
+        raise ReadFailed("the log source must bind both a non-empty stream and actor")
     salt = secrets.token_bytes(32)
     key = _key(salt)
     checkpoint = None if log is None else dict(log.checkpoint())
@@ -636,9 +660,11 @@ def recheck(
             at=started,
         )
     source_scope = _source_binding(record, "source_scope")
-    if source_scope is None:
+    if not _valid_source_scope(source_scope):
         return _not_checked(
-            "the record source carries no source binding", state, at=started
+            "the record source carries no account/tenant source binding",
+            state,
+            at=started,
         )
     try:
         source_mac = _mac(key, "source", _canonical(source_scope).decode("ascii"))
@@ -654,9 +680,11 @@ def recheck(
         )
     if log is not None:
         log_scope = _source_binding(log, "stream_scope")
-        if log_scope is None:
+        if not _valid_log_scope(log_scope):
             return _not_checked(
-                "the log source carries no stream and actor binding", state, at=started
+                "the log source must bind both a non-empty stream and actor",
+                state,
+                at=started,
             )
         try:
             log_scope_mac = _mac(
@@ -973,7 +1001,14 @@ class VerifierReadback:
         return policies
 
     def source_scope(self) -> Optional[dict[str, Any]]:
-        """Identify the underlying API endpoint and resource query, or None if unavailable."""
+        """Identify the underlying API endpoint, account/tenant principal, and query.
+
+        Returns ``None`` when the actual reader cannot establish both its
+        endpoint and a stable, non-secret tenant or principal identifier
+        (``account_scope``, ``tenant_id``, ``principal_id``, ``account_id``, or
+        ``token_source.client_id``). Secret tokens and auth headers are never
+        included.
+        """
         cur: Any = self.verifier
         seen: set[int] = set()
         while cur is not None and id(cur) not in seen:
@@ -989,9 +1024,31 @@ class VerifierReadback:
         )
         if not isinstance(base, str) or not base.strip():
             return None
+        account: Optional[str] = None
+        for attr in ("account_scope", "tenant_id", "principal_id", "account_id"):
+            cand = getattr(cur, attr, None)
+            if isinstance(cand, str) and cand.strip():
+                account = cand.strip()
+                break
+        if account is None:
+            token_src = getattr(cur, "token_source", None)
+            if token_src is not None:
+                for attr in (
+                    "account_scope",
+                    "tenant_id",
+                    "principal_id",
+                    "client_id",
+                ):
+                    cand = getattr(token_src, attr, None)
+                    if isinstance(cand, str) and cand.strip():
+                        account = cand.strip()
+                        break
+        if account is None:
+            return None
         scope: dict[str, Any] = {
             "substrate": self._substrate,
             "endpoint": base.rstrip("/"),
+            "account": account,
             "identity_path": self.identity_path,
         }
         for attr in (

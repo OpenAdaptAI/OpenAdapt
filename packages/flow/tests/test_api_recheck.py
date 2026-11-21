@@ -40,7 +40,11 @@ class Record:
         self.found = True
         self.fail = False
         self.identity: Any = "7"
-        self.source_scope: Any = {"system": "test-ehr", "resource": "Patient"}
+        self.source_scope: Any = {
+            "system": "test-ehr",
+            "account": "tenant-a",
+            "resource": "Patient",
+        }
 
     def read(self) -> Readback:
         if self.fail:
@@ -99,6 +103,7 @@ def _setup(log: Optional[Log] = None, **kw: Any):
         first_outcome=kw.pop("first_outcome", "VERIFIED"),
         window_s=kw.pop("window_s", 120),
         log=log,
+        first_identity=kw.pop("first_identity", "7"),
         now=T0,
         **kw,
     )
@@ -143,7 +148,14 @@ def test_state_and_schedule_hold_no_values() -> None:
     log = Log()
     rec = Record({"name.family": "Lovelace-Q", "birthDate": "1815-12-10 (q)"})
     rec.identity = "Patient-Qz"
-    state = begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5, log=log)
+    state = begin(
+        rec,
+        target=TARGET,
+        first_outcome="VERIFIED",
+        first_identity="Patient-Qz",
+        window_s=5,
+        log=log,
+    )
     sched = schedule(state)
     text = json.dumps(state) + json.dumps(sched)
     for value in ("Lovelace-Q", "1815-12-10 (q)", "Patient-Qz", TARGET):
@@ -195,7 +207,13 @@ def test_a_to_b_to_a_with_no_version_is_caught_by_the_log() -> None:
     log = Log()
     rec = Record({"birthDate": "1815-12-10"}, version=None)
     state = begin(
-        rec, target=TARGET, first_outcome="VERIFIED", window_s=60, log=log, now=T0
+        rec,
+        target=TARGET,
+        first_outcome="VERIFIED",
+        first_identity="7",
+        window_s=60,
+        log=log,
+        now=T0,
     )
     log.add("u2", "update", "other", True)
     log.add("u3", "update", "other", True)
@@ -364,6 +382,7 @@ def test_rest_readback_over_http_verifies_then_refutes_a_late_edit() -> None:
     base_url, db, stop = serve()
     try:
         verifier = RestRecordVerifier(base_url, **mockmed_rest_read_kwargs())
+        verifier.account_scope = "mockmed-local"
         before = verifier.capture_pre_state()
         written = db.add("p1", "Triage", "BP 120/80", key="k1")
         effect = Effect(
@@ -376,7 +395,12 @@ def test_rest_readback_over_http_verifies_then_refutes_a_late_edit() -> None:
             verifier, effect, before, fields=["patient_id", "note"]
         )
         state = begin(
-            source, target="encounter/1", first_outcome="VERIFIED", window_s=1, now=T0
+            source,
+            target="encounter/1",
+            first_outcome="VERIFIED",
+            first_identity=written["id"],
+            window_s=1,
+            now=T0,
         )
         sha = schedule(state)["state_sha256"]
         later = T0 + timedelta(seconds=5)
@@ -408,6 +432,7 @@ def test_rest_readback_over_http_catches_an_undeclared_field_change() -> None:
     base_url, db, stop = serve()
     try:
         verifier = RestRecordVerifier(base_url, **mockmed_rest_read_kwargs())
+        verifier.account_scope = "mockmed-local"
         before = verifier.capture_pre_state()
         written = db.add("p1", "Triage", "BP 120/80", key="k1")
         effect = Effect(
@@ -418,7 +443,12 @@ def test_rest_readback_over_http_catches_an_undeclared_field_change() -> None:
         )
         source = VerifierReadback(verifier, effect, before)
         state = begin(
-            source, target="encounter/1", first_outcome="VERIFIED", window_s=1, now=T0
+            source,
+            target="encounter/1",
+            first_outcome="VERIFIED",
+            first_identity=written["id"],
+            window_s=1,
+            now=T0,
         )
         with db._lock:
             written["type"] = "Consult"
@@ -504,14 +534,26 @@ def test_begin_refuses_an_absent_record() -> None:
     rec = Record({"birthDate": "1815-12-10"})
     rec.found = False
     with pytest.raises(ReadFailed):
-        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+        begin(
+            rec,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+        )
 
 
 def test_begin_refuses_a_read_back_with_no_identity() -> None:
     rec = Record({"birthDate": "1815-12-10"})
     rec.identity = None
     with pytest.raises(ReadFailed):
-        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+        begin(
+            rec,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+        )
 
 
 def test_a_read_back_landing_on_another_record_is_not_checked() -> None:
@@ -557,6 +599,7 @@ def test_a_value_with_no_exact_json_form_fails_the_read() -> None:
             Record({"amount": Decimal("1.0")}),
             target=TARGET,
             first_outcome="VERIFIED",
+            first_identity="7",
             window_s=5,
         )
     rec, state, sched = _setup()
@@ -632,7 +675,11 @@ def test_a_state_is_only_recheckable_with_the_same_host_secret(
 
 def test_read_failure_reasons_carry_no_upstream_text() -> None:
     class Leaky:
-        source_scope = {"system": "test-ehr", "resource": "Patient"}
+        source_scope = {
+            "system": "test-ehr",
+            "account": "tenant-a",
+            "resource": "Patient",
+        }
 
         def read(self) -> Readback:
             raise ReadFailed("GET https://sor.example/Patient/7 returned 500")
@@ -784,7 +831,11 @@ def test_source_stream_actor_and_first_identity_bindings_are_enforced() -> None:
 
     # Different record source scope with identical local id/fields/version -> NOT_CHECKED.
     other_rec = Record({"name.family": "Lovelace", "birthDate": "1815-12-10"})
-    other_rec.source_scope = {"system": "other-tenant-ehr", "resource": "Patient"}
+    other_rec.source_scope = {
+        "system": "test-ehr",
+        "account": "tenant-b",
+        "resource": "Patient",
+    }
     out = _run(state, other_rec, sched, log)
     assert out.outcome == "NOT_CHECKED" and "record source" in out.reason
 
@@ -792,8 +843,18 @@ def test_source_stream_actor_and_first_identity_bindings_are_enforced() -> None:
     unbound_rec = Record({"name.family": "Lovelace", "birthDate": "1815-12-10"})
     unbound_rec.source_scope = None
     with pytest.raises(ReadFailed, match="source binding"):
-        begin(unbound_rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+        begin(
+            unbound_rec,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+        )
     assert _run(state, unbound_rec, sched, log).outcome == "NOT_CHECKED"
+
+    # Missing original observed identity for VERIFIED -> ReadFailed on begin.
+    with pytest.raises(ReadFailed, match="observed record identity is required"):
+        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
 
     # Different log stream/actor with identical checkpoint -> NOT_CHECKED.
     other_log = Log()
@@ -801,12 +862,100 @@ def test_source_stream_actor_and_first_identity_bindings_are_enforced() -> None:
     out = _run(state, rec, sched, other_log)
     assert out.outcome == "NOT_CHECKED" and "log stream" in out.reason
 
+    # Log stream missing actor -> ReadFailed on begin, NOT_CHECKED on recheck.
+    actorless_log = Log()
+    actorless_log.stream_scope = {"stream": "test-audit"}
+    with pytest.raises(ReadFailed, match="stream and actor"):
+        begin(
+            rec,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+            log=actorless_log,
+        )
+    assert _run(state, rec, sched, actorless_log).outcome == "NOT_CHECKED"
+
     # Unavailable log stream binding -> ReadFailed on begin, NOT_CHECKED on recheck.
     unbound_log = Log()
     unbound_log.stream_scope = None
     with pytest.raises(ReadFailed, match="stream and actor"):
-        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5, log=unbound_log)
+        begin(
+            rec,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+            log=unbound_log,
+        )
     assert _run(state, rec, sched, unbound_log).outcome == "NOT_CHECKED"
+
+
+def test_shared_endpoint_with_different_accounts_or_no_account_scope_is_refused() -> (
+    None
+):
+    class _AccountVerifier(_Verifier):
+        substrate = "fhir"
+        base_url = "https://shared-fhir.invalid/R4"
+
+        def __init__(self, account: Optional[str]) -> None:
+            super().__init__()
+            self.record = {"id": "7", "meta": {"versionId": "1"}, "note": "A"}
+            if account is not None:
+                self.account_scope = account
+
+    # Reader without account scope cannot establish source_scope -> begin refuses.
+    no_acct = VerifierReadback(
+        _AccountVerifier(None),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    assert no_acct.source_scope() is None
+    with pytest.raises(ReadFailed, match="account/tenant"):
+        begin(
+            no_acct,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+            now=T0,
+        )
+
+    # Same shared endpoint, different account/principal -> NOT_CHECKED.
+    src_a = VerifierReadback(
+        _AccountVerifier("acct-alpha"),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    src_b = VerifierReadback(
+        _AccountVerifier("acct-beta"),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    state = begin(
+        src_a,
+        target=TARGET,
+        first_outcome="VERIFIED",
+        first_identity="7",
+        window_s=5,
+        now=T0,
+    )
+    sha = schedule(state)["state_sha256"]
+    later = T0 + timedelta(seconds=10)
+    assert (
+        recheck(
+            state, src_a, target=TARGET, expected_state_sha256=sha, now=later
+        ).outcome
+        == "VERIFIED"
+    )
+    out_b = recheck(state, src_b, target=TARGET, expected_state_sha256=sha, now=later)
+    assert out_b.outcome == "NOT_CHECKED" and "record source" in out_b.reason
 
 
 def test_incomplete_log_returns_not_checked_even_when_fields_changed_or_missing() -> (
