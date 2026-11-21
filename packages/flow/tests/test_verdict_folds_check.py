@@ -38,6 +38,24 @@ def test_closed_except_is_not_a_swallow(tmp_path: Path) -> None:
     assert "swallow" not in _count(tmp_path, src)
 
 
+def test_each_exit_of_a_handler_is_judged(tmp_path: Path) -> None:
+    mixed = "def f(g, x):\n    try:\n        return g()\n    except Exception:\n        if x:\n            raise\n        return True\n"
+    assert _count(tmp_path, mixed).get("swallow") == 1
+    literal = "def f(g):\n    try:\n        return g()\n    except Exception:\n        return 'not_checked'\n"
+    assert "swallow" not in _count(tmp_path, literal)
+    reraise = "def f(g):\n    try:\n        return g()\n    except Exception:\n        raise\n"
+    assert "swallow" not in _count(tmp_path, reraise)
+
+
+def test_a_site_id_on_two_functions_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "m.py"
+    path.write_text(
+        "@verdict_site('x', classes='C2')\ndef a(): ...\n@verdict_site('x', classes='C2')\ndef b(): ...\n"
+    )
+    with pytest.raises(ValueError):
+        folds.decorated_sites(path)
+
+
 def test_a_registered_site_is_exempt(tmp_path: Path) -> None:
     body = "".join(SNIPPETS.values()).replace("def f(", "def g(")
     src = "@verdict_site('x', classes='C2')\n" + body.replace(
@@ -50,9 +68,23 @@ def test_a_registered_site_is_exempt(tmp_path: Path) -> None:
 def test_only_growth_fails() -> None:
     base = {"a.py": {"swallow": 2}}
     assert folds.compare({"a.py": {"swallow": 3}}, base)
-    assert folds.compare({"b.py": {"swallow": 1}}, base)
+    assert folds.compare({"a.py": {"swallow": 2}, "b.py": {"swallow": 1}}, base)
     assert not folds.compare({"a.py": {"swallow": 1}}, base)
     assert not folds.compare({}, base)
+
+
+def test_moving_a_fold_to_a_new_module_is_not_growth() -> None:
+    base = {"big.py": {"swallow": 5, "bool_fold": 1}}
+    moved = {"big.py": {"swallow": 2}, "big_part.py": {"swallow": 3, "bool_fold": 1}}
+    assert not folds.compare(moved, base)
+    grown = folds.compare(
+        {**moved, "big_part.py": {"swallow": 4, "bool_fold": 1}}, base
+    )
+    assert (
+        len(grown) == 1
+        and grown[0].startswith("swallow: 6")
+        and "big_part.py 4" in grown[0]
+    )
 
 
 def test_the_baseline_only_lowers() -> None:

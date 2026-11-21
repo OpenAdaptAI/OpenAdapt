@@ -106,7 +106,8 @@ def observe(
     A returned :data:`Observation` passes through; any other value becomes
     :class:`Observed`. :class:`FailClosed` re-raises. An exception listed in
     ``benign`` maps to its declared observation (a 404 that means "no such
-    row" is ``Missing``, never a value). Any other ``Exception`` becomes
+    row" is ``Missing``; mapping one to ``Observed`` raises ``TypeError``).
+    Any other ``Exception`` becomes
     :class:`Errored`. It never returns a default value.
     """
 
@@ -117,6 +118,9 @@ def observe(
     except Exception as exc:  # noqa: BLE001 - every failure becomes Errored
         for kind, mapped in (benign or {}).items():
             if isinstance(exc, kind):
+                if not isinstance(mapped, (Missing, Errored)):
+                    # A raised probe is never evidence that something holds.
+                    raise TypeError("benign maps an exception to Missing or Errored")
                 return mapped
         return Errored(type(exc).__name__, str(exc)[:200])
     if isinstance(value, (Observed, Missing, Errored)):
@@ -198,8 +202,13 @@ def require_bound(expected: Subject, got: Subject) -> None:
 # -- results ----------------------------------------------------------------------
 
 #: Only this module's constructors hold it, so ``Result(..., Status.HELD, ...)``
-#: written anywhere else raises.
+#: written anywhere else raises. The token is bound to the subject, so
+#: ``dataclasses.replace(result, subject=other)`` raises too.
 _JUDGED = object()
+
+
+def _seal(subject: "Subject") -> object:
+    return (_JUDGED, subject)
 
 
 @dataclass(frozen=True)
@@ -214,7 +223,14 @@ class Result:
     def __post_init__(self) -> None:
         if not isinstance(self.status, Status):
             raise TypeError(f"status must be a Status, not {self.status!r}")
-        if self.status is Status.HELD and self._token is not _JUDGED:
+        token = self._token
+        sealed = (
+            isinstance(token, tuple)
+            and len(token) == 2
+            and token[0] is _JUDGED
+            and token[1] == self.subject
+        )
+        if self.status is Status.HELD and not sealed:
             raise TypeError(
                 "HELD comes only from Result.held or Result.from_code; "
                 "see docs/FAIL_CLOSED.md"
@@ -226,7 +242,7 @@ class Result:
 
         if not isinstance(obs, Observed) or obs.complete is not True:
             raise TypeError("HELD needs a complete Observed value")
-        return cls(subject, Status.HELD, reason or "held", _JUDGED)
+        return cls(subject, Status.HELD, reason or "held", _seal(subject))
 
     @classmethod
     def refuted(cls, subject: Subject, obs: Observation, reason: str) -> "Result":
@@ -278,7 +294,7 @@ class Result:
         status = from_code(code, held=held, refuted=refuted)
         text = reason or f"code {code!r}"
         if status is Status.HELD:
-            return cls(subject, status, text, _JUDGED)
+            return cls(subject, status, text, _seal(subject))
         return cls(subject, status, text)
 
 
@@ -313,14 +329,16 @@ class Obligations:
 
     @classmethod
     def fix(cls, items: Iterable[Subject], *, source: str) -> "Obligations":
-        """Dedupe by :meth:`Subject.key_tuple`, keeping the first. Empty is
-        allowed; it never settles as a pass."""
+        """Dedupe by subject key and binding, keeping the first: the same field
+        planned in two runs is two obligations. Empty is allowed; it never
+        settles as a pass."""
 
         seen: set[tuple[object, ...]] = set()
         kept = []
         for item in items:
-            if item.key_tuple() not in seen:
-                seen.add(item.key_tuple())
+            ident = (*item.key_tuple(), *(getattr(item, f) for f in BINDING_FIELDS))
+            if ident not in seen:
+                seen.add(ident)
                 kept.append(item)
         return cls(tuple(kept), source)
 
@@ -406,27 +424,31 @@ def settle(
     *,
     limit: Optional[int] = None,
 ) -> Settlement:
-    """Match results to obligations by subject key. See :class:`Settlement`."""
+    """Match results to obligations by subject key and binding. See
+    :class:`Settlement`."""
 
     by_key: dict[tuple[object, ...], list[Result]] = {}
     for result in results:
         by_key.setdefault(result.subject.key_tuple(), []).append(result)
-    wanted = {o.key_tuple() for o in obligations.items}
     buckets: dict[str, list[Subject]] = {
         k: [] for k in ("held", "refuted", "not_checked", "missing", "mismatched")
     }
     conflicting: list[Subject] = []
+    used: set[int] = set()
     for item in obligations.items:
-        got = by_key.get(item.key_tuple(), [])
-        if not got:
+        same_key = by_key.get(item.key_tuple(), [])
+        got = [r for r in same_key if not binding_mismatches(item, r.subject)]
+        used.update(id(r) for r in got)
+        if not same_key:
             buckets["missing"].append(item)
-        elif any(binding_mismatches(item, r.subject) for r in got):
+        elif not got:
             buckets["mismatched"].append(item)
         elif len({r.status for r in got}) > 1:
             conflicting.append(item)
         else:
             buckets[got[0].status.value].append(item)
-    unexpected = tuple(r for key, rs in by_key.items() if key not in wanted for r in rs)
+    # A result no obligation took: another key, or another run's binding.
+    unexpected = tuple(r for rs in by_key.values() for r in rs if id(r) not in used)
     total = len(obligations.items)
     return Settlement(
         total=total,

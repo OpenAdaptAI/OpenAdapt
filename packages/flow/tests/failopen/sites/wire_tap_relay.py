@@ -55,6 +55,11 @@ def _main() -> None:
             relay_redirect_location, "wire_tap.relay_redirect_location", "owned"
         ),
         xfail="#2470: '///host' is relayed raw and a browser reads it as a host",
+        known=[
+            "M11 P3: accepted '///evil.example/x' as '///evil.example/x'",
+            "M11 P3: accepted '////evil.example/x' as '////evil.example/x'",
+            "M11 P3: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
+        ],
     )
 
 

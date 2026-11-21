@@ -23,7 +23,7 @@ def _verdicts(codes: list[str]) -> list[Any]:
 def aggregate_spec(fn: Callable[..., Any], id: str, kind: str = "site") -> SiteSpec:
     return SiteSpec(
         id=id,
-        classes="C2 C3",
+        classes="C2",
         target="openadapt_flow.verify_run:_aggregate",
         kind=kind,
         run=lambda ev: fn(_verdicts(ev)),

@@ -13,7 +13,9 @@ from openadapt_flow.runtime.effects.effect import Verdict
 from tests.failopen.selftest import _v_s9_verify_run_pre as before
 
 PROFILE = settings(derandomize=True, max_examples=300, deadline=None)
-VERDICTS = st.sampled_from(list(Verdict))
+# The three members the vendored fold knew; a member added later is not
+# compared, since the old fold would have called it CONFIRMED.
+VERDICTS = st.sampled_from([Verdict.CONFIRMED, Verdict.REFUTED, Verdict.INDETERMINATE])
 OBSERVED = st.sampled_from(["present", "absent", "unknown", "conflicting"])
 
 

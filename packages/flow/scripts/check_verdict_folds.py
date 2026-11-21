@@ -6,8 +6,9 @@ tally, ``except Exception: return``, a final ``else`` that says success, a
 compare against ``"VERIFIED"``. ``openadapt_flow/verdict.py`` folds once, and
 a function marked ``@verdict_site`` has a spec the fail-open harness runs
 (``tests/failopen``). This check counts the hand-written folds everywhere
-else, per file and per kind, and fails only when a count rises above
-``verdict_folds_baseline.json``. A count that falls never fails; lower the
+else, per kind, and fails only when a kind's total rises above
+``verdict_folds_baseline.json`` (it lists the files whose count rose).
+Totals decide, so moving code into a new module is not a new fold. A count that falls never fails; lower the
 baseline with ``--update-baseline`` when you like (it never raises one).
 
 What it counts (``verdict_folds.toml`` holds the literal lists):
@@ -106,6 +107,10 @@ def decorated_sites(path: Path) -> dict[str, str]:
                 name = f"{prefix}{child.name}"
                 site = _site_decorator(child)
                 if site is not None:
+                    if site in out:
+                        raise ValueError(
+                            f"{path}: verdict site {site!r} on both {out[site]} and {name}"
+                        )
                     out[site] = name
                 visit(child, name + ".")
 
@@ -145,6 +150,23 @@ def _names(node: ast.AST) -> Iterator[str]:
 _NOT_CHECKED_NAMES = frozenset(
     {"Missing", "Errored", "not_checked", "NOT_CHECKED", "FailClosed"}
 )
+_NOT_CHECKED_STRINGS = frozenset(
+    {"not_checked", "NOT_CHECKED", "INDETERMINATE", "unchecked", "unknown", "UNKNOWN"}
+)
+
+
+def _closed_exit(node: ast.AST) -> bool:
+    """True for a ``return`` that hands back a not-checked value."""
+
+    value = getattr(node, "value", None)
+    if not isinstance(node, ast.Return) or value is None:
+        return False
+    return any(n in _NOT_CHECKED_NAMES for n in _names(value)) or any(
+        isinstance(c, ast.Constant) and c.value in _NOT_CHECKED_STRINGS
+        for c in ast.walk(value)
+    )
+
+
 _COUNTING = frozenset({"sum", "len", "Counter", "tally", "count"})
 
 
@@ -200,15 +222,14 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
                 isinstance(node.type, ast.Name)
                 and node.type.id in ("Exception", "BaseException")
             )
+            # Each way out of the handler is judged on its own: a raise on one
+            # branch doesn't excuse a ``return True`` on another.
             body = ast.Module(body=node.body, type_ignores=[])
-            leaves = any(
-                isinstance(n, (ast.Return, ast.Continue, ast.Pass))
+            if broad and any(
+                not _closed_exit(n)
                 for n in ast.walk(body)
-            )
-            closed = any(isinstance(n, ast.Raise) for n in ast.walk(body)) or any(
-                name in _NOT_CHECKED_NAMES for name in _names(body)
-            )
-            if broad and leaves and not closed:
+                if isinstance(n, (ast.Return, ast.Continue, ast.Pass))
+            ):
                 counts["swallow"] += 1
         elif isinstance(node, ast.If) and node.orelse:
             tail = node.orelse
@@ -272,17 +293,33 @@ def scan(
     return out
 
 
+def totals(counts: dict[str, dict[str, int]]) -> Counter[str]:
+    out: Counter[str] = Counter()
+    for kinds in counts.values():
+        out.update(kinds)
+    return out
+
+
 def compare(
     found: dict[str, dict[str, int]], baseline: dict[str, dict[str, int]]
 ) -> list[str]:
-    """Every (file, kind) whose count rose above the baseline."""
+    """Every kind whose total rose above the baseline's, with the files whose
+    count rose. Totals, not per-file counts, decide: moving a fold to a new
+    module (the decomposition plan splits large files) is not a new fold."""
 
     grown = []
-    for rel, kinds in sorted(found.items()):
-        for kind, n in sorted(kinds.items()):
-            allowed = baseline.get(rel, {}).get(kind, 0)
-            if n > allowed:
-                grown.append(f"{rel}: {kind} {n} (baseline {allowed})")
+    now, allowed = totals(found), totals(baseline)
+    for kind in KINDS:
+        if now[kind] > allowed[kind]:
+            files = [
+                f"{rel} {kinds[kind]} (baseline {baseline.get(rel, {}).get(kind, 0)})"
+                for rel, kinds in sorted(found.items())
+                if kinds.get(kind, 0) > baseline.get(rel, {}).get(kind, 0)
+            ]
+            grown.append(
+                f"{kind}: {now[kind]} (baseline {allowed[kind]}); rose in "
+                + ("; ".join(files) or "no single file")
+            )
     return grown
 
 

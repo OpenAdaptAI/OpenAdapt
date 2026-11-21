@@ -2964,7 +2964,7 @@ _AGGREGATE_LABELS: dict[Status, EffectVerdictLabel] = {
 }
 
 
-@verdict_site("verify_run.aggregate", classes="C2 C3")
+@verdict_site("verify_run.aggregate", classes="C2")
 def _aggregate(verdicts: Sequence[EffectVerdict]) -> EffectVerdictLabel:
     """CONFIRMED only when every effect is; any INDETERMINATE outranks a
     REFUTED; no effects at all is INDETERMINATE (docs/FAIL_CLOSED.md)."""

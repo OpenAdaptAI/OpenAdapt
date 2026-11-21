@@ -52,9 +52,18 @@ def test_every_site_spec_targets_its_decorated_function() -> None:
             continue
         path, qualname = decorated[spec.id]
         module, _, target_name = spec.target.partition(":")
-        assert path == "packages/flow/" + module.replace(".", "/") + ".py", spec.id
+        expected = (
+            module
+            if module.endswith(".py")
+            else "packages/flow/" + module.replace(".", "/") + ".py"
+        )
+        if module.split(".")[0] == "openadapt":
+            expected = module.replace(".", "/") + ".py"
+        assert path == expected, spec.id
         assert qualname == target_name, spec.id
-        assert getattr(_resolve(spec.target), "__verdict_site__", None) == spec.id
+        target = _resolve(spec.target)
+        if target is not None:  # a script path is checked by its decorator above
+            assert getattr(target, "__verdict_site__", None) == spec.id
 
 
 def test_owned_and_selftest_targets_exist() -> None:
@@ -98,7 +107,9 @@ def test_vendored_lines_match_history_when_it_is_available() -> None:
             if got.returncode != 0:
                 continue
             want = "\n".join(got.stdout.splitlines()[int(a) - 1 : int(b)])
-            assert textwrap.dedent(block) == textwrap.dedent(want), f"{path.name} {sha}"
+            assert textwrap.dedent(block).rstrip() == textwrap.dedent(want).rstrip(), (
+                f"{path.name} {sha}"
+            )
             checked += 1
     if not checked:
         pytest.skip("no git history for the vendored commits")

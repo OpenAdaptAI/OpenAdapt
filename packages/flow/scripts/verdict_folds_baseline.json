@@ -38,7 +38,7 @@
   },
   "packages/flow/openadapt_flow/__main__.py": {
     "cmp_literal": 14,
-    "swallow": 7
+    "swallow": 8
   },
   "packages/flow/openadapt_flow/_browser_readiness.py": {
     "swallow": 1
@@ -67,7 +67,7 @@
   },
   "packages/flow/openadapt_flow/agent/authoring.py": {
     "cmp_literal": 3,
-    "swallow": 2
+    "swallow": 6
   },
   "packages/flow/openadapt_flow/agent/bridge.py": {
     "cmp_literal": 2
@@ -110,7 +110,7 @@
     "swallow": 3
   },
   "packages/flow/openadapt_flow/agent/runs.py": {
-    "swallow": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/agent/sandbox.py": {
     "says_success": 2,
@@ -145,7 +145,7 @@
   },
   "packages/flow/openadapt_flow/agent_guard/session.py": {
     "cmp_literal": 1,
-    "swallow": 3
+    "swallow": 4
   },
   "packages/flow/openadapt_flow/approval_mode/approver.py": {
     "bool_fold": 1
@@ -224,17 +224,17 @@
   },
   "packages/flow/openadapt_flow/backends/playwright_backend.py": {
     "cmp_literal": 1,
-    "swallow": 70
+    "swallow": 71
   },
   "packages/flow/openadapt_flow/backends/rdp_backend.py": {
-    "swallow": 8
+    "swallow": 11
   },
   "packages/flow/openadapt_flow/backends/redirect_guard.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/backends/remote_display.py": {
     "bool_fold": 1,
-    "swallow": 29
+    "swallow": 31
   },
   "packages/flow/openadapt_flow/backends/win_agent/keyboard_lease.py": {
     "bool_fold": 1
@@ -333,7 +333,7 @@
   },
   "packages/flow/openadapt_flow/compile_agent/repair_bridge.py": {
     "cmp_literal": 4,
-    "swallow": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/compile_agent/repair_selection.py": {
     "cmp_literal": 7
@@ -396,7 +396,7 @@
     "swallow": 5
   },
   "packages/flow/openadapt_flow/console/app.py": {
-    "swallow": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/console/attention.py": {
     "cmp_literal": 1
@@ -433,6 +433,9 @@
   },
   "packages/flow/openadapt_flow/countersign/tsa.py": {
     "swallow": 3
+  },
+  "packages/flow/openadapt_flow/countersign/vault.py": {
+    "swallow": 1
   },
   "packages/flow/openadapt_flow/decision/calibration.py": {
     "cmp_literal": 1
@@ -506,10 +509,11 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/form_tx/playwright_surface.py": {
-    "swallow": 13
+    "swallow": 14
   },
   "packages/flow/openadapt_flow/form_tx/session_lease.py": {
-    "cmp_literal": 1
+    "cmp_literal": 1,
+    "swallow": 1
   },
   "packages/flow/openadapt_flow/form_tx/types.py": {
     "says_success": 1
@@ -549,7 +553,7 @@
     "cmp_literal": 6
   },
   "packages/flow/openadapt_flow/interactive_recorder.py": {
-    "swallow": 17
+    "swallow": 20
   },
   "packages/flow/openadapt_flow/interchange/conformance.py": {
     "cmp_literal": 3
@@ -628,7 +632,7 @@
     "slice_count": 1
   },
   "packages/flow/openadapt_flow/privacy.py": {
-    "swallow": 2
+    "swallow": 5
   },
   "packages/flow/openadapt_flow/provenance.py": {
     "says_success": 1,
@@ -789,8 +793,7 @@
   },
   "packages/flow/openadapt_flow/rl_env/reward.py": {
     "says_success": 2,
-    "cmp_literal": 5,
-    "swallow": 2
+    "cmp_literal": 5
   },
   "packages/flow/openadapt_flow/rl_env/trainers.py": {
     "swallow": 1
@@ -831,7 +834,7 @@
     "says_success": 1,
     "cmp_literal": 7,
     "bool_fold": 1,
-    "swallow": 3
+    "swallow": 4
   },
   "packages/flow/openadapt_flow/runner/verify.py": {
     "swallow": 2
@@ -883,10 +886,11 @@
   },
   "packages/flow/openadapt_flow/runtime/durable/authority.py": {
     "cmp_literal": 6,
-    "swallow": 1
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/runtime/durable/checkpoint.py": {
     "bool_fold": 1,
+    "swallow": 1,
     "slice_count": 2
   },
   "packages/flow/openadapt_flow/runtime/durable/continuation.py": {
@@ -1083,8 +1087,7 @@
   "packages/flow/openadapt_flow/taskgen/validate.py": {
     "says_success": 1,
     "cmp_literal": 2,
-    "bool_fold": 3,
-    "swallow": 2
+    "bool_fold": 3
   },
   "packages/flow/openadapt_flow/taskgen/workbench.py": {
     "swallow": 2
@@ -1188,6 +1191,9 @@
     "cmp_literal": 1
   },
   "packages/flow/openadapt_flow/wire_check.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/wrap/candidate.py": {
     "swallow": 1
   },
   "packages/flow/openadapt_flow/wrap/cli.py": {

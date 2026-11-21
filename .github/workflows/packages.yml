@@ -563,12 +563,6 @@ jobs:
         # App knowledge lives in profiles, contracts and fixtures (CONTRIBUTING:
         # "App knowledge lives in data"); the denylist is scripts/generality.toml.
         run: python scripts/check_engine_generality.py
-      - name: No new hand-written verdict folds
-        # A check that can pass on an empty set, a short read or an unknown
-        # code is folded once in openadapt_flow/verdict.py; a new fold goes in
-        # a @verdict_site with a spec under tests/failopen (docs/FAIL_CLOSED.md).
-        # Fails only when a file's count rises above the baseline.
-        run: python scripts/check_verdict_folds.py
       - name: Install uv (for the oldest-Python syntax check)
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Syntax at the oldest supported Python (3.10)

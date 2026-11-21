@@ -41,8 +41,10 @@ from tests.failopen.selftest import (
     _v_s7_cancel_post,
     _v_s7_cancel_pre,
     _v_s8_governed_post,
+    _v_s8_governed_pre,
     _v_s9_verify_run_pre,
     _v_wire_tap_post,
+    _v_wire_tap_pre,
 )
 from tests.failopen.sites import governed_safety, verify_run_folds, wire_tap_relay
 
@@ -146,7 +148,7 @@ UNDO_CODES = (
 )
 
 
-def undo_spec(mod: Any, id: str) -> SiteSpec:
+def undo_spec(mod: Any, id: str, unlisted: bool = False) -> SiteSpec:
     def ev(*codes: str) -> dict[str, Any]:
         return {"per_write": {f"w{i}": c for i, c in enumerate(codes)}, "leftover": []}
 
@@ -171,7 +173,7 @@ def undo_spec(mod: Any, id: str) -> SiteSpec:
                 f"{code} after {prefix}",
                 unknown=True,
             )
-            for code in UNDO_CODES
+            for code in (*UNDO_CODES, *(("a_code_no_list_names",) if unlisted else ()))
             for prefix in ((), ("undone",))
         ],
         notes={
@@ -183,6 +185,16 @@ def undo_spec(mod: Any, id: str) -> SiteSpec:
 
 
 pair("S3_undo_no_undo", undo_spec, _v_s3_undo_pre, _v_s3_undo_post, {"M14"})
+# The fix lists no_undo but keeps the deny-list: a per-write code nobody
+# listed still settles as ROLLED_BACK. Pre-only until undo_plan adopts
+# from_code (reported to the #2428 owner).
+pair(
+    "S3_undo_unlisted_code",
+    lambda m, i: undo_spec(m, i, unlisted=True),
+    _v_s3_undo_post,
+    None,
+    {"M14"},
+)
 
 
 # -- S4 written field with no verdict (#2429, fixed by fa26f69fc) ------------------
@@ -410,9 +422,7 @@ def _governed(check: Any, id: str) -> SiteSpec:
 pair(
     "S8_governed_note",
     _governed,
-    governed_safety.load_check(
-        governed_safety.ROOT / "scripts/ci/check_windows_governed_safety.py"
-    ),
+    _v_s8_governed_pre.check,
     _v_s8_governed_post.check,
     {"seed", "M10"},
 )
@@ -425,16 +435,10 @@ def _relay(fn: Any, id: str) -> SiteSpec:
     return wire_tap_relay.relay_spec(fn, id, "selftest")
 
 
-def _main_relay() -> Any:
-    from openadapt_flow.tx.wire_tap import relay_redirect_location
-
-    return relay_redirect_location
-
-
 pair(
     "wire_tap_triple_slash",
     _relay,
-    _main_relay(),
+    _v_wire_tap_pre.relay_redirect_location,
     _v_wire_tap_post.relay_redirect_location,
     {"M11"},
 )

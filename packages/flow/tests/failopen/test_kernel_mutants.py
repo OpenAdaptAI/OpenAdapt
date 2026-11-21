@@ -29,8 +29,8 @@ MUTANTS: dict[str, tuple[str, str]] = {
     ),
     "ignore unexpected": ("            and not self.unexpected\n", "\n"),
     "ignore mismatched": (
-        "        elif any(binding_mismatches(item, r.subject) for r in got):\n",
-        "        elif False:\n",
+        "        got = [r for r in same_key if not binding_mismatches(item, r.subject)]\n",
+        "        got = list(same_key)\n",
     ),
     "keep last writer": (
         "        elif len({r.status for r in got}) > 1:\n            conflicting.append(item)\n"
@@ -38,9 +38,9 @@ MUTANTS: dict[str, tuple[str, str]] = {
         "        else:\n            buckets[got[-1].status.value].append(item)\n",
     ),
     "truncate at limit": (
-        "    for item in obligations.items:\n",
-        "    obligations = Obligations(obligations.items[:limit], obligations.source)"
-        " if limit is not None else obligations\n    for item in obligations.items:\n",
+        "    used: set[int] = set()\n",
+        "    used: set[int] = set()\n    obligations = Obligations(obligations.items[:limit],"
+        " obligations.source) if limit is not None else obligations\n",
     ),
     "observe returns a default": (
         "        return Errored(type(exc).__name__, str(exc)[:200])\n",

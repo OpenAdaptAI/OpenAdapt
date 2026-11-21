@@ -37,9 +37,10 @@ from typing import Any, Optional
 P2 = frozenset({"M1", "M2", "M3", "M4", "M5", "M7", "M10", "M14"})
 P3 = frozenset({"M8", "M11"})
 #: Mutators P1 applies to: each one only removes or corrupts evidence. A
-#: value perturbation (M10) or a rebuilt set (M2) can land on the correct
-#: value by chance, so it is held to P2/P3 only.
-P1_IDS = frozenset({"M1", "M3", "M4", "M5", "M7", "M8"})
+#: value perturbation (M10), a rebuilt set (M2) or a dropped result (M1, which
+#: can drop the one bad result) can repair a failing seed, so those are held
+#: to P2/P3 only.
+P1_IDS = frozenset({"M3", "M4", "M5", "M7", "M8"})
 
 
 @dataclass(frozen=True)
@@ -167,7 +168,11 @@ class SiteSpec:
     #: open pull request owns; decorated when the owner adopts) or
     #: ``selftest`` (vendored history).
     kind: str = "site"
+    #: For an ``owned`` site: why it is still fail-open, and who owns the fix.
     xfail: Optional[str] = None
+    #: For an ``owned`` site: exactly the failures it has today (``Failure.key``).
+    #: Any other failure, or one of these going away, fails the test.
+    known: frozenset[str] = frozenset()
     notes: dict[str, str] = field(default_factory=dict)
 
 
@@ -178,18 +183,25 @@ class Failure:
     prop: str
     detail: str
 
+    @property
+    def key(self) -> str:
+        return f"{self.mutator} {self.prop}: {self.detail}"
+
     def __str__(self) -> str:
-        return f"{self.site} {self.mutator} {self.prop}: {self.detail}"
+        return f"{self.site} {self.key}"
 
 
 REGISTRY: dict[str, SiteSpec] = {}
 
 
-def register(spec: SiteSpec, xfail: Optional[str] = None) -> SiteSpec:
+def register(
+    spec: SiteSpec, xfail: Optional[str] = None, known: Sequence[str] = ()
+) -> SiteSpec:
     if spec.id in REGISTRY:
         raise ValueError(f"spec {spec.id!r} registered twice")
     if xfail is not None:
         spec.xfail = xfail
+        spec.known = frozenset(known)
     REGISTRY[spec.id] = spec
     return spec
 
@@ -208,7 +220,11 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
     from tests.failopen import mutators
 
     failures: list[Failure] = []
-    for seed in spec.seeds():
+    seeds = spec.seeds()
+    if not any(seed.correct_pass for seed in seeds):
+        failures.append(Failure(spec.id, "seed", "P0", "no pass seed to mutate"))
+    ran = 0
+    for seed in seeds:
         got = safe_pass(spec, seed.evidence)
         if got != seed.correct_pass:
             failures.append(
@@ -218,6 +234,7 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
         for m in mutators.mutations(spec, seed):
             if only is not None and m.id not in only:
                 continue
+            ran += 1
             if m.check is not None:
                 problem = m.check()
                 if problem:
@@ -235,6 +252,8 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
                 )
             elif m.expect == "same" and after != got:
                 failures.append(Failure(spec.id, m.id, "P4", f"{m.label}: changed"))
+    if not ran and only is None:
+        failures.append(Failure(spec.id, "spec", "P0", "no mutation applies"))
     return failures
 
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from tests.failopen.harness import ABSENT, Seed, SiteSpec, safe_pass
+from tests.failopen.harness import ABSENT, Seed, SiteSpec
 
 CORPUS = Path(__file__).with_name("corpus")
 
@@ -89,7 +89,7 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
             "not_pass",
         )  # type: ignore[union-attr]
     if spec.inflate is not None:
-        n = (spec.limit or 256) + 1
+        n = (256 if spec.limit is None else spec.limit) + 1
         yield Mutation(
             "M2", f"{n} results, the last one bad", spec.inflate(ev, n), "not_pass"
         )
@@ -232,12 +232,12 @@ def _code_check(spec: SiteSpec, case: Any) -> Callable[[], str]:
             return ""
         if case.unknown:
             return (
-                f"unknown code passed as {out!r}"
-                if safe_pass(spec, case.evidence)
+                f"{case.label}: unlisted code passed as {out!r}"
+                if spec.is_pass(out)
                 else ""
             )
         if case.may_have_changed and case.forbidden(out):
-            return f"may have changed, reported {out!r}"
+            return f"{case.label}: may have changed, reported {out!r}"
         return ""
 
     return check

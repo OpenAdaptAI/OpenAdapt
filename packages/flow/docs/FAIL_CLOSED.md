@@ -112,7 +112,8 @@ vectors (follow-up 5).
 from this repository's history. The first line of each file names the commit
 and the lines; the copied lines sit between `# fmt: off` and `# fmt: on`.
 `test_selftest.py` requires the harness to flag every pre-fix copy and to pass
-every post-fix copy:
+every post-fix copy. A spec with no pass seed, or one that no mutation
+applies to, fails too:
 
 | Bug | Pre-fix | Post-fix | Caught by |
 |---|---|---|---|
@@ -123,14 +124,20 @@ every post-fix copy:
 | S5 `min_scored=1`; an undelivered fault drops a run from the rates (#2419) | `275199914^` and `275199914` | open | M9 |
 | S6 a type-ahead prefix matches an assumed typed baseline (#2448) | `c329c57dc^` | `c329c57dc` | P0, M11 |
 | S7 a cancel after the child started is reported as failed (#2300) | `fd7133866` | #2300 head | M12 |
-| S8 `''` and NULL in the governed check (#2258) | main | `00a55cc16` | P0, M10 |
-| Wire tap relays `///host` raw (#2470) | main | #2470 head | M11 |
+| S3b the S3 fix still keeps a deny-list: a per-write code nobody listed is `ROLLED_BACK` | `fda539c78` | open | M14 |
+| S8 `''` and NULL in the governed check (#2258) | main at `576f87b41` | `00a55cc16` | P0, M10 |
+| Wire tap relays `///host` raw (#2470) | main at `576f87b41` | #2470 head | M11 |
 | S9 `verify_run` folds pass an empty effect list | main before this change | main | M1, M3 |
 
+The pre-fix controls are pinned copies, never live code, so landing a fix on
+main can't turn a control green.
+
 Three sites on main are still fail-open and are owned by open pull requests.
-Their specs are `xfail(strict=True)` with the owner in the reason: when the fix
-lands, the test passes unexpectedly and fails, so the marker has to come out
-in the same change.
+Their specs are `owned`: they name the owner and list exactly the failures the
+site has today. This is a strict xfail per case. A new failure fails the test,
+so a known bug can't hide another one. A known failure that goes away also
+fails it, so the list, and then the `owned` marker, comes out in the change
+that fixes the site.
 
 - `wire_tap.relay_redirect_location`: `///evil.example/x` is relayed raw (#2470).
 - `governed_safety.check`: a held target note changed between `''` and NULL
@@ -141,18 +148,18 @@ in the same change.
 
 ## The ratchet
 
-`scripts/check_verdict_folds.py` runs in the required `ci` check, next to the
-engine-generality check. It counts, per file in `openadapt_flow/`, the
+`scripts/check_verdict_folds.py` runs in the required `ci` check, in the smoke
+job that runs on every change, next to the file-size ratchet. It counts, in `openadapt_flow/`, the
 launcher and `scripts/ci/`, six kinds of hand-written fold: a success literal
 produced in code (`VERIFIED`, `CONFIRMED`, `held`, ...), a compare against an
 outcome literal, `all()`/`any()` over verdicts or results, a broad `except`
 that returns without a raise or a not-checked value, a slice in a statement
-that counts, and a final `else` that assigns success. It fails only when a
-file's count rises above `verdict_folds_baseline.json`. It never fails on a
-drop, so open pull requests that don't add folds are unaffected. To add
-verdict code, put it in a `@verdict_site` with a spec; the ratchet doesn't
-count inside one. When a file is renamed, move its baseline entry in the same
-change.
+that counts, and a final `else` that assigns success. It fails only when the
+total for a kind rises above `verdict_folds_baseline.json`, and then lists the
+files whose count rose. Totals decide, so moving code into a new module (as
+the decomposition plan asks) is not a new fold. It never fails on a drop; run
+it with `--update-baseline` to lower the baseline. To add verdict code, put it
+in a `@verdict_site` with a spec; the ratchet doesn't count inside one.
 
 ## Review rule
 

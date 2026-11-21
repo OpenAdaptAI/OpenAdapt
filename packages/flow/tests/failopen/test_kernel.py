@@ -229,9 +229,36 @@ def test_from_code_refuses_overlapping_lists() -> None:
         from_code("x", held=frozenset({"x"}), refuted=frozenset({"x"}))
 
 
-def test_obligations_dedupe_by_subject_key() -> None:
+def test_obligations_dedupe_by_subject_key_and_binding() -> None:
+    a, b = Subject(key="1", run_id="r1"), Subject(key="1", run_id="r2")
+    assert Obligations.fix([a, a, b], source="p").items == (a, b)
+    settled = settle(Obligations.fix([a, b], source="p"), [_result(a, "held")], limit=1)
+    assert settled.mismatched == (b,) and settled.over_limit and not settled.passes
+
+
+def test_a_stray_result_from_another_run_is_unexpected() -> None:
     a = Subject(key="1", run_id="r1")
-    assert Obligations.fix([a, Subject(key="1", run_id="r2")], source="p").items == (a,)
+    stray = Subject(key="1", run_id="r2")
+    settled = settle(
+        Obligations.fix([a], source="p"), [_result(a, "held"), _result(stray, "held")]
+    )
+    assert settled.held == (a,) and len(settled.unexpected) == 1 and not settled.passes
+
+
+def test_a_held_result_cannot_be_moved_to_another_subject() -> None:
+    import dataclasses
+
+    a = Subject(key="1", run_id="r1")
+    with pytest.raises(TypeError):
+        dataclasses.replace(_result(a, "held"), subject=Subject(key="1", run_id="r2"))
+
+
+def test_benign_cannot_map_a_raise_to_a_value() -> None:
+    def probe() -> object:
+        raise TimeoutError
+
+    with pytest.raises(TypeError):
+        observe(probe, benign={TimeoutError: Observed(0)})
 
 
 @pytest.mark.parametrize(

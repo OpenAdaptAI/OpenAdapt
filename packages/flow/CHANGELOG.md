@@ -25,7 +25,7 @@
   set, a truncated or short read, a probe that raised, a result bound to
   another run, two results that disagree, or a code nobody listed. Functions
   marked `@verdict_site` are run by a fail-open harness
-  (`tests/failopen`) with 13 generic mutations; it flags 14 historical bugs
+  (`tests/failopen`) with 13 generic mutations; it flags 15 fail-open bugs
   rebuilt from this repository's code and passes their fixes.
   `scripts/check_verdict_folds.py` fails CI when a file gains a hand-written
   fold. See `docs/FAIL_CLOSED.md`.
