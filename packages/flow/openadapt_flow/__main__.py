@@ -13204,6 +13204,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_hooks_parser(sub)
 
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+
+    _add_plan_parser(sub)
+
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
+
+    _add_proxy_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
