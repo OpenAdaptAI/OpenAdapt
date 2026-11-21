@@ -74,7 +74,12 @@ document.getElementById('submit').addEventListener('click', async () => {{
 
 
 def _estimator_body(
-    *, in_page: bool, calculate: bool, factor: int, offset: int = 0, round_back: bool = False
+    *,
+    in_page: bool,
+    calculate: bool,
+    factor: int,
+    offset: int = 0,
+    round_back: bool = False,
 ) -> str:
     calc_btn = '<button id="calc" type="button">Calculate</button>' if calculate else ""
     if in_page:
@@ -112,9 +117,15 @@ def _estimator_body(
 {close_tag}"""
 
 
-def _estimator_page(*, calculate: bool, factor: int, offset: int, round_back: bool) -> str:
+def _estimator_page(
+    *, calculate: bool, factor: int, offset: int, round_back: bool
+) -> str:
     body = _estimator_body(
-        in_page=False, calculate=calculate, factor=factor, offset=offset, round_back=round_back
+        in_page=False,
+        calculate=calculate,
+        factor=factor,
+        offset=offset,
+        round_back=round_back,
     )
     return f"""<!doctype html><html><head><title>Estimator</title></head>
 <body>{body}</body></html>"""
@@ -346,7 +357,10 @@ def test_two_step_estimator_runs_calculate_then_use_and_keeps_its_input_unchecke
     verdict = result.summary_verdict
     assert verdict is not None
     assert verdict.failed_keys == ()
-    assert set(verdict.not_checked_keys) == {"property.square_feet", "coverage.dwelling"}
+    assert set(verdict.not_checked_keys) == {
+        "property.square_feet",
+        "coverage.dwelling",
+    }
     by_key = {v.dossier_key: v for v in verdict.field_verdicts}
     # The dwelling figure came only from the popup, whose input is not checked,
     # and no displayed result was declared to compare it with.
