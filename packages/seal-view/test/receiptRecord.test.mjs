@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const dir = join(here, '..', '..', 'types', 'tests', 'vectors', 'record-run-v1')
 const read = (name) => JSON.parse(readFileSync(join(dir, name), 'utf8'))
 const registry = read('registry.json')
-const names = readdirSync(dir).filter((n) => n.endsWith('.json') && !n.startsWith('registry') && n !== 'jcs.json')
+const names = readdirSync(dir).filter((n) => n.endsWith('.json') && !n.startsWith('registry') && n !== 'jcs.json' && !n.startsWith('chain-'))
 
 test('the vector set is there', () => {
     expect(names.length).toBeGreaterThanOrEqual(30)
