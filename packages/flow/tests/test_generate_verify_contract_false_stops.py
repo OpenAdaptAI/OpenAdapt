@@ -180,3 +180,71 @@ def test_plan_edit_that_loses_another_users_save_stops(gp: dict[str, Any]) -> No
 
     out = _run(gp, "edit_plan", v, write)
     assert not out.startswith("CONFIRMED"), out
+
+
+# -- an update that empties a field (the task gives it as null) -----------------
+
+
+def test_plan_edit_that_empties_the_due_date_confirmed(gp: dict[str, Any]) -> None:
+    app = gp["app"]
+    iid = _fresh(app, "P6 clear")
+    app.save(iid, {"due_date": "2026-12-01"})
+    v = {"project": "Billing Portal", "subject": "P6 clear", "due_date": None}
+    out = _run(gp, "edit_plan", v, lambda: app.save(iid, {"due_date": None}))
+    assert out.startswith("CONFIRMED"), out
+
+
+def test_plan_edit_that_leaves_the_due_date_stops(gp: dict[str, Any]) -> None:
+    app = gp["app"]
+    iid = _fresh(app, "P7 kept")
+    app.save(iid, {"due_date": "2026-12-01"})
+    v = {"project": "Billing Portal", "subject": "P7 kept", "due_date": None}
+    out = _run(gp, "edit_plan", v, lambda: app.save(iid, {"done_ratio": 10}))
+    assert not out.startswith("CONFIRMED"), out
+
+
+def test_plan_edit_that_also_changes_another_field_stops(gp: dict[str, Any]) -> None:
+    app = gp["app"]
+    iid = _fresh(app, "P8 other")
+    app.save(iid, {"due_date": "2026-12-01", "done_ratio": 20})
+    v = {"project": "Billing Portal", "subject": "P8 other", "due_date": None}
+    out = _run(
+        gp, "edit_plan", v, lambda: app.save(iid, {"due_date": None, "done_ratio": 90})
+    )
+    assert not out.startswith("CONFIRMED"), out
+
+
+# -- "already there" checks only the task's own values --------------------------
+
+
+def _entered_by_a_person(app: AppV, subject: str) -> int:
+    """An issue already there, with a value a create never sets."""
+    iid = _fresh(app, subject)
+    app.q("UPDATE issues SET description=%s WHERE id=%s", ("typed by a person", iid))
+    return iid
+
+
+def test_issue_already_there_with_other_values_is_found(gp: dict[str, Any]) -> None:
+    app = gp["app"]
+    _entered_by_a_person(app, "P9 there")
+    v = {
+        "project": "Billing Portal",
+        "subject": "P9 there",
+        "status": "New",
+        "parent": None,
+    }
+    out = _run(gp, "create_issue", v, lambda: None)
+    assert out.startswith("CONFIRMED"), out
+
+
+def test_second_copy_of_an_issue_already_there_stops(gp: dict[str, Any]) -> None:
+    app = gp["app"]
+    _entered_by_a_person(app, "P10 dup")
+    v = {
+        "project": "Billing Portal",
+        "subject": "P10 dup",
+        "status": "New",
+        "parent": None,
+    }
+    out = _run(gp, "create_issue", v, lambda: app.create_issue(v))
+    assert not out.startswith("CONFIRMED"), out

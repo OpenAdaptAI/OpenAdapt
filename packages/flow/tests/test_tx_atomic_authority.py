@@ -265,10 +265,10 @@ def test_http_redirects_cannot_change_endpoint_method_or_forward_credentials(tmp
         )
         with SessionWireTap(url) as tap:
             tapped = EntityLensClient(_lens(tap.base_url))
-            assert (
-                tapped.write("update", {"note": "new"}, entity_id="r1").status_code
-                == 502
-            )
+            relayed = tapped.write("update", {"note": "new"}, entity_id="r1")
+            # The tap relays a same-origin redirect to the client, rewritten
+            # onto its own origin, and never follows it itself.
+            assert relayed.status_code == 302 and not relayed.ok
         assert all(path.startswith("/rows") for _, path, _ in seen)
         assert [method for method, _, _ in seen] == ["GET", "PATCH", "PATCH"]
     finally:

@@ -1,0 +1,285 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "FaultMutationReceipt": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "PHI-free signed proof that a real gate input changed for one case.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-fault-mutation/v1",
+      "default": "openadapt.qualification-fault-mutation/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "project_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+     },
+     "project_revision": {
+      "minimum": 1,
+      "title": "Project Revision",
+      "type": "integer"
+     },
+     "project_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Project Contract Sha256",
+      "type": "string"
+     },
+     "campaign_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Campaign Id Sha256",
+      "type": "string"
+     },
+     "case_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Case Id Sha256",
+      "type": "string"
+     },
+     "case_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Case Input Sha256",
+      "type": "string"
+     },
+     "run_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Run Id Sha256",
+      "type": "string"
+     },
+     "step_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Step Id Sha256",
+      "type": "string"
+     },
+     "actuation_path": {
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "fault_kind": {
+      "enum": [
+       "ambiguity",
+       "wrong_identity",
+       "stale_identity",
+       "weak_effect",
+       "missing_effect"
+      ],
+      "title": "Fault Kind",
+      "type": "string"
+     },
+     "gate": {
+      "enum": [
+       "target_resolution",
+       "identity_verification",
+       "actuation_revalidation",
+       "effect_strength",
+       "effect_verifier"
+      ],
+      "title": "Gate",
+      "type": "string"
+     },
+     "driver_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Driver Id",
+      "type": "string"
+     },
+     "driver_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Driver Contract Sha256",
+      "type": "string"
+     },
+     "before_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Before Input Sha256",
+      "type": "string"
+     },
+     "after_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "After Input Sha256",
+      "type": "string"
+     },
+     "mutation_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Mutation Artifact Sha256",
+      "type": "string"
+     },
+     "attestation_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Attestation Key Id",
+      "type": "string"
+     },
+     "attestation_signature": {
+      "default": "",
+      "title": "Attestation Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "project_id",
+     "project_revision",
+     "project_contract_sha256",
+     "campaign_id_sha256",
+     "case_id_sha256",
+     "case_input_sha256",
+     "run_id_sha256",
+     "step_id_sha256",
+     "actuation_path",
+     "fault_kind",
+     "gate",
+     "driver_id",
+     "driver_contract_sha256",
+     "before_input_sha256",
+     "after_input_sha256",
+     "mutation_artifact_sha256",
+     "attestation_key_id"
+    ],
+    "title": "FaultMutationReceipt",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "PHI-free signed proof that a real gate input changed for one case.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-fault-mutation/v1",
+      "default": "openadapt.qualification-fault-mutation/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "project_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+     },
+     "project_revision": {
+      "minimum": 1,
+      "title": "Project Revision",
+      "type": "integer"
+     },
+     "project_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Project Contract Sha256",
+      "type": "string"
+     },
+     "campaign_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Campaign Id Sha256",
+      "type": "string"
+     },
+     "case_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Case Id Sha256",
+      "type": "string"
+     },
+     "case_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Case Input Sha256",
+      "type": "string"
+     },
+     "run_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Run Id Sha256",
+      "type": "string"
+     },
+     "step_id_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Step Id Sha256",
+      "type": "string"
+     },
+     "actuation_path": {
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "fault_kind": {
+      "enum": [
+       "ambiguity",
+       "wrong_identity",
+       "stale_identity",
+       "weak_effect",
+       "missing_effect"
+      ],
+      "title": "Fault Kind",
+      "type": "string"
+     },
+     "gate": {
+      "enum": [
+       "target_resolution",
+       "identity_verification",
+       "actuation_revalidation",
+       "effect_strength",
+       "effect_verifier"
+      ],
+      "title": "Gate",
+      "type": "string"
+     },
+     "driver_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Driver Id",
+      "type": "string"
+     },
+     "driver_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Driver Contract Sha256",
+      "type": "string"
+     },
+     "before_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Before Input Sha256",
+      "type": "string"
+     },
+     "after_input_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "After Input Sha256",
+      "type": "string"
+     },
+     "mutation_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Mutation Artifact Sha256",
+      "type": "string"
+     },
+     "attestation_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Attestation Key Id",
+      "type": "string"
+     },
+     "attestation_signature": {
+      "default": "",
+      "title": "Attestation Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "project_id",
+     "project_revision",
+     "project_contract_sha256",
+     "campaign_id_sha256",
+     "case_id_sha256",
+     "case_input_sha256",
+     "run_id_sha256",
+     "step_id_sha256",
+     "actuation_path",
+     "fault_kind",
+     "gate",
+     "driver_id",
+     "driver_contract_sha256",
+     "before_input_sha256",
+     "after_input_sha256",
+     "mutation_artifact_sha256",
+     "attestation_key_id"
+    ],
+    "title": "FaultMutationReceipt",
+    "type": "object"
+   }
+  }
+ }
+}
