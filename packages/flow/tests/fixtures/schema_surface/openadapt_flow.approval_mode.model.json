@@ -1,0 +1,1287 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "ApprovalModeItemEvidence": {
+   "validation": {
+    "$defs": {
+     "ApprovalMode": {
+      "description": "Whether a person approves an item before it is saved.",
+      "enum": [
+       "each_item",
+       "problems_only",
+       "not_gated"
+      ],
+      "title": "ApprovalMode",
+      "type": "string"
+     },
+     "ApproverAuth": {
+      "enum": [
+       "cloud_user",
+       "unauthenticated",
+       "policy",
+       "local_cli",
+       "signed_webhook",
+       "mcp_session"
+      ],
+      "title": "ApproverAuth",
+      "type": "string"
+     },
+     "ApproverIdentityV1": {
+      "additionalProperties": false,
+      "description": "Mirror of ``openadapt_types.ApproverIdentityV1``.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.approver-identity/v1",
+        "default": "openadapt.approver-identity/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "kind": {
+        "$ref": "#/$defs/ApproverKind"
+       },
+       "auth": {
+        "$ref": "#/$defs/ApproverAuth"
+       },
+       "id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Id"
+       },
+       "auth_method": {
+        "default": "none",
+        "enum": [
+         "cloud_aal2",
+         "cloud_aal1",
+         "none"
+        ],
+        "title": "Auth Method",
+        "type": "string"
+       },
+       "policy_ref": {
+        "anyOf": [
+         {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Policy Ref"
+       },
+       "on_behalf_of": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "On Behalf Of"
+       }
+      },
+      "required": [
+       "kind",
+       "auth"
+      ],
+      "title": "ApproverIdentityV1",
+      "type": "object"
+     },
+     "ApproverKind": {
+      "enum": [
+       "person",
+       "rule",
+       "agent",
+       "system"
+      ],
+      "title": "ApproverKind",
+      "type": "string"
+     },
+     "CheckOutcome": {
+      "additionalProperties": false,
+      "description": "The result of one named check, with a closed-vocabulary detail code.",
+      "properties": {
+       "code": {
+        "enum": [
+         "channel",
+         "inputs_strict",
+         "inputs_supplied",
+         "not_a_retry",
+         "record_key_not_recent",
+         "deployment_config",
+         "switch_lease",
+         "not_resumed",
+         "switch_on",
+         "signed_in_user",
+         "right_record",
+         "same_screens",
+         "record_check_ready",
+         "verified",
+         "whole_run_clean",
+         "each_item",
+         "gate_error",
+         "switch_log",
+         "dry_run"
+        ],
+        "title": "Code",
+        "type": "string"
+       },
+       "passed": {
+        "title": "Passed",
+        "type": "boolean"
+       },
+       "detail": {
+        "default": "ok",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "title": "Detail",
+        "type": "string"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "code",
+       "passed"
+      ],
+      "title": "CheckOutcome",
+      "type": "object"
+     },
+     "ItemApprovalRef": {
+      "additionalProperties": false,
+      "description": "One person's answer to one item-approval request, as PHI-free codes.\n\nThe approver is a Cloud user id (never a name), or ``unauthenticated``\nwhen the person approved in Desktop while signed out. Digests bind the\nexact request the person saw and the exact answer file.",
+      "properties": {
+       "step_id": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "Step Id",
+        "type": "string"
+       },
+       "request_sha256": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Request Sha256",
+        "type": "string"
+       },
+       "answer_sha256": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Answer Sha256",
+        "type": "string"
+       },
+       "decision": {
+        "enum": [
+         "approved",
+         "declined"
+        ],
+        "title": "Decision",
+        "type": "string"
+       },
+       "decline_reason": {
+        "anyOf": [
+         {
+          "enum": [
+           "wrong_values",
+           "wrong_record",
+           "screen_problem"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Decline Reason"
+       },
+       "decided_by": {
+        "default": "human",
+        "enum": [
+         "human",
+         "automation"
+        ],
+        "title": "Decided By",
+        "type": "string"
+       },
+       "route": {
+        "default": "desktop_run_it",
+        "enum": [
+         "desktop_run_it",
+         "decision_portal",
+         "local_cli",
+         "webhook",
+         "mcp"
+        ],
+        "title": "Route",
+        "type": "string"
+       },
+       "approver_kind": {
+        "enum": [
+         "cloud_user",
+         "unauthenticated"
+        ],
+        "title": "Approver Kind",
+        "type": "string"
+       },
+       "approver_id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Approver Id"
+       },
+       "auth_method": {
+        "enum": [
+         "cloud_aal2",
+         "cloud_aal1",
+         "none"
+        ],
+        "title": "Auth Method",
+        "type": "string"
+       },
+       "approver": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ApproverIdentityV1"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       }
+      },
+      "required": [
+       "step_id",
+       "request_sha256",
+       "answer_sha256",
+       "decision",
+       "approver_kind",
+       "auth_method"
+      ],
+      "title": "ItemApprovalRef",
+      "type": "object"
+     },
+     "ItemDecisionKind": {
+      "description": "What happened to one item under its approval mode.",
+      "enum": [
+       "no_person",
+       "approval_required",
+       "stop_before_saving",
+       "problem",
+       "not_gated",
+       "approved",
+       "declined"
+      ],
+      "title": "ItemDecisionKind",
+      "type": "string"
+     },
+     "OffReason": {
+      "description": "Why the switch turned off (design section 7.6). Closed set.",
+      "enum": [
+       "uncertain_result",
+       "wrong_item_found",
+       "too_many_problems",
+       "screen_changed",
+       "record_check_lost",
+       "spot_checks_overdue",
+       "version_changed",
+       "environment_changed",
+       "admission_lost",
+       "setup_lapsed",
+       "turned_off"
+      ],
+      "title": "OffReason",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The per-item approval block stored in the run report (design 10).\n\nPHI-free: codes, counts, digests and step ids only. The model enforces the\nsafety rule at the evidence boundary: an item can be recorded as saved\nwithout a person only in ``problems_only`` mode, only after at least one\nsave passed every pre-check, and only when both post-checks passed.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.approval-mode-item/v1",
+      "default": "openadapt.approval-mode-item/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "mode": {
+      "$ref": "#/$defs/ApprovalMode"
+     },
+     "channel": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Channel"
+     },
+     "switch_id": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Switch Id"
+     },
+     "switch_record_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Switch Record Sha256"
+     },
+     "item_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Item Checks",
+      "type": "array"
+     },
+     "pre_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Pre Checks",
+      "type": "array"
+     },
+     "post_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Post Checks",
+      "type": "array"
+     },
+     "saves_without_person": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Saves Without Person",
+      "type": "integer"
+     },
+     "gated_step_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Gated Step Id"
+     },
+     "decision": {
+      "$ref": "#/$defs/ItemDecisionKind"
+     },
+     "decision_reason": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Decision Reason"
+     },
+     "needs_person": {
+      "title": "Needs Person",
+      "type": "boolean"
+     },
+     "counts_toward_problems": {
+      "default": false,
+      "title": "Counts Toward Problems",
+      "type": "boolean"
+     },
+     "switch_off_reason": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/OffReason"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "switch_log_recorded": {
+      "default": false,
+      "title": "Switch Log Recorded",
+      "type": "boolean"
+     },
+     "approvals": {
+      "items": {
+       "$ref": "#/$defs/ItemApprovalRef"
+      },
+      "title": "Approvals",
+      "type": "array"
+     }
+    },
+    "required": [
+     "mode",
+     "decision",
+     "needs_person"
+    ],
+    "title": "ApprovalModeItemEvidence",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "ApprovalMode": {
+      "description": "Whether a person approves an item before it is saved.",
+      "enum": [
+       "each_item",
+       "problems_only",
+       "not_gated"
+      ],
+      "title": "ApprovalMode",
+      "type": "string"
+     },
+     "CheckOutcome": {
+      "additionalProperties": false,
+      "description": "The result of one named check, with a closed-vocabulary detail code.",
+      "properties": {
+       "code": {
+        "enum": [
+         "channel",
+         "inputs_strict",
+         "inputs_supplied",
+         "not_a_retry",
+         "record_key_not_recent",
+         "deployment_config",
+         "switch_lease",
+         "not_resumed",
+         "switch_on",
+         "signed_in_user",
+         "right_record",
+         "same_screens",
+         "record_check_ready",
+         "verified",
+         "whole_run_clean",
+         "each_item",
+         "gate_error",
+         "switch_log",
+         "dry_run"
+        ],
+        "title": "Code",
+        "type": "string"
+       },
+       "passed": {
+        "title": "Passed",
+        "type": "boolean"
+       },
+       "detail": {
+        "default": "ok",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "title": "Detail",
+        "type": "string"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       }
+      },
+      "required": [
+       "code",
+       "passed"
+      ],
+      "title": "CheckOutcome",
+      "type": "object"
+     },
+     "ItemApprovalRef": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "ItemDecisionKind": {
+      "description": "What happened to one item under its approval mode.",
+      "enum": [
+       "no_person",
+       "approval_required",
+       "stop_before_saving",
+       "problem",
+       "not_gated",
+       "approved",
+       "declined"
+      ],
+      "title": "ItemDecisionKind",
+      "type": "string"
+     },
+     "OffReason": {
+      "description": "Why the switch turned off (design section 7.6). Closed set.",
+      "enum": [
+       "uncertain_result",
+       "wrong_item_found",
+       "too_many_problems",
+       "screen_changed",
+       "record_check_lost",
+       "spot_checks_overdue",
+       "version_changed",
+       "environment_changed",
+       "admission_lost",
+       "setup_lapsed",
+       "turned_off"
+      ],
+      "title": "OffReason",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The per-item approval block stored in the run report (design 10).\n\nPHI-free: codes, counts, digests and step ids only. The model enforces the\nsafety rule at the evidence boundary: an item can be recorded as saved\nwithout a person only in ``problems_only`` mode, only after at least one\nsave passed every pre-check, and only when both post-checks passed.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.approval-mode-item/v1",
+      "default": "openadapt.approval-mode-item/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "mode": {
+      "$ref": "#/$defs/ApprovalMode"
+     },
+     "channel": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Channel"
+     },
+     "switch_id": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Switch Id"
+     },
+     "switch_record_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Switch Record Sha256"
+     },
+     "item_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Item Checks",
+      "type": "array"
+     },
+     "pre_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Pre Checks",
+      "type": "array"
+     },
+     "post_checks": {
+      "items": {
+       "$ref": "#/$defs/CheckOutcome"
+      },
+      "title": "Post Checks",
+      "type": "array"
+     },
+     "saves_without_person": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Saves Without Person",
+      "type": "integer"
+     },
+     "gated_step_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Gated Step Id"
+     },
+     "decision": {
+      "$ref": "#/$defs/ItemDecisionKind"
+     },
+     "decision_reason": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Decision Reason"
+     },
+     "needs_person": {
+      "title": "Needs Person",
+      "type": "boolean"
+     },
+     "counts_toward_problems": {
+      "default": false,
+      "title": "Counts Toward Problems",
+      "type": "boolean"
+     },
+     "switch_off_reason": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/OffReason"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "switch_log_recorded": {
+      "default": false,
+      "title": "Switch Log Recorded",
+      "type": "boolean"
+     },
+     "approvals": {
+      "items": {
+       "$ref": "#/$defs/ItemApprovalRef"
+      },
+      "title": "Approvals",
+      "type": "array"
+     }
+    },
+    "required": [
+     "mode",
+     "decision",
+     "needs_person"
+    ],
+    "title": "ApprovalModeItemEvidence",
+    "type": "object"
+   }
+  },
+  "CheckOutcome": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "The result of one named check, with a closed-vocabulary detail code.",
+    "properties": {
+     "code": {
+      "enum": [
+       "channel",
+       "inputs_strict",
+       "inputs_supplied",
+       "not_a_retry",
+       "record_key_not_recent",
+       "deployment_config",
+       "switch_lease",
+       "not_resumed",
+       "switch_on",
+       "signed_in_user",
+       "right_record",
+       "same_screens",
+       "record_check_ready",
+       "verified",
+       "whole_run_clean",
+       "each_item",
+       "gate_error",
+       "switch_log",
+       "dry_run"
+      ],
+      "title": "Code",
+      "type": "string"
+     },
+     "passed": {
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "detail": {
+      "default": "ok",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Detail",
+      "type": "string"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     }
+    },
+    "required": [
+     "code",
+     "passed"
+    ],
+    "title": "CheckOutcome",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "The result of one named check, with a closed-vocabulary detail code.",
+    "properties": {
+     "code": {
+      "enum": [
+       "channel",
+       "inputs_strict",
+       "inputs_supplied",
+       "not_a_retry",
+       "record_key_not_recent",
+       "deployment_config",
+       "switch_lease",
+       "not_resumed",
+       "switch_on",
+       "signed_in_user",
+       "right_record",
+       "same_screens",
+       "record_check_ready",
+       "verified",
+       "whole_run_clean",
+       "each_item",
+       "gate_error",
+       "switch_log",
+       "dry_run"
+      ],
+      "title": "Code",
+      "type": "string"
+     },
+     "passed": {
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "detail": {
+      "default": "ok",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Detail",
+      "type": "string"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     }
+    },
+    "required": [
+     "code",
+     "passed"
+    ],
+    "title": "CheckOutcome",
+    "type": "object"
+   }
+  },
+  "ItemApprovalRef": {
+   "validation": {
+    "$defs": {
+     "ApproverAuth": {
+      "enum": [
+       "cloud_user",
+       "unauthenticated",
+       "policy",
+       "local_cli",
+       "signed_webhook",
+       "mcp_session"
+      ],
+      "title": "ApproverAuth",
+      "type": "string"
+     },
+     "ApproverIdentityV1": {
+      "additionalProperties": false,
+      "description": "Mirror of ``openadapt_types.ApproverIdentityV1``.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.approver-identity/v1",
+        "default": "openadapt.approver-identity/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "kind": {
+        "$ref": "#/$defs/ApproverKind"
+       },
+       "auth": {
+        "$ref": "#/$defs/ApproverAuth"
+       },
+       "id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Id"
+       },
+       "auth_method": {
+        "default": "none",
+        "enum": [
+         "cloud_aal2",
+         "cloud_aal1",
+         "none"
+        ],
+        "title": "Auth Method",
+        "type": "string"
+       },
+       "policy_ref": {
+        "anyOf": [
+         {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Policy Ref"
+       },
+       "on_behalf_of": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "On Behalf Of"
+       }
+      },
+      "required": [
+       "kind",
+       "auth"
+      ],
+      "title": "ApproverIdentityV1",
+      "type": "object"
+     },
+     "ApproverKind": {
+      "enum": [
+       "person",
+       "rule",
+       "agent",
+       "system"
+      ],
+      "title": "ApproverKind",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One person's answer to one item-approval request, as PHI-free codes.\n\nThe approver is a Cloud user id (never a name), or ``unauthenticated``\nwhen the person approved in Desktop while signed out. Digests bind the\nexact request the person saw and the exact answer file.",
+    "properties": {
+     "step_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Step Id",
+      "type": "string"
+     },
+     "request_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Sha256",
+      "type": "string"
+     },
+     "answer_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Answer Sha256",
+      "type": "string"
+     },
+     "decision": {
+      "enum": [
+       "approved",
+       "declined"
+      ],
+      "title": "Decision",
+      "type": "string"
+     },
+     "decline_reason": {
+      "anyOf": [
+       {
+        "enum": [
+         "wrong_values",
+         "wrong_record",
+         "screen_problem"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Decline Reason"
+     },
+     "decided_by": {
+      "default": "human",
+      "enum": [
+       "human",
+       "automation"
+      ],
+      "title": "Decided By",
+      "type": "string"
+     },
+     "route": {
+      "default": "desktop_run_it",
+      "enum": [
+       "desktop_run_it",
+       "decision_portal",
+       "local_cli",
+       "webhook",
+       "mcp"
+      ],
+      "title": "Route",
+      "type": "string"
+     },
+     "approver_kind": {
+      "enum": [
+       "cloud_user",
+       "unauthenticated"
+      ],
+      "title": "Approver Kind",
+      "type": "string"
+     },
+     "approver_id": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Approver Id"
+     },
+     "auth_method": {
+      "enum": [
+       "cloud_aal2",
+       "cloud_aal1",
+       "none"
+      ],
+      "title": "Auth Method",
+      "type": "string"
+     },
+     "approver": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ApproverIdentityV1"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "step_id",
+     "request_sha256",
+     "answer_sha256",
+     "decision",
+     "approver_kind",
+     "auth_method"
+    ],
+    "title": "ItemApprovalRef",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "ItemContext": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "What the caller knows about one item before it runs (design 7.2).\n\nDesktop fills this from its own list parsing, work-item history and lease.\nEvery field defaults to the value that fails its check, so an omitted\nfield sends the item to per-item approval rather than past a person.",
+    "properties": {
+     "channel": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Channel"
+     },
+     "header_maps_every_input": {
+      "default": false,
+      "title": "Header Maps Every Input",
+      "type": "boolean"
+     },
+     "rows_well_formed": {
+      "default": false,
+      "title": "Rows Well Formed",
+      "type": "boolean"
+     },
+     "values_pass_types": {
+      "default": false,
+      "title": "Values Pass Types",
+      "type": "boolean"
+     },
+     "is_retry": {
+      "default": true,
+      "title": "Is Retry",
+      "type": "boolean"
+     },
+     "allow_repeat": {
+      "default": true,
+      "title": "Allow Repeat",
+      "type": "boolean"
+     },
+     "record_key_seen_recently": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Record Key Seen Recently"
+     },
+     "caller_supplied_configuration": {
+      "default": true,
+      "title": "Caller Supplied Configuration",
+      "type": "boolean"
+     },
+     "holds_switch_lease": {
+      "default": false,
+      "title": "Holds Switch Lease",
+      "type": "boolean"
+     }
+    },
+    "title": "ItemContext",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "What the caller knows about one item before it runs (design 7.2).\n\nDesktop fills this from its own list parsing, work-item history and lease.\nEvery field defaults to the value that fails its check, so an omitted\nfield sends the item to per-item approval rather than past a person.",
+    "properties": {
+     "channel": {
+      "anyOf": [
+       {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Channel"
+     },
+     "header_maps_every_input": {
+      "default": false,
+      "title": "Header Maps Every Input",
+      "type": "boolean"
+     },
+     "rows_well_formed": {
+      "default": false,
+      "title": "Rows Well Formed",
+      "type": "boolean"
+     },
+     "values_pass_types": {
+      "default": false,
+      "title": "Values Pass Types",
+      "type": "boolean"
+     },
+     "is_retry": {
+      "default": true,
+      "title": "Is Retry",
+      "type": "boolean"
+     },
+     "allow_repeat": {
+      "default": true,
+      "title": "Allow Repeat",
+      "type": "boolean"
+     },
+     "record_key_seen_recently": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Record Key Seen Recently"
+     },
+     "caller_supplied_configuration": {
+      "default": true,
+      "title": "Caller Supplied Configuration",
+      "type": "boolean"
+     },
+     "holds_switch_lease": {
+      "default": false,
+      "title": "Holds Switch Lease",
+      "type": "boolean"
+     }
+    },
+    "title": "ItemContext",
+    "type": "object"
+   }
+  },
+  "SwitchThresholds": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Conservative public defaults (design 7.6). Deployments may only tighten.\n\nTuned values are private configuration and stay out of this repository;\nthe validator refuses any value looser than these defaults.",
+    "properties": {
+     "status_max_age_s": {
+      "default": 900,
+      "exclusiveMinimum": 0,
+      "maximum": 900,
+      "title": "Status Max Age S",
+      "type": "integer"
+     },
+     "problems_in_a_row": {
+      "default": 3,
+      "maximum": 3,
+      "minimum": 1,
+      "title": "Problems In A Row",
+      "type": "integer"
+     },
+     "problems_in_window": {
+      "default": 5,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Problems In Window",
+      "type": "integer"
+     },
+     "problems_window": {
+      "default": 20,
+      "maximum": 1000,
+      "minimum": 20,
+      "title": "Problems Window",
+      "type": "integer"
+     }
+    },
+    "title": "SwitchThresholds",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Conservative public defaults (design 7.6). Deployments may only tighten.\n\nTuned values are private configuration and stay out of this repository;\nthe validator refuses any value looser than these defaults.",
+    "properties": {
+     "status_max_age_s": {
+      "default": 900,
+      "exclusiveMinimum": 0,
+      "maximum": 900,
+      "title": "Status Max Age S",
+      "type": "integer"
+     },
+     "problems_in_a_row": {
+      "default": 3,
+      "maximum": 3,
+      "minimum": 1,
+      "title": "Problems In A Row",
+      "type": "integer"
+     },
+     "problems_in_window": {
+      "default": 5,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Problems In Window",
+      "type": "integer"
+     },
+     "problems_window": {
+      "default": 20,
+      "maximum": 1000,
+      "minimum": 20,
+      "title": "Problems Window",
+      "type": "integer"
+     }
+    },
+    "title": "SwitchThresholds",
+    "type": "object"
+   }
+  }
+ }
+}
