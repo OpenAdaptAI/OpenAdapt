@@ -51,8 +51,14 @@ def _registry(*signers: SoftwareSigner) -> list[r.RoleKey]:
 
 
 @pytest.fixture()
-def signer() -> SoftwareSigner:
-    return _signer()
+def signer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SoftwareSigner:
+    """This computer's receipt key, in a throwaway seal home."""
+    from openadapt_flow.offline_seal import signer_for
+
+    home = tmp_path / "seal-home"
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(home))
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY", raising=False)
+    return signer_for(home)
 
 
 @pytest.fixture()
@@ -64,8 +70,12 @@ def run_dir(tmp_path: Path, signer: SoftwareSigner) -> Path:
     return run
 
 
+def _bound(payload, run_dir, signer, **kwargs):
+    return h.make_handoff(payload, h.receipt_for_run(run_dir), signer=signer, **kwargs)
+
+
 def test_a_good_handoff_says_who_signed_and_what_that_does_not_prove(run_dir, signer):
-    doc = h.make_handoff({"outcome": "done", "count": 3}, h.receipt_for_run(run_dir))
+    doc = _bound({"outcome": "done", "count": 3}, run_dir, signer)
     verdict = h.verify_handoff(doc, _registry(signer))
     assert verdict.ok and verdict.integrity == "intact"
     assert verdict.signer_roles == ["this_computer"]
@@ -76,24 +86,36 @@ def test_a_good_handoff_says_who_signed_and_what_that_does_not_prove(run_dir, si
     # The honesty rule: a signature proves who signed, not that it is true.
     assert verdict.what_this_proves[0] == h.WHAT_A_SIGNATURE_PROVES
     assert "does not prove" in verdict.what_this_proves[0]
-    # The receipt signs the report, not this payload.
-    assert verdict.payload["bound"] is False
-    assert verdict.payload["note"] == h.NOT_BOUND
+    # The sender's key bound these exact bytes as the payload subject.
+    assert verdict.payload["bound"] is True
+    assert verdict.payload["media_type"] == "application/json"
     assert verdict.confirmations == [] and verdict.independent_confirmations == 0
 
 
-def test_the_signed_report_itself_is_a_bound_payload(run_dir, signer):
-    report = (run_dir / "report.json").read_bytes()
-    doc = h.make_handoff(report, h.receipt_for_run(run_dir), name="report.json")
+def test_binding_keeps_the_signer_and_names_the_payload(run_dir, signer):
+    original = h.receipt_for_run(run_dir)
+    doc = _bound(b"%PDF-1.7 claim", run_dir, signer, media_type="application/pdf")
+    statement = json.loads(base64.b64decode(doc["receipt"]["payload"]))
+    (payload,) = [s for s in statement["subject"] if s["name"] == "payload"]
+    assert payload["media_type"] == "application/pdf"
+    assert [s["keyid"] for s in doc["receipt"]["signatures"]] == [
+        s["keyid"] for s in original["signatures"]
+    ]
+    # A key that didn't sign the run can't bind a payload to it.
+    with pytest.raises(h.HandoffError, match="didn't sign that receipt"):
+        h.make_handoff({"x": 1}, original, signer=_signer())
+
+
+def test_an_unbound_receipt_is_refused_once_the_payload_is_checked(run_dir, signer):
+    """Missing: a receipt that names no payload doesn't vouch for this one."""
+    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
     verdict = h.verify_handoff(doc, _registry(signer))
-    assert verdict.payload["bound"] is True
-    assert verdict.payload["bound_to"] == "report.json"
+    assert not verdict.ok and verdict.reason == "payload_not_bound"
 
 
 def test_a_tampered_receipt_is_refused(run_dir, signer):
-    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
+    doc = _bound({"outcome": "done"}, run_dir, signer)
     statement = json.loads(base64.b64decode(doc["receipt"]["payload"]))
-    statement["predicate"]["outcome"] = "VERIFIED"
     statement["predicate"]["model_calls"] = 7
     doc["receipt"]["payload"] = base64.b64encode(
         r.canonical_json(statement).encode()
@@ -106,26 +128,27 @@ def test_a_tampered_receipt_is_refused(run_dir, signer):
     ]
 
 
-def test_an_unknown_signer_is_refused_even_when_the_signature_is_valid(run_dir):
-    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
+def test_an_unknown_signer_is_refused_even_when_the_signature_is_valid(run_dir, signer):
+    doc = _bound({"outcome": "done"}, run_dir, signer)
     verdict = h.verify_handoff(doc, _registry(_signer()))
     assert not verdict.ok and verdict.reason == "unknown_signer"
     assert verdict.signer_lines == [r.UNKNOWN_SIGNER_LINE]
     assert h.verify_handoff(doc, []).reason == "unknown_signer"
 
 
-def test_a_swapped_payload_is_caught_or_reported_unbound(run_dir, signer):
-    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
+def test_a_swapped_payload_is_refused(run_dir, signer):
+    """Mismatched: the receipt signed other bytes than the ones received."""
+    doc = _bound({"outcome": "done"}, run_dir, signer)
     # Swap the content but keep the old digest: the wrapper no longer matches.
     swapped = json.loads(json.dumps(doc))
     swapped["payload"]["content"] = {"outcome": "done", "amount": 1_000_000}
     verdict = h.verify_handoff(swapped, _registry(signer))
     assert not verdict.ok and verdict.reason == "payload_mismatch"
-    # Re-staple the receipt to a new payload with its own digest: the receipt
-    # still verifies, and the verdict says nothing ties the two together.
+    # Re-staple the bound receipt to a new payload with its own digest: the
+    # receipt names other bytes, so it is refused too.
     restapled = h.make_handoff({"outcome": "done", "amount": 1_000_000}, doc["receipt"])
     verdict = h.verify_handoff(restapled, _registry(signer))
-    assert verdict.ok and verdict.payload["bound"] is False
+    assert not verdict.ok and verdict.reason == "payload_mismatch"
 
 
 def test_private_openings_never_travel(run_dir):
@@ -138,7 +161,7 @@ def test_private_openings_never_travel(run_dir):
 
 
 def test_a_handoff_with_extra_fields_or_another_schema_is_refused(run_dir, signer):
-    doc = h.make_handoff({"x": 1}, h.receipt_for_run(run_dir))
+    doc = _bound({"x": 1}, run_dir, signer)
     assert h.verify_handoff({**doc, "signer_role": "openadapt_cloud"}, []).reason == (
         "malformed"
     )
@@ -149,20 +172,23 @@ def test_a_handoff_with_extra_fields_or_another_schema_is_refused(run_dir, signe
 def test_a_detached_handoff_checks_the_file_beside_it(run_dir, signer, tmp_path):
     attachment = tmp_path / "claim.pdf"
     attachment.write_bytes(b"%PDF-1.7 synthetic")
-    doc = h.make_handoff(
+    doc = _bound(
         attachment.read_bytes(),
-        h.receipt_for_run(run_dir),
+        run_dir,
+        signer,
         name=str(attachment),
         detached=True,
+        media_type="application/pdf",
     )
     assert "content" not in doc["payload"] and "content_base64" not in doc["payload"]
     assert doc["payload"]["name"] == "claim.pdf"
     good = h.verify_handoff(doc, _registry(signer), payload=attachment.read_bytes())
-    assert good.ok and good.payload["present"] is True
+    assert good.ok and good.payload["bound"] is True
     bad = h.verify_handoff(doc, _registry(signer), payload=b"another file")
     assert not bad.ok and bad.reason == "payload_mismatch"
     missing = h.verify_handoff(doc, _registry(signer))
     assert missing.ok and missing.payload["present"] is False
+    assert missing.payload["bound"] is False
 
 
 def _vector(name: str) -> dict:
@@ -184,7 +210,8 @@ def _vector_registry(case: dict) -> list[r.RoleKey]:
 )
 def test_confirmation_lines_come_from_the_shared_verifier(name, independent):
     case = _vector(name)
-    doc = h.make_handoff({"outcome": "done"}, case["document"])
+    # The vectors' keys aren't ours to bind with, so the payload stays detached.
+    doc = h.make_handoff(b"claim", case["document"], detached=True)
     verdict = h.verify_handoff(doc, _vector_registry(case))
     assert verdict.ok
     assert [c["independent"] for c in verdict.confirmations] == [independent]
@@ -202,7 +229,7 @@ def test_confirmation_lines_come_from_the_shared_verifier(name, independent):
 
 def test_a_tampered_confirmation_is_refused():
     case = _vector("confirmation-tampered.json")
-    doc = h.make_handoff({"outcome": "done"}, case["document"])
+    doc = h.make_handoff(b"claim", case["document"], detached=True)
     assert h.verify_handoff(doc, _vector_registry(case)).reason == "bad_signature"
 
 
@@ -246,7 +273,7 @@ def test_cli_key_and_trust_pin_the_other_party_by_name(run_dir, signer, tmp_path
     assert flow_main(args) == 0
     registry = r.parse_registry(json.loads(keys.read_text()))
     assert [(k.role, k.org) for k in registry] == [("customer_key", "Example Clinic")]
-    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
+    doc = _bound({"outcome": "done"}, run_dir, signer)
     assert h.verify_handoff(doc, registry).signer_lines == ["Signed by Example Clinic's key"]
     bad = ["handoff", "trust", str(key), "--org", "x" * 80, "--keys", str(keys)]
     assert flow_main(bad) == 2
@@ -317,7 +344,7 @@ def test_decide_accepts_only_what_the_receivers_own_record_shows(run_dir, signer
         return h.ReceiverRecord("recorded_as_intended")
 
     def decision(claim, check=own_record):
-        return h.decide(h.make_handoff(claim, receipt), registry, check)
+        return h.decide(h.make_handoff(claim, receipt, signer=signer), registry, check)
 
     true = decision({"ref": "ref-1", "note": "note A"})
     assert true.decision == "accept" and true.what_this_proves[-1] == h.ACCEPT_LINE
@@ -337,7 +364,7 @@ def test_decide_accepts_only_what_the_receivers_own_record_shows(run_dir, signer
 
     assert decision({"ref": "ref-1", "note": "note A"}, broken).decision == "reject"
     # No own read: never accepted on the receipt alone.
-    unchecked = h.decide(h.make_handoff({"ref": "ref-1"}, receipt), registry)
+    unchecked = h.decide(h.make_handoff({"ref": "ref-1"}, receipt, signer=signer), registry)
     assert unchecked.decision == "unchecked" and unchecked.what_this_proves[-1] == h.UNCHECKED_LINE
     # A refused receipt is rejected before the receiver reads anything.
     calls = []
@@ -359,3 +386,22 @@ def test_the_handoff_group_is_shared_whichever_module_registers_first():
         if not list_first:
             handoff_group(sub).add_parser("list")
         assert sorted(handoff_group(sub).choices) == ["key", "list", "send", "trust", "verify"]
+
+
+@pytest.mark.parametrize(
+    ("name", "reason"),
+    [
+        ("payload-bound.json", None),
+        ("payload-mismatch.json", "payload_mismatch"),
+        ("payload-missing.json", "payload_not_bound"),
+    ],
+)
+def test_the_shared_payload_vectors_give_the_same_answer_through_a_handoff(name, reason):
+    case = _vector(name)
+    received = base64.b64decode(case["received"])
+    doc = h.make_handoff(received, case["document"], detached=True)
+    verdict = h.verify_handoff(doc, _vector_registry(case), payload=received)
+    assert verdict.reason == reason
+    assert verdict.signer_lines == case["expected"]["signer_lines"]
+    if reason is None:
+        assert verdict.ok and verdict.payload["bound"] is True

@@ -25,8 +25,15 @@ The format is described in
   the claim is true. Only a confirmation read from the other party's own
   system is independent of the sender.
 
-The receipt signs the run, not the payload, unless the payload is the signed
-report itself. The verdict says when nothing ties the payload to the receipt.
+`send` binds the payload to the receipt. It adds the payload's digest and
+media type as the receipt's `payload` subject and signs again with the key
+that signed the run. A receiver holding the payload refuses two kinds of
+receipt:
+
+- one that names no payload (`payload_not_bound`);
+- one that names other bytes (`payload_mismatch`).
+
+`--unbound` attaches the run's receipt as it is.
 
 ## A signature doesn't make the claim true
 

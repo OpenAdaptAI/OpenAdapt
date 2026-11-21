@@ -36,10 +36,12 @@ Every verifier MUST tell its user the following, in its own words:
    changed since. It does **not** prove that the receipt's claims are true.
 2. The signer's role comes from the **receiver's** pinned key registry, never
    from the handoff document or the envelope.
-3. The receipt signs the **run** (its report and bundle digests), not the
-   handoff payload. The payload is **bound** only when its SHA-256 equals a
-   signed subject digest. Otherwise the verdict MUST say that nothing ties the
-   payload to the receipt.
+3. The receipt binds the handoff payload only through a `payload` subject:
+   `{"name": "payload", "digest": {"sha256": ...}, "media_type": ...}`.
+   The sender adds that subject and signs again with the key that signed the
+   run, which never changes who signed. A receiver that holds the payload
+   MUST refuse a receipt with no `payload` subject (`payload_not_bound`) or
+   with another digest (`payload_mismatch`).
 4. A confirmation counts as **independent of the sender** only when its
    signed `read_method` reads the other party's own system (`portal_read_back`
    or `api`). Any other claim rests on the signer's word.
@@ -103,8 +105,14 @@ The result is a refusal, never a partial pass.
      consistent, and free of embedded content.
 3. **Check the payload**:
    - recompute its SHA-256 from the inline content or the detached file;
-   - refuse on mismatch (`payload_mismatch`);
-   - mark it bound only if it equals a signed `subject` digest.
+   - refuse when it doesn't match the document's own `payload.sha256`
+     (`payload_mismatch`);
+   - check the bytes against the receipt's `payload` subject, as
+     `verify_receipt(..., received=bytes)` does in the reference verifier.
+     A receipt with no `payload` subject is refused (`payload_not_bound`),
+     and one with a different digest is refused (`payload_mismatch`);
+   - a detached payload the receiver doesn't have is reported as not
+     checked, never as bound.
 4. **Report** the verdict (section 5).
 
 ## 5. The verdict
@@ -119,7 +127,7 @@ The result is a refusal, never a partial pass.
   "outcome": "VERIFIED",
   "checks": {"passed": [], "incomplete": [], "not_checked": ["field_values"],
              "writes": {"confirmed": 1, "refuted": 0, "not_checked": 0}},
-  "payload": {"bound": false, "note": "The receipt signs the run's report, not this payload. ..."},
+  "payload": {"bound": true, "media_type": "application/json", "note": "The receipt's signer bound these exact payload bytes: ..."},
   "confirmations": [{"state": "recorded_as_intended", "read_method": "api", "independent": true}],
   "confirmation_lines": ["Confirmed in the other party's system"],
   "independent_confirmations": 1,

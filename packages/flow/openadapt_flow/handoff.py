@@ -19,10 +19,11 @@ What the verdict says, and why:
 * A valid signature proves **who signed** the receipt (the role comes from
   the verifier's pinned registry, never from the document) and that the
   receipt is unchanged. It does not prove the receipt's claims are true.
-* The receipt signs the run (its report and bundle), not the handoff payload.
-  The payload counts as **bound** only when its SHA-256 equals a signed
-  subject digest. Otherwise anyone could staple this receipt to another
-  payload, and the verdict says so.
+* The sender binds the payload: :func:`bind_payload` adds it as the
+  receipt's ``payload`` subject and signs again with the key that signed the
+  run. A receiver holding the payload refuses a receipt that names other
+  bytes (``payload_mismatch``) or none (``payload_not_bound``), so a receipt
+  can't be stapled to another payload.
 * A confirmation line counts as **independent of the sender** only when it
   was read from the other party's system (``read_method`` ``portal_read_back``
   or ``api``). Everything else is the sender's own word.
@@ -52,11 +53,6 @@ MAX_INLINE_BYTES = 1_048_576
 WHAT_A_SIGNATURE_PROVES = (
     "A valid signature proves who signed this receipt and that it has not "
     "changed since. It does not prove that what the receipt says is true."
-)
-NOT_BOUND = (
-    "The receipt signs the run's report, not this payload. Nothing ties this "
-    "payload to the receipt: anyone could attach the same receipt to another "
-    "payload."
 )
 
 
@@ -114,13 +110,20 @@ def make_handoff(
     name: Optional[str] = None,
     media_type: Optional[str] = None,
     detached: bool = False,
+    signer: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Attach ``receipt`` to ``payload`` as an ``openadapt.handoff/v1`` document.
 
     ``detached`` leaves the payload out and keeps only its digest, for a file
-    sent beside the document.
+    sent beside the document. With ``signer`` (the key that signed the run's
+    receipt), the receipt is re-signed with the payload as its ``payload``
+    subject (:func:`bind_payload`), so the receiver can check that these are
+    the bytes the sender handed off. Without it the receipt names no payload
+    and a receiver's check refuses it (``payload_not_bound``).
     """
     data, default_type = payload_bytes(payload)
+    if signer is not None:
+        receipt = bind_payload(receipt, data, media_type or default_type, signer)
     doc_payload: dict[str, Any] = {
         "media_type": media_type or default_type,
         "sha256": _sha256(data),
@@ -142,6 +145,58 @@ def make_handoff(
         "payload": doc_payload,
         "receipt": _check_receipt_document(receipt),
     }
+
+
+def _subject_media_type(media_type: str) -> str:
+    from typing import get_args
+
+    from openadapt_types import receipt as r
+
+    essence = media_type.split(";", 1)[0].strip().lower()
+    allowed = get_args(r.PayloadMediaType)
+    return essence if essence in allowed else "application/octet-stream"
+
+
+def bind_payload(
+    receipt: Mapping[str, Any], data: bytes, media_type: str, signer: Any
+) -> dict[str, Any]:
+    """Re-sign a run's receipt with ``data`` as its ``payload`` subject.
+
+    Only a key that already signed the receipt may bind it, so binding never
+    changes who signed. Any other signature (a Cloud countersignature) covers
+    the old bytes and is dropped; it can be added again over the new ones.
+    A public card keeps its openings, which still match the commitments.
+    """
+    from openadapt_types import receipt as r
+
+    receipt = _check_receipt_document(receipt)
+    envelope = receipt["envelope"] if r.is_receipt_card(receipt) else receipt
+    kid = r.key_id(signer.public_raw())
+    if kid not in {s.get("keyid") for s in envelope.get("signatures") or []}:
+        raise HandoffError(
+            "this computer's key didn't sign that receipt, so it can't bind a "
+            "payload to it"
+        )
+    try:
+        statement = r.loads_strict(base64.b64decode(str(envelope["payload"])))
+    except ValueError:
+        raise HandoffError("the receipt's statement is not readable") from None
+    subjects = [s for s in statement.get("subject") or [] if s.get("name") != "payload"]
+    subjects.append(
+        {
+            "name": "payload",
+            "digest": {"sha256": _sha256(data)},
+            "media_type": _subject_media_type(media_type),
+        }
+    )
+    statement["subject"] = subjects
+    try:
+        bound = r.sign_statement(statement, [(kid, signer.sign)])
+    except ValueError as exc:
+        raise HandoffError(f"the payload can't be bound: {exc}") from None
+    if r.is_receipt_card(receipt):
+        return {**receipt, "envelope": bound}
+    return bound
 
 
 def receipt_for_run(run_dir: Path, *, public: bool = False) -> dict[str, Any]:
@@ -297,48 +352,48 @@ def _confirmations(statement: Mapping[str, Any], result: Any) -> list[dict[str, 
     return out
 
 
-def _payload_verdict(
-    doc_payload: Mapping[str, Any],
-    statement: Mapping[str, Any],
-    supplied: Optional[bytes],
-) -> tuple[dict[str, Any], Optional[str]]:
-    """Whether the payload is what the document says, and whether it is signed."""
-    declared = doc_payload.get("sha256")
-    actual: Optional[str] = None
+def _received_bytes(
+    doc_payload: Mapping[str, Any], supplied: Optional[bytes]
+) -> tuple[Optional[bytes], Optional[str]]:
+    """The payload bytes the receiver has, checked against the handoff's digest."""
+    data: Optional[bytes] = None
     if supplied is not None:
-        actual = _sha256(supplied)
+        data = supplied
     elif "content_base64" in doc_payload:
         try:
-            actual = _sha256(
-                base64.b64decode(str(doc_payload["content_base64"]), validate=True)
-            )
+            data = base64.b64decode(str(doc_payload["content_base64"]), validate=True)
         except ValueError:
-            return {}, "the inline payload is not base64"
+            return None, "the inline payload is not base64"
     elif "content" in doc_payload:
-        actual = _sha256(_canonical(doc_payload["content"]))
-    if actual is not None and actual != declared:
-        return {}, "the payload does not match its digest in the handoff"
-    subjects = {
-        s.get("digest", {}).get("sha256"): s.get("name")
-        for s in statement.get("subject") or []
-        if isinstance(s, Mapping)
-    }
-    subject = subjects.get(actual or declared) if (actual or declared) else None
+        data = _canonical(doc_payload["content"])
+    if data is not None and _sha256(data) != doc_payload.get("sha256"):
+        return None, "the payload does not match its digest in the handoff"
+    return data, None
+
+
+def _payload_verdict(
+    doc_payload: Mapping[str, Any], statement: Mapping[str, Any], data: Optional[bytes]
+) -> dict[str, Any]:
+    bound = next(
+        (s for s in statement.get("subject") or [] if s.get("name") == "payload"), None
+    )
     result: dict[str, Any] = {
-        "sha256": declared,
-        "present": actual is not None,
-        "bound": subject is not None and actual is not None,
-        "bound_to": subject if actual is not None else None,
+        "sha256": doc_payload.get("sha256"),
+        "present": data is not None,
+        "bound": data is not None,
+        "media_type": (bound or {}).get("media_type"),
     }
-    if result["bound"]:
-        result["note"] = f"The payload is the signed {subject} itself."
-    elif actual is None:
+    if data is not None:
         result["note"] = (
-            "The payload was not supplied, so it could not be checked. " + NOT_BOUND
+            "The receipt's signer bound these exact payload bytes: they are what "
+            "the sender handed off."
         )
     else:
-        result["note"] = NOT_BOUND
-    return result, None
+        result["note"] = (
+            "The payload was not supplied, so it could not be checked against "
+            "the receipt."
+        )
+    return result
 
 
 def verify_handoff(
@@ -374,13 +429,16 @@ def verify_handoff(
         return _refused("malformed", "a handoff has a payload and a receipt object")
     if receipt.get("schema") == r.OPENINGS_SCHEMA:
         return _refused("malformed", "a handoff never carries private openings")
-    result = r.verify_receipt(receipt, registry)
+    data, problem = _received_bytes(doc_payload, payload)
+    if problem:
+        return _refused("payload_mismatch", problem, "Not verified: " + problem)
+    # With the payload in hand, the receipt must name exactly these bytes as
+    # its payload subject (payload_not_bound, payload_mismatch otherwise).
+    result = r.verify_receipt(receipt, registry, received=data)
     if not result.ok or result.statement is None:
         return _refused(str(result.reason or "malformed"), result.detail)
     statement = result.statement
-    payload_result, problem = _payload_verdict(doc_payload, statement, payload)
-    if problem:
-        return _refused("payload_mismatch", problem, "Not verified: " + problem)
+    payload_result = _payload_verdict(doc_payload, statement, data)
     confirmations = _confirmations(statement, result)
     lines = [c["line"] for c in confirmations if c["line"]]
     independent = sum(1 for c in confirmations if c["independent"])
@@ -542,6 +600,7 @@ __all__ = [
     "RECEIVER_STATES",
     "ReceiverRecord",
     "Verdict",
+    "bind_payload",
     "decide",
     "detached_path",
     "load_registry",

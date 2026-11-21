@@ -26,8 +26,10 @@
   keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
   gives the signer role, integrity, the checks passed and not checked, and
   counterparty confirmation lines. It always says that a valid signature
-  proves who signed, not that the claim is true, and it marks the payload
-  unbound unless it is a signed subject. The private openings file never
+  proves who signed, not that the claim is true. `send` binds the payload as
+  the receipt's `payload` subject, re-signed by the run's own key, so a
+  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
+  no payload (`payload_not_bound`). The private openings file never
   travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
 - `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
   `verify_handoff`. `serve --a2a` serves the same workflows over the A2A

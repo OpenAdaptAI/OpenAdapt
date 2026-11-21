@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import socket
 import threading
@@ -94,7 +95,7 @@ def bridge(monkeypatch, bundles_root, runner_config, success_report, signer):
         runner_mod, "_run_flow_process", ReceiptWritingStub(signer, exit_code=0, report=report)
     )
     bridge = AgentBridge(bundles_root, runner_config, allow_run=True, mode="production")
-    bridge.handoffs = HandoffTools(registry=_registry(signer))
+    bridge.handoffs = HandoffTools(registry=_registry(signer), signer=signer)
     return bridge
 
 
@@ -235,6 +236,7 @@ def test_a2a_run_carries_its_receipt_and_verifies_good_tampered_unknown_and_swap
         tampered = await _send(
             a2a_url, {"skill": "verify_handoff", "handoff": _tampered(handoff)}
         )
+        # The receipt is bound to the run result; stapled to other bytes it fails.
         restapled = h.make_handoff({"outcome": "done", "amount": 10**6}, handoff["receipt"])
         swapped = await _send(a2a_url, {"skill": "verify_handoff", "handoff": restapled})
         return handoff, _verdict_from(good), _verdict_from(tampered), _verdict_from(swapped)
@@ -245,7 +247,8 @@ def test_a2a_run_carries_its_receipt_and_verifies_good_tampered_unknown_and_swap
     assert good["outcome"] == "VERIFIED"
     assert good["what_this_proves"][0] == h.WHAT_A_SIGNATURE_PROVES
     assert tampered["integrity"] == "refused" and tampered["reason"] == "bad_signature"
-    assert swapped["integrity"] == "intact" and swapped["payload"]["bound"] is False
+    assert good["payload"]["bound"] is True
+    assert swapped["integrity"] == "refused" and swapped["reason"] == "payload_mismatch"
     # Unknown signer: a receiver that pins other keys refuses the same handoff.
     other = SoftwareSigner(Ed25519PrivateKey.generate(), "generated")
     assert h.verify_handoff(handoff, _registry(other)).reason == "unknown_signer"
@@ -261,7 +264,7 @@ def test_a2a_unknown_signer_through_the_server(a2a_url, bridge, tmp_path):
         json.dumps({"execution_outcome": "VERIFIED", "results": WRITE_REPORT_RESULTS})
     )
     write_receipt_record(run, signer=other, flow_version="3.4.0")
-    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run))
+    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run), signer=other)
 
     async def scenario():
         return _verdict_from(await _send(a2a_url, {"skill": "verify_handoff", "handoff": doc}))
@@ -339,7 +342,7 @@ def test_a2a_follow_up_cannot_approve_a_run_waiting_for_a_person(
         runner_mod, "_run_flow_process", ReceiptWritingStub(signer, exit_code=1, report=halt_report)
     )
     bridge = AgentBridge(bundles_root, runner_config, allow_run=True, mode="production")
-    bridge.handoffs = HandoffTools(registry=_registry(signer))
+    bridge.handoffs = HandoffTools(registry=_registry(signer), signer=signer)
     executor = a2a_server.OpenAdaptExecutor(bridge)
     result = a2a_server.call_remote_tool(
         bridge,
@@ -440,7 +443,10 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
 
     db = sqlite3.connect(":memory:", check_same_thread=False)
     db.execute("create table referral (ref text primary key, note text)")
-    kinds = ["true"] * 10 + ["fabricated"] * 5 + ["differing"] * 5
+    # Every handoff but "unbound" binds its claim as the receipt's payload.
+    # "swapped" changes the claim after binding (mismatched); "unbound"
+    # carries a receipt that names no payload (missing).
+    kinds = ["true"] * 10 + ["fabricated"] * 4 + ["differing"] * 4 + ["swapped", "unbound"]
     workflow = next(iter(bridge.catalog))
 
     def own_record(claim):
@@ -459,6 +465,7 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
         }
     )
     signer_lines: set[tuple[str, ...]] = set()
+    reasons: dict[str, set] = {kind: set() for kind in ("true", "fabricated", "differing", "swapped", "unbound")}
     decisions: list[tuple[str, str, float]] = []
 
     class Inbox(BaseHTTPRequestHandler):
@@ -472,7 +479,9 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
             spent = time.perf_counter() - started
             kind = json.loads(body)["payload"]["content"]["kind"]
             decisions.append((kind, verdict.decision, spent))
-            signer_lines.add(tuple(verdict.signer_lines))
+            reasons[kind].add(verdict.reason)
+            if verdict.ok:
+                signer_lines.add(tuple(verdict.signer_lines))
             self.send_response(202)
             self.end_headers()
 
@@ -487,12 +496,12 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
                 a2a_url,
                 {"skill": workflow, "inputs": {"note": f"n{i}"}, "request_id": f"ref-2p-{i:04d}"},
             )
-            out.append(_handoff_from(task)["receipt"])
+            out.append((_handoff_from(task)["receipt"], _result_from(task)["run_id"]))
         return out
 
     try:
         receipts = asyncio.run(runs())
-        for i, (kind, receipt) in enumerate(zip(kinds, receipts)):
+        for i, (kind, (receipt, run_id)) in enumerate(zip(kinds, receipts)):
             ref, note = f"ref-2p-{i:04d}", f"n{i}"
             # Stands in for the record party A's program wrote in B's system.
             if kind == "true":
@@ -500,9 +509,18 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
             elif kind == "differing":
                 db.execute("insert into referral values (?, ?)", (ref, note + "-changed"))
             claim = {"kind": kind, "ref": ref, "fields": {"note": note}}
-            status = post_handoff(
-                f"http://127.0.0.1:{inbox.server_address[1]}/inbox", h.make_handoff(claim, receipt)
-            )
+            if kind == "unbound":
+                # The run's own receipt.json, which names no payload.
+                run_dir = Path(bridge.runner_config.runs_dir) / run_id
+                doc = h.make_handoff(claim, h.receipt_for_run(run_dir))
+            else:
+                doc = h.make_handoff(claim, receipt, signer=signer)
+            if kind == "swapped":
+                db.execute("insert into referral values (?, ?)", (ref, note + "-other"))
+                swapped = {**claim, "fields": {"note": note + "-other"}}
+                doc["payload"]["content"] = swapped
+                doc["payload"]["sha256"] = hashlib.sha256(h.payload_bytes(swapped)[0]).hexdigest()
+            status = post_handoff(f"http://127.0.0.1:{inbox.server_address[1]}/inbox", doc)
             assert status == 202
     finally:
         inbox.shutdown()
@@ -517,7 +535,14 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
     )
     assert accepted_false == [] and rejected_true == []
     assert signer_lines == {("Signed by Party A's key",)}
+    # Bound and true: accepted. Fabricated or differing: the receipt is
+    # intact, and the receiver's own record rejects them. Mismatched and
+    # missing payloads: the receipt itself refuses them.
+    assert reasons["true"] == {None}
+    assert reasons["fabricated"] == {None} and reasons["differing"] == {None}
+    assert reasons["swapped"] == {"payload_mismatch"}
+    assert reasons["unbound"] == {"payload_not_bound"}
     assert slowest <= 2.0
     # Without its own read, the receiver never accepts on the signature.
-    unchecked = h.decide(h.make_handoff({"ref": "x"}, receipts[0]), registry)
+    unchecked = h.decide(h.make_handoff({"ref": "x"}, receipts[0][0], signer=signer), registry)
     assert unchecked.ok and unchecked.decision == "unchecked"

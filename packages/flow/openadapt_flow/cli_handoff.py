@@ -68,6 +68,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         ),
     )
     s.add_argument("--media-type", help="the payload's media type")
+    s.add_argument(
+        "--unbound",
+        action="store_true",
+        help=(
+            "attach the receipt as it is, without binding this payload to it. "
+            "A receiver that checks the payload refuses it (payload_not_bound)"
+        ),
+    )
     s.add_argument("--out", help="where to write the handoff (default: stdout)")
     s.add_argument(
         "--post",
@@ -177,15 +185,24 @@ def cmd_send(args: argparse.Namespace) -> int:
             receipt = h.receipt_for_run(Path(args.run), public=args.public)
         else:
             receipt = h._loads_strict(Path(args.receipt).read_text("utf-8"))
+        signer = None
+        if not args.unbound:
+            from openadapt_flow.offline_seal import seal_home, signer_for
+
+            signer = signer_for(seal_home())
         document = h.make_handoff(
             data,
             receipt,
             name=None if args.payload == "-" else args.payload,
             media_type=args.media_type,
             detached=args.detached,
+            signer=signer,
         )
     except h.HandoffError as exc:
         print(f"handoff send: {exc}", file=sys.stderr)
+        return 2
+    except RuntimeError as exc:
+        print(f"handoff send: no receipt key to bind the payload ({exc})", file=sys.stderr)
         return 2
     except (OSError, ValueError) as exc:
         print(f"handoff send: {type(exc).__name__}: {exc}", file=sys.stderr)

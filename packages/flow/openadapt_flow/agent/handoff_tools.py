@@ -34,9 +34,20 @@ class HandoffTools:
         *,
         registry_path: Optional[Path] = None,
         registry: Optional[Sequence[Any]] = None,
+        signer: Optional[Any] = None,
     ) -> None:
         self.registry_path = Path(registry_path) if registry_path else None
         self._registry = list(registry) if registry is not None else None
+        #: The key that signs this computer's run receipts; it binds each
+        #: handed-off result as the receipt's payload subject.
+        self._signer = signer
+
+    def signer(self) -> Any:
+        if self._signer is None:
+            from openadapt_flow.offline_seal import seal_home, signer_for
+
+            self._signer = signer_for(seal_home())
+        return self._signer
 
     def registry(self) -> list[Any]:
         if self._registry is None:
@@ -129,6 +140,12 @@ class HandoffTools:
             raise BridgeError("the run is still running; it has no receipt yet")
         try:
             receipt = receipt_for_run(run_dir_for(run_id), public=public)
-            return make_handoff(result, receipt, name=f"{run_id}.result.json")
+            return make_handoff(
+                result, receipt, name=f"{run_id}.result.json", signer=self.signer()
+            )
         except HandoffError as exc:
             raise BridgeError(f"no handoff for this run: {exc}") from None
+        except RuntimeError:
+            raise BridgeError(
+                "no handoff for this run: this computer's receipt key is unavailable"
+            ) from None
