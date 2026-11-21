@@ -287,6 +287,11 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
                 "coverage.deductible",
                 "coverage.liability_limit",
                 "estimated_replacement_cost_cents",
+                # Typed in the estimator popup; the summary does not show
+                # them, so they are re-read in the popup before apply.
+                "estimator.finish_grade",
+                "estimator.living_area_sqft",
+                "estimator.stories",
             }
             checked_keys = {
                 verdict.dossier_key

@@ -209,6 +209,7 @@ def issue_form_tx_receipt(
             and (
                 not summary_verdict.passed
                 or summary_verdict.failed_keys
+                or summary_verdict.not_checked_keys
                 or summary_verdict.missing_required_outputs
             )
         )
@@ -240,6 +241,9 @@ def issue_form_tx_receipt(
         commit_mutations_observed=commit_mutations_observed,
         readback_checked_count=resolved_checked_count,
         readback_passed=resolved_readback_passed,
+        readback_not_checked_count=(
+            len(summary_verdict.not_checked_keys) if summary_verdict is not None else 0
+        ),
         salted_output_digests=salted_outputs,
     )
 

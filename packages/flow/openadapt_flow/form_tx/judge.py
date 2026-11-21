@@ -26,6 +26,7 @@ from openadapt_flow.form_tx.types import (
     ControlKind,
     DossierFact,
     FieldBindingSpec,
+    FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
     FormPack,
@@ -37,6 +38,7 @@ from openadapt_flow.form_tx.types import (
     OutputExtractionSpec,
     ProvenanceKind,
     ReadbackFieldVerdict,
+    ReadbackStatus,
     SummaryVerdict,
     WizardScreenSpec,
 )
@@ -194,6 +196,7 @@ class SummaryJudge:
         *,
         known_outputs: Optional[Mapping[str, Any]] = None,
         supplemental_facts: Optional[Mapping[str, DossierFact]] = None,
+        writes: Sequence[FieldWriteRecord] = (),
     ) -> SummaryVerdict:
         """Navigate/search if configured, verify all read-backs, and extract outputs."""
         active_surface = surface if surface is not None else self._surface
@@ -289,9 +292,49 @@ class SummaryJudge:
                         snapshot = active_surface.snapshot(screens=observation_screens)
 
         verdicts: list[ReadbackFieldVerdict] = []
-        # A matching subset does not establish that the intended write landed.
-        # Cover every grounded bound fact, including conditional fields and
-        # human-added bindings, before a transaction may be called verified.
+
+        def _codec_for(key: str) -> FormCodecKind:
+            for binding in (*summary_check.field_readbacks, *active_pack.bindings):
+                if binding.dossier_key == key:
+                    return binding.codec.kind
+            for subroutine in active_pack.popup_subroutines:
+                for binding in subroutine.bindings:
+                    if binding.dossier_key == key:
+                        return binding.codec.kind
+                if subroutine.return_output_key == key:
+                    return subroutine.return_codec.kind
+            return FormCodecKind.WHITESPACE_COLLAPSE
+
+        def _not_checked(
+            key: str, provenance: ProvenanceKind, reason: str
+        ) -> ReadbackFieldVerdict:
+            return ReadbackFieldVerdict(
+                dossier_key=key,
+                codec_kind=_codec_for(key),
+                passed=False,
+                status=ReadbackStatus.NOT_CHECKED,
+                provenance=provenance,
+                reason=reason,
+            )
+
+        def _failed(
+            key: str, codec_kind: FormCodecKind, provenance: ProvenanceKind, reason: str
+        ) -> ReadbackFieldVerdict:
+            return ReadbackFieldVerdict(
+                dossier_key=key,
+                codec_kind=codec_kind,
+                passed=False,
+                status=ReadbackStatus.FAILED,
+                provenance=provenance,
+                reason=reason,
+            )
+
+        # Coverage is the union of what the pack binds and what the run
+        # actually wrote. A matching subset does not establish that the
+        # intended write landed: every bound grounded fact, every field typed
+        # or selected (including inside popups and by the operator) and every
+        # popup return must get a verdict. A field with no way to read it back
+        # is reported as not_checked, never passed.
         declared_keys = {
             binding.dossier_key for binding in summary_check.field_readbacks
         }
@@ -303,50 +346,96 @@ class SummaryJudge:
         for resolution in active_resolutions:
             if resolution.dossier_key and resolution.dossier_key in expected_facts:
                 expected_keys.add(resolution.dossier_key)
+        for subroutine in active_pack.popup_subroutines:
+            if subroutine.return_output_key in expected_facts:
+                expected_keys.add(subroutine.return_output_key)
+        written_by_key = {w.dossier_key: w for w in writes if w.dossier_key}
+        unbound_writes = [w for w in writes if not w.dossier_key]
         unbound_human_fact = any(
             resolution.halt_kind == FormHaltKind.UNGROUNDED_REQUIRED_FIELD
             and resolution.action in _OVERRIDE_PROVENANCE
             and not resolution.dossier_key
             for resolution in active_resolutions
         )
-        for subroutine in active_pack.popup_subroutines:
-            if subroutine.return_output_key in expected_facts:
-                expected_keys.add(subroutine.return_output_key)
-        for key in sorted(expected_keys - declared_keys):
-            verdicts.append(
-                ReadbackFieldVerdict(
-                    dossier_key=key,
-                    codec_kind=next(
-                        (
-                            binding.codec.kind
-                            for binding in active_pack.bindings
-                            if binding.dossier_key == key
-                        ),
-                        next(iter(summary_check.field_readbacks)).codec.kind
-                        if summary_check.field_readbacks
-                        else FormCodecKind.WHITESPACE_COLLAPSE,
-                    ),
-                    passed=False,
-                    provenance=expected_facts[key].provenance,
-                    reason="Grounded bound fact is missing from the read-back contract",
-                )
-            )
-        for binding in summary_check.field_readbacks:
-            fact = expected_facts.get(binding.dossier_key)
-            if search_failure_reason is not None:
-                prov = (
-                    fact.provenance
-                    if fact is not None
-                    else ProvenanceKind.INTAKE_DOCUMENT
-                )
+
+        for key in sorted((expected_keys | set(written_by_key)) - declared_keys):
+            fact = expected_facts.get(key)
+            write = written_by_key.get(key)
+            if write is not None and write.checked_before_apply:
                 verdicts.append(
                     ReadbackFieldVerdict(
-                        dossier_key=binding.dossier_key,
-                        codec_kind=binding.codec.kind,
-                        passed=False,
-                        provenance=prov,
-                        reason=search_failure_reason,
+                        dossier_key=key,
+                        codec_kind=_codec_for(key),
+                        passed=True,
+                        status=ReadbackStatus.PASSED,
+                        provenance=(
+                            fact.provenance
+                            if fact is not None
+                            else ProvenanceKind.INTAKE_DOCUMENT
+                        ),
+                        reason=(
+                            f"Read back in popup {write.in_popup_subroutine!r} "
+                            "before apply; the summary does not show it"
+                        ),
                     )
+                )
+                continue
+            where = (
+                f" (entered in popup {write.in_popup_subroutine!r})"
+                if write is not None and write.in_popup_subroutine
+                else ""
+            )
+            verdicts.append(
+                _not_checked(
+                    key,
+                    fact.provenance
+                    if fact is not None
+                    else ProvenanceKind.INTAKE_DOCUMENT,
+                    f"No read-back is declared for this field{where}",
+                )
+            )
+        for write in unbound_writes:
+            if write.checked_before_apply:
+                verdicts.append(
+                    ReadbackFieldVerdict(
+                        dossier_key=write.field_key,
+                        codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                        passed=True,
+                        status=ReadbackStatus.PASSED,
+                        provenance=ProvenanceKind.HUMAN_OPERATOR,
+                        reason=(
+                            f"Read back in popup {write.in_popup_subroutine!r} "
+                            "before apply; the summary does not show it"
+                        ),
+                    )
+                )
+                continue
+            verdicts.append(
+                _not_checked(
+                    write.field_key,
+                    ProvenanceKind.HUMAN_OPERATOR,
+                    "Operator entered a value on a control with no binding, so "
+                    "no read-back can cover it",
+                )
+            )
+        if unbound_human_fact and not unbound_writes:
+            verdicts.append(
+                _not_checked(
+                    "control:operator-entered",
+                    ProvenanceKind.HUMAN_OPERATOR,
+                    "Operator answered a required control with no binding, so "
+                    "no read-back can cover it",
+                )
+            )
+
+        for binding in summary_check.field_readbacks:
+            fact = expected_facts.get(binding.dossier_key)
+            prov = (
+                fact.provenance if fact is not None else ProvenanceKind.INTAKE_DOCUMENT
+            )
+            if search_failure_reason is not None:
+                verdicts.append(
+                    _not_checked(binding.dossier_key, prov, search_failure_reason)
                 )
                 continue
 
@@ -355,18 +444,11 @@ class SummaryJudge:
                     binding.anchor, snapshot, include_readonly=True
                 )
             except AmbiguousAnchorError as exc:
-                prov = (
-                    fact.provenance
-                    if fact is not None
-                    else ProvenanceKind.INTAKE_DOCUMENT
-                )
                 verdicts.append(
-                    ReadbackFieldVerdict(
-                        dossier_key=binding.dossier_key,
-                        codec_kind=binding.codec.kind,
-                        passed=False,
-                        provenance=prov,
-                        reason=f"Ambiguous summary read-back anchor for {binding.dossier_key!r}: {exc}",
+                    _not_checked(
+                        binding.dossier_key,
+                        prov,
+                        f"Ambiguous summary read-back anchor for {binding.dossier_key!r}: {exc}",
                     )
                 )
                 continue
@@ -378,39 +460,33 @@ class SummaryJudge:
                         observed_ctrl.current_value, binding.placeholder_values
                     )
                 )
-                if binding.required_in_pack:
+                if has_ungrounded_screen_val:
                     verdicts.append(
-                        ReadbackFieldVerdict(
-                            dossier_key=binding.dossier_key,
-                            codec_kind=binding.codec.kind,
-                            passed=False,
-                            provenance=ProvenanceKind.INTAKE_DOCUMENT,
-                            reason=f"Required summary read-back key {binding.dossier_key!r} has no grounded fact",
+                        _failed(
+                            binding.dossier_key,
+                            binding.codec.kind,
+                            prov,
+                            f"Summary screen showed unexpected non-empty value for "
+                            f"ungrounded key {binding.dossier_key!r}",
                         )
                     )
-                elif has_ungrounded_screen_val:
+                elif binding.required_in_pack:
                     verdicts.append(
-                        ReadbackFieldVerdict(
-                            dossier_key=binding.dossier_key,
-                            codec_kind=binding.codec.kind,
-                            passed=False,
-                            provenance=ProvenanceKind.INTAKE_DOCUMENT,
-                            reason=(
-                                f"Summary screen showed unexpected non-empty value for "
-                                f"ungrounded key {binding.dossier_key!r}"
-                            ),
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"Required summary read-back key {binding.dossier_key!r} "
+                            f"has no expected value to compare",
                         )
                     )
                 continue
 
             if observed_ctrl is None:
                 verdicts.append(
-                    ReadbackFieldVerdict(
-                        dossier_key=binding.dossier_key,
-                        codec_kind=binding.codec.kind,
-                        passed=False,
-                        provenance=fact.provenance,
-                        reason=f"Summary read-back control missing for {binding.dossier_key!r}",
+                    _not_checked(
+                        binding.dossier_key,
+                        prov,
+                        f"Summary read-back control missing for {binding.dossier_key!r}",
                     )
                 )
                 continue
@@ -421,23 +497,45 @@ class SummaryJudge:
                         dossier_key=binding.dossier_key,
                         codec_kind=binding.codec.kind,
                         passed=True,
-                        provenance=fact.provenance,
+                        status=ReadbackStatus.PASSED,
+                        provenance=prov,
                         reason="",
                     )
                 )
             else:
                 verdicts.append(
-                    ReadbackFieldVerdict(
-                        dossier_key=binding.dossier_key,
-                        codec_kind=binding.codec.kind,
-                        passed=False,
-                        provenance=fact.provenance,
-                        reason=(
-                            f"Read-back value mismatch for {binding.dossier_key!r} "
-                            f"under codec {binding.codec.kind.value!r}"
-                        ),
+                    _failed(
+                        binding.dossier_key,
+                        binding.codec.kind,
+                        prov,
+                        f"Read-back value mismatch for {binding.dossier_key!r} "
+                        f"under codec {binding.codec.kind.value!r}",
                     )
                 )
+
+        screen_problems: list[str] = []
+        if snapshot.auth_wall_present:
+            screen_problems.append("sign-in wall")
+        if snapshot.active_modals:
+            screen_problems.append("open dialog")
+        if snapshot.banner_errors:
+            screen_problems.append("error banner")
+        if snapshot.inflight_mutations:
+            screen_problems.append("save still in flight")
+        if (
+            summary_check.summary_landmark_selector
+            and snapshot.screen_id != summary_screen_id
+        ):
+            screen_problems.append("summary screen not reached")
+        if screen_problems:
+            verdicts.append(
+                _failed(
+                    "__summary_screen__",
+                    FormCodecKind.WHITESPACE_COLLAPSE,
+                    ProvenanceKind.INTAKE_DOCUMENT,
+                    "Summary screen was not readable: " + ", ".join(screen_problems),
+                )
+            )
 
         final_outputs: dict[str, Any] = {}
         missing_required: list[str] = []
@@ -472,27 +570,27 @@ class SummaryJudge:
                 elif out_spec.required:
                     missing_required.append(key)
 
-        failed_keys = tuple(v.dossier_key for v in verdicts if not v.passed)
+        failed_keys = tuple(
+            v.dossier_key for v in verdicts if v.status == ReadbackStatus.FAILED
+        )
+        not_checked_keys = tuple(
+            v.dossier_key for v in verdicts if v.status == ReadbackStatus.NOT_CHECKED
+        )
         passed = (
             search_failure_reason is None
             and bool(verdicts)
-            and not unbound_human_fact
-            and not snapshot.auth_wall_present
-            and not snapshot.active_modals
-            and not snapshot.banner_errors
-            and snapshot.inflight_mutations == 0
-            and (
-                not summary_check.summary_landmark_selector
-                or snapshot.screen_id == summary_screen_id
-            )
             and len(failed_keys) == 0
+            and len(not_checked_keys) == 0
             and len(missing_required) == 0
         )
 
         return SummaryVerdict(
             passed=passed,
-            checked_count=len(verdicts),
+            checked_count=sum(
+                1 for v in verdicts if v.status != ReadbackStatus.NOT_CHECKED
+            ),
             failed_keys=failed_keys,
+            not_checked_keys=not_checked_keys,
             field_verdicts=tuple(verdicts),
             extracted_outputs=final_outputs,
             missing_required_outputs=tuple(missing_required),

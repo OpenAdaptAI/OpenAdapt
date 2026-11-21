@@ -120,6 +120,9 @@ class FormTxOutcome(str, Enum):
     AUTH_REQUIRED = "auth_required"
     VALIDATION_BLOCKED = "validation_blocked"
     READBACK_REFUTED = "readback_refuted"
+    # Submitted, and nothing read back contradicted it, but at least one field
+    # that was typed, selected or kept could not be read back. Never verified.
+    READBACK_INCOMPLETE = "readback_incomplete"
     DELIVERY_UNCERTAIN = "delivery_uncertain"
     ABORTED_BY_HUMAN = "aborted_by_human"
 
@@ -541,6 +544,45 @@ class HumanResolutionRecord(BaseModel):
     idempotency_key: str
 
 
+class FieldWriteRecord(BaseModel):
+    """One field the layer typed, selected or kept during a run.
+
+    The read-back judge covers every record: each one gets a passed, failed or
+    not_checked verdict. ``field_key`` is the dossier key when the field is
+    bound, otherwise ``control:<label or selector>``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    field_key: str = Field(min_length=1)
+    dossier_key: Optional[str] = None
+    label: Optional[str] = None
+    selector: Optional[str] = None
+    source: Literal[
+        "auto_fill",
+        "operator_value",
+        "operator_fixed_on_screen",
+        "operator_kept_prefill",
+        "popup_return",
+    ]
+    in_popup_subroutine: Optional[str] = None
+    # Set when a popup input was re-read from its control and matched just
+    # before the popup's apply button. Popup inputs are often not stored with
+    # the record, so this is the read-back they get.
+    checked_before_apply: bool = False
+
+
+class ReadbackStatus(str, Enum):
+    """Result of reading back one field after submit."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    # The field was written, selected or kept, but the layer could not read it
+    # back (no read-back declared, control absent, anchor ambiguous, lookup
+    # failed). It is never counted as passed.
+    NOT_CHECKED = "not_checked"
+
+
 class ReadbackFieldVerdict(BaseModel):
     """Field-by-field comparison between intended state and post-run read-back."""
 
@@ -551,6 +593,19 @@ class ReadbackFieldVerdict(BaseModel):
     passed: bool
     provenance: ProvenanceKind
     reason: str = ""
+    status: Optional[ReadbackStatus] = None
+
+    @model_validator(mode="after")
+    def _status_agrees_with_passed(self) -> "ReadbackFieldVerdict":
+        if self.status is None:
+            object.__setattr__(
+                self,
+                "status",
+                ReadbackStatus.PASSED if self.passed else ReadbackStatus.FAILED,
+            )
+        elif self.passed != (self.status == ReadbackStatus.PASSED):
+            raise ValueError("passed must be True exactly when status is 'passed'")
+        return self
 
 
 class SummaryVerdict(BaseModel):
@@ -561,9 +616,20 @@ class SummaryVerdict(BaseModel):
     passed: bool
     checked_count: int
     failed_keys: tuple[str, ...] = ()
+    not_checked_keys: tuple[str, ...] = ()
     field_verdicts: tuple[ReadbackFieldVerdict, ...] = ()
     extracted_outputs: dict[str, Any] = Field(default_factory=dict)
     missing_required_outputs: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _passed_needs_every_field_checked(self) -> "SummaryVerdict":
+        if self.passed and (
+            self.failed_keys
+            or self.not_checked_keys
+            or any(v.status != ReadbackStatus.PASSED for v in self.field_verdicts)
+        ):
+            raise ValueError("A read-back cannot pass with a failed or unchecked field")
+        return self
 
 
 class PackPatchCandidate(BaseModel):
@@ -603,7 +669,18 @@ class FormTxReceiptPayload(BaseModel):
     commit_mutations_observed: int = Field(ge=0)
     readback_checked_count: int = Field(ge=0)
     readback_passed: bool
+    readback_not_checked_count: int = Field(default=0, ge=0)
     salted_output_digests: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _verified_means_fully_checked(self) -> "FormTxReceiptPayload":
+        if self.outcome == FormTxOutcome.VERIFIED_DONE and (
+            not self.readback_passed or self.readback_not_checked_count
+        ):
+            raise ValueError(
+                "A verified receipt needs a passing read-back with no unchecked field"
+            )
+        return self
 
 
 class SignedFormTxReceipt(BaseModel):
