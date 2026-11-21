@@ -1,8 +1,9 @@
 """Dispatch an admitted Execute request to the local openadapt-flow runner.
 
-The customer runner is this process. Synthetic MockMed admissions (the test
-and ``--seed-mockmed`` path) never launch a browser. A digest-pinned compiled
-bundle is replayed in-process under the standard profile.
+The customer runner is this process. Synthetic admissions (used by tests and
+demo seeding) never launch a browser. A digest-pinned compiled bundle is
+replayed in-process or via the governed deployment config under the standard
+profile.
 """
 
 from __future__ import annotations
@@ -66,10 +67,10 @@ def default_runner(
     *,
     deployment: Optional[Path] = None,
 ) -> DispatchResult:
-    """Run synthetic MockMed or local governed replay.
+    """Run synthetic projection or local governed replay.
 
     ``deployment`` is the deployment file (``serve-execute --config``) a
-    bundle recorded off the web runs under when its admission names none.
+    bundle runs under when its admission names none.
     """
 
     if admission.synthetic and admission.target_url:
@@ -79,14 +80,14 @@ def default_runner(
             pre_effect=True,
         )
     if admission.synthetic or not admission.bundle_dir:
-        return synthetic_mockmed(admission, request)
+        return synthetic_runner(admission, request)
     return live_replay(admission, request, run_dir, deployment=deployment)
 
 
-def synthetic_mockmed(
+def synthetic_runner(
     admission: AdmittedBundle, request: ExecuteRequestV1
 ) -> DispatchResult:
-    """Project the MockMed tutorial outcomes without a browser.
+    """Project synthetic tutorial outcomes without a browser.
 
     Honest environment: ``verified`` at independent-system strength.
     Banner-lie / ``break_it`` environment: the screen postcondition passes,
@@ -107,7 +108,7 @@ def synthetic_mockmed(
             observed_effect_strength=None,
             delivery_uncertain=True,
             workflow_digest=request.workflow_digest,
-            evidence_tag="mockmed-banner-lie",
+            evidence_tag="synthetic-banner-lie",
         )
     return _result(
         outcome=ExecuteTerminalOutcomeV1.VERIFIED,
@@ -119,7 +120,7 @@ def synthetic_mockmed(
         observed_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
         delivery_uncertain=False,
         workflow_digest=request.workflow_digest,
-        evidence_tag="mockmed-verified",
+        evidence_tag="synthetic-verified",
     )
 
 
@@ -161,12 +162,7 @@ def live_replay(
 
     from openadapt_flow.ir import Workflow
     from openadapt_flow.jit.lifecycle import DraftNotAdmitted, ensure_runnable
-    from openadapt_flow.mockmed.fault_server import serve as serve_mockmed
-    from openadapt_flow.tutorial import (
-        TUTORIAL_BREAK_ENTRY_QUERY,
-        TUTORIAL_ENTRY_QUERY,
-        run_tutorial_workflow,
-    )
+    from openadapt_flow.tutorial import run_demo_workflow_replay
 
     try:
         # A JIT draft is refused before anything runs. Replayer.run checks
@@ -185,8 +181,8 @@ def live_replay(
     from openadapt_flow.emit.skill import bundle_surface
 
     surface = bundle_surface(workflow)
-    if surface != "web":
-        chosen = admission.deployment or deployment
+    chosen = admission.deployment or deployment
+    if surface != "web" or chosen is not None:
         return _surface_replay(
             bundle,
             workflow,
@@ -196,26 +192,16 @@ def live_replay(
             run_dir,
             authority=admission.qualification_authority_file,
         )
-    stop: Optional[Callable[[], None]] = None
     try:
-        base_url, _db, stop = serve_mockmed(port=0)
-        entry_query = (
-            TUTORIAL_BREAK_ENTRY_QUERY if admission.break_it else TUTORIAL_ENTRY_QUERY
-        )
-        report = run_tutorial_workflow(
-            base_url=base_url,
+        report = run_demo_workflow_replay(
             workflow=workflow,
             bundle_dir=bundle,
             run_dir=run_dir,
-            headed=False,
-            entry_query=entry_query,
+            break_it=admission.break_it,
         )
     except Exception as exc:
         # The replay may have dispatched a write before it failed.
         raise DispatchError(f"local replay failed: {exc}", pre_effect=False) from exc
-    finally:
-        if stop is not None:
-            stop()
     return project_run_report(report, workflow_digest=request.workflow_digest)
 
 

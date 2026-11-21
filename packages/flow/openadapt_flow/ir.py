@@ -6194,7 +6194,7 @@ class ReportRedaction(BaseModel):
 
     pointer: str = Field(description="RFC 6901 JSON pointer to the string.")
     reason: str = Field(
-        description="What was removed, e.g. url_param:token_main or header:cookie."
+        description="What was removed, e.g. url_param:session_token or header:cookie."
     )
     by: Optional[str] = Field(
         default=None,

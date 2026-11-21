@@ -608,3 +608,43 @@ class TestContextFromLines:
             )
             is None
         )
+
+
+class TestSiblingChromeDerivation:
+    def test_generic_identity_words_exclude_domain_specific_terms(self):
+        from openadapt_flow.runtime.identity import _GENERIC_IDENTITY_WORDS
+
+        for domain_term in (
+            "patient",
+            "chart",
+            "charts",
+            "discharged",
+            "admitted",
+            "appointment",
+            "demo",
+        ):
+            assert domain_term not in _GENERIC_IDENTITY_WORDS
+
+    def test_derive_sibling_chrome_words_across_domains(self):
+        from openadapt_flow.runtime.identity import derive_sibling_chrome_words
+
+        # Non-healthcare CRM / ERP invoice rows sharing chrome words
+        rows = [
+            "INV-1001 Acme Corp Invoice Approved View",
+            "INV-1002 Globex Ltd Invoice Approved View",
+            "INV-1003 Initech LLC Invoice Pending View",
+        ]
+        chrome = derive_sibling_chrome_words(rows)
+        assert "lnvolce" in chrome or "invoice" in chrome
+        assert "vlew" in chrome or "view" in chrome
+        assert "approved" in chrome
+        # Entity-discriminating names are not shared chrome
+        assert "acme" not in chrome
+        assert "globex" not in chrome
+        assert "lnltech" not in chrome and "initech" not in chrome
+
+    def test_derive_sibling_chrome_words_requires_multiple_rows(self):
+        from openadapt_flow.runtime.identity import derive_sibling_chrome_words
+
+        assert derive_sibling_chrome_words([]) == frozenset()
+        assert derive_sibling_chrome_words(["Only One Row Here"]) == frozenset()

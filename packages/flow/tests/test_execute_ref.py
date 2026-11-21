@@ -26,7 +26,7 @@ from openadapt_types.execute import (  # noqa: E402
 from openadapt_flow.execute.app import create_app  # noqa: E402
 from openadapt_flow.execute.dispatch import (  # noqa: E402
     DispatchResult,
-    synthetic_mockmed,
+    synthetic_runner,
 )
 from openadapt_flow.execute.keys import (  # noqa: E402
     fingerprint_of,
@@ -38,15 +38,16 @@ from openadapt_flow.execute.models import (  # noqa: E402
     SelfSignedSealV1,
     assert_no_forbidden_keys,
 )
-from openadapt_flow.execute.registry import (  # noqa: E402
+from openadapt_flow.execute.service import ExecuteService  # noqa: E402
+from openadapt_flow.mockmed.execute_seed import (  # noqa: E402
     MOCKMED_EFFECT_STRENGTH,
     MOCKMED_ENVIRONMENT_LIE,
     MOCKMED_ENVIRONMENT_OK,
     MOCKMED_QUALIFICATION_ID,
     MOCKMED_WORKFLOW_DIGEST,
     MOCKMED_WORKFLOW_VERSION,
+    mockmed_admissions,
 )
-from openadapt_flow.execute.service import ExecuteService  # noqa: E402
 from openadapt_flow.receipt import RunReceipt  # noqa: E402
 
 AUTH_CTX = {
@@ -73,7 +74,7 @@ def _request(**updates: object) -> dict[str, object]:
 
 
 def _client(tmp_path: Path, **kwargs: Any) -> tuple[TestClient, ExecuteService]:
-    kwargs.setdefault("seed_mockmed", True)
+    kwargs.setdefault("seed_admissions", mockmed_admissions())
     kwargs.setdefault("process_inline", True)
     app = create_app(tmp_path, token="test-token", **kwargs)
     store: ExecuteService = app.state.execute
@@ -204,7 +205,7 @@ def test_receipt_409_until_terminal(tmp_path: Path) -> None:
 
     def runner(admission, request, run_dir):
         gate.wait(timeout=5)
-        return synthetic_mockmed(admission, request)
+        return synthetic_runner(admission, request)
 
     client, _store = _client(tmp_path, runner=runner, process_inline=False)
     accepted = client.post(
@@ -378,7 +379,32 @@ def test_synthetic_break_it_dispatch_is_zero_dollars() -> None:
         synthetic=True,
         break_it=True,
     )
-    result = synthetic_mockmed(admission, request)
+    result = synthetic_runner(admission, request)
     assert result.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
     assert isinstance(result, DispatchResult)
     assert result.effect_passed is False
+
+
+def test_generic_seed_admissions_writes_non_demo_bundle(tmp_path: Path) -> None:
+    from openadapt_flow.execute.models import AdmittedBundle
+    from openadapt_flow.execute.registry import lookup_admission
+
+    custom = AdmittedBundle(
+        qualification_id="qualification_erp_invoice01",
+        workflow_version="workflow_invoice_post",
+        workflow_digest="sha256:" + "d" * 64,
+        environment_id="environment_erp_prod",
+        minimum_effect_strength="independent_system_of_record",
+        synthetic=True,
+        break_it=False,
+    )
+    store = ExecuteService(tmp_path, token="t", seed_admissions=(custom,))
+    loaded = lookup_admission(
+        store.data_dir,
+        qualification_id=custom.qualification_id,
+        workflow_version=custom.workflow_version,
+        workflow_digest=custom.workflow_digest,
+        environment_id=custom.environment_id,
+        minimum_effect_strength=custom.minimum_effect_strength,
+    )
+    assert loaded == custom

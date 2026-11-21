@@ -3,17 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 from openadapt_flow.execute.models import AdmittedBundle
-
-# Well-known MockMed / tutorial admissions used by tests and ``--seed-mockmed``.
-MOCKMED_QUALIFICATION_ID = "qualification_mockmed01"
-MOCKMED_WORKFLOW_VERSION = "workflow_tutorial1"
-MOCKMED_WORKFLOW_DIGEST = "sha256:" + "c" * 64
-MOCKMED_ENVIRONMENT_OK = "environment_mockmed_ok"
-MOCKMED_ENVIRONMENT_LIE = "environment_mockmed_lie"
-MOCKMED_EFFECT_STRENGTH = "independent_system_of_record"
 
 
 class AdmissionError(ValueError):
@@ -78,27 +71,12 @@ def write_admission(data_dir: Path, admission: AdmittedBundle) -> Path:
     return path
 
 
-def seed_mockmed_admissions(data_dir: Path) -> tuple[AdmittedBundle, AdmittedBundle]:
-    """Write the synthetic MockMed ok + banner-lie admissions."""
+def seed_admissions(
+    data_dir: Path, admissions: Iterable[AdmittedBundle]
+) -> tuple[AdmittedBundle, ...]:
+    """Write caller-supplied admissions into the registry directory."""
 
-    honest = AdmittedBundle(
-        qualification_id=MOCKMED_QUALIFICATION_ID,
-        workflow_version=MOCKMED_WORKFLOW_VERSION,
-        workflow_digest=MOCKMED_WORKFLOW_DIGEST,
-        environment_id=MOCKMED_ENVIRONMENT_OK,
-        minimum_effect_strength=MOCKMED_EFFECT_STRENGTH,
-        synthetic=True,
-        break_it=False,
-    )
-    lie = AdmittedBundle(
-        qualification_id=MOCKMED_QUALIFICATION_ID,
-        workflow_version=MOCKMED_WORKFLOW_VERSION,
-        workflow_digest=MOCKMED_WORKFLOW_DIGEST,
-        environment_id=MOCKMED_ENVIRONMENT_LIE,
-        minimum_effect_strength=MOCKMED_EFFECT_STRENGTH,
-        synthetic=True,
-        break_it=True,
-    )
-    write_admission(data_dir, honest)
-    write_admission(data_dir, lie)
-    return honest, lie
+    seeded = tuple(admissions)
+    for admission in seeded:
+        write_admission(data_dir, admission)
+    return seeded

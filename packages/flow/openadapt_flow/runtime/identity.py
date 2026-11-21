@@ -76,6 +76,7 @@ from typing import (
     NamedTuple,
     Optional,
     Protocol,
+    Sequence,
     runtime_checkable,
 )
 
@@ -102,8 +103,8 @@ MIN_CONTEXT_CHARS = 12
 MIN_PARAM_CHARS = 4
 
 # Fraction of the recorded band's squashed characters that must be covered
-# by matched tokens. Measured with the token matcher on MockMed rows: the
-# true row re-reads at 1.0 (0.97+ under injected OCR jitter); a look-alike
+# by matched tokens. With the token matcher on dense table rows, the true
+# row re-reads at 1.0 (0.97+ under injected OCR jitter) while a look-alike
 # row sharing every column except the name covers ~0.67 — 0.8 splits the
 # populations with margin on both sides.
 COVERAGE_THRESHOLD = 0.8
@@ -267,12 +268,14 @@ GLYPH_AMBIGUOUS_ID_CHARS_CAP = 0
 # tokens (a 3-char label, a status word) do not carry identity on their own.
 ID_CARRY_NAME_MIN = 4
 
-# Low-entropy record-list column words that are NOT patient names: the Sex,
-# Status, and action-button vocabulary of an EMR list. A same-name sibling
-# SHARES these, so they never discriminate identity and must not be mistaken
-# for a name carrier (or a glyph-vulnerable MRN would wrongly verify because
-# 'Active'/'Open' looked like a name). Compared on the OCR-canonical form of
-# the squashed token (see :func:`_is_discriminative_name`).
+# Low-entropy record-list status and UI action words that are NOT entity
+# names. A same-name sibling SHARES these, so they never discriminate identity
+# and must not be mistaken for a name carrier (otherwise a glyph-vulnerable ID
+# would wrongly verify because 'Active'/'Open' looked like a name). Domain-
+# specific repeated row chrome should be derived from sibling rows via
+# :func:`derive_sibling_chrome_words` rather than hardcoded here. Compared on
+# the OCR-canonical form of the squashed token (see
+# :func:`_is_discriminative_name`).
 _GENERIC_IDENTITY_WORDS = frozenset(
     (
         "active",
@@ -283,8 +286,6 @@ _GENERIC_IDENTITY_WORDS = frozenset(
         "male",
         "female",
         "unknown",
-        "discharged",
-        "admitted",
         "scheduled",
         "cancelled",
         "canceled",
@@ -292,15 +293,38 @@ _GENERIC_IDENTITY_WORDS = frozenset(
         "review",
         "results",
         "records",
-        "patient",
         "status",
         "search",
-        "demo",
-        "chart",
-        "charts",
-        "appointment",
     )
 )
+
+
+def derive_sibling_chrome_words(
+    rows: Sequence[str], *, min_fraction: float = 0.5
+) -> frozenset[str]:
+    """Derive non-identifying row chrome words from sibling table/list rows.
+
+    Any alphabetic token of length >= :data:`ID_CARRY_NAME_MIN` that appears
+    in at least ``min_fraction`` of ``rows`` (when at least two rows are
+    provided) is shared row chrome rather than an entity-discriminating name.
+    Returns OCR-canonical tokens suitable for combining with
+    :data:`_GENERIC_IDENTITY_CANON`.
+    """
+
+    if len(rows) < 2:
+        return frozenset()
+    counts: dict[str, int] = {}
+    for row in rows:
+        seen_in_row: set[str] = set()
+        for raw in row.split():
+            tok = squash(raw)
+            if len(tok) >= ID_CARRY_NAME_MIN and tok.isalpha():
+                seen_in_row.add(ocr_canonical(tok))
+        for tok in seen_in_row:
+            counts[tok] = counts.get(tok, 0) + 1
+    threshold = max(2, int(len(rows) * min_fraction + 0.999999))
+    return frozenset(tok for tok, n in counts.items() if n >= threshold)
+
 
 # The letter/digit NEAR-HOMOGLYPHS of the O/0 and l/1/I classes — the glyphs
 # RapidOCR collapses onto one another. BOTH sides now carry the SAME evidence

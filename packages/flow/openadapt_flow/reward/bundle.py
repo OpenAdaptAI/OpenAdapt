@@ -42,11 +42,11 @@ from openadapt_flow.reward.models import (
 )
 from openadapt_flow.runtime.effects.effect import Effect
 
-#: The task and environment a synthetic bundle's contract names. The values
-#: are the ones the ``serve-reward`` demo seed has always used, so a bundle's
-#: digests do not change with the module it was written from.
-SYNTHETIC_TASK_ID = "task_mockmed_encounter_note"
-SYNTHETIC_ENVIRONMENT_ID = "environment_mockmed_synthetic"
+#: Default task and environment IDs for a synthetic reward bundle when the
+#: caller does not supply its own.
+SYNTHETIC_TASK_ID = "task_synthetic_record_write"
+SYNTHETIC_ENVIRONMENT_ID = "environment_synthetic"
+DEFAULT_CERTIFICATE_ID = "reward_certificate_synthetic"
 CERTIFICATE_EXPIRY_UPDATES = 1000
 CALIBRATION_FILE = "calibration.json"
 #: Trials run before the synthetic certificate is signed. 300 trials with
@@ -89,6 +89,9 @@ def write_bundle(
     required_effects: list[dict[str, Any]] | None = None,
     forbidden_effects: list[dict[str, Any]] | None = None,
     identity_keys: list[str] | None = None,
+    task_id: str = SYNTHETIC_TASK_ID,
+    environment_id: str = SYNTHETIC_ENVIRONMENT_ID,
+    certificate_id: str = DEFAULT_CERTIFICATE_ID,
 ) -> None:
     """Write one synthetic bundle. Tests pass their own effects and keys."""
 
@@ -112,12 +115,10 @@ def write_bundle(
         {
             "contract_id": contract_id,
             "contract_version": "version_0001",
-            "task_id": SYNTHETIC_TASK_ID,
-            "task_digest": _digest_payload({"task": SYNTHETIC_TASK_ID}),
-            "environment_id": SYNTHETIC_ENVIRONMENT_ID,
-            "environment_digest": _digest_payload(
-                {"environment": SYNTHETIC_ENVIRONMENT_ID}
-            ),
+            "task_id": task_id,
+            "task_digest": _digest_payload({"task": task_id}),
+            "environment_id": environment_id,
+            "environment_digest": _digest_payload({"environment": environment_id}),
             "required_effect_contract_digest": _digest_payload(required),
             "forbidden_effect_contract_digest": _digest_payload(forbidden),
             "oracle": {
@@ -152,6 +153,7 @@ def write_bundle(
             expiry_policy_updates=CERTIFICATE_EXPIRY_UPDATES,
             epsilon=calibration.epsilon,
             delta=confidence_delta(calibration.confidence),
+            certificate_id=certificate_id,
         )
         _write(directory / CERTIFICATE_FILE, certificate.model_dump(mode="json"))
         _write(directory / CALIBRATION_FILE, calibration.as_metadata())
@@ -207,7 +209,7 @@ def self_signed_certificate(
     expiry_policy_updates: int,
     epsilon: float,
     delta: float,
-    certificate_id: str = "reward_certificate_mockmed",
+    certificate_id: str = DEFAULT_CERTIFICATE_ID,
 ) -> RewardCertificateV1:
     """A certificate signed by the local key, synthetic scope.
 
