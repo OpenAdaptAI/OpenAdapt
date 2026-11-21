@@ -23,6 +23,8 @@ name: Desktop replay
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs it.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - packages/flow/openadapt_flow/**
       - packages/flow/scripts/desktop/pn_db.py
@@ -61,6 +63,7 @@ concurrency:
 jobs:
   replay:
     name: windows replay (Patient Notes, WindowsBackend)
+    if: github.event.pull_request.draft != true
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -280,6 +283,7 @@ jobs:
 
   freerdp:
     name: freerdp transport round trip (loopback RDP session)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -327,6 +331,7 @@ jobs:
 
   check-it-gtk:
     name: Check without saving (GTK, ten cases, no skips)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:

@@ -104,10 +104,32 @@ class SyntaxHostileScrubber:
             "backend:PlaywrightBackend",
         ),
         (("steps", 0, "anchor", "landmarks", 0, "relation"), "left_of"),
+        (
+            ("steps", 4, "identity_template", "punctuation_body_keys", "2"),
+            "c8f8346efd9dd8de",
+        ),
     ],
 )
 def test_bundle_machine_contract_strings_are_not_sent_to_phi_ner(path, value):
     assert _bundle_string_is_structural(path, value)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        # Free text in the salted-hash slot is still scrubbed.
+        (("steps", 4, "identity_template", "punctuation_body_keys", "2"), "Jane Doe"),
+        # Only token-index keys hold hashes.
+        (
+            ("steps", 4, "identity_template", "punctuation_body_keys", "name"),
+            "c8f8346efd9dd8de",
+        ),
+        # A short hex string is not the hash shape.
+        (("steps", 4, "identity_template", "punctuation_body_keys", "2"), "c8f8"),
+    ],
+)
+def test_punctuation_body_keys_allow_only_the_hash_shape(path, value):
+    assert not _bundle_string_is_structural(path, value)
 
 
 @pytest.fixture(autouse=True)

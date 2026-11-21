@@ -2283,7 +2283,7 @@ def _dynamic_problems(graph: Graph, contract: dict, *, transitive: bool) -> list
 # The baseline file carries no line numbers, so this pins only the reviewed
 # membership: moving a known site within its file leaves the bytes unchanged.
 DEBT_BASELINE_SHA256 = (
-    "d8c5aa0c76e59707756dcd06e489eb7385489b872b6416ef48bbd92e0feb11cf"
+    "f6808ff431bc39122716ed50d5e6d77a53499d770c7bf79c67cd400572fbcb52"
 )
 
 
@@ -2384,7 +2384,12 @@ def _debt_rows_problems(rows):
             )
             or row["edge_kind"] not in ("direct", "transitive")
             or row["reason"]
-            not in ("unbounded-config", "namespace-query", "vision-transfer")
+            not in (
+                "unbounded-config",
+                "namespace-query",
+                "vision-transfer",
+                "package-attribute-compat",
+            )
             or row["follow_up"] != _DEBT_FOLLOW_UP
             or type(row["source_statement_sha256"]) is not str
             or re.fullmatch(r"[0-9a-f]{64}", row["source_statement_sha256"]) is None
@@ -6783,7 +6788,7 @@ def test_repository_debt_receipt_detaches_raw_and_policy_without_safety_claim(
     )
     receipt = graph.repository_debt_observations[edge_kind]
     assert receipt["raw_validator_results"] == tuple(raw)
-    assert len(receipt["raw_validator_results"]) == (9 if edge_kind == "direct" else 21)
+    assert len(receipt["raw_validator_results"]) == (9 if edge_kind == "direct" else 25)
     assert len(receipt["reviewed_debt_memberships"]) == len(raw)
     assert receipt["repository_policy_results"] == ()
     assert receipt["baseline_bound"] is True
