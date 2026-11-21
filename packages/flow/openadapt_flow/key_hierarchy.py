@@ -1,7 +1,6 @@
 """Who can open an encrypted run: the key hierarchy behind sealed-set v3.
 
-Design: openadapt-internal ``docs/design/evidence-encryption-2026-11/MEMO.md``
-(sections 3.1 to 3.8). The layers::
+See docs/phi_at_rest.md ("Key hierarchy"). The layers::
 
     data key (DEK, 256-bit, one per sealed set)
       wrapped by HPKE (P-256, HKDF-SHA256, AES-256-GCM) to

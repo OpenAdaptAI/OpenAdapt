@@ -103,8 +103,6 @@ What stays readable is listed under [What is not encrypted](#what-is-not-encrypt
 
 ## Key hierarchy
 
-The design is the evidence-encryption memo of 2026-11-20
-(openadapt-internal `docs/design/evidence-encryption-2026-11/MEMO.md`).
 Every new recording, bundle and run directory (sealed-set format version 3)
 has three layers of keys:
 

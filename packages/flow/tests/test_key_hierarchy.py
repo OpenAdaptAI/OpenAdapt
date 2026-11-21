@@ -523,3 +523,14 @@ def test_strict_mode_ignores_the_opt_out(home, monkeypatch) -> None:
 def test_new_artifacts_are_sealed_by_default(home) -> None:
     assert at_rest.DEFAULT_SEALS_ARTIFACTS is True
     assert at_rest.seals_by_default() is True
+
+
+def test_recovery_key_derivation_matches_rfc_9180() -> None:
+    """DeriveKeyPair for DHKEM(P-256, HKDF-SHA256): RFC 9180 A.3.1 (ikmE, skEm)."""
+    ikm = bytes.fromhex(
+        "4270e54ffd08d79d5928020af4686d8f6b7d35dbe470265f1f5aa22816ce860e"
+    )
+    private = kh._hpke_derive_p256(ikm)
+    assert private.private_numbers().private_value.to_bytes(32, "big").hex() == (
+        "4995788ef4b9d6132b249ce59a77281493eb39af373d236a1fe415cb0c2d7beb"
+    )

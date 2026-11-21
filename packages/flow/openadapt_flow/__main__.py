@@ -98,6 +98,7 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow import cli_at_rest as _at_rest_cli
 from openadapt_flow.cli_params import _parse_params as _parse_params
 from openadapt_flow.cli_params import _replay_params as _replay_params
 from openadapt_flow.private_file import open_binary
@@ -526,10 +527,8 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
             return None
         explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
         if backend != "web":
-            # The raw capture session (database, video) is plaintext while
-            # recording; Flow encrypts the converted recording and deletes the
-            # raw session (docs/phi_at_rest.md, "Desktop recordings"). Strict
-            # mode holds the raw window back.
+            # The raw capture is plaintext while recording; the converted
+            # recording is sealed (docs/phi_at_rest.md). Strict holds it back.
             if at_rest.strict():
                 at_rest.unsealed_write(f"a {backend} raw capture session", out)
             if at_rest.opt_out_reason() is not None:
@@ -1791,19 +1790,11 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
             "--surface WINDOW). Nothing was recorded."
         )
     # A capture session runs for every cross-window recording, and Flow
-    # cannot encrypt a cross-window recording yet: it is written in
-    # plaintext, named on stderr and in the ledger (strict mode refuses).
+    # cannot encrypt a cross-window recording yet: logged (strict refuses).
     if _recording_encryption_key(
         args, surfaces[0].kind if surfaces else host_surface_kind()
     ):
-        from openadapt_flow import at_rest
-
-        try:
-            at_rest.unsealed_write(
-                "a cross-window recording (--surface)", args.out or "--out"
-            )
-        except at_rest.AtRestRefused as exc:
-            raise SystemExit(f"record: {exc}") from exc
+        _at_rest_cli.note_plaintext_recording("a cross-window recording", args.out)
     desktop_params: dict[str, str] = {}
     web_params: list[str] = []
     for entry in args.param or ():
@@ -8463,7 +8454,6 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
         print(f"report-run failed: no report.json in {run_dir} — nothing to report.")
         return 1
     try:
-        # Decrypted in memory when the run directory is encrypted.
         report = RunReport.model_validate_json(artifacts.read_text(report_path))
     except (OSError, ValueError, sealed_set.SealedSetError):
         print("report-run failed: report.json is unreadable or invalid")
@@ -9799,16 +9789,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an irreversible step on every run."
         ),
     )
-    p.add_argument(
-        "--no-encrypt",
-        action="store_true",
-        help=(
-            "Write this command's output in plaintext (recorded in "
-            "~/.openadapt/plaintext-at-rest.jsonl, with a warning). Output is "
-            "encrypted by default; same as OPENADAPT_ENCRYPT_AT_REST=0. "
-            "Ignored under OPENADAPT_FLOW_AT_REST=strict"
-        ),
-    )
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_compile)
 
     p = sub.add_parser(
@@ -10326,16 +10307,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
-    p.add_argument(
-        "--no-encrypt",
-        action="store_true",
-        help=(
-            "Write this command's output in plaintext (recorded in "
-            "~/.openadapt/plaintext-at-rest.jsonl, with a warning). Output is "
-            "encrypted by default; same as OPENADAPT_ENCRYPT_AT_REST=0. "
-            "Ignored under OPENADAPT_FLOW_AT_REST=strict"
-        ),
-    )
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_replay)
 
     p = sub.add_parser(
@@ -10603,16 +10575,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_approval_flags(p)
-    p.add_argument(
-        "--no-encrypt",
-        action="store_true",
-        help=(
-            "Write this command's output in plaintext (recorded in "
-            "~/.openadapt/plaintext-at-rest.jsonl, with a warning). Output is "
-            "encrypted by default; same as OPENADAPT_ENCRYPT_AT_REST=0. "
-            "Ignored under OPENADAPT_FLOW_AT_REST=strict"
-        ),
-    )
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_run)
 
     sa = sub.add_parser(
@@ -10641,9 +10604,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_no_outbound(sub)
 
-    from openadapt_flow.cli_at_rest import register as _register_at_rest
-
-    _register_at_rest(sub)
+    _at_rest_cli.register(sub)
 
     from openadapt_flow.cli_service import register as _register_service
 
@@ -14333,13 +14294,7 @@ def main(
         return 2
     from openadapt_flow import at_rest
 
-    if (
-        getattr(args, "no_encrypt", False)
-        and getattr(args, "func", None) is not _cmd_record
-    ):
-        # `compile/run/replay --no-encrypt`: this process writes plaintext,
-        # with the one-line warning and the ledger line at the first write.
-        at_rest.opt_out_for_this_process("--no-encrypt")
+    _at_rest_cli.apply_no_encrypt(args, _cmd_record)
     try:
         _unsealed_output_check(args)
     except (at_rest.AtRestRefused, ValueError) as exc:

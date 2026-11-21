@@ -114,6 +114,43 @@ def _cmd_shred(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_no_encrypt(p: argparse.ArgumentParser) -> None:
+    """``--no-encrypt`` on ``compile``, ``run`` and ``replay``."""
+    p.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help=(
+            "Write this command's output in plaintext (recorded in "
+            "~/.openadapt/plaintext-at-rest.jsonl, with a warning). Output is "
+            "encrypted by default; same as OPENADAPT_ENCRYPT_AT_REST=0. "
+            "Ignored under OPENADAPT_FLOW_AT_REST=strict"
+        ),
+    )
+
+
+def apply_no_encrypt(args: argparse.Namespace, record_func: object) -> None:
+    """``compile/run/replay --no-encrypt``: this process writes plaintext, with
+    the one-line warning and the ledger line at the first write. ``record``
+    handles its own flag."""
+    from openadapt_flow import at_rest
+
+    if (
+        getattr(args, "no_encrypt", False)
+        and getattr(args, "func", None) is not record_func
+    ):
+        at_rest.opt_out_for_this_process("--no-encrypt")
+
+
+def note_plaintext_recording(artifact: str, out: object) -> None:
+    """Name and record a recording Flow can't encrypt yet (strict refuses)."""
+    from openadapt_flow import at_rest
+
+    try:
+        at_rest.unsealed_write(artifact, str(out or "--out"))
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
+
+
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "at-rest",

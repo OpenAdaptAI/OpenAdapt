@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -72,7 +73,11 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         "OPENADAPT_LEDGER_AUTHORITY_CONFIG": None,
         # Preserve the suite's recorded synthetic-data opt-out. The default
         # encryption and strict modes are covered by test_at_rest_default.py.
-        "OPENADAPT_FLOW_PLAINTEXT_AT_REST": "test suite: synthetic data",
+        # OPENADAPT_TEST_DEFAULT_AT_REST=1 runs the suite under the real
+        # default (everything sealed), to find readers that assume plaintext.
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST": None
+        if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1"
+        else "test suite: synthetic data",
         "OPENADAPT_FLOW_AT_REST_HOME": str(root / ".at-rest-home"),
         "OPENADAPT_FLOW_AT_REST": None,
         # The device key goes to a file in the isolated home, never to the
