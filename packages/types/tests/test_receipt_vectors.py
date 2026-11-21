@@ -29,6 +29,13 @@ def test_the_vector_set_is_complete():
         "cloud-countersign",
         "embedded-image-in-card",
         "embedded-image-in-record",
+        "confirmation-recorded-as-intended",
+        "confirmation-recorded-differently",
+        "confirmation-acknowledged",
+        "confirmation-sent",
+        "confirmation-tampered",
+        "confirmation-public-redaction",
+        "confirmation-reason-no-answer",
     ):
         assert required in NAMES
 
@@ -45,6 +52,10 @@ def test_vector(name):
         assert result.outcome == expected["outcome"]
         assert result.demo is expected["demo"]
         assert dict(result.disclosed) == expected["disclosed"]
+        assert list(result.confirmation_lines) == expected.get("confirmation_lines", [])
+        assert list(result.independent) == expected.get("independent", [])
+        # A confirmation line never joins or upgrades the signer lines.
+        assert not set(result.confirmation_lines) & set(result.signer_lines)
     else:
         assert result.outcome is None
 
@@ -99,3 +110,31 @@ def test_allow_list_fields_are_disclosure_fields():
         assert set(allowed) <= set(r.DISCLOSURE_FIELDS)
         for source in allowed.values():
             assert source.split(":")[0] in ("public-card/v1", "public-evidence-receipt/v1")
+
+
+def test_a_statement_without_confirmations_is_byte_identical():
+    vector = json.loads((VECTORS / "valid.json").read_text())
+    import base64
+
+    payload = base64.b64decode(vector["document"]["payload"])
+    assert b"confirmations" not in payload
+    assert r.statement_payload(json.loads(payload)) == payload
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"state": "recorded_as_intended", "read_method": "acknowledgment_message"},
+        {"state": "sent", "strength": "read_back"},
+        {"state": "recorded_differently", "differing_count": 0},
+        {"for_step": 3},
+    ],
+)
+def test_inconsistent_confirmations_are_refused(change):
+    vector = json.loads((VECTORS / "confirmation-recorded-as-intended.json").read_text())
+    import base64
+
+    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
+    statement["predicate"]["confirmations"][0].update(change)
+    with pytest.raises(ValueError):
+        r.statement_payload(statement)

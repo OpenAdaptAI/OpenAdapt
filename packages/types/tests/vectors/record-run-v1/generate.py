@@ -233,7 +233,135 @@ def build() -> dict[str, dict]:
     add("unknown-schema", "A correctly signed statement of a predicate type this verifier doesn't know.",
         unknown_schema, {"ok": False, "reason": "unknown_schema",
                          "signer_lines": [r.refusal_line("unknown_schema")]})
+    _confirmation_vectors(add)
     return vectors
+
+
+_STATES = {
+    "recorded_as_intended": ("portal_read_back", "read_back", 0),
+    "recorded_differently": ("api", "read_back", 1),
+    "acknowledged": ("acknowledgment_message", "acknowledgment", 0),
+    "sent": ("acknowledgment_message", "none", 0),
+}
+
+
+def _confirmed(state: str, reason=None, salt=None):
+    """A VERIFIED statement whose step-4 write has one counterparty confirmation."""
+    method, strength, differing = _STATES[state]
+    field = "dob:" + hashlib.sha256(b"synthetic field value").hexdigest()
+    values = {
+        "confirmations.0.counterparty": "ehr:cp-" + "ab" * 8,
+        "confirmations.0.observed_at": "2026-11-20T23:41:07Z",
+        "confirmations.0.field.0": field + (":differs" if differing else ""),
+    }
+    if reason is not None:
+        values["confirmations.0.reason"] = reason
+    commitments, openings = r.make_openings(values, salt=salt or _salts())
+    st = statement("VERIFIED")
+    st["predicate"]["confirmations"] = [
+        {
+            "kind": "counterparty_confirmation",
+            "for_step": 4,
+            "system_kind": "ehr",
+            "read_method": method,
+            "state": state,
+            "strength": strength,
+            "differing_count": differing,
+            "commitments": {k.split(".", 2)[2]: v for k, v in commitments.items()},
+        }
+    ]
+    return st, openings
+
+
+def _confirmation_vectors(add) -> None:
+    lines = {
+        "recorded_as_intended": "Confirmed in the other party's system at 2026-11-20T23:41:07Z",
+        "recorded_differently": "Recorded differently in the other party's system at 2026-11-20T23:41:07Z: 1 field differs",
+        "acknowledged": "Acknowledged by the other party at 2026-11-20T23:41:07Z",
+        "sent": "Sent to the other party at 2026-11-20T23:41:07Z, not confirmed",
+    }
+    for state, line in lines.items():
+        st, openings = _confirmed(state)
+        env = r.sign_statement(st, [signer("this_computer")])
+        add(
+            f"confirmation-{state.replace('_', '-')}",
+            f"A counterparty confirmation in state {state}, with its private openings.",
+            env,
+            {
+                "ok": True,
+                "reason": None,
+                "outcome": "VERIFIED",
+                "demo": False,
+                "signer_lines": ["Signed by this computer"],
+                "confirmation_lines": [line],
+                "independent": [_STATES[state][0] in r.INDEPENDENT_READS],
+                "disclosed": {k: v["value"] for k, v in openings.items()},
+            },
+            r.private_openings(env, openings),
+        )
+    st, openings = _confirmed("recorded_as_intended")
+    env = r.sign_statement(st, [signer("this_computer")])
+    payload = base64.b64decode(env["payload"]).replace(
+        b'"state":"recorded_as_intended"', b'"state":"recorded_differently"', 1
+    )
+    tampered = dict(env, payload=base64.b64encode(payload).decode())
+    add(
+        "confirmation-tampered",
+        "A confirmation's state edited after signing.",
+        tampered,
+        {"ok": False, "reason": "bad_signature", "signer_lines": [r.refusal_line("bad_signature")]},
+    )
+    card = r.public_card(env, {}, reveal=[])
+    add(
+        "confirmation-public-redaction",
+        "The public card of a confirmed receipt: state and strength show; the counterparty, time, fields and reason stay committed.",
+        card,
+        {
+            "ok": True,
+            "reason": None,
+            "outcome": "VERIFIED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "confirmation_lines": ["Confirmed in the other party's system"],
+            "independent": [True],
+            "disclosed": {},
+        },
+    )
+    leaky = copy.deepcopy(card)
+    leaky["openings"]["confirmations.0.counterparty"] = openings["confirmations.0.counterparty"]
+    add(
+        "confirmation-public-not-allowed",
+        "A card that opens the counterparty, which isn't on the allow-list.",
+        leaky,
+        {"ok": False, "reason": "disclosure_not_allowed", "signer_lines": [r.refusal_line("disclosure_not_allowed")]},
+    )
+    st, openings = _confirmed("sent", reason="no_answer_by_deadline")
+    env = r.sign_statement(st, [signer("this_computer")])
+    add(
+        "confirmation-reason-no-answer",
+        "A sent handoff with reason no_answer_by_deadline (committed; shown only from the private openings).",
+        env,
+        {
+            "ok": True,
+            "reason": None,
+            "outcome": "VERIFIED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "confirmation_lines": ["Sent to the other party at 2026-11-20T23:41:07Z, not confirmed"],
+            "independent": [False],
+            "disclosed": {k: v["value"] for k, v in openings.items()},
+        },
+        r.private_openings(env, openings),
+    )
+    st, openings = _confirmed("recorded_as_intended", reason="receiver_unreachable")
+    env = r.sign_statement(st, [signer("this_computer")])
+    add(
+        "confirmation-reason-inconsistent",
+        "recorded_as_intended with reason receiver_unreachable: refused when the openings are read.",
+        env,
+        {"ok": False, "reason": "inconsistent", "signer_lines": [r.refusal_line("inconsistent")]},
+        r.private_openings(env, openings),
+    )
 
 
 def main() -> None:
