@@ -610,6 +610,57 @@ def build_parser() -> argparse.ArgumentParser:
             "long so teach_repair acts on it (default 300; 0 turns it off)."
         ),
     )
+    p.add_argument(
+        "--handoffs",
+        action="store_true",
+        help=(
+            "Add get_handoff (a run's result with its signed receipt, to pass "
+            "to another agent) and verify_handoff (check one another agent "
+            "sent). --a2a turns this on."
+        ),
+    )
+    p.add_argument(
+        "--handoff-keys",
+        default=None,
+        metavar="REGISTRY",
+        help=(
+            "The key registry verify_handoff trusts (openadapt.receipt-keys/v1). "
+            "Default: this computer's key and pinned OpenAdapt Cloud keys."
+        ),
+    )
+    p.add_argument(
+        "--a2a",
+        action="store_true",
+        help=(
+            "Serve over the Agent2Agent (A2A) protocol (HTTP, JSON-RPC and "
+            "HTTP+JSON) instead of MCP stdio, with an Agent Card at "
+            "/.well-known/agent-card.json. Needs the a2a extra."
+        ),
+    )
+    p.add_argument(
+        "--a2a-host",
+        default=None,
+        help=(
+            "Address to listen on (default: this computer's loopback address "
+            "only). Any other needs --a2a-token-file."
+        ),
+    )
+    p.add_argument("--a2a-port", type=int, default=8770, help="Port (default 8770)")
+    p.add_argument(
+        "--a2a-public-url",
+        default=None,
+        metavar="URL",
+        help="The URL other agents use to reach this server, for the Agent Card.",
+    )
+    p.add_argument(
+        "--a2a-token-file",
+        default=None,
+        metavar="FILE",
+        help=(
+            "A file holding the bearer token (32+ characters) every A2A request "
+            "must carry. Required off loopback."
+        ),
+    )
     p.set_defaults(func=_cmd_serve)
 
     repair = sub.add_parser(
@@ -784,9 +835,41 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_flow.agent.tutorial import TutorialError
 
     def serve(*bridges: Any, **options: Any) -> None:
+        bridge = bridges[0] if bridges else None
+        if bridge is not None and (args.handoffs or args.a2a):
+            from openadapt_flow.agent.handoff_tools import HandoffTools
+
+            bridge.handoffs = HandoffTools(registry_path=args.handoff_keys)
+        if args.a2a:
+            from openadapt_flow.agent import a2a_server
+
+            a2a_server.serve(bridge, a2a_config)
+            return
         from openadapt_flow.agent.mcp import serve as serve_mcp
 
         serve_mcp(*bridges, **options)
+
+    a2a_config = None
+    if args.a2a:
+        problem = _a2a_problem(args)
+        if problem:
+            print(f"serve: {problem}", file=sys.stderr)
+            return 2
+        from openadapt_flow.agent import a2a_server
+
+        try:
+            a2a_config = a2a_server.A2AConfig(
+                host=args.a2a_host or a2a_server.DEFAULT_HOST,
+                port=args.a2a_port,
+                public_url=args.a2a_public_url,
+                token=a2a_server.read_token(args.a2a_token_file),
+            )
+        except (OSError, ValueError) as exc:
+            print(f"serve: {exc}", file=sys.stderr)
+            return 2
+    elif args.a2a_token_file or args.a2a_public_url:
+        print("serve: the --a2a-* flags need --a2a", file=sys.stderr)
+        return 2
 
     if args.guard:
         return _serve_guard(args, serve)
@@ -1486,6 +1569,32 @@ def _config_approvers(args: argparse.Namespace) -> Any:
         raise SystemExit(
             f"REFUSED (deployment_config_unreadable): {args.config}: {exc}"
         ) from None
+
+
+def _a2a_problem(args: argparse.Namespace) -> Optional[str]:
+    """Why --a2a can't be combined with these flags, or None."""
+    from openadapt_flow.agent import a2a_server
+
+    for flag, value in (
+        ("--authoring", args.authoring),
+        ("--guard", args.guard),
+        ("--verify", args.verify),
+        ("--teach", args.teach),
+        ("--teach-browser", args.teach_browser),
+    ):
+        if value:
+            return (
+                f"--a2a serves run and handoff tools only; {flag} needs a person "
+                "in an MCP client, so it stays on MCP stdio"
+            )
+    if args.allow_protected_export:
+        return (
+            "--allow-protected-export stays on local MCP stdio; --a2a never "
+            "sends protected workflow data"
+        )
+    if not a2a_server.a2a_available():
+        return a2a_server.A2A_INSTALL_HINT
+    return None
 
 
 def _attach_ledger(args: argparse.Namespace, bridge: Any, runs_dir: Path) -> None:

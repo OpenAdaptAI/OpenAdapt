@@ -4,6 +4,35 @@
 
 ## Unreleased
 
+### Features
+
+- **Agent-to-agent handoffs.**
+  - `openadapt handoff send` attaches a run's receipt to a result for
+    another agent: inline, detached beside a file, or POSTed to a webhook.
+    `openadapt handoff verify` checks one on arrival against your pinned keys
+    and says who signed it, what was checked, and that a valid signature
+    proves who signed, not that the claim is true. Also available as
+    `openadapt verify handoff`.
+  - `openadapt agent serve --handoffs` adds the same over MCP.
+  - `openadapt agent serve --a2a` serves workflows over the A2A (Agent2Agent)
+    protocol with an Agent Card. It needs the new `openadapt[a2a]` extra.
+
+- **Receipts replace Seals.** A receipt is a signed, itemized record of one run:
+  what it changed, how each change was checked, and who signed it. It doesn't
+  grade the run. Every run, with any outcome, now writes `receipt.json` (a DSSE
+  envelope over an in-toto `record/run/v1` statement) and a private
+  `receipt.private.json`. `openadapt verify <file|folder|link>` checks any
+  receipt, prints who signed it ("Signed by this computer", "Countersigned by
+  OpenAdapt Cloud", "Demo key: checks only in this demo"), fails closed on an
+  unknown key, schema or role, and still verifies every older format, labelled
+  "older format". `openadapt receipt verify|view|publish|unpublish` replaces
+  `openadapt seal`, which stays as a hidden alias. A receipt never holds
+  screenshots, typed values, URLs or page text.
+- `openadapt flow encrypt` replaces `flow seal` (a hidden alias for one release).
+  Desktop's "Seal and encrypt version" is now "Encrypt version".
+- The run summary (`run-receipt/v2`) moves from `receipt.json` to
+  `run-summary.json`, `.md` and `.png`. Older run folders still read.
+
 ### Fixes
 
 - `openadapt quickstart` keeps the browser hidden and shows each step in the

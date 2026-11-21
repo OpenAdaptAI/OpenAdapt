@@ -82,6 +82,7 @@ FLOW_NAMES = {
     "push": "workflow push",
     "qualify": "qualify",
     "receipt": "verify receipt",
+    "handoff": "verify handoff",
     "reconcile": "verify reconcile",
     "record": "record",
     "redact-report": "inspect redact-report",
@@ -126,6 +127,9 @@ FLOW_ROUTES = routes(FLOW_NAMES)
 # Merge integration only: these capabilities are not registered by this change.
 # Once their own registrar is present, the task view can expose it automatically.
 INTEGRATION_NAMES = {"pilot": "verify pilot", "audit": "verify audit"}
+#: Leaves renamed in place: the new name and the legacy leaf it replaces. The
+#: task route still names the legacy leaf, which every released engine has.
+RENAMED_LEAVES = {"encrypt": "seal"}
 
 
 def translate(

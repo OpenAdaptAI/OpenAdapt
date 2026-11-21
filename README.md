@@ -172,6 +172,25 @@ and `openadapt verify effect` judges a write made by any agent or script
 against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
 
+### Hand results from agent to agent
+
+When one agent hands a result to another, the run's signed receipt goes with
+it, and the receiving agent verifies it against keys it pins:
+
+```bash
+openadapt handoff send result.json --run RUN_DIR --out result.handoff.json
+openadapt handoff verify result.handoff.json --keys trusted-keys.json
+```
+
+The verdict says who signed, which checks passed and which were not checked,
+and any change confirmed in the other party's own system. A valid signature
+proves who signed, not that the claim is true. Handoffs travel over MCP
+(`serve --handoffs`), HTTP and webhooks (`--post URL`), files and email
+(`--detached`), and the A2A (Agent2Agent) protocol (`openadapt agent serve
+--a2a`, with an Agent Card, after `pip install 'openadapt[a2a]'`).
+[HANDOFFS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HANDOFFS.md)
+has the details.
+
 ### Record a task by hand
 
 Recording works the same way on every surface; only the target differs:
@@ -318,6 +337,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
+- **Hands results from agent to agent with their receipts**, over MCP, HTTP, files and the A2A protocol, and verifies a handoff on arrival.
 - **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
