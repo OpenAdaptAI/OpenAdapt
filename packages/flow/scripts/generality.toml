@@ -51,8 +51,9 @@ mockmed-records = '/api/db\b'
 mockmed-write = '/api/encounter\b'
 
 [allow]
-# Data, loaded generically: an app profile is where one app's bookkeeping lives.
-paths = ["app_profiles/"]
+# Data, loaded generically: an app profile is where one app's bookkeeping lives,
+# and an `openadapt test` app or scenario pack is data that packs.py validates.
+paths = ["app_profiles/", "agent_test/catalog/"]
 
 # OpenAdapt's own demo apps and the user-facing commands that serve them
 # (tutorial, demo, demo-record, quickstart, `openadapt-agent serve` with no

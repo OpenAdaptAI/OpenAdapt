@@ -1,0 +1,59 @@
+{
+ "scenario": "dol-clean-2",
+ "rep": 1,
+ "fault": "none",
+ "note": "A plain contact.",
+ "task": {
+  "lastname": "Lindgren",
+  "firstname": "Tove",
+  "poste": "Purchasing lead",
+  "phone": "555-0202",
+  "email": "t.lindgren@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=33",
+ "agent_s": 2.5,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=33",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=33"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "33"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245606.442,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 40
+  },
+  {
+   "t": 1795245608.134,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 59
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

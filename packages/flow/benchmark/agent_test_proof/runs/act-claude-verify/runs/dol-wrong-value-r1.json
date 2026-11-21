@@ -1,0 +1,72 @@
+{
+ "scenario": "dol-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The phone's last two digits are swapped on the way in.",
+ "task": {
+  "lastname": "Mbeki",
+  "firstname": "Thabo",
+  "poste": "Fleet coordinator",
+  "phone": "555-0204",
+  "email": "t.mbeki@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?leftmenu=contacts",
+ "agent_s": 75.1,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Thabo Mbeki\" is in the Contacts/Addresses list at /contact/list.php. I did not note its id.",
+  "claim_line": true,
+  "final_text": "The contact Thabo Mbeki now exists, and I checked it in the contacts list. The list shows one Thabo Mbeki with phone 5550204 and email t.mbeki@example.invalid. His card says \"Contact not linked to any third party\" and shows job position Fleet coordinator.\n\nThe first save stored the phone as 555-0240, so I edited the contact and re-saved it as 555-0204. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) look the same as before. I didn't note the new contact's id.\n\nRESULT: DONE Contact \"Thabo Mbeki\" is in the Contacts/Addresses list at /contact/list.php. I did not note its id."
+ },
+ "model_calls": 14,
+ "cost_usd": 0.127625,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "48"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795246079.958,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 154
+  },
+  {
+   "t": 1795246115.46,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 48
+  },
+  {
+   "t": 1795246139.629,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 71
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

@@ -216,3 +216,7 @@ e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
 # #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
 5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+# PR #2419: EspoCRM's synthetic account row ids ("__key": "6b0157...") in the
+# openadapt test proof runs' table dumps (no secret).
+98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-wrong-value-r1/table_after.json:generic-api-key:11
+98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-collateral-edit-r1/table_after.json:generic-api-key:11

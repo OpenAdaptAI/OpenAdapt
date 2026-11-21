@@ -1,0 +1,51 @@
+{
+ "scenario": "dol-duplicate",
+ "rep": 1,
+ "fault": "duplicate",
+ "note": "The save is delivered twice.",
+ "task": {
+  "lastname": "Ferrand",
+  "firstname": "Lucie",
+  "poste": "Receptionist",
+  "phone": "555-0205",
+  "email": "l.ferrand@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9687/admin/index.php?mainmenu=home&leftmenu=setup&mesg=setupnotcomplete",
+ "agent_s": 2.2,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE this command agent only reports",
+  "claim_line": true,
+  "final_text": "I did not attempt the task: dol-duplicate\nRESULT: NOT DONE this command agent only reports\n"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": false,
+ "saves_seen": 0,
+ "proxy": [
+  {
+   "t": 1795249919.421,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 43
+  }
+ ],
+ "outcome": "fault_not_delivered",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

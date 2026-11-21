@@ -64,7 +64,7 @@ def test_wrap_help_is_discovered_as_an_actual_launcher_command():
         if isinstance(action, argparse._SubParsersAction)
     )
     assert "wrap" not in choices
-    assert len(names) == 16
+    assert len(names) == 17
 
 
 def test_review_brief_matches_the_unmodified_canonical_generator():

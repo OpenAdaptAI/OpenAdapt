@@ -1,0 +1,66 @@
+{
+ "scenario": "dol-collateral-edit",
+ "rep": 1,
+ "fault": "collateral_edit",
+ "note": "With the save, Samir Haddad's phone changes.",
+ "task": {
+  "lastname": "Park",
+  "firstname": "Minseo",
+  "poste": "Logistics planner",
+  "phone": "555-0208",
+  "email": "m.park@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=17&save_lastsearch_values=1",
+ "agent_s": 6.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=17&save_lastsearch_values=1",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=17&save_lastsearch_values=1"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records changed: ['1']"
+  ],
+  "new": [
+   "17"
+  ],
+  "deleted": [],
+  "changed": [
+   "1"
+  ],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245274.734,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 55
+  },
+  {
+   "t": 1795245276.714,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "collateral_edit",
+   "status": 302,
+   "accepted": true,
+   "after_save": "changed 1 other record(s)",
+   "ms": 768
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

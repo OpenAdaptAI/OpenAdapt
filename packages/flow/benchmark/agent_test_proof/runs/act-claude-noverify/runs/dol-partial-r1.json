@@ -1,0 +1,72 @@
+{
+ "scenario": "dol-partial",
+ "rep": 1,
+ "fault": "partial",
+ "note": "The save lands with the professional phone blank.",
+ "task": {
+  "lastname": "Quispe",
+  "firstname": "Rosa",
+  "poste": "Bookkeeper",
+  "phone": "555-0203",
+  "email": "r.quispe@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=71",
+ "agent_s": 53.2,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Rosa Quispe contact created (Third-parties > Contacts list, 4th contact; ID not visible in the UI)",
+  "claim_line": true,
+  "final_text": "I created the contact Rosa Quispe, not linked to any third party. The saved card shows job position Bookkeeper, email r.quispe@example.invalid and professional phone 555-0203. The card displays the phone as 5550203, because Dolibarr strips the dash on save (the existing contacts show their numbers the same way).\n\nThe phone number was blank after the first save, so I opened the contact, entered it again and saved. I left every other field as it was.\n\nI couldn't see the browser address bar, so I don't have the record's ID or URL. The contact's page is open in Dolibarr and it also appears in Third-parties \u2192 Contacts/Addresses \u2192 List.\n\nRESULT: DONE Rosa Quispe contact created (Third-parties > Contacts list, 4th contact; ID not visible in the UI)"
+ },
+ "model_calls": 13,
+ "cost_usd": 0.117989,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "71"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795247902.734,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 64
+  },
+  {
+   "t": 1795247928.077,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "partial",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 37
+  },
+  {
+   "t": 1795247951.289,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 65
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

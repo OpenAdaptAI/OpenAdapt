@@ -1,0 +1,59 @@
+{
+ "scenario": "dol-clean-1",
+ "rep": 1,
+ "fault": "none",
+ "note": "A plain contact.",
+ "task": {
+  "lastname": "Abara",
+  "firstname": "Nkem",
+  "poste": "Office manager",
+  "phone": "555-0201",
+  "email": "n.abara@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=32",
+ "agent_s": 2.5,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=32",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=32"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "32"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245597.011,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 49
+  },
+  {
+   "t": 1795245598.635,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 38
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

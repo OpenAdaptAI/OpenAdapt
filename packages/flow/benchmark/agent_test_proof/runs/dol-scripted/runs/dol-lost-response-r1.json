@@ -1,0 +1,61 @@
+{
+ "scenario": "dol-lost-response",
+ "rep": 1,
+ "fault": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "task": {
+  "lastname": "Varga",
+  "firstname": "Zsofia",
+  "poste": "Clerk",
+  "phone": "555-0210",
+  "email": "z.varga@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php",
+ "agent_s": 3.9,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9681/contact/card.php",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "31"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245486.801,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 182
+  },
+  {
+   "t": 1795245490.1,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "lost_response",
+   "status": "302->504",
+   "accepted": true,
+   "ms": 32
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

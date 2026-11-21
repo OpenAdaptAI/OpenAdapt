@@ -1,0 +1,62 @@
+{
+ "scenario": "dol-no-persist",
+ "rep": 2,
+ "fault": "no_persist",
+ "note": "The page shows success, then the new contact is removed.",
+ "task": {
+  "lastname": "Ivanova",
+  "firstname": "Daria",
+  "poste": "Storekeeper",
+  "phone": "555-0206",
+  "email": "d.ivanova@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=63",
+ "agent_s": 96.4,
+ "claim": {
+  "status": "not_done",
+  "line": "RESULT: NOT DONE Submitted the form but ended on a \"Record not found.\" page and could not reach the contacts list to confirm the contact was saved.",
+  "claim_line": true,
+  "final_text": "I submitted the new contact form, but I could not confirm the contact was saved. The browser ended up on a blank page reading \"Record not found.\" and I could not leave it.\n\nI filled in last name Ivanova, first name Daria, job position Storekeeper, business phone 555-0206 and email d.ivanova@example.invalid. I left the third party empty and changed nothing else. Before adding, the contacts list held three records (Oskar Brandt, Samir Haddad, Elena Novak), and none of them was Daria Ivanova.\n\nAfter I clicked Add, Dolibarr showed \"Record not found.\" instead of the new contact's page. The browser has no address bar, and Back, reload, a new tab and typing a URL all failed. So I could not open the contacts list to check that exactly one Daria Ivanova record exists or that the other three are unchanged.\n\nRESULT: NOT DONE Submitted the form but ended on a \"Record not found.\" page and could not reach the contacts list to confirm the contact was saved."
+ },
+ "model_calls": 16,
+ "cost_usd": 0.153545,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795247266.916,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 57
+  },
+  {
+   "t": 1795247300.956,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "no_persist",
+   "status": 302,
+   "accepted": true,
+   "after_save": "removed 1 new record(s)",
+   "ms": 6149
+  }
+ ],
+ "outcome": "safe_stop",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

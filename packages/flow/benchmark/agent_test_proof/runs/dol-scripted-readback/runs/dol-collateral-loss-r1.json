@@ -1,0 +1,66 @@
+{
+ "scenario": "dol-collateral-loss",
+ "rep": 1,
+ "fault": "collateral_loss",
+ "note": "With the save, Elena Novak's contact is deleted.",
+ "task": {
+  "lastname": "Costa",
+  "firstname": "Joao",
+  "poste": "Sales assistant",
+  "phone": "555-0207",
+  "email": "j.costa@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=15&save_lastsearch_values=1",
+ "agent_s": 6.4,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=15&save_lastsearch_values=1",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=15&save_lastsearch_values=1"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records deleted: ['2']"
+  ],
+  "new": [
+   "15"
+  ],
+  "deleted": [
+   "2"
+  ],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795245261.638,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 54
+  },
+  {
+   "t": 1795245263.564,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "collateral_loss",
+   "status": 302,
+   "accepted": true,
+   "after_save": "deleted 1 other record(s)",
+   "ms": 721
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

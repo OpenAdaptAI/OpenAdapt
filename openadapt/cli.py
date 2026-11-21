@@ -1934,6 +1934,36 @@ def wrap(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "test",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # openadapt_flow.agent_test owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def agent_test_command(command_ctx: click.Context) -> None:
+    """Test an agent on real apps with planted faults, for CI.
+
+    Runs any agent against stateful scenarios on an app in local containers
+    (OpenEMR, Dolibarr, EspoCRM), plants faults on its saves, grades the
+    app's database, and gates against a stored baseline. Every argument
+    passes to openadapt_flow.agent_test unchanged.
+    """
+    _require_supported_python()
+    test_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_flow.agent_test.cli",)
+    )
+    if test_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no test command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(test_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,

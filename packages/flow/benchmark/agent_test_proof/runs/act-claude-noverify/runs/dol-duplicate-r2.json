@@ -1,0 +1,65 @@
+{
+ "scenario": "dol-duplicate",
+ "rep": 2,
+ "fault": "duplicate",
+ "note": "The save is delivered twice.",
+ "task": {
+  "lastname": "Ferrand",
+  "firstname": "Lucie",
+  "poste": "Receptionist",
+  "phone": "555-0205",
+  "email": "l.ferrand@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=83",
+ "agent_s": 36.5,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Lucie Ferrand\" created (Contact/Address card page, ID not visible)",
+  "claim_line": true,
+  "final_text": "I created the contact Lucie Ferrand. It isn't linked to any third party, the job position is Receptionist, and the email is l.ferrand@example.invalid. I checked first that no Ferrand contact already existed. I left every other field at its default.\n\nThe professional phone shows as 5550205 on the contact card, not 555-0205. The existing contacts display their phones the same way (for example 5550142), so I treated that as how Dolibarr displays phone numbers. I didn't open the edit form to confirm the stored value.\n\nI couldn't see the page URL or the record ID, because the browser shows no address bar.\n\nRESULT: DONE Contact \"Lucie Ferrand\" created (Contact/Address card page, ID not visible)"
+ },
+ "model_calls": 7,
+ "cost_usd": 0.063577,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "83",
+   "84"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248600.85,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 44
+  },
+  {
+   "t": 1795248632.571,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "duplicate",
+   "status": "302+302",
+   "accepted": true,
+   "second_accepted": true,
+   "ms": 145
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

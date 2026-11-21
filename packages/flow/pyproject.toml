@@ -119,6 +119,13 @@ browser = [
     # its separately downloaded Chromium runtime.
     "playwright>=1.44",
 ]
+# `openadapt test` (openadapt_flow.agent_test): the headless browser the
+# scenarios run in, and the two computer-use agents' SDKs. No vision stack.
+agent-test = [
+    "playwright>=1.44",
+    "anthropic>=0.40",
+    "openai>=1.60",
+]
 dev = [
     # The test suite exercises record, compile and replay.
     "numpy>=1.26",
@@ -400,6 +407,8 @@ exclude = [
     # Leaderboard evidence (screenshots, transcripts) is repository-only.
     "/benchmark/fhir_medplum/leaderboard/results",
     "/benchmark/write_leaderboard_v2/results",
+    # `openadapt test` proof runs (raw tables, transcripts) are repository-only.
+    "/benchmark/agent_test_proof/runs",
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
@@ -472,6 +481,8 @@ exclude = [
     # Leaderboard evidence (screenshots, transcripts) is repository-only.
     "/benchmark/fhir_medplum/leaderboard/results",
     "/benchmark/write_leaderboard_v2/results",
+    # `openadapt test` proof runs (raw tables, transcripts) are repository-only.
+    "/benchmark/agent_test_proof/runs",
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",

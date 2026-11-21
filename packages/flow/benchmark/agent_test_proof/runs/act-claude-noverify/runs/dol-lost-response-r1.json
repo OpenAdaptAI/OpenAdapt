@@ -1,0 +1,51 @@
+{
+ "scenario": "dol-lost-response",
+ "rep": 1,
+ "fault": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "task": {
+  "lastname": "Varga",
+  "firstname": "Zsofia",
+  "poste": "Clerk",
+  "phone": "555-0210",
+  "email": "z.varga@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/admin/index.php?mainmenu=home&leftmenu=setup&mesg=setupnotcomplete",
+ "agent_s": 9.4,
+ "claim": {
+  "status": "not_done",
+  "line": "(no reply)",
+  "claim_line": false,
+  "final_text": ""
+ },
+ "model_calls": 2,
+ "cost_usd": 0.023039,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": false,
+ "saves_seen": 0,
+ "proxy": [
+  {
+   "t": 1795248318.71,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 64
+  }
+ ],
+ "outcome": "fault_not_delivered",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

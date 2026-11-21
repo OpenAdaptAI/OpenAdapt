@@ -1,0 +1,65 @@
+{
+ "scenario": "dol-late-revert",
+ "rep": 2,
+ "fault": "late_revert",
+ "note": "The save lands correctly; 45 s later the phone is blanked again.",
+ "task": {
+  "lastname": "Okafor",
+  "firstname": "Chidi",
+  "poste": "Planner",
+  "phone": "555-0209",
+  "email": "c.okafor@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?mode=common&contextpage=contactlist&begin=&userid=0&contactname=&type=&view=&search_no_email=-1&search_status=1",
+ "agent_s": 51.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 4"
+ },
+ "model_calls": 15,
+ "cost_usd": 0.070543,
+ "late": "reverted 1 new record(s)",
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 112 phone: want '555-0209' got ''"
+  ],
+  "new": [
+   "112"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795250196.879,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 37
+  },
+  {
+   "t": 1795250213.418,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "late_revert",
+   "status": 302,
+   "accepted": true,
+   "late": "scheduled in 45 s",
+   "ms": 61
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}
