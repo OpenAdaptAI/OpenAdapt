@@ -215,3 +215,13 @@ def test_all_entrypoints_share_stateful_budget_and_write_route_policy(
     assert route.events == ["abort"]
     assert tap.summary().mutations[0].block_reason == "undeclared_write_route"
     assert tap.summary().mutations_allowed == 0
+
+
+@pytest.mark.parametrize("suffix", [":notaport/rows", ":99999/rows", ":-1/rows"])
+def test_absolute_target_with_an_unparseable_origin_is_refused(upstream, suffix):
+    origin, seen = upstream
+    host = urlsplit(origin).hostname
+    with SessionWireTap(origin, WirePolicy(max_mutations=None)) as tap:
+        status = send(tap, "GET", f"http://{host}{suffix}")
+    assert status >= 400
+    assert seen == []
