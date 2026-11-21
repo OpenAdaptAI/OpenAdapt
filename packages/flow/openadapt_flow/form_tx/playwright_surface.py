@@ -156,7 +156,6 @@ _SNAPSHOT_WALKER_JS = r"""
         'none selected',
         'select one',
         '-- select one --',
-        'select',
         'choose one',
         'please choose',
         'choose',
@@ -676,7 +675,16 @@ _SNAPSHOT_WALKER_JS = r"""
             currentValue = checked ? radioValue : '';
             groupLabel = groupLabelFor(el);
             if (nameAttr) {
-                radioGroup = 'name:' + nameAttr;
+                // A radio group is its name within one form (or one root
+                // when it has no form): same-named groups in two forms stay
+                // two fields.
+                const rootNode = el.getRootNode();
+                const owner = el.form
+                    ? 'form:' + computeDomSelector(el.form)
+                    : (rootNode && rootNode.host
+                        ? 'root:' + computeDomSelector(rootNode.host)
+                        : 'doc');
+                radioGroup = 'name:' + nameAttr + '@' + owner;
                 const scope = el.form || el.getRootNode() || document;
                 const peers = safeQueryAll(scope, 'input[type="radio"]').filter(
                     (r) => r.name === nameAttr && (r.form || null) === (el.form || null)
