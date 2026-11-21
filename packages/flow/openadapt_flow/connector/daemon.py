@@ -105,6 +105,14 @@ def handle_job(
     Cloud accepts that outcome. A callback/ACK delivery failure leaves the
     lease to expire as terminal ``lease_expired_uncertain`` without re-offer.
     """
+    # The executor supplies its observed archive digest once the child could
+    # have written to the system of record.
+    child_bundle_sha256: Optional[str] = None
+
+    def child_start(verified_sha256: str) -> None:
+        nonlocal child_bundle_sha256
+        child_bundle_sha256 = verified_sha256
+
     try:
         storage = storage_factory(job)
         result = execute_job(
@@ -114,14 +122,16 @@ def handle_job(
             runner=runner,
             require_run_token=require_run_token,
             on_secrets=client.add_secret_values,
+            on_child_start=child_start,
         )
-    except Exception as exc:  # fail closed: build a failed result, still report
+    except Exception as exc:  # The outcome may be unknown after child handoff.
         result = ExecutionResult(
-            "failed",
+            "halt" if child_bundle_sha256 else "failed",
             {},
+            {"present": True} if child_bundle_sha256 else None,
             None,
-            job.report_ref(),
-            f"{type(exc).__name__}",
+            type(exc).__name__,
+            verified_bundle_sha256=child_bundle_sha256,
             error_code="connector_exception",
         )
 
@@ -134,27 +144,33 @@ def handle_job(
         callback_body = phi_free_callback_body(job, result)
     except Exception:  # noqa: BLE001 - nothing unchecked is ever sent
         callback_body = None
-    for attempt in range(CALLBACK_ATTEMPTS):
-        if callback_body is None:
-            break
+    transport_failures = 0
+    while callback_body is not None and transport_failures < CALLBACK_ATTEMPTS:
         try:
             client.run_callback(callback_body, run_token=job.run_token)
             callback_accepted = True
             break
         except EgressViolation:
-            # The body would carry something off the allow-list. Never retry
-            # it; report the run as a plain failure instead.
-            callback_body = phi_free_callback_body(
-                job,
-                ExecutionResult(
-                    "failed", {}, None, None, None, error_code="egress_refused"
-                ),
+            if result.error_code == "egress_refused":
+                break  # Even the minimal binding was refused. Leave the lease unacked.
+            # Discard every report-derived field. Cloud requires the observed
+            # archive digest for a halt, and runner_failure for a pre-hash failure.
+            result = ExecutionResult(
+                "halt" if child_bundle_sha256 else "failed",
+                {},
+                {"present": True} if child_bundle_sha256 else None,
+                None,
+                verified_bundle_sha256=child_bundle_sha256,
+                error_code="egress_refused",
             )
-            result.error_code = "egress_refused"
-            result.status = "failed"
+            callback_body = phi_free_callback_body(job, result)
+            callback_body.pop("failure_signal", None)
+            if child_bundle_sha256:
+                callback_body["error_code"] = "egress_refused"
         except Exception:  # noqa: BLE001 - bounded retry, then leave lease unacked
-            if attempt + 1 < CALLBACK_ATTEMPTS:
-                time.sleep(0.25 * (2**attempt))
+            transport_failures += 1
+            if transport_failures < CALLBACK_ATTEMPTS:
+                time.sleep(0.25 * (2 ** (transport_failures - 1)))
 
     if job.lease_job_id and callback_accepted:
         ack_status = "failed" if result.status == "failed" else "done"
