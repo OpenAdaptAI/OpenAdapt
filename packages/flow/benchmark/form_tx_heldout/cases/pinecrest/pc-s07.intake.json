@@ -1,0 +1,21 @@
+{
+  "case_id": "pc-s07",
+  "facts": {
+    "coverage.deductible": 2500,
+    "coverage.effective_date": "2027-01-01",
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "1210 Ridgecrest Blvd",
+    "property.burglar_alarm": true,
+    "property.city": "Quarry Point",
+    "property.construction_type": "brick",
+    "property.finish_level": "custom",
+    "property.heating_type": "heat pump",
+    "property.roof_material": "tile",
+    "property.roof_year": 2015,
+    "property.square_feet": 3300,
+    "property.state": "WA",
+    "property.stories": "2",
+    "property.year_built": 2015,
+    "property.zip": "98221"
+  }
+}

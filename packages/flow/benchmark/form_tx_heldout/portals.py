@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from .case_defs import CASES
 from .common import CREDENTIALS, PortalSpec
+from .cobalt import Cobalt
 from .harborline import Harborline
+from .pinecrest import Pinecrest
+from .tidewater import Tidewater
 
 
 def _cases(portal: str) -> list[str]:
@@ -49,5 +52,35 @@ PORTALS: dict[str, PortalSpec] = {
         login=_login("harborline", "/agent/login", "User ID", "Password"),
         cases=_cases("harborline"),
         dev_case=_dev("harborline"),
+    ),
+    "cobalt": PortalSpec(
+        name="cobalt",
+        title="Cobalt Ridge Insurance auto quote",
+        description="Modern single-page auto quote, div/ARIA widgets, async type-ahead listboxes, 4 steps plus review",
+        factory=Cobalt,
+        entry_path="/quote",
+        login={**_login("cobalt", "/quote (sign-in dialog)", "Email", "Password"), "required_at_start": False},
+        cases=_cases("cobalt"),
+        dev_case=_dev("cobalt"),
+    ),
+    "pinecrest": PortalSpec(
+        name="pinecrest",
+        title="Pinecrest Assurance agent workspace",
+        description="Homeowners quote app inside an iframe, full re-render on every change, modal estimator dialog, 3 steps plus review",
+        factory=Pinecrest,
+        entry_path="/portal",
+        login=_login("pinecrest", "/login", "Username", "Password"),
+        cases=_cases("pinecrest"),
+        dev_case=_dev("pinecrest"),
+    ),
+    "tidewater": PortalSpec(
+        name="tidewater",
+        title="Tidewater Grange agency quick quote",
+        description="Home plus auto bundle quick quote, server-rendered pages built from shadow-DOM custom elements, 3 steps plus review",
+        factory=Tidewater,
+        entry_path="/qq/start",
+        login=_login("tidewater", "/signin", "Agent ID", "Passphrase"),
+        cases=_cases("tidewater"),
+        dev_case=_dev("tidewater"),
     ),
 }

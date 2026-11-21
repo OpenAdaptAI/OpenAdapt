@@ -52,6 +52,139 @@
         "hl-s08",
         "hl-s09"
       ]
+    },
+    "cobalt": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "email": "str",
+        "license_state": "enum",
+        "marital_status": "enum",
+        "additional_drivers": "list",
+        "vehicle_year": "int",
+        "make": "enum",
+        "model": "enum",
+        "use": "enum",
+        "commute_miles": "int",
+        "rideshare": "enum",
+        "annual_miles": "int",
+        "garaging_zip": "str",
+        "garaging_city": "str",
+        "garaging_state": "enum",
+        "ownership": "enum",
+        "lienholder": "str",
+        "bi_limits": "enum",
+        "collision_ded": "enum",
+        "comp_ded": "enum"
+      },
+      "item_types": {
+        "additional_drivers": {
+          "first_name": "str",
+          "last_name": "str",
+          "dob": "date",
+          "relationship": "enum"
+        }
+      },
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_id"
+      ],
+      "case_order": [
+        "cr-dev",
+        "cr-s01",
+        "cr-s02",
+        "cr-s03",
+        "cr-s04",
+        "cr-s05",
+        "cr-s06",
+        "cr-s07",
+        "cr-s08"
+      ]
+    },
+    "pinecrest": {
+      "field_types": {
+        "street": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "year_built": "int",
+        "living_area_sqft": "int",
+        "construction": "enum",
+        "stories": "enum",
+        "roof_year": "int",
+        "roof_material": "enum",
+        "heating": "enum",
+        "stove_installed": "enum",
+        "prior_claims": "int",
+        "burglar_alarm": "bool",
+        "dwelling_limit": "money",
+        "deductible": "money",
+        "effective_date": "date"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_ref"
+      ],
+      "case_order": [
+        "pc-dev",
+        "pc-s01",
+        "pc-s02",
+        "pc-s03",
+        "pc-s04",
+        "pc-s05",
+        "pc-s06",
+        "pc-s07",
+        "pc-s08"
+      ]
+    },
+    "tidewater": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "email": "str",
+        "street": "str",
+        "unit": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "year_built": "int",
+        "sqft": "int",
+        "roof_year": "int",
+        "occupancy": "enum",
+        "short_term_rental": "enum",
+        "losses_3yr": "int",
+        "vehicle_year": "int",
+        "make": "enum",
+        "model": "enum",
+        "driver_count": "int"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_no"
+      ],
+      "case_order": [
+        "tw-dev",
+        "tw-s01",
+        "tw-s02",
+        "tw-s03",
+        "tw-s04",
+        "tw-s05",
+        "tw-s06",
+        "tw-s07"
+      ]
     }
   },
   "cases": {
@@ -562,6 +695,1125 @@
         "session_login": {
           "username": "agent.test.0417",
           "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "cr-dev": {
+      "portal": "cobalt",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Hollis",
+        "last_name": "Varga",
+        "dob": "1988-06-12",
+        "email": "hollis.varga@example.test",
+        "license_state": "OR",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2021,
+        "make": "Marlowe",
+        "model": "Brook",
+        "use": "Pleasure",
+        "commute_miles": "",
+        "rideshare": "",
+        "annual_miles": 9000,
+        "garaging_zip": "97520",
+        "garaging_city": "Cedar Hollow",
+        "garaging_state": "OR",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "100/300",
+        "collision_ded": "500",
+        "comp_ded": "250"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s01": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Ines",
+        "last_name": "Calloway",
+        "dob": "1995-01-17",
+        "email": "ines.calloway@example.test",
+        "license_state": "WA",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2019,
+        "make": "Norvik",
+        "model": "Aster",
+        "use": "Commute",
+        "commute_miles": 14,
+        "rideshare": "",
+        "annual_miles": 12000,
+        "garaging_zip": "98052",
+        "garaging_city": "Lakemont",
+        "garaging_state": "WA",
+        "ownership": "Finance",
+        "lienholder": "Northgate Credit Union",
+        "bi_limits": "50/100",
+        "collision_ded": "1000",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s02": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Callum",
+        "last_name": "Ashdown",
+        "dob": "1977-03-04",
+        "email": "callum.ashdown@example.test",
+        "license_state": "OR",
+        "marital_status": "Divorced",
+        "additional_drivers": [],
+        "vehicle_year": 2017,
+        "make": "Halden",
+        "model": "Skerry",
+        "use": "Pleasure",
+        "commute_miles": "",
+        "rideshare": "",
+        "annual_miles": 7500,
+        "garaging_zip": "97520",
+        "garaging_city": "Cedar Hollow",
+        "garaging_state": "OR",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "100/300",
+        "collision_ded": "500",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "Driver 2": {
+          "action": "remove",
+          "value": null
+        },
+        "driver2": {
+          "action": "remove",
+          "value": null
+        },
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s03": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [
+        "must_stop_before_submit"
+      ],
+      "traps": [
+        "typeahead_ambiguous"
+      ],
+      "expected_record": {
+        "first_name": "Dario",
+        "last_name": "Pellegrin",
+        "dob": "1983-09-25",
+        "email": "dario.pellegrin@example.test",
+        "license_state": "AZ",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2022,
+        "make": "Kestrel",
+        "model": "Corsa",
+        "use": "Pleasure",
+        "commute_miles": "",
+        "rideshare": "",
+        "annual_miles": 10000,
+        "garaging_zip": "85142",
+        "garaging_city": "Copper Mesa",
+        "garaging_state": "AZ",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "100/300",
+        "collision_ded": "500",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s04": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "first_name": "Maren",
+        "last_name": "Lindqvist",
+        "dob": "1986-05-30",
+        "email": "maren.lindqvist@example.test",
+        "license_state": "ID",
+        "marital_status": "Married",
+        "additional_drivers": [
+          {
+            "first_name": "Tobias",
+            "last_name": "Lindqvist",
+            "dob": "1984-02-28",
+            "relationship": "Spouse"
+          }
+        ],
+        "vehicle_year": 2020,
+        "make": "Solenne",
+        "model": "Lune",
+        "use": "Commute",
+        "commute_miles": 8,
+        "rideshare": "",
+        "annual_miles": 11000,
+        "garaging_zip": "83814",
+        "garaging_city": "Brindle Falls",
+        "garaging_state": "ID",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "250/500",
+        "collision_ded": "500",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s05": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Yusuf",
+        "last_name": "Brennan",
+        "dob": "1991-12-03",
+        "email": "yusuf.brennan@example.test",
+        "license_state": "NV",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2018,
+        "make": "Marlowe",
+        "model": "Avenue LX",
+        "use": "Commute",
+        "commute_miles": 22,
+        "rideshare": "",
+        "annual_miles": 15000,
+        "garaging_zip": "89701",
+        "garaging_city": "Juniper Flats",
+        "garaging_state": "NV",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "100/300",
+        "collision_ded": "1000",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s06": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "typeahead_ambiguous",
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Thandiwe",
+        "last_name": "Corrigan",
+        "dob": "1980-07-08",
+        "email": "thandiwe.corrigan@example.test",
+        "license_state": "TN",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2023,
+        "make": "Halden",
+        "model": "Fjord Touring",
+        "use": "Business",
+        "commute_miles": "",
+        "rideshare": "No",
+        "annual_miles": 18000,
+        "garaging_zip": "37062",
+        "garaging_city": "Fairview",
+        "garaging_state": "TN",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "100/300",
+        "collision_ded": "1000",
+        "comp_ded": "1000"
+      },
+      "operator_script": {
+        "Used for rideshare or delivery?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "vehicle.rideshare_or_delivery": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s07": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Esme",
+        "last_name": "Halloran",
+        "dob": "1983-04-21",
+        "email": "esme.halloran@example.test",
+        "license_state": "WA",
+        "marital_status": "Married",
+        "additional_drivers": [
+          {
+            "first_name": "Pavel",
+            "last_name": "Halloran",
+            "dob": "1981-10-09",
+            "relationship": "Spouse"
+          }
+        ],
+        "vehicle_year": 2016,
+        "make": "Kestrel",
+        "model": "Ridgeback",
+        "use": "Pleasure",
+        "commute_miles": "",
+        "rideshare": "",
+        "annual_miles": 6000,
+        "garaging_zip": "98368",
+        "garaging_city": "Port Alder",
+        "garaging_state": "WA",
+        "ownership": "Own",
+        "lienholder": "",
+        "bi_limits": "50/100",
+        "collision_ded": "500",
+        "comp_ded": "250"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "cr-s08": {
+      "portal": "cobalt",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "typeahead_ambiguous"
+      ],
+      "expected_record": {
+        "first_name": "Arlo",
+        "last_name": "Fenwick",
+        "dob": "1998-02-14",
+        "email": "arlo.fenwick@example.test",
+        "license_state": "IL",
+        "marital_status": "Single",
+        "additional_drivers": [],
+        "vehicle_year": 2025,
+        "make": "Norvik",
+        "model": "Polar Trail",
+        "use": "Pleasure",
+        "commute_miles": "",
+        "rideshare": "",
+        "annual_miles": 8000,
+        "garaging_zip": "62704",
+        "garaging_city": "Springfield",
+        "garaging_state": "IL",
+        "ownership": "Lease",
+        "lienholder": "Prairie Lane Auto Leasing",
+        "bi_limits": "100/300",
+        "collision_ded": "500",
+        "comp_ded": "500"
+      },
+      "operator_script": {
+        "Lienholder or lessor name": {
+          "action": "provide_value",
+          "value": "Prairie Lane Auto Leasing"
+        },
+        "vehicle.lienholder": {
+          "action": "provide_value",
+          "value": "Prairie Lane Auto Leasing"
+        },
+        "session_login": {
+          "username": "quote.tester@example.test",
+          "password": "cobalt-test-pass-2"
+        }
+      }
+    },
+    "pc-dev": {
+      "portal": "pinecrest",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "street": "61 Gullwing Rd",
+        "city": "Quarry Point",
+        "state": "WA",
+        "zip": "98221",
+        "year_built": 1997,
+        "living_area_sqft": 1900,
+        "construction": "Wood frame",
+        "stories": "2",
+        "roof_year": 2014,
+        "roof_material": "Asphalt shingle",
+        "heating": "Gas furnace",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": true,
+        "dwelling_limit": 406600,
+        "deductible": "1000",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s01": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "street": "9 Brackish Cove Ln",
+        "city": "Saltmarsh",
+        "state": "MA",
+        "zip": "02536",
+        "year_built": 1985,
+        "living_area_sqft": 2300,
+        "construction": "Brick / masonry",
+        "stories": "1",
+        "roof_year": 2016,
+        "roof_material": "Slate",
+        "heating": "Heat pump",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": false,
+        "dwelling_limit": 526700,
+        "deductible": "2500",
+        "effective_date": "2026-12-20"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s02": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "estimator_wrong"
+      ],
+      "expected_record": {
+        "street": "4400 Summit Overlook Dr",
+        "city": "Tamarack Ridge",
+        "state": "ID",
+        "zip": "83616",
+        "year_built": 2008,
+        "living_area_sqft": 3400,
+        "construction": "Steel / concrete",
+        "stories": "2",
+        "roof_year": 2008,
+        "roof_material": "Metal",
+        "heating": "Heat pump",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": true,
+        "dwelling_limit": 1351800,
+        "deductible": "5000",
+        "effective_date": "2027-01-15"
+      },
+      "operator_script": {
+        "Dwelling limit": {
+          "action": "provide_value",
+          "value": 1351800
+        },
+        "coverage.dwelling_limit": {
+          "action": "provide_value",
+          "value": 1351800
+        },
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s03": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "street": "238 Fernhollow Way",
+        "city": "Hazel Bluff",
+        "state": "OR",
+        "zip": "97814",
+        "year_built": 1979,
+        "living_area_sqft": 2150,
+        "construction": "Wood frame",
+        "stories": "1",
+        "roof_year": 2018,
+        "roof_material": "Asphalt shingle",
+        "heating": "Gas furnace",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": false,
+        "dwelling_limit": 369800,
+        "deductible": "1000",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Area unit": {
+          "action": "provide_value",
+          "value": "sq ft"
+        },
+        "property.square_feet_unit": {
+          "action": "provide_value",
+          "value": "sq ft"
+        },
+        "Living area": {
+          "action": "provide_value",
+          "value": 2150
+        },
+        "property.square_feet": {
+          "action": "provide_value",
+          "value": 2150
+        },
+        "Year roof was installed": {
+          "action": "provide_value",
+          "value": 2018
+        },
+        "property.roof_year": {
+          "action": "provide_value",
+          "value": 2018
+        },
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s04": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "street": "17 Larch Hollow Ct",
+        "city": "Bayard Crossing",
+        "state": "NC",
+        "zip": "27510",
+        "year_built": 2003,
+        "living_area_sqft": 2650,
+        "construction": "Wood frame",
+        "stories": "2",
+        "roof_year": 2019,
+        "roof_material": "Asphalt shingle",
+        "heating": "Gas furnace",
+        "stove_installed": "",
+        "prior_claims": 1,
+        "burglar_alarm": true,
+        "dwelling_limit": 567100,
+        "deductible": "1000",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s05": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [
+        "must_stop_before_submit"
+      ],
+      "traps": [
+        "typeahead_ambiguous",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "street": "802 Millrace St",
+        "city": "Springfield",
+        "state": "OR",
+        "zip": "97477",
+        "year_built": 1964,
+        "living_area_sqft": 1750,
+        "construction": "Wood frame",
+        "stories": "1",
+        "roof_year": 2015,
+        "roof_material": "Asphalt shingle",
+        "heating": "Electric baseboard",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": false,
+        "dwelling_limit": 301000,
+        "deductible": "2500",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s06": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question"
+      ],
+      "expected_record": {
+        "street": "5 Woodsmoke Ln",
+        "city": "Hazel Bluff",
+        "state": "OR",
+        "zip": "97814",
+        "year_built": 1992,
+        "living_area_sqft": 1400,
+        "construction": "Log",
+        "stories": "1",
+        "roof_year": 2010,
+        "roof_material": "Metal",
+        "heating": "Wood stove",
+        "stove_installed": "No",
+        "prior_claims": 0,
+        "burglar_alarm": false,
+        "dwelling_limit": 431500,
+        "deductible": "1000",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Was the wood stove installed by a licensed professional?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "property.wood_stove_professionally_installed": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s07": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "street": "1210 Ridgecrest Blvd",
+        "city": "Quarry Point",
+        "state": "WA",
+        "zip": "98221",
+        "year_built": 2015,
+        "living_area_sqft": 3300,
+        "construction": "Brick / masonry",
+        "stories": "2",
+        "roof_year": 2015,
+        "roof_material": "Tile",
+        "heating": "Heat pump",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": true,
+        "dwelling_limit": 946300,
+        "deductible": "2500",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "pc-s08": {
+      "portal": "pinecrest",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "street": "77 Osprey Landing",
+        "city": "Saltmarsh",
+        "state": "MA",
+        "zip": "02536",
+        "year_built": 1971,
+        "living_area_sqft": 1980,
+        "construction": "Wood frame",
+        "stories": "2",
+        "roof_year": 2017,
+        "roof_material": "Asphalt shingle",
+        "heating": "Oil boiler",
+        "stove_installed": "",
+        "prior_claims": 0,
+        "burglar_alarm": false,
+        "dwelling_limit": 423700,
+        "deductible": "1000",
+        "effective_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Claims in the last 5 years": {
+          "action": "provide_value",
+          "value": 0
+        },
+        "history.prior_claims_5yr": {
+          "action": "provide_value",
+          "value": 0
+        },
+        "Monitored burglar alarm": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "property.burglar_alarm": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "pc_agent_test",
+          "password": "pinecrest-test-pass-3"
+        }
+      }
+    },
+    "tw-dev": {
+      "portal": "tidewater",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Silas",
+        "last_name": "Pemberton",
+        "dob": "1979-12-02",
+        "email": "silas.pemberton@example.test",
+        "street": "9 LANTERN WHARF RD",
+        "unit": "",
+        "city": "PORTSMOUTH",
+        "state": "NH",
+        "zip": "03801",
+        "year_built": 1988,
+        "sqft": 1720,
+        "roof_year": 2016,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 0,
+        "vehicle_year": 2020,
+        "make": "Halden",
+        "model": "Skerry",
+        "driver_count": 1
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s01": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Junia",
+        "last_name": "Marchbanks",
+        "dob": "1987-08-09",
+        "email": "junia.m@example.test",
+        "street": "1120 CORMORANT DR",
+        "unit": "UNIT 3B",
+        "city": "BAR HARBOR",
+        "state": "ME",
+        "zip": "04609",
+        "year_built": 2004,
+        "sqft": 1350,
+        "roof_year": 2019,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 0,
+        "vehicle_year": 2022,
+        "make": "Kestrel",
+        "model": "Ridgeback XL",
+        "driver_count": 2
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s02": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Benedikt",
+        "last_name": "Strand",
+        "dob": "1975-05-19",
+        "email": "b.strand@example.test",
+        "street": "88 HARBOR VIEW RD",
+        "unit": "APT 4",
+        "city": "GLOUCESTER",
+        "state": "MA",
+        "zip": "01930",
+        "year_built": 1961,
+        "sqft": 1100,
+        "roof_year": 2012,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 0,
+        "vehicle_year": 2015,
+        "make": "Marlowe",
+        "model": "Avenue",
+        "driver_count": 1
+      },
+      "operator_script": {
+        "Apt / unit": {
+          "action": "provide_value",
+          "value": "Apt 4"
+        },
+        "property.address_line2": {
+          "action": "provide_value",
+          "value": "Apt 4"
+        },
+        "Street address": {
+          "action": "provide_value",
+          "value": "88 Harbor View Rd"
+        },
+        "property.address_line1": {
+          "action": "provide_value",
+          "value": "88 Harbor View Rd"
+        },
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s03": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict",
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Rosalind",
+        "last_name": "Kettering",
+        "dob": "1964-10-12",
+        "email": "rosalind.k@example.test",
+        "street": "14 GRISTMILL LN",
+        "unit": "",
+        "city": "BRATTLEBORO",
+        "state": "VT",
+        "zip": "05301",
+        "year_built": 1938,
+        "sqft": 2480,
+        "roof_year": 2020,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 0,
+        "vehicle_year": 2021,
+        "make": "Norvik",
+        "model": "Aster",
+        "driver_count": 2
+      },
+      "operator_script": {
+        "Roof updated (year)": {
+          "action": "provide_value",
+          "value": 2020
+        },
+        "property.roof_year": {
+          "action": "provide_value",
+          "value": 2020
+        },
+        "Square footage": {
+          "action": "provide_value",
+          "value": 2480
+        },
+        "property.square_feet": {
+          "action": "provide_value",
+          "value": 2480
+        },
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s04": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "first_name": "Oren",
+        "last_name": "Castellane",
+        "dob": "1981-06-01",
+        "email": "oren.castellane@example.test",
+        "street": "301 TERN HOLLOW RD",
+        "unit": "",
+        "city": "KITTERY",
+        "state": "ME",
+        "zip": "03904",
+        "year_built": 1996,
+        "sqft": 1840,
+        "roof_year": 2017,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 1,
+        "vehicle_year": 2019,
+        "make": "Marlowe",
+        "model": "Brook",
+        "driver_count": 1
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s05": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "typeahead_ambiguous",
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Delphine",
+        "last_name": "Ashgrove",
+        "dob": "1990-03-23",
+        "email": "delphine.ashgrove@example.test",
+        "street": "52 BREAKWATER AVE",
+        "unit": "",
+        "city": "NEWPORT",
+        "state": "RI",
+        "zip": "02840",
+        "year_built": 1972,
+        "sqft": 1660,
+        "roof_year": 2015,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 2,
+        "vehicle_year": 2024,
+        "make": "Solenne",
+        "model": "Vida",
+        "driver_count": 1
+      },
+      "operator_script": {
+        "Losses in the last 3 years": {
+          "action": "provide_value",
+          "value": 2
+        },
+        "history.prior_claims_3yr": {
+          "action": "provide_value",
+          "value": 2
+        },
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s06": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Agathe",
+        "last_name": "Rimmington",
+        "dob": "1969-01-28",
+        "email": "agathe.r@example.test",
+        "street": "6 HERON ROCK WAY",
+        "unit": "",
+        "city": "ASTORIA",
+        "state": "OR",
+        "zip": "97103",
+        "year_built": 1955,
+        "sqft": 2010,
+        "roof_year": 2021,
+        "occupancy": "Owner occupied",
+        "short_term_rental": "",
+        "losses_3yr": 0,
+        "vehicle_year": 2018,
+        "make": "Halden",
+        "model": "Fjord",
+        "driver_count": 3
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
+        }
+      }
+    },
+    "tw-s07": {
+      "portal": "tidewater",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Lucan",
+        "last_name": "Abernethy",
+        "dob": "1972-09-14",
+        "email": "lucan.abernethy@example.test",
+        "street": "40 DUNE GRASS LN",
+        "unit": "",
+        "city": "CANNON BEACH",
+        "state": "OR",
+        "zip": "97110",
+        "year_built": 1999,
+        "sqft": 1580,
+        "roof_year": 2018,
+        "occupancy": "Seasonal",
+        "short_term_rental": "No",
+        "losses_3yr": 0,
+        "vehicle_year": 2023,
+        "make": "Norvik",
+        "model": "Polar",
+        "driver_count": 1
+      },
+      "operator_script": {
+        "Is the home rented to others for short stays (under 30 days)?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "property.short_term_rental": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "tg.agent.test",
+          "password": "tidewater-test-pass-4"
         }
       }
     }
