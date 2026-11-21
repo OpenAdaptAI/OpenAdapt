@@ -16,7 +16,9 @@ VECTORS = Path(__file__).parent / "vectors" / "record-run-v1"
 NAMES = sorted(
     p.stem
     for p in VECTORS.glob("*.json")
-    if not p.name.startswith("registry") and p.stem != "jcs"
+    if not p.name.startswith("registry")
+    and p.stem != "jcs"
+    and not p.stem.startswith("chain-")
 )
 
 
@@ -186,3 +188,22 @@ def test_report_digests_never_stand_in_for_each_other():
         r.report_subject_match(statement, file_bytes=r.jcs(vector["report"]).encode())
         is None
     )
+
+
+CHAINS = sorted(p.stem for p in VECTORS.glob("chain-*.json"))
+
+
+def test_the_chain_vectors_are_there():
+    assert {"chain-valid", "chain-wrong-original", "chain-out-of-sequence",
+            "chain-tampered", "chain-empty", "chain-different-signer"} <= set(CHAINS)
+
+
+@pytest.mark.parametrize("name", CHAINS)
+def test_chain_vector(name):
+    vector = json.loads((VECTORS / f"{name}.json").read_text())
+    chain = vector["chain"]
+    result = r.verify_chain(chain["original"], chain["updates"], _registry())
+    expected = vector["expected"]
+    assert result.ok is expected["ok"], result.detail
+    assert result.reason == expected["reason"]
+    assert list(result.lines) == expected["lines"]

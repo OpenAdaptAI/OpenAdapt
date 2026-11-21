@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
-    from openadapt_flow.eligibility.artifact import (
+    from openadapt_eligibility.artifact import (
         ArtifactEncryption,
         EligibilityArtifact,
         PracticeArtifactPolicy,
@@ -20,7 +20,7 @@ if TYPE_CHECKING:  # pragma: no cover
         write_and_verify,
         write_eligibility_artifacts,
     )
-    from openadapt_flow.eligibility.client import (
+    from openadapt_eligibility.client import (
         ApplicationMode,
         BenefitSelection,
         EligibilityRequest,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:  # pragma: no cover
         StediEligibilityClient,
         eligibility_request_sha256,
     )
-    from openadapt_flow.eligibility.waterfall import (
+    from openadapt_eligibility.waterfall import (
         EligibilityRoute,
         PayerCapability,
         RouteDecision,
@@ -102,15 +102,15 @@ _ARTIFACT = (
 def __getattr__(name: str) -> object:
     """Lazy re-exports (PEP 562) -- importing the package stays cheap."""
     if name in _CLIENT:
-        from openadapt_flow.eligibility import client
+        from openadapt_eligibility import client
 
         return getattr(client, name)
     if name in _WATERFALL:
-        from openadapt_flow.eligibility import waterfall
+        from openadapt_eligibility import waterfall
 
         return getattr(waterfall, name)
     if name in _ARTIFACT:
-        from openadapt_flow.eligibility import artifact
+        from openadapt_eligibility import artifact
 
         return getattr(artifact, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

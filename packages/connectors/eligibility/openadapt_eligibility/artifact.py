@@ -25,15 +25,6 @@ from pathlib import Path
 from typing import Iterator, Literal, Mapping, Optional, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
-from openadapt_flow.eligibility.client import (
-    ApplicationMode,
-    EligibilityRequest,
-    EligibilityResult,
-    eligibility_request_sha256,
-    parse_271,
-)
 from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.effects.document_hash import DocumentHashVerifier
 from openadapt_flow.runtime.effects.effect import (
@@ -42,6 +33,15 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
     ValueExpr,
     Verdict,
+)
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from openadapt_eligibility.client import (
+    ApplicationMode,
+    EligibilityRequest,
+    EligibilityResult,
+    eligibility_request_sha256,
+    parse_271,
 )
 
 RESULTS_CSV = "eligibility_results.csv"
