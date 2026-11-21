@@ -449,6 +449,7 @@ class SkillCache:
         if json.loads(stored.read_text(encoding="utf-8")) != key:
             # Never serve a program compiled for another task or record.
             return None
+        compiler.require_credential_withholding()
         emitted = compiler.out_dir / "emitted.json"
         if (
             not emitted.is_file()
@@ -774,6 +775,7 @@ class SkillCache:
     ) -> SkillRun:
         from openadapt_flow.ir import Workflow
 
+        compiler.require_credential_withholding()
         stop = compiler.dir / _STOP_FILE
         workflow = Workflow.load(compiler._jit().bundle_dir)
         if workflow.manifest is None:
@@ -803,7 +805,12 @@ class SkillCache:
             before,
             after,
             expect=self.common["expect"],
-            values={k: str(v) for k, v in params.items()},
+            # A secret parameter (a sign-in value) is never saved in the record.
+            values={
+                k: str(v)
+                for k, v in params.items()
+                if k not in set(workflow.secret_params)
+            },
         )
         verified = (
             reply.get("verified") is True

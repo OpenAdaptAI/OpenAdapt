@@ -302,10 +302,177 @@
     else detach();
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  // --- Side-panel Co-Pilot field highlights (cosmetic data-openadapt-* only) ---
+  const VALID_COPILOT_STATES = new Set(['filled', 'conflict', 'halt']);
+  const COPILOT_STYLE_ATTR = 'data-openadapt-copilot-style';
+  const COPILOT_STATE_ATTR = 'data-openadapt-copilot-state';
+  const COPILOT_CAPTION_ATTR = 'data-openadapt-copilot-caption';
+  const COPILOT_CSS = [
+    `[${COPILOT_STATE_ATTR}="filled"] {`,
+    '  outline: 2px solid #059669 !important;',
+    '  outline-offset: 2px !important;',
+    '  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.16) !important;',
+    '}',
+    `[${COPILOT_STATE_ATTR}="conflict"] {`,
+    '  outline: 2.5px solid #d97706 !important;',
+    '  outline-offset: 2px !important;',
+    '  box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.22) !important;',
+    '}',
+    `[${COPILOT_STATE_ATTR}="halt"] {`,
+    '  outline: 2.5px solid #dc2626 !important;',
+    '  outline-offset: 2px !important;',
+    '  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.24) !important;',
+    '}',
+  ].join('\n');
+
+  const trackedHighlightElements = new Set();
+  let lastAttentionScrollKey = '';
+  let pendingDomReadyHighlights = null;
+
+  function ensureCopilotStyle() {
+    if (typeof document === 'undefined' || !document.createElement) return;
+    if (
+      typeof document.querySelector === 'function' &&
+      document.querySelector(`style[${COPILOT_STYLE_ATTR}="true"]`)
+    ) {
+      return;
+    }
+    const parent = document.head || document.documentElement;
+    if (!parent || typeof parent.appendChild !== 'function') return;
+    const styleEl = document.createElement('style');
+    styleEl.setAttribute(COPILOT_STYLE_ATTR, 'true');
+    styleEl.textContent = COPILOT_CSS;
+    parent.appendChild(styleEl);
+  }
+
+  function querySelectorPiercing(selector) {
+    if (typeof document === 'undefined' || typeof selector !== 'string') return null;
+    const trimmed = selector.trim();
+    if (!trimmed) return null;
+    const segments = trimmed.split(/\s*>>>\s*/);
+    let root = document;
+    let current = null;
+    for (let i = 0; i < segments.length; i += 1) {
+      const part = segments[i];
+      if (!part || !root || typeof root.querySelector !== 'function') return null;
+      try {
+        current = root.querySelector(part);
+      } catch (e) {
+        return null;
+      }
+      if (!current) return null;
+      if (i < segments.length - 1) {
+        root = current.shadowRoot;
+      }
+    }
+    return current;
+  }
+
+  function clearCopilotHighlights() {
+    for (const el of trackedHighlightElements) {
+      if (el && typeof el.removeAttribute === 'function') {
+        el.removeAttribute(COPILOT_STATE_ATTR);
+        el.removeAttribute(COPILOT_CAPTION_ATTR);
+      }
+    }
+    trackedHighlightElements.clear();
+    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+      let existing = [];
+      try {
+        existing = document.querySelectorAll(`[${COPILOT_STATE_ATTR}]`);
+      } catch (e) {
+        existing = [];
+      }
+      for (const el of existing) {
+        if (el && typeof el.removeAttribute === 'function') {
+          el.removeAttribute(COPILOT_STATE_ATTR);
+          el.removeAttribute(COPILOT_CAPTION_ATTR);
+        }
+      }
+    }
+  }
+
+  function applyCopilotHighlights(highlights, options) {
+    const list = Array.isArray(highlights) ? highlights : [];
+    const forceScroll = Boolean(options && options.forceScroll);
+
+    if (typeof document !== 'undefined' && document.readyState === 'loading') {
+      pendingDomReadyHighlights = { list, forceScroll };
+      if (typeof document.addEventListener === 'function') {
+        document.addEventListener(
+          'DOMContentLoaded',
+          () => {
+            if (pendingDomReadyHighlights) {
+              const next = pendingDomReadyHighlights;
+              pendingDomReadyHighlights = null;
+              applyCopilotHighlights(next.list, { forceScroll: next.forceScroll });
+            }
+          },
+          { once: true }
+        );
+      }
+    }
+
+    clearCopilotHighlights();
+    if (!list.length) {
+      lastAttentionScrollKey = '';
+      return 0;
+    }
+
+    ensureCopilotStyle();
+    let applied = 0;
+    let firstAttentionEl = null;
+    let firstAttentionKey = '';
+
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      const state = String(item.badge_state || '');
+      const selector = typeof item.dom_selector === 'string' ? item.dom_selector.trim() : '';
+      if (!selector || !VALID_COPILOT_STATES.has(state)) continue;
+      const el = querySelectorPiercing(selector);
+      if (!el || typeof el.setAttribute !== 'function') continue;
+
+      // Never read or transmit field values; only stamp cosmetic attributes.
+      el.setAttribute(COPILOT_STATE_ATTR, state);
+      el.setAttribute(COPILOT_CAPTION_ATTR, String(item.caption || ''));
+      trackedHighlightElements.add(el);
+      applied += 1;
+
+      if (!firstAttentionEl && (state === 'halt' || state === 'conflict')) {
+        firstAttentionEl = el;
+        firstAttentionKey = `${selector}:${state}`;
+      }
+    }
+
+    if (
+      firstAttentionEl &&
+      typeof firstAttentionEl.scrollIntoView === 'function' &&
+      (forceScroll || firstAttentionKey !== lastAttentionScrollKey)
+    ) {
+      lastAttentionScrollKey = firstAttentionKey;
+      try {
+        firstAttentionEl.scrollIntoView({ block: 'center', inline: 'nearest' });
+      } catch (e) {}
+    } else if (!firstAttentionEl) {
+      lastAttentionScrollKey = '';
+    }
+
+    return applied;
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'SET_RECORDING') {
       setRecording(Boolean(msg.active));
+      return;
+    }
+    if (msg.type === 'COPILOT_APPLY_HIGHLIGHTS') {
+      const applied = applyCopilotHighlights(msg.highlights, {
+        forceScroll: Boolean(msg.forceScroll),
+      });
+      if (typeof sendResponse === 'function') {
+        sendResponse({ ok: true, applied });
+      }
     }
   });
 
@@ -320,6 +487,7 @@
   if (typeof globalThis !== 'undefined') {
     globalThis.__openadaptExtensionContent = {
       setRecording,
+      applyCopilotHighlights,
       shadowPiercingPath,
       targetEvidence,
       isSecretField,

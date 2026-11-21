@@ -464,10 +464,12 @@ def command(
         "kind": "web",
     }
 
-    def derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
+    def derive(
+        source: Path, destination: Path, kind: str
+    ) -> tuple[Path, dict[str, Any]]:
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "workflow.json").write_text("{}")
-        return {
+        return destination, {
             "kind": kind,
             "execution_semantics": state["semantics"],
             "files": [{"path": "workflow.json", "changed": False}],
@@ -1076,6 +1078,9 @@ def test_admitted_program_attestation_binds_the_compiled_recording(
     from openadapt_flow.sanitized_artifact import approve_derivative, sanitize_artifact
 
     class IdentityScrubber:
+        def sanitization_config(self):
+            return {}
+
         def scrub_text(self, text: str, is_separated: bool = False) -> str:
             return text
 
@@ -1175,6 +1180,9 @@ def test_real_governed_push_sanitizes_the_staged_bundle_and_pauses(
 
     class IdentityScrubber:
         # Scrubbing quality is the privacy package's job; this checks the path.
+        def sanitization_config(self):
+            return {}
+
         def scrub_text(self, text: str, is_separated: bool = False) -> str:
             return text
 
@@ -1209,3 +1217,124 @@ def test_loopback_publish_needs_the_local_classification(
     )
     with pytest.raises(publish.PublishError):
         publish.cloud_client("http://notes.example.test", "k")
+
+
+# -- admission modes a hosted run can verify -------------------------------------
+
+ADMITTER_PUB = "5e" * 32
+ADMITTER_FINGERPRINT = (
+    "sha256:" + hashlib.sha256(bytes.fromhex(ADMITTER_PUB)).hexdigest()
+)
+
+
+def _admitted_as(monkeypatch: pytest.MonkeyPatch, **fields: Any) -> None:
+    monkeypatch.setattr(lifecycle, "verify_admission", lambda *_a, **_k: dict(fields))
+
+
+@pytest.mark.parametrize("mode", ["agent_policy", "repair_probe", "made_up"])
+def test_an_admission_mode_a_hosted_run_cannot_verify_is_refused_locally(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+) -> None:
+    _admitted_as(monkeypatch, admission_mode=mode, admitted_by_principal_id="agent:x")
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "[ADMISSION_MODE_UNSUPPORTED]" in err and mode in err
+    assert command["cloud"].calls == [] and command["pushes"] == []
+
+
+def test_a_person_admission_needs_no_admitter_key(
+    command: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _admitted_as(monkeypatch, admission_mode="person")
+    assert _publish("--yes") == 0
+    assert f"/api/v1/org/{ORG}/admitter-keys" not in command["cloud"].paths()
+
+
+def _admitter(monkeypatch: pytest.MonkeyPatch) -> None:
+    _admitted_as(
+        monkeypatch,
+        admission_mode="admitter_key",
+        admitted_by_principal_id="ci:staging-admitter",
+        admitter_public_key=ADMITTER_PUB,
+    )
+
+
+def test_a_registered_admitter_key_publishes(
+    command: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _admitter(monkeypatch)
+    command["cloud"].routes[("GET", f"/api/v1/org/{ORG}/admitter-keys")] = (
+        200,
+        {
+            "admitter_keys": [
+                {
+                    "principal_id": "ci:staging-admitter",
+                    "fingerprint": ADMITTER_FINGERPRINT,
+                }
+            ]
+        },
+    )
+    assert _publish("--yes") == 0
+    assert len(command["pushes"]) == 1
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        # The same key under another principal is a different admitter.
+        [{"principal_id": "ci:other", "fingerprint": ADMITTER_FINGERPRINT}],
+        [{"principal_id": "ci:staging-admitter", "fingerprint": "sha256:" + "0" * 64}],
+    ],
+)
+def test_an_unregistered_admitter_key_is_refused_before_upload(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    rows: list[dict[str, str]],
+) -> None:
+    _admitter(monkeypatch)
+    command["cloud"].routes[("GET", f"/api/v1/org/{ORG}/admitter-keys")] = (
+        200,
+        {"admitter_keys": rows},
+    )
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "[ADMITTER_KEY_UNREGISTERED]" in err
+    assert "ci:staging-admitter" in err and ADMITTER_PUB in err
+    assert "owner or admin" in err
+    assert command["pushes"] == [] and command["attested"] == []
+    assert f"/api/v1/org/{ORG}/admission-keys" not in command["cloud"].paths("POST")
+
+
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (404, "WORKFLOW_API_UNAVAILABLE"),
+        (401, "API_KEY_REJECTED"),
+        (503, "ADMITTER_KEY_UNREGISTERED"),
+    ],
+)
+def test_admitter_key_lookup_refusals_upload_nothing(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    code: str,
+) -> None:
+    _admitter(monkeypatch)
+    command["cloud"].routes[("GET", f"/api/v1/org/{ORG}/admitter-keys")] = (
+        status,
+        {"error": "x"},
+    )
+    assert _publish("--yes") != 0
+    assert f"[{code}]" in capsys.readouterr().err
+    assert command["pushes"] == [] and command["attested"] == []
+
+
+def test_publish_never_uploads_the_recording(command: dict[str, Any]) -> None:
+    assert _publish("--yes") == 0
+    assert [kwargs.get("kind") for _path, kwargs in command["pushes"]] == ["bundle"]

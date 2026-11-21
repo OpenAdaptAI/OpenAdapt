@@ -17,6 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="openadapt wrap",
         allow_abbrev=False,
         epilog=(
+            "openadapt wrap export --bundle BUNDLE --out NEW_DIR prepares an "
+            "untrusted local candidate (see docs/WRAP_CANDIDATE.md). "
             "openadapt wrap publish --task TASK publishes the task's admitted "
             "program as an OpenAdapt Cloud endpoint (see its --help)."
         ),
@@ -58,7 +60,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-cost-usd", type=float, help="Explicit model spend cap for a cache miss"
     )
-    parser.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
+    parser.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="A task input. A sign-in input (a password, or the username "
+        "paired with it) may instead come from OPENADAPT_FLOW_SECRET_<NAME>, "
+        "so it is not on the command line",
+    )
     parser.add_argument(
         "--request-id", help="Reuse this ID when checking the same request"
     )
@@ -82,6 +92,32 @@ def _params(rows: Sequence[str]) -> dict[str, str]:
             raise TaskArgumentsError("--param requires unique NAME=VALUE pairs")
         values[name] = value
     return values
+
+
+def _with_secret_env(
+    values: dict[str, str], parameters: Sequence[str]
+) -> dict[str, str]:
+    """Fill each missing input from ``OPENADAPT_FLOW_SECRET_<NAME>`` when set.
+
+    A sign-in value then never appears in argv or shell history. It is held
+    in memory for this run only, like a ``--param`` value.
+    """
+    import os
+
+    from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
+
+    out = dict(values)
+    # Before compilation these can still be ordinary public inputs. Only the
+    # names actually sourced from the secret environment need a slot here;
+    # explicit public values must not acquire a new case-folding restriction.
+    sourced = [
+        name
+        for name in parameters
+        if name not in out and os.environ.get(secret_env_var(name))
+    ]
+    for name, key in secret_env_vars(sourced).items():
+        out[name] = os.environ[key]
+    return out
 
 
 def _prices(rows: Sequence[str]) -> dict[str, float] | None:
@@ -202,6 +238,10 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
 
 def main(argv: Sequence[str] | None = None) -> int:
     rows = list(sys.argv[1:] if argv is None else argv)
+    if rows[:1] == ["export"]:
+        from openadapt_flow.wrap.candidate import main as candidate_main
+
+        return candidate_main(rows[1:])
     if rows[:1] == ["publish"]:
         from openadapt_flow.wrap.publish import main as publish_main
 
@@ -222,7 +262,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             serve(task)
             return 0
-        result = task.call(args.request_id, values)
+        result = task.call(args.request_id, _with_secret_env(values, task.parameters))
     except TaskArgumentsError as exc:
         parser.error(str(exc))
     except MissingModelKey:

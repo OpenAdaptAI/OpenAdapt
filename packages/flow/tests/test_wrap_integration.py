@@ -23,6 +23,7 @@ from openadapt_flow.agent.runs import RunStore
 from openadapt_flow.compile_agent import pipeline
 from openadapt_flow.integrations.agents import skills
 from openadapt_flow.ir import Workflow
+from openadapt_flow.jit import lifecycle
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
 PROMPT = "Create the task record with note {note}"
@@ -55,6 +56,7 @@ class CapturedJit:
         self.program_dir = compiler.dir / "component-program"
         self.bundle_dir = self.program_dir / "bundle"
         self.runs_dir = compiler.dir / "component-runs"
+        self.key_dir = fixture.root / "component-signing"
         self.is_admitted = False
         self.agent: Any = None
 
@@ -152,6 +154,21 @@ class SqliteComponent:
             self.events.append("component-emit")
             state = jit(compiler)
             Workflow(name="component-only", steps=[]).save(state.bundle_dir)
+            # The captured-action boundary is synthetic, but cached privacy
+            # checks still consume a real signature bound to these exact bytes.
+            candidate = lifecycle.sign_recorder(
+                state.program_dir,
+                {
+                    "task": {"key": compiler.task.key},
+                    "recorded_by": "agent:component",
+                    "dialect": "component",
+                    "credential_withholding": True,
+                },
+                key_dir=state.key_dir,
+            )
+            (state.program_dir / lifecycle.CANDIDATE_FILE).write_text(
+                json.dumps(candidate), encoding="utf-8"
+            )
             server = compiler.out_dir / "component_server.py"
             server.write_text(
                 "raise RuntimeError('component MCP boundary must be intercepted')\n"
@@ -297,6 +314,36 @@ def test_saved_claim_on_hit_is_refuted_and_cannot_fall_back_to_agent(
     assert stopped.status == "CACHE_HALTED" and stopped.verified is False
     assert component.rows() == before
     assert len(component.skill_calls) == 1 and component.agent.calls == 1
+
+
+@pytest.mark.parametrize("entry", ["server", "run"])
+@pytest.mark.parametrize("marker", [False, None])
+def test_cached_component_with_missing_or_false_privacy_proof_never_dispatches(
+    component: SqliteComponent, entry: str, marker: Any
+) -> None:
+    assert component.task().run({"note": "first"}).verified
+    state = next(iter(component.states.values()))
+    path = state.program_dir / lifecycle.CANDIDATE_FILE
+    candidate = json.loads(path.read_text(encoding="utf-8"))
+    block = candidate["recorder"]
+    if marker is None:
+        candidate.pop("credential_withholding")
+        block.pop("credential_withholding")
+    else:
+        candidate["credential_withholding"] = marker
+        block["credential_withholding"] = marker
+    block["signature"] = lifecycle._sign_record(block, state.key_dir)
+    path.write_text(json.dumps(candidate), encoding="utf-8")
+    before = component.rows(), list(component.events), component.agent.calls
+    with pytest.raises(
+        lifecycle.AdmissionError, match="CREDENTIAL_CAPTURE_PRIVACY_MISMATCH"
+    ):
+        if entry == "server":
+            component.cache.server(PROMPT, {"note": "second"})
+        else:
+            component.cache.run(PROMPT, {"note": "second"}, component.agent)
+    assert (component.rows(), component.events, component.agent.calls) == before
+    assert component.skill_calls == []
 
 
 def test_compiled_prewrite_drift_stays_held_across_new_request_and_restart(

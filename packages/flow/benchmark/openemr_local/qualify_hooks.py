@@ -12,7 +12,10 @@ Environment (all optional):
 - ``OPENEMR_FIXTURE_STATE``: fixture state directory
   (default ``benchmark/openemr_local/state``);
 - ``OPENEMR_FIXTURE_LOCK``: a different environment lock file;
-- ``OPENEMR_UI_URL`` / ``OPENEMR_API_URL``: non-default ports.
+- ``OPENEMR_UI_URL`` / ``OPENEMR_API_URL``: non-default ports;
+- ``OPENEMR_HIDPI_FRAMES_DIR``: store a high-density copy of each new frame
+  there (``benchmark/openemr_local/hidpi_frames.py``), at
+  ``OPENEMR_HIDPI_SCALE`` (default 2). Off when unset.
 """
 
 from __future__ import annotations
@@ -100,6 +103,11 @@ def open_session(config: Any) -> tuple[Any, Callable[[], None]]:
     page.goto(fx.ui_base_url)
     backend = OpenEMRPlaywrightBackend(page)
     _preauthenticate_browser(backend, fx)
+    hidpi = os.environ.get("OPENEMR_HIDPI_FRAMES_DIR")
+    if hidpi:  # opt-in display copies; the engine's own frames stay 1x
+        from benchmark.openemr_local.hidpi_frames import attach
+
+        attach(backend, Path(hidpi), int(os.environ.get("OPENEMR_HIDPI_SCALE", "2")))
     return backend, context.close
 
 

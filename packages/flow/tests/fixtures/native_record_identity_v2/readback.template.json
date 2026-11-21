@@ -1,0 +1,32 @@
+{
+  "search": {
+    "box": {
+      "automation_id": "searchBox"
+    },
+    "query": {
+      "param": "patient_search"
+    },
+    "submit": {
+      "automation_id": "searchButton"
+    }
+  },
+  "ready": {
+    "automation_id": "currentRecordId"
+  },
+  "identity": {
+    "reader": {
+      "automation_id": "currentRecordId"
+    },
+    "value": {
+      "param": "record_id"
+    },
+    "field": "id"
+  },
+  "fields": {
+    "note": {
+      "control": {
+        "automation_id": "noteBox"
+      }
+    }
+  }
+}

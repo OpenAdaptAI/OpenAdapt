@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/LICENSE)
 
 Remove names, email addresses, phone numbers, SSNs, card numbers, medical
 record numbers, and other personal or health data from GUI recordings before

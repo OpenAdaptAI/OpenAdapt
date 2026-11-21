@@ -42,7 +42,9 @@ def test_committed_index_is_current() -> None:
 
 
 def test_no_entry_claims_certified_without_a_record() -> None:
-    entries = registry.load_index(str(ROOT / "registry/index.json"))
+    entries = registry.load_index(
+        str(ROOT / "registry/index.json"), allow_unsigned=True
+    )
     ids = {e.id: e for e in entries}
     assert ids["openemr/new-referral"].status == "example"
     # A release publishes only entries that have a bundle.
@@ -128,7 +130,7 @@ def test_cli_list_and_pull(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     from openadapt_flow.__main__ import main
 
     index = str(_local_registry(tmp_path))
-    assert main(["pull", "--list", "--index", index]) == 0
+    assert main(["pull", "--list", "--index", index, "--allow-unsigned"]) == 0
     out = capsys.readouterr().out
     assert "example, not certified" in out and "planned" not in out
     assert (

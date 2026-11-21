@@ -19,6 +19,7 @@ This module owns three small, deliberately CLI-local concerns:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -243,3 +244,92 @@ def surface_target_origin(backend: object) -> Optional[str]:
     else:
         target = str(getattr(backend, "rdp_window", None) or "workspace")
     return f"{kind}://{quote(target.lower(), safe='.:-_ ')}"
+
+
+def report_backend_kind(kind: object) -> "ExecutionTargetKind":
+    """Return the closed hosted-summary token for a resolved backend kind.
+
+    Execution accepts ``remote-display`` / ``remote_display`` as RDP aliases.
+    Hosted summaries use a closed enum, so fold those aliases without
+    collapsing the distinct Citrix product token to generic RDP.
+    """
+    token = str(kind).strip().lower()
+    if token in ("remote-display", "remote_display"):
+        return "rdp"
+    if token not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
+        raise ValueError(f"unsupported execution target kind: {kind!r}")
+    return cast("ExecutionTargetKind", token)
+
+
+def resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
+    """Merge the ``--backend`` family of CLI flags over ``cfg.backend``.
+
+    A deployment ``--config`` supplies the backend section; direct flags
+    (``--backend`` / ``--agent-url`` / ``--macos-app`` / ``--linux-app`` /
+    ``--rdp-host`` / ``--rdp-window`` / ``--rdp-window-title`` /
+    ``--rdp-readiness-text``) override individual fields, exactly as the
+    effects/actuation flags override their sections. A compiled window-scoped
+    RDP/Citrix workflow may contribute the exact target recorded with the
+    demonstration; explicit config/flags remain authoritative.
+    """
+    backend = cfg.backend
+    hints = getattr(workflow, "backend_hints", None)
+    configured = set(getattr(backend, "model_fields_set", set()))
+    explicit_kind = getattr(args, "backend", None)
+    configured_kind = backend.kind if "kind" in configured else None
+    selected_kind = explicit_kind or configured_kind
+    # Surface binding (Section 5): a surface-bound workflow supplies its own
+    # target when neither a flag nor the config selects one. There is no
+    # implicit browser default for a bound bundle; the browser is chosen only
+    # when the workflow was actually recorded on it.
+    bound_surface = getattr(workflow, "surface", None)
+    if selected_kind is None and hints is None and bound_surface is not None:
+        backend = backend.model_copy(update={"kind": bound_surface})
+    if hints is not None and (
+        selected_kind is None or report_backend_kind(selected_kind) == hints.backend
+    ):
+        updates: dict[str, object] = {}
+        if selected_kind is None:
+            updates["kind"] = hints.backend
+        for field in ("rdp_window", "rdp_window_title", "rdp_readiness_text"):
+            if field not in configured:
+                value = getattr(hints, field)
+                if value is not None:
+                    updates[field] = value
+        if updates:
+            backend = backend.model_copy(update=updates)
+    if getattr(args, "backend", None):
+        backend = backend.model_copy(update={"kind": args.backend})
+    if getattr(args, "agent_url", None):
+        backend = backend.model_copy(update={"agent_url": args.agent_url})
+    if getattr(args, "macos_app", None):
+        backend = backend.model_copy(update={"macos_app": args.macos_app})
+    if getattr(args, "macos_window_title", None):
+        backend = backend.model_copy(
+            update={"macos_window_title": args.macos_window_title}
+        )
+    if getattr(args, "linux_app", None):
+        backend = backend.model_copy(update={"linux_app": args.linux_app})
+    if getattr(args, "linux_window_title", None):
+        backend = backend.model_copy(
+            update={"linux_window_title": args.linux_window_title}
+        )
+    if getattr(args, "linux_allow_physical_input", False):
+        backend = backend.model_copy(update={"linux_allow_physical_input": True})
+    if getattr(args, "rdp_host", None):
+        backend = backend.model_copy(update={"rdp_host": args.rdp_host})
+    if getattr(args, "rdp_window", None):
+        backend = backend.model_copy(update={"rdp_window": args.rdp_window})
+    if getattr(args, "rdp_window_title", None):
+        backend = backend.model_copy(update={"rdp_window_title": args.rdp_window_title})
+    if getattr(args, "rdp_readiness_text", None):
+        backend = backend.model_copy(
+            update={"rdp_readiness_text": args.rdp_readiness_text}
+        )
+    if getattr(args, "browser_cdp_endpoint", None):
+        backend = backend.model_copy(
+            update={"browser_cdp_endpoint": args.browser_cdp_endpoint}
+        )
+    if getattr(args, "browser_page_url", None):
+        backend = backend.model_copy(update={"browser_page_url": args.browser_page_url})
+    return backend

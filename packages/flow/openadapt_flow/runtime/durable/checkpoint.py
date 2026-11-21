@@ -492,9 +492,8 @@ class CheckpointStore:
         # None => plaintext (unchanged default). A non-empty passphrase turns on
         # AEAD sealing for writes and decryption for reads.
         self.key = key
-        # One salt for every container this store seals, so the passphrase
-        # is stretched once per store (and once per process for reads; see
-        # crypto._derive), not once per checkpoint. Each container still
+        # Reuse one public salt for containers this store seals. Independent
+        # encryption/decryption requests still run scrypt; each container
         # records the salt and gets its own random nonce.
         self._salt: Optional[bytes] = None
 

@@ -1,0 +1,1266 @@
+{
+  "label": "after d32bb311339e04d2cd370e343a65197132576878",
+  "results": [
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0002",
+              "kind": "registration",
+              "patient_name": "Case demo native",
+              "task": "native"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.5
+        },
+        "disabled": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.4
+        },
+        "duplicate": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.5
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0003",
+              "kind": "registration",
+              "patient_name": "Case heldout native",
+              "task": "native"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 3.9
+        },
+        "missing": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.1
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0004",
+              "kind": "registration",
+              "patient_name": "Case reorder_late native",
+              "task": "native"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 3.8
+        },
+        "surprise_confirm": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.5
+        },
+        "surprise_modal": {
+          "detail": "step_004: Step 'step_004' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 8.8
+        }
+      },
+      "kind": "native",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0006",
+              "kind": "registration",
+              "patient_name": "Case demo aria_listbox",
+              "task": "aria_listbox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 3.9
+        },
+        "disabled": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.7
+        },
+        "duplicate": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.8
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0007",
+              "kind": "registration",
+              "patient_name": "Case heldout aria_listbox",
+              "task": "aria_listbox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 3.9
+        },
+        "missing": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.4
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0008",
+              "kind": "registration",
+              "patient_name": "Case reorder_late aria_listbox",
+              "task": "aria_listbox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.1
+        },
+        "surprise_confirm": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.6
+        },
+        "surprise_modal": {
+          "detail": "step_004: Step 'step_004' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 8.8
+        }
+      },
+      "kind": "aria_listbox",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0010",
+              "kind": "registration",
+              "patient_name": "Case demo div_dropdown",
+              "task": "div_dropdown"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.5
+        },
+        "disabled": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.9
+        },
+        "duplicate": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.8
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0011",
+              "kind": "registration",
+              "patient_name": "Case heldout div_dropdown",
+              "task": "div_dropdown"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 5.0
+        },
+        "missing": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.4
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0012",
+              "kind": "registration",
+              "patient_name": "Case reorder_late div_dropdown",
+              "task": "div_dropdown"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.2
+        },
+        "surprise_confirm": {
+          "detail": "step_003: Identity check failed for step 'step_003' (choose <department>): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.1
+        },
+        "surprise_modal": {
+          "detail": "step_003: Identity check failed for step 'step_003' (choose <department>): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.1
+        }
+      },
+      "kind": "div_dropdown",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0014",
+              "kind": "registration",
+              "patient_name": "Case demo select2",
+              "task": "select2"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.2
+        },
+        "disabled": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.9
+        },
+        "duplicate": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.6
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0015",
+              "kind": "registration",
+              "patient_name": "Case heldout select2",
+              "task": "select2"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.0
+        },
+        "missing": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.4
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0016",
+              "kind": "registration",
+              "patient_name": "Case reorder_late select2",
+              "task": "select2"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.1
+        },
+        "surprise_confirm": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.7
+        },
+        "surprise_modal": {
+          "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.1
+        }
+      },
+      "kind": "select2",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0018",
+              "kind": "registration",
+              "patient_name": "Case demo chosen",
+              "task": "chosen"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.4
+        },
+        "disabled": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.5
+        },
+        "duplicate": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.8
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0019",
+              "kind": "registration",
+              "patient_name": "Case heldout chosen",
+              "task": "chosen"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.3
+        },
+        "missing": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.4
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0020",
+              "kind": "registration",
+              "patient_name": "Case reorder_late chosen",
+              "task": "chosen"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.5
+        },
+        "surprise_confirm": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 7.2
+        },
+        "surprise_modal": {
+          "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.6
+        }
+      },
+      "kind": "chosen",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0022",
+              "kind": "registration",
+              "patient_name": "Case demo tom_select",
+              "task": "tom_select"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.7
+        },
+        "disabled": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 4.4
+        },
+        "duplicate": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 4.5
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0023",
+              "kind": "registration",
+              "patient_name": "Case heldout tom_select",
+              "task": "tom_select"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.7
+        },
+        "missing": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.4
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0024",
+              "kind": "registration",
+              "patient_name": "Case reorder_late tom_select",
+              "task": "tom_select"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 5.9
+        },
+        "surprise_confirm": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 7.9
+        },
+        "surprise_modal": {
+          "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.8
+        }
+      },
+      "kind": "tom_select",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0026",
+              "kind": "registration",
+              "patient_name": "Case demo async_combobox",
+              "task": "async_combobox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.3
+        },
+        "disabled": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.9
+        },
+        "duplicate": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 4.1
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0027",
+              "kind": "registration",
+              "patient_name": "Case heldout async_combobox",
+              "task": "async_combobox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.3
+        },
+        "missing": {
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.3
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "id": "R0028",
+              "kind": "registration",
+              "patient_name": "Case reorder_late async_combobox",
+              "task": "async_combobox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 5.2
+        },
+        "surprise_confirm": {
+          "detail": "step_004: Step 'step_004' (choose <department>): the page showed a browser dialog the demonstration did not (dialog_unexpected); it was dismissed, not answered; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 4.0
+        },
+        "surprise_modal": {
+          "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.2
+        }
+      },
+      "kind": "async_combobox",
+      "params": [
+        "department",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "doctor": "D11",
+              "id": "R0030",
+              "kind": "registration",
+              "patient_name": "Case demo cascade",
+              "task": "cascade"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.5
+        },
+        "disabled": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.7
+        },
+        "duplicate": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.7
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "doctor": "D21",
+              "id": "R0031",
+              "kind": "registration",
+              "patient_name": "Case heldout cascade",
+              "task": "cascade"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.5
+        },
+        "missing": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 11.2
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "department": "CARD",
+              "doctor": "D11",
+              "id": "R0032",
+              "kind": "registration",
+              "patient_name": "Case reorder_late cascade",
+              "task": "cascade"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 5.3
+        },
+        "surprise_confirm": {
+          "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 3.6
+        },
+        "surprise_modal": {
+          "detail": "step_006: Step 'step_006' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.5
+        }
+      },
+      "kind": "cascade",
+      "params": [
+        "department",
+        "doctor",
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <doctor>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "id": "R0034",
+              "kind": "registration",
+              "patient_name": "Case demo datepicker",
+              "task": "datepicker",
+              "visit_date": "2026-11-15"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.1
+        },
+        "disabled": {
+          "score": "n/a"
+        },
+        "duplicate": {
+          "score": "n/a"
+        },
+        "heldout": {
+          "score": "n/a"
+        },
+        "missing": {
+          "score": "n/a"
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "id": "R0035",
+              "kind": "registration",
+              "patient_name": "Case reorder_late datepicker",
+              "task": "datepicker",
+              "visit_date": "2026-11-15"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.0
+        },
+        "surprise_confirm": {
+          "detail": "",
+          "records": [
+            {
+              "id": "R0036",
+              "kind": "registration",
+              "patient_name": "Case surprise_confirm datepicker",
+              "task": "datepicker",
+              "visit_date": "2026-11-15"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.1
+        },
+        "surprise_modal": {
+          "detail": "step_004: Step 'step_004' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 9.1
+        }
+      },
+      "kind": "datepicker",
+      "params": [
+        "patient_name"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose '15'"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        }
+      ]
+    },
+    {
+      "cases": {
+        "demo": {
+          "detail": "",
+          "records": [
+            {
+              "blood_group": "BP",
+              "city": "BLR",
+              "department": "CARD",
+              "doctor": "D11",
+              "gender": "M",
+              "id": "R0039",
+              "kind": "registration",
+              "patient_name": "Case demo register",
+              "task": "register",
+              "title": "MR",
+              "visit_date": "2026-11-15"
+            },
+            {
+              "followup_in": "1W",
+              "id": "R0040",
+              "kind": "followup",
+              "registration": "R0039",
+              "task": "register"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 11.2
+        },
+        "disabled": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.3
+        },
+        "duplicate": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.6
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "blood_group": "ON",
+              "city": "MYS",
+              "department": "ORTH",
+              "doctor": "D21",
+              "gender": "F",
+              "id": "R0041",
+              "kind": "registration",
+              "patient_name": "Case heldout register",
+              "task": "register",
+              "title": "MRS",
+              "visit_date": "2026-11-15"
+            },
+            {
+              "followup_in": "1M",
+              "id": "R0042",
+              "kind": "followup",
+              "registration": "R0041",
+              "task": "register"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 11.4
+        },
+        "missing": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 14.1
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "blood_group": "BP",
+              "city": "BLR",
+              "department": "CARD",
+              "doctor": "D11",
+              "gender": "M",
+              "id": "R0043",
+              "kind": "registration",
+              "patient_name": "Case reorder_late register",
+              "task": "register",
+              "title": "MR",
+              "visit_date": "2026-11-15"
+            },
+            {
+              "followup_in": "1W",
+              "id": "R0044",
+              "kind": "followup",
+              "registration": "R0043",
+              "task": "register"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 14.3
+        },
+        "surprise_confirm": {
+          "detail": "step_005: Step 'step_005' (choose <gender>) stopped before continuing: choice_unverified; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 7.5
+        },
+        "surprise_modal": {
+          "detail": "step_018: Step 'step_018' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 14.4
+        }
+      },
+      "kind": "register",
+      "params": [
+        "blood_group",
+        "city",
+        "department",
+        "doctor",
+        "followup_in",
+        "gender",
+        "patient_name",
+        "title"
+      ],
+      "pipeline": "ok",
+      "steps": [
+        {
+          "action": "select_option",
+          "intent": "choose <title>"
+        },
+        {
+          "action": "click",
+          "intent": "click recorded visual target"
+        },
+        {
+          "action": "type",
+          "intent": "type <patient_name>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <gender>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <blood_group>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <department>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <doctor>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <city>"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose '15'"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Save'"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Schedule follow-up'"
+        },
+        {
+          "action": "select_option",
+          "intent": "choose <followup_in>"
+        },
+        {
+          "action": "click",
+          "intent": "click 'Book follow-up'"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "table": {
+      "aria_listbox": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "async_combobox": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "cascade": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "chosen": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "datepicker": {
+        "demo": "verified",
+        "disabled": "n/a",
+        "duplicate": "n/a",
+        "heldout": "n/a",
+        "missing": "n/a",
+        "reorder_late": "verified",
+        "surprise_confirm": "verified",
+        "surprise_modal": "safe_halt"
+      },
+      "div_dropdown": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "native": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "register": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "select2": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      },
+      "tom_select": {
+        "demo": "verified",
+        "disabled": "safe_halt",
+        "duplicate": "safe_halt",
+        "heldout": "verified",
+        "missing": "safe_halt",
+        "reorder_late": "verified",
+        "surprise_confirm": "safe_halt",
+        "surprise_modal": "safe_halt"
+      }
+    },
+    "totals": {
+      "n/a": 4,
+      "safe_halt": 46,
+      "verified": 30
+    }
+  }
+}

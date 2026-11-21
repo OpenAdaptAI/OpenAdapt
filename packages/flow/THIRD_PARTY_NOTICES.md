@@ -40,3 +40,22 @@ stored in this repository.
 
 Published `openadapt-flow` wheels and source distributions exclude the
 `benchmark/openimis_claims/` surface and this notice.
+
+## Dropdown widget libraries in the choice-widgets fixture
+
+The synthetic registration app in `benchmark/choice_widgets/` serves unmodified
+release builds of permissively licensed widget libraries from
+`benchmark/choice_widgets/vendor/`, each with its license file beside it. They
+are test fixtures only: no OpenAdapt code imports them, and the wheel and the
+sdist exclude that folder.
+
+| Library | Version | License | Files |
+| --- | --- | --- | --- |
+| jQuery | 3.7.1 | MIT | `jquery.min.js`, `LICENSE.jquery.txt` |
+| Select2 | 4.0.13 | MIT | `select2.min.js`, `select2.min.css`, `LICENSE.select2.md` |
+| Chosen | 1.8.7 | MIT | `chosen.jquery.min.js`, `chosen.min.css`, `LICENSE.chosen.md` |
+| Tom Select | 2.3.1 | Apache-2.0 | `tom-select.complete.min.js`, `tom-select.css`, `LICENSE.tom-select.txt` |
+| flatpickr | 4.6.13 | MIT | `flatpickr.min.js`, `flatpickr.min.css`, `LICENSE.flatpickr.md` |
+
+The OpenEMR and OpenMRS compose files in the same folder pin upstream images;
+no code or assets of those applications are stored here.

@@ -233,7 +233,11 @@ def card_sha256(card: Mapping[str, Any]) -> str:
 
 
 def public_run_id(key_id: str, run_id: str) -> str:
-    """``p-`` and 16 hex of SHA-256(key_id + run_id): stable, and reveals neither."""
+    """``p-`` and 16 hex of unsalted SHA-256(key_id + run_id).
+
+    This identifier is deterministic: repeated inputs produce linkable IDs.
+    When key_id is known, guesses of run_id can be checked against the ID.
+    """
     digest = hashlib.sha256((key_id + run_id).encode("utf-8")).hexdigest()
     return "p-" + digest[:16]
 

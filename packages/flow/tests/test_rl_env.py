@@ -153,6 +153,11 @@ def test_environment_loads_and_hides_its_answers(env_dir: Path) -> None:
         view = json.dumps(task.public_view())
         assert task.fault is None or f"fault={task.fault}" not in view
         assert "solution" not in view
+        assert "grade" not in view
+    if env.manifest.app.read and not env.verify_text:
+        # Whole-record grading: every task carries its own grade spec.
+        assert all(task.grade for task in env.tasks)
+        return
     cfg = render_verify_config(
         env.verify_text, "http://127.0.0.1:1", "http://127.0.0.1:2"
     )
@@ -363,3 +368,18 @@ finally:
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_task_can_set_its_own_step_limit() -> None:
+    pytest.importorskip("openenv")
+    from openadapt_flow.rl_env import environment as E
+    from openadapt_flow.rl_env.tasks import Task
+
+    env = E.OpenAdaptWebEnvironment(ENVS / "mockmed")
+    default = env.env.manifest.agent.max_steps
+    env._task = env.env.tasks[0]
+    assert env._max_steps() == default
+    env._task = env.env.tasks[0].model_copy(update={"max_steps": default + 90})
+    assert env._max_steps() == default + 90
+    with pytest.raises(ValueError):
+        Task(**_task(max_steps=0))

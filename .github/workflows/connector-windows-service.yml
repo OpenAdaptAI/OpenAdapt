@@ -1,0 +1,271 @@
+name: Connector Windows service
+
+# Installs the BYOC connector as the OpenAdaptConnector Windows service on a
+# GitHub-hosted runner, points it at a stub control plane on 127.0.0.1, and
+# checks the whole lifecycle: install (virtual account, locked-down config
+# ACL, no firewall rule), start, poll, refusal of an ungoverned job with a
+# failed callback and ack, no listening socket, stop and remove. Nothing here
+# drives a GUI: the stub's only job is refused before any bundle is fetched.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/flow/openadapt_flow/connector/**'
+      - 'packages/flow/tests/connector_stub/**'
+      - 'packages/flow/tests/test_connector_windows_service.py'
+      - '.github/workflows/connector-windows-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connector-windows-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  service:
+    name: connector service (windows, py3.12)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      CONNECTOR_DIR: C:\ProgramData\OpenAdapt\connector
+      EVIDENCE_DIR: ${{ github.workspace }}\connector-evidence
+      # A fixed test value; the stub accepts any bearer token.
+      CI_CONNECTOR_TOKEN: ci-connector-service-test-token-7f3a9c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: connector-windows-py3.12
+      - name: Install Flow with the connector-windows extra from its lock
+        run: >-
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
+          --lock 'packages/flow[connector-windows]'
+          --editable packages/types --editable packages/flow
+
+      - name: Unit tests (service wrapper)
+        working-directory: packages/flow
+        run: python -m pytest tests/test_connector_windows_service.py -q -p no:cacheprovider
+
+      - name: Start the stub control plane on 127.0.0.1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path $env:EVIDENCE_DIR | Out-Null
+          $portFile = Join-Path $env:EVIDENCE_DIR 'stub-port.txt'
+          $log = Join-Path $env:EVIDENCE_DIR 'stub-requests.json'
+          # Actions ends a step's child processes when the step ends, so
+          # start the stub through WMI, outside the step's job object.
+          $python = (Get-Command python).Source
+          $stub = Join-Path $env:GITHUB_WORKSPACE 'packages\flow\tests\connector_stub\stub_server.py'
+          $out = Join-Path $env:EVIDENCE_DIR 'stub-stdout.txt'
+          $err = Join-Path $env:EVIDENCE_DIR 'stub-stderr.txt'
+          $cmd = "cmd.exe /c `"`"$python`" `"$stub`" --log `"$log`" --port-file `"$portFile`" --empty-polls 3 > `"$out`" 2> `"$err`"`""
+          $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $env:GITHUB_WORKSPACE }
+          if ($r.ReturnValue -ne 0) { throw "Win32_Process.Create returned $($r.ReturnValue)" }
+          $p = [pscustomobject]@{ Id = $r.ProcessId }
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $portFile); $i++) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path $portFile)) { throw 'stub did not start' }
+          $port = (Get-Content $portFile).Trim()
+          "STUB_PORT=$port" >> $env:GITHUB_ENV
+          "STUB_PID=$($p.Id)" >> $env:GITHUB_ENV
+          "stub on 127.0.0.1:$port (pid $($p.Id))"
+
+      - name: Write the machine-wide connector.toml
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path $env:CONNECTOR_DIR | Out-Null
+          $storage = Join-Path $env:RUNNER_TEMP 'byoc-storage'
+          New-Item -ItemType Directory -Force -Path $storage | Out-Null
+          $toml = @(
+            '[connector]',
+            "control_plane_url = `"http://127.0.0.1:$env:STUB_PORT`"",
+            "token = `"$env:CI_CONNECTOR_TOKEN`"",
+            'org_id = "org_stub"',
+            'poll_wait_s = 2',
+            'storage_backend = "local"',
+            "storage_root = '$storage'"
+          ) -join "`n"
+          [IO.File]::WriteAllText((Join-Path $env:CONNECTOR_DIR 'connector.toml'), "$toml`n")
+          # Plant explicit broad grants. Installation must replace them,
+          # not merely remove inheritance or update its own named entries.
+          icacls $env:CONNECTOR_DIR /grant '*S-1-1-0:(OI)(CI)R' '*S-1-5-32-545:(OI)(CI)R'
+          if ($LASTEXITCODE -ne 0) { throw 'could not plant the broad-ACL fault' }
+          $rules = (Get-NetFirewallRule | Measure-Object).Count
+          "FIREWALL_RULES_BEFORE=$rules" >> $env:GITHUB_ENV
+
+      - name: Install the service
+        run: |
+          $ErrorActionPreference = 'Stop'
+          openadapt-flow connector service install
+          if ($LASTEXITCODE -ne 0) { throw "install exited $LASTEXITCODE" }
+
+      - name: Check the service account, start type, recovery and ACL
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $svc = Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'"
+          $svc | Format-List Name, StartName, StartMode, DelayedAutoStart, PathName
+          if ($svc.StartName -ne 'NT SERVICE\OpenAdaptConnector') { throw "service account is $($svc.StartName)" }
+          if ($svc.StartMode -ne 'Auto') { throw "start mode is $($svc.StartMode)" }
+          if (-not $svc.DelayedAutoStart) { throw 'delayed auto start is off' }
+          # The directory no longer inherits from %ProgramData%; its files
+          # inherit the locked-down directory ACL.
+          if ((Get-Acl $env:CONNECTOR_DIR).AreAccessRulesProtected -ne $true) { throw 'config dir still inherits from its parent' }
+          $failure = sc.exe qfailure OpenAdaptConnector | Out-String
+          $failure
+          if ($failure -notmatch 'RESTART') { throw 'no restart recovery action' }
+          $allowed = @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators', 'NT SERVICE\OpenAdaptConnector')
+          foreach ($path in @($env:CONNECTOR_DIR, (Join-Path $env:CONNECTOR_DIR 'connector.toml'))) {
+            icacls $path
+            $ids = (Get-Acl $path).Access | ForEach-Object { $_.IdentityReference.Value }
+            $extra = $ids | Where-Object { $allowed -notcontains $_ }
+            if ($extra) { throw "unexpected ACL entries on ${path}: $($extra -join ', ')" }
+            if ($ids -notcontains 'NT SERVICE\OpenAdaptConnector') { throw "service account missing on $path" }
+          }
+          $rules = (Get-NetFirewallRule | Measure-Object).Count
+          if ($rules -ne [int]$env:FIREWALL_RULES_BEFORE) { throw "firewall rules changed: $env:FIREWALL_RULES_BEFORE -> $rules" }
+
+      - name: Start the service
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tcp = [Net.Sockets.TcpClient]::new()
+          try { $tcp.Connect('127.0.0.1', [int]$env:STUB_PORT) } catch { throw 'the stub control plane is not running' } finally { $tcp.Dispose() }
+          openadapt-flow connector service start
+          if ($LASTEXITCODE -ne 0) { throw "start exited $LASTEXITCODE" }
+          openadapt-flow connector service status
+
+      - name: Wait for poll, failed callback and ack (120 s)
+        run: >-
+          python packages/flow/tests/connector_stub/wait_for_stub.py
+          --log "$env:EVIDENCE_DIR\stub-requests.json" --timeout 120
+          --token-env CI_CONNECTOR_TOKEN
+
+      - name: Recover after process death during an empty poll
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stateUrl = "http://127.0.0.1:$env:STUB_PORT/test/state"
+          $active = $false
+          for ($i = 0; $i -lt 100; $i++) {
+            $before = Invoke-RestMethod $stateUrl
+            if ($before.active_empty_polls -gt 0) { $active = $true; break }
+            Start-Sleep -Milliseconds 100
+          }
+          if (-not $active) { throw 'no active empty poll before the crash probe' }
+          $oldPid = [int](Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'").ProcessId
+          if ($oldPid -le 0) { throw 'service was not running before the crash probe' }
+          Stop-Process -Id $oldPid -Force
+          $recovered = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            $svc = Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'"
+            $after = Invoke-RestMethod $stateUrl
+            if ($svc.State -eq 'Running' -and [int]$svc.ProcessId -gt 0 -and [int]$svc.ProcessId -ne $oldPid -and $after.polls -gt $before.polls) {
+              $recovered = $true; break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $recovered) { throw 'SCM did not restart the service and resume polling' }
+          @{ old_pid = $oldPid; restarted_pid = [int]$svc.ProcessId; polls_before = $before.polls; polls_after = $after.polls; restarted_during_empty_poll = $true } |
+            ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-lifecycle.json')
+
+      - name: Refuse a revoked token without logging it or reporting a job
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testUrl = "http://127.0.0.1:$env:STUB_PORT/test"
+          $logPath = Join-Path $env:EVIDENCE_DIR 'stub-requests.json'
+          $beforeRecords = Get-Content $logPath -Raw | ConvertFrom-Json
+          $beforeOutcomes = @($beforeRecords | Where-Object { $_.path -in @('/api/internal/run-callback', '/api/connector/ack') }).Count
+          $before = Invoke-RestMethod "$testUrl/deny-auth"
+          try {
+            $rejected = $false
+            for ($i = 0; $i -lt 80; $i++) {
+              $state = Invoke-RestMethod "$testUrl/state"
+              if ($state.auth_denials -ge ($before.auth_denials + 2)) { $rejected = $true; break }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not $rejected) { throw 'did not observe two refused-token polls' }
+            $afterRecords = Get-Content $logPath -Raw | ConvertFrom-Json
+            $afterOutcomes = @($afterRecords | Where-Object { $_.path -in @('/api/internal/run-callback', '/api/connector/ack') }).Count
+            if ($afterOutcomes -ne $beforeOutcomes) { throw 'auth rejection produced a job outcome' }
+            $serviceLog = Get-Content (Join-Path $env:CONNECTOR_DIR 'logs\connector.log') -Raw
+            if ($serviceLog.Contains($env:CI_CONNECTOR_TOKEN)) { throw 'revoked token leaked to the service log' }
+            @{ auth_denials = $state.auth_denials - $before.auth_denials; outcome_count_unchanged = $true; token_absent_from_log = $true } |
+              ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-auth-refusal.json')
+          } finally {
+            Invoke-RestMethod "$testUrl/allow-auth" | Out-Null
+          }
+
+      - name: No listening socket owned by the service process
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $svc = Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'"
+          $svcPid = [int]$svc.ProcessId
+          if ($svcPid -le 0) { throw 'service has no process' }
+          $image = (Get-Process -Id $svcPid).Path
+          "service pid $svcPid image $image"
+          $listening = netstat -ano | Where-Object { $_ -match 'LISTENING' } | Where-Object {
+            (($_.Trim() -split '\s+')[-1]) -eq "$svcPid"
+          }
+          if ($listening) { $listening; throw "service pid $svcPid has a listening socket" }
+          $tcp = Get-NetTCPConnection -State Listen -OwningProcess $svcPid -ErrorAction SilentlyContinue
+          if ($tcp) { $tcp; throw 'Get-NetTCPConnection shows a listener' }
+          "no LISTENING socket for pid $svcPid"
+
+      - name: Stop and remove the service
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $active = $false
+          for ($i = 0; $i -lt 100; $i++) {
+            $state = Invoke-RestMethod "http://127.0.0.1:$env:STUB_PORT/test/state"
+            if ($state.active_empty_polls -gt 0) { $active = $true; break }
+            Start-Sleep -Milliseconds 100
+          }
+          if (-not $active) { throw 'no active empty poll before the stop probe' }
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          openadapt-flow connector service stop
+          if ($LASTEXITCODE -ne 0) { throw "stop exited $LASTEXITCODE" }
+          $timer.Stop()
+          @{ stopped_during_empty_poll = $true; elapsed_ms = $timer.ElapsedMilliseconds } |
+            ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-stop.json')
+          $log = Get-Content (Join-Path $env:CONNECTOR_DIR 'logs\connector.log') -Raw
+          if ($log -notmatch 'service stopped') { throw 'connector.log has no clean stop' }
+          openadapt-flow connector service remove
+          if ($LASTEXITCODE -ne 0) { throw "remove exited $LASTEXITCODE" }
+          if (Get-Service OpenAdaptConnector -ErrorAction SilentlyContinue) { throw 'service still installed' }
+          $rules = (Get-NetFirewallRule | Measure-Object).Count
+          if ($rules -ne [int]$env:FIREWALL_RULES_BEFORE) { throw "firewall rules changed: $env:FIREWALL_RULES_BEFORE -> $rules" }
+
+      - name: Collect diagnostics and evidence
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:EVIDENCE_DIR | Out-Null
+          sc.exe qc OpenAdaptConnector *> (Join-Path $env:EVIDENCE_DIR 'sc-qc.txt')
+          sc.exe queryex OpenAdaptConnector *> (Join-Path $env:EVIDENCE_DIR 'sc-queryex.txt')
+          Get-WinEvent -LogName System -MaxEvents 200 -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -eq 'Service Control Manager' } |
+            Select-Object -First 40 TimeCreated, Id, Message | Format-List |
+            Out-File (Join-Path $env:EVIDENCE_DIR 'system-events.txt')
+          Get-WinEvent -LogName Application -MaxEvents 100 -ErrorAction SilentlyContinue |
+            Select-Object -First 40 TimeCreated, ProviderName, Id, Message | Format-List |
+            Out-File (Join-Path $env:EVIDENCE_DIR 'application-events.txt')
+          $logs = Join-Path $env:CONNECTOR_DIR 'logs'
+          if (Test-Path $logs) { Copy-Item "$logs\*" $env:EVIDENCE_DIR -ErrorAction SilentlyContinue }
+          if ($env:STUB_PID) { taskkill /T /F /PID $env:STUB_PID 2>&1 | Out-Null }
+          Get-ChildItem $env:EVIDENCE_DIR | Format-Table Name, Length
+          Get-Content (Join-Path $env:EVIDENCE_DIR 'connector.log') -ErrorAction SilentlyContinue
+          $hits = Get-ChildItem $env:EVIDENCE_DIR -File | Select-String -SimpleMatch $env:CI_CONNECTOR_TOKEN
+          if ($hits) { $hits | ForEach-Object { $_.Path }; throw 'the connector token appears in the evidence' }
+          exit 0
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: connector-windows-service
+          path: connector-evidence
+          if-no-files-found: error

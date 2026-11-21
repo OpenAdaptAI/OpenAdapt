@@ -1,0 +1,58 @@
+{
+  "authorized_by": "Richard Abrich in Advisor fable on 2026-11-19: 'yes do the new runs for 2x frames.' Signing authorized by 'you do it' at15:16UTC. Corrected-capture rerun; initial attempt retained. Scope r3,r4,r5,r6, synthetic OpenEMR only.",
+  "bundle_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+  "runs": [
+    {
+      "n": 1,
+      "ref": "r3-ines-carvalho",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "25470d647829c3dfa1a5c20a1fbd136ba7408504f54e76ab3c22675109084460",
+      "halt_reason": null,
+      "mismatches": []
+    },
+    {
+      "n": 2,
+      "ref": "r4-theo-lindqvist",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "eb019383148bb8e20d835f867aaebb345473676979cec44c24b987381c1373ba",
+      "halt_reason": null,
+      "mismatches": []
+    },
+    {
+      "n": 3,
+      "ref": "r5-grace-adeyemi",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "a11c257fafe370e19e5c432a8dd9d2595e7ba7c26a26f65c48757ec2f5682693",
+      "halt_reason": null,
+      "mismatches": []
+    },
+    {
+      "n": 4,
+      "ref": "r6-rosa-delgado",
+      "expected": "HALTED_BEFORE_EFFECT",
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "new_charts": 0,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "f53316fad3c73d577f68264cb403bb114759f2c4db522074f381b60b2fad99b5",
+      "halt_reason": "Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'No matches were found.' \u2014 run aborted",
+      "mismatches": []
+    }
+  ]
+}
