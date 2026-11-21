@@ -705,7 +705,9 @@ export default function SealPage({ seal: page, host = {} }) {
                 : verdict === 'unsupported'
                   ? { state: 'unchecked', text: 'Report matches · signature not checked here' }
                   : { state: 'unchecked', text: 'Not checked here' }
-    const tabs = wide ? TABS : ['summary', 'program', 'steps', 'evidence', 'raw']
+    // Every tab is in the page; CSS hides "Program" from 900 px, where the map has its own pane.
+    const allTabs = ['summary', 'program', 'steps', 'evidence', 'raw']
+    const tabs = wide ? TABS : allTabs
     const onTabKey = (e) => {
         const i = tabs.indexOf(viewTab)
         const moves = { ArrowRight: 1, ArrowLeft: -1 }
@@ -797,7 +799,9 @@ export default function SealPage({ seal: page, host = {} }) {
                 className={s.page}
                 data-tone={tone}
                 data-phase={phase}
-                data-theme={theme}
+                // With its own chrome the page sets the theme on <html> and inherits it,
+                // so the server's HTML already has the visitor's theme; embedded, it sets its own.
+                data-theme={chrome ? undefined : theme}
                 data-layout={wide ? 'split' : 'stack'}
                 data-expanded={wide && expanded ? '1' : undefined}
                 data-view={viewTab}
@@ -959,7 +963,6 @@ export default function SealPage({ seal: page, host = {} }) {
                         aria-labelledby="map-h"
                         id="seal-panel-program"
                         role={wide ? undefined : 'tabpanel'}
-                        hidden={!wide && viewTab !== 'program'}
                     >
                         <div className={s.paneHead}>
                             <h2 id="map-h">Program steps for this run</h2>
@@ -986,25 +989,23 @@ export default function SealPage({ seal: page, host = {} }) {
                         ) : null}
                     </section>
 
-                    {wide ? (
-                        <div
-                            className={s.resizer}
-                            role="separator"
-                            aria-orientation="vertical"
-                            aria-label="Resize the program map"
-                            aria-valuenow={split}
-                            aria-valuemin={30}
-                            aria-valuemax={70}
-                            tabIndex={0}
-                            onKeyDown={onSplitKey}
-                            onPointerDown={onSplitDown}
-                            onDoubleClick={() => saveSplit(50)}
-                            title="Drag, or use the arrow keys. Enter expands the map."
-                        />
-                    ) : null}
+                    <div
+                        className={s.resizer}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Resize the program map"
+                        aria-valuenow={split}
+                        aria-valuemin={30}
+                        aria-valuemax={70}
+                        tabIndex={0}
+                        onKeyDown={onSplitKey}
+                        onPointerDown={onSplitDown}
+                        onDoubleClick={() => saveSplit(50)}
+                        title="Drag, or use the arrow keys. Enter expands the map."
+                    />
 
                     <div className={s.tabs} role="tablist" aria-label="Details" onKeyDown={onTabKey}>
-                        {tabs.map((t) => (
+                        {allTabs.map((t) => (
                             <button
                                 key={t}
                                 type="button"

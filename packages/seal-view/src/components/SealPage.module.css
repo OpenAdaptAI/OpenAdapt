@@ -54,10 +54,12 @@
     --tone-strong: var(--oa-stopped-strong);
     --tone-tint: var(--oa-stopped-tint);
 }
-.page[data-layout='split'] {
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
+@media (min-width: 900px) {
+    .page {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
 }
 .page a {
     color: inherit;
@@ -295,14 +297,16 @@
         'panel';
     align-content: start;
 }
-.page[data-layout='split'] .app {
-    grid-template-columns: minmax(0, var(--split, 50%)) 9px minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
-    grid-template-areas:
-        'map rz hero'
-        'map rz tabs'
-        'map rz panel';
-    align-content: stretch;
+@media (min-width: 900px) {
+    .page .app {
+        grid-template-columns: minmax(0, var(--split, 50%)) 9px minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-areas:
+            'map rz hero'
+            'map rz tabs'
+            'map rz panel';
+        align-content: stretch;
+    }
 }
 .page[data-expanded] .app {
     grid-template-columns: minmax(0, 1fr) 0 0;
@@ -320,13 +324,15 @@
     min-height: 0;
     padding: 12px 16px 16px;
 }
-.page[data-layout='split'] .mapPane {
-    grid-area: map;
-    padding: 12px 6px 14px 16px;
-    /* The pane takes the grid's height and never sizes the grid's rows: the
-       map measures itself to fit (SealMap's fill), so its content must not
-       feed back into the rows beside it. */
-    contain: size;
+@media (min-width: 900px) {
+    .page .mapPane {
+        grid-area: map;
+        padding: 12px 6px 14px 16px;
+        /* The pane takes the grid's height and never sizes the grid's rows: the
+           map measures itself to fit (SealMap's fill), so its content must not
+           feed back into the rows beside it. */
+        contain: size;
+    }
 }
 .page[data-expanded] .mapPane {
     padding-right: 16px;
@@ -498,13 +504,15 @@
 .hero:focus {
     outline: none;
 }
-.page[data-layout='split'] .hero {
-    grid-template-columns: clamp(150px, 24vh, 270px) minmax(0, 1fr);
-    grid-template-areas:
-        'stage heading'
-        'dock dock';
-    align-items: center;
-    padding: 18px 22px 14px;
+@media (min-width: 900px) {
+    .page .hero {
+        grid-template-columns: clamp(150px, 24vh, 270px) minmax(0, 1fr);
+        grid-template-areas:
+            'stage heading'
+            'dock dock';
+        align-items: center;
+        padding: 18px 22px 14px;
+    }
 }
 .stage {
     grid-area: stage;
@@ -512,8 +520,10 @@
     width: min(58vw, 240px);
     justify-self: center;
 }
-.page[data-layout='split'] .stage {
-    width: 100%;
+@media (min-width: 900px) {
+    .page .stage {
+        width: 100%;
+    }
 }
 .stage:focus {
     outline: none;
@@ -771,10 +781,12 @@
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
 }
-.page[data-layout='split'] .tabs {
-    position: static;
-    background: var(--oa-canvas);
-    padding: 0 14px;
+@media (min-width: 900px) {
+    .page .tabs {
+        position: static;
+        background: var(--oa-canvas);
+        padding: 0 14px;
+    }
 }
 .tabs button {
     position: relative;
@@ -823,21 +835,35 @@
     grid-area: panel;
     min-width: 0;
 }
-.page[data-layout='split'] .panels {
-    min-height: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+@media (min-width: 900px) {
+    .page .panels {
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+    }
 }
-.page[data-layout='stack'][data-view='program'] .panels {
-    display: none;
+/* Below 900 px the map is a tab: shown only on it, and the panels hide. */
+@media (max-width: 899px) {
+    .page[data-view='program'] .panels,
+    .page:not([data-view='program']) .mapPane,
+    .resizer {
+        display: none;
+    }
+}
+@media (min-width: 900px) {
+    .tabs [data-tab='program'] {
+        display: none;
+    }
 }
 .panel {
     padding: 16px 16px 32px;
     animation: panelIn var(--oa-duration-slow) var(--oa-easing);
 }
-.page[data-layout='split'] .panel {
-    padding: 16px 22px 32px;
+@media (min-width: 900px) {
+    .page .panel {
+        padding: 16px 22px 32px;
+    }
 }
 .panel[hidden] {
     display: none;
