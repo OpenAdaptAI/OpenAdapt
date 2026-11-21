@@ -8,7 +8,10 @@ D1 before any scored case). Portals and answer key from
 fresh agents from each portal's dev case only, and committed at `85606e0f0`
 before the first scored case. Raw rows are in `results/arm_B.jsonl`,
 `results/arm_A.jsonl` and the full logs. Counts:
-`../form_tx_heldout_run/summarize.py --suite=heldout3`.
+`../form_tx_heldout_run/summarize.py --suite=heldout3`. Freeze check: `git
+diff 13772e2b6 85606e0f0 -- packages/flow/openadapt_flow` and `git diff
+85606e0f0 a1f024d37 -- packages/flow/benchmark/form_tx_heldout_run/packs3`
+are both empty.
 
 Everything here is synthetic.
 
@@ -69,37 +72,50 @@ with no flag, 0 unsubmitted.
 
 ## What went wrong, by cause
 
+Each cause below is checked against the answer key's trap labels and
+operator script, read after the scored run. Where the mechanism is inferred
+from the rows and has not been confirmed by a diagnostic run, it says so.
+
 1. **A bound question shown with no intake value, left empty, verifies**
-   (`cv-s04`, the false receipt).
-   - The dog questions appear only when dogs are kept. The intake said dogs
-     were kept, but it gave no breeds, which is an answer the operator
-     should supply.
-   - The pack bound the breed field. With no fact and no `required`
-     marker, the layer left it empty and submitted.
-   - The summary showed a dash, which the pack declares blank, so read-back
-     had nothing to compare. The run ended `verified_done`.
-   - The rework's unbound-control checks do not reach this, because the
-     control is bound.
-   - Needed: a bound field shown with no intake value and left empty must
-     either stop or be `not_checked`, unless the pack marks it optional.
-2. **Validation stops on a one-question-at-a-time form still carry no
-   label** (`pb-s02`, `pb-s05`, `pb-s08`). "Please answer this question to
-   continue." is shown away from the control, and the control does not
-   change, so none of the new rules find it. The operator escalated each
-   time.
-3. **Type-ahead options must match a fact exactly** (`cv-s05`, `cv-s06`,
-   both false stops). The pack built the mortgagee entry from a single dev
-   sample. On scored cases the directory text differed, so no option
-   matched.
-4. **Other false stops:**
-   - `cv-s03`: a dwelling limit with no intake value; the estimator was not
-     in the pack.
-   - `pb-s06`: an agreed hull value missing from the intake, where the
-     book-value lookup was not in the pack.
-5. **A wrong summary value with no stop before submit** (`pb-s04`). The
-   portal showed and stored horsepower doubled. Read-back caught it after
-   submit (`readback_refuted`), naming the field. Nothing before submit
-   re-reads a value the portal derives.
+   (`cv-s04`, `needs_operator_answer`, trap `unknown_question`; the false
+   receipt).
+   - The intake says dogs are kept but gives no breeds. The script expects
+     the operator to supply "Breed of each dog".
+   - The layer stopped on the bite-history question (validation, named). The
+     operator answered it, and the run submitted with breeds empty.
+   - Inferred mechanism, not confirmed by a diagnostic run: the pack binds
+     the breed field, so the unbound-control checks skip it. With no fact
+     and no `required` marker, no stop fires. The summary shows a dash,
+     which the pack declares blank, so read-back has nothing to compare.
+2. **Validation stops on the one-question-at-a-time form carry no label**
+   (`pb-s02`, `pb-s05`, `pb-s08`, all `needs_operator_answer` on "Lay-up
+   period").
+   - Inferred: the message "Please answer this question to continue." is not
+     attached to the control. The control is the same one for every
+     question, so neither a banner-to-label match nor row growth finds it.
+   - The script's label never matched, and the operator escalated.
+3. **A type-ahead option that does not exactly equal the derived fact.**
+   - `cv-s05` (clean, trap `typeahead_ambiguous`) is a false stop: "No option
+     matched" on the mortgagee. The careful human picks the right one of
+     several similar options. The pack builds the expected entry from one
+     dev sample.
+   - `cv-s06` (`must_stop_before_submit`, trap `estimator_wrong`) also
+     stopped on the mortgagee, before reaching the estimator, and escalated.
+     It counts toward K1 but not for the trap's reason.
+4. **Missing popups in the packs** (false stops on clean cases with
+   `estimator_ok`). `cv-s03` stopped on a dwelling limit the intake leaves
+   to the estimator, and `pb-s06` on an agreed hull value left to the
+   book-value lookup. Neither pack declares that popup, because the dev
+   case never opened it.
+5. **A summary that differs from what was entered, with no stop before
+   submit** (`pb-s04`, trap `summary_differs`). The stored horsepower was
+   800 against an intake of 400. A careful human catches it on the review
+   page. The layer does not compare the review page before submit, so it
+   was caught only after submit (`readback_refuted`, naming the field).
+6. **Stops on the wrong field.** `cv-s02` (trap `prefill_conflict` on the
+   co-applicant) stopped first on a phone prefill, and `pb-s07` (trap on the
+   lienholder) stopped first on a model-year prefill. The script had no entry
+   for either, so both escalated. They count toward K1.
 
 ## What changed since the second run
 
