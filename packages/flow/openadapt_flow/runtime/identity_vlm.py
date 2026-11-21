@@ -36,6 +36,9 @@ class MLXIdentityVLM:
     O/0 collapse surface, ~0.8s/call). The model loads lazily on first call.
     """
 
+    # In process: the crops never leave this machine.
+    MAY_EGRESS = False
+
     def __init__(self, model_name: str = DEFAULT_MODEL) -> None:
         self.model_name = model_name
         self._comparator: Optional[Any] = None

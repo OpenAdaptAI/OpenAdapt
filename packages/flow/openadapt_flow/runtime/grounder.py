@@ -82,19 +82,21 @@ class Grounder(Protocol):
 # appliance). The replayer refuses to wire an egress-capable component unless the
 # operator explicitly opts in (``allow_model_grounding``), and the run report
 # flags any run where a screenshot could leave the box. Local, in-process
-# grounders (Null / OCR-anchoring) carry ``MAY_EGRESS = False``.
+# grounders (Null / OCR-anchoring) carry ``MAY_EGRESS = False``; a component
+# without the marker is unknown, and unknown counts as egress.
 
 
 def component_may_egress(component: object) -> bool:
     """Whether a grounder / identity-VLM / state-verifier can send a screenshot
-    off the box. Reads the component's ``MAY_EGRESS`` marker (default False for
-    an unmarked stub / local component); a :class:`FallbackGrounder` is egress
-    if ANY chained grounder is."""
+    off the box. Reads the component's ``MAY_EGRESS`` marker. Only an explicit
+    ``MAY_EGRESS = False`` makes a component local; an unmarked one may egress
+    (fail closed). A :class:`FallbackGrounder` is egress if ANY chained
+    grounder is."""
     if component is None:
         return False
     if isinstance(component, FallbackGrounder):
         return any(component_may_egress(g) for g in component._grounders)
-    return bool(getattr(component, "MAY_EGRESS", False))
+    return getattr(component, "MAY_EGRESS", True) is not False
 
 
 class NullGrounder:
