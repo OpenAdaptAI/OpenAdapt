@@ -163,22 +163,30 @@ def build_confirmations(
 
 
 def handoffs_for_run(
-    report: Mapping[str, Any], ledgers: Sequence[HandoffLedger]
+    report: Mapping[str, Any],
+    ledgers: Sequence[HandoffLedger],
+    run_dir: Optional[Any] = None,
 ) -> list[Handoff]:
     """The handoffs a run made, each with ``step`` set to its write's index.
 
     A deferred claim check is found by the ``deferred_check`` id on the
-    step's effect evidence; any other handoff by its ``run_id`` and ``step``.
+    step's effect evidence; any other handoff by its ``run_id``, which names
+    the report's ``run_id`` or the run directory (its path or its name).
     """
 
     by_source: dict[str, Handoff] = {}
     by_run: list[Handoff] = []
-    run_id = report.get("run_id")
+    names = {report.get("run_id")}
+    if run_dir is not None:
+        from pathlib import Path
+
+        names |= {str(Path(run_dir)), str(Path(run_dir).resolve()), Path(run_dir).name}
+    names.discard(None)
     for ledger in ledgers:
         for handoff in ledger.entries():
             if handoff.source:
                 by_source[handoff.source] = handoff
-            if run_id and handoff.run_id == run_id:
+            if handoff.run_id and handoff.run_id in names:
                 by_run.append(handoff)
     found: dict[str, Handoff] = {h.id: h for h in by_run}
     results = report.get("results")
@@ -197,6 +205,16 @@ def handoffs_for_run(
     return sorted(found.values(), key=lambda h: (h.step or 0, h.sent_at, h.id))
 
 
+def place(statement: Mapping[str, Any], handoffs: Sequence[Handoff]) -> list[Handoff]:
+    """The handoffs as the statement will carry them: a handoff whose step
+    has no line on the statement goes on without a step."""
+
+    steps = {line["step"] for line in statement["predicate"].get("lines", [])}
+    return [
+        h if h.step in steps else h.model_copy(update={"step": None}) for h in handoffs
+    ]
+
+
 def attach_confirmations(
     statement: dict[str, Any],
     openings: dict[str, dict[str, str]],
@@ -208,10 +226,7 @@ def attach_confirmations(
     is signed: ``predicate.confirmations`` and their openings. A handoff
     whose step has no line on the statement is attached without a step."""
 
-    steps = {line["step"] for line in statement["predicate"].get("lines", [])}
-    placed = [
-        h if h.step in steps else h.model_copy(update={"step": None}) for h in handoffs
-    ]
+    placed = place(statement, handoffs)
     lines, opened = build_confirmations(placed, salt=salt)
     out = {**statement, "predicate": {**statement["predicate"], "confirmations": lines}}
     if not lines:
@@ -223,6 +238,7 @@ __all__ = [
     "KIND",
     "attach_confirmations",
     "handoffs_for_run",
+    "place",
     "REASONS_FOR_STATE",
     "ConfirmationLine",
     "build_confirmations",

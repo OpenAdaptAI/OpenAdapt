@@ -130,8 +130,57 @@ returns a `ReadResult`.
 The other party, the time and the fields are salted commitments. They open
 only in `receipt.private.json`, never on a public card. A reason the schema
 doesn't allow for a state stays in the local ledger and is left off the
-line. `handoffs_for_run` finds a run's handoffs, and `attach_confirmations`
-puts their lines on a statement before it is signed.
+line.
+
+**The run's receipt carries its handoffs.** When the run ends, the receipt
+hook adds a line for each of the run's handoffs, usually `sent`:
+
+- a deferred claim check is found from its step's evidence;
+- any other handoff is found by its `run_id`, which can be the report's
+  `run_id` or the run directory.
+
+The hook looks in the ledgers the run used in this process (a deferred check
+and `HandoffLedger.send` note theirs). It also looks in any ledgers listed in
+`OPENADAPT_HANDOFF_LEDGERS`, separated by the OS path separator.
+
+## Follow-up receipts
+
+A receipt is signed once, but a handoff keeps changing after that: it is
+sent, then acknowledged, then recorded. Each change gets its own small
+signed record:
+
+```bash
+openadapt handoff list --ledger DIR --run runs/claim-0412 --sign-updates
+```
+
+This signs `receipt.update-N.json`, a `record/run/v1` statement that:
+
+- copies the original receipt's predicate unchanged;
+- names the original's payload digest in `follows`, with `sequence` N;
+- carries only the confirmation lines that changed since they were last
+  signed. A new read of the same state is not a change.
+
+The openings go in `receipt.update-N.private.json` (0600). Which handoff
+each signed line belongs to is kept in `receipt.handoffs.json` (0600). That
+file is local only and holds handoff ids, never values.
+
+`handoff list --run` verifies the chain with
+`openadapt_types.receipt.verify_chain` and prints it:
+
+```text
+Signed history (receipt and 2 update(s), verified)
+  Sent to the other party at 2026-11-21T06:00:00Z, not confirmed
+  Update 1: Confirmed in the other party's system at 2026-11-21T07:10:02Z
+  Update 2: Recorded differently in the other party's system at 2026-11-21T09:30:41Z: 1 field differs
+```
+
+The chain is refused in any of these cases:
+
+- any record fails to verify;
+- a follow-up names another receipt;
+- a follow-up skips or repeats a sequence number;
+- a follow-up changes anything it copies from the original;
+- a follow-up carries no confirmation. Such a follow-up can't be signed.
 
 ## Privacy
 
@@ -142,10 +191,9 @@ digests. No model calls.
 
 ## Limits
 
-- **A receipt is signed once.** The lines a receipt carries are the states
-  at signing time, usually `sent`. Later states live in the ledger and in
-  `handoff list`. A follow-up record that names the receipt is still to be
-  designed.
+- **Follow-ups aren't signed automatically.** `--sign-updates` signs them
+  when someone runs it; no scheduler does. The TypeScript verifiers don't
+  check follow-up chains yet, and no shared test vectors exist for them.
 - **Payer reports are status only.** They never compare fields, so a payer
   handoff is never `recorded_*`.
 - **The FHIR profile needs the receiver to keep the sender's key.** It must

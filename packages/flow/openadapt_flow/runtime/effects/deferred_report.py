@@ -618,6 +618,7 @@ class DeferredReportVerifier(VerifierAdapterBase):
                 unavailable=True,
                 assurance=UNCHECKED,
             )
+        _record_handoff(self.ledger, entry)
         return EffectVerdict(
             verdict=Verdict.INDETERMINATE,
             kind=expected.kind,
@@ -629,6 +630,23 @@ class DeferredReportVerifier(VerifierAdapterBase):
             deferred_check=entry.id,
             assurance=UNCHECKED,
         )
+
+
+def _record_handoff(ledger: PendingLedger, entry: PendingCheck) -> None:
+    """The claim is now a handoff (``sent``), so the run's receipt can carry
+    its line. Never changes the check: a failure here is ignored, and
+    ``handoff list`` adds the handoff later from the pending entry."""
+
+    try:
+        from openadapt_flow.handoffs import payer
+        from openadapt_flow.handoffs.registry import note_ledger
+
+        if entry.report_format in payer.COUNTERPARTY_FORMATS:
+            handoffs = payer.handoff_ledger(ledger)
+            handoffs.adopt(payer.as_handoff(entry))
+            note_ledger(handoffs.directory)
+    except Exception:  # noqa: BLE001 - bookkeeping must never fail the save
+        return
 
 
 def build_deferred_report_verifier(

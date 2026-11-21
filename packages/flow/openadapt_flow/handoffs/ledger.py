@@ -334,6 +334,9 @@ class HandoffLedger:
                 step=step,
             )
             self._write(handoff)
+        from openadapt_flow.handoffs.registry import note_ledger
+
+        note_ledger(self.directory)
         return handoff
 
     def adopt(self, handoff: Handoff) -> Handoff:
