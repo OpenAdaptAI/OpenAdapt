@@ -248,7 +248,9 @@ def _in_roots(path: str, search: list[str]) -> bool:
 
 
 def changed_python_files(root: Path, base: str, search: list[str]) -> list[str]:
-    names = _git(root, "diff", "--name-only", base, "--", "*.py").split()
+    names = _git(
+        root, "diff", "--name-only", "--no-renames", base, "--", "*.py"
+    ).split()
     return sorted(n for n in names if _in_roots(n, search) and "/tests/" not in n)
 
 
@@ -262,6 +264,8 @@ def base_source(root: Path, base: str, path: str) -> str | None:
 def _module_name(path: str) -> str | None:
     """``packages/flow/openadapt_flow/runtime/replayer.py`` -> dotted module."""
     parts = Path(path).with_suffix("").parts
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]  # a package's __init__.py is the package module
     for i, part in enumerate(parts):
         if part.startswith("openadapt"):
             return ".".join(parts[i:])
