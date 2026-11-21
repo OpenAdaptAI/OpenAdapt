@@ -168,8 +168,6 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
-        # What this run typed into each type-ahead before its pick, by field.
-        self._typeahead_typed: dict[str, str] = {}
         self._human_accepted_control_signatures: set[str] = set()
         self._human_accepted_values: dict[str, Any] = {}
         self._accepted_entity_rows: list[tuple[str, dict[str, str]]] = []
@@ -274,16 +272,7 @@ def _control_matches_fact(
     ctrl: ObservedControl,
     intended_value: Any,
     binding: FieldBindingSpec,
-    *,
-    typed_query: Optional[str] = None,
 ) -> bool:
-    """True when ``ctrl`` shows ``intended_value`` under the binding's codec.
-
-    ``typed_query`` is what this run actually typed into a type-ahead before
-    picking. Only then may a leading part of the pick count as a match; a
-    value already in the field, or one the run did not type, must match in
-    full.
-    """
     if binding.control_kind == ControlKind.CHECKBOX and ctrl.checked is not None:
         try:
             yn = normalize_boolean_yes_no(intended_value)
@@ -291,24 +280,8 @@ def _control_matches_fact(
             return False
         return (yn == "yes") == bool(ctrl.checked)
 
-    if (
-        binding.control_kind == ControlKind.PORTAL_COMBOBOX
-        and binding.typeahead_query_chars is not None
-        and typed_query
-    ):
-        # A type-ahead that keeps only the leading part of its pick (see
-        # _is_leading_part_of_choice); typed text alone never matches.
-        try:
-            formatted = format_for_text_entry(intended_value, binding.codec)
-        except CodecValueError:
-            formatted = ""
-        if formatted and _is_leading_part_of_choice(
-            ctrl.current_value,
-            formatted,
-            typed_query,
-        ):
-            return True
-
+    # partial-match-as-match: only the whole intended value matches. A field
+    # that shows a leading part of it (whoever put it there) is not a match.
     if values_equivalent(intended_value, ctrl.current_value, binding.codec):
         return True
 
@@ -386,24 +359,6 @@ def _is_editable_combobox(ctrl: ObservedControl) -> bool:
         and not ctrl.readonly
         and not ctrl.disabled
     )
-
-
-def _is_leading_part_of_choice(shown: str, label: str, typed: str) -> bool:
-    """True when a pick left the leading part of its label in the input.
-
-    Some type-aheads put only the first part of the chosen suggestion in the
-    input ("2210 Juniper Loop" from "2210 Juniper Loop Apt 4, Brackenfield,
-    OR") and fill the rest into other fields. That counts only when the input
-    shows more than was typed, so text left over from typing never passes.
-    """
-    shown_n = collapse_whitespace(shown).casefold()
-    label_n = collapse_whitespace(label).casefold()
-    typed_n = collapse_whitespace(typed).casefold()
-    if not shown_n or shown_n == typed_n or len(shown_n) <= len(typed_n):
-        return False
-    if not label_n.startswith(shown_n) or len(label_n) == len(shown_n):
-        return False
-    return label_n[len(shown_n)] in " ,;-/("
 
 
 def _surface_action_halt(
@@ -603,7 +558,6 @@ class FormReconciler:
     ) -> None:
         self._surface = surface
         self._default_signing_key = signing_key
-        self._last_typed_query: Optional[str] = None
         self.max_screen_transitions = max_screen_transitions
         self.max_passes_per_screen = max_passes_per_screen
         self._summary_judge = (
@@ -841,7 +795,6 @@ class FormReconciler:
         typeahead_query_chars: Optional[int] = None,
     ) -> Optional[FormHaltItem]:
         typed_query: Optional[str] = None
-        self._last_typed_query = None
         try:
             if control_kind in (ControlKind.TEXT, ControlKind.DATE):
                 formatted = format_for_text_entry(intended_value, codec)
@@ -862,8 +815,11 @@ class FormReconciler:
                     typed_query = format_for_text_entry(intended_value, codec)
                     if typeahead_query_chars is not None:
                         typed_query = typed_query[:typeahead_query_chars]
+                    elif len(typed_query) > 2:
+                        # Leave the last character to the pick, so a pick that
+                        # took is visible as a change in the field.
+                        typed_query = typed_query[:-1]
                     opts = typer(ctrl.dom_selector, typed_query)
-                    self._last_typed_query = typed_query
                 else:
                     opts = surface.open_portal_combobox_options(ctrl.dom_selector)
                 try:
@@ -898,6 +854,17 @@ class FormReconciler:
                         ),
                         available_options=opts,
                     )
+                before_value = ""
+                if typed_query is not None:
+                    pre = surface.snapshot()
+                    before_value = next(
+                        (
+                            c.current_value
+                            for c in pre.controls
+                            if c.visible and c.dom_selector == ctrl.dom_selector
+                        ),
+                        "",
+                    )
                 surface.choose_portal_combobox_option(ctrl.dom_selector, opt)
                 if typed_query is not None:
                     return self._verify_typeahead_choice(
@@ -910,6 +877,7 @@ class FormReconciler:
                         dossier_key=dossier_key,
                         run_id=run_id,
                         typed_query=typed_query,
+                        before_value=before_value,
                     )
                 return None
 
@@ -991,6 +959,7 @@ class FormReconciler:
         dossier_key: Optional[str],
         run_id: str,
         typed_query: str = "",
+        before_value: str = "",
     ) -> Optional[FormHaltItem]:
         """Stop unless the type-ahead now holds the chosen suggestion.
 
@@ -1018,8 +987,15 @@ class FormReconciler:
                 )
 
             if collapse_whitespace(ctrl.label_text):
+                # Only a control that was not on the page before the pick can
+                # be the redrawn input; an existing look-alike never is.
+                before_selectors = {c.dom_selector for c in snapshot.controls}
                 same = [
-                    c for c in after.controls if c.visible and _key(c) == _key(ctrl)
+                    c
+                    for c in after.controls
+                    if c.visible
+                    and c.dom_selector not in before_selectors
+                    and _key(c) == _key(ctrl)
                 ]
                 if len(same) == 1:
                     live = same[0]
@@ -1034,8 +1010,11 @@ class FormReconciler:
             and (
                 shown.casefold() in accepted
                 or values_equivalent(intended_value, live.current_value, codec)
-                or _is_leading_part_of_choice(shown, option.label, typed_query)
             )
+            # The click must be what changed the field: a value that was
+            # already there before it (typed text, an inline completion)
+            # proves nothing about the pick.
+            and collapse_whitespace(before_value).casefold() != shown.casefold()
         ):
             return None
         reason = (
@@ -1141,12 +1120,6 @@ class FormReconciler:
             is_empty = _is_control_empty(ctrl, binding.placeholder_values)
             fact = session.effective_facts.get(binding.dossier_key)
 
-            typed_here = (
-                session._typeahead_typed.get(filled_key)
-                if was_filled_by_session
-                else None
-            )
-
             # Prefill Value Conflict Check
             if not is_empty and not was_filled_by_session:
                 if fact is None or (
@@ -1197,10 +1170,7 @@ class FormReconciler:
                 or binding.prefill_policy == PrefillPolicy.OVERWRITE_WITH_DOSSIER
                 or was_filled_by_session
             ):
-                if not _control_matches_fact(
-                    ctrl, fact.value, binding, typed_query=typed_here
-                ):
-                    self._last_typed_query = None
+                if not _control_matches_fact(ctrl, fact.value, binding):
                     act_halt = self._actuate_control(
                         surface,
                         snapshot,
@@ -1224,8 +1194,6 @@ class FormReconciler:
 
                     session.fields_filled_auto += 1
                     session._filled_selectors.add(filled_key)
-                    if self._last_typed_query is not None:
-                        session._typeahead_typed[filled_key] = self._last_typed_query
                     session.record_write(
                         source="auto_fill",
                         dossier_key=binding.dossier_key,
@@ -1281,12 +1249,7 @@ class FormReconciler:
             if (
                 fact is not None
                 and binding is not None
-                and _control_matches_fact(
-                    ctrl,
-                    fact.value,
-                    binding,
-                    typed_query=session._typeahead_typed.get(ctrl.dom_selector),
-                )
+                and _control_matches_fact(ctrl, fact.value, binding)
             ):
                 continue
             accepted_binding = binding or FieldBindingSpec(
@@ -1676,12 +1639,7 @@ class FormReconciler:
                 ok = (
                     fact is not None
                     and ctrl is not None
-                    and _control_matches_fact(
-                        ctrl,
-                        fact.value,
-                        binding,
-                        typed_query=session._typeahead_typed.get(ctrl.dom_selector),
-                    )
+                    and _control_matches_fact(ctrl, fact.value, binding)
                 )
             else:
                 intended = session._popup_manual_fills.get(

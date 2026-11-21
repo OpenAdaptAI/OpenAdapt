@@ -176,12 +176,16 @@ def _run_address(
         ctx.close()
 
 
-def test_pick_that_keeps_the_leading_part_of_its_label_is_accepted(
+def test_pick_that_keeps_only_the_leading_part_of_its_label_stops(
     browser: Any,
 ) -> None:
+    # partial-match-as-match: the field shows "2210 Juniper Loop", not the
+    # intake's "2210 Juniper Loop Apt 4, Brackenfield, OR". A leading part is
+    # not the value, so the run stops before submit instead of guessing.
     result, submissions = _run_address(browser, inert=False)
-    assert not result.halts, [h.message for h in result.halts]
-    assert submissions == [{"addr": "2210 Juniper Loop"}]
+    assert submissions == []
+    assert result.halts, result.what_happened
+    assert result.halts[0].field_label == "Street address"
 
 
 def test_typed_text_left_in_the_input_is_not_taken_as_a_pick(browser: Any) -> None:
@@ -204,3 +208,32 @@ def test_prefilled_leading_part_is_a_prefill_conflict_not_a_match(
     assert result.halts, result.what_happened
     assert result.halts[0].kind == FormHaltKind.PREFILL_VALUE_CONFLICT
     assert result.halts[0].field_label == "Street address"
+
+
+def test_inert_pick_with_a_full_length_value_stops(browser: Any) -> None:
+    # partial-match-as-match: with no query length set, the run leaves the
+    # last character to the pick. An option click that does nothing leaves
+    # the typed text, which is not the value, so the run stops.
+    body = ADDRESS.replace("<script>", "<script>const INERT = true;")
+    ctx, page, submissions = _serve(browser, {"/a": body})
+    try:
+        surface = PlaywrightFormSurface(page, _profile(), base_origin=ORIGIN)
+        surface.goto(f"{ORIGIN}/a")
+        pack = _address_pack()
+        pack = pack.model_copy(
+            update={
+                "bindings": (
+                    pack.bindings[0].model_copy(update={"typeahead_query_chars": None}),
+                )
+            }
+        )
+        reconciler = FormReconciler(surface)
+        session = reconciler.create_session(
+            pack,
+            _dossier(**{"home.address_full": "2214 Juniper Loop, Brackenfield, OR"}),
+        )
+        result = reconciler.run_until_halt_or_done(session)
+    finally:
+        ctx.close()
+    assert submissions == []
+    assert result.halts, result.what_happened
