@@ -131,7 +131,9 @@ def verify_path(
                 "  Not verified: --keys can't pin a hosted link; download it and verify the file"
             )
             return 1
-        return legacy_link(target, list(extra))
+        # Dropped-requirement class: a link's signer must be pinned here,
+        # exactly as a downloaded file's is.
+        return legacy_link(target, [*extra, "--require-pinned"])
     path = Path(target)
     if path.is_dir():
         return _verify_folder(
@@ -264,7 +266,8 @@ def _verify_folder(
             )
     if sealed_only:
         say(f"{len(sealed_only)} run(s) have only a seal.json ({OLDER})")
-        legacy_extra = [*extra] if keys is None else ["--keys", str(keys)]
+        # --keys is added to, never replaces, the requested options.
+        legacy_extra = [*extra] + ([] if keys is None else ["--keys", str(keys)])
         for run in sealed_only:
             failed += 1 if legacy_folder(run, legacy_extra) else 0
     total = len(runs)

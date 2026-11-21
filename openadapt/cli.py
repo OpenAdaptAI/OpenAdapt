@@ -2481,14 +2481,30 @@ def _is_seal_link(value: str) -> bool:
     return parse_link(value) is not None
 
 
+REQUIRE_PINNED = "--require-pinned"
+
+
 def _verify_seal_link(url: str, extra: list[str]) -> int:
     """`openadapt seal verify <link>`: fetch a hosted Seal and check it here."""
     from openadapt.seal_publish import PublishError, check_link, urllib_transport
 
+    pinned = None
+    if extra == [REQUIRE_PINNED]:
+        # The unified verify: a link's key must be pinned here, like a file's.
+        from openadapt.receipt_verify import _registry
+
+        def pinned(key_id: str) -> bool:
+            return any(
+                k.key_id == key_id and k.status == "active" for k in _registry(None)
+            )
+
+        extra = []
     if extra:
         raise click.UsageError("A Seal link takes no other options.")
     try:
-        return check_link(url, transport=urllib_transport, say=click.echo)
+        return check_link(
+            url, transport=urllib_transport, say=click.echo, pinned=pinned
+        )
     except PublishError as exc:
         click.echo(str(exc), err=True)
         return exc.exit_code
