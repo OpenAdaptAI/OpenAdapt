@@ -368,7 +368,7 @@ class OutputExtractionSpec(BaseModel):
 
 
 class SummaryCheckSpec(BaseModel):
-    """Independent summary/search read-back verification contract."""
+    """Summary/search read-back verification contract (read by the acting session)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -564,6 +564,8 @@ class FieldWriteRecord(BaseModel):
         "operator_fixed_on_screen",
         "operator_kept_prefill",
         "popup_return",
+        # Already held the intended value; the run left it as it was.
+        "kept_matching",
     ]
     in_popup_subroutine: Optional[str] = None
     # Set when a popup input was re-read from its control and matched just
@@ -609,6 +611,11 @@ class ReadbackFieldVerdict(BaseModel):
         return self
 
 
+ReadbackEvidence = Literal[
+    "acting_session_reread", "separate_session_read", "operator_attested"
+]
+
+
 class SummaryVerdict(BaseModel):
     """Aggregate read-back verification result over summary/search screen."""
 
@@ -621,6 +628,10 @@ class SummaryVerdict(BaseModel):
     field_verdicts: tuple[ReadbackFieldVerdict, ...] = ()
     extracted_outputs: dict[str, Any] = Field(default_factory=dict)
     missing_required_outputs: tuple[str, ...] = ()
+    # Who produced the read-back. The judge reads through the session that
+    # did the work, so it is "acting_session_reread"; only a read by a fresh,
+    # separate session may be called independent.
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
 
     @model_validator(mode="after")
     def _passed_needs_every_field_checked(self) -> "SummaryVerdict":
@@ -672,6 +683,7 @@ class FormTxReceiptPayload(BaseModel):
     readback_passed: bool
     readback_not_checked_count: int = Field(default=0, ge=0)
     salted_output_digests: dict[str, str] = Field(default_factory=dict)
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
 
     @model_validator(mode="after")
     def _verified_means_fully_checked(self) -> "FormTxReceiptPayload":

@@ -166,6 +166,10 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
+        # Surface mutation count when this run first started.
+        self._mutations_at_start: Optional[int] = None
+        # True only while apply_human_resolution resumes the run.
+        self._resuming: bool = False
         self._human_accepted_control_signatures: set[str] = set()
         self._human_accepted_values: dict[str, Any] = {}
         self._accepted_entity_rows: list[tuple[str, dict[str, str]]] = []
@@ -940,6 +944,16 @@ class FormReconciler:
                     edited_any = True
                     if binding.triggers_re_render:
                         return True, True, None
+            elif fact is not None and not is_empty:
+                # A control that already held the intended value is still a
+                # control this run relied on: it needs its own verdict.
+                session.record_write(
+                    source="kept_matching",
+                    dossier_key=binding.dossier_key,
+                    label=ctrl.label_text,
+                    selector=ctrl.dom_selector,
+                    in_popup_subroutine=in_popup_subroutine,
+                )
 
         return edited_any, False, None
 
@@ -1577,7 +1591,7 @@ class FormReconciler:
                     summary_verdict=verdict,
                     receipt=None,
                     what_happened=(
-                        f"Independent read-back did not verify commit: {reasons}"
+                        f"Read-back by the acting session did not verify commit: {reasons}"
                     ),
                 )
             return self._build_result(
@@ -1612,7 +1626,7 @@ class FormReconciler:
             outputs=extracted_outputs,
             summary_verdict=verdict,
             receipt=receipt,
-            what_happened="Committed and verified via independent read-back",
+            what_happened="Committed and verified by the acting session's read-back",
         )
 
     def _is_still_on_uncommitted_commit_screen(
@@ -1641,10 +1655,36 @@ class FormReconciler:
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Advance ``session`` deterministically until verified completion or a governed halt."""
+        """Advance ``session`` deterministically until verified completion or a governed halt.
+
+        A session with an open stop does not move: a stop is cleared only by
+        ``apply_human_resolution`` (absent-evidence-as-success: a retry is not
+        a decision).
+        """
+        if session.active_halts and not session._resuming:
+            return self._build_result(
+                session,
+                outcome=(
+                    session._last_result.outcome
+                    if session._last_result is not None
+                    else FormTxOutcome.HALTED_NEEDS_HUMAN
+                ),
+                safe_to_retry=True,
+                halts=tuple(session.active_halts),
+                what_happened=(
+                    "Refused to continue: a stop is still open and needs a "
+                    "decision through apply_human_resolution"
+                ),
+            )
+        session._resuming = False
         active_surface = self._resolve_surface(surface, session)
         pack = session.pack
         session.active_halts.clear()
+        if session._mutations_at_start is None:
+            try:
+                session._mutations_at_start = active_surface.mutation_count
+            except Exception:  # noqa: BLE001
+                session._mutations_at_start = 0
 
         for _ in range(self.max_screen_transitions):
             snapshot = active_surface.snapshot(
@@ -2106,10 +2146,43 @@ class FormReconciler:
                     )
                 continue
 
-            # Single-screen pack with no WizardScreenSpec transition buttons
-            return self._finalize_commit(
-                active_surface, session, snapshot, active_surface.mutation_count
-            )
+            # Single-screen pack with no WizardScreenSpec transition buttons.
+            # With no commit control, only a save the page itself sent during
+            # this run can be finalized; reading back our own unsaved edits is
+            # not evidence of a commit (absent-evidence-as-success).
+            start = session._mutations_at_start or 0
+            if active_surface.mutation_count - start <= 0:
+                sig = f"no_commit|{snapshot.screen_id or snapshot.url_origin_and_path}"
+                halt_id = _deterministic_halt_id(
+                    session.run_id,
+                    FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+                    snapshot.screen_id,
+                    pack.pack_id,
+                    sig,
+                )
+                msg = (
+                    "No commit control on this screen and nothing was saved: "
+                    "the run will not treat its own unsaved edits as a commit"
+                )
+                halt = FormHaltItem(
+                    halt_id=halt_id,
+                    kind=FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+                    screen_id=snapshot.screen_id,
+                    message=msg,
+                    allowed_actions=(
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
+                        HumanDecisionAction.ABORT_RUN,
+                    ),
+                )
+                session._halt_metadata[halt_id] = {"field_signature": sig}
+                return self._build_result(
+                    session,
+                    outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+                    safe_to_retry=True,
+                    halts=(halt,),
+                    what_happened=msg,
+                )
+            return self._finalize_commit(active_surface, session, snapshot, start)
 
         sig = f"transition_budget|{pack.pack_id}"
         halt_id = _deterministic_halt_id(
@@ -2214,6 +2287,15 @@ class FormReconciler:
             and snapshot.active_modals.count(previous_modal) != 1
         ):
             raise ValueError("Human decision modal changed; observe and review again")
+
+    def _resume_after_resolution(
+        self, session: ReconcilerSession, surface: FormSurfaceBackend
+    ) -> FormTxResult:
+        session._resuming = True
+        try:
+            return self.run_until_halt_or_done(session, surface=surface)
+        finally:
+            session._resuming = False
 
     def apply_human_resolution(
         self,
@@ -2417,7 +2499,7 @@ class FormReconciler:
                 in_popup_subroutine=in_popup_sub,
             )
             _append_record(val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL:
@@ -2452,7 +2534,7 @@ class FormReconciler:
                 )
 
             _append_record(portal_val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.DISMISS_PORTAL_ENTITY:
@@ -2506,7 +2588,7 @@ class FormReconciler:
             )
             session.dismissed_entities.add(entity_key)
             _append_record(dict(row.values))
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.CONFIRM_MODAL_ACTION:
@@ -2541,7 +2623,7 @@ class FormReconciler:
 
             session.confirmed_modals.add(modal_id)
             _append_record("confirmed")
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         if action == HumanDecisionAction.FIXED_ON_SCREEN:
@@ -2567,7 +2649,7 @@ class FormReconciler:
                     )
                     return _cache_and_return(res)
                 _append_record("authenticated")
-                res = self.run_until_halt_or_done(session, surface=active_surface)
+                res = self._resume_after_resolution(session, active_surface)
                 return _cache_and_return(res)
 
             binding = meta.get("binding")
@@ -2616,7 +2698,7 @@ class FormReconciler:
                     )
                     return _cache_and_return(res)
                 _append_record("validation_cleared")
-                res = self.run_until_halt_or_done(session, surface=active_surface)
+                res = self._resume_after_resolution(session, active_surface)
                 return _cache_and_return(res)
 
             placeholders = (
@@ -2671,7 +2753,7 @@ class FormReconciler:
                 in_popup_subroutine=meta.get("in_popup_subroutine"),
             )
             _append_record(live_val)
-            res = self.run_until_halt_or_done(session, surface=active_surface)
+            res = self._resume_after_resolution(session, active_surface)
             return _cache_and_return(res)
 
         raise ValueError(f"Unsupported human resolution action: {action!r}")

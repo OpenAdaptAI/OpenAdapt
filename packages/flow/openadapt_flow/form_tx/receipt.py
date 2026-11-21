@@ -8,7 +8,9 @@ signed over canonical JSON bytes.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import itertools
 import os
 import secrets
 import tempfile
@@ -40,6 +42,7 @@ from openadapt_flow.form_tx.types import (
 __all__ = [
     "ed25519_public_key_hex",
     "generate_ed25519_keypair",
+    "form_tx_receipt_format",
     "issue_form_tx_receipt",
     "load_or_create_ed25519_key",
     "verify_form_tx_receipt",
@@ -217,6 +220,32 @@ def issue_form_tx_receipt(
         raise ValueError(
             "Verified receipt requires successful nonempty read-back evidence"
         )
+    # absent-evidence-as-success: counts are not evidence. A verified receipt
+    # needs the per-field verdicts, every one of them passed, and a passing
+    # verdict for every bound field the dossier has a value for: one passing
+    # field out of several is partial, never verified.
+    if outcome == FormTxOutcome.VERIFIED_DONE:
+        if (
+            summary_verdict is None
+            or not summary_verdict.field_verdicts
+            or any(not v.passed for v in summary_verdict.field_verdicts)
+        ):
+            raise ValueError(
+                "Verified receipt requires per-field read-back verdicts, all passed"
+            )
+        if pack is not None and dossier is not None:
+            passed_keys = {v.dossier_key for v in summary_verdict.field_verdicts}
+            bound_with_value = {
+                b.dossier_key
+                for b in pack.bindings
+                if dossier.facts.get(b.dossier_key) is not None
+            }
+            missing = sorted(bound_with_value - passed_keys)
+            if missing:
+                raise ValueError(
+                    "Verified receipt requires every bound field with a value "
+                    f"to pass read-back; missing: {missing}"
+                )
 
     hr_digests = tuple(salted_sha256(rec, actual_salt) for rec in human_resolutions)
     salted_outputs = {
@@ -245,6 +274,11 @@ def issue_form_tx_receipt(
             len(summary_verdict.not_checked_keys) if summary_verdict is not None else 0
         ),
         salted_output_digests=salted_outputs,
+        readback_evidence=(
+            summary_verdict.readback_evidence
+            if summary_verdict is not None
+            else "acting_session_reread"
+        ),
     )
 
     payload_bytes = canonical_json_bytes(payload)
@@ -261,6 +295,39 @@ def issue_form_tx_receipt(
     )
 
 
+# Fields added to the v1 payload after v1 receipts were first signed on main,
+# with the value they read as when absent. A receipt signed before a field
+# existed was signed over the payload without it.
+_LATER_V1_FIELDS: dict[str, Any] = {
+    "readback_not_checked_count": 0,
+    "readback_evidence": "acting_session_reread",
+}
+
+RECEIPT_FORMAT_CURRENT = "v1"
+RECEIPT_FORMAT_OLDER = "v1, older (signed before: {fields})"
+
+
+def _signed_encodings(payload: Any) -> list[tuple[str, bytes]]:
+    """The current encoding, then each older one a receipt may have been signed in.
+
+    An older receipt lacks fields added later; those read as their default,
+    so each subset of later fields that hold their default is tried absent.
+    """
+    out = [(RECEIPT_FORMAT_CURRENT, canonical_json_bytes(payload))]
+    data = payload.model_dump(mode="json")
+    defaulted = [k for k, d in _LATER_V1_FIELDS.items() if k in data and data[k] == d]
+    for size in range(1, len(defaulted) + 1):
+        for absent in itertools.combinations(defaulted, size):
+            older = {k: v for k, v in data.items() if k not in absent}
+            out.append(
+                (
+                    RECEIPT_FORMAT_OLDER.format(fields=", ".join(absent)),
+                    canonical_json_bytes(older),
+                )
+            )
+    return out
+
+
 def verify_form_tx_receipt(
     receipt: SignedFormTxReceipt,
     *,
@@ -269,38 +336,56 @@ def verify_form_tx_receipt(
     """Verify ``payload_sha256`` and Ed25519 signature over canonical payload JSON.
 
     Returns ``False`` on any digest mismatch, malformed hex, key mismatch, or
-    single-bit payload/signature tamper.
+    single-bit payload/signature tamper. A v1 receipt signed before later
+    optional fields existed still verifies; ``form_tx_receipt_format`` says
+    which format it is.
     """
+    return (
+        form_tx_receipt_format(receipt, expected_public_key_hex=expected_public_key_hex)
+        is not None
+    )
+
+
+def form_tx_receipt_format(
+    receipt: SignedFormTxReceipt,
+    *,
+    expected_public_key_hex: Optional[str] = None,
+) -> Optional[str]:
+    """The format a receipt verifies under, or ``None`` when it does not verify."""
     if not isinstance(receipt, SignedFormTxReceipt):
-        return False
+        return None
     if receipt.algorithm != "Ed25519":
-        return False
+        return None
     if expected_public_key_hex is not None and not hmac.compare_digest(
         receipt.public_key_hex.lower(),
         expected_public_key_hex.lower(),
     ):
-        return False
-
-    expected_sha = canonical_sha256(receipt.payload)
-    if not hmac.compare_digest(receipt.payload_sha256, expected_sha):
-        return False
+        return None
 
     try:
         pub_bytes = bytes.fromhex(receipt.public_key_hex)
         sig_bytes = bytes.fromhex(receipt.signature_hex)
     except ValueError:
-        return False
+        return None
 
     if len(pub_bytes) != 32 or len(sig_bytes) != 64:
-        return False
+        return None
 
     try:
         public_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
-        public_key.verify(sig_bytes, canonical_json_bytes(receipt.payload))
-    except (InvalidSignature, ValueError):
-        return False
-
-    return True
+    except ValueError:
+        return None
+    for label, encoded in _signed_encodings(receipt.payload):
+        if not hmac.compare_digest(
+            receipt.payload_sha256, hashlib.sha256(encoded).hexdigest()
+        ):
+            continue
+        try:
+            public_key.verify(sig_bytes, encoded)
+        except (InvalidSignature, ValueError):
+            continue
+        return label
+    return None
 
 
 def verify_salted_output_digest(

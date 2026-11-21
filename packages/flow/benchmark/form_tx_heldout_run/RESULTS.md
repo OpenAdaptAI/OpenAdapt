@@ -6,8 +6,9 @@ key from `claude/form-tx-heldout-portals` at `36be56dcd` (answer key sha256
 `948f695a...7227`). The pre-registration was pushed at `8ea2e5602`, before the
 portals were merged into this branch at `eeb53cadb`; deviations D1 and D2 were
 recorded before any scored case ran. The runner and packs were committed at
-`3312524d5`, before the first scored case; `git diff 6392bac91 HEAD --
-packages/flow/openadapt_flow` is empty, so the engine did not change after
+`3312524d5`, before the first scored case; `git diff 6392bac91 124db5c98 --
+packages/flow/openadapt_flow` is empty (124db5c98 is the last commit of this
+measurement; later commits on this branch change the engine), so the engine did not change after
 the freeze. Raw rows: `results/arm_B.jsonl`, `results/arm_C.jsonl`,
 the JSON lines in `results/arm_A_full.log`, and the full console logs `results/arm_*_full.log`.
 Counts: `summarize.py`.

@@ -1,4 +1,8 @@
-"""Independent post-commit summary/search read-back judge for ``form_tx``.
+"""Post-commit summary/search read-back judge for ``form_tx``.
+
+The judge reads through the surface of the session that did the work
+(``acting_session_reread``). It is not an independent check: only a read by a
+fresh, separate session would be.
 
 Verifies committed portal state against the authoritative expected fact map
 (grounded ``InputDossier`` facts overlaid with verified human co-pilot
@@ -8,8 +12,10 @@ missing controls, mismatched values, or missing required outputs.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict
 
 from openadapt_flow.form_tx.codecs import (
     CodecValueError,
@@ -125,6 +131,11 @@ def _observed_control_matches(
     ctrl: ObservedControl,
     binding: FieldBindingSpec,
 ) -> bool:
+    # partial-match-as-match: a radio option matches only when it is selected.
+    if (
+        ctrl.input_type.casefold() == "radio" or ctrl.role.casefold() == "radio"
+    ) and ctrl.checked is not True:
+        return False
     if (
         binding.control_kind == ControlKind.CHECKBOX
         and not ctrl.current_value.strip()
@@ -143,6 +154,84 @@ def _observed_control_matches(
             return True
 
     return False
+
+
+class Subject(BaseModel):
+    """One control the run wrote, kept or accepted, and the key it holds.
+
+    ``subject_id`` names where it is (popup, selector or entity row), so two
+    controls that hold the same dossier key are two subjects.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    subject_id: str
+    key: str
+    label: str = ""
+
+
+def read_subjects(
+    writes: Sequence[FieldWriteRecord],
+    resolutions: Sequence[HumanResolutionRecord],
+) -> list[Subject]:
+    """Every written, kept or operator-accepted control, by subject."""
+    subjects: dict[str, Subject] = {}
+    for w in writes:
+        key = w.dossier_key or w.field_key
+        sid = f"{w.in_popup_subroutine or 'main'}|{w.selector or ''}|{w.field_key}"
+        subjects.setdefault(sid, Subject(subject_id=sid, key=key, label=w.label or ""))
+    for rec in resolutions:
+        if (
+            rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
+            and rec.action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL
+        ):
+            sid = f"entity|{rec.field_signature}"
+            subjects.setdefault(
+                sid, Subject(subject_id=sid, key=f"entity:{rec.field_signature}")
+            )
+    return list(subjects.values())
+
+
+def uncovered_subject_verdicts(
+    subjects: Sequence[Subject],
+    verdicts: Sequence[ReadbackFieldVerdict],
+    codec_for: Callable[[str], FormCodecKind],
+) -> list[ReadbackFieldVerdict]:
+    """absent-evidence-as-success: a subject with no verdict is not_checked.
+
+    One verdict for a key accounts for one subject holding that key. When more
+    subjects hold the key than there are verdicts for it, the summary cannot
+    say which control it shows, so the rest are not_checked. Never passed.
+    """
+    verdicts_per_key: dict[str, int] = {}
+    for v in verdicts:
+        verdicts_per_key[v.dossier_key] = verdicts_per_key.get(v.dossier_key, 0) + 1
+    by_key: dict[str, list[Subject]] = {}
+    for subject in subjects:
+        by_key.setdefault(subject.key, []).append(subject)
+    out: list[ReadbackFieldVerdict] = []
+    for key, group in sorted(by_key.items()):
+        have = verdicts_per_key.get(key, 0)
+        for subject in sorted(group, key=lambda s: s.subject_id)[have:]:
+            out.append(
+                ReadbackFieldVerdict(
+                    dossier_key=key,
+                    codec_kind=codec_for(key),
+                    passed=False,
+                    status=ReadbackStatus.NOT_CHECKED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                    reason=(
+                        f"No read-back covers {subject.label or subject.subject_id!r}"
+                        + (
+                            f": {len(group)} controls hold {key!r} and only "
+                            f"{have} read-back verdict(s) exist"
+                            if have
+                            else ""
+                        )
+                    ),
+                )
+            )
+    return out
 
 
 def _extract_present_outputs(
@@ -173,7 +262,7 @@ def _extract_present_outputs(
 
 
 class SummaryJudge:
-    """Independent read-back verifier for committed form transactions."""
+    """Read-back verifier for committed form transactions (acting session)."""
 
     def __init__(
         self,
@@ -244,7 +333,7 @@ class SummaryJudge:
         pre_outputs, _ = _extract_present_outputs(snapshot, summary_check.outputs)
         seeded_outputs.update(pre_outputs)
 
-        # Navigate to independent summary/search route if configured and not already there.
+        # Navigate to the summary/search route if configured and not already there.
         if summary_check.summary_url_path and not _url_matches(
             snapshot.url_origin_and_path, summary_check.summary_url_path
         ):
@@ -505,6 +594,12 @@ class SummaryJudge:
                         f"under codec {binding.codec.kind.value!r}",
                     )
                 )
+
+        verdicts.extend(
+            uncovered_subject_verdicts(
+                read_subjects(writes, active_resolutions), verdicts, _codec_for
+            )
+        )
 
         screen_problems: list[str] = []
         if snapshot.auth_wall_present:
