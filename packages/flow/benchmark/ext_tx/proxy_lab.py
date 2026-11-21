@@ -147,7 +147,7 @@ def independent_counts(before: Any, after: Any) -> dict[str, dict[str, int]]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--out", required=True)
     ap.add_argument("--n", type=int, default=120)
     ap.add_argument("--seed", type=int, default=20261121)

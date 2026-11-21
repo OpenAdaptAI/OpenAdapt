@@ -534,7 +534,7 @@ def seeded_faults(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--phase", choices=["pilot", "measured"], required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--batches", type=int, default=10)
