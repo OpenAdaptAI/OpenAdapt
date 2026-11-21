@@ -346,3 +346,28 @@ def test_learned_routes_never_store_credential_fields(app: _App) -> None:
         har, sandbox_base_url=app.base, store_digest=app.digest, store_reset=app.reset
     )
     assert report.read_routes[0].body_equals == (("page", "1"),)
+
+
+def test_read_route_without_a_body_discriminator_is_rejected() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ReadRoute(path=r"/search", body_equals=())
+
+
+def test_probe_refuses_a_route_whose_bodies_share_no_field(app: _App) -> None:
+    """A form path that both searches and saves: nothing is constant."""
+    with SessionWireTap(app.base, WirePolicy(max_mutations=None)) as tap:
+        _call(tap.base_url, "POST", "/search", {"q": "a"})
+        _call(tap.base_url, "POST", "/search", {"term": "b"})
+        har = tap.export_har()
+    report = probe_read_routes(
+        har, sandbox_base_url=app.base, store_digest=app.digest, store_reset=app.reset
+    )
+    (route,) = report.routes
+    assert not route.read_only and "nothing tells a read" in route.reason
+    assert report.read_routes == ()
+    # With nothing learned, a write on that path is still a mutation.
+    with SessionWireTap(app.base, WirePolicy(max_mutations=1)) as tap:
+        assert _call(tap.base_url, "POST", "/search", {"q": "c"}) == 200
+        assert _call(tap.base_url, "POST", "/rec/1", {"note": "x"}) == 403

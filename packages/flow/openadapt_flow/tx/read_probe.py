@@ -266,6 +266,18 @@ def probe_read_routes(
                 )
             )
             continue
+        if not body_equals:
+            probes.append(
+                ReadRouteProbe(
+                    method=method,
+                    path=path,
+                    samples=len(samples),
+                    read_only=False,
+                    reason="no body field was constant across the samples, so "
+                    "nothing tells a read on this path from a write",
+                )
+            )
+            continue
         reason = "every replay returned 2xx and left the store unchanged"
         read_only = True
         for sample in samples:
