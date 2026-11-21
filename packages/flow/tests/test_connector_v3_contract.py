@@ -247,6 +247,32 @@ def test_live_scope_faults_refuse_before_fetch_or_child(tmp_path, monkeypatch, f
     assert storage.fetches == 0 and seen == []
 
 
+#: The grounding block exactly as Cloud's live BYOC builder sends it for an
+#: organization with grounding off (captured from a staging lease).
+CLOUD_GROUNDING_DEFAULT = {
+    "model": "",
+    "enabled": False,
+    "base_url": "",
+    "provider": "anthropic",
+    "api_key_env": "",
+    "phi_egress_attested": False,
+    "phi_grounding_allowlist": [],
+}
+
+
+def test_cloud_grounding_policy_shape_is_a_supported_governance_field(tmp_path):
+    case = build_program_case(tmp_path)
+    raw = copy.deepcopy(case["payload"])
+    raw["grounding_model"] = copy.deepcopy(CLOUD_GROUNDING_DEFAULT)
+    job = parse_job(raw, lease_job_id="synthetic-lease")
+    job.ensure_governed(require_run_token=True)
+    assert job.grounding_model.phi_grounding_allowlist == []
+
+    raw["grounding_model"]["phi_grounding_allowlist_override"] = ["*"]
+    with pytest.raises(ByocGovernanceError, match="unsupported governance fields"):
+        parse_job(raw, lease_job_id="synthetic-lease").ensure_governed(require_run_token=True)
+
+
 def test_legacy_parse_never_inherits_live_authority_from_environment(
     tmp_path, monkeypatch
 ):
