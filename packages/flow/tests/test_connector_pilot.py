@@ -289,6 +289,19 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     # The PHI-bearing report stayed in customer storage.
     if outcome_kind == "halt_report":
         assert CANARY_RECORD in json.dumps(storage.written)
+        # Only the stored report's digest left, so Cloud can bind it.
+        from openadapt_flow.connector.storage import report_bytes
+
+        callback = next(
+            json.loads(r.content)
+            for r in plane.requests
+            if r.url.path == "/api/internal/run-callback"
+        )
+        (stored,) = storage.written.values()
+        assert (
+            callback["metrics"]["report_sha256"]
+            == hashlib.sha256(report_bytes(stored)).hexdigest()
+        )
 
 
 def test_guard_callback_refuses_everything_off_the_list():
@@ -314,6 +327,8 @@ def test_guard_callback_refuses_everything_off_the_list():
         {**base, "status": "VERIFIED by Alice"},
         {**base, "outcome": {"outcome": "VERIFIED", "note": "Alice"}},
         {**base, "metrics": {"wrap_readback": {"readback_sha256": "x"}}},
+        {**base, "metrics": {"report_sha256": f"report of {CANARY_RECORD}"}},
+        {**base, "metrics": {"report_sha256": "A" * 64}},
     ]
     for body in bad:
         with pytest.raises(egress.EgressViolation):
@@ -840,6 +855,29 @@ def test_the_outcome_envelope_still_refuses_free_text():
     except egress.EgressViolation:
         return
     assert CANARY_RECORD not in json.dumps(sent)
+
+
+def test_local_report_digest_matches_the_stored_bytes(tmp_path):
+    from openadapt_flow.connector.storage import LocalCustomerStorage, report_bytes
+
+    report = {"success": True, "note": CANARY_RECORD}
+    storage = LocalCustomerStorage(str(tmp_path))
+    written = storage.write_report("org_1/run_1/report.json", report)
+    assert Path(written).read_bytes() == report_bytes(report)
+    assert egress.guard_callback(
+        {
+            "run_id": "run_1",
+            "org_id": "org_1",
+            "workflow_id": "wf_1",
+            "status": "success",
+            "report_path": "org_1/run_1/report.json",
+            "metrics": {
+                "steps": 1,
+                "report_sha256": hashlib.sha256(report_bytes(report)).hexdigest(),
+            },
+            "mode": "replay",
+        }
+    )["metrics"]["report_sha256"]
 
 
 def test_wrap_readback_evidence_reads_the_v1_effect_receipt():
