@@ -562,7 +562,9 @@ def test_egress_refusal_reports_whether_the_child_could_have_written(
         storage_factory=lambda job: InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES),
     )
 
-    expected_code = "governance_refused" if phase == "before_child" else "egress_refused"
+    expected_code = (
+        "governance_refused" if phase == "before_child" else "egress_refused"
+    )
     assert result["callback_accepted"]
     assert len(cp.callbacks) == len(cp.acks) == 1
     assert result["error_code"] == cp.acks[0]["error_code"] == expected_code
