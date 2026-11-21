@@ -217,7 +217,13 @@ learned unless you name it (`--users`).
 
 `--apply` writes the excuses into every contract the manifest lists, with
 `frame.learned.source: read_only_probe`, and leaves out of each contract
-any excuse for a column that contract names. No person approves them: the
+any excuse for a column that contract names. It writes them only into a
+contract whose frame can see a lost update without the bookkeeping move:
+one whose every declared record is new (`count_new_only`), or one that
+reads the target's versions (`frame.versions`). In an update with no
+version source, another user's edit that the agent's stale save reverts
+leaves nothing changed, and only the bookkeeping move stopped it, so such
+contracts keep stopping. No person approves them: the
 rows were read, the relation is derived from the schema, and the requests
 are checked to be read-only. A contract that already has `frame.learned`
 is refused, so a person reconciles the two. Receipts name the source.

@@ -27,9 +27,10 @@ from tests.test_learned_excuses import (
     Engine,
     _refuted,
     _title,
+    asset_contract,
     check,
-    note_contract,
 )
+from tests.test_learned_excuses import note_contract as _note_contract
 
 # The engines (SQLite, and MySQL or PostgreSQL when given) and the private
 # ledger and seal homes, shared with test_learned_excuses.
@@ -37,6 +38,23 @@ engine = _le.engine
 _homes = _le._homes
 
 _n = [0]
+
+
+def note_contract(e: Engine) -> dict[str, Any]:
+    """Create a note: one new record (``count_new_only``), nothing else."""
+
+    doc = _note_contract(e)
+    doc.pop("record")
+    doc["effects"] = [
+        {
+            "kind": "record_written",
+            "match": {"title": {"param": "title"}, "body": {"param": "body"}},
+            "expected_count": 1,
+            "count_new_only": True,
+            "identity_field": "id",
+        }
+    ]
+    return doc
 
 
 def _t(name: str, cols: list[str], pk: list[str], fks: list[ForeignKey] = ()) -> Table:
@@ -347,3 +365,31 @@ def test_users_table_from_the_manifests_actor_parameter(tmp_path: Path) -> None:
     assert u is not None and (u.table, u.key) == ("app_user", "id")
     assert learn_probe.users_for_actor_params(manifest([]), schema) is None
     assert learn_probe.users_for_actor_params(manifest(["other"]), schema) is None
+
+
+def test_an_update_without_a_version_source_gets_no_probe_excuse(
+    engine: Engine, tmp_path: Path
+) -> None:
+    # Another user's edit that the agent's stale save reverts leaves the
+    # target unchanged. Without versions, only the bookkeeping move stopped
+    # such a write, so an update contract with no version source keeps it.
+    proposal = run_probe(engine, tmp_path, first_once(engine))
+    assert excuses_of(proposal)
+    path = tmp_path / "asset.yaml"
+    path.write_text(yaml.safe_dump(asset_contract(engine)))
+    assert learn_probe.apply(proposal, [path]) == []
+    assert "learned" not in yaml.safe_load(path.read_text())["frame"]
+
+    def act() -> None:
+        app_reads(engine, first=False)
+        engine.run("UPDATE asset SET name = 'Laptop B' WHERE id = 1")
+
+    _refuted(
+        check(
+            engine,
+            yaml.safe_load(path.read_text()),
+            {"tag": "LT-100", "name": "Laptop B"},
+            act,
+            tmp_path,
+        )  # fmt: skip
+    )

@@ -228,8 +228,9 @@ def apply(
 ) -> list[tuple[Path, int]]:
     """Write the probe's excuses into each contract's ``frame.learned``, all
     or none. A contract gets only the excuses whose columns it doesn't name
-    itself; one with a ``frame.learned`` already is refused (a person
-    reconciles two sets of excuses)."""
+    itself, and only when it creates new records or reads the target's
+    versions (:func:`_sees_its_own_harm`); one with a ``frame.learned``
+    already is refused (a person reconciles two sets of excuses)."""
 
     import yaml
 
@@ -258,6 +259,12 @@ def apply(
                 names |= _learn._names(n)
         except VerifierError as exc:
             raise ProbeError(f"{path}: {exc}") from exc
+        if not _sees_its_own_harm(loaded):
+            # An update (or a found check) with no version source: another
+            # user's edit that the agent's stale save reverts leaves nothing
+            # changed, so before learning only the bookkeeping move stopped
+            # it. Such a contract gets no automatic excuse.
+            continue
         excuses = [
             e
             for e in block["excuses"]
@@ -282,6 +289,25 @@ def apply(
         ]
     )
     return [(path, n) for path, _new, n in plan]
+
+
+def _sees_its_own_harm(contract: Any) -> bool:
+    """May a probe excuse go into this (loaded) contract? Only when the
+    frame can see a lost update without the bookkeeping move: every
+    declared record is new (each ``record_written`` effect counts new rows
+    only), or the contract reads the target's versions (``frame.versions``)."""
+
+    config = getattr(contract, "config", None)
+    frame = getattr(config, "frame", None)
+    if frame is not None and getattr(frame, "versions", None) is not None:
+        return True
+    records = [
+        e.model_dump(mode="json")
+        for e in getattr(config, "effects", None) or []
+        if str(getattr(getattr(e, "kind", None), "value", getattr(e, "kind", "")))
+        == "record_written"
+    ]
+    return bool(records) and all(r.get("count_new_only") is True for r in records)
 
 
 def http_sender(
