@@ -1,0 +1,25 @@
+{
+  "case_id": "vw-s05",
+  "facts": {
+    "applicant.date_of_birth": "1983-09-14",
+    "applicant.email": "cornelius.a@example.test",
+    "applicant.first_name": "Cornelius",
+    "applicant.last_name": "Abiodun",
+    "applicant.occupation": "Teacher",
+    "applicant.phone": "843-555-0123",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 1000000,
+    "home.address_line1": "15 Palmetto Row",
+    "home.city": "Edisto Landing",
+    "home.state": "SC",
+    "home.zip": "29438",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 1,
+    "household.vehicles": 2,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 300000
+  }
+}

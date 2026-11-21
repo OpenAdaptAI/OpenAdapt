@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s01",
+  "facts": {
+    "applicant.date_of_birth": "1990-10-03",
+    "applicant.email": "clementine.ar@example.test",
+    "applicant.first_name": "Clementine",
+    "applicant.last_name": "Abernathy-Ruiz",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "30",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "AZ",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 15,
+    "garaging.address_line1": "218 Paloverde Ct",
+    "garaging.city": "Sunhollow",
+    "garaging.state": "AZ",
+    "garaging.zip": "85251",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 9500,
+    "vehicle.make": "Quellen",
+    "vehicle.model": "Vale",
+    "vehicle.ownership": "financed",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2022
+  }
+}

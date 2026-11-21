@@ -1,0 +1,22 @@
+{
+  "case_id": "gw-s04",
+  "facts": {
+    "applicant.date_of_birth": "1996-04-18",
+    "applicant.email": "m.oyelowo@example.test",
+    "applicant.first_name": "Marguerite",
+    "applicant.last_name": "Oyelowo",
+    "building.sprinklered": true,
+    "contents.furnished": "typically",
+    "contents.rooms": 3,
+    "contents.valuables": 0,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2026-12-01",
+    "household.adults": 1,
+    "residence.address_line1": "1517 Otterbrook Ln",
+    "residence.address_line2": "Unit 208",
+    "residence.city": "Larchmere",
+    "residence.state": "CO",
+    "residence.zip": "80526"
+  }
+}

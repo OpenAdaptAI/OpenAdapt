@@ -1,0 +1,23 @@
+{
+  "case_id": "gw-s06",
+  "facts": {
+    "applicant.date_of_birth": "1993-09-02",
+    "applicant.email": "caspian.thurlow@example.test",
+    "applicant.first_name": "Caspian",
+    "applicant.last_name": "Thurlow",
+    "building.sprinklered": true,
+    "contents.furnished": "fully",
+    "contents.rooms": 4,
+    "contents.valuables": 0,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 500000,
+    "coverage.start_date": "2026-12-15",
+    "household.adults": 2,
+    "household.roommate_name": "Ines Valdecasas",
+    "residence.address_line1": "1517 Otterbrook Ln",
+    "residence.address_line2": "Unit 314",
+    "residence.city": "Larchmere",
+    "residence.state": "CO",
+    "residence.zip": "80526"
+  }
+}

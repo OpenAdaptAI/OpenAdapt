@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s05",
+  "facts": {
+    "applicant.date_of_birth": "1988-12-19",
+    "applicant.email": "marisela.v@example.test",
+    "applicant.first_name": "Marisela",
+    "applicant.last_name": "Vantongeren",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "none",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "UT",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 18,
+    "garaging.address_line1": "903 Quaking Aspen Rd",
+    "garaging.city": "Ashgrove Village",
+    "garaging.state": "UT",
+    "garaging.zip": "84321",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 10500,
+    "vehicle.make": "Torvane",
+    "vehicle.model": "Bolt",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2021
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "case_id": "gw-dev",
+  "facts": {
+    "applicant.date_of_birth": "1991-02-11",
+    "applicant.email": "w.achterhof@example.test",
+    "applicant.first_name": "Wilhelmina",
+    "applicant.last_name": "Achterhof",
+    "building.sprinklered": true,
+    "contents.furnished": "typically",
+    "contents.rooms": 3,
+    "contents.valuables": 0,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2026-12-01",
+    "household.adults": 1,
+    "residence.address_line1": "2210 Juniper Loop",
+    "residence.address_line2": "Apt 4",
+    "residence.city": "Brackenfield",
+    "residence.state": "OR",
+    "residence.zip": "97405"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "case_id": "fc-s01",
+  "facts": {
+    "applicant.email": "tmoorcroft@example.test",
+    "applicant.first_name": "Thaddeus",
+    "applicant.last_name": "Moorcroft",
+    "applicant.phone": "856-555-0163",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 395000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 300000,
+    "coverage.loss_of_rents": "6 months",
+    "property.address_line1": "442 Sorrel Ln",
+    "property.city": "Pellham Ford",
+    "property.construction": "frame",
+    "property.has_mortgage": true,
+    "property.mortgagee_name": "Coldharbor Savings Bank",
+    "property.roof_year": 2018,
+    "property.square_feet": 2240,
+    "property.state": "NJ",
+    "property.units": 2,
+    "property.year_built": 1958,
+    "property.zip": "08061",
+    "rental.monthly_rent": 1450,
+    "rental.units_rented": 2
+  }
+}
