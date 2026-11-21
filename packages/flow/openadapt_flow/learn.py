@@ -333,6 +333,12 @@ def _why_ignored(ep: Mapping[str, Any]) -> Optional[str]:
 
     if ep.get("mode") not in ("sql", ""):
         return "not a SQL check"
+    if ep.get("probe"):
+        # A read-only window (learn_probe): no write, so no declared effect
+        # to hold; only the frame's moved rows count.
+        if ep.get("frame") != "refuted":
+            return "nothing moved in the read-only window"
+        return _why_rows_ignored(ep)
     outcome = ep.get("outcome")
     if outcome == "CONFIRMED":
         return "confirmed: nothing moved that needs an excuse"
@@ -342,6 +348,13 @@ def _why_ignored(ep: Mapping[str, Any]) -> Optional[str]:
         return "the frame wasn't refuted (not checked)"
     if outcome != "REFUTED":
         return f"outcome {outcome}"
+    return _why_rows_ignored(ep)
+
+
+def _why_rows_ignored(ep: Mapping[str, Any]) -> Optional[str]:
+    """Why an episode's moves teach nothing, or None when every move is a
+    row that can be named."""
+
     moves = ep.get("moves")
     if not isinstance(moves, list) or not moves:
         return "no moved rows recorded"
@@ -934,6 +947,10 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--reject", action="append", default=[], metavar="ID", help="leave out E<n>"
     )
     a.set_defaults(func=cmd_approve)
+
+    from openadapt_flow import learn_probe
+
+    learn_probe.add_parser(steps)
     return p
 
 
