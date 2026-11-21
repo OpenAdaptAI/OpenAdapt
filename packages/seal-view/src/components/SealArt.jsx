@@ -260,8 +260,8 @@ export default function SealArt({
 // clock) at the lower right. Each shows only when the run's files have it, and
 // lights when its check passes.
 const WITNESS = {
-    rekor: { deg: 226, short: 'PUBLIC LOG', name: 'Sigstore Rekor: the Seal is in the public transparency log' },
-    tsa: { deg: 134, short: 'TIMESTAMP', name: 'Sigstore Timestamp Authority: a trusted time for the Seal' },
+    rekor: { deg: 226, short: 'PUBLIC LOG', name: 'Sigstore Rekor: the receipt is in the public transparency log' },
+    tsa: { deg: 134, short: 'TIMESTAMP', name: 'Sigstore Timestamp Authority: a trusted time for the receipt' },
 }
 function Witnesses({ witnesses }) {
     return (
@@ -301,7 +301,7 @@ function AnchorMark({ deg, kind }) {
     return (
         <g className={s.layer} style={{ '--z': 1 }}>
             <g className={s.anchorMark} data-kind={kind}>
-                <title>{kind === 'stop' ? 'Sealed here: the run stopped at this step' : 'Sealed here: the save OpenAdapt confirmed by reading the record back'}</title>
+                <title>{kind === 'stop' ? 'Signed here: the run stopped at this step' : 'Signed here: the save OpenAdapt confirmed by reading the record back'}</title>
                 <line x1={x1} y1={y1} x2={x} y2={y} />
                 <circle cx={x} cy={y} r="8" />
                 <circle cx={x} cy={y} r="3" className={s.anchorDot} />

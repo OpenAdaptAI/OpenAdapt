@@ -46,8 +46,9 @@
 //                entry and GitHub's key list (default true; the viewer: false)
 //   kicker, footer, trustWords (how the verdict names the key: "signed by
 //   the pinned key"; the offline viewer: "checked against your computer's
-//   Seal key"), unchanged ("The published
-//   files are unchanged."), canonicalOrigin (rewritten to this page's origin
+//   signing key"), unchanged ("The published files are unchanged; this was a
+//   copy in your browser."), signer ('this_computer' or 'demo'), mediaNote
+//   (the caption under a step's screenshots), canonicalOrigin (rewritten to this page's origin
 //   in the commands)
 // No <head>: the host sets the title (sealPageMeta).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -74,14 +75,15 @@ const SPEEDS = [1, 2, 4]
 
 // Each failure, in words a reader can act on. The code shows beside it.
 const REASONS = {
-    subject_mismatch: "The report doesn't match the SHA-256 the Seal signed.",
+    subject_mismatch: "The report doesn't match the SHA-256 the receipt signed.",
     bad_signature: "The Ed25519 signature doesn't match the signed fields.",
-    malformed: "The Seal file isn't well formed.",
-    unknown_key: "The Seal names a key this site doesn't pin.",
-    revoked_key: 'The Seal names a revoked key.',
-    key_mismatch: "The key in the Seal isn't the key this site pins.",
+    malformed: "The receipt file isn't well formed.",
+    unknown_key: "The receipt names a key this site doesn't pin.",
+    revoked_key: 'The receipt names a revoked key.',
+    key_mismatch: "The key in the receipt isn't the key this site pins.",
     ambiguous_key: 'The pinned key list names this key twice.',
 }
+const UNKNOWN_SIGNER = new Set(['unknown_key', 'key_mismatch', 'ambiguous_key'])
 const reasonText = (reason) =>
     REASONS[reason] ||
     (String(reason).startsWith('anchor_')
@@ -243,7 +245,7 @@ function useParallax(ref, enabled) {
 export function sealPageMeta(page) {
     const c = page.rings.counts
     return {
-        title: `${page.label} · ${page.job} · OpenAdapt Seal`,
+        title: `${page.label} · ${page.job} · OpenAdapt Receipt`,
         description: `${page.app}, ${page.job}: ${page.label}. ${c.stepsPassed} of ${c.steps} steps, ${c.checksPassed} of ${c.checks} screen checks${c.readbacksPassed ? `, ${c.readbacksPassed} of ${c.readbacks} record checks confirmed` : ''}. A signed run report you can check in your browser.`,
     }
 }
@@ -258,10 +260,15 @@ export default function SealPage({ seal: page, host = {} }) {
         kicker: hostKicker = null,
         footer = null,
         trustWords = 'signed by the pinned key',
-        unchanged = 'The published files are unchanged.',
+        unchanged = 'The published files are unchanged; this was a copy in your browser.',
         canonicalOrigin = null,
         chrome = true,
         map = {},
+        // Who signed it, as the host knows from its pinned keys: 'this_computer'
+        // (a run folder's own key, the default for local-seal/v1) or 'demo'.
+        signer: signerRole = 'this_computer',
+        // Screenshots are never part of a receipt; a host shows them only from a local run folder.
+        mediaNote = "From this computer's run folder: not part of the receipt, never uploaded",
     } = host
     const {
         rings,
@@ -303,7 +310,6 @@ export default function SealPage({ seal: page, host = {} }) {
     const [focusIndex, setFocusIndex] = useState(0)
     const [ring, setRing] = useState(null)
     const [copied, setCopied] = useState(false)
-    const [tamperOpen, setTamperOpen] = useState(false)
     const [commands, setCommands] = useState(canonicalCommands)
     const [theme, flipTheme] = useTheme(chrome)
     // The split view from 900 px; below it, one column with the map as a tab.
@@ -317,46 +323,7 @@ export default function SealPage({ seal: page, host = {} }) {
     const stageRef = useRef(null)
     const runId = useRef(0)
     useParallax(stageRef, !reduced)
-    // The map inspector's "Back to the Seal ↑": scroll up to the Seal and pulse it once.
-    const [pulse, setPulse] = useState(0)
-    const pulseTimer = useRef(0)
     const tiltRef = useRef(null)
-    const heldPointer = useRef(false)
-    const heldListener = useRef(null)
-    const backToSeal = useCallback(
-        (event) => {
-            const el = stageRef.current
-            if (!el) return
-            setExpanded(false)
-            const target = tiltRef.current || el
-            target.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
-            el.focus({ preventScroll: true })
-            // Hover means nothing until the pointer itself moves again.
-            heldPointer.current = true
-            let from = event && event.detail > 0 ? [event.screenX, event.screenY] : null
-            const moved = (e) => {
-                from ??= [e.screenX, e.screenY]
-                if (Math.hypot(e.screenX - from[0], e.screenY - from[1]) < 6) return
-                heldPointer.current = false
-                window.removeEventListener('pointermove', moved)
-            }
-            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
-            heldListener.current = moved
-            window.addEventListener('pointermove', moved)
-            // Two values, so a second press restarts the animation; it clears itself.
-            setPulse((n) => (n % 2) + 1)
-            clearTimeout(pulseTimer.current)
-            pulseTimer.current = setTimeout(() => setPulse(0), 1600)
-        },
-        [reduced]
-    )
-    useEffect(
-        () => () => {
-            clearTimeout(pulseTimer.current)
-            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
-        },
-        []
-    )
 
     // The replay: one index into the run's frames is the only playback state.
     const frames = useMemo(() => replayFrames(rings), [rings])
@@ -594,8 +561,6 @@ export default function SealPage({ seal: page, host = {} }) {
     const onActive = useCallback(
         (i, how = {}) => {
             if (how.focus) setFocusIndex(i)
-            // After "Back to the Seal", the Seal scrolls under a pointer that never moved: not pointing.
-            if (!how.focus && heldPointer.current) return
             // During a replay, pointing at a step moves the replay there (the same index).
             if (frame !== null) seek(frameOfStep(frames, i))
             else setHovered(i)
@@ -686,7 +651,7 @@ export default function SealPage({ seal: page, host = {} }) {
     const witnesses = hasWitness
         ? { rekor: witnessState(files.anchor, witness?.rekor), tsa: witnessState(files.tsa, witness?.tsa) }
         : null
-    const ariaSeal = `The Seal of this run: ${stats.map((l) => `${l.big} ${l.small}`).join('; ')}.`
+    const ariaSeal = `The receipt of this run: ${stats.map((l) => `${l.big} ${l.small}`).join('; ')}.`
     const busy = phase === 'verify' || phase === 'build'
     const lineStep = step
     const stepLine = lineStep
@@ -762,20 +727,36 @@ export default function SealPage({ seal: page, host = {} }) {
     }
     const showMap = wide || viewTab === 'program' || mapOpened
 
+    // The signer line, always shown: who signed this receipt, or why it isn't verified.
+    const demo = signerRole === 'demo' || seal?.issuer === 'demo'
+    const signer =
+        verdict === null
+            ? { state: 'pending', text: 'Checking who signed it' }
+            : verdict === 'valid'
+              ? demo
+                  ? { state: 'demo', text: 'Demo key: checks only in this demo' }
+                  : { state: 'signed', text: 'Signed by this computer' }
+              : UNKNOWN_SIGNER.has(result?.reason)
+                ? { state: 'unknown', text: 'Not verified: unknown signer' }
+                : verdict === 'fails'
+                  ? { state: 'fails', text: 'Not verified: the signature check failed' }
+                  : { state: 'unchecked', text: 'Not verified here' }
+    const legacy = typeof seal?.schema === 'string' && /^openadapt\.(local-seal|public-seal)\//.test(seal.schema)
+
     const verdictText =
         verdict === null ? (
-            <span className={s.pending}>{phase === 'build' ? 'Assembling the Seal from the report' : 'Checking the Ed25519 signature in your browser'}</span>
+            <span className={s.pending}>{phase === 'build' ? 'Assembling the receipt from the report' : 'Checking the Ed25519 signature in your browser'}</span>
         ) : verdict === 'valid' ? (
             <>
                 <b>Valid.</b> This is the report exactly as the run wrote it, {trustWords}.
             </>
         ) : verdict === 'unsupported' ? (
             <>
-                <b>The report matches.</b> This browser can&apos;t check Ed25519 signatures; {commands ? 'use the commands under Raw.' : 'check it from a terminal: openadapt seal verify RUN_FOLDER.'}
+                <b>The report matches.</b> This browser can&apos;t check Ed25519 signatures; {commands ? 'use the commands under Raw.' : 'check it from a terminal: openadapt verify RUN_FOLDER.'}
             </>
         ) : verdict === 'not_loaded' ? (
             <>
-                <b>The files didn&apos;t load,</b> so nothing was checked here. {commands ? 'Use the commands under Raw.' : 'Check it from a terminal: openadapt seal verify RUN_FOLDER.'}
+                <b>The files didn&apos;t load,</b> so nothing was checked here. {commands ? 'Use the commands under Raw.' : 'Check it from a terminal: openadapt verify RUN_FOLDER.'}
             </>
         ) : (
             <>
@@ -872,7 +853,7 @@ export default function SealPage({ seal: page, host = {} }) {
 
                 <div className={s.app} ref={appRef}>
                     <main id="main" tabIndex={-1} className={s.hero} aria-labelledby="seal-h1">
-                        <section className={s.stage} ref={stageRef} aria-label="The Seal" tabIndex={-1} data-pulse={pulse || undefined} onMouseLeave={() => setHovered(null)}>
+                        <section className={s.stage} ref={stageRef} aria-label="The receipt" tabIndex={-1} onMouseLeave={() => setHovered(null)}>
                             <div className={s.tilt} ref={tiltRef}>
                                 <SealArt
                                     rings={rings}
@@ -906,11 +887,36 @@ export default function SealPage({ seal: page, host = {} }) {
                             <p className={s.verdict} data-verdict={verdict || 'pending'} aria-live="polite">
                                 {verdictText}
                             </p>
+                            <p className={s.signer} data-signer={signer.state}>
+                                <span>{signer.text}</span>
+                                {legacy ? <span className={s.older}>older format · {seal.schema.replace(/^openadapt\./, '')}</span> : null}
+                            </p>
                             {tampered && verdict === 'fails' ? (
-                                <p className={s.change}>
-                                    Changed in a copy of the {change.target === 'seal' ? 'Seal' : 'report'}: <code>{change.field}</code>{' '}
-                                    <del>{change.from}</del> → <ins>{change.to}</ins>. {unchanged}
-                                </p>
+                                <div className={s.changed} data-changed="">
+                                    <p className={s.change}>
+                                        Changed in a copy of the {change.target === 'seal' ? 'receipt' : 'report'}: <code>{change.field}</code>{' '}
+                                        <del>{change.from}</del> → <ins>{change.to}</ins>.
+                                    </p>
+                                    <p className={s.change}>{unchanged}</p>
+                                    <div className={s.actions}>
+                                        <button type="button" className={s.primary} onClick={() => verify(null)} disabled={busy}>
+                                            Restore
+                                        </button>
+                                    </div>
+                                    <div className={s.another} role="group" aria-label="Try another change">
+                                        <span className={s.anotherHead}>Try another change</span>
+                                        {tamper
+                                            .filter((t) => t.id !== change.id)
+                                            .map((t) => (
+                                                <button key={t.id} type="button" className={s.tchip} disabled={busy} onClick={() => verify(t)}>
+                                                    <span>{t.label}</span>
+                                                    <code>
+                                                        {t.from} → {t.to}
+                                                    </code>
+                                                </button>
+                                            ))}
+                                    </div>
+                                </div>
                             ) : null}
                             <div className={s.actions}>
                                 <button type="button" className={s.primary} onClick={playing ? () => setPlaying(false) : play} disabled={busy}>
@@ -918,20 +924,13 @@ export default function SealPage({ seal: page, host = {} }) {
                                     {playing ? 'Pause the run' : replaying ? 'Resume the run' : 'Play the run'}
                                 </button>
                                 <button type="button" className={s.ghost} onClick={() => verify(null)} disabled={busy}>
-                                    {tampered ? 'Restore and verify' : 'Verify'}
+                                    Verify
                                 </button>
-                                <button
-                                    type="button"
-                                    className={s.ghost}
-                                    aria-expanded={tamperOpen}
-                                    aria-controls="seal-tamper"
-                                    onClick={() => {
-                                        setTamperOpen((o) => !o)
-                                        setTab('summary')
-                                    }}
-                                >
-                                    Tamper with it
-                                </button>
+                                {tampered && verdict === 'fails' ? null : (
+                                    <button type="button" className={s.ghost} onClick={() => verify(tamper[0])} disabled={busy || !tamper.length}>
+                                        Try changing it
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className={s.dock}>
@@ -984,7 +983,6 @@ export default function SealPage({ seal: page, host = {} }) {
                                 anchor={rings.anchor}
                                 sealRun={{ rings, tone, irisSeed: seed, referral }}
                                 sealLine={sealOutcomeLine({ rings, label, stopReason }, verdict === 'valid')}
-                                onBackToSeal={backToSeal}
                                 theme={theme}
                                 fill={wide}
                             />
@@ -1036,7 +1034,7 @@ export default function SealPage({ seal: page, host = {} }) {
                                     </a>
                                 </p>
                             ) : null}
-                            <dl className={s.stats} aria-label="What the Seal shows">
+                            <dl className={s.stats} aria-label="What the receipt shows">
                                 {stats.map((l) => (
                                     <div key={l.ring} data-ring={l.ring} onMouseEnter={() => setRing(l.ring)} onMouseLeave={() => setRing(null)}>
                                         <dt>
@@ -1064,35 +1062,15 @@ export default function SealPage({ seal: page, host = {} }) {
                                     still={reduced}
                                 />
                                 <div className={s.signed}>
-                                    <span className={s.proofLabel}>Signed in the Seal</span>
+                                    <span className={s.proofLabel}>Signed in the receipt</span>
                                     <code className={s.hex}>{seal.subject_sha256}</code>
                                 </div>
                             </div>
 
-                            <div id="seal-tamper" className={s.tamper} hidden={!tamperOpen}>
-                                <p className={s.tamperHead}>Change one thing in a copy of the files, then check the copy:</p>
-                                <div className={s.chips}>
-                                    {tamper.map((t) => (
-                                        <button
-                                            key={t.id}
-                                            type="button"
-                                            className={s.tchip}
-                                            aria-pressed={change?.id === t.id}
-                                            disabled={busy}
-                                            onClick={() => verify(t)}
-                                        >
-                                            <span>{t.label}</span>
-                                            <code>
-                                                {t.from} → {t.to}
-                                            </code>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
                             <p className={s.foot}>
                                 {footer || "The signature comes from the machine that ran it: it shows the report hasn't changed since the run."}{' '}
                                 {links.programMap ? <Link href={links.programMap.href}>{links.programMap.label}</Link> : null}{' '}
-                                <a href={links.docs || 'https://docs.openadapt.ai/reference/receipts-and-seals/'}>How Seals work</a>
+                                <a href={links.docs || 'https://docs.openadapt.ai/reference/receipts-and-seals/'}>How receipts work</a>
                             </p>
                         </section>
 
@@ -1125,14 +1103,15 @@ export default function SealPage({ seal: page, host = {} }) {
                                         frame={current}
                                         stopReason={stopReason}
                                         stopNote={stopNote}
+                                        mediaNote={mediaNote}
                                     />
                                 </>
                             ) : (
                                 <div className={s.empty}>
-                                    <p>Pick a step on the map, on the Seal or in Steps to see its checks{media.some((m) => m && (m.crop || m.frame)) ? ', its pictures' : ''} and its record checks.</p>
+                                    <p>Pick a step on the map, on the receipt or in Steps to see its checks{media.some((m) => m && (m.crop || m.frame)) ? ', its pictures' : ''} and its record checks.</p>
                                     {rings.anchor ? (
                                         <button type="button" className={s.ghost} onClick={() => pick(rings.anchor.step)}>
-                                            Show the step the Seal certifies (step {rings.anchor.step + 1})
+                                            Show the step the receipt covers (step {rings.anchor.step + 1})
                                         </button>
                                     ) : null}
                                 </div>
@@ -1286,7 +1265,7 @@ function Player({ frames, frame, playing, speed, busy, rings, onPlay, onPause, o
 }
 
 // The step being shown, as a compact table, with its read-backs and pictures.
-function StepPanel({ step, rings, media, frame, stopReason, stopNote }) {
+function StepPanel({ step, rings, media, frame, stopReason, stopNote, mediaNote }) {
     const reads = rings.readbacks.filter((r) => r.step === step.i)
     const petal = rings.identity.find((p) => p.step === step.i)
     const n = step.checks.passed + step.checks.failed
@@ -1344,6 +1323,7 @@ function StepPanel({ step, rings, media, frame, stopReason, stopNote }) {
                             <figcaption>This run</figcaption>
                         </figure>
                     ) : null}
+                    {mediaNote ? <p className={s.shotsNote} data-media-note="">{mediaNote}</p> : null}
                 </div>
             ) : null}
             </div>
@@ -1382,15 +1362,15 @@ const utc = (seconds) => new Date(seconds * 1000).toISOString().replace('T', ' '
 const isoUtc = (iso) => String(iso).replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC')
 const short = (hex, n = 16) => `${String(hex).slice(0, n)}…`
 const WITNESS_REASONS = {
-    anchor_mismatch: "The log entry isn't for this Seal.",
-    anchor_key_mismatch: "The log entry isn't signed by the Seal's key.",
+    anchor_mismatch: "The log entry isn't for this receipt.",
+    anchor_key_mismatch: "The log entry isn't signed by the receipt's key.",
     anchor_bad_signature: "The log entry's signature doesn't match.",
     anchor_unknown_log: "The entry names a log this site doesn't pin.",
     anchor_bad_timestamp: "The log's signed timestamp doesn't verify.",
     anchor_bad_inclusion: "The inclusion proof doesn't reach the log's tree.",
     anchor_bad_checkpoint: "The log's signed checkpoint doesn't verify.",
     anchor_malformed: "The log entry isn't well formed.",
-    tsa_imprint_mismatch: "The timestamp stamps a different digest from this Seal's.",
+    tsa_imprint_mismatch: "The timestamp stamps a different digest from this receipt's.",
     tsa_bad_signature: "The timestamp's signature doesn't verify.",
     tsa_untrusted: "The timestamp doesn't chain to the pinned Sigstore root.",
     tsa_expired: "The timestamp's certificate wasn't valid at that time.",
@@ -1444,7 +1424,7 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
                 'Checking…'
             ) : t?.ok ? (
                 <span key="t">
-                    Sigstore Timestamp Authority (RFC 3161): {isoUtc(t.genTime)}, over this Seal&apos;s SHA-256, chained to the pinned{' '}
+                    Sigstore Timestamp Authority (RFC 3161): {isoUtc(t.genTime)}, over this receipt&apos;s SHA-256, chained to the pinned{' '}
                     <a href="https://timestamp.sigstore.dev/api/v1/timestamp/certchain" rel="noopener noreferrer">
                         Sigstore TSA root
                     </a>

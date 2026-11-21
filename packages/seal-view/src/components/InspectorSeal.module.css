@@ -1,4 +1,4 @@
-/* The Seal card at the top of the program map's inspector (InspectorSeal.js).
+/* The receipt card at the top of the program map's inspector (InspectorSeal.js).
    The map is dark in both site themes, so the card uses its dark palette. */
 .host {
     display: block;
@@ -24,6 +24,7 @@
     --wash: color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 9%, transparent);
 }
 .body {
+    flex: 1 1 auto;
     min-width: 0;
 }
 .kicker {
@@ -60,7 +61,13 @@
     font-size: 13px;
     font-weight: 700;
     text-decoration: none;
-    white-space: nowrap;
+    /* Wrap inside the card at every width (320-1920 px), never overflow it. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding-block: 6px;
+    text-align: left;
     cursor: pointer;
 }
 .card[data-tone='halt'] .action {

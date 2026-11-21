@@ -4,7 +4,7 @@
 // resolves and a guided tour. It follows the Seal page's one frame index: the
 // step the page shows is lit and selected here, its section unfolded; picking
 // a step here picks it on the Seal. While the inspector shows the step the
-// Seal certifies, a card at its top says so and goes back up to the Seal.
+// receipt covers, a card at its top says so.
 //
 // program: { spec, folds?, titles? } (sealPageProps fills them in);
 // map: { kicker?, title?, resolveMedia? } from the host.
@@ -28,7 +28,6 @@ export default function SealMap({
     anchor = null,
     sealRun = null,
     sealLine = '',
-    onBackToSeal,
     theme = 'dark',
     fill = false,
 }) {
@@ -135,7 +134,7 @@ export default function SealMap({
             />
             {sealHost && sealRun
                 ? createPortal(
-                      <InspectorSealCard seals={[{ ...sealRun, line: sealLine, anchor }]} onBack={onBackToSeal} />,
+                      <InspectorSealCard seals={[{ ...sealRun, line: sealLine, anchor }]} here />,
                       sealHost
                   )
                 : null}

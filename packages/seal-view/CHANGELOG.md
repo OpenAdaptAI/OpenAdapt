@@ -2,6 +2,24 @@
 
 ## v0.1.0 (unreleased)
 
+- Every string a reader sees says "receipt", not "Seal". The verdict card
+  always shows a signer line ("Signed by this computer", "Demo key: checks
+  only in this demo" with `host.signer: 'demo'`, or "Not verified: unknown
+  signer"), and marks a `local-seal/v1` file "older format". The package name
+  is unchanged.
+- "Tamper with it" is "Try changing it": one click flips the outcome in a
+  copy of the report and checks the copy. The verdict card shows the from→to
+  line, "The published files are unchanged; this was a copy in your browser",
+  "Restore" and the other two changes inline. The separate tamper panel is
+  gone; Verify always checks the originals.
+- The map inspector's "Back to the Seal ↑" button and its scroll-and-pulse
+  are gone: the split view keeps the receipt on screen. The landing card keeps
+  one link, "Open the receipt →". Card and page buttons wrap inside their card
+  from 320 to 1920 px.
+- A step's screenshots, when a host shows them, carry `host.mediaNote`
+  (default "From this computer's run folder: not part of the receipt, never
+  uploaded"). A receipt never holds screenshots.
+
 - The Seal page is one screen, like an app: the program map on the left
   (resizable, or the whole width), the Seal and verdict top right, and
   Summary, Steps, Evidence and Raw tabs bottom right; one column with the map
