@@ -336,9 +336,15 @@ def test_effects_config_builds_and_refuses_free_form_commands(tmp_path: Path) ->
         build_effect_verifier(EffectsConfig(kind="local-state"))
 
 
-def _verify_cfg(path: Path) -> VerifyConfig:
+def _verify_cfg(path: Path, *, frame: bool = True) -> VerifyConfig:
+    extra: dict[str, Any] = (
+        {"frame": {"target_fields": ["present", "text", "sha256", "size"]}}
+        if frame
+        else {}
+    )
     return VerifyConfig.model_validate(
         {
+            **extra,
             "schema_version": "openadapt.verify/v1",
             "minimum_effect_strength": "independent_system_of_record",
             "verifier": {
@@ -390,6 +396,31 @@ def test_verify_run_rules_on_a_saved_file(
         assert receipt["outcome"] != "verified"
 
 
+def test_without_frame_target_fields_the_hash_change_is_collateral(
+    tmp_path: Path,
+) -> None:
+    # The lab found this: a save moves sha256 and size with the text. Unless
+    # the example says those fields may change, the frame counts them as
+    # unexpected changes, so the receipt can't say verified.
+    note = tmp_path / "doc" / "note.txt"
+    note.parent.mkdir()
+    note.write_text("", encoding="utf-8")
+    cfg = _verify_cfg(note, frame=False)
+    params = {"note": "synthetic note 9022"}
+    baseline = tmp_path / "baseline.json"
+    capture_baseline(cfg, params, baseline)
+    note.write_text("synthetic note 9022", encoding="utf-8")
+    receipt = verify_run(
+        cfg,
+        params=params,
+        run_record=RUN_RECORD,
+        authorization_ref="local-state-test",
+        baseline_path=baseline,
+        private_dir=tmp_path / "private",
+    )["receipt"]
+    assert receipt["outcome"] != "verified"
+
+
 def test_verify_run_halts_when_the_state_cannot_be_read(tmp_path: Path) -> None:
     cfg = _verify_cfg(tmp_path / "gone" / "note.txt")
     result = verify_run(
@@ -401,3 +432,21 @@ def test_verify_run_halts_when_the_state_cannot_be_read(tmp_path: Path) -> None:
     )
     assert result["receipt"]["effect_verdict"] == "INDETERMINATE"
     assert result["receipt"]["outcome"] != "verified"
+
+
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "local_state"
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in EXAMPLES.iterdir() if (p / "verify.yaml").is_file())
+)
+def test_every_example_contract_loads_and_builds(name: str) -> None:
+    import yaml
+
+    doc = yaml.safe_load((EXAMPLES / name / "verify.yaml").read_text(encoding="utf-8"))
+    cfg = VerifyConfig.model_validate(doc)
+    verifier = build_effect_verifier(cfg.verifier)
+    assert isinstance(verifier, LocalStateVerifier)
+    # Every field an effect checks is one a save may move.
+    allowed = set(doc["frame"]["target_fields"])
+    assert {e["field"] for e in doc["effects"]} <= allowed

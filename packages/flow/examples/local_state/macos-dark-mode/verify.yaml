@@ -1,0 +1,21 @@
+# Dark Mode (macOS): System Settings > Appearance > Dark.
+# The check reads the appearance preference through the preferences system
+# (`defaults export NSGlobalDomain -`): Dark Mode stores
+# AppleInterfaceStyle = Dark; Light Mode removes the key.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: local-state
+  local_state:
+    - type: macos_defaults
+      id: appearance
+      domain: NSGlobalDomain
+      key: AppleInterfaceStyle
+frame:
+  target_fields: [present, value, value_type]
+effects:
+  - kind: field_equals
+    match: {id: appearance}
+    field: value
+    value: Dark
+    timeout_s: 5
