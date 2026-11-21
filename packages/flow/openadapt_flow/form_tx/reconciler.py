@@ -1565,10 +1565,29 @@ class FormReconciler:
     ) -> FormTxResult:
         pack = session.pack
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
-        has_confirmed_fn = getattr(surface, "has_confirmed_mutation_since", None)
-        save_confirmed = callable(has_confirmed_fn) and bool(
-            has_confirmed_fn(pre_commit_mutations)
+        has_commit_endpoint = bool(pack.commit_url_patterns)
+        has_record_lookup = bool(
+            pack.summary_check
+            and pack.summary_check.search_by_output_key
+            and pack.summary_check.search_input_anchor is not None
+            and pack.summary_check.search_submit_anchor is not None
         )
+        has_confirmed_fn = getattr(surface, "has_confirmed_mutation_since", None)
+        if not callable(has_confirmed_fn):
+            save_confirmed = False
+        elif has_commit_endpoint:
+            save_confirmed = bool(
+                has_confirmed_fn(
+                    pre_commit_mutations, url_patterns=pack.commit_url_patterns
+                )
+            )
+        elif has_record_lookup:
+            save_confirmed = bool(has_confirmed_fn(pre_commit_mutations))
+        else:
+            # Without either a declared commit endpoint pattern or a record-specific
+            # summary lookup, a same-page draft autosave cannot be distinguished
+            # from the intended commit.
+            save_confirmed = False
         no_confirmed_save = not save_confirmed
         still_on_commit_screen = self._is_still_on_uncommitted_commit_screen(
             post_commit_snapshot, pack

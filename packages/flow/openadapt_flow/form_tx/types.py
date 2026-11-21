@@ -396,6 +396,7 @@ class FormPack(BaseModel):
     modal_rules: tuple[ModalRuleSpec, ...] = ()
     screens: tuple[WizardScreenSpec, ...] = ()
     summary_check: Optional[SummaryCheckSpec] = None
+    commit_url_patterns: tuple[str, ...] = ()
     max_commit_mutations: int = Field(default=1, ge=0, le=10)
 
     def digest(self) -> str:
@@ -665,6 +666,7 @@ class Subject(BaseModel):
     subject_id: str
     key: str
     label: str = ""
+    source: str = ""
 
 
 def read_subjects(
@@ -679,7 +681,13 @@ def read_subjects(
             f"{w.in_popup_subroutine or 'main'}|{w.screen_id or ''}|"
             f"{w.selector or ''}|{w.field_key}"
         )
-        subjects.setdefault(sid, Subject(subject_id=sid, key=key, label=w.label or ""))
+        existing = subjects.get(sid)
+        if existing is None:
+            subjects[sid] = Subject(
+                subject_id=sid, key=key, label=w.label or "", source=w.source
+            )
+        elif w.source == "auto_fill" and existing.source != "auto_fill":
+            subjects[sid] = existing.model_copy(update={"source": "auto_fill"})
     for rec in resolutions:
         if (
             rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
@@ -690,7 +698,11 @@ def read_subjects(
             sid = f"entity|{rec.field_signature}|{row}"
             subjects.setdefault(
                 sid,
-                Subject(subject_id=sid, key=f"entity:{rec.field_signature}|{row}"),
+                Subject(
+                    subject_id=sid,
+                    key=f"entity:{rec.field_signature}|{row}",
+                    source="operator_kept_prefill",
+                ),
             )
     return list(subjects.values())
 

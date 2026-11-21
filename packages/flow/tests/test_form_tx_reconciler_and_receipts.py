@@ -113,7 +113,9 @@ class FakePopupFormSurface:
     def confirmed_mutation_count(self) -> int:
         return self.mutation_count
 
-    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
         return self.mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
@@ -335,7 +337,9 @@ class FakeStatefulFormSurface:
     def confirmed_mutation_count(self) -> int:
         return self._mutation_count
 
-    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
         return self._mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
@@ -1264,6 +1268,7 @@ def _build_pack(
             ),
         ),
         summary_check=summary_check,
+        commit_url_patterns=("/api/submit",),
         max_commit_mutations=1,
     )
 
@@ -1915,6 +1920,8 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     reloaded_key = load_or_create_ed25519_key(key_file)
     assert ed25519_public_key_hex(created_key) == ed25519_public_key_hex(reloaded_key)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     bound_writes = tuple(
@@ -1927,9 +1934,12 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
         for b in pack.bindings
         if dossier.facts.get(b.dossier_key) is not None
     )
+    verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(bound_writes, ()))}
+    )
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
-        summary_verdict=_all_bound_passed(pack, dossier),
+        summary_verdict=verdict,
         writes=bound_writes,
         pack=pack,
         dossier=dossier,
@@ -2280,12 +2290,16 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     with pytest.raises(ValueError):
         load_or_create_ed25519_key(bad_path)
 
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     # Passing (priv, pub) keypair tuple directly
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
-        summary_verdict=_all_bound_passed(pack, dossier),
+        summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+            update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+        ),
         writes=(),
         pack=pack,
         dossier=dossier,
@@ -2861,15 +2875,32 @@ def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> Non
 def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_coverage() -> (
     None
 ):
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
     private, _ = generate_ed25519_keypair()
+
+    # Missing ledger_digest on SummaryVerdict is refused for newly issued receipts.
+    with pytest.raises(ValueError, match="ledger_digest"):
+        issue_form_tx_receipt(
+            run_id="run_no_digest",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
+            commit_mutations_observed=1,
+        )
 
     # Empty write ledger contradicting a nonzero fields_filled_auto must fail.
     with pytest.raises(ValueError, match="auto-fill count does not match"):
         issue_form_tx_receipt(
             run_id="run_incomplete_ledger",
-            summary_verdict=_all_bound_passed(pack, dossier),
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects((), ()))}
+            ),
             writes=(),
             pack=pack,
             dossier=dossier,
@@ -2888,15 +2919,60 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
             screen_id="applicant",
         ),
     )
+    kept_digest = subjects_digest(read_subjects(kept_only, ()))
     with pytest.raises(ValueError, match="auto-fill count does not match"):
         issue_form_tx_receipt(
             run_id="run_kept_only",
-            summary_verdict=_all_bound_passed(pack, dossier),
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
             writes=kept_only,
             pack=pack,
             dossier=dossier,
             signing_key=private,
             fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Flipping a kept_matching subject to auto_fill between judge and signer
+    # invalidates ledger_digest because source is bound in the subject digest.
+    flipped_to_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_source_flip",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": kept_digest}
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Under-claiming fields_filled_auto below recorded auto_fill subjects is also refused.
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_underclaim",
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={
+                    "ledger_digest": subjects_digest(read_subjects(flipped_to_auto, ()))
+                }
+            ),
+            writes=flipped_to_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=0,
             commit_mutations_observed=1,
         )
 
@@ -2920,7 +2996,9 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
     with pytest.raises(ValueError, match="auto-fill count does not match"):
         issue_form_tx_receipt(
             run_id="run_dup_auto",
-            summary_verdict=_all_bound_passed(pack, dossier),
+            summary_verdict=_all_bound_passed(pack, dossier).model_copy(
+                update={"ledger_digest": subjects_digest(read_subjects(dup_auto, ()))}
+            ),
             writes=dup_auto,
             pack=pack,
             dossier=dossier,
@@ -2946,7 +3024,6 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
             in_popup_subroutine="calc",
         ),
     )
-    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
 
     judge_verdict = _all_bound_passed(pack, dossier).model_copy(
         update={"ledger_digest": subjects_digest(read_subjects(full_writes, ()))}
@@ -2995,6 +3072,7 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
                 ),
             ),
             "observations_per_key": None,
+            "ledger_digest": subjects_digest(read_subjects(two_writes, ())),
         }
     )
     with pytest.raises(ValueError, match="uncovered"):
@@ -3070,11 +3148,36 @@ def test_commit_confirmation_requires_response_for_request_started_by_commit_cli
     surface._on_response(SimpleNamespace(request=req_bg, status=200))
     assert surface.has_confirmed_mutation_since(pre_commit) is False
 
-    # A clean commit window on own page where the mutation succeeds with 201 -> confirmed.
+    # A same-page draft autosave succeeding does NOT satisfy a declared commit endpoint pattern.
+    autosave_pre = surface.mutation_count
+    req_autosave = SimpleNamespace(
+        method="POST", url="https://example.test/draft/autosave", frame=own_frame
+    )
+    surface._on_request(req_autosave)
+    surface._on_response(SimpleNamespace(request=req_autosave, status=200))
+    assert (
+        surface.has_confirmed_mutation_since(autosave_pre, url_patterns=("/submit",))
+        is False
+    )
+
+    # A clean commit window on own page where the commit endpoint succeeds with 201 -> confirmed.
     clean_pre = surface.mutation_count
     req3 = SimpleNamespace(
         method="POST", url="https://example.test/submit", frame=own_frame
     )
     surface._on_request(req3)
     surface._on_response(SimpleNamespace(request=req3, status=201))
-    assert surface.has_confirmed_mutation_since(clean_pre) is True
+    assert (
+        surface.has_confirmed_mutation_since(clean_pre, url_patterns=("/submit",))
+        is True
+    )
+
+    # A pack declaring neither commit_url_patterns nor a record-specific lookup
+    # stays DELIVERY_UNCERTAIN rather than trusting an unattributed mutation.
+    unattributed_pack = _build_pack(use_lookup_search=False).model_copy(
+        update={"commit_url_patterns": ()}
+    )
+    unattributed_res = FormReconciler(FakeStatefulFormSurface()).run_until_halt_or_done(
+        ReconcilerSession(unattributed_pack, _build_dossier(has_pool="No"))
+    )
+    assert unattributed_res.outcome == FormTxOutcome.DELIVERY_UNCERTAIN

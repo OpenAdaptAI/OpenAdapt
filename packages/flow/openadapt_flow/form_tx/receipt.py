@@ -274,11 +274,12 @@ def issue_form_tx_receipt(
             raise ValueError(
                 "Verified receipt requires the run's writes to check coverage"
             )
+        if not summary_verdict.ledger_digest:
+            raise ValueError(
+                "Verified receipt requires the summary judge's ledger_digest"
+            )
         subjects = read_subjects(writes, human_resolutions)
-        if (
-            summary_verdict.ledger_digest is not None
-            and subjects_digest(subjects) != summary_verdict.ledger_digest
-        ):
+        if subjects_digest(subjects) != summary_verdict.ledger_digest:
             raise ValueError(
                 "Verified receipt subject set does not match the run ledger "
                 "evaluated by the summary judge"
@@ -298,7 +299,7 @@ def issue_form_tx_receipt(
         auto_fill_subjects = read_subjects(
             [w for w in writes if w.source == "auto_fill"], ()
         )
-        if fields_filled_auto > len(auto_fill_subjects):
+        if fields_filled_auto != len(auto_fill_subjects):
             raise ValueError(
                 "Verified receipt auto-fill count does not match recorded "
                 f"auto_fill subjects: fields_filled_auto={fields_filled_auto} "
