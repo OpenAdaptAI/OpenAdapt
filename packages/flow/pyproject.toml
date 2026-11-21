@@ -7,6 +7,19 @@ name = "openadapt-flow"
 version = "3.4.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
+keywords = [
+    "computer-use-agents",
+    "gui-automation",
+    "workflow-compiler",
+    "agent-verification",
+    "read-back",
+    "receipts",
+    "mcp",
+    "rpa",
+    "desktop",
+    "citrix",
+    "rdp",
+]
 license = { text = "MIT" }
 # rapidocr-onnxruntime is part of the validated identity/OCR path and does not
 # publish Python 3.13-compatible releases. Keep the package boundary aligned

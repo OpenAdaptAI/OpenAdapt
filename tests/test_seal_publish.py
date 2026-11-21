@@ -886,7 +886,7 @@ def test_the_tutorial_card_carries_the_program_name(make_run, tmp_path, monkeypa
     run = make_run()
     _terminal(monkeypatch)
     monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_status(True)))
-    cli._quickstart_publish_offer()(run, lambda _line: None, lambda _q: "")
+    cli._quickstart_publish_offer()([run], lambda _line: None, lambda _q: "")
     card = json.loads((run / "public-seal.json").read_text())["card"]
     assert card["program_name"] == "local-quickstart"
 
