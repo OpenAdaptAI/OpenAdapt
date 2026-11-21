@@ -1,0 +1,411 @@
+"""Row versions held from the baseline (``frame.row_versions``).
+
+On PostgreSQL the verifier holds a read-only snapshot from the baseline and
+counts the transactions that wrote each target row in the window. These
+tests check that one save passes and that every lost update stops: another
+user's save then the agent's stale save (with and without a gap), two
+same-value rewrites, an edit and a revert against a found check, and a
+target whose held read is gone. They also check that the probe writes the
+version source beside an excuse only where it can derive one, and that a
+learned bookkeeping excuse no longer hides a lost update.
+
+The judge's arithmetic runs everywhere on recorded transaction ids; the
+round trips need ``OPENADAPT_SNAPSHOT_POSTGRES``. Records are made up.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Optional
+
+import pytest
+
+from openadapt_flow import learn_probe
+from openadapt_flow.runtime.effects import row_versions as rv
+from openadapt_flow.runtime.effects.frame import FrameSpec
+from openadapt_flow.verifier import Contract
+from tests import test_learned_excuses as _le
+from tests.test_learned_excuses import (
+    LOGIN,
+    SEEN,
+    Engine,
+    check,
+    learned_block,
+)
+
+_homes = _le._homes
+
+
+@pytest.fixture
+def pg(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
+    if not _le._PG:
+        pytest.skip("set OPENADAPT_SNAPSHOT_POSTGRES")
+    e = _le._postgres()
+    try:
+        for statement in e.ddl():
+            e.run(statement)
+        for table in ("app_user", "api_token", "note", "asset"):
+            e.run(
+                f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                f"(SELECT MAX(id) FROM {table}))"
+            )
+        yield e
+    finally:
+        for fn in e.cleanup:
+            fn()
+
+
+SPEC = {"table": "asset", "key_column": "id"}
+_n = [0]
+
+
+def request_bookkeeping(e: Engine, user: str = _le.ACTOR) -> None:
+    """What the app changes on every request by ``user``: the moves a
+    read-only probe learns (no added row)."""
+
+    _n[0] += 1
+    e.run("UPDATE app_user SET last_login = %s WHERE id = %s", f"r{_n[0]}", int(user))
+    e.run(
+        "UPDATE api_token SET last_seen = %s WHERE user_id = %s", f"r{_n[0]}", int(user)
+    )
+
+
+def rename_contract(e: Engine, *, versions: bool = True, found: bool = False) -> dict:
+    """Rename asset LT-100 (an update), or check it is already named (a
+    found check), with the bookkeeping on the agent's own rows excused."""
+
+    doc = _le.asset_contract(e, learned_block(LOGIN, SEEN))
+    if versions:
+        doc["frame"]["row_versions"] = dict(SPEC)
+    if found:
+        doc["frame"]["target_fields"] = []
+    return doc
+
+
+def rename(e: Engine, name: str, user: str = _le.ACTOR) -> None:
+    request_bookkeeping(e, user)
+    e.run("UPDATE asset SET name = %s WHERE tag = 'LT-100'", name)
+
+
+def _outcome(result: Any) -> str:
+    return result.outcome.value
+
+
+# -- the judge's arithmetic, on recorded transaction ids ---------------------------
+
+
+class _Held:
+    def __init__(self, rows: dict[str, tuple]) -> None:
+        self._rows, self.closed = rows, False
+
+    def rows(self, spec: Any, keys: Any) -> dict[str, tuple]:
+        return {k: v for k, v in self._rows.items() if k in keys}
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _Cur:
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+
+    def execute(self, *a: Any) -> None:
+        pass
+
+    def fetchall(self) -> list[tuple]:
+        return self._rows
+
+
+class _Conn:
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+
+    def cursor(self) -> _Cur:
+        return _Cur(self._rows)
+
+    def rollback(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def _judge(
+    old: tuple, now: tuple, *, changed: bool, held: bool = True
+) -> rv.VersionVerdict:
+    spec = rv.FrameRowVersions(**SPEC)
+    h: Optional[_Held] = _Held({"1": old}) if held else None
+    result = rv.judge_row_versions(
+        spec, h, lambda: _Conn([("1", *now)]), [("1", True, changed)]
+    )
+    if h is not None:
+        assert h.closed
+    return result
+
+
+def test_judge_counts_writers() -> None:
+    # Nobody wrote it: xmin unchanged.
+    assert _judge(("100", "0"), ("100", "0"), changed=False).status == "held"
+    # One transaction replaced the version the baseline saw.
+    assert _judge(("100", "105"), ("105", "0"), changed=True).status == "held"
+    # Two: the old version was replaced by 105, the current one is 107's.
+    two = _judge(("100", "105"), ("107", "0"), changed=True)
+    assert (two.status, two.problem) == ("refuted", "extra_steps")
+    # An edit and a revert leave the content unchanged, still two writers.
+    assert _judge(("100", "105"), ("107", "0"), changed=False).status == "refuted"
+    # Changed, yet the row version didn't move: can't say who saved it.
+    odd = _judge(("100", "0"), ("100", "0"), changed=True)
+    assert (odd.status, odd.problem) == ("not_checked", "no_new_version")
+    # A lock left on the old version (xmax) but no save: still nobody.
+    assert _judge(("100", "103"), ("100", "103"), changed=False).status == "held"
+
+
+def test_judge_stops_without_the_held_read() -> None:
+    v = _judge(("100", "0"), ("105", "0"), changed=True, held=False)
+    assert (v.status, v.problem) == ("not_checked", "unreadable")
+
+
+def test_judge_stops_on_a_missing_row() -> None:
+    spec = rv.FrameRowVersions(**SPEC)
+    v = rv.judge_row_versions(
+        spec, _Held({}), lambda: _Conn([("1", "5", "0")]), [("1", True, True)]
+    )
+    assert (v.status, v.problem) == ("not_checked", "missing")
+    # A record created in the window has no earlier version: not judged.
+    v = rv.judge_row_versions(
+        spec, _Held({}), lambda: _Conn([]), [("9", False, False)]
+    )
+    assert v.status == "held"
+
+
+def test_spec_is_postgresql_only_and_plain_names() -> None:
+    db = {"dialect": "postgresql", "read": {"sql_driver": "psycopg2"}}
+    FrameSpec.model_validate({"database": db, "row_versions": SPEC})
+    with pytest.raises(ValueError, match="PostgreSQL only"):
+        FrameSpec.model_validate(
+            {
+                "database": {"dialect": "mysql", "read": {"sql_driver": "pymysql"}},
+                "row_versions": SPEC,
+            }
+        )
+    with pytest.raises(ValueError, match="PostgreSQL only"):
+        FrameSpec.model_validate({"row_versions": SPEC})
+    with pytest.raises(ValueError, match="plain"):
+        FrameSpec.model_validate(
+            {"database": db, "row_versions": {"table": 'asset"; DROP TABLE x; --'}}
+        )
+    # Unset, it is left out, so existing contracts keep their digests.
+    assert "row_versions" not in FrameSpec.model_validate({"database": db}).model_dump()
+
+
+# -- the probe writes the version source beside the excuse ------------------------
+
+
+def _generated(dialect: str, query: str, *, read_same: bool = True) -> dict:
+    read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "db"}}
+    other = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "elsewhere"}}
+    return {
+        "verifier": {
+            "kind": "surfaces",
+            "surfaces": {
+                "record": {"kind": "sql", **(read if read_same else other), "sql_query": query}
+            },
+        },
+        "effects": [
+            {"kind": "record_written", "probe": "surface=record|x", "expected_count": 1}
+        ],
+        "frame": {"database": {"dialect": dialect, "read": read}},
+    }
+
+
+GENERATED = (
+    'SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."name" AS TEXT) AS "name", '
+    'CASE WHEN (SELECT COUNT(*) FROM "part_note" n WHERE n.part_id = t.id) = 0 '
+    'THEN \'1\' ELSE \'0\' END AS "p__notes" FROM "part_part" t'
+)
+
+
+def test_detects_the_row_versions_of_a_generated_read() -> None:
+    got = learn_probe.detect_row_versions(_generated("postgresql", GENERATED))
+    assert got == {
+        "source": "postgresql_xmin",
+        "table": "part_part",
+        "key_column": "id",
+        "target_surface": "record",
+    }
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        # MySQL and MariaDB: a marker can't count saves.
+        _generated("mysql", GENERATED),
+        # A read over another connection.
+        _generated("postgresql", GENERATED, read_same=False),
+        # A join or any shape the detector can't read: no source.
+        _generated(
+            "postgresql",
+            'SELECT CAST(t."id" AS TEXT) AS "id" FROM "part_part" t JOIN x ON x.id = t.id',
+        ),
+        _generated("postgresql", 'SELECT CAST(t."pk" + 1 AS TEXT) AS "id" FROM "p" t'),
+    ],
+)
+def test_no_row_versions_where_none_can_be_derived(doc: dict) -> None:
+    assert learn_probe.detect_row_versions(doc) is None
+
+
+def test_probe_excuse_goes_in_only_with_a_version_source(tmp_path: Path) -> None:
+    proposal = {
+        "kinds": {"read_only_probe": {"excuses": [dict(LOGIN)]}},
+        "proposal_sha256": "sha256:" + "0" * 64,
+    }
+    pg_doc = _generated("postgresql", GENERATED)
+    my_doc = _generated("mysql", GENERATED)
+    import yaml
+
+    paths = []
+    for name, doc in (("pg", pg_doc), ("my", my_doc)):
+        doc["schema_version"] = "openadapt.verify/v1"
+        doc["effects"][0]["match"] = {"name": {"param": "name"}}
+        doc["verifier"]["surfaces"]["record"]["sql_password_env"] = "X"
+        doc["frame"]["database"]["read"]["sql_password_env"] = "X"
+        p = tmp_path / f"{name}.yaml"
+        p.write_text(yaml.safe_dump(doc))
+        paths.append(p)
+    written = learn_probe.apply(proposal, paths)
+    names = {p.stem for p, _n in written}
+    assert names == {"pg"}
+    pg_new = yaml.safe_load(paths[0].read_text())
+    assert pg_new["frame"]["row_versions"]["table"] == "part_part"
+    assert "learned" not in (yaml.safe_load(paths[1].read_text())["frame"] or {})
+    Contract.from_dict(pg_new, name="pg")
+
+
+# -- round trips on PostgreSQL ---------------------------------------------------
+
+
+def test_one_save_passes(pg: Engine, tmp_path: Path) -> None:
+    r = check(
+        pg,
+        rename_contract(pg),
+        {"tag": "LT-100", "name": "Laptop B"},
+        lambda: rename(pg, "Laptop B"),
+        tmp_path,
+    )
+    assert _outcome(r) == "CONFIRMED", r.reasons
+
+
+def test_bookkeeping_excuse_alone_hides_a_lost_update(
+    pg: Engine, tmp_path: Path
+) -> None:
+    """Why #2413 holds these contracts back: excused bookkeeping, no
+    version source, and a colleague's edit the stale save reverts."""
+
+    def act() -> None:
+        pg.run("UPDATE asset SET assigned_to = 3 WHERE tag = 'LT-100'")
+        rename(pg, "Laptop B")
+        pg.run("UPDATE asset SET assigned_to = NULL WHERE tag = 'LT-100'")
+
+    r = check(
+        pg,
+        rename_contract(pg, versions=False),
+        {"tag": "LT-100", "name": "Laptop B"},
+        act,
+        tmp_path,
+    )
+    assert _outcome(r) == "CONFIRMED", r.reasons
+
+
+@pytest.mark.parametrize("gap", [False, True])
+def test_lost_update_stops(pg: Engine, tmp_path: Path, gap: bool) -> None:
+    """A colleague's save, then the agent's stale full save over it."""
+
+    def act() -> None:
+        pg.run("UPDATE asset SET assigned_to = 3 WHERE tag = 'LT-100'")
+        if gap:
+            import time
+
+            time.sleep(1.0)
+        request_bookkeeping(pg)
+        pg.run(
+            "UPDATE asset SET name = 'Laptop B', assigned_to = NULL WHERE tag = 'LT-100'"
+        )
+
+    r = check(
+        pg,
+        rename_contract(pg),
+        {"tag": "LT-100", "name": "Laptop B"},
+        act,
+        tmp_path,
+    )
+    assert _outcome(r) == "REFUTED", r.reasons
+    assert r.evidence["frame"]["versions"]["problem"] == "extra_steps"
+
+
+def test_same_value_rewrite_twice_stops(pg: Engine, tmp_path: Path) -> None:
+    def act() -> None:
+        rename(pg, "Laptop B")
+        pg.run("UPDATE asset SET name = 'Laptop B' WHERE tag = 'LT-100'")
+
+    r = check(
+        pg,
+        rename_contract(pg),
+        {"tag": "LT-100", "name": "Laptop B"},
+        act,
+        tmp_path,
+    )
+    assert _outcome(r) == "REFUTED", r.reasons
+
+
+def test_found_check(pg: Engine, tmp_path: Path) -> None:
+    params = {"tag": "LT-100", "name": "Laptop A"}
+    ok = check(
+        pg,
+        rename_contract(pg, found=True),
+        params,
+        lambda: request_bookkeeping(pg),
+        tmp_path,
+    )
+    assert _outcome(ok) == "CONFIRMED", ok.reasons
+
+    def edit_and_revert() -> None:
+        # A colleague edits the record; the agent's stale save puts it back.
+        pg.run("UPDATE asset SET assigned_to = 3 WHERE tag = 'LT-100'")
+        request_bookkeeping(pg)
+        pg.run("UPDATE asset SET assigned_to = NULL WHERE tag = 'LT-100'")
+
+    bad = check(pg, rename_contract(pg, found=True), params, edit_and_revert, tmp_path)
+    assert _outcome(bad) == "REFUTED", bad.reasons
+
+
+def test_judge_without_the_held_read_stops(
+    pg: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A judge in another process finds no held read: never a pass."""
+
+    monkeypatch.setattr(rv, "take", lambda token: None)
+    r = check(
+        pg,
+        rename_contract(pg),
+        {"tag": "LT-100", "name": "Laptop B"},
+        lambda: rename(pg, "Laptop B"),
+        tmp_path,
+    )
+    assert _outcome(r) != "CONFIRMED"
+    assert r.evidence["frame"]["versions"]["problem"] == "unreadable"
+
+
+def test_held_read_is_a_read_only_snapshot(pg: Engine) -> None:
+    from openadapt_flow.verify_run import _db_connect
+
+    held = rv.open_held(rv.FrameRowVersions(**SPEC), _db_connect(pg.read))
+    try:
+        cur = held.conn.cursor()
+        with pytest.raises(Exception, match="read-only"):
+            cur.execute("UPDATE asset SET name = 'x'")
+    finally:
+        held.close()
+    with pytest.raises(Exception):
+        rv.open_held(
+            rv.FrameRowVersions(table="no_such_table"), _db_connect(pg.read)
+        )

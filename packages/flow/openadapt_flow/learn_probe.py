@@ -38,6 +38,7 @@ learned. Nothing here reads or stores a record value.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -259,12 +260,16 @@ def apply(
                 names |= _learn._names(n)
         except VerifierError as exc:
             raise ProbeError(f"{path}: {exc}") from exc
+        row_versions = None
         if not _sees_its_own_harm(loaded):
             # An update (or a found check) with no version source: another
             # user's edit that the agent's stale save reverts leaves nothing
             # changed, so before learning only the bookkeeping move stopped
-            # it. Such a contract gets no automatic excuse.
-            continue
+            # it. Such a contract gets an excuse only with a version source
+            # derived here, written beside it.
+            row_versions = detect_row_versions(data)
+            if row_versions is None:
+                continue
         excuses = [
             e
             for e in block["excuses"]
@@ -277,6 +282,8 @@ def apply(
             **frame,
             "learned": {**block, "excuses": excuses, "source": "read_only_probe"},
         }
+        if row_versions is not None:
+            new["frame"]["row_versions"] = row_versions
         try:
             Contract.from_dict(new, name=Path(path).stem)
         except VerifierError as exc:
@@ -295,11 +302,15 @@ def _sees_its_own_harm(contract: Any) -> bool:
     """May a probe excuse go into this (loaded) contract? Only when the
     frame can see a lost update without the bookkeeping move: every
     declared record is new (each ``record_written`` effect counts new rows
-    only), or the contract reads the target's versions (``frame.versions``)."""
+    only), or the contract reads the target's versions (``frame.versions``
+    or ``frame.row_versions``)."""
 
     config = getattr(contract, "config", None)
     frame = getattr(config, "frame", None)
-    if frame is not None and getattr(frame, "versions", None) is not None:
+    if frame is not None and (
+        getattr(frame, "versions", None) is not None
+        or getattr(frame, "row_versions", None) is not None
+    ):
         return True
     records = [
         e.model_dump(mode="json")
@@ -308,6 +319,76 @@ def _sees_its_own_harm(contract: Any) -> bool:
         == "record_written"
     ]
     return bool(records) and all(r.get("count_new_only") is True for r in records)
+
+
+_IDENT = r'(?:"[A-Za-z_][A-Za-z0-9_$]*"|[A-Za-z_][A-Za-z0-9_$]*)'
+#: The main relation of a generated read: ``... FROM "table" t`` at the end.
+_MAIN_FROM = re.compile(
+    rf"\bFROM\s+({_IDENT}(?:\.{_IDENT})?)\s+(?:AS\s+)?t\s*;?\s*$", re.IGNORECASE
+)
+
+
+def _unquote(name: str) -> str:
+    return ".".join(p.strip('"') for p in name.split("."))
+
+
+def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    """A version source for an update or found check, from the contract
+    alone: on PostgreSQL, the target's own row versions
+    (``frame.row_versions``). Found only when every write effect reads one
+    surface, that surface's read is a plain ``SELECT ... FROM <table> t``
+    over the frame's own connection, and it selects the identity field
+    straight from one column. Anything else: None (no excuse).
+
+    A MySQL or MariaDB target has no such source: ``updated_at`` and
+    ``ON UPDATE`` columns read the same after one save as after two, so they
+    can't count saves. Those need a history read (``frame.versions``) or the
+    database's change log."""
+
+    frame = data.get("frame") if isinstance(data, Mapping) else None
+    database = frame.get("database") if isinstance(frame, Mapping) else None
+    if not isinstance(database, Mapping) or database.get("dialect") != "postgresql":
+        return None
+    surfaces: set[str] = set()
+    for effect in data.get("effects") or []:
+        if not isinstance(effect, Mapping):
+            return None
+        if effect.get("kind") not in ("record_written", "field_equals"):
+            continue
+        if effect.get("kind") == "record_written" and effect.get("expected_count") == 0:
+            continue  # a guard reads; it has no target
+        probe = str(effect.get("probe") or "")
+        if not probe.startswith("surface="):
+            return None
+        surfaces.add(probe[len("surface=") :].split("|", 1)[0].strip())
+    if len(surfaces) != 1:
+        return None
+    (surface,) = surfaces
+    verifier = data.get("verifier") if isinstance(data, Mapping) else None
+    source = ((verifier or {}).get("surfaces") or {}).get(surface)
+    if not isinstance(source, Mapping) or source.get("kind") != "sql":
+        return None
+    read = database.get("read") or {}
+    if any(source.get(k) != read.get(k) for k in ("sql_driver", "sql_connect_args")):
+        return None  # another database: its rows aren't the frame's
+    query = " ".join(str(source.get("sql_query") or "").split())
+    main = _MAIN_FROM.search(query)
+    if main is None:
+        return None
+    field = str(frame.get("identity_field") or "id")
+    column = re.search(
+        rf'(?:CAST\(\s*)?t\.({_IDENT})(?:\s+AS\s+TEXT\s*\))?\s+AS\s+"?{re.escape(field)}"?\s*,',
+        query,
+        re.IGNORECASE,
+    )
+    if column is None:
+        return None
+    return {
+        "source": "postgresql_xmin",
+        "table": _unquote(main.group(1)),
+        "key_column": _unquote(column.group(1)),
+        "target_surface": surface,
+    }
 
 
 def http_sender(
