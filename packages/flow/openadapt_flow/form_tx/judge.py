@@ -21,11 +21,13 @@ from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
     match_anchor_in_snapshot,
+    match_text_pair_in_snapshot,
 )
 from openadapt_flow.form_tx.types import (
     ControlKind,
     DossierFact,
     FieldBindingSpec,
+    FieldCodecSpec,
     FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
@@ -35,6 +37,7 @@ from openadapt_flow.form_tx.types import (
     HumanResolutionRecord,
     InputDossier,
     ObservedControl,
+    ObservedTextPair,
     OutputExtractionSpec,
     ProvenanceKind,
     ReadbackFieldVerdict,
@@ -145,6 +148,25 @@ def _observed_control_matches(
     return False
 
 
+def _text_pair_matches(
+    expected_val: Any,
+    pair: ObservedTextPair,
+    binding: FieldBindingSpec,
+) -> bool:
+    """Compare an expected value with a value shown as page text."""
+    if _is_placeholder_or_empty(pair.value, binding.placeholder_values):
+        return False
+    if values_equivalent(expected_val, pair.value, binding.codec):
+        return True
+    if binding.control_kind in (ControlKind.CHECKBOX, ControlKind.RADIO_GROUP):
+        return values_equivalent(
+            expected_val,
+            pair.value,
+            FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
+        )
+    return False
+
+
 def _extract_present_outputs(
     snapshot: FormSnapshot,
     output_specs: Sequence[OutputExtractionSpec],
@@ -161,6 +183,21 @@ def _extract_present_outputs(
             invalid_keys.add(spec.output_key)
             continue
         if ctrl is None:
+            # A read-only summary may show the output (a quote number, a
+            # premium) as page text rather than in a control.
+            try:
+                pair = match_text_pair_in_snapshot(spec.anchor, snapshot)
+            except AmbiguousAnchorError:
+                invalid_keys.add(spec.output_key)
+                continue
+            if pair is None or not pair.value.strip():
+                continue
+            try:
+                extracted[spec.output_key] = normalize_with_codec(
+                    pair.value.strip(), spec.codec
+                )
+            except CodecValueError:
+                invalid_keys.add(spec.output_key)
             continue
         raw_val = ctrl.current_value.strip()
         if not raw_val:
@@ -434,12 +471,34 @@ class SummaryJudge:
                 )
                 continue
 
-            if fact is None:
-                has_ungrounded_screen_val = (
-                    observed_ctrl is not None
-                    and not _is_placeholder_or_empty(
-                        observed_ctrl.current_value, binding.placeholder_values
+            # With no control, the summary may show the value as page text.
+            observed_text: Optional[ObservedTextPair] = None
+            if observed_ctrl is None:
+                try:
+                    observed_text = match_text_pair_in_snapshot(
+                        binding.anchor, snapshot
                     )
+                except AmbiguousAnchorError as exc:
+                    verdicts.append(
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"Page text shows {binding.dossier_key!r} more than "
+                            f"once, so it cannot be read back: {exc}",
+                        )
+                    )
+                    continue
+
+            if fact is None:
+                shown_value = (
+                    observed_ctrl.current_value
+                    if observed_ctrl is not None
+                    else observed_text.value
+                    if observed_text is not None
+                    else ""
+                )
+                has_ungrounded_screen_val = not _is_placeholder_or_empty(
+                    shown_value, binding.placeholder_values
                 )
                 if has_ungrounded_screen_val:
                     verdicts.append(
@@ -458,6 +517,41 @@ class SummaryJudge:
                             prov,
                             f"Required summary read-back key {binding.dossier_key!r} "
                             f"has no expected value to compare",
+                        )
+                    )
+                continue
+
+            if observed_ctrl is None and observed_text is not None:
+                if _text_pair_matches(fact.value, observed_text, binding):
+                    verdicts.append(
+                        ReadbackFieldVerdict(
+                            dossier_key=binding.dossier_key,
+                            codec_kind=binding.codec.kind,
+                            passed=True,
+                            status=ReadbackStatus.PASSED,
+                            provenance=prov,
+                            reason=(
+                                "Read from page text "
+                                f"({observed_text.source}: {observed_text.label!r})"
+                            ),
+                        )
+                    )
+                else:
+                    shown = (
+                        "an empty value"
+                        if _is_placeholder_or_empty(
+                            observed_text.value, binding.placeholder_values
+                        )
+                        else "a different value"
+                    )
+                    verdicts.append(
+                        _failed(
+                            binding.dossier_key,
+                            binding.codec.kind,
+                            prov,
+                            f"Page text shows {shown} for {binding.dossier_key!r} "
+                            f"({observed_text.source}: {observed_text.label!r}) "
+                            f"under codec {binding.codec.kind.value!r}",
                         )
                     )
                 continue
