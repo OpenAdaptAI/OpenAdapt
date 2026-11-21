@@ -29,6 +29,7 @@ from openadapt_flow.form_tx.codecs import (
 from openadapt_flow.form_tx.judge import SummaryJudge
 from openadapt_flow.form_tx.playwright_surface import (
     PopupContractError,
+    SurfaceContextError,
     SurfaceSettleTimeoutError,
 )
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
@@ -1370,6 +1371,7 @@ class FormReconciler:
             PopupContractError,
             MissingAnchorError,
             AmbiguousAnchorError,
+            SurfaceContextError,
             SurfaceSettleTimeoutError,
         ) as exc:
             sig = f"popup_error|{subroutine.subroutine_id}|{type(exc).__name__}"
