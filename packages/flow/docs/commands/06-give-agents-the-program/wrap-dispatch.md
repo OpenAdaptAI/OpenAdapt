@@ -1,0 +1,1 @@
+Run a wrapped task's admitted program. With `--fallback agent --fallback-max-cost-usd N`, a proved pre-effect drift goes to the agent behind a pre-commit gate; `status`, `release` and `evict` manage the hold (docs/WRAP_FALLBACK.md).
