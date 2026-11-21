@@ -1118,6 +1118,7 @@ def _editable_value_observation(auto: Any, payload: dict[str, Any]) -> dict[str,
         left <= point[0] < right and top <= point[1] < bottom
     ):
         return unavailable("point_outside_focused_target")
+
     def current_binding() -> Optional[str]:
         current = _focused_target_control(auto, verify_locator_uniqueness=False)
         return current[1]["fingerprint"] if current is not None else None
@@ -1193,26 +1194,45 @@ def _find_candidates(
     stack: list[tuple[Any, int]] = [(root, 0)]
     found: list[tuple[Any, dict[str, Any]]] = []
     visited = 0
-    truncated = False
+    native_api = None
+
+    def incomplete(stage: str, error: Exception | None = None):
+        # Fixture diagnostics stay in the guest log. Never log control metadata
+        # or provider exceptions, including their messages.
+        if strict_walk and os.environ.get("OAFLOW_AGENT_TRACE_CENSUS") == "1":
+            if native_api is not None and isinstance(
+                error, native_api.ValueUnavailable
+            ):
+                stage = "sensitivity"
+            try:
+                print(
+                    f"[win-agent] strict census stop: {stage}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            except (OSError, ValueError):
+                pass
+        return found, True
+
     while stack:
         control, depth = stack.pop()
         visited += 1
         if visited > _MAX_UIA_NODES:
-            truncated = True
-            break
+            return incomplete("node_limit")
         possible = False
         if strict_walk:
             # A failed selector/bounds read cannot hide a second match and
             # turn a partial query into unique value authority.
             try:
-                _native_value_api().require_non_sensitive_value(control)
+                native_api = _native_value_api()
+                native_api.require_non_sensitive_value(control)
                 facts = {
                     key: _read_control_value(control, key, None)
                     for key in ("AutomationId", "Name", "ControlTypeName")
                 }
                 _native_value_api().require_non_sensitive_value(control)
                 if any(not isinstance(value, str) for value in facts.values()):
-                    return found, True
+                    return incomplete("selector_property")
                 possible = all(
                     expected is None or actual == expected
                     for expected, actual in (
@@ -1238,23 +1258,23 @@ def _find_candidates(
                             if not isinstance(
                                 _read_control_value(node, "Name", None), str
                             ):
-                                return found, True
+                                return incomplete("ancestor_name")
                             break
                         node = _parent(node, get=_read_control_value)
                     else:
-                        return found, True
-            except Exception:  # noqa: BLE001 - unknown query scope is incomplete
-                return found, True
+                        return incomplete("ancestor_depth")
+            except Exception as exc:  # noqa: BLE001 - unknown query scope is incomplete
+                return incomplete("selector", exc)
         try:
             candidate = _candidate(
                 control, get=_read_control_value if strict_walk else _control_value
             )
-        except Exception:  # noqa: BLE001 - changing sensitive metadata is no complete census
+        except Exception as exc:  # noqa: BLE001 - changing sensitive metadata is no complete census
             if strict_walk:
-                return found, True
+                return incomplete("candidate_properties", exc)
             raise
         if strict_walk and possible and candidate is None:
-            return found, True
+            return incomplete("candidate_unavailable")
         if candidate is not None:
             matches = True
             for key in ("automation_id", "role", "name", "window_name"):
@@ -1265,25 +1285,24 @@ def _find_candidates(
             if matches:
                 found.append((control, candidate))
                 if len(found) >= _MAX_UIA_CANDIDATES:
-                    truncated = True
-                    break
+                    return incomplete("candidate_limit")
         if depth >= _MAX_UIA_DEPTH and not strict_walk:
             continue
         children = _control_value(control, "GetChildren", None)
         try:
             if strict_walk and not callable(children):
-                return found, True
+                return incomplete("children_unavailable")
             values = list(children()) if callable(children) else []
         except Exception:  # noqa: BLE001
             if strict_walk:
-                return found, True
+                return incomplete("children_error")
             values = []
         if depth >= _MAX_UIA_DEPTH:
             if values:
-                return found, True
+                return incomplete("depth_limit")
             continue
         stack.extend((child, depth + 1) for child in reversed(values))
-    return found, truncated
+    return found, False
 
 
 def _structured_text_at(auto: Any, x: int, y: int) -> Optional[str]:

@@ -195,6 +195,40 @@ def test_unqualified_scope_and_name_only_sources_never_become_values(
     assert answer["text"] is None and answer["complete"] is False
 
 
+@pytest.mark.parametrize("stage", ["sensitivity", "children_error", "depth_limit"])
+def test_census_trace_records_only_the_stopping_stage(monkeypatch, capsys, stage):
+    import sys
+
+    import openadapt_flow.backends.win_agent.server as server
+
+    control = _Control("EditControl", value="synthetic fixture content")
+    control.AutomationId = "field"
+    window = _window(control)
+    perform = _agent(monkeypatch, window)
+    sys.modules["uiautomation"].GetRootControl = lambda: window
+    if stage == "sensitivity":
+        control.GetPropertyValueEx = lambda *_: None
+    elif stage == "children_error":
+
+        def fail():
+            raise RuntimeError("private provider exception")
+
+        control.GetChildren = fail
+    else:
+        monkeypatch.setattr(server, "_MAX_UIA_DEPTH", 0)
+
+    request = {"locator": {"automation_id": "field"}}
+    monkeypatch.delenv("OAFLOW_AGENT_TRACE_CENSUS", raising=False)
+    refusal = perform("read", request)
+    assert refusal["reason"] == "not_unique" and not refusal["complete"]
+    assert capsys.readouterr().err == ""
+    monkeypatch.setenv("OAFLOW_AGENT_TRACE_CENSUS", "1")
+    assert perform("read", request) == refusal
+    assert capsys.readouterr().err.splitlines() == [
+        f"[win-agent] strict census stop: {stage}"
+    ]
+
+
 def test_row_previews_cannot_authorize_inventory_even_when_empty():
     payload = {
         **complete("value"),

@@ -346,7 +346,9 @@ def test_native_keyboard_lease_actual_delivery_and_refusal(tmp_path, monkeypatch
     )
     evidence["fixture_sha256"] = _sha(app.read_bytes())
     try:
-        backend = host.start_agent()
+        with monkeypatch.context() as agent_env:
+            agent_env.setenv("OAFLOW_AGENT_TRACE_CENSUS", "1")
+            backend = host.start_agent()
         capabilities = backend.agent_capabilities()
         evidence["capabilities"] = sorted(capabilities)
         assert {
