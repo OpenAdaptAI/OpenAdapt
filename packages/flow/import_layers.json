@@ -122,13 +122,13 @@
     }
   ],
   "import_time_budgets": {
-    "openadapt_flow": 51,
-    "openadapt_flow.crypto": 52,
-    "openadapt_flow.ir": 51,
-    "openadapt_flow.offline_seal": 52,
-    "openadapt_flow.public_seal": 53,
-    "openadapt_flow.receipt": 52,
-    "openadapt_flow.verification": 51,
-    "openadapt_flow.write_receipt": 54
+    "openadapt_flow": 3,
+    "openadapt_flow.crypto": 4,
+    "openadapt_flow.ir": 44,
+    "openadapt_flow.offline_seal": 4,
+    "openadapt_flow.public_seal": 5,
+    "openadapt_flow.receipt": 45,
+    "openadapt_flow.verification": 5,
+    "openadapt_flow.write_receipt": 6
   }
 }
