@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -28,6 +29,33 @@ def pytest_collection_modifyitems(
     """In the fast and main lanes, leave out tests in tests/nightly_only.txt."""
 
     lanes.deselect(config, items)
+
+
+_SESSION_ENV: dict[str, str | None] = {}
+
+
+def _configure_at_rest() -> None:
+    """Session-wide, before any fixture of any scope: module and session
+    fixtures (an e2e recording compiled once per module) must not seal their
+    output under a key a later per-test home can't open, and nothing may reach
+    the person's OS keychain. The per-test isolation sets these again."""
+
+    wanted = {"OPENADAPT_FLOW_KEY_STORE": "file"}
+    if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
+        wanted["OPENADAPT_FLOW_PLAINTEXT_AT_REST"] = os.environ.get(
+            "OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data"
+        )
+    for name, value in wanted.items():
+        _SESSION_ENV[name] = os.environ.get(name)
+        os.environ[name] = value
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    for name, value in _SESSION_ENV.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -72,9 +100,20 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         "OPENADAPT_LEDGER_AUTHORITY_CONFIG": None,
         # Preserve the suite's recorded synthetic-data opt-out. The default
         # encryption and strict modes are covered by test_at_rest_default.py.
-        "OPENADAPT_FLOW_PLAINTEXT_AT_REST": "test suite: synthetic data",
+        # OPENADAPT_TEST_DEFAULT_AT_REST=1 runs the suite under the real
+        # default (everything sealed), to find readers that assume plaintext.
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST": None
+        if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") == "1"
+        else "test suite: synthetic data",
         "OPENADAPT_FLOW_AT_REST_HOME": str(root / ".at-rest-home"),
         "OPENADAPT_FLOW_AT_REST": None,
+        # The device key goes to a file in the isolated home, never to the
+        # OS keychain (no dialog, no write to the person's login keychain).
+        "OPENADAPT_FLOW_KEY_STORE": "file",
+        "OPENADAPT_ENCRYPT_AT_REST": None,
+        "OPENADAPT_POLICY": None,
+        "OPENADAPT_RECOVERY_CODE": None,
+        "OPENADAPT_ORG_KEY_FILE": None,
     }
 
 
@@ -133,6 +172,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    _configure_at_rest()
     # A package-local pyproject.toml cuts off ancestor conftest discovery.
     if not config.pluginmanager.hasplugin("openadapt-headless"):
         from tests import headless_guard

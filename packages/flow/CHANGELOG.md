@@ -29,6 +29,39 @@
 
 ## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
+### Encryption at rest by default
+
+- Recordings (web, the quickstart and tutorial, and desktop once converted),
+  compiled bundles and every run directory (report, step screenshots, crops,
+  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
+  no setup, as sealed-set version 3: a data key per set, wrapped with HPKE
+  (P-256, HKDF-SHA256, AES-256-GCM) to a per-set bucket key, and files as
+  Tink AES-256-GCM-HKDF 1 MiB streams. The bucket key is wrapped to the
+  device runtime key (only while the set is written; bundles keep it), the
+  device viewer key, organization keys and a recovery key.
+- Organization mode, from a machine policy (MDM profile, Group Policy, a
+  root-owned `/etc/openadapt/policy.json`): organization recipients (P-256
+  or RSA-OAEP-3072) and a key archive are required, and recording stops
+  without them. Solo users can make a recovery key
+  (`openadapt-flow at-rest recovery create`).
+- `openadapt-flow at-rest status` shows the keys and policy;
+  `at-rest shred` destroys a set's tracked bucket-key copies.
+- The device key is a software P-256 key in the OS keychain through
+  `keyring` (a 0600 file with a warning where there is none). Secure
+  Enclave, TPM, Touch ID and Windows Hello providers are interfaces with test
+  doubles, not built yet.
+- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
+  outside organization mode (deprecated), and `~/.openadapt/keys/at-rest.key`
+  keeps working. Version 1 and 2 sets and plaintext folders still read.
+- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
+  `run` and `replay`, turns it off with a one-line warning and a ledger line.
+- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
+  are now written for encrypted runs too; their digests are over the
+  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
+  page and the quickstart read encrypted runs. The receipt page embeds the
+  report, so beside an encrypted run it is logged as a plaintext copy.
+- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
+
 ### Features
 
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,

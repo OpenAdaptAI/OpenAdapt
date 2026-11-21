@@ -54,7 +54,9 @@ dependencies = [
     # Workflow.save(encrypt=True) / load(key=...) and encrypted checkpoints work
     # out of the box in a regulated/PHI deployment; the audited AEAD substrate
     # for docs/phi_at_rest.md. Imported lazily, only on the encryption path.
-    "cryptography>=42.0",
+    # 50 brings HPKE (RFC 9180), which wraps each encrypted set's data key
+    # (docs/phi_at_rest.md, openadapt_flow.key_hierarchy).
+    "cryptography>=50.0",
     # The portable contracts (request, result and receipt models). They live
     # in openadapt-types, which depends only on pydantic, so a consumer of the
     # models never installs this package's vision stack; openadapt_flow.contracts
@@ -107,6 +109,8 @@ browser = [
     "playwright>=1.44",
 ]
 dev = [
+    # tests/test_stream_aead.py checks the sealed-set v3 payload against Tink.
+    "tink>=1.16,<2",
     # The test suite exercises record, compile and replay.
     "numpy>=1.26",
     "opencv-python>=4.9,<5.1",

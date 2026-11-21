@@ -98,6 +98,7 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow import cli_at_rest as _at_rest_cli
 from openadapt_flow.cli_params import _parse_params as _parse_params
 from openadapt_flow.cli_params import _replay_params as _replay_params
 from openadapt_flow.private_file import open_binary
@@ -503,15 +504,9 @@ def _enforce_surface_binding(
 def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
-    The web recorder encrypts every file from the first frame under
-    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
-    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
-    plaintext recording is logged. ``--no-encrypt`` and
-    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
-    line. The desktop recorders write a raw capture session through
-    openadapt-capture that Flow cannot encrypt yet: by default they record in
-    plaintext and name the directory on stderr and in the ledger;
-    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
+    Recordings are encrypted by default (docs/phi_at_rest.md): the web
+    recorder from the first frame, a desktop recording once converted.
+    ``--no-encrypt`` and the opt-out record plaintext, with a warning.
     """
     import os
 
@@ -526,17 +521,7 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
             return None
         explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
         if backend != "web":
-            if explicit:
-                raise SystemExit(
-                    f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
-                    f"{backend} recorder writes its raw capture session "
-                    "(database, video) through openadapt-capture, which Flow "
-                    "cannot encrypt yet. Nothing was recorded. Record on an "
-                    "encrypted volume and pass --no-encrypt, or use --backend web."
-                )
-            if not at_rest.plaintext_allowed(f"a desktop recording at {out}"):
-                at_rest.unsealed_write(f"a {backend} recording", out)
-            return None
+            return _at_rest_cli.desktop_recording_key(backend, out, explicit)
     except at_rest.AtRestRefused as exc:
         raise SystemExit(f"record: {exc}") from exc
     if explicit or os.environ.get(crypto.ENV_KEY):
@@ -1482,7 +1467,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
-    recording_key = _recording_encryption_key(args, backend)
+    recording_key = args._recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1792,10 +1777,11 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
             "--surface WINDOW). Nothing was recorded."
         )
     # A capture session runs for every cross-window recording, and Flow
-    # cannot encrypt it yet: the desktop recording policy applies.
-    _recording_encryption_key(
+    # cannot encrypt a cross-window recording yet: logged (strict refuses).
+    if _recording_encryption_key(
         args, surfaces[0].kind if surfaces else host_surface_kind()
-    )
+    ):
+        _at_rest_cli.note_plaintext_recording("a cross-window recording", args.out)
     desktop_params: dict[str, str] = {}
     web_params: list[str] = []
     for entry in args.param or ():
@@ -1943,6 +1929,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
         replay_window_title=getattr(args, "rdp_window_title", None),
         readiness_text=getattr(args, "rdp_readiness_text", None),
         stop=_record_until_stop(args),
+        encryption_key=getattr(args, "_recording_key", None),
     )
     _stamp_recording_surface(out, backend)
     print(f"Recording written to {out}")
@@ -8442,17 +8429,18 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     ``openadapt_flow.receipt``; the rich local ``REPORT.md`` -- screenshots,
     typed values, OCR identity text, parameters -- is never the source.
     """
+    from openadapt_flow import artifacts
     from openadapt_flow.ir import RunReport
     from openadapt_flow.receipt import ReceiptError, build_receipt, write_receipt
 
     run_dir = Path(args.run_dir)
     report_path = run_dir / "report.json"
-    if not report_path.is_file():
+    if not artifacts.is_file(report_path):
         print(f"report-run failed: no report.json in {run_dir} — nothing to report.")
         return 1
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        report = RunReport.model_validate_json(artifacts.read_text(report_path))
+    except (OSError, ValueError):  # a SealedSetError is a ValueError
         print("report-run failed: report.json is unreadable or invalid")
         return 1
 
@@ -9786,6 +9774,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an irreversible step on every run."
         ),
     )
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_compile)
 
     p = sub.add_parser(
@@ -10303,6 +10292,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_replay)
 
     p = sub.add_parser(
@@ -10570,6 +10560,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_approval_flags(p)
+    _at_rest_cli.add_no_encrypt(p)
     p.set_defaults(func=_cmd_run)
 
     sa = sub.add_parser(
@@ -10598,6 +10589,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_no_outbound(sub)
 
+    _at_rest_cli.register(sub)
     from openadapt_flow.cli_service import register as _register_service
 
     _register_service(sub)
@@ -13685,6 +13677,7 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_undo:_cmd_undo_approve",
         "openadapt_flow.cli_undo:_cmd_undo_run",
     }
+    | _at_rest_cli.SEALED_READY
 )
 
 
@@ -13742,6 +13735,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.agent.seal_cli:cmd_keys_show",
         "openadapt_flow.agent.seal_cli:cmd_verify",
     }
+    | _at_rest_cli.STRICT_SAFE
 )
 
 
@@ -14199,12 +14193,12 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
-        if not sealed_set.passphrase_for(kind):
+        if _at_rest_cli.lacks_key(root, kind):
             return sealed_set.missing_key_message(root, kind)
         try:
             # With no key configured the local key resolves; opening the set
             # tells "sealed with a key that isn't set" apart before any work.
-            sealed_set.open_set(root)
+            _at_rest_cli.precheck_open(root)
         except sealed_set.SealedSetKeyError as exc:
             return str(exc)
     return None
@@ -14278,6 +14272,7 @@ def main(
         return 2
     from openadapt_flow import at_rest
 
+    _at_rest_cli.apply_no_encrypt(args, _cmd_record)
     try:
         _unsealed_output_check(args)
     except (at_rest.AtRestRefused, ValueError) as exc:

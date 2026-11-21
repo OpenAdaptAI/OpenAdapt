@@ -1109,3 +1109,78 @@ def test_cli_record_macos_until_cmd_stops_capture(
     stop = captured["stop"]
     assert isinstance(stop, UntilCommand)
     assert stop.argv == ["python3", "check_awake.py"]
+
+
+def test_an_encrypted_desktop_recording_leaves_only_ciphertext(
+    tmp_path: Path,
+) -> None:
+    """With a key, the converted recording is sealed into the output and the
+    raw capture session and converted plaintext beside it are deleted."""
+    from openadapt_flow import crypto, sealed_set
+
+    log: list = []
+    frame = b"\x89PNG\r\n\x1a\nsynthetic desktop frame"
+
+    def fake_convert(cap_dir: Path, out_dir: Path, *, params=None) -> Path:
+        (Path(cap_dir) / "capture.db").write_bytes(b"raw synthetic session")
+        (Path(out_dir) / "frames").mkdir()
+        (Path(out_dir) / "frames" / "f1.png").write_bytes(frame)
+        (Path(out_dir) / "events.jsonl").write_text('{"text": "typed value"}\n')
+        (Path(out_dir) / "meta.json").write_text("{}")
+        return Path(out_dir)
+
+    key = "a-deployment-key-for-tests"
+    out = record_desktop_capture(
+        tmp_path / "rec",
+        recorder_factory=_make(log),
+        convert=fake_convert,
+        stop=lambda: True,
+        announce=False,
+        encryption_key=key,
+    )
+    assert out == tmp_path / "rec" and sealed_set.is_sealed(out)
+    leftovers = [p for p in tmp_path.rglob("*") if p.is_file()]
+    for path in leftovers:
+        data = path.read_bytes()
+        assert b"typed value" not in data and b"raw synthetic" not in data, path
+        assert not data.startswith(b"\x89PNG"), path
+    stray = [p for p in leftovers if not str(p).startswith(str(out))]
+    assert [p for p in stray if p.suffix != ".lock"] == []  # lock files only
+    opened = sealed_set.SealedSet.open(out, key)
+    assert opened.read_bytes("frames/f1.png") == frame
+    assert crypto.is_encrypted((out / "events.jsonl.enc").read_bytes())
+
+
+def test_direct_desktop_capture_follows_the_encryption_policy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Called directly (not through `record`), the default is the at-rest
+    policy: encrypted, and a capture_dir outside the staging area refused."""
+    from openadapt_flow import sealed_set
+
+    monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
+    log: list = []
+
+    def fake_convert(cap_dir: Path, out_dir: Path, *, params=None) -> Path:
+        (Path(out_dir) / "events.jsonl").write_text('{"text": "typed value"}\n')
+        (Path(out_dir) / "meta.json").write_text("{}")
+        return Path(out_dir)
+
+    out = record_desktop_capture(
+        tmp_path / "rec",
+        recorder_factory=_make(log),
+        convert=fake_convert,
+        stop=lambda: True,
+        announce=False,
+    )
+    assert sealed_set.is_sealed(out)
+    with pytest.raises(SystemExit, match="capture_dir"):
+        record_desktop_capture(
+            tmp_path / "rec2",
+            capture_dir=tmp_path / "raw",
+            recorder_factory=_make(log),
+            convert=fake_convert,
+            stop=lambda: True,
+            announce=False,
+        )
+    assert not (tmp_path / "raw").exists()

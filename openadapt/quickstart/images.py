@@ -55,9 +55,11 @@ def detect_image_protocol(
 def crop_png(path: Path, box: tuple[int, int, int, int]) -> bytes:
     """Return the ``(left, top, right, bottom)`` part of a PNG, as PNG bytes."""
 
+    from openadapt_flow import sealed_set
     from PIL import Image
 
-    with Image.open(path) as image:
+    # A run's screenshots are encrypted on disk: decrypt in memory only.
+    with Image.open(io.BytesIO(sealed_set.read_bytes(path))) as image:
         width, height = image.size
         left, top, right, bottom = box
         cropped = image.crop((left, top, min(right, width), min(bottom, height)))

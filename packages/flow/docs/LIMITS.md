@@ -1003,6 +1003,14 @@ postconditions, model requests, effect queries, logs, and reports. Keep those
 observations inside the declared execution boundary and apply storage,
 retention, access, and egress controls there.
 
+Encryption at rest is on by default: recordings, bundles and run
+directories (screenshots, frames, typed values, reports) are ciphertext on
+disk, each under its own data key, wrapped through a per-set bucket key to
+this computer's device key and, in organization mode, the organization's key
+([`phi_at_rest.md`](phi_at_rest.md)). It protects
+files at rest, not a running session: anyone who can run commands as the
+signed-in person can read them, as Flow does.
+
 See [`SANITIZED_ARTIFACTS.md`](SANITIZED_ARTIFACTS.md) for the review and
 exact-hash workflow, [`PRIVACY.md`](PRIVACY.md) for the field-level data map,
 and [`ENTERPRISE_ARCHITECTURE.md`](ENTERPRISE_ARCHITECTURE.md) for component
@@ -1027,13 +1035,19 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional encryption at rest for
-bundles, web recordings and the run directories of sealed bundles, destination
-policy, local egress checks, and audit primitives. Encryption at rest does not
-cover data in process memory, the target application's own storage, file names
-and sizes, desktop recordings, or commands outside the list in
-[`phi_at_rest.md`](phi_at_rest.md), which refuse sealed input; the key is a
-passphrase in the environment, not a KMS. A content digest
+The repository supplies integrity manifests, encryption at rest by default
+for recordings, bundles and run directories, destination policy, local egress
+checks, and audit primitives. Encryption at rest does not cover data in
+process memory, the target application's own storage, file names and sizes, a
+desktop recording's raw capture session while it records, cross-window
+(`record --surface`) recordings, the receipt page, the logged artifacts in
+[`phi_at_rest.md`](phi_at_rest.md), or commands outside its list, which refuse
+sealed input. Without an organization policy only this computer's device key
+(and a recovery key, if made) opens what it wrote. The device key is a
+software key in the OS keychain (or a 0600 file where there is none) until the
+Secure Enclave and TPM providers are built: code running as the signed-in
+person can use it. Losing it loses the data unless an organization policy or a
+recovery key exists. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP

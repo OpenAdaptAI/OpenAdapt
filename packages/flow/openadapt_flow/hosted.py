@@ -1765,19 +1765,23 @@ def report_break(
     from openadapt_flow.ir import RunReport
 
     run_path = Path(run_dir)
+    from openadapt_flow import sealed_set
+
     report_path = run_path / "report.json"
-    if not report_path.is_file():
-        raise HostedError(f"No report.json in {run_path} — nothing to report.")
     try:
-        report_size = report_path.stat().st_size
-    except OSError as exc:
+        # An encrypted run directory is read in memory (docs/phi_at_rest.md).
+        if not sealed_set.is_file(report_path):
+            raise HostedError(f"No report.json in {run_path} — nothing to report.")
+        report_bytes = sealed_set.read_bytes(report_path)
+    except (OSError, sealed_set.SealedSetError) as exc:
         raise HostedError("Could not inspect report.json") from exc
+    report_size = len(report_bytes)
     if report_size > _MAX_RUN_REPORT_BYTES:
         raise HostedError(
             f"report.json exceeds the {_MAX_RUN_REPORT_BYTES}-byte reporting limit"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        report = RunReport.model_validate_json(report_bytes.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 
@@ -2425,13 +2429,17 @@ def report_run(
     from openadapt_flow.ir import RunReport
 
     run_path = Path(run_dir)
+    from openadapt_flow import sealed_set
+
     report_path = run_path / "report.json"
-    if not report_path.is_file():
-        raise HostedError(f"No report.json in {run_path} — nothing to report.")
     try:
-        report_size = report_path.stat().st_size
-    except OSError as exc:
+        # An encrypted run directory is read in memory (docs/phi_at_rest.md).
+        if not sealed_set.is_file(report_path):
+            raise HostedError(f"No report.json in {run_path} — nothing to report.")
+        report_bytes = sealed_set.read_bytes(report_path)
+    except (OSError, sealed_set.SealedSetError) as exc:
         raise HostedError("Could not inspect report.json") from exc
+    report_size = len(report_bytes)
     if report_size > _MAX_RUN_REPORT_BYTES:
         raise HostedError(
             f"report.json exceeds the {_MAX_RUN_REPORT_BYTES}-byte reporting limit"
