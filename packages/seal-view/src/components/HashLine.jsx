@@ -68,14 +68,19 @@ export default function HashLine({ label, from, to, against, running, still }) {
 
     const final = done && to
     const matches = final && to === against
+    // Nothing computed (before the check, or the files didn't load): say so,
+    // rather than show the animation's seed as if it were a digest.
+    const idle = !running && !to
     return (
-        <div className={s.hashRow} data-state={!final ? 'running' : matches ? 'match' : 'differs'}>
+        <div className={s.hashRow} data-state={idle ? 'idle' : !final ? 'running' : matches ? 'match' : 'differs'}>
             <span className={s.proofLabel}>
                 {label}
                 {final ? <b>{matches ? ' · matches' : ' · differs'}</b> : null}
             </span>
-            <code className={s.hex} aria-label={final ? `SHA-256 ${to}` : 'Computing the SHA-256'}>
-                {final
+            <code className={s.hex} aria-label={final ? `SHA-256 ${to}` : idle ? 'Not computed' : 'Computing the SHA-256'}>
+                {idle
+                    ? 'not computed'
+                    : final
                     ? [...to].map((ch, i) => (
                           <span key={i} data-diff={ch !== against[i] ? '1' : undefined}>
                               {ch}

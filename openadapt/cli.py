@@ -35,7 +35,7 @@ import sys
 from contextlib import contextmanager
 from importlib import import_module
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import click
 
@@ -133,6 +133,22 @@ class _FlowFirstGroup(click.Group):
         ):
             click.echo(group_help(ctx.command_path, root_name), nl=False)
             ctx.exit()
+        if (
+            not ctx.resilient_parsing
+            and root_name == "verify"
+            and len(raw) > 1
+            and not raw[1].startswith("-")
+            and raw[1] not in _verify_operations(self.commands.get("verify"))
+            and (
+                Path(raw[1]).exists()
+                or "/" in raw[1]
+                or raw[1].endswith((".json", ".cbor"))
+                or _is_seal_link(raw[1])
+            )
+        ):
+            # `openadapt verify <file|folder|link>` checks a receipt; the
+            # verify subcommands (serve, ledger, effect, ...) are never paths.
+            raw = ["receipt", "verify", *raw[1:]]
         args = translate(raw, set(self.commands), normalize)
         name = normalize(args[0]) if args and normalize else (args[0] if args else "")
         command = self.commands.get(name)
@@ -2069,7 +2085,131 @@ def agent(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "receipt",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def receipt(command_ctx: click.Context) -> None:
+    """Check, view and share a run's receipt: `openadapt receipt verify <file|folder|link>`.
+
+    A receipt is a signed, itemized record of one run: what it changed, how
+    each change was checked, and who signed it. It doesn't grade the run.
+    `verify` (also `openadapt verify`) prints who signed it and fails closed
+    on an unknown key, schema or role; older formats still verify. `view
+    RUN_DIR` writes the run's offline page and opens it. `publish [RUN_DIR]`
+    uploads the run's public card (counts, outcomes and digests only) after
+    you say yes; `unpublish RUN_DIR` takes it down. `keys pin` pins
+    OpenAdapt Cloud's keys after a person confirms them.
+    """
+    _require_supported_python()
+    args = list(command_ctx.args)
+    if args[:1] in ([], ["-h"], ["--help"]):
+        click.echo(command_ctx.get_help())
+        sys.exit(0 if args else 2)
+    if args[0] == "verify":
+
+        def agent(argv: list[str]) -> int:
+            agent_main = _optional_engine_entrypoint(
+                command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+            )
+            if agent_main is None:
+                click.echo(
+                    "Not verified: this openadapt-agent can't check that format."
+                )
+                return 1
+            return int(agent_main(argv) or 0)
+
+        sys.exit(_verify_receipts(args[1:], agent))
+    if args[0] == "view":
+        sys.exit(_view_sealed_runs(args[1:]))
+    if args[0] == "publish":
+        sys.exit(_publish_seal(args[1:]))
+    if args[0] == "unpublish":
+        sys.exit(_unpublish_seal(args[1:]))
+    if args[0] == "keys":
+        agent_main = _optional_engine_entrypoint(
+            command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+        )
+        if agent_main is None:
+            click.echo("Error: this openadapt-agent cannot pin keys.", err=True)
+            sys.exit(1)
+        sys.exit(int(agent_main(["seal", *args]) or 0))
+    raise click.UsageError(
+        f"No such receipt command '{args[0]}'. Use verify, view, publish, "
+        "unpublish or keys."
+    )
+
+
+def _verify_operations(group: Optional[click.Command]) -> set[str]:
+    """`openadapt verify` subcommands and operations: never read as a path."""
+    from openadapt.cli_tasks import FLOW_NAMES, NATIVE_ROUTES
+
+    names = {
+        route.split()[1]
+        for route in FLOW_NAMES.values()
+        if route.startswith("verify ") and len(route.split()) > 1
+    }
+    names |= {path[1] for path in NATIVE_ROUTES if path[0] == "verify"}
+    names |= set(getattr(group, "commands", {}) or {})
+    return names
+
+
+def _verify_receipts(argv: list[str], agent: Callable[[list[str]], int]) -> int:
+    """`openadapt verify <file|folder|link> [--keys FILE]`: any receipt, any format."""
+    if not argv or any(arg in ("-h", "--help") for arg in argv):
+        click.echo(
+            "Usage: openadapt verify <file|folder|link> [--keys FILE]\n\n"
+            "Checks a receipt and prints who signed it. Fails closed on an "
+            "unknown key, schema or role. Older formats (seal.json, public "
+            "Seals, run summaries, write and tx receipts) still verify, "
+            "labelled older format. --keys pins an openadapt.receipt-keys/v1 "
+            "registry beside this computer's own key."
+        )
+        return 0 if argv else 2
+    target, rest = argv[0], argv[1:]
+    keys = None
+    if "--keys" in rest:
+        at = rest.index("--keys")
+        if at + 1 >= len(rest):
+            raise click.UsageError("--keys needs a FILE")
+        keys = Path(rest[at + 1])
+        rest = rest[:at] + rest[at + 2 :]
+    try:
+        from openadapt.receipt_verify import verify_path
+    except ImportError:  # pragma: no cover - ships with the launcher
+        click.echo("This install has no receipt verifier.", err=True)
+        return 1
+
+    try:
+        return verify_path(
+            target,
+            keys=keys,
+            extra=rest,
+            say=click.echo,
+            invoke_flow=_invoke_flow,
+            invoke_agent=agent,
+            legacy_folder=_verify_sealed_runs,
+            legacy_link=_verify_seal_link,
+            is_link=_is_seal_link,
+        )
+    except ImportError:
+        click.echo(
+            "Not verified: this openadapt-flow or openadapt-types is too old to "
+            "check receipts. Upgrade with: pip install --upgrade openadapt"
+        )
+        return 1
+    except (OSError, ValueError) as exc:
+        click.echo(f"Not verified: {exc}")
+        return 1
+
+
+@main.command(
     "seal",
+    hidden=True,
     context_settings={
         "ignore_unknown_options": True,
         "allow_extra_args": True,
@@ -2444,14 +2584,30 @@ def _is_seal_link(value: str) -> bool:
     return parse_link(value) is not None
 
 
+REQUIRE_PINNED = "--require-pinned"
+
+
 def _verify_seal_link(url: str, extra: list[str]) -> int:
     """`openadapt seal verify <link>`: fetch a hosted Seal and check it here."""
     from openadapt.seal_publish import PublishError, check_link, urllib_transport
 
+    pinned = None
+    if extra == [REQUIRE_PINNED]:
+        # The unified verify: a link's key must be pinned here, like a file's.
+        from openadapt.receipt_verify import _registry
+
+        def pinned(key_id: str) -> bool:
+            return any(
+                k.key_id == key_id and k.status == "active" for k in _registry(None)
+            )
+
+        extra = []
     if extra:
         raise click.UsageError("A Seal link takes no other options.")
     try:
-        return check_link(url, transport=urllib_transport, say=click.echo)
+        return check_link(
+            url, transport=urllib_transport, say=click.echo, pinned=pinned
+        )
     except PublishError as exc:
         click.echo(str(exc), err=True)
         return exc.exit_code

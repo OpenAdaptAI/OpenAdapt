@@ -334,6 +334,7 @@ def seal_rows(outcome: Outcome, card: Optional[SealCard], marks: Marks) -> list[
         )
         lines.append(f"ed25519 over report sha256 {card.short_digest}")
     if outcome.seal is not None:
+        lines.append("Signed by this computer")
         reports = "report" if outcome.seal.sealed == 1 else "reports"
         lines.append(
             f"key {outcome.seal.key_id}{dot}{outcome.seal.sealed} {reports} signed"
@@ -348,8 +349,8 @@ def seal_lines(outcome: Outcome) -> list[tuple[str, str]]:
     if page is None:
         return []
     return [
-        ("Your Seal", str(display_path(page))),
-        ("See real Seals from OpenEMR runs", REAL_SEALS_URL),
+        ("Your receipt", str(display_path(page))),
+        ("See real receipts from OpenEMR runs", REAL_SEALS_URL),
     ]
 
 
@@ -434,10 +435,10 @@ def more_lines(steps: NextSteps, root: Path, seal_page: Optional[Path]) -> list[
         f"Try it on your own app: {steps.record}",
     ]
     if steps.verify:
-        lines.append(f"Check every Seal again: {steps.verify}")
+        lines.append(f"Check every receipt again: {steps.verify}")
     if seal_page is not None:
-        lines.append(f"Open your Seal (offline): {display_path(seal_page)}")
-    lines.append(f"See real Seals from OpenEMR runs: {REAL_SEALS_URL}")
+        lines.append(f"Open your receipt (offline): {display_path(seal_page)}")
+    lines.append(f"See real receipts from OpenEMR runs: {REAL_SEALS_URL}")
     lines.append(f"Read what each run did: {display_path(root)}, one REPORT.md per run")
     if steps.keep:
         lines.append(f"Keep it installed: {steps.keep}")
@@ -675,14 +676,14 @@ class PlainView(_Base):
         self._say()
         card = seal_card(outcome)
         if outcome.seal is not None:
-            self._say(f"Your Seal: {card_outcome(card)}")
+            self._say(f"Your receipt: {card_outcome(card)}")
             for line in seal_rows(outcome, card, self.marks):
                 self._say(f"  {line}")
             page = outcome.seal_pages.verified
             if page is not None:
                 self._say(f"  Open it: {display_path(page)}")
                 self._say(f"    {seal_page_note(outcome)}")
-            self._say(f"  Real Seals from OpenEMR runs: {REAL_SEALS_URL}")
+            self._say(f"  Real receipts from OpenEMR runs: {REAL_SEALS_URL}")
             self._publish(outcome, steps)
             self._say()
         if all_clear(outcome):
@@ -1258,7 +1259,7 @@ class RichView(_Base):
         self.console.print(
             Panel(
                 body,
-                title=f"[bold cyan] {self.marks.save} Your Seal [/]",
+                title=f"[bold cyan] {self.marks.save} Your receipt [/]",
                 title_align="left",
                 border_style="cyan",
                 expand=False,
@@ -1289,7 +1290,7 @@ class RichView(_Base):
             if self.hyperlinks
             else REAL_SEALS_URL
         )
-        links.add_row("[dim]Real Seals[/]", f"[cyan]{real}[/]")
+        links.add_row("[dim]Real receipts[/]", f"[cyan]{real}[/]")
         self.console.print(links)
 
     def finale(self, outcome: Outcome, steps: NextSteps) -> None:

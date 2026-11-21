@@ -323,7 +323,7 @@ def test_verbose_adds_the_engine_detail(root):
 
 def test_finale_has_one_next_step_and_the_rest_behind_more(root):
     output, _ = _plain(FakeEngine(root))
-    finale = output[output.index("\nYour Seal: ") + 1 :].rstrip("\n").splitlines()
+    finale = output[output.index("\nYour receipt: ") + 1 :].rstrip("\n").splitlines()
     assert len(finale) <= 16, finale
     at = finale.index("Next: Give your agent this task as a tool")
     assert finale[at + 1] == (
@@ -345,9 +345,9 @@ def test_more_lists_every_other_next_step(root):
     joined = "\n".join(lines)
     assert "Try it on your own app: openadapt flow record --backend web" in joined
     assert (
-        "Check every Seal again: openadapt seal verify openadapt-quickstart" in joined
+        "Check every receipt again: openadapt verify openadapt-quickstart" in joined
     )
-    assert "Open your Seal (offline): openadapt-quickstart/run-1/seal.html" in joined
+    assert "Open your receipt (offline): openadapt-quickstart/run-1/seal.html" in joined
     assert "https://openadapt.ai/seals" in joined
 
 
@@ -364,7 +364,7 @@ def test_quickstart_more_prints_and_runs_nothing(tmp_path, monkeypatch):
         result = CliRunner().invoke(cli.main, ["quickstart", "--more"])
     assert result.exit_code == 0, result.output
     assert "claude mcp add openadapt --" in result.output
-    assert "seal verify openadapt-quickstart" in result.output
+    assert "openadapt verify openadapt-quickstart" in result.output
     assert "openadapt-quickstart/run-1/seal.html" in result.output
 
 
@@ -376,7 +376,7 @@ def test_no_break_skips_act_three(root):
     assert "page" not in engine.calls
     assert outcome.broken is None
     assert "[5/5]" not in output
-    assert "Your Seal: " in output
+    assert "Your receipt: " in output
 
 
 # ---------------------------------------------------------------------------
@@ -496,14 +496,14 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
     engine = FakeEngine(root)
     opened = []
     output, outcome = _plain(engine, open_page=lambda page: opened.append(page) or True)
-    finale = output[output.index("\nYour Seal: ") + 1 :].splitlines()
+    finale = output[output.index("\nYour receipt: ") + 1 :].splitlines()
     at = finale.index("  Open it: openadapt-quickstart/run-1/seal.html")
     assert finale[at + 1] == (
         "    opened in your browser; it checks the signature in your browser, "
         "offline; nothing is uploaded"
     )
     assert (
-        finale[at + 2] == "  Real Seals from OpenEMR runs: https://openadapt.ai/seals"
+        finale[at + 2] == "  Real receipts from OpenEMR runs: https://openadapt.ai/seals"
     )
     # The person's own Seal opens; the side-by-side page does not.
     assert opened == [root / "run-1" / "seal.html"]
@@ -511,7 +511,7 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
     assert outcome.seal_pages.broken == root / "run-broken" / "seal.html"
     assert "side by side: openadapt-quickstart/index.html\n" in output
     # The page's own command checks that run folder.
-    assert engine.seal_command == "openadapt seal verify openadapt-quickstart/run-1"
+    assert engine.seal_command == "openadapt verify openadapt-quickstart/run-1"
 
 
 def test_a_seal_page_that_fails_leaves_the_seal_and_no_page_line(root):
@@ -744,7 +744,7 @@ def test_terminal_view_tells_the_story_with_boxes_and_one_next_step(root):
     assert "A screen-trusting bot  ✓ Done" in text
     assert "■ Stopped. Not marked done." in text
     assert "a person checks the record before anything is retried" in text
-    assert "◆ Your Seal" in text and "●─●─●─●─●─◆" in text
+    assert "◆ Your receipt" in text and "●─●─●─●─●─◆" in text
     assert "claude mcp add openadapt -- openadapt agent serve --allow-run" in text
     assert text.count("Next  ") == 1
     assert "flow record" not in text
@@ -797,7 +797,7 @@ def test_the_seal_card_reads_the_runs_receipt(root):
     (run / "receipt.json").write_text(json.dumps(RECEIPT))
     (run / "seal.json").write_text(json.dumps(SEAL))
     plain, _ = _plain(FakeEngine(root))
-    assert "Your Seal: Saved and checked" in plain
+    assert "Your receipt: Saved and checked" in plain
     assert "6 of 6 steps · 2 of 2 record checks · 0 model calls" in plain
     assert "ed25519 over report sha256 6dd4a7f2d1ea" in plain
     assert "VERIFIED" not in plain
