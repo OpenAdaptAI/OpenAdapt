@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
+from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
     build_statement,
     local_registry,
@@ -24,8 +25,6 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
-
-from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
@@ -259,7 +258,9 @@ PERSON_APPROVAL = {
 def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
     run = _approved_run(tmp_path, [PERSON_APPROVAL])
     write_receipt_record(run)
-    payload = base64.b64decode(json.loads((run / "receipt.json").read_text())["payload"])
+    payload = base64.b64decode(
+        json.loads((run / "receipt.json").read_text())["payload"]
+    )
     assert b"usr_synthetic01" not in payload
     result = verify_run_receipt(run, local_registry())
     assert result.ok, result.detail
@@ -286,4 +287,6 @@ def test_a_not_gated_run_says_so(tmp_path):
     run = _approved_run(tmp_path, [], mode="not_gated")
     write_receipt_record(run)
     result = verify_run_receipt(run, local_registry())
-    assert result.approval_line == "Not gated: no approval was required for these writes"
+    assert (
+        result.approval_line == "Not gated: no approval was required for these writes"
+    )
