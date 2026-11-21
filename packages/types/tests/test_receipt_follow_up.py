@@ -97,6 +97,22 @@ def test_a_follow_up_naming_another_receipt_or_changing_it_is_refused():
     assert r.verify_chain(update, [], _registry()).reason == "original_is_follow_up"
 
 
+def test_a_follow_up_signed_by_another_registered_key_is_refused():
+    original, _ = _original()
+    updated, _ = gen._confirmed("acknowledged")
+    statement = r.follow_up_statement(
+        original, 1, updated["predicate"]["confirmations"]
+    )
+    by_other = r.sign_statement(statement, [gen.signer("customer_key")])
+    assert r.verify_receipt(by_other, _registry()).ok
+    chain = r.verify_chain(original, [by_other], _registry())
+    assert (chain.ok, chain.reason) == (False, "different_signer")
+    both = r.sign_statement(
+        statement, [gen.signer("this_computer"), gen.signer("customer_key")]
+    )
+    assert r.verify_chain(original, [both], _registry()).reason == "different_signer"
+
+
 def test_an_empty_follow_up_cannot_be_signed():
     original, _ = _original()
     with pytest.raises(ValueError, match="at least one confirmation"):

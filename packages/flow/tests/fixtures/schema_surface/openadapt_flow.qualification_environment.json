@@ -1,0 +1,105 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "QualificationEnvironmentObservation": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "One PHI-free application, version, and session observation.",
+    "properties": {
+     "target_kind": {
+      "enum": [
+       "web",
+       "windows",
+       "macos",
+       "linux",
+       "rdp",
+       "citrix"
+      ],
+      "title": "Target Kind",
+      "type": "string"
+     },
+     "application_identity": {
+      "maxLength": 320,
+      "minLength": 1,
+      "title": "Application Identity",
+      "type": "string"
+     },
+     "application_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Application Version",
+      "type": "string"
+     },
+     "session_identity_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Session Identity Sha256",
+      "type": "string"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     }
+    },
+    "required": [
+     "target_kind",
+     "application_identity",
+     "application_version",
+     "session_identity_sha256",
+     "environment_digest"
+    ],
+    "title": "QualificationEnvironmentObservation",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "One PHI-free application, version, and session observation.",
+    "properties": {
+     "target_kind": {
+      "enum": [
+       "web",
+       "windows",
+       "macos",
+       "linux",
+       "rdp",
+       "citrix"
+      ],
+      "title": "Target Kind",
+      "type": "string"
+     },
+     "application_identity": {
+      "maxLength": 320,
+      "minLength": 1,
+      "title": "Application Identity",
+      "type": "string"
+     },
+     "application_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Application Version",
+      "type": "string"
+     },
+     "session_identity_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Session Identity Sha256",
+      "type": "string"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     }
+    },
+    "required": [
+     "target_kind",
+     "application_identity",
+     "application_version",
+     "session_identity_sha256",
+     "environment_digest"
+    ],
+    "title": "QualificationEnvironmentObservation",
+    "type": "object"
+   }
+  }
+ }
+}
