@@ -27,9 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
 if TYPE_CHECKING:
-    from openadapt_types.receipt import ReceiptVerification, RoleKey
-
     from openadapt_flow.seal_keys import SealSigner
+    from openadapt_types.receipt import ReceiptVerification, RoleKey
 
 RECEIPT_FILE = "receipt.json"
 PRIVATE_FILE = "receipt.private.json"
@@ -100,6 +99,51 @@ def _line(index: int, result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _approval(
+    report: Mapping[str, Any],
+) -> tuple[Optional[dict[str, Any]], dict[str, Optional[str]]]:
+    """``predicate.approval`` from the report's item-approval block, and its values.
+
+    The source is Flow's approval binding (``report.approval``,
+    ``openadapt.approval-mode-item/v1``): its mode, and each approved
+    ``ItemApprovalRef``. The approver's id is committed, never shown.
+    """
+    block = report.get("approval")
+    if not isinstance(block, Mapping):
+        return None, {}
+    mode = block.get("mode")
+    if mode not in ("each_item", "problems_only", "not_gated"):
+        return None, {}
+    approved = [
+        a
+        for a in block.get("approvals") or []
+        if isinstance(a, Mapping) and a.get("decision") == "approved"
+    ]
+    if mode == "not_gated" or not approved:
+        return {"mode": mode, "approver_kind": "none", "commitments": {}}, {}
+    kind = (
+        "person"
+        if any(a.get("decided_by") != "automation" for a in approved)
+        else "agent"
+    )
+    ids = sorted(
+        str(
+            a.get("approver_id")
+            or (a.get("approver") or {}).get("id")
+            or a.get("approver_kind")
+            or "unknown"
+        )
+        for a in approved
+    )
+    scope = sorted(str(a.get("request_sha256", "")) for a in approved)
+    values = {
+        "approval.principal": f"{kind}:pr-"
+        + hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:16],
+        "approval.scope": hashlib.sha256("\n".join(scope).encode("utf-8")).hexdigest(),
+    }
+    return {"mode": mode, "approver_kind": kind, "commitments": {}}, values
+
+
 def build_statement(
     report: Mapping[str, Any],
     report_sha256: str,
@@ -108,9 +152,8 @@ def build_statement(
     salt: Any = None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, str]]]:
     """The ``record/run/v1`` statement for a run report, and its private openings."""
-    from openadapt_types import receipt as r
-
     from openadapt_flow.public_seal import _checks, _hour, _int
+    from openadapt_types import receipt as r
 
     results = report.get("results")
     results = (
@@ -145,7 +188,12 @@ def build_statement(
     run_id = report.get("run_id")
     if isinstance(run_id, str) and r.DISCLOSURE_FIELDS["run_id"].fullmatch(run_id):
         values["run_id"] = run_id
-    commitments, openings = r.make_openings(values, salt=salt)
+    approval, approval_values = _approval(report)
+    commitments, openings = r.make_openings({**values, **approval_values}, salt=salt)
+    if approval is not None:
+        approval["commitments"] = {
+            path.split(".", 1)[1]: commitments.pop(path) for path in approval_values
+        }
     checks = _checks(report)
     statement = {
         "_type": r.STATEMENT_TYPE,
@@ -180,6 +228,8 @@ def build_statement(
             },
         },
     }
+    if approval is not None:
+        statement["predicate"]["approval"] = approval
     return statement, openings
 
 
@@ -208,10 +258,9 @@ def write_receipt_record(
     Idempotent: an existing receipt over the same report bytes is kept. A
     receipt over different bytes is never silently replaced.
     """
-    from openadapt_types import receipt as r
-
     from openadapt_flow.offline_seal import loads_strict, signer_for
     from openadapt_flow.seal_keys import KeyUnavailable
+    from openadapt_types import receipt as r
 
     run_dir = Path(run_dir)
     report_path = run_dir / "report.json"
@@ -301,9 +350,8 @@ def local_registry(
 
     Demo keys are never trusted by default.
     """
-    from openadapt_types.receipt import RoleKey
-
     from openadapt_flow.offline_seal import public_key_entry, seal_home, signer_for
+    from openadapt_types.receipt import RoleKey
 
     keys: list[RoleKey] = list(extra)
     try:
@@ -335,9 +383,8 @@ def _pinned_cloud_keys(home: Optional[Path]) -> list["RoleKey"]:
 
 
 def load_role_registry(path: Path) -> list["RoleKey"]:
-    from openadapt_types.receipt import parse_registry
-
     from openadapt_flow.offline_seal import loads_strict
+    from openadapt_types.receipt import parse_registry
 
     return parse_registry(loads_strict(Path(path).read_text(encoding="utf-8")))
 
@@ -346,9 +393,8 @@ def verify_run_receipt(
     run_dir: Path, registry: Sequence["RoleKey"]
 ) -> "ReceiptVerification":
     """Verify ``run_dir/receipt.json`` and check it covers the run's report bytes."""
-    from openadapt_types import receipt as r
-
     from openadapt_flow.offline_seal import loads_strict
+    from openadapt_types import receipt as r
 
     run_dir = Path(run_dir)
     try:

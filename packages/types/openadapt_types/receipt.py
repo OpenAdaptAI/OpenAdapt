@@ -95,7 +95,19 @@ NotChecked = Literal[
     "field_values",
     "postconditions",
 ]
-SubjectName = Literal["report.json", "bundle", "evidence"]
+SubjectName = Literal["report.json", "bundle", "evidence", "payload"]
+#: The media type of a handed-off payload (the ``payload`` subject only).
+PayloadMediaType = Literal[
+    "application/json",
+    "application/cbor",
+    "text/plain",
+    "text/csv",
+    "application/pdf",
+    "application/octet-stream",
+]
+ApprovalMode = Literal["each_item", "problems_only", "not_gated"]
+#: Who answered, as Flow's item approval records it (decided_by).
+ApproverKind = Literal["person", "agent", "none"]
 
 Role = Literal[
     "this_computer", "customer_key", "openadapt_cloud", "public_log", "demo"
@@ -115,6 +127,8 @@ ReceiptRefusal = Literal[
     "opening_mismatch",
     "disclosure_not_allowed",
     "inconsistent",
+    "payload_mismatch",
+    "payload_not_bound",
     "verifier_unavailable",
 ]
 
@@ -147,6 +161,24 @@ class Digest(_Closed):
 class Subject(_Closed):
     name: SubjectName
     digest: Digest
+    #: Only on ``payload``: the bytes handed to another party (an MCP tool
+    #: result, an HTTP body or a file), by digest and media type.
+    media_type: Optional[PayloadMediaType] = None
+
+
+_APPROVAL_KEY = re.compile(r"principal|scope|approved_at")
+
+
+class Approval(_Closed):
+    """Who approved the run's writes, from Flow's item approval binding.
+
+    The principal, the scope and the time are salted commitments; a public
+    card shows only the mode and the approver kind.
+    """
+
+    mode: ApprovalMode
+    approver_kind: ApproverKind
+    commitments: dict[StrictStr, StrictStr] = Field(max_length=3)
 
 
 class Program(_Closed):
@@ -192,6 +224,60 @@ class Disclosure(_Closed):
     commitments: dict[StrictStr, StrictStr] = Field(max_length=16)
 
 
+SystemKind = Literal[
+    "ehr", "payer_portal", "bank", "erp", "crm", "government_portal", "email", "other"
+]
+ReadMethod = Literal["portal_read_back", "api", "acknowledgment_message"]
+ConfirmationState = Literal[
+    "sent", "acknowledged", "recorded_as_intended", "recorded_differently"
+]
+ConfirmationStrength = Literal["read_back", "acknowledgment", "none"]
+#: Read methods that look at the other party's own system of record.
+INDEPENDENT_READS: Final = ("portal_read_back", "api")
+_CONFIRMATION_KEY = re.compile(r"counterparty|observed_at|reason|field\.[0-9]{1,2}")
+ConfirmationReason = Literal[
+    "rejected_by_counterparty",
+    "conflicting_report",
+    "ambiguous_key",
+    "receiver_unreachable",
+    "not_found",
+    "no_answer_by_deadline",
+]
+#: Which reasons each state may carry (no reason is always allowed). The
+#: reason is committed, so it shows only where the private openings are read.
+REASONS_FOR_STATE: Final[Mapping[str, frozenset[str]]] = {
+    "sent": frozenset(
+        {
+            "rejected_by_counterparty",
+            "ambiguous_key",
+            "receiver_unreachable",
+            "not_found",
+            "no_answer_by_deadline",
+        }
+    ),
+    "acknowledged": frozenset({"ambiguous_key", "not_found", "no_answer_by_deadline"}),
+    "recorded_as_intended": frozenset({"conflicting_report"}),
+    "recorded_differently": frozenset({"conflicting_report"}),
+}
+
+
+class Confirmation(_Closed):
+    """Evidence read from another party's system about one handoff.
+
+    Everything that could identify the other party, the time or the fields
+    is a salted commitment; the openings stay in the private sidecar.
+    """
+
+    kind: Literal["counterparty_confirmation"]
+    for_step: Optional[Count] = Field(default=None, ge=0, le=10_000)
+    system_kind: SystemKind
+    read_method: ReadMethod
+    state: ConfirmationState
+    strength: ConfirmationStrength
+    differing_count: Count = Field(ge=0, le=64)
+    commitments: dict[StrictStr, StrictStr] = Field(min_length=2, max_length=34)
+
+
 class RunPredicateV1(_Closed):
     program: Program
     started_hour: StrictStr = Field(pattern=_HOUR)
@@ -202,16 +288,69 @@ class RunPredicateV1(_Closed):
     checks: Checks
     model_calls: Count = Field(ge=0, le=MAX_COUNT)
     disclosure: Disclosure
+    #: Counterparty confirmations; omitted from the payload when empty, so a
+    #: receipt without one is byte-identical to one made before they existed.
+    confirmations: list[Confirmation] = Field(default_factory=list, max_length=64)
+    #: The approval binding; omitted when the run recorded none.
+    approval: Optional[Approval] = None
 
 
 class RunStatementV1(_Closed):
     type_: Literal["https://in-toto.io/Statement/v1"] = Field(alias="_type")
-    subject: list[Subject] = Field(min_length=1, max_length=3)
+    subject: list[Subject] = Field(min_length=1, max_length=4)
     predicateType: Literal["https://openadapt.ai/record/run/v1"]
     predicate: RunPredicateV1
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        out = self.model_dump(mode="json", by_alias=True)
+        if not out["predicate"]["confirmations"]:
+            del out["predicate"]["confirmations"]
+        if out["predicate"]["approval"] is None:
+            del out["predicate"]["approval"]
+        for subject in out["subject"]:
+            if subject["media_type"] is None:
+                del subject["media_type"]
+        return out
+
+
+def _check_confirmation(c: Confirmation, steps: set[int]) -> Optional[str]:
+    if c.for_step is not None and c.for_step not in steps:
+        return "a confirmation names a step with no line"
+    if c.state == "sent" and c.strength != "none":
+        return "a sent handoff has no confirmation strength"
+    if c.state == "acknowledged" and c.strength != "acknowledgment":
+        return "an acknowledgment has acknowledgment strength"
+    if c.state.startswith("recorded_") and (
+        c.read_method not in INDEPENDENT_READS or c.strength != "read_back"
+    ):
+        return "only a portal or API read-back can say how the record was recorded"
+    if (c.state == "recorded_differently") != (c.differing_count > 0):
+        return "differing_count disagrees with the state"
+    if not {"counterparty", "observed_at"} <= set(c.commitments):
+        return "a confirmation commits to its counterparty and observed_at"
+    for key, value in c.commitments.items():
+        if not _CONFIRMATION_KEY.fullmatch(key) or not re.fullmatch(
+            _SHA256_HEX[1:-1], value
+        ):
+            return f"confirmation commitment {key!r} is not a known field"
+    fields = sum(1 for key in c.commitments if key.startswith("field."))
+    if c.differing_count > fields:
+        return "more differing fields than observed fields"
+    return None
+
+
+def _check_approval(a: Approval) -> Optional[str]:
+    for key, value in a.commitments.items():
+        if not _APPROVAL_KEY.fullmatch(key) or not re.fullmatch(_SHA256_HEX[1:-1], value):
+            return f"approval commitment {key!r} is not a known field"
+    if a.mode == "not_gated" and a.approver_kind != "none":
+        return "a not_gated run names no approver"
+    if a.approver_kind == "none":
+        if a.commitments:
+            return "an approval with no approver commits to nothing"
+    elif not {"principal", "scope"} <= set(a.commitments):
+        return "an approval names its approver's principal and scope"
+    return None
 
 
 def _check_consistent(statement: RunStatementV1) -> Optional[str]:
@@ -220,6 +359,13 @@ def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     names = [s.name for s in statement.subject]
     if len(set(names)) != len(names) or "report.json" not in names:
         return "subject names repeat, or the report is missing"
+    for subject in statement.subject:
+        if (subject.name == "payload") != (subject.media_type is not None):
+            return "only the payload subject has a media type, and it always has one"
+    if p.approval is not None:
+        problem = _check_approval(p.approval)
+        if problem:
+            return problem
     for path, value in p.disclosure.commitments.items():
         if path not in DISCLOSURE_FIELDS or not re.fullmatch(_SHA256_HEX[1:-1], value):
             return f"disclosure path {path!r} is not a known field"
@@ -247,6 +393,10 @@ def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     steps = [line.step for line in p.lines]
     if steps != sorted(set(steps)):
         return "lines are not in step order, or repeat a step"
+    for c in p.confirmations:
+        problem = _check_confirmation(c, set(steps))
+        if problem:
+            return problem
     return None
 
 
@@ -321,7 +471,46 @@ def make_openings(
     return commitments, openings
 
 
+_APPROVAL_PATH = re.compile(r"approval\.(principal|scope|approved_at)")
+_APPROVAL_VALUES: Final[Mapping[str, re.Pattern[str]]] = {
+    "principal": re.compile(r"(person|agent):pr-[a-f0-9]{16}"),
+    "scope": re.compile(r"[a-f0-9]{64}"),
+    "approved_at": _ISO_SECONDS,
+}
+_CONFIRMATION_PATH = re.compile(
+    r"confirmations\.([0-9]{1,2})\.(counterparty|observed_at|reason|field\.[0-9]{1,2})"
+)
+_CONFIRMATION_VALUES: Final[Mapping[str, re.Pattern[str]]] = {
+    "counterparty": re.compile(
+        r"(ehr|payer_portal|bank|erp|crm|government_portal|email|other):cp-[a-f0-9]{16}"
+    ),
+    "observed_at": _ISO_SECONDS,
+    "reason": re.compile(
+        r"rejected_by_counterparty|conflicting_report|ambiguous_key"
+        r"|receiver_unreachable|not_found|no_answer_by_deadline"
+    ),
+    "field": re.compile(r"[a-z][a-z0-9_]{0,31}:[a-f0-9]{64}(:differs)?"),
+}
+
+
+def confirmation_path(index: int, key: str) -> str:
+    return f"confirmations.{index}.{key}"
+
+
 def _value_problem(path: str, value: Any) -> Optional[str]:
+    approval = _APPROVAL_PATH.fullmatch(path)
+    if approval:
+        if not (isinstance(value, str) and _APPROVAL_VALUES[approval.group(1)].fullmatch(value)):
+            return f"{path!r} does not match its field's pattern"
+        return None
+    found = _CONFIRMATION_PATH.fullmatch(path)
+    if found:
+        if not isinstance(value, str):
+            return f"{path!r} is not a string"
+        kind = found.group(2).split(".")[0]
+        if not _CONFIRMATION_VALUES[kind].fullmatch(value):
+            return f"{path!r} does not match its field's pattern"
+        return None
     pattern = DISCLOSURE_FIELDS.get(path)
     if pattern is None:
         return f"{path!r} is not a disclosure field"
@@ -575,6 +764,17 @@ class ReceiptVerification:
     disclosed: Mapping[str, str] = field(default_factory=dict)
     #: True when a full private openings file was checked.
     private: bool = False
+    #: One line per counterparty confirmation. Never merged with, and never
+    #: upgrading, ``signer_lines``.
+    confirmation_lines: tuple[str, ...] = ()
+    #: Per confirmation: read from the other party's own system (portal or
+    #: API). Decided only from the read method; the signer's role comes
+    #: from the pinned registry.
+    independent: tuple[bool, ...] = ()
+    #: "No approval recorded", or how the run's writes were approved.
+    approval_line: str = ""
+    #: True when ``payload`` bytes were given and match the payload subject.
+    payload_bound: Optional[bool] = None
 
 
 _REFUSAL_LINES: Final[Mapping[str, str]] = {
@@ -589,6 +789,8 @@ _REFUSAL_LINES: Final[Mapping[str, str]] = {
     "opening_mismatch": "Not verified: a disclosed value doesn't match the receipt",
     "disclosure_not_allowed": "Not verified: the card reveals a field it may not",
     "inconsistent": "Not verified: the receipt contradicts itself",
+    "payload_mismatch": "Not verified: these bytes aren't the payload the receipt signed",
+    "payload_not_bound": "Not verified: the receipt isn't bound to a payload",
     "malformed": "Not verified: malformed receipt",
     "verifier_unavailable": "Not verified: install cryptography to check signatures",
 }
@@ -631,12 +833,16 @@ def verify_receipt(
     registry: Sequence[RoleKey],
     *,
     openings: Optional[Mapping[str, Any]] = None,
+    received: Optional[bytes] = None,
 ) -> ReceiptVerification:
     """Verify a receipt (a DSSE envelope) or a public card against pinned keys.
 
     ``document`` is the envelope (``receipt.json``) or a card
     (``openadapt.receipt-card/v1``). ``openings`` is the private sidecar for
-    an envelope; its values are checked against the commitments. A card's
+    an envelope; its values are checked against the commitments.
+    ``received`` is the bytes a receiver got in a handoff; the receipt must
+    name them as its ``payload`` subject (``payload_not_bound`` or
+    ``payload_mismatch`` otherwise). A card's
     openings must be on its disclosure version's allow-list.
 
     Fails closed: an unknown key, role or schema, any bad signature, a demo
@@ -731,7 +937,13 @@ def verify_receipt(
     problem = _check_consistent(statement)
     if problem:
         return _refuse("inconsistent", problem)
-    commitments = statement.predicate.disclosure.commitments
+    commitments = dict(statement.predicate.disclosure.commitments)
+    for index, c in enumerate(statement.predicate.confirmations):
+        for key, value in c.commitments.items():
+            commitments[confirmation_path(index, key)] = value
+    if statement.predicate.approval is not None:
+        for key, value in statement.predicate.approval.commitments.items():
+            commitments[f"approval.{key}"] = value
     disclosed: dict[str, str] = {}
     private = False
     if card_openings is not None:
@@ -755,6 +967,12 @@ def verify_receipt(
             return result
         disclosed = result
         private = True
+        for index, c in enumerate(statement.predicate.confirmations):
+            reason = disclosed.get(confirmation_path(index, "reason"))
+            if reason is not None and reason not in REASONS_FOR_STATE[c.state]:
+                return _refuse(
+                    "inconsistent", f"a {c.state} confirmation can't have reason {reason}"
+                )
     ordered = sorted(
         checks,
         key=lambda c: _ROLE_ORDER.index(c.role) if c.role in _ROLE_ORDER else -1,
@@ -763,8 +981,24 @@ def verify_receipt(
     for c in ordered:
         if c.line not in lines:
             lines.append(c.line)
+    payload_bound: Optional[bool] = None
+    if received is not None:
+        bound = next((x for x in statement.subject if x.name == "payload"), None)
+        if bound is None:
+            return _refuse("payload_not_bound", "the receipt names no payload")
+        if bound.digest.sha256 != hashlib.sha256(received).hexdigest():
+            return _refuse("payload_mismatch", "the bytes received aren't the payload signed")
+        payload_bound = True
+    confirmations = statement.predicate.confirmations
     return ReceiptVerification(
         True,
+        approval_line=approval_line(statement.predicate.approval),
+        payload_bound=payload_bound,
+        confirmation_lines=tuple(
+            confirmation_line(c, disclosed.get(confirmation_path(i, "observed_at")))
+            for i, c in enumerate(confirmations)
+        ),
+        independent=tuple(c.read_method in INDEPENDENT_READS for c in confirmations),
         signers=tuple(ordered),
         signer_lines=tuple(lines),
         demo=demo,
@@ -773,6 +1007,36 @@ def verify_receipt(
         disclosed=disclosed,
         private=private,
     )
+
+
+def approval_line(a: Optional[Approval]) -> str:
+    """The verifier's approval line, as every verifier prints it."""
+    if a is None:
+        return "No approval recorded"
+    if a.mode == "not_gated":
+        return "Not gated: no approval was required for these writes"
+    if a.approver_kind == "none":
+        mode = "each item" if a.mode == "each_item" else "items that fail a check"
+        return f"Approval required for {mode}; no item was approved"
+    who = "a person" if a.approver_kind == "person" else "an agent delegate"
+    how = "each item" if a.mode == "each_item" else "items that failed a check"
+    return f"Approved by {who}: {how}"
+
+
+def confirmation_line(c: Confirmation, observed_at: Optional[str] = None) -> str:
+    """The verifier's line for one confirmation, as every verifier prints it."""
+    at = f" at {observed_at}" if observed_at else ""
+    if c.state == "recorded_as_intended":
+        return f"Confirmed in the other party's system{at}"
+    if c.state == "recorded_differently":
+        noun = "field differs" if c.differing_count == 1 else "fields differ"
+        return (
+            f"Recorded differently in the other party's system{at}: "
+            f"{c.differing_count} {noun}"
+        )
+    if c.state == "acknowledged":
+        return f"Acknowledged by the other party{at}"
+    return f"Sent to the other party{at}, not confirmed"
 
 
 def _check_openings(
@@ -846,6 +1110,11 @@ __all__ = [
     "add_signature",
     "canonical_json",
     "commitment",
+    "Approval",
+    "approval_line",
+    "Confirmation",
+    "confirmation_line",
+    "confirmation_path",
     "find_embedded_content",
     "is_receipt_card",
     "is_receipt_envelope",
