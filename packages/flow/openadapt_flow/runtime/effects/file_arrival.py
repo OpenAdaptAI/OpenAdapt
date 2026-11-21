@@ -152,6 +152,7 @@ class FileArrivalVerifier(VerifierAdapterBase):
         return self.content_probe.search(text) is not None
 
     def _scan_local(self) -> Optional[list[dict[str, Any]]]:
+        self._refused = ""
         root = Path(self.root)
         if not root.is_dir():
             return None

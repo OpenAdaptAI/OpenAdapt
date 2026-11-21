@@ -184,6 +184,7 @@ class DocumentArrivalVerifier(VerifierAdapterBase):
         }
 
     def _scan(self) -> Optional[list[dict[str, Any]]]:
+        self._refused = ""
         if not self.root.is_dir():
             return None
         paths = sorted(p for p in self.root.glob(self.pattern) if p.is_file())

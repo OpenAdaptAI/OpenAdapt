@@ -103,6 +103,7 @@ class DocumentHashVerifier(VerifierAdapterBase):
         directory is absent or cannot be listed. An empty but present store
         returns ``[]`` (readable, no documents -- a real, judgeable state).
         """
+        self._refused = ""
         if not self.root.is_dir():
             return None
         try:

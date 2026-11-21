@@ -24,8 +24,10 @@ download folder) is graded ``acting_session`` whatever was declared.
 
 The grade is also bound to each artifact a check reads. Under a declared
 ``separate_session`` or ``system_of_record`` producer, a scan that lists a
-file inside a Playwright download folder or an acting folder beneath the
-store, or a file whose real path leaves the store (a symlink), is refused:
+file inside a Playwright download folder beneath the store, or a file
+whose real path leaves the store (a symlink), is refused (a declared acting
+folder beneath the store already lowers the whole store when the verifier is
+built):
 the verifier reads the store as unreadable and the verdict is INDETERMINATE
 with that reason (:meth:`ProvenanceGrade.acting_artifact`). The tier the
 approval gate sees is fixed when the verifier is built, so a refused read is

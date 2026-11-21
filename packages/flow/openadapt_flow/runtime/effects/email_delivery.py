@@ -210,6 +210,7 @@ class MaildirDeliveryVerifier(VerifierAdapterBase):
         """Every message in the store; ``None`` when the store or ANY message
         is unreadable (a partially readable outbox is never judged -- the
         unreadable message might be the one that matters)."""
+        self._refused = ""
         files = self._candidate_files()
         if files is None:
             return None

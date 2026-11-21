@@ -27,8 +27,8 @@
   tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
   folder or a Playwright download folder is graded as the acting session's.
   Under a declared `separate_session` or `system_of_record` producer, a scan
-  that lists a file in a Playwright download folder or an acting folder
-  beneath the store, or a file whose real path leaves the store, is refused:
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
   the verdict is INDETERMINATE and names why. Each verdict records the
   producer, and whether it was declared or observed, in
   `read_evidence.provenance`. Breaking: a deployment that relied on the old

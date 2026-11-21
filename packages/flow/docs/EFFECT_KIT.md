@@ -1490,7 +1490,19 @@ server's capture store). List the acting session's download and output
 folders in `acting_roots`: a `root` overlapping one, the user's Downloads
 folder or a Playwright download folder is graded tier 4 whatever is declared.
 Each verdict's `read_evidence.provenance` records the declared producer, the
-producer it was graded by and the check level.
+producer it was graded by, the check level, and `producer_source`:
+`declared` when the level rests on the configuration, `observed` when Flow
+lowered it.
+
+Under a declared `separate_session` or `system_of_record` producer, each scan
+is also checked file by file. If it lists a file inside a
+`playwright-artifacts-*` folder beneath `root` ("a file the check read is in
+a browser download folder") or a file whose real path leaves `root`, such as
+a symlink ("a file the check read resolves outside the store"), the read is
+refused and the verdict is INDETERMINATE with that reason. Playwright saves a
+download under a random name with no extension, so only a glob that matches
+every file lists it. A file the acting session saves into an undeclared
+folder under an ordinary name cannot be told apart and is graded as declared.
 
 **Same-application screen read-back is a LOWER-CONFIDENCE consistency check,
 never independent system-of-record proof** -- an optimistic UI can paint
