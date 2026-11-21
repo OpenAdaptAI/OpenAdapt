@@ -513,3 +513,85 @@ def test_a_cached_runs_child_gets_the_url_with_its_run_token(
     assert seen["env"][sf.URL_ENV].startswith("https://control.example/")
     assert seen["env"][sf.TOKEN_ENV] == "run-token"
     assert "UNRELATED_SECRET" not in seen["env"]
+
+
+# -- terminal source -------------------------------------------------------------
+
+
+class _Tty:
+    def __init__(self, lines: list[str]) -> None:
+        self.lines = list(lines)
+        self.written: list[str] = []
+
+    def readline(self) -> str:
+        return self.lines.pop(0) if self.lines else ""
+
+    def write(self, text: str) -> int:
+        self.written.append(text)
+        return len(text)
+
+    def flush(self) -> None:
+        pass
+
+
+def test_the_terminal_asks_without_echo_and_keeps_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import getpass
+
+    asked: list[str] = []
+    monkeypatch.setattr(
+        getpass,
+        "getpass",
+        lambda prompt, stream=None: asked.append(prompt) or "482 913",
+    )
+    source = sf.TerminalSource(_Tty([]), _Tty([]))
+    assert sf.obtain("code", "step_004", source=source) == CODE
+    assert asked and "not shown" in asked[0]
+    monkeypatch.setattr(getpass, "getpass", lambda prompt, stream=None: "")
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        sf.obtain("code", "step_004", source=source)
+    assert refused.value.code == "second_factor_declined"
+
+
+def test_the_terminal_confirms_or_declines_an_approval() -> None:
+    assert (
+        sf.obtain("approval", "s", source=sf.TerminalSource(_Tty(["\n"]), _Tty([])))
+        is None
+    )
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        sf.obtain("approval", "s", source=sf.TerminalSource(_Tty(["n\n"]), _Tty([])))
+    assert refused.value.code == "second_factor_declined"
+
+
+def test_a_terminal_that_does_not_answer_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import getpass
+    import threading
+
+    block = threading.Event()
+    monkeypatch.setattr(
+        getpass, "getpass", lambda prompt, stream=None: block.wait(5) and ""
+    )
+    source = sf.TerminalSource(_Tty([]), _Tty([]))
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        source.obtain(sf.Request("code", "s", 0.2), heartbeat=lambda: None)
+    assert refused.value.code == "second_factor_timeout"
+    block.set()
+
+
+def test_a_run_without_a_terminal_never_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class NotTty:
+        def isatty(self) -> bool:
+            return False
+
+    monkeypatch.setattr(sys, "stdin", NotTty())
+    assert sf.source_from_env({}) is None
+    monkeypatch.setattr(
+        sf.TerminalSource, "open", classmethod(lambda cls: cls(None, None))
+    )
+    assert isinstance(sf.source_from_env({}), sf.TerminalSource)
+    assert sf.source_from_env({sf.PROMPT_ENV: "off"}) is None
