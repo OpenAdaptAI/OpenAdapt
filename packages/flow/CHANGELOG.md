@@ -26,6 +26,13 @@
   "starting state not ready". When every other page signal is quiet and the
   page has drawn no frame for a second, or the page is hidden, the settle now
   falls back to two identical screenshots.
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
 
 ## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
@@ -104,6 +111,10 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
+  A durable checkpoint store counts as such a handle: it keeps the keys it
+  derived from its explicit key for its own lifetime. Without that, each
+  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
+  instead of 3.5 s (131 derivations, now 1).
 
 ## v3.3.0 (2026-11-19)
 
