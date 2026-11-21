@@ -301,6 +301,23 @@ def _control_matches_fact(
             return False
         return (yn == "yes") == bool(ctrl.checked)
 
+    if (
+        binding.control_kind == ControlKind.PORTAL_COMBOBOX
+        and binding.typeahead_query_chars is not None
+    ):
+        # A type-ahead that keeps only the leading part of its pick (see
+        # _is_leading_part_of_choice); typed text alone never matches.
+        try:
+            formatted = format_for_text_entry(intended_value, binding.codec)
+        except CodecValueError:
+            formatted = ""
+        if formatted and _is_leading_part_of_choice(
+            ctrl.current_value,
+            formatted,
+            formatted[: binding.typeahead_query_chars],
+        ):
+            return True
+
     if values_equivalent(intended_value, ctrl.current_value, binding.codec):
         return True
 

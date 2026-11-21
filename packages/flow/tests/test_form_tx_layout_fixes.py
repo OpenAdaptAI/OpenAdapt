@@ -100,7 +100,7 @@ document.getElementById('calc').onclick = () => {
   document.getElementById('res').value = String(Number(document.getElementById('sq').value) * 150);
 };
 document.getElementById('use').onclick = () => {
-  window.opener.frames[0].postMessage(document.getElementById('res').value, '*');
+  window.opener.postMessage(document.getElementById('res').value, '*');
   window.close();
 };
 </script></body></html>"""
