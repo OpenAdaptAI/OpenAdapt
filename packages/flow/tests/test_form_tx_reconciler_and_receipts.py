@@ -2866,7 +2866,7 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
     private, _ = generate_ed25519_keypair()
 
     # Empty write ledger contradicting a nonzero fields_filled_auto must fail.
-    with pytest.raises(ValueError, match="write ledger is incomplete"):
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
         issue_form_tx_receipt(
             run_id="run_incomplete_ledger",
             summary_verdict=_all_bound_passed(pack, dossier),
@@ -2875,6 +2875,91 @@ def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_c
             dossier=dossier,
             signing_key=private,
             fields_filled_auto=3,
+            commit_mutations_observed=1,
+        )
+
+    # Ledger with only kept_matching controls cannot back fields_filled_auto > 0.
+    kept_only = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="kept_matching",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_kept_only",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=kept_only,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
+            commit_mutations_observed=1,
+        )
+
+    # Duplicate auto_fill entries for the same control count as one subject.
+    dup_auto = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+    )
+    with pytest.raises(ValueError, match="auto-fill count does not match"):
+        issue_form_tx_receipt(
+            run_id="run_dup_auto",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=dup_auto,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+    # Omitting a popup subject recorded in SummaryVerdict.ledger_digest is refused.
+    full_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="living_area_sqft",
+            dossier_key="living_area_sqft",
+            source="auto_fill",
+            selector="#popup-living-area",
+            in_popup_subroutine="calc",
+        ),
+    )
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
+    judge_verdict = _all_bound_passed(pack, dossier).model_copy(
+        update={"ledger_digest": subjects_digest(read_subjects(full_writes, ()))}
+    )
+    with pytest.raises(ValueError, match="does not match the run ledger"):
+        issue_form_tx_receipt(
+            run_id="run_omitted_popup",
+            summary_verdict=judge_verdict,
+            writes=full_writes[:1],
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=1,
             commit_mutations_observed=1,
         )
 
@@ -2947,28 +3032,49 @@ def test_commit_confirmation_requires_response_for_request_started_by_commit_cli
         def evaluate(self, *_a: Any, **_kw: Any) -> None:
             return None
 
-    surface = PlaywrightFormSurface(
-        _FakePage(), UIProfileSpec(profile_id="generic_web_ui")
-    )
+    page = _FakePage()
+    other_page = _FakePage()
+    own_frame = SimpleNamespace(page=page)
+    other_frame = SimpleNamespace(page=other_page)
+    surface = PlaywrightFormSurface(page, UIProfileSpec(profile_id="generic_web_ui"))
+
     # Request 1 started BEFORE commit click.
-    req1 = SimpleNamespace(method="POST", url="https://example.test/draft", frame=None)
+    req1 = SimpleNamespace(
+        method="POST", url="https://example.test/draft", frame=own_frame
+    )
     surface._on_request(req1)
     pre_commit = surface.mutation_count
     assert pre_commit == 1
 
-    # Request 2 started BY commit click, and fails with 500.
-    req2 = SimpleNamespace(method="POST", url="https://example.test/submit", frame=None)
-    surface._on_request(req2)
-    surface._on_response(SimpleNamespace(request=req2, status=500))
-    # Request 1 (pre-commit) arrives later with 200 OK.
-    surface._on_response(SimpleNamespace(request=req1, status=200))
-
-    assert surface.mutation_count == 2
-    assert surface.confirmed_mutation_count == 1
+    # Request from ANOTHER page in the browser context succeeding does NOT confirm.
+    req_other = SimpleNamespace(
+        method="POST", url="https://example.test/other-tab", frame=other_frame
+    )
+    surface._on_request(req_other)
+    surface._on_response(SimpleNamespace(request=req_other, status=200))
     assert surface.has_confirmed_mutation_since(pre_commit) is False
 
-    # Request 3 started after commit click succeeds with 201 -> confirmed.
-    req3 = SimpleNamespace(method="POST", url="https://example.test/submit", frame=None)
+    # Request 2 started BY commit click on own page fails with 500;
+    # a late 200 for pre-commit req1 AND a background autosave 200 on own page
+    # STILL do not confirm because an own-page mutation after commit failed.
+    req2 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
+    surface._on_request(req2)
+    surface._on_response(SimpleNamespace(request=req2, status=500))
+    surface._on_response(SimpleNamespace(request=req1, status=200))
+    req_bg = SimpleNamespace(
+        method="POST", url="https://example.test/autosave", frame=own_frame
+    )
+    surface._on_request(req_bg)
+    surface._on_response(SimpleNamespace(request=req_bg, status=200))
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # A clean commit window on own page where the mutation succeeds with 201 -> confirmed.
+    clean_pre = surface.mutation_count
+    req3 = SimpleNamespace(
+        method="POST", url="https://example.test/submit", frame=own_frame
+    )
     surface._on_request(req3)
     surface._on_response(SimpleNamespace(request=req3, status=201))
-    assert surface.has_confirmed_mutation_since(pre_commit) is True
+    assert surface.has_confirmed_mutation_since(clean_pre) is True

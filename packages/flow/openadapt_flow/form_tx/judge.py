@@ -47,6 +47,7 @@ from openadapt_flow.form_tx.types import (
     SummaryVerdict,
     WizardScreenSpec,
     read_subjects,
+    subjects_digest,
     uncovered_subject_verdicts,
 )
 
@@ -531,9 +532,10 @@ class SummaryJudge:
                 continue
             if oc is not None:
                 observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
+        evaluated_subjects = read_subjects(writes, active_resolutions)
         verdicts.extend(
             uncovered_subject_verdicts(
-                read_subjects(writes, active_resolutions),
+                evaluated_subjects,
                 verdicts,
                 _codec_for,
                 {k: len(v) for k, v in observations.items()},
@@ -622,6 +624,7 @@ class SummaryJudge:
             extracted_outputs=final_outputs,
             missing_required_outputs=tuple(missing_required),
             observations_per_key={k: len(v) for k, v in observations.items()},
+            ledger_digest=subjects_digest(evaluated_subjects),
         )
 
     verify = evaluate

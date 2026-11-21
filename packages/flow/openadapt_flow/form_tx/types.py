@@ -638,6 +638,9 @@ class SummaryVerdict(BaseModel):
     # SummaryJudge.evaluate so downstream signers can verify subject coverage
     # without counting repeated verdicts for the same control as distinct reads.
     observations_per_key: Optional[dict[str, int]] = None
+    # Digest of the complete run subject set evaluated by SummaryJudge, so the
+    # public signer rejects partial or altered write ledgers.
+    ledger_digest: Optional[str] = None
 
     @model_validator(mode="after")
     def _passed_needs_every_field_checked(self) -> "SummaryVerdict":
@@ -690,6 +693,16 @@ def read_subjects(
                 Subject(subject_id=sid, key=f"entity:{rec.field_signature}|{row}"),
             )
     return list(subjects.values())
+
+
+def subjects_digest(subjects: Sequence[Subject]) -> str:
+    """Canonical SHA-256 digest of a run's complete subject set."""
+    return canonical_sha256(
+        [
+            s.model_dump(mode="json")
+            for s in sorted(subjects, key=lambda s: s.subject_id)
+        ]
+    )
 
 
 def uncovered_subject_verdicts(
