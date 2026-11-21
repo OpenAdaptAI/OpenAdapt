@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.31.0 (2026-11-21)
+
+### Features
+
+- **guard**: approval card values beside the source, ReadbackProvider seam, per-save ledger row
+
+### Bug Fixes
+
+- **ci**: qualify owned deadlines and pin helper outside subject checkout (#2333)
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes
