@@ -13218,6 +13218,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_guard_parser(sub)
 
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+
+    _add_hooks_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
