@@ -606,7 +606,6 @@ _PREDICATE_BEFORE = frozenset(
         ("word", "or"),
         ("word", "on"),
         ("word", "having"),
-        ("word", "not"),
         ("punct", "("),
     }
 )
@@ -865,6 +864,22 @@ def _find_param_placeholders(
     return found
 
 
+def _inside_not_group(spans: list[tuple[str, str, int, int]], idx: int) -> bool:
+    """Return True if token ``idx`` sits inside any ``NOT (...)`` grouping."""
+
+    open_stack: list[int] = []
+    for pos in range(idx):
+        tok = spans[pos][0:2]
+        if tok == ("punct", "("):
+            open_stack.append(pos)
+        elif tok == ("punct", ")") and open_stack:
+            open_stack.pop()
+    return any(
+        open_pos > 0 and spans[open_pos - 1][0:2] == ("word", "not")
+        for open_pos in open_stack
+    )
+
+
 def _analyze_null_param(
     text: str,
     spans: list[tuple[str, str, int, int]],
@@ -887,7 +902,7 @@ def _analyze_null_param(
     rewrites: list[tuple[int, int, str]] = []
     keep_param = False
     for ph_i, ph_j in occurrences:
-        if clauses[ph_i] not in _NULL_SAFE_CLAUSES:
+        if clauses[ph_i] not in _NULL_SAFE_CLAUSES or _inside_not_group(spans, ph_i):
             return None
         ph_s = spans[ph_i][2]
         ph_e = spans[ph_j - 1][3]
