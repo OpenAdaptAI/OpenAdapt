@@ -26,13 +26,47 @@ from openadapt_flow.form_tx.types import (  # noqa: E402
     FormHaltKind,
     FormPack,
     InputDossier,
-    PopupSubroutineSpec,
     ProvenanceKind,
     UIProfileSpec,
     WizardScreenSpec,
 )
 
 ORIGIN = "http://layout.local"
+
+ADDRESS = """<!doctype html><html><body><form onsubmit="return false">
+<label for="addr">Street address</label>
+<input id="addr" role="combobox" aria-controls="addr-list" autocomplete="off">
+<ul id="addr-list" role="listbox" hidden></ul>
+<label for="city">City</label><input id="city" readonly>
+<button id="go" type="button">Submit quote</button>
+</form><script>
+const addr = document.getElementById('addr'), list = document.getElementById('addr-list');
+const ITEMS = ['2210 Juniper Loop Apt 4, Brackenfield, OR', '2214 Juniper Loop, Brackenfield, OR'];
+addr.addEventListener('input', () => {
+  const q = addr.value.toLowerCase();
+  list.innerHTML = '';
+  for (const it of ITEMS.filter((i) => i.toLowerCase().startsWith(q))) {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.textContent = it;
+    li.addEventListener('click', () => {
+      if (!INERT) {
+        const parts = it.split(',');
+        addr.value = parts[0].replace(/ Apt \\d+$/, '');
+        document.getElementById('city').value = parts[1].trim();
+      }
+      list.hidden = true;
+    });
+    list.appendChild(li);
+  }
+  list.hidden = q.length < 2;
+});
+document.getElementById('go').addEventListener('click', async () => {
+  await fetch('/api/submit', {method: 'POST', body: JSON.stringify({addr: addr.value})});
+  document.body.innerHTML = '<h1>Saved</h1>';
+});
+</script></body></html>"""
+
 
 
 @pytest.fixture(scope="module")
