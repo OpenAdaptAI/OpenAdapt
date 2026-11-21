@@ -394,3 +394,104 @@ def test_a_page_with_no_run_says_how_to_make_one(browser, tmp_path):
         assert reader.outside() == []
     finally:
         reader.close()
+
+
+def test_a_link_can_open_one_steps_evidence(browser, runs):
+    """The fragment keeps the tab and the step: #step=6 opens step 6's evidence."""
+    page_path = _page(runs / "run-broken")
+    reader = Reader(browser, page_path, reduced=True)
+    try:
+        reader.page.goto(reader.uri + "#step=6")
+        reader.verdict("Valid")
+        tab = reader.page.locator("[data-tab='evidence']")
+        assert tab.get_attribute("aria-selected") == "true"
+        panel = reader.page.locator("#seal-panel-evidence")
+        assert "Step 6 of 6".upper() in panel.inner_text().upper()
+        assert "Click Save Encounter" in panel.inner_text()
+        # A failed read-back says so; it never reads as found.
+        assert "not exactly 1" in panel.inner_text()
+        # The next step from the list moves the fragment with it.
+        reader.page.locator("[data-tab='steps']").click()
+        reader.page.locator("[data-row='2']").click()
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=evidence&step=3'", timeout=2_000
+        )
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_the_tabs_and_the_steps_take_the_keyboard(browser, runs):
+    reader = Reader(browser, _page(runs / "run-1"), reduced=True)
+    try:
+        reader.verdict("Valid")
+        summary = reader.page.locator("[data-tab='summary']")
+        summary.focus()
+        summary.press("ArrowRight")
+        steps = reader.page.locator("[data-tab='steps']")
+        assert steps.get_attribute("aria-selected") == "true"
+        assert reader.page.evaluate("document.activeElement.dataset.tab") == "steps"
+        first = reader.page.locator("[data-row='0']")
+        first.focus()
+        reader.page.keyboard.press("ArrowDown")
+        reader.page.keyboard.press("ArrowDown")
+        assert reader.page.evaluate("document.activeElement.dataset.row") == "2"
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=steps&step=3'", timeout=2_000
+        )
+        reader.page.keyboard.press("Enter")
+        assert (
+            reader.page.locator("[data-tab='evidence']").get_attribute("aria-selected")
+            == "true"
+        )
+        # j and k step through the run from anywhere but a field.
+        reader.page.locator("body").press("j")
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=evidence&step=4'", timeout=2_000
+        )
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_the_theme_follows_the_system_and_the_switch(browser, runs):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": 1280, "height": 900}, color_scheme="light"
+    )
+    page = context.new_page()
+    try:
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.dataset.theme") == "light"
+        page.get_by_role("button", name="Switch to the dark theme").click()
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+        page.reload()
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+    finally:
+        context.close()
+
+
+def test_a_phone_gets_one_column_with_the_map_as_a_tab(browser, runs):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": 375, "height": 812}, reduced_motion="reduce"
+    )
+    page = context.new_page()
+    requests: list[str] = []
+    page.on("request", lambda r: requests.append(r.url))
+    try:
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.scrollWidth") <= 375
+        assert page.locator(".opg-node").count() == 0
+        page.locator("[data-tab='program']").click()
+        page.locator(".opg-node").first.wait_for()
+        assert page.locator(".opg-node").count() >= 6
+        # The verdict stays in view on every tab.
+        assert "Signature valid" in page.get_by_role("status").first.inner_text()
+        assert [u for u in requests if not u.startswith("file:")] == []
+    finally:
+        context.close()

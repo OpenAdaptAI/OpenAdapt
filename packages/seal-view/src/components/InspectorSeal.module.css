@@ -5,23 +5,23 @@
     margin: 0 0 14px;
 }
 .card {
-    --t0: #4cf0b8;
-    --edge: rgba(76, 240, 184, 0.45);
-    --wash: rgba(76, 240, 184, 0.09);
+    --t0: var(--seal-ok, #4cf0b8);
+    --edge: color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 45%, transparent);
+    --wash: color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 9%, transparent);
     display: flex;
     gap: 12px;
     align-items: flex-start;
     padding: 12px;
     border: 1px solid var(--edge);
     border-radius: 14px;
-    background: linear-gradient(160deg, var(--wash), rgba(255, 255, 255, 0.02) 70%);
+    background: linear-gradient(160deg, var(--wash), color-mix(in srgb, var(--seal-ink, #fff) 2%, transparent) 70%);
     box-shadow: 0 0 28px -12px var(--edge);
     animation: cardIn 420ms ease-out both;
 }
 .card[data-tone='halt'] {
-    --t0: #ffbf55;
-    --edge: rgba(255, 191, 85, 0.5);
-    --wash: rgba(255, 191, 85, 0.09);
+    --t0: var(--seal-halt, #ffbf55);
+    --edge: color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 50%, transparent);
+    --wash: color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 9%, transparent);
 }
 .body {
     min-width: 0;
@@ -36,14 +36,14 @@
 }
 .line {
     margin: 0;
-    color: #f2f7fb;
+    color: var(--seal-ink, #f2f7fb);
     font-size: 14px;
     font-weight: 600;
     line-height: 1.35;
 }
 .sub {
     margin: 4px 0 10px;
-    color: #9fb0c3;
+    color: var(--seal-ink-muted, #9fb0c3);
     font-size: 12px;
     line-height: 1.4;
 }
@@ -55,7 +55,7 @@
     border: 0;
     border-radius: 999px;
     background: var(--t0);
-    color: #04120c;
+    color: var(--seal-core, #04120c);
     font: inherit;
     font-size: 13px;
     font-weight: 700;
@@ -64,13 +64,13 @@
     cursor: pointer;
 }
 .card[data-tone='halt'] .action {
-    color: #1a1002;
+    color: var(--seal-core, #1a1002);
 }
 .action:hover {
     filter: brightness(1.08);
 }
 .action:focus-visible {
-    outline: 2px solid #a2c6ff;
+    outline: 2px solid var(--seal-focus, #a2c6ff);
     outline-offset: 2px;
 }
 @keyframes cardIn {
@@ -90,7 +90,7 @@
     flex-wrap: wrap;
     gap: 4px 10px;
     margin: 10px 0 0;
-    color: #9fb0c3;
+    color: var(--seal-ink-muted, #9fb0c3);
     font-size: 12px;
 }
 .others a {
@@ -98,6 +98,6 @@
     font-weight: 600;
 }
 .others a:focus-visible {
-    outline: 2px solid #a2c6ff;
+    outline: 2px solid var(--seal-focus, #a2c6ff);
     outline-offset: 2px;
 }

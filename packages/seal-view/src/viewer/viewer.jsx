@@ -13,6 +13,8 @@
 //              commands? }
 import { createRoot } from 'react-dom/client'
 import '@openadapt/program-graph/styles.css'
+// The shared semantic theme roles (--oa-*), light and dark, without fonts.
+import '../vendor/semantic-theme/semantic-theme.css'
 import SealPage, { sealPageMeta } from '../components/SealPage.jsx'
 import { sealPageProps } from '../lib/sealProps.mjs'
 
@@ -20,7 +22,7 @@ const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 
 function Problem({ text }) {
     return (
-        <main style={{ font: '16px/1.5 system-ui, sans-serif', color: '#eaf0f6', padding: '48px 24px', maxWidth: 640, margin: '0 auto' }}>
+        <main style={{ font: '16px/1.5 var(--oa-font-body)', color: 'var(--oa-text)', padding: '48px 24px', maxWidth: 640, margin: '0 auto' }}>
             <h1 style={{ fontSize: 22 }}>This Seal can&apos;t be shown</h1>
             <p>{text}</p>
             <p>

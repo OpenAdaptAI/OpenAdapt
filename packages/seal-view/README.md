@@ -31,12 +31,42 @@ openadapt.ai's Seal pages and `openadapt quickstart` use the same code.
   timestamp (`seal.tsa.json` naming its token file `seal.tsr`) are checked
   offline and shown only when the run has them.
 
+## Layout
+
+One screen, like an app. From 900 px wide it is a split view: the program
+map fills the left pane (drag the divider, or focus it and use the arrow
+keys; "Expand map" or Enter gives the map the whole width), the Seal and the
+verdict sit top right, and the details sit bottom right in four tabs:
+
+- **Summary**: the counts, the AI model calls and program time, and the
+  signature check (the report's SHA-256 in this browser against the one the
+  Seal signed), with the tamper demo.
+- **Steps**: every step, with its result and checks. Up and Down move, Enter
+  or a click opens the step's evidence.
+- **Evidence**: the picked step (on the map, the ring or the list): its
+  checks, its pictures when the host has them, and its record checks.
+- **Raw**: the signed fields, the witnesses, the files and the commands.
+
+Narrower, the page is one column (the Seal and the verdict, then the tabs)
+and the map is a fifth tab. The verdict stays in the top bar at every width
+and on every tab. The URL's fragment keeps the tab and the step
+(`#tab=evidence&step=6`, steps from 1), so a link can open one step. `j` and
+`k` move to the next and previous step from anywhere but a field.
+
+Light and dark come from the shared semantic theme roles (`--oa-*`,
+openadapt-web's `styles/semantic-theme.css`). The host provides them; the
+offline viewer inlines a pinned copy without fonts
+(`src/vendor/semantic-theme`, with its provenance). The visitor's choice is
+`data-theme` on `<html>` and `oa-theme` in local storage, the same as
+openadapt.ai's own switch; with no choice, the system setting.
+
 ## Use it
 
 ```jsx
 import { SealPage, sealPageProps } from '@openadapt/seal-view'
 import '@openadapt/program-graph/styles.css'
 import '@openadapt/seal-view/styles.css'
+// and the --oa-* theme roles, e.g. openadapt-web's styles/semantic-theme.css
 
 const files = { report: reportBytes, sealText }  // exact bytes and text
 const { page } = await sealPageProps({ files, keys, program: { spec } })
@@ -62,7 +92,7 @@ slot that `openadapt seal view RUN_DIR` fills with the run's files. Its
 Content-Security-Policy allows no requests, so it works from `file://` with
 the network off and uploads nothing.
 
-Size, measured on 2026-10-24: 212,474 bytes (68,660 gzipped). The budget is
+Size, measured on 2026-11-20: 230,946 bytes (73,545 gzipped). The budget is
 262,144 bytes (`VIEWER_BUDGET` in `scripts/build.mjs`, and
 `tests/snapshots/seal_viewer_size.json` at the repository root);
 `node scripts/build.mjs --check` fails over it or when the launcher's copy is

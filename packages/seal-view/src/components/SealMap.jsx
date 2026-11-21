@@ -8,6 +8,9 @@
 //
 // program: { spec, folds?, titles? } (sealPageProps fills them in);
 // map: { kicker?, title?, resolveMedia? } from the host.
+// theme: 'dark' or 'light'. fill: the workbench's stage grows to fill the
+// height of the pane it sits in (the Seal page's split view), measured as the
+// pane resizes; otherwise the package's own fixed stage height.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ProgramWorkbench, defaultTourStops } from '@openadapt/program-graph'
@@ -26,6 +29,8 @@ export default function SealMap({
     sealRun = null,
     sealLine = '',
     onBackToSeal,
+    theme = 'dark',
+    fill = false,
 }) {
     const { spec, folds = null, titles = {} } = program
     const groups = folds?.groups || NO_GROUPS
@@ -52,6 +57,31 @@ export default function SealMap({
             (group ? cards.find((el) => el.dataset.fold && label(el).includes(`: ${group.title}.`)) : null)
         if (card) card.dataset.sealAnchor = anchor.kind
     })
+    // Fill: the stage takes the pane's height less the workbench's own chrome.
+    useEffect(() => {
+        const root = box.current
+        if (!root || !fill || typeof ResizeObserver === 'undefined') return undefined
+        let frame = 0
+        const size = () => {
+            frame = 0
+            const wb = root.querySelector('.opg-root')
+            const view = root.querySelector('.opg-canvas-viewport')
+            if (!wb || !view) return
+            const chrome = wb.offsetHeight - view.offsetHeight
+            const stage = Math.max(240, Math.floor(root.clientHeight - chrome - 2))
+            if (root.style.getPropertyValue('--seal-stage-h') !== `${stage}px`) root.style.setProperty('--seal-stage-h', `${stage}px`)
+        }
+        const ro = new ResizeObserver(() => {
+            if (!frame) frame = requestAnimationFrame(size)
+        })
+        ro.observe(root)
+        size()
+        return () => {
+            ro.disconnect()
+            cancelAnimationFrame(frame)
+            root.style.removeProperty('--seal-stage-h')
+        }
+    }, [fill])
     const node = step != null ? actions[step] : null
     // A folded card or the stop card the visitor picked, until the replay moves on.
     const [own, setOwn] = useState(null)
@@ -67,7 +97,7 @@ export default function SealMap({
     const anchorIds = useMemo(() => (anchorId ? [anchorId] : []), [anchorId])
     const sealHost = useInspectorHost(box, anchorIds, groups).host
     return (
-        <div className={s.map} data-step={step ?? ''} ref={box}>
+        <div className={s.map} data-step={step ?? ''} data-fill={fill ? '1' : undefined} ref={box}>
             <ProgramWorkbench
                 spec={spec}
                 folds={folds}
@@ -81,7 +111,7 @@ export default function SealMap({
                 tour={tour}
                 tourSeen
                 plainStopRules
-                theme="dark"
+                theme={theme}
                 playhead={playhead}
                 selectedId={own || node || actions[0]}
                 onSelect={(id, origin) => {

@@ -2,6 +2,15 @@
 
 ## v0.1.0 (unreleased)
 
+- The Seal page is one screen, like an app: the program map on the left
+  (resizable, or the whole width), the Seal and verdict top right, and
+  Summary, Steps, Evidence and Raw tabs bottom right; one column with the map
+  as a tab below 900 px. The verdict stays in the top bar. The URL's fragment
+  keeps the tab and the step. Light and dark themes from the shared `--oa-*`
+  roles; the offline viewer inlines them. A failed read-back now says "not
+  exactly 1" or "not equal" instead of the passing wording, and the report's
+  digest says "not computed" when nothing was computed.
+
 - `SealPage`: one run's Seal, drawn from its signed report (step ring, screen
   checks, read-backs, right-record checks and an iris drawn from the
   digests), checked in the browser (Ed25519 over the exact `report.json`),

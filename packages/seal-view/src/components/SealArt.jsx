@@ -301,7 +301,7 @@ function AnchorMark({ deg, kind }) {
     return (
         <g className={s.layer} style={{ '--z': 1 }}>
             <g className={s.anchorMark} data-kind={kind}>
-                <title>{kind === 'stop' ? 'Sealed here: the run stopped at this step' : 'Sealed here: the save its read-backs prove'}</title>
+                <title>{kind === 'stop' ? 'Sealed here: the run stopped at this step' : 'Sealed here: the save OpenAdapt confirmed by reading the record back'}</title>
                 <line x1={x1} y1={y1} x2={x} y2={y} />
                 <circle cx={x} cy={y} r="8" />
                 <circle cx={x} cy={y} r="3" className={s.anchorDot} />
@@ -321,11 +321,18 @@ function Iris({ layers, phase, broken, tone }) {
     useEffect(() => {
         const root = box.current
         if (!root) return undefined
-        const css = getComputedStyle(root)
-        const color = (name, fallback) => css.getPropertyValue(name).trim() || fallback
-        const fills = broken
-            ? [color('--fail', '#ff4d6a'), color('--fail', '#ff4d6a'), color('--fail', '#ff4d6a')]
-            : [color('--t0', '#4cf0b8'), color('--soft', '#b9fbe5'), color('--t0', '#4cf0b8')]
+        // The colours come from the theme's roles, read again when the theme changes.
+        let fills = []
+        let lit = '#ffffff'
+        const readColors = () => {
+            const css = getComputedStyle(root)
+            const color = (name, fallback) => css.getPropertyValue(name).trim() || fallback
+            fills = broken
+                ? [color('--fail', '#ff4d6a'), color('--fail', '#ff4d6a'), color('--fail', '#ff4d6a')]
+                : [color('--t0', '#4cf0b8'), color('--soft', '#b9fbe5'), color('--t0', '#4cf0b8')]
+            lit = color('--seal-ink', '#ffffff')
+        }
+        readColors()
         const alphas = broken ? [0.3, 0.26, 0.22] : [0.62, 0.45, 0.35]
         const paths = layers.map((layer) => layer.petals.map((p) => ({ path: new Path2D(p.d), at: p.at })))
         const draw = (progress) => {
@@ -343,20 +350,31 @@ function Iris({ layers, phase, broken, tone }) {
                 for (const p of paths[l]) {
                     const lift = progress == null ? 0 : Math.max(0, 1 - Math.abs(progress - p.at) * 6)
                     ctx.globalAlpha = Math.min(1, alphas[l] + lift * 0.6)
-                    ctx.fillStyle = lift > 0.3 ? '#ffffff' : fills[l]
+                    ctx.fillStyle = lift > 0.3 ? lit : fills[l]
                     ctx.fill(p.path)
                 }
             })
         }
         draw(null)
-        if (phase !== 'verify' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
+        // A frame later: the page re-renders with the new theme first.
+        const themed = new MutationObserver(() =>
+            requestAnimationFrame(() => {
+                readColors()
+                draw(null)
+            })
+        )
+        themed.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+        if (phase !== 'verify' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => themed.disconnect()
         const start = performance.now()
         let frame = requestAnimationFrame(function tick(now) {
             const k = (now - start) / SWEEP_MS
             draw(k > 1.1 ? null : k)
             if (k <= 1.1) frame = requestAnimationFrame(tick)
         })
-        return () => cancelAnimationFrame(frame)
+        return () => {
+            cancelAnimationFrame(frame)
+            themed.disconnect()
+        }
     }, [layers, phase, broken, tone])
     return (
         <div className={s.iris} ref={box} aria-hidden="true">
