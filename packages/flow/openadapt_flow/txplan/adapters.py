@@ -646,43 +646,70 @@ class SqlAdapter:
 
     def compensate_sql(self, images: Mapping[str, Any]) -> None:
         """Undo one statement from its images, in one transaction: delete what
-        it added, restore what it changed, reinsert what it removed."""
+        it added, restore what it changed, reinsert what it removed.
+
+        Foreign keys can make the order matter (a cascade removed children
+        with their parent), so each row runs under a savepoint and failed rows
+        are retried in later passes until none makes progress."""
+        steps: list[tuple[str, str, Mapping[str, Any]]] = [
+            ("delete", rid, item) for rid, item in images.get("added_pk", {}).items()
+        ] + [("restore", rid, item) for rid, item in images.get("before", {}).items()]
         con = self.connect()
         try:
             cur = con.cursor()
             self._begin(cur)
             try:
-                for rid, item in images.get("added_pk", {}).items():
-                    self._delete_row(cur, rid, item)
-                for rid, item in images.get("before", {}).items():
-                    table = rid.split("/", 1)[0]
-                    pk, row = item["pk"], item["row"]
-                    if not pk:
-                        raise AdapterError(f"{table} has no primary key: no generated undo")
-                    where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
-                    cur.execute(f"SELECT 1 FROM {self._ident(table)} WHERE {where}",
-                                tuple(untag(row[c]) for c in pk))
-                    if cur.fetchall():
-                        cols = [c for c in row if c not in pk]
-                        sets = ", ".join(f"{self._ident(c)} = {self.ph}" for c in cols)
-                        if cols:
-                            cur.execute(
-                                f"UPDATE {self._ident(table)} SET {sets} WHERE {where}",
-                                (*(untag(row[c]) for c in cols), *(untag(row[c]) for c in pk)),
-                            )
-                    else:
-                        cols = list(row)
-                        cur.execute(
-                            f"INSERT INTO {self._ident(table)} ({', '.join(self._ident(c) for c in cols)}) "
-                            f"VALUES ({', '.join([self.ph] * len(cols))})",
-                            tuple(untag(row[c]) for c in cols),
-                        )
+                left = steps
+                n = 0
+                while left:
+                    failed = []
+                    for step in left:
+                        n += 1
+                        sp = f"oa_undo_{n}"
+                        cur.execute(f"SAVEPOINT {sp}")
+                        try:
+                            if step[0] == "delete":
+                                self._delete_row(cur, step[1], step[2])
+                            else:
+                                self._restore_row(cur, step[1], step[2])
+                            cur.execute(f"RELEASE SAVEPOINT {sp}")
+                        except AdapterError:
+                            raise
+                        except Exception:  # noqa: BLE001 - a constraint: retry after the others
+                            cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                            failed.append(step)
+                    if len(failed) == len(left):
+                        raise AdapterError(f"{len(failed)} row(s) could not be restored")
+                    left = failed
             except Exception:
                 con.rollback()
                 raise
             con.commit()
         finally:
             con.close()
+
+    def _restore_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
+        table = rid.split("/", 1)[0]
+        pk, row = item["pk"], item["row"]
+        if not pk:
+            raise AdapterError(f"{table} has no primary key: no generated undo")
+        where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
+        cur.execute(f"SELECT 1 FROM {self._ident(table)} WHERE {where}", tuple(untag(row[c]) for c in pk))
+        if cur.fetchall():
+            cols = [c for c in row if c not in pk]
+            if cols:
+                sets = ", ".join(f"{self._ident(c)} = {self.ph}" for c in cols)
+                cur.execute(
+                    f"UPDATE {self._ident(table)} SET {sets} WHERE {where}",
+                    (*(untag(row[c]) for c in cols), *(untag(row[c]) for c in pk)),
+                )
+        else:
+            cols = list(row)
+            cur.execute(
+                f"INSERT INTO {self._ident(table)} ({', '.join(self._ident(c) for c in cols)}) "
+                f"VALUES ({', '.join([self.ph] * len(cols))})",
+                tuple(untag(row[c]) for c in cols),
+            )
 
     def _delete_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
         table = rid.split("/", 1)[0]

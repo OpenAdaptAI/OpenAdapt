@@ -527,7 +527,7 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
                 "sql": "statements"}[w["op"]]
         if w["irreversible"] and w["op"] == "delete":
             verb = "deleted after holdback"
-        k = f"{w['system']}.{w['collection']} {verb}"
+        k = f"SQL statement(s) on {w['system']}" if w["op"] == "sql" else f"{w['system']}.{w['collection']} {verb}"
         summary[k] = summary.get(k, 0) + 1
     anomalies = _anomalies(spec, writes, baselines)
     anomalies += _row_anomalies(spec, writes, staged_rows)

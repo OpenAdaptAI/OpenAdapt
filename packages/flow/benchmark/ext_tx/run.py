@@ -331,6 +331,7 @@ def seeded_faults(ctx: Ctx, writes_fn: Callable[[int], list[dict[str, Any]]], po
                   adapter_cls: Any, trials: int) -> dict[str, Any]:
     """A change the plan didn't predict, during apply and before undo: both must be caught."""
     caught_apply = caught_undo = 0
+    detail: list[dict[str, Any]] = []
     real = adapter_cls.apply
     for t in range(trials):
         def apply_and_poke(self, w, base, key, _real=real):  # noqa: ANN001
@@ -352,8 +353,13 @@ def seeded_faults(ctx: Ctx, writes_fn: Callable[[int], list[dict[str, Any]]], po
         engine.apply_plan(ctx, plan["digest"])
         poke()
         undone = engine.undo_plan(ctx, plan["digest"])
-        caught_undo += int(undone["outcome"] != "ROLLED_BACK" and undone["tx"]["collateral_changes"] > 0)
-    return {"trials": trials, "missed_effect_caught": caught_apply, "collateral_caught": caught_undo}
+        hit = undone["outcome"] != "ROLLED_BACK" and undone["tx"]["collateral_changes"] > 0
+        caught_undo += int(hit)
+        if not hit:
+            detail.append({"trial": t, "undo": undone["outcome"], "codes": undone["tx"]["codes"],
+                           "collateral": undone["tx"]["collateral_changes"], "planned": plan["predicted"]})
+    return {"trials": trials, "missed_effect_caught": caught_apply, "collateral_caught": caught_undo,
+            "not_caught": detail}
 
 
 # -- main ----------------------------------------------------------------------
