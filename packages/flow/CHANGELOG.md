@@ -15,6 +15,18 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
+
 ## v3.4.0 (2026-11-20)
 
 ### Features
@@ -92,13 +104,6 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
-- A headed browser window that draws no frames (on macOS, one covered by a
-  full-size terminal window) no longer halts a run at its first step. The
-  page settle waited for two animation frames after the last change, which
-  such a window never draws, so the readiness gate timed out after 10 s with
-  "starting state not ready". When every other page signal is quiet and the
-  page has drawn no frame for a second, or the page is hidden, the settle now
-  falls back to two identical screenshots.
 
 ## v3.3.0 (2026-11-19)
 
