@@ -329,6 +329,11 @@ class PopupSubroutineSpec(BaseModel):
     # before the trigger count as the dialog's, and the commit button must be
     # gone afterwards.
     popup_mode: Literal["window", "in_page"] = "window"
+    # The popup's own displayed result, read just before apply. When set, the
+    # value the popup puts back in the parent must equal it under
+    # ``return_codec``, or the run stops before submit. A declared result that
+    # cannot be read is also a stop.
+    result_anchor: Optional[FieldAnchorSpec] = None
     commit_anchor: FieldAnchorSpec
     parent_return_anchor: FieldAnchorSpec
     return_output_key: str = Field(min_length=1)
@@ -580,6 +585,10 @@ class FieldWriteRecord(BaseModel):
     # read-back of the application's record, so the field stays not_checked
     # unless the summary shows it.
     checked_before_apply: bool = False
+    # For a popup return: the popup that produced it, and whether the value
+    # put back in the parent matched the popup's own displayed result.
+    from_popup_subroutine: Optional[str] = None
+    matched_popup_result: bool = False
 
 
 class ReadbackStatus(str, Enum):

@@ -494,6 +494,48 @@ class SummaryJudge:
                     )
                 )
 
+        # A value that came only from a popup is no better checked than the
+        # popup inputs that produced it. If one of those inputs is not
+        # checked, the returned value is not checked either, unless the value
+        # put back matched the popup's own displayed result and the summary
+        # shows it.
+        status_by_key: dict[str, ReadbackStatus] = {}
+        for v in verdicts:
+            status_by_key.setdefault(v.dossier_key, v.status)
+            if v.status != ReadbackStatus.PASSED:
+                status_by_key[v.dossier_key] = v.status
+        for write in writes:
+            sub_id = write.from_popup_subroutine
+            if write.source != "popup_return" or not sub_id or not write.dossier_key:
+                continue
+            fact = expected_facts.get(write.dossier_key)
+            if fact is None or fact.source_id != f"subroutine:{sub_id}":
+                continue
+            if write.matched_popup_result:
+                continue
+            unchecked_inputs = sorted(
+                {
+                    w.field_key
+                    for w in writes
+                    if w.in_popup_subroutine == sub_id
+                    and status_by_key.get(w.field_key) != ReadbackStatus.PASSED
+                }
+            )
+            if not unchecked_inputs:
+                continue
+            for i, v in enumerate(verdicts):
+                if (
+                    v.dossier_key == write.dossier_key
+                    and v.status == ReadbackStatus.PASSED
+                ):
+                    verdicts[i] = _not_checked(
+                        v.dossier_key,
+                        v.provenance,
+                        f"Value came from popup {sub_id!r}, whose inputs "
+                        f"{unchecked_inputs} are not checked, and was not "
+                        "compared with the popup's displayed result",
+                    )
+
         screen_problems: list[str] = []
         if snapshot.auth_wall_present:
             screen_problems.append("sign-in wall")
