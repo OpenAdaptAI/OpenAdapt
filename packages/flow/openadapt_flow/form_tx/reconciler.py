@@ -30,6 +30,7 @@ from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
+    MissingAnchorError,
     compute_field_signature,
     match_anchor_in_snapshot,
 )
@@ -57,6 +58,7 @@ from openadapt_flow.form_tx.types import (
     ObservedControl,
     ObservedEntityRow,
     ObservedModal,
+    ObservedOption,
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
@@ -166,6 +168,8 @@ class ReconcilerSession:
 
         # Internal session bookkeeping across halt/resume cycles:
         self._filled_selectors: set[str] = set()
+        # What this run typed into each type-ahead before its pick, by field.
+        self._typeahead_typed: dict[str, str] = {}
         self._human_accepted_control_signatures: set[str] = set()
         self._human_accepted_values: dict[str, Any] = {}
         self._accepted_entity_rows: list[tuple[str, dict[str, str]]] = []
@@ -176,6 +180,7 @@ class ReconcilerSession:
         self._halt_contexts: dict[str, tuple[str, Optional[str]]] = {}
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
+        self._commit_clicked: bool = False
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
@@ -269,13 +274,40 @@ def _control_matches_fact(
     ctrl: ObservedControl,
     intended_value: Any,
     binding: FieldBindingSpec,
+    *,
+    typed_query: Optional[str] = None,
 ) -> bool:
+    """True when ``ctrl`` shows ``intended_value`` under the binding's codec.
+
+    ``typed_query`` is what this run actually typed into a type-ahead before
+    picking. Only then may a leading part of the pick count as a match; a
+    value already in the field, or one the run did not type, must match in
+    full.
+    """
     if binding.control_kind == ControlKind.CHECKBOX and ctrl.checked is not None:
         try:
             yn = normalize_boolean_yes_no(intended_value)
         except CodecValueError:
             return False
         return (yn == "yes") == bool(ctrl.checked)
+
+    if (
+        binding.control_kind == ControlKind.PORTAL_COMBOBOX
+        and binding.typeahead_query_chars is not None
+        and typed_query
+    ):
+        # A type-ahead that keeps only the leading part of its pick (see
+        # _is_leading_part_of_choice); typed text alone never matches.
+        try:
+            formatted = format_for_text_entry(intended_value, binding.codec)
+        except CodecValueError:
+            formatted = ""
+        if formatted and _is_leading_part_of_choice(
+            ctrl.current_value,
+            formatted,
+            typed_query,
+        ):
+            return True
 
     if values_equivalent(intended_value, ctrl.current_value, binding.codec):
         return True
@@ -316,6 +348,113 @@ def _deterministic_halt_id(
         }
     )
     return f"halt_{digest[:14]}"
+
+
+# Backend errors that mean "the surface could not do what was asked": the
+# control vanished or matched twice, a listbox or popup never appeared, the
+# page never settled, or the browser timed out. Matched by class name so the
+# reconciler does not import a browser backend.
+_SURFACE_ACTION_ERROR_NAMES = frozenset(
+    {
+        "MissingAnchorError",
+        "AmbiguousAnchorError",
+        "PopupContractError",
+        "SurfaceSettleTimeoutError",
+        "SurfaceContextError",
+    }
+)
+
+
+def _is_surface_action_error(exc: BaseException) -> bool:
+    if isinstance(exc, (MissingAnchorError, AmbiguousAnchorError, TimeoutError)):
+        return True
+    for cls in type(exc).__mro__:
+        if cls.__name__ in _SURFACE_ACTION_ERROR_NAMES:
+            return True
+        if cls.__module__.startswith("playwright") and cls.__name__ in (
+            "TimeoutError",
+            "Error",
+        ):
+            return True
+    return False
+
+
+def _is_editable_combobox(ctrl: ObservedControl) -> bool:
+    """A combobox that is itself a text input takes typed text."""
+    return (
+        ctrl.tag.casefold() in ("input", "textarea")
+        and not ctrl.readonly
+        and not ctrl.disabled
+    )
+
+
+def _is_leading_part_of_choice(shown: str, label: str, typed: str) -> bool:
+    """True when a pick left the leading part of its label in the input.
+
+    Some type-aheads put only the first part of the chosen suggestion in the
+    input ("2210 Juniper Loop" from "2210 Juniper Loop Apt 4, Brackenfield,
+    OR") and fill the rest into other fields. That counts only when the input
+    shows more than was typed, so text left over from typing never passes.
+    """
+    shown_n = collapse_whitespace(shown).casefold()
+    label_n = collapse_whitespace(label).casefold()
+    typed_n = collapse_whitespace(typed).casefold()
+    if not shown_n or shown_n == typed_n or len(shown_n) <= len(typed_n):
+        return False
+    if not label_n.startswith(shown_n) or len(label_n) == len(shown_n):
+        return False
+    return label_n[len(shown_n)] in " ,;-/("
+
+
+def _surface_action_halt(
+    run_id: str,
+    snapshot: FormSnapshot,
+    exc: BaseException,
+    *,
+    ctrl: Optional[ObservedControl] = None,
+    dossier_key: Optional[str] = None,
+    dossier_value: Any = None,
+    locator: str = "",
+) -> FormHaltItem:
+    """A stop for a person when the surface could not act on a control."""
+    target = ctrl.dom_selector if ctrl is not None else locator
+    label = ctrl.label_text if ctrl is not None else ""
+    sig = (
+        compute_field_signature(ctrl)
+        if ctrl is not None
+        else f"surface_action|{locator}"
+    )
+    halt_id = _deterministic_halt_id(
+        run_id,
+        FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+        snapshot.screen_id,
+        target,
+        sig,
+    )
+    where = label or target or "the form"
+    allowed: tuple[HumanDecisionAction, ...] = (
+        HumanDecisionAction.FIXED_ON_SCREEN,
+        HumanDecisionAction.ESCALATE_TO_OWNER,
+        HumanDecisionAction.ABORT_RUN,
+    )
+    if ctrl is not None:
+        allowed = (HumanDecisionAction.PROVIDE_VALUE, *allowed)
+    return FormHaltItem(
+        halt_id=halt_id,
+        kind=FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+        screen_id=snapshot.screen_id,
+        control_id=ctrl.control_id if ctrl is not None else None,
+        dom_selector=target or None,
+        field_label=label,
+        section_text=ctrl.section_text if ctrl is not None else "",
+        dossier_key=dossier_key,
+        dossier_value=dossier_value,
+        message=(
+            f"Could not act on {where!r}: {type(exc).__name__}: "
+            f"{collapse_whitespace(str(exc))[:400]}"
+        ),
+        allowed_actions=allowed,
+    )
 
 
 def _collect_surface_errors(snapshot: FormSnapshot) -> list[str]:
@@ -464,6 +603,7 @@ class FormReconciler:
     ) -> None:
         self._surface = surface
         self._default_signing_key = signing_key
+        self._last_typed_query: Optional[str] = None
         self.max_screen_transitions = max_screen_transitions
         self.max_passes_per_screen = max_passes_per_screen
         self._summary_judge = (
@@ -653,8 +793,55 @@ class FormReconciler:
         placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
         dossier_key: Optional[str] = None,
         run_id: str = "",
+        typeahead_query_chars: Optional[int] = None,
     ) -> Optional[FormHaltItem]:
-        """Actuate ``ctrl`` on ``surface``, returning a ``FormHaltItem`` on ambiguity/codec failure."""
+        """Actuate ``ctrl`` on ``surface``, returning a ``FormHaltItem`` instead of raising.
+
+        A control the surface cannot act on (it vanished, matched twice, never
+        opened its suggestions, or the page never settled) is a stop for a
+        person, not an exception out of the run.
+        """
+        try:
+            return self._actuate_control_unguarded(
+                surface,
+                snapshot,
+                ctrl,
+                intended_value,
+                control_kind=control_kind,
+                codec=codec,
+                placeholder_values=placeholder_values,
+                dossier_key=dossier_key,
+                run_id=run_id,
+                typeahead_query_chars=typeahead_query_chars,
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return _surface_action_halt(
+                run_id,
+                snapshot,
+                exc,
+                ctrl=ctrl,
+                dossier_key=dossier_key,
+                dossier_value=intended_value,
+            )
+
+    def _actuate_control_unguarded(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        *,
+        control_kind: ControlKind,
+        codec: FieldCodecSpec,
+        placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
+        dossier_key: Optional[str] = None,
+        run_id: str = "",
+        typeahead_query_chars: Optional[int] = None,
+    ) -> Optional[FormHaltItem]:
+        typed_query: Optional[str] = None
+        self._last_typed_query = None
         try:
             if control_kind in (ControlKind.TEXT, ControlKind.DATE):
                 formatted = format_for_text_entry(intended_value, codec)
@@ -669,7 +856,16 @@ class FormReconciler:
                 return None
 
             if control_kind == ControlKind.PORTAL_COMBOBOX:
-                opts = surface.open_portal_combobox_options(ctrl.dom_selector)
+                typer = getattr(surface, "type_portal_combobox_query", None)
+                if typer is not None and _is_editable_combobox(ctrl):
+                    # Type-ahead: suggestions exist only after typed text.
+                    typed_query = format_for_text_entry(intended_value, codec)
+                    if typeahead_query_chars is not None:
+                        typed_query = typed_query[:typeahead_query_chars]
+                    opts = typer(ctrl.dom_selector, typed_query)
+                    self._last_typed_query = typed_query
+                else:
+                    opts = surface.open_portal_combobox_options(ctrl.dom_selector)
                 try:
                     opt = resolve_unique_option(
                         intended_value, opts, codec, placeholder_values
@@ -703,6 +899,18 @@ class FormReconciler:
                         available_options=opts,
                     )
                 surface.choose_portal_combobox_option(ctrl.dom_selector, opt)
+                if typed_query is not None:
+                    return self._verify_typeahead_choice(
+                        surface,
+                        snapshot,
+                        ctrl,
+                        intended_value,
+                        opt,
+                        codec=codec,
+                        dossier_key=dossier_key,
+                        run_id=run_id,
+                        typed_query=typed_query,
+                    )
                 return None
 
             if control_kind == ControlKind.CHECKBOX:
@@ -770,6 +978,82 @@ class FormReconciler:
                 ),
                 available_options=ctrl.options,
             )
+
+    def _verify_typeahead_choice(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        option: ObservedOption,
+        *,
+        codec: FieldCodecSpec,
+        dossier_key: Optional[str],
+        run_id: str,
+        typed_query: str = "",
+    ) -> Optional[FormHaltItem]:
+        """Stop unless the type-ahead now holds the chosen suggestion.
+
+        Typed text left in the input looks like a value but is not a choice,
+        so the control must show the chosen option (or the intended value).
+        """
+        after = surface.snapshot()
+        live = next(
+            (
+                c
+                for c in after.controls
+                if c.visible and c.dom_selector == ctrl.dom_selector
+            ),
+            None,
+        )
+        if live is None:
+            # Pages that redraw a step after a pick give the input a new id
+            # (and often a new random name). Find it again by section, label
+            # and kind; only a unique, labelled match counts.
+            def _key(c: ObservedControl) -> tuple[str, str, str]:
+                return (
+                    collapse_whitespace(c.section_text).casefold(),
+                    collapse_whitespace(c.label_text).casefold(),
+                    (c.role or c.input_type or c.tag).casefold(),
+                )
+
+            if collapse_whitespace(ctrl.label_text):
+                same = [
+                    c for c in after.controls if c.visible and _key(c) == _key(ctrl)
+                ]
+                if len(same) == 1:
+                    live = same[0]
+        shown = collapse_whitespace(live.current_value) if live is not None else ""
+        accepted = {
+            collapse_whitespace(option.label).casefold(),
+            collapse_whitespace(option.value).casefold(),
+        } - {""}
+        if (
+            live is not None
+            and shown
+            and (
+                shown.casefold() in accepted
+                or values_equivalent(intended_value, live.current_value, codec)
+                or _is_leading_part_of_choice(shown, option.label, typed_query)
+            )
+        ):
+            return None
+        reason = (
+            "the control is gone after choosing"
+            if live is None
+            else f"it shows {shown!r} instead"
+        )
+        return _surface_action_halt(
+            run_id,
+            snapshot,
+            MissingAnchorError(
+                f"Chose suggestion {option.label!r} in "
+                f"{ctrl.label_text or ctrl.dom_selector!r}, but {reason}"
+            ),
+            ctrl=ctrl,
+            dossier_key=dossier_key,
+            dossier_value=intended_value,
+        )
 
     def _infer_unmapped_control_kind(self, ctrl: ObservedControl) -> ControlKind:
         tag = ctrl.tag.casefold()
@@ -857,6 +1141,12 @@ class FormReconciler:
             is_empty = _is_control_empty(ctrl, binding.placeholder_values)
             fact = session.effective_facts.get(binding.dossier_key)
 
+            typed_here = (
+                session._typeahead_typed.get(filled_key)
+                if was_filled_by_session
+                else None
+            )
+
             # Prefill Value Conflict Check
             if not is_empty and not was_filled_by_session:
                 if fact is None or (
@@ -907,7 +1197,10 @@ class FormReconciler:
                 or binding.prefill_policy == PrefillPolicy.OVERWRITE_WITH_DOSSIER
                 or was_filled_by_session
             ):
-                if not _control_matches_fact(ctrl, fact.value, binding):
+                if not _control_matches_fact(
+                    ctrl, fact.value, binding, typed_query=typed_here
+                ):
+                    self._last_typed_query = None
                     act_halt = self._actuate_control(
                         surface,
                         snapshot,
@@ -918,6 +1211,7 @@ class FormReconciler:
                         placeholder_values=binding.placeholder_values,
                         dossier_key=binding.dossier_key,
                         run_id=session.run_id,
+                        typeahead_query_chars=binding.typeahead_query_chars,
                     )
                     if act_halt is not None:
                         session._halt_metadata[act_halt.halt_id] = {
@@ -930,6 +1224,8 @@ class FormReconciler:
 
                     session.fields_filled_auto += 1
                     session._filled_selectors.add(filled_key)
+                    if self._last_typed_query is not None:
+                        session._typeahead_typed[filled_key] = self._last_typed_query
                     session.record_write(
                         source="auto_fill",
                         dossier_key=binding.dossier_key,
@@ -985,7 +1281,12 @@ class FormReconciler:
             if (
                 fact is not None
                 and binding is not None
-                and _control_matches_fact(ctrl, fact.value, binding)
+                and _control_matches_fact(
+                    ctrl,
+                    fact.value,
+                    binding,
+                    typed_query=session._typeahead_typed.get(ctrl.dom_selector),
+                )
             ):
                 continue
             accepted_binding = binding or FieldBindingSpec(
@@ -1375,7 +1676,12 @@ class FormReconciler:
                 ok = (
                     fact is not None
                     and ctrl is not None
-                    and _control_matches_fact(ctrl, fact.value, binding)
+                    and _control_matches_fact(
+                        ctrl,
+                        fact.value,
+                        binding,
+                        typed_query=session._typeahead_typed.get(ctrl.dom_selector),
+                    )
                 )
             else:
                 intended = session._popup_manual_fills.get(
@@ -1635,14 +1941,88 @@ class FormReconciler:
         except AmbiguousAnchorError:
             return True
 
+    def _surface_error_result(
+        self,
+        session: ReconcilerSession,
+        active_surface: FormSurfaceBackend,
+        exc: BaseException,
+        mutations_at_entry: int,
+    ) -> FormTxResult:
+        """Turn a surface error into a stop; after a submit click, delivery is uncertain."""
+        snapshot = session._last_observation or FormSnapshot(url_origin_and_path="")
+        halt = _surface_action_halt(
+            session.run_id,
+            snapshot,
+            exc,
+            locator=snapshot.url_origin_and_path or session.pack.pack_id,
+        )
+        after_commit = session._commit_in_progress or session._commit_clicked
+        if after_commit:
+            halt = halt.model_copy(
+                update={
+                    "allowed_actions": (
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
+                        HumanDecisionAction.ABORT_RUN,
+                    ),
+                    "message": "After the submit click: " + halt.message,
+                }
+            )
+        session._halt_metadata[halt.halt_id] = {
+            "field_signature": f"surface_action|{halt.dom_selector or ''}"
+        }
+        session._commit_in_progress = False
+        try:
+            mutated = active_surface.mutation_count != mutations_at_entry
+        except Exception:
+            mutated = True
+        return self._build_result(
+            session,
+            outcome=(
+                FormTxOutcome.DELIVERY_UNCERTAIN
+                if after_commit
+                else FormTxOutcome.HALTED_NEEDS_HUMAN
+            ),
+            safe_to_retry=not after_commit and not mutated,
+            halts=(halt,),
+            what_happened=halt.message,
+        )
+
     def run_until_halt_or_done(
         self,
         session: ReconcilerSession,
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Advance ``session`` deterministically until verified completion or a governed halt."""
+        """Advance ``session`` deterministically until verified completion or a governed halt.
+
+        A surface error (a control that vanished or matched twice, a listbox or
+        popup that never opened, a page that never settled) ends the run as a
+        stop for a person. It is never raised past this point and never
+        followed by a submit; after the submit click it is reported as
+        ``delivery_uncertain``.
+        """
         active_surface = self._resolve_surface(surface, session)
+        try:
+            mutations_at_entry = active_surface.mutation_count
+        except Exception:
+            mutations_at_entry = 0
+        try:
+            return self._run_until_halt_or_done_unguarded(
+                session, active_surface=active_surface
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return self._surface_error_result(
+                session, active_surface, exc, mutations_at_entry
+            )
+
+    def _run_until_halt_or_done_unguarded(
+        self,
+        session: ReconcilerSession,
+        *,
+        active_surface: FormSurfaceBackend,
+    ) -> FormTxResult:
         pack = session.pack
         session.active_halts.clear()
 
@@ -1994,6 +2374,7 @@ class FormReconciler:
                 pre_commit_mutations = active_surface.mutation_count
                 session._pre_commit_mutations = pre_commit_mutations
                 session._commit_in_progress = True
+                session._commit_clicked = True
                 active_surface.click(commit_ctrl.dom_selector)
 
                 post_snap = active_surface.snapshot(
@@ -2222,7 +2603,34 @@ class FormReconciler:
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable."""
+        """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable.
+
+        Surface errors while applying the decision become a stop, as in
+        ``run_until_halt_or_done``.
+        """
+        active_surface = self._resolve_surface(surface, session)
+        try:
+            mutations_at_entry = active_surface.mutation_count
+        except Exception:
+            mutations_at_entry = 0
+        try:
+            return self._apply_human_resolution_unguarded(
+                session, resolution, surface=surface
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return self._surface_error_result(
+                session, active_surface, exc, mutations_at_entry
+            )
+
+    def _apply_human_resolution_unguarded(
+        self,
+        session: ReconcilerSession,
+        resolution: HumanResolutionInput,
+        *,
+        surface: Optional[FormSurfaceBackend] = None,
+    ) -> FormTxResult:
         decision_digest = canonical_sha256(resolution)
         if resolution.idempotency_key in session.seen_idempotency_keys:
             if (
@@ -2386,6 +2794,11 @@ class FormReconciler:
                         placeholder_values=placeholders,
                         dossier_key=effective_dossier_key,
                         run_id=session.run_id,
+                        typeahead_query_chars=(
+                            binding.typeahead_query_chars
+                            if binding is not None
+                            else None
+                        ),
                     )
                     if act_halt is not None:
                         session._halt_metadata[act_halt.halt_id] = {
