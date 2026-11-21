@@ -37,7 +37,9 @@ from openadapt_flow.form_tx.types import (
     SummaryVerdict,
     canonical_json_bytes,
     canonical_sha256,
+    read_subjects,
     salted_sha256,
+    uncovered_subject_verdicts,
 )
 
 __all__ = [
@@ -271,15 +273,18 @@ def issue_form_tx_receipt(
             raise ValueError(
                 "Verified receipt requires the run's writes to check coverage"
             )
-        from openadapt_flow.form_tx.judge import (
-            read_subjects,
-            uncovered_subject_verdicts,
-        )
+        if fields_filled_auto > 0 and len(writes) < fields_filled_auto:
+            raise ValueError(
+                "Verified receipt write ledger is incomplete: "
+                f"fields_filled_auto={fields_filled_auto} but only "
+                f"{len(writes)} write record(s) supplied"
+            )
 
         uncovered = uncovered_subject_verdicts(
             read_subjects(writes, human_resolutions),
             summary_verdict.field_verdicts,
             lambda _k: FormCodecKind.WHITESPACE_COLLAPSE,
+            summary_verdict.observations_per_key,
         )
         if uncovered:
             raise ValueError(

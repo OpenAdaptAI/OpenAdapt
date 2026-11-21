@@ -102,6 +102,13 @@ class DeterministicFakeSurface:
     def mutation_count(self) -> int:
         return self._mutation_count
 
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self._mutation_count
+
+    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+        return self._mutation_count > since_mutation_count
+
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
 

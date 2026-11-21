@@ -1565,13 +1565,18 @@ class FormReconciler:
     ) -> FormTxResult:
         pack = session.pack
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
-        confirmed_now = getattr(surface, "confirmed_mutation_count", None)
-        confirmed_before = session._pre_commit_confirmed
-        no_confirmed_save = (
-            confirmed_now is not None
-            and confirmed_before is not None
-            and confirmed_now - confirmed_before <= 0
-        )
+        has_confirmed_fn = getattr(surface, "has_confirmed_mutation_since", None)
+        if callable(has_confirmed_fn):
+            save_confirmed = bool(has_confirmed_fn(pre_commit_mutations))
+        else:
+            confirmed_now = getattr(surface, "confirmed_mutation_count", None)
+            confirmed_before = session._pre_commit_confirmed
+            save_confirmed = (
+                confirmed_now is not None
+                and confirmed_before is not None
+                and confirmed_now - confirmed_before > 0
+            )
+        no_confirmed_save = not save_confirmed
         still_on_commit_screen = self._is_still_on_uncommitted_commit_screen(
             post_commit_snapshot, pack
         )

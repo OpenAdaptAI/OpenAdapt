@@ -941,6 +941,8 @@ class PlaywrightFormSurface:
 
         self._mutation_count = 0
         self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs: dict[int, int] = {}
+        self._confirmed_mutation_seqs: set[int] = set()
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -976,6 +978,10 @@ class PlaywrightFormSurface:
         """Non-ignored state-changing requests the server answered with 2xx/3xx."""
         return self._confirmed_mutation_count
 
+    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+        """Return True iff a non-ignored mutation started after ``since_mutation_count`` got 2xx/3xx."""
+        return any(seq > since_mutation_count for seq in self._confirmed_mutation_seqs)
+
     @property
     def total_mutation_count(self) -> int:
         """Count of all state-changing HTTP requests (including ignored UI PPR paths)."""
@@ -991,6 +997,9 @@ class PlaywrightFormSurface:
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs.clear()
+        self._confirmed_mutation_seqs.clear()
         self._total_mutation_count = 0
 
     def _detach(self) -> None:
@@ -1041,25 +1050,27 @@ class PlaywrightFormSurface:
         req_path = urlsplit(raw_url).path or "/"
         if not self._is_ignored_mutation_path(req_path):
             self._mutation_count += 1
+            self._pending_mutation_seqs[id(request)] = self._mutation_count
 
     def _on_request_done(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+        self._pending_mutation_seqs.pop(id(request), None)
 
     def _on_response(self, response: Any) -> None:
-        """Count state-changing requests the server answered with success."""
+        """Count state-changing requests started on this surface that succeeded."""
         try:
             request = response.request
             if self._detached or not self._request_belongs_to_surface(request):
                 return
-            method = str(request.method or "").upper()
             status = int(response.status)
-            path = urlsplit(str(request.url or "")).path or "/"
         except Exception:
             return
-        if method not in _MUTATION_METHODS or self._is_ignored_mutation_path(path):
+        seq = self._pending_mutation_seqs.get(id(request))
+        if seq is None:
             return
         if 200 <= status < 400:
             self._confirmed_mutation_count += 1
+            self._confirmed_mutation_seqs.add(seq)
 
     def _is_page_closed(self) -> bool:
         try:

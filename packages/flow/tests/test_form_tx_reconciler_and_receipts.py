@@ -35,6 +35,7 @@ from openadapt_flow.form_tx.types import (
     FieldAnchorSpec,
     FieldBindingSpec,
     FieldCodecSpec,
+    FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
     FormPack,
@@ -107,6 +108,13 @@ class FakePopupFormSurface:
     # badly built widget might. The parent form never shows the input.
     truncate_living_area: bool = False
     mutation_count: int = 0
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self.mutation_count
+
+    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+        return self.mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self.mutation_count = 0
@@ -322,6 +330,13 @@ class FakeStatefulFormSurface:
     @property
     def mutation_count(self) -> int:
         return self._mutation_count
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        return self._mutation_count
+
+    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+        return self._mutation_count > since_mutation_count
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
@@ -1902,14 +1917,24 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
 
     pack = _build_pack()
     dossier = _build_dossier(has_pool="No")
+    bound_writes = tuple(
+        FieldWriteRecord(
+            field_key=b.dossier_key,
+            dossier_key=b.dossier_key,
+            source="auto_fill",
+            selector=f"#{b.dossier_key}",
+        )
+        for b in pack.bindings
+        if dossier.facts.get(b.dossier_key) is not None
+    )
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
         summary_verdict=_all_bound_passed(pack, dossier),
-        writes=(),
+        writes=bound_writes,
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
-        fields_filled_auto=10,
+        fields_filled_auto=len(bound_writes),
         commit_mutations_observed=1,
         outputs={"confirmation_code": "CONF-777"},
     )
@@ -2831,3 +2856,119 @@ def test_pre_apply_reread_halts_when_a_popup_value_changed_after_typing() -> Non
     )
     (write,) = [w for w in session.writes if w.field_key == "living_area_sqft"]
     assert write.checked_before_apply
+
+
+def test_public_signer_rejects_inconsistent_write_ledger_and_duplicate_verdict_coverage() -> (
+    None
+):
+    pack = _build_pack()
+    dossier = _build_dossier(has_pool="No")
+    private, _ = generate_ed25519_keypair()
+
+    # Empty write ledger contradicting a nonzero fields_filled_auto must fail.
+    with pytest.raises(ValueError, match="write ledger is incomplete"):
+        issue_form_tx_receipt(
+            run_id="run_incomplete_ledger",
+            summary_verdict=_all_bound_passed(pack, dossier),
+            writes=(),
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=3,
+            commit_mutations_observed=1,
+        )
+
+    # Two subjects sharing one key cannot be covered by two verdicts without
+    # distinct observation evidence.
+    two_writes = (
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#first-name",
+            screen_id="applicant",
+        ),
+        FieldWriteRecord(
+            field_key="first_name",
+            dossier_key="first_name",
+            source="auto_fill",
+            selector="#popup-first-name",
+            in_popup_subroutine="calc",
+        ),
+    )
+    base_verdict = _all_bound_passed(pack, dossier)
+    dup_verdict = base_verdict.model_copy(
+        update={
+            "field_verdicts": (
+                *base_verdict.field_verdicts,
+                ReadbackFieldVerdict(
+                    dossier_key="first_name",
+                    codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                    passed=True,
+                    status=ReadbackStatus.PASSED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                ),
+            ),
+            "observations_per_key": None,
+        }
+    )
+    with pytest.raises(ValueError, match="uncovered"):
+        issue_form_tx_receipt(
+            run_id="run_dup_verdict_no_obs",
+            summary_verdict=dup_verdict,
+            writes=two_writes,
+            pack=pack,
+            dossier=dossier,
+            signing_key=private,
+            fields_filled_auto=2,
+            commit_mutations_observed=1,
+        )
+
+
+def test_commit_confirmation_requires_response_for_request_started_by_commit_click() -> (
+    None
+):
+    from types import SimpleNamespace
+
+    from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
+
+    listeners: dict[str, list[Any]] = {}
+
+    class _FakeContext:
+        def on(self, event: str, cb: Any) -> None:
+            listeners.setdefault(event, []).append(cb)
+
+        def remove_listener(self, event: str, cb: Any) -> None:
+            pass
+
+    class _FakePage:
+        context = _FakeContext()
+
+        def evaluate(self, *_a: Any, **_kw: Any) -> None:
+            return None
+
+    surface = PlaywrightFormSurface(
+        _FakePage(), UIProfileSpec(profile_id="generic_web_ui")
+    )
+    # Request 1 started BEFORE commit click.
+    req1 = SimpleNamespace(method="POST", url="https://example.test/draft", frame=None)
+    surface._on_request(req1)
+    pre_commit = surface.mutation_count
+    assert pre_commit == 1
+
+    # Request 2 started BY commit click, and fails with 500.
+    req2 = SimpleNamespace(method="POST", url="https://example.test/submit", frame=None)
+    surface._on_request(req2)
+    surface._on_response(SimpleNamespace(request=req2, status=500))
+    # Request 1 (pre-commit) arrives later with 200 OK.
+    surface._on_response(SimpleNamespace(request=req1, status=200))
+
+    assert surface.mutation_count == 2
+    assert surface.confirmed_mutation_count == 1
+    assert surface.has_confirmed_mutation_since(pre_commit) is False
+
+    # Request 3 started after commit click succeeds with 201 -> confirmed.
+    req3 = SimpleNamespace(method="POST", url="https://example.test/submit", frame=None)
+    surface._on_request(req3)
+    surface._on_response(SimpleNamespace(request=req3, status=201))
+    assert surface.has_confirmed_mutation_since(pre_commit) is True
