@@ -781,3 +781,57 @@ def test_readback_evidence_is_closed():
     ).encode()
     assert wrap_readback_evidence(bad, "a" * 64) is None
     assert wrap_readback_evidence(good, "") is None
+
+
+_VERIFIED_ENVELOPE = Path(__file__).parent / "fixtures" / "connector_outcome_envelope_verified.json"
+
+
+def test_a_verified_outcome_envelope_passes_the_egress_guard():
+    """A real VERIFIED envelope (staging, synthetic) carries digest-named keys."""
+    from openadapt_flow.connector import egress
+
+    envelope = json.loads(_VERIFIED_ENVELOPE.read_text())
+    body = {
+        "run_id": "run_1",
+        "org_id": "org_1",
+        "workflow_id": "wf_1",
+        "status": "success",
+        "report_path": "org_1/run_1/report.json",
+        "metrics": {"steps": 3},
+        "mode": "replay",
+        "outcome": envelope,
+    }
+    sent = egress.guard_callback(body)
+    assert sent["outcome"]["outcome"] == "VERIFIED"
+    assert sent["outcome"]["workflow_contract_sha256"] == envelope["workflow_contract_sha256"]
+
+
+def test_the_outcome_envelope_still_refuses_free_text():
+    from openadapt_flow.connector import egress
+
+    def body(envelope):
+        return {
+            "run_id": "run_1",
+            "org_id": "org_1",
+            "workflow_id": "wf_1",
+            "status": "success",
+            "report_path": "org_1/run_1/report.json",
+            "metrics": {"steps": 3},
+            "mode": "replay",
+            "outcome": envelope,
+        }
+
+    # A record value in a string leaf is refused.
+    envelope = json.loads(_VERIFIED_ENVELOPE.read_text())
+    envelope["postcondition_evidence"][0]["action_kind"] = f"type {CANARY_RECORD}"
+    with pytest.raises(egress.EgressViolation):
+        egress.guard_callback(body(envelope))
+
+    # An unknown key is refused or dropped by the closed model; it never leaves.
+    envelope = json.loads(_VERIFIED_ENVELOPE.read_text())
+    envelope["required_contracts"][f"note {CANARY_RECORD}"] = 1
+    try:
+        sent = egress.guard_callback(body(envelope))
+    except egress.EgressViolation:
+        return
+    assert CANARY_RECORD not in json.dumps(sent)

@@ -51,6 +51,9 @@ _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _HEX64 = re.compile(r"^[a-f0-9]{64}$")
 ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _LABEL = re.compile(r"^[A-Za-z_]{1,40}$")
+#: A key inside a closed envelope: a field name, which may carry digits
+#: (``workflow_contract_sha256``). Values are still restricted to short tokens.
+_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 #: A string leaf inside the closed envelopes: a short token, no whitespace.
 _TOKEN = re.compile(r"^[A-Za-z0-9_.:/+-]{0,128}$")
 _REPORT_KEY = re.compile(
@@ -130,7 +133,7 @@ def _closed_tree(value: Any, field: str, depth: int = 0) -> Any:
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for key, item in value.items():
-            if not isinstance(key, str) or not _LABEL.fullmatch(key):
+            if not isinstance(key, str) or not _KEY.fullmatch(key):
                 raise EgressViolation(f"{field} has a key that is not a label")
             out[key] = _closed_tree(item, f"{field}.{key}", depth + 1)
         return out
