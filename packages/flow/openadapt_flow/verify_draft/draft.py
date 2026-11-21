@@ -25,7 +25,6 @@ contract makes no model calls.
 from __future__ import annotations
 
 import argparse
-import copy
 import datetime as _dt
 import hashlib
 import json
@@ -78,7 +77,9 @@ class Outcome:
 Asker = Callable[[str, Sequence[str]], Optional[Mapping[str, str]]]
 
 
-def first_message(task: I.Task, desc: I.Description, trace: list[Any], demo: A.Demo, dialect: str) -> str:
+def first_message(
+    task: I.Task, desc: I.Description, trace: list[Any], demo: A.Demo, dialect: str
+) -> str:
     writes = [I.masked(r) for r in demo.writes]
     return "\n\n".join(
         [
@@ -119,19 +120,38 @@ def run(
     writes = I.writes(trace, skip_paths=app.login_paths())
     if not writes:
         raise I.InputError("the trace holds no write request")
+    problem = read_account_problem(sandbox)
+    if problem:
+        # An operator fix, not something a model round can repair.
+        raise I.InputError(
+            f"the sandbox's read account can't read the whole database: {problem}"
+        )
     base = store.read()
     log(f"store: {len(store.tables)} tables; trace: {len(writes)} write request(s)")
     demo = A.record_demo(store, app, writes, task.params, base)
     if demo.main is None or any(s >= 400 for s in demo.statuses):
         return _finish(
-            out, started, Outcome(False, 0, 0, 0.0, 0.0,
-                                  f"replaying the trace moved no row holding a task value (HTTP {demo.statuses})"),
+            out,
+            started,
+            Outcome(
+                False,
+                0,
+                0,
+                0.0,
+                0.0,
+                f"replaying the trace moved no row holding a task value (HTTP {demo.statuses})",
+            ),
             [],
         )
-    log(f"demonstration: {demo.change} {demo.main.table}, columns {sorted(demo.param_columns)}")
+    log(
+        f"demonstration: {demo.change} {demo.main.table}, columns {sorted(demo.param_columns)}"
+    )
     qualifier = A.Qualifier(sandbox, store, app, demo, workdir=out / "work")
     messages: list[dict[str, Any]] = [
-        {"role": "user", "content": first_message(task, desc, trace, demo, sandbox.store.dialect)}
+        {
+            "role": "user",
+            "content": first_message(task, desc, trace, demo, sandbox.store.dialect),
+        }
     ]
     usd = 0.0
     decisions = 0
@@ -146,16 +166,34 @@ def run(
         used += 1
         draft = drafter.draft(messages)
         usd += draft.call.usd if draft.call else 0.0
-        messages.append({"role": "assistant", "content": draft.raw or json.dumps(
-            {"contract_yaml": draft.contract_yaml, "payloads": draft.payloads, "notes": draft.notes})})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": draft.raw
+                or json.dumps(
+                    {
+                        "contract_yaml": draft.contract_yaml,
+                        "payloads": draft.payloads,
+                        "notes": draft.notes,
+                    }
+                ),
+            }
+        )
         (out / "rounds").mkdir(exist_ok=True)
-        (out / "rounds" / f"round-{used}.yaml").write_text(draft.contract_yaml or "", encoding="utf-8")
+        (out / "rounds" / f"round-{used}.yaml").write_text(
+            draft.contract_yaml or "", encoding="utf-8"
+        )
         try:
             contract = A.prepare(draft.contract_yaml, sandbox)
         except A.DraftProblem as exc:
             reason = str(exc)
             log(f"round {used}: draft refused before testing: {reason}")
-            messages.append({"role": "user", "content": f"The contract could not be tested: {reason}\nFix it and answer with the same JSON object."})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"The contract could not be tested: {reason}\nFix it and answer with the same JSON object.",
+                }
+            )
             continue
         adm = qualifier.qualify(contract, draft.payloads)
         if adm.masked and not asked and ask is not None:
@@ -170,7 +208,9 @@ def run(
             answers = ask(question, columns)
             if answers is not None:
                 decisions += 1
-                keep = [c for c, a in answers.items() if str(a).lower().startswith("book")]
+                keep = [
+                    c for c, a in answers.items() if str(a).lower().startswith("book")
+                ]
                 qualifier.bookkeeping.update(keep)
                 if set(keep) >= set(columns):
                     adm = qualifier.qualify(contract, draft.payloads)
@@ -179,7 +219,9 @@ def run(
             json.dumps(adm.as_dict(), indent=1, default=str), encoding="utf-8"
         )
         passed = sum(c.passed for c in adm.cases)
-        log(f"round {used}: {'ADMITTED' if adm.admitted else 'rejected'} ({passed}/{len(adm.cases)} cases, {adm.seconds:.0f}s)")
+        log(
+            f"round {used}: {'ADMITTED' if adm.admitted else 'rejected'} ({passed}/{len(adm.cases)} cases, {adm.seconds:.0f}s)"
+        )
         if adm.admitted:
             break
         reason = adm.feedback()
@@ -193,9 +235,14 @@ def run(
         )
     admitted = bool(admissions and admissions[-1].admitted)
     outcome = Outcome(
-        admitted, used, decisions, 0.0, usd,
+        admitted,
+        used,
+        decisions,
+        0.0,
+        usd,
         "admitted" if admitted else f"refused after {used} round(s): {reason}",
-        admissions=admissions, questions=questions,
+        admissions=admissions,
+        questions=questions,
     )
     if admitted and contract is not None and draft is not None:
         adm = admissions[-1]
@@ -214,7 +261,22 @@ def run(
     return _finish(out, started, outcome, admissions)
 
 
-def _finish(out: Path, started: float, outcome: Outcome, admissions: list[A.Admission]) -> Outcome:
+def read_account_problem(sandbox: SandboxConfig) -> Optional[str]:
+    """Why the read-only connection can't take a whole-database snapshot,
+    or None. Checked once, before any model call."""
+
+    from openadapt_flow.verifier import BaselineUnreadable, capture_database
+
+    try:
+        capture_database(A.connection(sandbox), sandbox.store.dialect)
+    except BaselineUnreadable as exc:
+        return str(exc)
+    return None
+
+
+def _finish(
+    out: Path, started: float, outcome: Outcome, admissions: list[A.Admission]
+) -> Outcome:
     outcome.seconds = round(time.monotonic() - started, 1)
     (out / "report.json").write_text(
         json.dumps(
@@ -227,7 +289,9 @@ def _finish(out: Path, started: float, outcome: Outcome, admissions: list[A.Admi
                         "passed": sum(c.passed for c in a.cases),
                         "failed": [c.name for c in a.cases if not c.passed],
                         "problems": a.problems,
-                        "attribution_problems": [f"{x.table}.{x.column}" for x in a.attribution if x.problem],
+                        "attribution_problems": [
+                            f"{x.table}.{x.column}" for x in a.attribution if x.problem
+                        ],
                     }
                     for a in admissions
                 ],
@@ -261,7 +325,9 @@ def provenance(
         "inputs": {
             "description": {
                 "kind": desc.kind,
-                "file_sha256": _sha(Path(describe).read_bytes()) if describe and Path(describe).is_file() else None,
+                "file_sha256": _sha(Path(describe).read_bytes())
+                if describe and Path(describe).is_file()
+                else None,
                 "text_sha256": _sha(desc.text.encode("utf-8")),
             },
             "trace_sha256": _sha(Path(trace_path).read_bytes()),
@@ -271,14 +337,22 @@ def provenance(
             "suite": SUITE,
             "check_sha256": adm.check_sha256,
             "rounds": rounds,
-            "admitted_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "admitted_at": _dt.datetime.now(_dt.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
             "recheck_window_tested_s": qualifier.recheck_s,
             "faults": {
-                c.name: ("refuted" if c.passed else "missed") if c.applicable else f"not applicable: {c.note}"
+                c.name: ("refuted" if c.passed else "missed")
+                if c.applicable
+                else f"not applicable: {c.note}"
                 for c in faults
             },
-            "clean_writes_confirmed": sum(c.passed for c in adm.cases if c.group == "clean"),
-            "attribution_probe_writes": sum(c.passed for c in adm.cases if c.group == "probe"),
+            "clean_writes_confirmed": sum(
+                c.passed for c in adm.cases if c.group == "clean"
+            ),
+            "attribution_probe_writes": sum(
+                c.passed for c in adm.cases if c.group == "probe"
+            ),
             "bookkeeping_confirmed_by_person": sorted(qualifier.bookkeeping),
         },
     }
@@ -304,14 +378,18 @@ def _ask_from(answers_path: Optional[str], interactive: bool) -> Optional[Asker]
     if answers_path:
         given = yaml.safe_load(Path(answers_path).read_text(encoding="utf-8")) or {}
 
-        def from_file(question: str, columns: Sequence[str]) -> Optional[Mapping[str, str]]:
+        def from_file(
+            question: str, columns: Sequence[str]
+        ) -> Optional[Mapping[str, str]]:
             got = {c: str(given[c]) for c in columns if c in given}
             return got if len(got) == len(columns) else None
 
         return from_file
     if interactive and sys.stdin.isatty():
 
-        def from_tty(question: str, columns: Sequence[str]) -> Optional[Mapping[str, str]]:
+        def from_tty(
+            question: str, columns: Sequence[str]
+        ) -> Optional[Mapping[str, str]]:
             print(question, file=sys.stderr)
             out = {}
             for c in columns:
@@ -328,18 +406,41 @@ def main(argv: Optional[list[str]] = None) -> int:
         description="Draft a write contract with a model and admit it only if OpenAdapt qualifies it.",
         allow_abbrev=False,
     )
-    ap.add_argument("--describe", default="none",
-                    help="OpenAPI, GraphQL or FHIR CapabilityStatement file; 'db' for the sandbox's database schema; or 'none'")
-    ap.add_argument("--trace", required=True, help="HAR file of one correct demonstration")
-    ap.add_argument("--task", required=True, help="task.yaml: instruction and the demonstration's params")
-    ap.add_argument("--sandbox", required=True, help="sandbox.yaml (openadapt.verify-sandbox/v1)")
+    ap.add_argument(
+        "--describe",
+        default="none",
+        help="OpenAPI, GraphQL or FHIR CapabilityStatement file; 'db' for the sandbox's database schema; or 'none'",
+    )
+    ap.add_argument(
+        "--trace", required=True, help="HAR file of one correct demonstration"
+    )
+    ap.add_argument(
+        "--task",
+        required=True,
+        help="task.yaml: instruction and the demonstration's params",
+    )
+    ap.add_argument(
+        "--sandbox", required=True, help="sandbox.yaml (openadapt.verify-sandbox/v1)"
+    )
     ap.add_argument("--out", required=True, help="output folder")
-    ap.add_argument("--rounds", type=int, default=MAX_ROUNDS, choices=range(1, MAX_ROUNDS + 1))
-    ap.add_argument("--answers", help="answers to the one question (table.column: bookkeeping|business)")
+    ap.add_argument(
+        "--rounds", type=int, default=MAX_ROUNDS, choices=range(1, MAX_ROUNDS + 1)
+    )
+    ap.add_argument(
+        "--answers",
+        help="answers to the one question (table.column: bookkeeping|business)",
+    )
     ap.add_argument("--no-input", action="store_true", help="never ask; refuse instead")
-    ap.add_argument("--spend-ledger", default=str(Path.home() / ".openadapt" / "verify-draft" / "spend.jsonl"))
+    ap.add_argument(
+        "--spend-ledger",
+        default=str(Path.home() / ".openadapt" / "verify-draft" / "spend.jsonl"),
+    )
     ap.add_argument("--spend-cap-usd", type=float, default=30.0)
-    ap.add_argument("--check", metavar="CONTRACT", help="only check that CONTRACT is still the admitted check")
+    ap.add_argument(
+        "--check",
+        metavar="CONTRACT",
+        help="only check that CONTRACT is still the admitted check",
+    )
     args = ap.parse_args(argv)
     if args.check:
         problem = admission_problem(args.check)

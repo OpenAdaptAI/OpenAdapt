@@ -136,7 +136,10 @@ OUTPUT_SCHEMA = {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"param": {"type": "string"}, "value": {"type": "string"}},
+                    "properties": {
+                        "param": {"type": "string"},
+                        "value": {"type": "string"},
+                    },
                     "required": ["param", "value"],
                     "additionalProperties": False,
                 },
@@ -268,7 +271,13 @@ class ClaudeDrafter:
         with self.client.messages.stream(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
             output_config={
                 "effort": EFFORT,
@@ -281,8 +290,12 @@ class ClaudeDrafter:
             response_model=str(getattr(response, "model", "")),
             input_tokens=int(response.usage.input_tokens or 0),
             output_tokens=int(response.usage.output_tokens or 0),
-            cache_read_tokens=int(getattr(response.usage, "cache_read_input_tokens", 0) or 0),
-            cache_write_tokens=int(getattr(response.usage, "cache_creation_input_tokens", 0) or 0),
+            cache_read_tokens=int(
+                getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            ),
+            cache_write_tokens=int(
+                getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            ),
             usd=round(cost(response.usage), 6),
             seconds=round(time.monotonic() - started, 2),
             request_id=str(getattr(response, "_request_id", "") or ""),
@@ -291,7 +304,9 @@ class ClaudeDrafter:
         self.ledger.add(call, self.label)
         if response.stop_reason == "refusal":
             return Draft("", [], "the model declined to draft", call)
-        raw = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
+        raw = "".join(
+            b.text for b in response.content if getattr(b, "type", "") == "text"
+        )
         return parse_answer(raw, call)
 
 
@@ -309,5 +324,13 @@ def parse_answer(raw: str, call: Optional[Call] = None) -> Draft:
         if isinstance(p, dict):
             payloads.append(p)
         elif isinstance(p, list):
-            payloads.append({str(i.get("param")): i.get("value") for i in p if isinstance(i, dict)})
-    return Draft(str(data.get("contract_yaml") or ""), payloads, str(data.get("notes") or ""), call, raw)
+            payloads.append(
+                {str(i.get("param")): i.get("value") for i in p if isinstance(i, dict)}
+            )
+    return Draft(
+        str(data.get("contract_yaml") or ""),
+        payloads,
+        str(data.get("notes") or ""),
+        call,
+        raw,
+    )

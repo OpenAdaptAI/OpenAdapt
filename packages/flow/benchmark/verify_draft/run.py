@@ -43,7 +43,13 @@ def heldout(run: AppRun, contract_path: Path, work: Path) -> dict[str, Any]:
 
     task = load_task(run.task)
     base = store.read()
-    demo = A.record_demo(store, app, writes(load_trace(run.trace), skip_paths=app.login_paths()), task.params, base)
+    demo = A.record_demo(
+        store,
+        app,
+        writes(load_trace(run.trace), skip_paths=app.login_paths()),
+        task.params,
+        base,
+    )
     q = A.Qualifier(sandbox, store, app, demo, seed=1, workdir=work)
     contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
     contract.pop("provenance", None)
@@ -51,16 +57,27 @@ def heldout(run: AppRun, contract_path: Path, work: Path) -> dict[str, Any]:
     adm = q.qualify(contract, run.heldout_payloads, base_values=values, attribute=False)
     extra: list[A.Case] = []
     if run.other_record:
-        case = A.Case("fault", "app_sibling", f"the same write also sent to {run.other_record} through the app", "refuted")
+        case = A.Case(
+            "fault",
+            "app_sibling",
+            f"the same write also sent to {run.other_record} through the app",
+            "refuted",
+        )
 
         def both(pre: Any, post: Any) -> None:
-            app.send(demo.writes, "agent", swap_map(demo.params, {**values, **run.other_record}))
+            app.send(
+                demo.writes,
+                "agent",
+                swap_map(demo.params, {**values, **run.other_record}),
+            )
 
         q.run(contract, case, values=values, fault=both)
         q._judge(case)
         extra.append(case)
     if demo.change == "added":
-        case = A.Case("fault", "app_duplicate", "the write sent twice through the app", "refuted")
+        case = A.Case(
+            "fault", "app_duplicate", "the write sent twice through the app", "refuted"
+        )
 
         def twice(pre: Any, post: Any) -> None:
             app.send(demo.writes, "agent", swap_map(demo.params, values))
@@ -71,9 +88,17 @@ def heldout(run: AppRun, contract_path: Path, work: Path) -> dict[str, Any]:
     cases = adm.cases + extra
     return {
         "cases": [c.as_dict() for c in cases],
-        "faults_applicable": sum(1 for c in cases if c.group == "fault" and c.applicable),
-        "faults_caught": sum(1 for c in cases if c.group == "fault" and c.applicable and c.passed),
-        "faults_missed": [c.name for c in cases if c.group == "fault" and c.applicable and not c.passed],
+        "faults_applicable": sum(
+            1 for c in cases if c.group == "fault" and c.applicable
+        ),
+        "faults_caught": sum(
+            1 for c in cases if c.group == "fault" and c.applicable and c.passed
+        ),
+        "faults_missed": [
+            c.name
+            for c in cases
+            if c.group == "fault" and c.applicable and not c.passed
+        ],
         "clean": sum(1 for c in cases if c.group == "clean"),
         "false_stops": [c.name for c in cases if c.group == "clean" and not c.passed],
         "problems": adm.problems,
@@ -84,7 +109,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("app", choices=sorted(SETUPS))
     ap.add_argument("--out", required=True)
-    ap.add_argument("--spend-ledger", default="benchmark/verify_draft/results/spend.jsonl")
+    ap.add_argument(
+        "--spend-ledger", default="benchmark/verify_draft/results/spend.jsonl"
+    )
     ap.add_argument("--spend-cap-usd", type=float, default=30.0)
     args = ap.parse_args(argv)
     out = Path(args.out)
@@ -109,12 +136,26 @@ def main(argv: list[str] | None = None) -> int:
         rounds = [
             {
                 "admitted": a.admitted,
-                "faults_applicable": sum(1 for c in a.cases if c.group == "fault" and c.applicable),
-                "faults_caught": sum(1 for c in a.cases if c.group == "fault" and c.applicable and c.passed),
+                "faults_applicable": sum(
+                    1 for c in a.cases if c.group == "fault" and c.applicable
+                ),
+                "faults_caught": sum(
+                    1
+                    for c in a.cases
+                    if c.group == "fault" and c.applicable and c.passed
+                ),
                 "clean": sum(1 for c in a.cases if c.group == "clean"),
-                "false_stops": [c.name for c in a.cases if c.group == "clean" and not c.passed],
-                "probe_writes_confirmed": sum(1 for c in a.cases if c.group == "probe" and c.passed),
-                "attribution_problems": [f"{x.table}.{x.column}: {x.problem}" for x in a.attribution if x.problem],
+                "false_stops": [
+                    c.name for c in a.cases if c.group == "clean" and not c.passed
+                ],
+                "probe_writes_confirmed": sum(
+                    1 for c in a.cases if c.group == "probe" and c.passed
+                ),
+                "attribution_problems": [
+                    f"{x.table}.{x.column}: {x.problem}"
+                    for x in a.attribution
+                    if x.problem
+                ],
                 "not_applicable": {c.name: c.note for c in a.cases if not c.applicable},
                 "seconds": a.seconds,
             }
@@ -129,9 +170,10 @@ def main(argv: list[str] | None = None) -> int:
             "setup_minutes": round(minutes, 2),
             "person_decisions": outcome.decisions,
             "questions": outcome.questions,
-            "drafts": len(outcome.admissions) or outcome.rounds,
+            "drafts": outcome.rounds,
             "drafts_admitted": sum(1 for a in outcome.admissions if a.admitted),
-            "drafts_rejected": (len(outcome.admissions) or outcome.rounds) - sum(1 for a in outcome.admissions if a.admitted),
+            "drafts_rejected": outcome.rounds
+            - sum(1 for a in outcome.admissions if a.admitted),
             "admitted": outcome.admitted,
             "reason": outcome.reason[:2000],
             "model": M.MODEL,
@@ -142,9 +184,19 @@ def main(argv: list[str] | None = None) -> int:
             "notes": run.notes,
         }
         if outcome.admitted and outcome.contract_path is not None:
-            result["heldout"] = heldout(run, outcome.contract_path, out / "heldout-work")
-        (out / "result.json").write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
-        print(json.dumps({k: v for k, v in result.items() if k not in ("model_calls",)}, indent=1, default=str))
+            result["heldout"] = heldout(
+                run, outcome.contract_path, out / "heldout-work"
+            )
+        (out / "result.json").write_text(
+            json.dumps(result, indent=1, default=str), encoding="utf-8"
+        )
+        print(
+            json.dumps(
+                {k: v for k, v in result.items() if k not in ("model_calls",)},
+                indent=1,
+                default=str,
+            )
+        )
         return 0
     finally:
         run.teardown()

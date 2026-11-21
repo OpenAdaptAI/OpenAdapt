@@ -57,12 +57,22 @@ GOOD = textwrap.dedent(
 #: Matches the loan only (the other columns are waved through as fields a
 #: new row may set), and schedules no recheck.
 WEAK = (
-    GOOD.replace("    product: {param: product}\n    amount: {param: amount}\n    memo: {param: memo}\n", "")
+    GOOD.replace(
+        "    product: {param: product}\n    amount: {param: amount}\n    memo: {param: memo}\n",
+        "",
+    )
     .replace("    recheck_after_s: 300\n", "")
-    .replace("[id, source, record_key, surface]", "[id, source, record_key, surface, product, amount, memo]")
+    .replace(
+        "[id, source, record_key, surface]",
+        "[id, source, record_key, surface, product, amount, memo]",
+    )
 )
 PAYLOADS = [
-    {"amount": f"{1000 + i * 111}.00", "memo": f"Probe memo {i}", "product": ["Auto", "Home", "Personal"][i % 3]}
+    {
+        "amount": f"{1000 + i * 111}.00",
+        "memo": f"Probe memo {i}",
+        "product": ["Auto", "Home", "Personal"][i % 3],
+    }
     for i in range(8)
 ]
 
@@ -88,10 +98,19 @@ def mockloan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     url, db, stop = fault_server.serve(0)
     base = url.rstrip("/")
     for loan, prod, amt in [("LN-1", "Auto", "10.00"), ("LN-2", "Home", "20.00")]:
-        requests.post(base + "/api/disbursement", json={"loan_id": loan, "product": prod, "amount": amt, "memo": "seed"}, timeout=10)
+        requests.post(
+            base + "/api/disbursement",
+            json={"loan_id": loan, "product": prod, "amount": amt, "memo": "seed"},
+            timeout=10,
+        )
     seeded = tmp_path / "seeded.sqlite3"
     shutil.copy(db.database_path, seeded)
-    params = {"loan_id": "LN-9", "product": "Personal", "amount": "31.50", "memo": "Kitchen"}
+    params = {
+        "loan_id": "LN-9",
+        "product": "Personal",
+        "amount": "31.50",
+        "memo": "Kitchen",
+    }
     trace = {
         "log": {
             "entries": [
@@ -99,9 +118,17 @@ def mockloan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
                     "request": {
                         "method": "POST",
                         "url": base + "/api/disbursement",
-                        "headers": [{"name": "Content-Type", "value": "application/json"},
-                                    {"name": "Authorization", "value": "Bearer secret-demo-token"}],
-                        "postData": {"mimeType": "application/json", "text": json.dumps({**params, "password": "hunter2"})},
+                        "headers": [
+                            {"name": "Content-Type", "value": "application/json"},
+                            {
+                                "name": "Authorization",
+                                "value": "Bearer secret-demo-token",
+                            },
+                        ],
+                        "postData": {
+                            "mimeType": "application/json",
+                            "text": json.dumps({**params, "password": "hunter2"}),
+                        },
                     },
                     "response": {"status": 200, "content": {"text": "{}"}},
                 }
@@ -109,15 +136,20 @@ def mockloan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         }
     }
     (tmp_path / "trace.har").write_text(json.dumps(trace))
-    (tmp_path / "task.yaml").write_text(yaml.safe_dump({"instruction": "Book it.", "params": params}))
+    (tmp_path / "task.yaml").write_text(
+        yaml.safe_dump({"instruction": "Book it.", "params": params})
+    )
     (tmp_path / "sandbox.yaml").write_text(
         yaml.safe_dump(
             {
                 "schema_version": "openadapt.verify-sandbox/v1",
                 "app": {"base_url": base},
                 "actors": {"agent": {"id": "a1"}, "other": {"id": "b2"}},
-                "store": {"dialect": "sqlite", "read": {"sqlite_database": str(db.database_path)},
-                          "admin": {"sqlite_database": str(db.database_path)}},
+                "store": {
+                    "dialect": "sqlite",
+                    "read": {"sqlite_database": str(db.database_path)},
+                    "admin": {"sqlite_database": str(db.database_path)},
+                },
             }
         )
     )
@@ -148,7 +180,7 @@ def test_good_draft_is_admitted_and_bound(mockloan: Path) -> None:
     assert {"wrong_row", "duplicate", "sibling_edit", "late_revert"} <= names
     assert any(n.startswith("wrong_value:") for n in names)
     assert sum(c.passed for c in adm.cases if c.group == "clean") == A.CLEAN_PROBES
-    assert sum(c.passed for c in adm.cases if c.group == "probe") == 4
+    assert sum(c.passed for c in adm.cases if c.group == "probe") == 5
     path = outcome.contract_path
     assert path is not None and D.admission_problem(path) is None
     prov = yaml.safe_load(path.read_text())["provenance"]
@@ -180,8 +212,14 @@ def test_weak_draft_is_refused_with_reasons_fed_back(mockloan: Path) -> None:
 
 
 def test_rounds_stop_at_three_and_unsafe_drafts_never_run(mockloan: Path) -> None:
-    unsafe = GOOD.replace("  kind: surfaces\n", "  kind: surfaces\n  session: my.hooks:login\n")
-    drafter = Fixed(unsafe, "not: [valid", GOOD.replace("FROM records", "FROM records; DELETE FROM records"))
+    unsafe = GOOD.replace(
+        "  kind: surfaces\n", "  kind: surfaces\n  session: my.hooks:login\n"
+    )
+    drafter = Fixed(
+        unsafe,
+        "not: [valid",
+        GOOD.replace("FROM records", "FROM records; DELETE FROM records"),
+    )
     outcome = _run(mockloan, drafter, rounds=3)
     assert not outcome.admitted
     assert len(drafter.seen) == 3 and outcome.rounds == 3
@@ -191,7 +229,20 @@ def test_rounds_stop_at_three_and_unsafe_drafts_never_run(mockloan: Path) -> Non
 
 def test_rounds_are_capped() -> None:
     with pytest.raises(SystemExit):
-        D.main(["--trace", "t", "--task", "t", "--sandbox", "s", "--out", "o", "--rounds", "4"])
+        D.main(
+            [
+                "--trace",
+                "t",
+                "--task",
+                "t",
+                "--sandbox",
+                "s",
+                "--out",
+                "o",
+                "--rounds",
+                "4",
+            ]
+        )
 
 
 def test_attribution_flags_masks(tmp_path: Path) -> None:
@@ -199,8 +250,11 @@ def test_attribution_flags_masks(tmp_path: Path) -> None:
     assert A._cause(seen, ["agent", "other"]) == "payload"
     seen = {("agent", 0): "7", ("agent", 1): "7", ("other", 0): "9", ("other", 1): "9"}
     assert A._cause(seen, ["agent", "other"]) == "actor"
-    clock = {k: f"2026-11-21 07:0{i}:00" for i, k in enumerate(seen)}
+    clock = {k: f"2026-11-21 07:0{i}:00" for i, k in enumerate([*seen, ("agent", 2)])}
     assert A._cause(clock, ["agent", "other"]) == "clock"
+    # A new id on every write: it differs between two identical writes.
+    fresh = {**{k: str(i) for i, k in enumerate(seen)}, ("agent", 2): "99"}
+    assert A._cause(fresh, ["agent", "other"]) == "fresh"
 
 
 def test_spend_ledger_refuses_past_the_cap(tmp_path: Path) -> None:
@@ -211,21 +265,67 @@ def test_spend_ledger_refuses_past_the_cap(tmp_path: Path) -> None:
 
 
 def test_descriptions_and_masking(tmp_path: Path) -> None:
-    api = {"openapi": "3.1.0", "info": {"title": "T", "version": "1"},
-           "paths": {"/r/{slug}": {"patch": {"summary": "Update", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/R"}}}}}}},
-           "components": {"schemas": {"R": {"properties": {"name": {"type": "string"}}}}}}
+    api = {
+        "openapi": "3.1.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {
+            "/r/{slug}": {
+                "patch": {
+                    "summary": "Update",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/R"}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+        "components": {"schemas": {"R": {"properties": {"name": {"type": "string"}}}}},
+    }
     (tmp_path / "api.json").write_text(json.dumps(api))
     d = I.load_description(str(tmp_path / "api.json"))
-    assert d.kind == "openapi" and "PATCH /r/{slug} body=R" in d.text and "R{name:string}" in d.text
-    (tmp_path / "cap.json").write_text(json.dumps({"resourceType": "CapabilityStatement", "rest": [{"resource": [{"type": "Patient", "interaction": [{"code": "update"}]}]}]}))
-    assert I.load_description(str(tmp_path / "cap.json")).text.endswith("Patient: update")
-    (tmp_path / "s.graphql").write_text("type Query { a: Int }\ntype Task { id: ID title: String }")
+    assert (
+        d.kind == "openapi"
+        and "PATCH /r/{slug} body=R" in d.text
+        and "R{name:string}" in d.text
+    )
+    (tmp_path / "cap.json").write_text(
+        json.dumps(
+            {
+                "resourceType": "CapabilityStatement",
+                "rest": [
+                    {
+                        "resource": [
+                            {"type": "Patient", "interaction": [{"code": "update"}]}
+                        ]
+                    }
+                ],
+            }
+        )
+    )
+    assert I.load_description(str(tmp_path / "cap.json")).text.endswith(
+        "Patient: update"
+    )
+    (tmp_path / "s.graphql").write_text(
+        "type Query { a: Int }\ntype Task { id: ID title: String }"
+    )
     assert I.load_description(str(tmp_path / "s.graphql")).kind == "graphql"
     assert I.load_description("none").kind == "none"
-    req = I.Request("POST", "http://x/a?token=t1&q=1", {"Cookie": "c", "X-Api-Key": "k", "Accept": "*/*"},
-                    "username=u&password=p", "application/x-www-form-urlencoded")
+    req = I.Request(
+        "POST",
+        "http://x/a?token=t1&q=1",
+        {"Cookie": "c", "X-Api-Key": "k", "Accept": "*/*"},
+        "username=u&password=p",
+        "application/x-www-form-urlencoded",
+    )
     m = I.masked(req)
-    assert "t1" not in m["url"] and "Cookie" not in m["headers"] and "X-Api-Key" not in m["headers"]
+    assert (
+        "t1" not in m["url"]
+        and "Cookie" not in m["headers"]
+        and "X-Api-Key" not in m["headers"]
+    )
     assert "password=%2A%2A%2A" in m["body"] and "username=u" in m["body"]
 
 
@@ -249,7 +349,16 @@ def test_run_path_makes_no_model_calls(mockloan: Path) -> None:
         print(r.outcome.value)
         """
     )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120,
-                         env={"OPENADAPT_LOCAL_SEAL": "off", "PATH": "/usr/bin:/bin", "HOME": str(mockloan)})
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={
+            "OPENADAPT_LOCAL_SEAL": "off",
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(mockloan),
+        },
+    )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() in ("REFUTED", "UNCERTAIN")  # no new record was written

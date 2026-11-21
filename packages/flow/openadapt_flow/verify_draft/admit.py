@@ -76,9 +76,22 @@ CLEAN_PROBES = 5
 #: The recheck window admission cases use.
 ADMISSION_RECHECK_S = 2.0
 _FORBIDDEN_KEYS = frozenset(
-    {"session", "reset", "command", "python", "hook", "hooks", "sql_driver",
-     "sql_connect_args", "sql_password_env", "sqlite_database", "admission",
-     "owned_sqlite_insert", "profile", "profile_sha256"}
+    {
+        "session",
+        "reset",
+        "command",
+        "python",
+        "hook",
+        "hooks",
+        "sql_driver",
+        "sql_connect_args",
+        "sql_password_env",
+        "sqlite_database",
+        "admission",
+        "owned_sqlite_insert",
+        "profile",
+        "profile_sha256",
+    }
 )
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
 
@@ -96,7 +109,11 @@ def _walk(value: Any, path: str = "") -> list[str]:
         for k, v in value.items():
             if k in _FORBIDDEN_KEYS:
                 bad.append(f"{path}{k}")
-            if isinstance(v, str) and re.fullmatch(r"[\w.]+:[\w]+", v) and k not in ("probe",):
+            if (
+                isinstance(v, str)
+                and re.fullmatch(r"[\w.]+:[\w]+", v)
+                and k not in ("probe",)
+            ):
                 if k in ("driver", "module", "function"):
                     bad.append(f"{path}{k}")
             bad += _walk(v, f"{path}{k}.")
@@ -174,7 +191,11 @@ def excluded(contract: Mapping[str, Any]) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for entry in database.get("allow_tables") or []:
         table = entry if isinstance(entry, str) else entry.get("table")
-        mode = "append_only" if isinstance(entry, str) else entry.get("mode", "append_only")
+        mode = (
+            "append_only"
+            if isinstance(entry, str)
+            else entry.get("mode", "append_only")
+        )
         out.setdefault(str(table), set()).add("*" if mode == "skip" else "+")
     for table, cols in (database.get("ignore_columns") or {}).items():
         out.setdefault(str(table), set()).update(str(c) for c in cols)
@@ -227,7 +248,9 @@ class Demo:
                 )
                 for c in cols
             }
-            lines.append(f"{m.change} {m.table} key={_keytext(m.key)}: {json.dumps(vals)[:1500]}")
+            lines.append(
+                f"{m.change} {m.table} key={_keytext(m.key)}: {json.dumps(vals)[:1500]}"
+            )
         return "\n".join(lines) or "(nothing moved)"
 
 
@@ -239,8 +262,10 @@ def _matches(stored: Any, value: Any) -> bool:
     a, b = text(stored).strip(), text(value).strip()
     if not b:
         return False
-    if a == b or a.casefold() == b.casefold():
+    if a == b:
         return True
+    if "@" in b and a.casefold() == b.casefold():
+        return True  # an email address the app stored in another case
     try:
         return decimal.Decimal(a) == decimal.Decimal(b)
     except (decimal.InvalidOperation, ValueError):
@@ -248,7 +273,9 @@ def _matches(stored: Any, value: Any) -> bool:
     return len(b) >= 10 and a.startswith(b)  # a date read back as a date-time
 
 
-def main_move(found: Sequence[Move], params: Mapping[str, Any]) -> tuple[Optional[Move], dict[str, str]]:
+def main_move(
+    found: Sequence[Move], params: Mapping[str, Any]
+) -> tuple[Optional[Move], dict[str, str]]:
     """The added or changed row holding the most task values, and which of
     its columns holds which value."""
 
@@ -275,9 +302,10 @@ def main_move(found: Sequence[Move], params: Mapping[str, Any]) -> tuple[Optiona
 def record_demo(
     store: Store, app: App, writes: list[Request], params: dict[str, Any], base: Rows
 ) -> Demo:
+    store.remember(base)
     store.restore(base)
     statuses = app.send(writes, "agent", {})
-    after = store.read()
+    after = store.read_moved(base)
     found = moves(base, after)
     main, cols = main_move(found, params)
     store.restore(base)
@@ -494,14 +522,16 @@ class Qualifier:
                 case.note = f"the app refused the write (HTTP {max(statuses)})"
                 return None
             pre = self.demo.base
-            post = self.store.read()
+            post = self.store.read_moved(pre)
             if fault is not None:
                 fault(pre, post)
-                post = self.store.read()
+                post = self.store.read_moved(pre)
             result = verify_write(pending, seal=False)
             case.outcome = result.outcome.value
             case.reasons = list(result.reasons)
-            case.moved = list(((result.evidence or {}).get("frame") or {}).get("moves") or [])[:20]
+            case.moved = list(
+                ((result.evidence or {}).get("frame") or {}).get("moves") or []
+            )[:20]
             if rechecks and result.outcome.value == "CONFIRMED":
                 if result.recheck is None:
                     case.recheck = "NONE"
@@ -511,7 +541,14 @@ class Qualifier:
                 else:
                     if revert is not None:
                         revert(pre, post)
-                    rr = recheck(c, result, params=params, actor=Actor("agent", f"verify-draft-{actor}"), wait=True, ledger=ledger)
+                    rr = recheck(
+                        c,
+                        result,
+                        params=params,
+                        actor=Actor("agent", f"verify-draft-{actor}"),
+                        wait=True,
+                        ledger=ledger,
+                    )
                     case.recheck = str(getattr(rr.outcome, "value", rr.outcome))
                     case.reasons += list(rr.reasons)
             return pre, post
@@ -530,10 +567,20 @@ class Qualifier:
             case.passed = True
             return
         if case.expect == "confirmed":
-            case.passed = case.outcome == "CONFIRMED" and case.recheck in ("", "CONFIRMED")
+            # No recheck scheduled is the late-revert case's failure, not a
+            # false stop on a clean write.
+            case.passed = case.outcome == "CONFIRMED" and case.recheck in (
+                "",
+                "CONFIRMED",
+                "NONE",
+            )
         else:
             final = case.recheck or case.outcome
-            case.passed = case.outcome not in ("", "ERROR", "NO_BASELINE") and final != "CONFIRMED" and final != "NONE"
+            case.passed = (
+                case.outcome not in ("", "ERROR", "NO_BASELINE")
+                and final != "CONFIRMED"
+                and final != "NONE"
+            )
 
     # -- the suite
 
@@ -564,13 +611,35 @@ class Qualifier:
         for i, v in enumerate(values):
             if len(accepted) >= clean:
                 break
-            case = Case("clean", f"clean-{len(accepted) + 1}", f"the write with payload {i + 1}", "confirmed")
+            case = Case(
+                "clean",
+                f"clean-{len(accepted) + 1}",
+                f"the write with payload {i + 1}",
+                "confirmed",
+            )
             self.run(contract, case, values=v, rechecks=True)
             if not case.applicable:
                 continue  # the app refused these values: not a probe
             self._judge(case)
             cases.append(case)
             accepted.append(v)
+            if not case.passed and len(accepted) == 1:
+                # A check that stops a clean write can't be judged on faults
+                # yet: say so now rather than spend the round.
+                problems.append(
+                    "stopped after the first clean write was not confirmed: fix that first "
+                    "(no fault was planted this round)"
+                )
+                self.store.restore(demo.base)
+                return Admission(
+                    False,
+                    check_sha256(contract),
+                    cases,
+                    [],
+                    problems,
+                    [],
+                    round(time.monotonic() - started, 2),
+                )
         if len(accepted) < clean:
             problems.append(
                 f"only {len(accepted)} of the payloads were accepted by the app; {clean} clean writes are needed"
@@ -585,7 +654,9 @@ class Qualifier:
         attribution: list[Attribution] = []
         probe_cases: list[Case] = []
         if attribute:
-            attribution, probe_cases = self._attribute(contract, [base_values] + accepted[:1])
+            attribution, probe_cases = self._attribute(
+                contract, [base_values] + accepted[:1]
+            )
         cases += probe_cases
         self.store.restore(demo.base)  # leave the sandbox as it was found
         for c in cases:
@@ -615,16 +686,22 @@ class Qualifier:
         m = self.demo.main
         if m is None:
             return []
-        rows = list(self.demo.base.get(m.table, {}).values()) + list(self.demo.after.get(m.table, {}).values())
-        own = {text(v) for v in (m.before or {}).values()} | {text(v) for v in (m.after or {}).values()}
+        rows = list(self.demo.base.get(m.table, {}).values()) + list(
+            self.demo.after.get(m.table, {}).values()
+        )
+        own = {text(v) for v in (m.before or {}).values()} | {
+            text(v) for v in (m.after or {}).values()
+        }
         common = set()
-        for col in (m.after or {}):
+        for col in m.after or {}:
             values = {text(r.get(col)) for r in rows}
             if len(values) == 1:
                 common |= values
         out = []
         for effect in contract.get("effects") or []:
-            selectors = [effect.get("match") or {}] + list(effect.get("new_records") or [])
+            selectors = [effect.get("match") or {}] + list(
+                effect.get("new_records") or []
+            )
             for sel in selectors:
                 for field_name, expr in sel.items():
                     if isinstance(expr, dict) and "literal" in expr:
@@ -648,7 +725,9 @@ class Qualifier:
 
     # -- fault operators
 
-    def _target(self, pre: Rows, post: Rows, values: Mapping[str, Any]) -> tuple[Optional[Move], dict[str, str]]:
+    def _target(
+        self, pre: Rows, post: Rows, values: Mapping[str, Any]
+    ) -> tuple[Optional[Move], dict[str, str]]:
         return main_move(moves(pre, post), values)
 
     def _fault(
@@ -664,17 +743,30 @@ class Qualifier:
         mask = excluded(contract)
 
         if name == "wrong_value":
-            cols = sorted(demo.param_columns)[: 4] or []
+            cols = sorted(demo.param_columns)[:4] or []
             if not cols:
-                c = Case("fault", "wrong_value", "no written column holds a task value", "refuted", applicable=False)
+                c = Case(
+                    "fault",
+                    "wrong_value",
+                    "no written column holds a task value",
+                    "refuted",
+                    applicable=False,
+                )
                 return [c]
             for col in cols:
-                case = Case("fault", f"wrong_value:{col}", f"{table}.{col} holds another value", "refuted")
+                case = Case(
+                    "fault",
+                    f"wrong_value:{col}",
+                    f"{table}.{col} holds another value",
+                    "refuted",
+                )
 
                 def plant(pre: Rows, post: Rows, col: str = col) -> None:
                     m, _ = self._target(pre, post, values)
                     if m is None:
-                        raise RuntimeError("the write moved no row holding a task value")
+                        raise RuntimeError(
+                            "the write moved no row holding a task value"
+                        )
                     self.store.update(m.table, m.key, {col: _perturb(m.after[col])})
 
                 self.run(contract, case, values=values, fault=plant)
@@ -696,19 +788,31 @@ class Qualifier:
                     other = others[self.seed % len(others)]
                     moved = {c: m.after[c] for c in m.columns}
                     self.store.update(m.table, other, moved)
-                    self.store.update(m.table, m.key, {c: m.before[c] for c in m.columns})
+                    self.store.update(
+                        m.table, m.key, {c: m.before[c] for c in m.columns}
+                    )
                     case.detail = f"the update landed on another {m.table} row"
                     return
                 fk = [c for c in m.columns if c in t.fks and m.after.get(c) is not None]
                 if fk:
                     col = fk[0]
                     ref = self.store.tables[t.fks[col]]
-                    choices = [k for k in post.get(ref.name, {}) if len(ref.pk) == 1 and text(k[0]) != text(m.after[col])]
+                    choices = [
+                        k
+                        for k in post.get(ref.name, {})
+                        if len(ref.pk) == 1 and text(k[0]) != text(m.after[col])
+                    ]
                     if choices:
-                        self.store.update(m.table, m.key, {col: choices[self.seed % len(choices)][0]})
+                        self.store.update(
+                            m.table, m.key, {col: choices[self.seed % len(choices)][0]}
+                        )
                         case.detail = f"the new {m.table} row points at another {ref.name} ({col})"
                         return
-                ids = [c for c, p in cols.items() if _IDENTIFIER.search(c) or _IDENTIFIER.search(p)]
+                ids = [
+                    c
+                    for c, p in cols.items()
+                    if _IDENTIFIER.search(c) or _IDENTIFIER.search(p)
+                ]
                 if not ids:
                     raise _NotApplicable("the new row names no parent record")
                 self.store.update(m.table, m.key, {ids[0]: _perturb(m.after[ids[0]])})
@@ -718,13 +822,17 @@ class Qualifier:
             return [case]
 
         if name == "duplicate":
-            case = Case("fault", "duplicate", f"a second copy of the {table} record", "refuted")
+            case = Case(
+                "fault", "duplicate", f"a second copy of the {table} record", "refuted"
+            )
 
             def plant_dup(pre: Rows, post: Rows) -> None:
                 m, _ = self._target(pre, post, values)
                 if m is None:
                     raise RuntimeError("the write moved no row holding a task value")
-                self.store.insert(m.table, self.store.new_key_row(m.table, m.after, post))
+                self.store.insert(
+                    m.table, self.store.new_key_row(m.table, m.after, post)
+                )
 
             self._planted(contract, case, values, plant_dup)
             return [case]
@@ -734,10 +842,18 @@ class Qualifier:
 
             def plant_sib(pre: Rows, post: Rows) -> None:
                 m, _ = self._target(pre, post, values)
-                order = [m.table] + [t for t in self.store.tables if t != m.table] if m else list(self.store.tables)
+                order = (
+                    [m.table] + [t for t in self.store.tables if t != m.table]
+                    if m
+                    else list(self.store.tables)
+                )
                 hidden: list[str] = []
                 for tname in order:
-                    rows = [(k, r) for k, r in post.get(tname, {}).items() if not (m and tname == m.table and k == m.key)]
+                    rows = [
+                        (k, r)
+                        for k, r in post.get(tname, {}).items()
+                        if not (m and tname == m.table and k == m.key)
+                    ]
                     t = self.store.tables[tname]
                     for key, row in rows:
                         for col in t.columns:
@@ -753,13 +869,16 @@ class Qualifier:
                             if not t.pk:
                                 continue
                             self.store.update(tname, key, {col: _perturb(row[col])})
-                            case.detail = f"another {tname} row's {col} edited beside the write"
+                            case.detail = (
+                                f"another {tname} row's {col} edited beside the write"
+                            )
                             return
                 if hidden:
                     for h in hidden[:3]:
                         self.masked.append({"fault": "sibling_edit", "column": h})
                     raise _NotApplicable(
-                        "every editable column of the other records is excluded: " + ", ".join(hidden[:3])
+                        "every editable column of the other records is excluded: "
+                        + ", ".join(hidden[:3])
                     )
                 raise _NotApplicable("the store holds no other record to edit")
 
@@ -767,7 +886,12 @@ class Qualifier:
             return [case]
 
         if name == "late_revert":
-            case = Case("fault", "late_revert", f"the {table} write undone after the check", "refuted")
+            case = Case(
+                "fault",
+                "late_revert",
+                f"the {table} write undone after the check",
+                "refuted",
+            )
 
             def undo(pre: Rows, post: Rows) -> None:
                 m, _ = self._target(pre, post, values)
@@ -776,7 +900,9 @@ class Qualifier:
                 if m.change == "added":
                     self.store.delete(m.table, m.key)
                 else:
-                    self.store.update(m.table, m.key, {c: m.before[c] for c in m.columns})
+                    self.store.update(
+                        m.table, m.key, {c: m.before[c] for c in m.columns}
+                    )
 
             self.run(contract, case, values=values, revert=undo, rechecks=True)
             if case.outcome == "CONFIRMED" and not case.recheck:
@@ -786,30 +912,48 @@ class Qualifier:
         if name == "lost_update":
             case = Case("fault", "lost_update", "", "refuted")
             if demo.change != "changed":
-                case.applicable, case.note = False, "the write creates a record; nothing can be overwritten"
+                case.applicable, case.note = (
+                    False,
+                    "the write creates a record; nothing can be overwritten",
+                )
                 return [case]
             if "other" not in self.sandbox.actors:
                 case.applicable, case.note = False, "the sandbox has no second user"
                 return [case]
             other_values = accepted[0] if accepted else None
             if other_values is None:
-                case.applicable, case.note = False, "no accepted payload for the other user"
+                case.applicable, case.note = (
+                    False,
+                    "no accepted payload for the other user",
+                )
                 return [case]
 
             def first_save() -> Optional[str]:
-                st = self.app.send(demo.writes, "other", swap_map(demo.params, other_values))
+                st = self.app.send(
+                    demo.writes, "other", swap_map(demo.params, other_values)
+                )
                 if any(s >= 400 for s in st):
                     return f"the other user's save was refused (HTTP {max(st)})"
                 return None
 
-            case.detail = "the other user saves the record, then the agent's save overwrites it"
+            case.detail = (
+                "the other user saves the record, then the agent's save overwrites it"
+            )
             self.run(contract, case, values=values, before=first_save)
             if case.note.startswith("the app refused"):
-                case.note = "the app refused the stale save: it prevents lost updates itself"
+                case.note = (
+                    "the app refused the stale save: it prevents lost updates itself"
+                )
             return [case]
         raise ValueError(f"unknown fault {name}")
 
-    def _planted(self, contract: Mapping[str, Any], case: Case, values: Mapping[str, Any], plant: Callable[[Rows, Rows], None]) -> None:
+    def _planted(
+        self,
+        contract: Mapping[str, Any],
+        case: Case,
+        values: Mapping[str, Any],
+        plant: Callable[[Rows, Rows], None],
+    ) -> None:
         def guarded(pre: Rows, post: Rows) -> None:
             try:
                 plant(pre, post)
@@ -835,13 +979,22 @@ class Qualifier:
             return [], []
         runs: dict[tuple[str, int], list[Move]] = {}
         cases = []
-        for actor in actors:
-            for i, values in enumerate(payloads[:2]):
-                case = Case("probe", f"attribution:{actor}:p{i + 1}", f"the write by {actor} with payload {i + 1}", "confirmed")
-                got = self.run(contract, case, values=values, actor=actor)
-                cases.append(case)
-                if got is not None:
-                    runs[(actor, i)] = moves(*got)
+        # Each actor with each payload, plus the first one again: what moves
+        # between two identical writes moves on its own (a clock, a new id).
+        plan = [(a, i) for a in actors for i in (0, 1)] + [(actors[0], 2)]
+        for actor, i in plan:
+            values = payloads[min(i, 1) if i < 2 else 0]
+            label = f"p{i + 1}" if i < 2 else "p1-again"
+            case = Case(
+                "probe",
+                f"attribution:{actor}:{label}",
+                f"the write by {actor} with payload {1 if i == 2 else i + 1}",
+                "confirmed",
+            )
+            got = self.run(contract, case, values=values, actor=actor)
+            cases.append(case)
+            if got is not None:
+                runs[(actor, i)] = moves(*got)
         # Every (table, column) that moved, with its new value per run.
         cells: dict[tuple[str, str], dict[tuple[str, int], str]] = {}
         for run, found in runs.items():
@@ -851,9 +1004,14 @@ class Qualifier:
                     continue
                 cols = m.columns if m.change == "changed" else sorted(m.after or {})
                 for col in cols:
-                    cells.setdefault((m.table, col), {})[run] = text((m.after or {}).get(col))
+                    cells.setdefault((m.table, col), {})[run] = text(
+                        (m.after or {}).get(col)
+                    )
                 if m.change == "added":
                     cells.setdefault((m.table, "+"), {})[run] = "added"
+        for seen in cells.values():  # a run that didn't move the cell
+            for run in runs:
+                seen.setdefault(run, "<unmoved>")
         mask = excluded(contract)
         out: list[Attribution] = []
         for (table, col), seen in sorted(cells.items()):
@@ -861,7 +1019,7 @@ class Qualifier:
             ex = mask.get(table, set())
             is_ex = "*" in ex or col in ex or (col == "+" and "+" in ex)
             a = Attribution(table, col, cause, is_ex)
-            if is_ex and cause == "payload":
+            if is_ex and cause == "payload" and col != "+":
                 a.problem = "excluded, but it moves with the values written: the exclusion hides the write"
             out.append(a)
         moved = {(a.table, a.column) for a in out}
@@ -872,21 +1030,40 @@ class Qualifier:
                 if col == "+" and (table, "+") in moved:
                     continue
                 if (table, col) not in moved and col not in ("*", "+"):
-                    out.append(Attribution(table, col, "never moved", True, "excluded, but it never moved in any probe write: nothing to excuse"))
+                    out.append(
+                        Attribution(
+                            table,
+                            col,
+                            "never moved",
+                            True,
+                            "excluded, but it never moved in any probe write: nothing to excuse",
+                        )
+                    )
         return out, cases
 
 
 def _cause(seen: Mapping[tuple[str, int], str], actors: Sequence[str]) -> str:
-    """payload, actor, clock or constant, from the 2 x 2 runs."""
+    """payload, actor, fresh, clock or constant, from the 2 x 2 runs and
+    the repeated first run (index 2)."""
 
+    if (actors[0], 2) in seen and (actors[0], 0) in seen:
+        if seen.get((actors[0], 0)) != seen.get((actors[0], 2)):
+            values = [v for v in seen.values()]
+            return "clock" if _clockish(values) else "fresh"
     by_payload = any(
-        seen.get((a, 0)) != seen.get((a, 1)) for a in actors if (a, 0) in seen or (a, 1) in seen
+        seen.get((a, 0)) != seen.get((a, 1))
+        for a in actors
+        if (a, 0) in seen or (a, 1) in seen
     )
     by_actor = len(actors) > 1 and any(
         seen.get((actors[0], i)) != seen.get((actors[1], i)) for i in (0, 1)
     )
     values = [v for v in seen.values()]
-    if len(set(values)) == len(values) and len(values) == 2 * len(actors) and _clockish(values):
+    if (
+        len(set(values)) == len(values)
+        and len(values) == 2 * len(actors)
+        and _clockish(values)
+    ):
         return "clock"
     if by_payload and not by_actor:
         return "payload"
@@ -899,7 +1076,11 @@ def _cause(seen: Mapping[tuple[str, int], str], actors: Sequence[str]) -> str:
 
 
 def _clockish(values: Sequence[str]) -> bool:
-    return all(re.match(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}", v or "") or re.fullmatch(r"\d{9,}(\.\d+)?", v or "") for v in values)
+    return all(
+        re.match(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}", v or "")
+        or re.fullmatch(r"\d{9,}(\.\d+)?", v or "")
+        for v in values
+    )
 
 
 class _NotApplicable(Exception):
@@ -907,4 +1088,9 @@ class _NotApplicable(Exception):
 
 
 def digest(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, default=str).encode()
+        ).hexdigest()
+    )

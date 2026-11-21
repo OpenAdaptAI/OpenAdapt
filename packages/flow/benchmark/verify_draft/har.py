@@ -28,13 +28,21 @@ class Recorder:
                 "url": req.url,
                 # Sign-in material is never kept in the trace file.
                 "headers": [
-                    {"name": k, "value": "REDACTED" if k.lower() in ("authorization", "cookie") else v}
+                    {
+                        "name": k,
+                        "value": "REDACTED"
+                        if k.lower() in ("authorization", "cookie")
+                        else v,
+                    }
                     for k, v in req.headers.items()
                 ],
             },
             "response": {
                 "status": r.status_code,
-                "content": {"mimeType": r.headers.get("Content-Type", ""), "text": r.text[:20000]},
+                "content": {
+                    "mimeType": r.headers.get("Content-Type", ""),
+                    "text": r.text[:20000],
+                },
             },
         }
         if body is not None:
@@ -43,6 +51,15 @@ class Recorder:
 
     def save(self, path: Path) -> None:
         path.write_text(
-            json.dumps({"log": {"version": "1.2", "creator": {"name": "verify-draft-bench"}, "entries": self.entries}}, indent=1),
+            json.dumps(
+                {
+                    "log": {
+                        "version": "1.2",
+                        "creator": {"name": "verify-draft-bench"},
+                        "entries": self.entries,
+                    }
+                },
+                indent=1,
+            ),
             encoding="utf-8",
         )

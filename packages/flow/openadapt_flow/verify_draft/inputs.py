@@ -26,7 +26,14 @@ from openadapt_flow.verify_draft.sandbox import Request
 MAX_DESCRIPTION_CHARS = 40_000
 _SECRET = re.compile(r"pass(word)?|secret|token|api[-_]?key|session|csrf|auth", re.I)
 _SECRET_HEADERS = frozenset(
-    {"authorization", "cookie", "set-cookie", "x-api-key", "x-csrf-token", "proxy-authorization"}
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "x-csrf-token",
+        "proxy-authorization",
+    }
 )
 _READS = frozenset({"GET", "HEAD", "OPTIONS"})
 
@@ -96,8 +103,12 @@ def load_description(source: Optional[str], *, schema_text: str = "") -> Descrip
         return Description("openapi", _openapi(doc), path.name)
     if isinstance(doc, dict) and doc.get("resourceType") == "CapabilityStatement":
         return Description("fhir", _fhir(doc), path.name)
-    if isinstance(doc, dict) and ("__schema" in doc or "__schema" in (doc.get("data") or {})):
-        return Description("graphql", _graphql(doc.get("data", doc)["__schema"]), path.name)
+    if isinstance(doc, dict) and (
+        "__schema" in doc or "__schema" in (doc.get("data") or {})
+    ):
+        return Description(
+            "graphql", _graphql(doc.get("data", doc)["__schema"]), path.name
+        )
     if isinstance(doc, str) and re.search(r"\b(type|schema|input)\s+\w+\s*\{", doc):
         return Description("graphql", doc[:MAX_DESCRIPTION_CHARS], path.name)
     raise InputError(
@@ -119,23 +130,35 @@ def _ref(schema: Any) -> str:
 
 
 def _openapi(doc: dict) -> str:
-    lines = [f"# {doc.get('info', {}).get('title', 'API')} {doc.get('info', {}).get('version', '')}"]
+    lines = [
+        f"# {doc.get('info', {}).get('title', 'API')} {doc.get('info', {}).get('version', '')}"
+    ]
     for path, ops in (doc.get("paths") or {}).items():
         for method, op in (ops or {}).items():
-            if not isinstance(op, dict) or method.startswith("x-") or method == "parameters":
+            if (
+                not isinstance(op, dict)
+                or method.startswith("x-")
+                or method == "parameters"
+            ):
                 continue
             body = ""
-            content = ((op.get("requestBody") or {}).get("content") or {})
+            content = (op.get("requestBody") or {}).get("content") or {}
             for mime, media in content.items():
                 body = f" body={_ref(media.get('schema'))} ({mime})"
                 break
-            params = ",".join(p.get("name", "") for p in op.get("parameters") or [] if isinstance(p, dict))
+            params = ",".join(
+                p.get("name", "")
+                for p in op.get("parameters") or []
+                if isinstance(p, dict)
+            )
             lines.append(
                 f"{method.upper()} {path}{body}"
                 + (f" params={params}" if params else "")
                 + (f" -- {op.get('summary')}" if op.get("summary") else "")
             )
-    schemas = (doc.get("components") or {}).get("schemas") or doc.get("definitions") or {}
+    schemas = (
+        (doc.get("components") or {}).get("schemas") or doc.get("definitions") or {}
+    )
     lines.append("# schemas")
     for name, schema in schemas.items():
         props = (schema or {}).get("properties") or {}
@@ -150,7 +173,9 @@ def _fhir(doc: dict) -> str:
         for res in rest.get("resource") or []:
             inter = ",".join(i.get("code", "") for i in res.get("interaction") or [])
             search = ",".join(s.get("name", "") for s in res.get("searchParam") or [])
-            lines.append(f"{res.get('type')}: {inter}" + (f" search={search}" if search else ""))
+            lines.append(
+                f"{res.get('type')}: {inter}" + (f" search={search}" if search else "")
+            )
     return "\n".join(lines)[:MAX_DESCRIPTION_CHARS]
 
 
@@ -159,7 +184,9 @@ def _graphql(schema: dict) -> str:
     for t in schema.get("types") or []:
         if str(t.get("name", "")).startswith("__"):
             continue
-        fields = ", ".join(f.get("name", "") for f in t.get("fields") or [] if isinstance(f, dict))
+        fields = ", ".join(
+            f.get("name", "") for f in t.get("fields") or [] if isinstance(f, dict)
+        )
         if fields:
             lines.append(f"{t.get('kind', '').lower()} {t['name']} {{{fields}}}")
     return "\n".join(lines)[:MAX_DESCRIPTION_CHARS]
@@ -190,7 +217,9 @@ def load_trace(path: str | Path) -> list[Request]:
             Request(
                 method=str(req.get("method", "GET")).upper(),
                 url=str(req.get("url", "")),
-                headers={h["name"]: h.get("value", "") for h in req.get("headers") or []},
+                headers={
+                    h["name"]: h.get("value", "") for h in req.get("headers") or []
+                },
                 body=body,
                 mime=str(post.get("mimeType") or ""),
                 status=res.get("status"),
@@ -200,7 +229,9 @@ def load_trace(path: str | Path) -> list[Request]:
     return out
 
 
-def writes(trace: list[Request], *, skip_paths: set[str] = frozenset()) -> list[Request]:  # type: ignore[assignment]
+def writes(
+    trace: list[Request], *, skip_paths: set[str] = frozenset()
+) -> list[Request]:  # type: ignore[assignment]
     """The trace's write requests (anything but GET, HEAD and OPTIONS),
     without sign-in requests."""
 
@@ -210,7 +241,11 @@ def writes(trace: list[Request], *, skip_paths: set[str] = frozenset()) -> list[
 def _mask_json(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            k: ("***" if _SECRET.search(str(k)) and not isinstance(v, (dict, list)) else _mask_json(v))
+            k: (
+                "***"
+                if _SECRET.search(str(k)) and not isinstance(v, (dict, list))
+                else _mask_json(v)
+            )
             for k, v in value.items()
         }
     if isinstance(value, list):
@@ -230,7 +265,10 @@ def _mask_body(body: Optional[str], mime: str) -> Optional[str]:
         from urllib.parse import parse_qsl, urlencode
 
         return urlencode(
-            [(k, "***" if _SECRET.search(k) else v) for k, v in parse_qsl(body, keep_blank_values=True)]
+            [
+                (k, "***" if _SECRET.search(k) else v)
+                for k, v in parse_qsl(body, keep_blank_values=True)
+            ]
         )
     return body[:2000]
 
@@ -243,16 +281,23 @@ def masked(req: Request, *, response_chars: int = 1500) -> dict[str, Any]:
 
     parts = urlsplit(req.url)
     query = urlencode(
-        [(k, "***" if _SECRET.search(k) else v) for k, v in parse_qsl(parts.query, keep_blank_values=True)]
+        [
+            (k, "***" if _SECRET.search(k) else v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        ]
     )
     response = req.response
     if response is not None:
-        response = _mask_body(response, "json" if response.lstrip()[:1] in "{[" else "text")
+        response = _mask_body(
+            response, "json" if response.lstrip()[:1] in "{[" else "text"
+        )
     return {
         "method": req.method,
         "url": urlunsplit(("", "", parts.path, query, "")),
         "headers": {
-            k: v for k, v in req.headers.items() if k.lower() not in _SECRET_HEADERS and not _SECRET.search(k)
+            k: v
+            for k, v in req.headers.items()
+            if k.lower() not in _SECRET_HEADERS and not _SECRET.search(k)
         },
         "body": _mask_body(req.body, req.mime),
         "status": req.status,

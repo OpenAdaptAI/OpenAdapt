@@ -391,14 +391,70 @@ class Store:
         finally:
             con.close()
 
+    def digests(self) -> dict[str, str]:
+        """One digest per table, computed in the database where it can be,
+        so finding what moved doesn't read every row."""
+
+        if self.dialect == "sqlite":
+            return {name: _digest_rows(rows) for name, rows in self.read().items()}
+        con = self._con()
+        try:
+            cur = con.cursor()
+            if self.dialect == "postgresql":
+                parts = [
+                    f"SELECT {i} AS n, md5(coalesce(string_agg(md5(t::text), '' "
+                    f"ORDER BY md5(t::text)), '')) FROM {self.q(name)} t"
+                    for i, name in enumerate(self.tables)
+                ]
+                cur.execute(" UNION ALL ".join(parts))
+                names = list(self.tables)
+                out = {names[int(n)]: str(d) for n, d in cur.fetchall()}
+            else:
+                cur.execute(
+                    "CHECKSUM TABLE " + ", ".join(self.q(n) for n in self.tables)
+                )
+                found = {str(r[0]).split(".", 1)[-1]: str(r[1]) for r in cur.fetchall()}
+                out = {n: found.get(n, "") for n in self.tables}
+            con.rollback()
+            return out
+        finally:
+            con.close()
+
+    def remember(self, base: Rows) -> None:
+        """Remember ``base`` (a full read) and its digests, so restoring it
+        and reading what moved since touch only the tables that moved."""
+
+        self._marked = (base, self.digests())
+
+    def _moved_tables(self, snapshot: Rows) -> Optional[list[str]]:
+        marked = getattr(self, "_marked", None)
+        if marked is None or marked[0] is not snapshot:
+            return None
+        now = self.digests()
+        return [t for t, d in marked[1].items() if now.get(t) != d]
+
+    def read_moved(self, base: Rows) -> Rows:
+        """A full read, fetching only the tables that moved since ``base``
+        (when ``base`` is the marked read)."""
+
+        moved = self._moved_tables(base)
+        if moved is None:
+            return self.read()
+        out = dict(base)
+        out.update(self.read(moved))
+        return out
+
     def restore(self, snapshot: Rows) -> int:
         """Put every table that differs from ``snapshot`` back. Returns how
         many tables were rewritten."""
 
-        now = self.read()
+        moved = self._moved_tables(snapshot)
+        now = self.read(moved) if moved is not None else self.read()
         statements: list[tuple[str, Sequence[Any]]] = []
         changed = 0
         for name, rows in snapshot.items():
+            if moved is not None and name not in moved:
+                continue
             if _digest_rows(now.get(name, {})) == _digest_rows(rows):
                 continue
             changed += 1
@@ -434,7 +490,12 @@ class Store:
         cols = ", ".join(self.q(c) for c in row)
         marks = ", ".join([self.mark] * len(row))
         self._exec(
-            [(f"INSERT INTO {self.q(table)} ({cols}) VALUES ({marks})", list(row.values()))]
+            [
+                (
+                    f"INSERT INTO {self.q(table)} ({cols}) VALUES ({marks})",
+                    list(row.values()),
+                )
+            ]
         )
 
     def delete(self, table: str, key: tuple) -> None:
@@ -451,7 +512,14 @@ class Store:
         out = dict(row)
         taken = existing.get(table, {})
         for c in t.pk:
-            out[c] = _fresh(row[c], [k[t.pk.index(c)] for k in taken if isinstance(k, tuple) and len(k) == len(t.pk)])
+            out[c] = _fresh(
+                row[c],
+                [
+                    k[t.pk.index(c)]
+                    for k in taken
+                    if isinstance(k, tuple) and len(k) == len(t.pk)
+                ],
+            )
         for cols in t.unique:
             if any(out.get(c) is None for c in cols):
                 continue
@@ -475,7 +543,9 @@ def _fresh(value: Any, taken: Sequence[Any]) -> Any:
         except ValueError:
             pass
         if value.isdigit():
-            return str(max([int(v) for v in taken if str(v).isdigit()] + [int(value)]) + 1000)
+            return str(
+                max([int(v) for v in taken if str(v).isdigit()] + [int(value)]) + 1000
+            )
         return value + "-copy"
     return value
 
@@ -497,7 +567,9 @@ def _canon(value: Any) -> Any:
         return json.dumps([_canon(v) for v in value])
     if isinstance(value, (bytes, memoryview)):
         return base64.b64encode(bytes(value)).decode()
-    if isinstance(value, (_dt.date, _dt.datetime, _dt.time, decimal.Decimal, uuid.UUID)):
+    if isinstance(
+        value, (_dt.date, _dt.datetime, _dt.time, decimal.Decimal, uuid.UUID)
+    ):
         return str(value)
     return value
 
@@ -601,7 +673,9 @@ class App:
             if login.token_field:
                 token = (r.json() or {}).get(login.token_field)
                 if not token:
-                    raise SandboxError(f"sign-in for {actor} returned no {login.token_field}")
+                    raise SandboxError(
+                        f"sign-in for {actor} returned no {login.token_field}"
+                    )
                 s.headers["Authorization"] = f"Bearer {token}"
         self._sessions[actor] = s
         return s
@@ -625,11 +699,16 @@ class App:
                 parts = urlsplit(req.url)
                 path = _swap_path(parts.path, swap)
                 query = urlencode(
-                    [(k, _swap_text(v, swap)) for k, v in parse_qsl(parts.query, keep_blank_values=True)]
+                    [
+                        (k, _swap_text(v, swap))
+                        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+                    ]
                 )
                 url = urlunsplit((base.scheme, base.netloc, path, query, ""))
                 headers = {
-                    k: v for k, v in req.headers.items() if k.lower() not in _DROP_HEADERS
+                    k: v
+                    for k, v in req.headers.items()
+                    if k.lower() not in _DROP_HEADERS
                 }
                 body = _swap_body(req.body, req.mime, swap)
                 r = s.request(
@@ -650,7 +729,8 @@ def _swap_text(value: str, swap: Mapping[str, Any]) -> str:
 
 def _swap_path(path: str, swap: Mapping[str, Any]) -> str:
     return "/".join(
-        quote(str(swap[seg]), safe="") if seg in swap else seg for seg in path.split("/")
+        quote(str(swap[seg]), safe="") if seg in swap else seg
+        for seg in path.split("/")
     )
 
 
@@ -673,7 +753,9 @@ def _swap_json(value: Any, swap: Mapping[str, Any]) -> Any:
     return value
 
 
-def _swap_body(body: Optional[str], mime: str, swap: Mapping[str, Any]) -> Optional[str]:
+def _swap_body(
+    body: Optional[str], mime: str, swap: Mapping[str, Any]
+) -> Optional[str]:
     if body is None or not swap:
         return body
     if "json" in mime:
@@ -683,7 +765,10 @@ def _swap_body(body: Optional[str], mime: str, swap: Mapping[str, Any]) -> Optio
             return body
     if "x-www-form-urlencoded" in mime:
         return urlencode(
-            [(k, _swap_text(v, swap)) for k, v in parse_qsl(body, keep_blank_values=True)]
+            [
+                (k, _swap_text(v, swap))
+                for k, v in parse_qsl(body, keep_blank_values=True)
+            ]
         )
     return body
 
