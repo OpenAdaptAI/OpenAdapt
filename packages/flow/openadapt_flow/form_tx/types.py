@@ -241,6 +241,16 @@ class UIProfileSpec(BaseModel):
         '[data-auth-wall="true"]',
     )
     authenticated_landmark_selectors: tuple[str, ...] = ()
+    # Case-insensitive regular expressions searched in error banners and open
+    # dialogs. A match means the session ended: the run stops at a sign-in
+    # wall instead of reporting a validation error.
+    session_expired_text_patterns: tuple[str, ...] = (
+        r"\bsession\b[^.]{0,40}\b(?:has\s+)?(?:expired|timed\s*out|ended)\b",
+        r"\b(?:you\s+(?:have\s+been|were)\s+)?(?:signed|logged)\s+out\b",
+        r"\b(?:please\s+)?(?:sign|log)\s*(?:in|on)\s+again\b",
+        r"\bre-?(?:authenticate|login|log\s+in|sign\s+in)\b",
+        r"\b(?:login|sign[- ]?in)\s+(?:has\s+)?expired\b",
+    )
     keepalive_path: Optional[str] = None
     debounce_grace_ms: int = Field(default=120, ge=0, le=5000)
     settle_window_ms: int = Field(default=150, ge=20, le=5000)
@@ -293,7 +303,18 @@ class FieldBindingSpec(BaseModel):
     prefill_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT
     triggers_re_render: bool = False
     required_in_pack: bool = False
-    placeholder_values: tuple[str, ...] = ("", "-- Select --", "Select...", "Choose...")
+    placeholder_values: tuple[str, ...] = (
+        "",
+        "-- Select --",
+        "Select...",
+        "Choose...",
+        "Select one",
+        "-- Select one --",
+        "Choose one",
+        "Please choose",
+        "Choose",
+        "-- Choose one --",
+    )
 
 
 class EntityTableSpec(BaseModel):
@@ -434,6 +455,13 @@ class ObservedControl(BaseModel):
     error_text: str = ""
     options: tuple[ObservedOption, ...] = ()
     is_secret: bool = False
+    # A native radio's own value attribute. ``current_value`` holds it only
+    # while the radio is checked; an unchecked radio reads as empty.
+    radio_value: str = ""
+    # The radio group this radio belongs to (native: its name; ARIA: its
+    # radiogroup container), and the group's visible label, if any.
+    radio_group: str = ""
+    group_label: str = ""
 
     @model_validator(mode="after")
     def _scrub_secret_fields(self) -> "ObservedControl":
