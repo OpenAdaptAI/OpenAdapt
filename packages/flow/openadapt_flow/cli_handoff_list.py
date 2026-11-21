@@ -70,8 +70,19 @@ def _handoff_verbs(sub: argparse._SubParsersAction) -> argparse._SubParsersActio
     return parser.add_subparsers(dest="handoff_command", required=True)
 
 
+def _group(sub: argparse._SubParsersAction) -> argparse._SubParsersAction:
+    """The shared group: ``cli_handoff.handoff_group`` where it exists (the
+    module with ``send`` and ``verify``), else the same rule here."""
+
+    try:
+        from openadapt_flow.cli_handoff import handoff_group
+    except ImportError:
+        return _handoff_verbs(sub)
+    return handoff_group(sub)
+
+
 def register_handoff_list(sub: argparse._SubParsersAction) -> None:
-    verbs = _handoff_verbs(sub)
+    verbs = _group(sub)
     listing = verbs.add_parser(
         "list",
         help="Open handoffs by state, with who still needs to follow up",
