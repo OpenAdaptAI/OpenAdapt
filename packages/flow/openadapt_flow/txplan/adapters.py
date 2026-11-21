@@ -789,6 +789,10 @@ class SqlAdapter:
         want = write.get("staged_diff")
         if not isinstance(want, Mapping):
             raise AdapterError("the plan has no staged diff for this statement")
+        # The planned values, not only the shape: without them a statement
+        # could commit different values into the planned rows.
+        if not isinstance(write.get("staged_after"), Mapping):
+            raise AdapterError("the plan has no staged values for this statement")
         con = self.connect()
         try:
             cur = con.cursor()
@@ -803,9 +807,7 @@ class SqlAdapter:
                 got_after = after_image(
                     after_raw(diff, after, after_rows), write.get("volatile") or []
                 )
-                if _shape(diff) != _shape(want) or (
-                    "staged_after" in write and got_after != write["staged_after"]
-                ):
+                if _shape(diff) != _shape(want) or got_after != write["staged_after"]:
                     con.rollback()
                     raise Diverged(
                         "the statement's rows or values are not the planned ones; rolled back"
