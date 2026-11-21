@@ -1929,7 +1929,6 @@ class PlaywrightFormSurface:
                     radio_value=str(item.get("radio_value") or ""),
                     radio_group=str(item.get("radio_group") or ""),
                     group_label=str(item.get("group_label") or ""),
-
                     modal_container=str(item.get("modal_container") or ""),
                 )
             )
