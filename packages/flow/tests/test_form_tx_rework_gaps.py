@@ -473,11 +473,16 @@ def test_declared_unbound_control_at_its_blank_value_is_named_on_the_receipt(
     )
 
 
+@pytest.mark.parametrize("readonly", [False, True])
 def test_intake_key_matching_an_empty_unbound_field_stops(
-    site: tuple[_Site, str], browser: Any
+    site: tuple[_Site, str], browser: Any, readonly: bool
 ) -> None:
     s, base = site
-    s.pages["/"] = _UNBOUND.replace(' value="Jasper Vellacott"', "")
+    html = _UNBOUND.replace(' value="Jasper Vellacott"', "")
+    if readonly:
+        # Set only by a client lookup the pack does not run.
+        html = html.replace('name="client_no">', 'name="client_no" readonly>')
+    s.pages["/"] = html
     _, _, reconciler, session = _start(
         browser,
         base,
