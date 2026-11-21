@@ -368,3 +368,115 @@ if __name__ == "__main__":  # pragma: no cover - fixture regeneration
     recorded, _, _ = _record_demo(base_url)
     out_path.write_text(json.dumps(recorded, indent=1) + "\n", encoding="utf-8")
     print(f"wrote {out_path} ({len(recorded['log']['entries'])} entries)")
+
+
+# ---------------------------------------------------------------------------
+# Refusal when the trace never shows a record at its own URL
+# ---------------------------------------------------------------------------
+
+
+def _json_entry(method: str, url: str, req: Any, resp: Any) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "request": {"method": method, "url": url, "headers": []},
+        "response": {
+            "status": 200,
+            "headers": [],
+            "content": {"mimeType": "application/json", "text": json.dumps(resp)},
+        },
+    }
+    if req is not None:
+        entry["request"]["postData"] = {
+            "mimeType": "application/json",
+            "text": json.dumps(req),
+        }
+    return entry
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        # Query-style reads only: a finder endpoint answering rows.
+        [
+            _json_entry(
+                "POST",
+                "http://127.0.0.1:8000/finder/ajax.php",
+                {"search": "a"},
+                {"aaData": [["1", "Doe"]]},
+            )
+        ],
+        # A query API that wraps its answers and a batch read.
+        [
+            _json_entry(
+                "POST",
+                "http://127.0.0.1:8000/api/$graphql",
+                {"query": "{ List { id } }"},
+                {"data": {"List": [{"id": "7"}]}},
+            ),
+            _json_entry(
+                "POST",
+                "http://127.0.0.1:8000/api",
+                {"type": "batch"},
+                {"type": "batch-response", "entry": []},
+            ),
+        ],
+        # One RPC endpoint for everything.
+        [
+            _json_entry(
+                "POST",
+                "http://127.0.0.1:8000/rpc/",
+                {"method": "model.read", "params": [[7]]},
+                {"id": 1, "result": [{"id": 7, "name": "x"}]},
+            )
+        ],
+    ],
+)
+def test_trace_without_an_item_route_is_refused(entries) -> None:
+    from openadapt_flow.tx.induce import InductionRefused
+
+    har = {"log": {"version": "1.2", "entries": entries}}
+    with pytest.raises(InductionRefused):
+        induce_lens_from_har(har)
+
+
+def test_recorded_real_trace_is_not_refused() -> None:
+    assert induce_lens_from_har(_fixture_har()).entity_name == "task"
+
+
+def test_create_then_read_at_its_url_is_enough_evidence() -> None:
+    base = "http://127.0.0.1:8000"
+    rec = {"id": 42, "title": "x"}
+    har = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                _json_entry("PUT", f"{base}/api/lists/3/items", {"title": "x"}, rec),
+                _json_entry("GET", f"{base}/api/items/42", None, rec),
+            ],
+        }
+    }
+    lens = induce_lens_from_har(har)
+    assert lens.write_mode == "create"
+    assert (lens.write_endpoint.method, lens.write_endpoint.path_template) == (
+        "PUT",
+        "/api/lists/3/items",
+    )
+    assert lens.get_one.path_template == "/api/items/{id}"
+
+
+def test_item_reads_without_any_attributable_write_are_refused() -> None:
+    from openadapt_flow.tx.induce import InductionRefused
+
+    base = "http://127.0.0.1:8000"
+    har = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                _json_entry("GET", f"{base}/api/items/42", None, {"id": 42}),
+                _json_entry(
+                    "POST", f"{base}/api", {"type": "batch"}, {"id": "b1", "type": "x"}
+                ),
+            ],
+        }
+    }
+    with pytest.raises(InductionRefused, match="no write the trace can attribute"):
+        induce_lens_from_har(har)
