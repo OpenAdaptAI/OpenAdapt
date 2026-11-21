@@ -446,8 +446,9 @@ browser workflows. Desktop and Citrix runs are self-hosted
   check reads whatever that path covers. In a fault test with injected bad
   writes, a screen-only check passed 54 of the 72 runs that left the record
   wrong, one API read passed 9, and a read of every table passed none. The
-  test database is SQLite with two record tables, and every check, the
-  database read included, also stopped 9 of the 18 correct saves
+  test database is SQLite with two record tables. Separately, 9 of the 18
+  correct saves stopped in every arm, when the save's answer timed out and
+  the write step halted before any read-back ran
   ([`EFFECT_E2E.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)).
 - On pixel surfaces, the identity check takes extra looks before it stops on
   a look-alike record ID: false stops on a dense record list fell from 232 to

@@ -59,11 +59,14 @@ monorepo and installable from source.
 5. **Confirms the right record before every write and reads it back after.**
    A run is `VERIFIED` only when a read outside the acting session confirms the
    save: the system of record (API, database, FHIR with SMART Backend Services,
-   a log or an export) or a separate signed-in session. A read on the acting
-   screen gets its own level and never verifies a run. The run report names
-   the level. Without database or API access, the check covers at most the
-   target record, plus the same actor's changes in the app's activity log
-   within a stated window where the app shows one; other records, later
+   a log or an export) or a separate session (a fresh sign-in on the web; on
+   desktop, a fresh session or a relaunch of the app, as the deployment
+   declares). A read on the acting screen gets its own level and never
+   verifies a run. The run report names the level for each save with a
+   declared read-back. Where the app's own screens are the only independent
+   read, the check covers at most the target record, plus the same actor's
+   changes in the app's activity log within a stated window where the app
+   shows one and the program is set up to read it; other records, later
    server-side jobs and outbound messages are not covered. The wire check is
    evidence of what was sent, not a check level.
    `record --verify` proposes those checks from what the demonstration changed.
@@ -515,10 +518,10 @@ A test fails when a command has no file or this list is out of date.
   clean runs: 72 runs left a wrong record behind. A check that trusts the screen's "Saved" banner reported 54 of those
   as success; reading the record back over the app's REST API missed 9; the
   complete database read path caught all 72. The test app's database is
-  SQLite with two record tables, so "every table" there is two tables. Every
-  check, the database read included, also stopped 9 of the 18 correct saves
-  (the server committed the save but the answer timed out), so the 72 is not
-  free of false stops. The fault set and method are in
+  SQLite with two record tables, so "every table" there is two tables.
+  Separately, 9 of the 18 correct saves stopped in every arm: the server
+  committed the save but its answer timed out, so the write step halted before
+  any read-back ran. The count is of end-to-end run outcomes. The fault set and method are in
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
 - **OpenEMR referral: agent, screen program and API step.** Median wall time
   per referral, from a fresh browser through sign-in, the entry and the read-back:
@@ -543,8 +546,9 @@ A test fails when a command has no file or this list is out of date.
 - **openIMIS claims.** On a test copy of openIMIS, the open-source insurance
   and claims system that runs Nepal's national health insurance scheme, the
   compiled program entered 149 synthetic claims with no model calls: 148 read
-  back correct and none were saved wrong. Each claim was read back by SQL
-  through a read-only database role on the test copy:
+  back correct and none were saved wrong. Each saved claim was read back by
+  SQL through a read-only database role on the test copy; the 149th stopped
+  before saving:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis).
 
 The systems each result ran on are listed in

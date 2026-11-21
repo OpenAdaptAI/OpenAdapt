@@ -5,9 +5,11 @@ Status: draft for approval. Nothing here is applied to the website.
 These changes bring the insurance and dental pages in line with the repository
 docs ([LIMITS.md](../packages/flow/docs/LIMITS.md#what-the-guarantee-covers-without-database-access),
 [THREAT_MODEL.md](../packages/flow/docs/THREAT_MODEL.md#what-layer-1-covers)).
-Without database or API access, the strongest check is a separately signed-in
-session. It covers the target record as shown at the time of the read, and
-only where the portal allows a second session.
+When a portal's own screens are the only independent read (no database, API,
+log or export), the strongest check is a separately signed-in session. It
+covers the target record as shown at the time of the read, and only where the
+portal allows a second session and that read loads the record fresh from the
+server.
 
 File: `data/site/pages/industries.mjs` in `OpenAdaptAI/openadapt-web`, at
 commit `53f05758`. Line numbers refer to that commit.
@@ -57,7 +59,7 @@ Proposed row:
 
 | Your setup | Second read | Result OpenAdapt can give |
 | --- | --- | --- |
-| Broker entering into a carrier portal | The saved claim, opened again in a separate signed-in session, where the portal allows one | Checked in a separate session, as of the time of the check. With no second session, a person reviews |
+| Broker entering into a carrier portal | The saved claim, opened again in a separate signed-in session, where the portal allows one and the second read loads the record fresh from the server | Checked in a separate session, as of the time of the check. With no second session, a person reviews |
 
 ## Line 218: dental page description (remove)
 

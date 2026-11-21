@@ -666,10 +666,11 @@ The 72-fault table in the README
 ([`EFFECT_E2E.md`](../benchmark/effect_e2e/EFFECT_E2E.md)) has two limits
 of its own. Its database is SQLite with two record tables (encounters and
 billing), so "a read of every table" there means two tables; a production
-system has hundreds, and a read path rarely covers them all. And every arm,
-the complete database read included, stopped 9 of the 18 correct saves: the
-`timeout` case commits the save but the client never learns it, so the run
-halts. That is a safe false stop, but it is a false stop.
+system has hundreds, and a read path rarely covers them all. And 9 of the 18
+correct saves stopped in every arm: the `timeout` case commits the save but
+the client never learns it, so the write step halts before any read-back
+runs. That is a safe false stop, but it is a false stop, and it counts end-to-end
+run outcomes rather than any one check.
 
 The openIMIS claims result (148 of 149 read back correct) was checked by SQL,
 through a read-only database role on a test copy. It shows the program and
@@ -678,21 +679,28 @@ a deployment without it.
 
 #### What the guarantee covers without database access
 
-Most deployments give no database or API access. There, the strongest read is
-a separately signed-in session (`separate_session`, level 3 in
+Most deployments give no database or API access. Where the application's own
+screens are then the only independent read (no readable log or export of
+committed data, which can still give level 4; see
+[`RECORDS.md`](RECORDS.md)), the strongest read is a separate session
+(`separate_session`, level 3 in
 [`check_level.py`](../../types/openadapt_types/check_level.py)), and the
 guarantee is narrower:
 
 - it covers the target record, read back in that session;
-- where the application shows an activity or audit log, it also covers the
-  same actor's logged changes within a stated window;
+- where the application shows an activity or audit log and the program is
+  set up to read it, it also covers the same actor's logged changes within a
+  stated window (with no audit view declared, a collateral edit to another
+  record is not seen);
 - it does not cover other records the log doesn't show, server-side jobs that
   run after the read, or outbound effects (HL7, message queues, email, a
   downstream service).
 
 `VERIFIED` there means "as of the read-back time, the separate session showed
 this value". It is not a claim that the value persisted, or that the run
-caused nothing else. The run report names the check level for every save.
+caused nothing else. The run report names the check level for every save
+with a declared read-back. A legacy step with no declared effect is checked
+only by its screen postcondition and is not graded on the ladder.
 
 #### On-screen read-back (the no-API default oracle) is a consistency signal, not transactional proof
 

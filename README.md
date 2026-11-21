@@ -17,8 +17,8 @@ every run. OpenAdapt lets your agent, or a person, do a task once in a web,
 Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
-each save, reads the save back after it outside the session that made it, and returns
-a plain outcome. When anything doesn't match, it stops and tells your agent
+each save, checks the save after it, and returns a plain outcome that says
+how the save was checked. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
 ## Measured on OpenEMR and openIMIS
@@ -45,8 +45,8 @@ has every run.
 On a test copy of openIMIS, the open-source insurance and claims system that
 runs Nepal's national health insurance scheme, the compiled program entered
 149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong. Each claim was read back by SQL through a read-only database role
-on the test copy
+saved wrong. Each saved claim was read back by SQL through a read-only
+database role on the test copy; the 149th stopped before saving
 ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
 
 A screen can't show a save that went wrong behind it. On a test copy of
@@ -80,12 +80,14 @@ Each check below was asked whether those 72 bad saves had succeeded:
 | A read of every table in the database | 0 of 72 |
 
 The test app's database is SQLite with two record tables, so "every table"
-there is two tables; a real system has many more. Every check, the database
-read included, also stopped 9 of the 18 correct saves, where the server
-committed the save but its answer timed out. Most deployments give no database
-access at all. There the check covers at most the target record, read in a
-separate signed-in session, and the same user's changes in the app's activity
-log within a stated window, where the app shows one.
+there is two tables; a real system has many more. Separately, 9 of the 18
+correct saves stopped in every arm: the server committed the save but its
+answer timed out, so the write step halted before any read-back ran. Most
+deployments give no database access at all. Where the app's own screens are
+the only independent read, the check covers at most the target record, read
+in a separate session, and the same user's changes in the app's activity log
+within a stated window, where the app shows one and the program is set up to
+read it.
 
 [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the fault set, the method and the raw results.
@@ -312,7 +314,7 @@ the right record is on screen, makes the entry, and reads the record back.
 | Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
 | When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
 | Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
-| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back outside the acting session; the report names how |
+| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Reported verified only when a read outside the acting session confirms it; weaker checks are named as such |
 | Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
 
 ## What it can do
@@ -321,7 +323,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
 - **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
 - **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
-- **Confirms the right record before every write and reads the saved record back** outside the acting session: from the system of record where one can be read, or in a separate signed-in session. The run report names the check level.
+- **Confirms the right record before every write and checks the saved record after it**. A run is reported verified only when a read outside the acting session confirms the save: the system of record where one can be read, or a separate session. Weaker checks are reported at their own level.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).

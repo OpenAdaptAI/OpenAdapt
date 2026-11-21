@@ -36,16 +36,19 @@ checks only reduce how often that owner has to act.
 
 Layer 1 can only report what its read path shows. The run's report names
 the check level ([`check_level.py`](../../types/openadapt_types/check_level.py),
-[READBACK_LADDER.md](READBACK_LADDER.md)) for every save.
+[READBACK_LADDER.md](READBACK_LADDER.md)) for every save with a declared
+read-back; a legacy step with no declared effect is checked only by its
+screen postcondition and is not graded.
 
 - **With a system-of-record read** (API, FHIR, SQL, a log or an export, level
   4), the check covers the target record and whatever else that read path
   reads. A collateral write outside the read path is not seen.
-- **With no database or API access** (the common case: most deployments give
-  none), the check covers the target record and, where the application shows
-  an activity or audit log, the same actor's logged changes within a stated
-  window. A separately signed-in session (level 3) is the
-  strongest read available there. Changes to other records that the log does
+- **When the application's own screens are the only independent read** (no
+  database, API, readable log or export; most deployments give no database
+  access), the check covers the target record and, where the application
+  shows an activity or audit log and the program is set up to read it, the
+  same actor's logged changes within a stated window. A separate session
+  (level 3) is the strongest read available there. Changes to other records that the log does
   not show, server-side jobs that run later, and outbound messages (HL7,
   queues, email) are outside it.
 - **Reads in the acting session** (`same_screen`, `reopened`) are reported at
@@ -71,9 +74,9 @@ What each attacker can do, and which layer stops it:
 | Threat | Owner |
 | --- | --- |
 | The app changed: a new layout, a renamed button, look-alike rows | Pre-checks stop most cases; layer 1 catches the rest |
-| The agent is wrong, hijacked or tries to cheat | Layer 2 refuses undeclared writes where requests can be intercepted; layer 1 checks the outcome through a read the agent cannot write, within that read's coverage |
+| The agent is wrong, hijacked or tries to cheat | Layer 2 refuses undeclared writes where requests can be intercepted (a state-changing GET that it classes as a read is not refused; see LIMITS.md); layer 1 checks the outcome through a read the agent cannot write, within that read's coverage |
 | The app's own page scripts change what is sent | Layer 2 compares what is actually sent; layer 1 checks what was stored |
-| The app's server says "saved" and writes nothing, or writes elsewhere | Layer 1 reads the target record from outside the acting session. A write elsewhere is caught only if the read path covers it (a database or API read of that table, or the app's activity log) |
+| The app's server says "saved" and writes nothing, or writes elsewhere | Layer 1 reads the target record from outside the acting session. A write elsewhere is caught only if the read path covers it (a database or API read of that table, or the app's activity log when the program is set up to read it) |
 | A bug in OpenAdapt | Layer 1, and blind fault suites that measure it |
 
 **Rule for reviews.** A finding that a pre-check can be fooled is a
