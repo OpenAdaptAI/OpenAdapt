@@ -1819,6 +1819,18 @@ def build_replayer(
         if not ok:
             print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
             appliance = None
+    regulated = (
+        getattr(governed_authorization, "execution_profile", None) == "regulated"
+    )
+    if appliance is not None and regulated:
+        from openadapt_flow.runtime.model_transport import regulated_transport_refusal
+
+        refusal = regulated_transport_refusal(
+            os.environ.get("OPENADAPT_FLOW_VLM_URL", "")
+        )
+        if refusal is not None:
+            print(f"Regulated profile: {refusal}; the appliance is NOT wired.")
+            appliance = None
     if appliance is not None:
         print(
             "Using on-prem VLM appliance at "
@@ -1849,6 +1861,15 @@ def build_replayer(
                 if not ok:
                     print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
                     wire = False
+            if wire and regulated and (grounding_cfg.base_url or "").strip():
+                from openadapt_flow.runtime.model_transport import (
+                    regulated_transport_refusal,
+                )
+
+                refusal = regulated_transport_refusal(grounding_cfg.base_url)
+                if refusal is not None:
+                    print(f"Regulated profile: {refusal}; replaying FULLY LOCAL.")
+                    wire = False
             if wire:
                 model_grounder = build_model_grounder(grounding_cfg)
                 if model_grounder is not None:
@@ -1860,9 +1881,12 @@ def build_replayer(
                     )
 
     # The configured model grounder takes precedence as the VLM fallback; the
-    # on-prem appliance grounder is used only when no model grounder is wired.
+    # on-prem appliance grounder is used only when no model is pinned. A pinned
+    # model that can't be wired (unavailable, refused) never falls back to
+    # another placement or model: the grounding rung stays off and a target
+    # the deterministic rungs can't resolve halts for a person.
     fallback = model_grounder
-    if fallback is None and appliance is not None:
+    if fallback is None and appliance is not None and not grounding_cfg.enabled:
         fallback = appliance.grounder
     local_model: Optional[Any] = None
     if runtime_config is not None and runtime_config.local_grounding:
