@@ -274,12 +274,16 @@ def apply(
                 names |= _learn._names(n)
         except VerifierError as exc:
             raise ProbeError(f"{path}: {exc}") from exc
+        row_versions = None
         if not _sees_its_own_harm(loaded):
             # An update (or a found check) with no version source: another
             # user's edit that the agent's stale save reverts leaves nothing
             # changed, so before learning only the bookkeeping move stopped
-            # it. Such a contract gets no automatic excuse.
-            continue
+            # it. Such a contract gets an excuse only with a version source
+            # derived here, written beside it.
+            row_versions = detect_row_versions(data)
+            if row_versions is None:
+                continue
         excuses = [
             e
             for e in block["excuses"]
@@ -292,10 +296,14 @@ def apply(
             **frame,
             "learned": {**block, "excuses": excuses, "source": "read_only_probe"},
         }
+        if row_versions is not None:
+            new["frame"]["row_versions"] = row_versions
         try:
-            Contract.from_dict(new, name=Path(path).stem)
+            checked = Contract.from_dict(new, name=Path(path).stem)
         except VerifierError as exc:
             raise ProbeError(f"{path}: {exc}") from exc
+        if row_versions is not None and not _sees_its_own_harm(checked):
+            continue  # the derived source doesn't cover every effect
         plan.append((Path(path), new, len(excuses)))
     _learn._write_all(
         [
@@ -312,11 +320,14 @@ def _sees_its_own_harm(contract: Any) -> bool:
 
     Either every declared effect creates new records (``record_written``
     with ``count_new_only``; a zero-count guard writes nothing), or the
-    contract reads the target's versions (``frame.versions``) and those
-    versions cover every other effect: with a ``target_surface``, each
-    effect that isn't a create must be read on that surface. Anything else,
-    such as a create plus a ``field_equals`` update, gets no excuse."""
+    contract reads the target's versions and they cover every other effect:
+    ``frame.versions`` (with a ``target_surface``, each effect that isn't a
+    create must be read on that surface), or ``frame.row_versions`` bound to
+    the target surface's own table (:func:`row_versions.binding_problem`)
+    with every other effect on that surface. Anything else, such as a create
+    plus a ``field_equals`` update, gets no excuse."""
 
+    from openadapt_flow.runtime.effects.row_versions import binding_problem
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
     config = getattr(contract, "config", None)
@@ -343,11 +354,88 @@ def _sees_its_own_harm(contract: Any) -> bool:
     others = [e for e in effects if not creates(e) and not guard(e)]
     if not others:
         return any(creates(e) for e in effects)
-    versions = getattr(frame, "versions", None) if frame is not None else None
-    if versions is None:
+    if frame is None:
         return False
-    surface = getattr(versions, "target_surface", None)
-    return surface is None or all(surface_of(e) == surface for e in others)
+    versions = getattr(frame, "versions", None)
+    if versions is not None:
+        surface = getattr(versions, "target_surface", None)
+        if surface is None or all(surface_of(e) == surface for e in others):
+            return True
+    rows = getattr(frame, "row_versions", None)
+    database = getattr(frame, "database", None)
+    verifier = getattr(config, "verifier", None)
+    if rows is None or database is None or verifier is None:
+        return False
+    if binding_problem(
+        rows,
+        getattr(verifier, "surfaces", None) or {},
+        getattr(database, "read", None) or {},
+        getattr(frame, "identity_field", None),
+    ):
+        return False
+    return all(surface_of(e) == rows.target_surface for e in others)
+
+
+def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    """A version source for an update or found check, from the contract
+    alone: on PostgreSQL, the target's own row versions
+    (``frame.row_versions``). Found only when every write effect reads one
+    surface, that surface's read is a plain ``SELECT ... FROM <table> t``
+    with no other ``FROM`` over the frame's own connection, and it selects the identity field
+    straight from one column. Anything else: None (no excuse).
+
+    A MySQL or MariaDB target has no such source: ``updated_at`` and
+    ``ON UPDATE`` columns read the same after one save as after two, so they
+    can't count saves. Those need a history read (``frame.versions``) or the
+    database's change log."""
+
+    frame = data.get("frame") if isinstance(data, Mapping) else None
+    if not isinstance(frame, Mapping):
+        return None
+    database = frame.get("database")
+    if not isinstance(database, Mapping) or database.get("dialect") != "postgresql":
+        return None
+    names: set[str] = set()
+    for effect in data.get("effects") or []:
+        if not isinstance(effect, Mapping):
+            return None
+        if effect.get("kind") not in ("record_written", "field_equals"):
+            continue
+        if effect.get("kind") == "record_written" and effect.get("expected_count") == 0:
+            continue  # a guard reads; it has no target
+        probe = str(effect.get("probe") or "")
+        if not probe.startswith("surface="):
+            return None
+        names.add(probe[len("surface=") :].split("|", 1)[0].strip())
+    if len(names) != 1:
+        return None
+    (surface,) = names
+    verifier = data.get("verifier")
+    surfaces = verifier.get("surfaces") if isinstance(verifier, Mapping) else None
+    source = surfaces.get(surface) if isinstance(surfaces, Mapping) else None
+    if not isinstance(source, Mapping) or source.get("kind") != "sql":
+        return None
+    read = database.get("read") or {}
+    if any(source.get(k) != read.get(k) for k in ("sql_driver", "sql_connect_args")):
+        return None  # another database: its rows aren't the frame's
+    from openadapt_flow.runtime.effects.row_versions import single_table_read
+
+    # One SELECT over one table: the declared record is one row, so the
+    # row's versions are the record's. A read that also looks into other
+    # tables (a list of tags, a child row, a UNION) declares rows this
+    # source doesn't count.
+    found = single_table_read(
+        str(source.get("sql_query") or ""), str(frame.get("identity_field") or "id")
+    )
+    if found is None:
+        return None
+    table, key_column = found
+    return {
+        "source": "postgresql_xmin",
+        "table": table,
+        "key_column": key_column,
+        "target_surface": surface,
+    }
 
 
 def http_sender(
