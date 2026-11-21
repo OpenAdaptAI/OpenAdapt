@@ -830,6 +830,38 @@ def test_a_key_press_with_several_plans_waiting_approves_none(tmp_path: Path) ->
         proxy.apply(a["plan"])
 
 
+def test_only_statements_the_stage_can_roll_back_are_writes(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=5)
+    proxy = _proxy(db, max_rows=100)
+    for sql in ("REINDEX users", "ANALYZE", "CALL do_things()", "COPY users FROM '/x'"):
+        with pytest.raises(TxRefused) as exc:
+            proxy.preview(sql)
+        assert exc.value.code == "bad_write", sql
+
+
+def test_the_plan_binds_the_sqlite_file_a_relative_path_resolved_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.txplan.spec import TxSpec
+
+    def spec(root: Path) -> TxSpec:
+        data = {
+            "schema_version": "openadapt.tx/v1",
+            "systems": [
+                {"name": "db", "kind": "sql", "dialect": "sqlite", "path": "app.sqlite"}
+            ],
+        }
+        out = TxSpec.model_validate(data)
+        out.source = root / "systems.tx.yaml"
+        return out
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    assert engine._spec_sha(spec(tmp_path / "a")) != engine._spec_sha(
+        spec(tmp_path / "b")
+    )
+
+
 def test_rest_path_values_are_one_segment() -> None:
     from openadapt_flow.txplan.adapters import AdapterError, RestAdapter
 

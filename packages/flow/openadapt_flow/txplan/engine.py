@@ -62,6 +62,7 @@ FREE = ("undone", "cancelled", "refused")
 _DDL = re.compile(
     r"^\s*(create|alter|drop|truncate|rename|comment|grant|revoke)\b", re.I
 )
+_DML = re.compile(r"^\s*(insert|update|delete|merge|replace)\b", re.I)
 _READ = re.compile(r"^\s*(select|with|show|explain|pragma|values)\b", re.I)
 #: Test hook: exit right after the Nth send, before its outcome is recorded.
 CRASH_ENV = "OPENADAPT_TX_CRASH_AFTER_SEND"
@@ -202,7 +203,18 @@ class Ctx:
 
 
 def _spec_sha(spec: TxSpec) -> str:
-    return sha256(spec.model_dump(mode="json"))
+    # Wrong-target class: a relative SQLite path names a file relative to the
+    # tx file (or the working folder), so the approved digest binds the file
+    # it resolved to, not just the spelling.
+    resolved = {}
+    for system in spec.systems:
+        path = getattr(system, "path", None)
+        if getattr(system, "dialect", None) == "sqlite" and path:
+            p = Path(str(path))
+            resolved[system.name] = str(
+                (p if p.is_absolute() else spec.root / p).resolve()
+            )
+    return sha256({"spec": spec.model_dump(mode="json"), "sqlite_files": resolved})
 
 
 # -- receipts ------------------------------------------------------------------
@@ -435,7 +447,19 @@ def _undo_sql(
         now_.get(r) == _row_digests(adapter, r, item["row"])
         for r, item in images.get("before", {}).items()
     )
-    state.record(w["key"], "undone", plan=digest, payload=entry.payload, read_back=ok)
+    if ok:
+        state.record(
+            w["key"], "undone", plan=digest, payload=entry.payload, read_back=ok
+        )
+    else:
+        # Unverified-success class: a refuted SQL undo keeps its replay key.
+        state.record(
+            w["key"],
+            "uncertain",
+            plan=digest,
+            payload=entry.payload,
+            reason="undo: the read-back does not show the baseline",
+        )
     return "undone" if ok else "undo_refuted"
 
 
@@ -467,6 +491,12 @@ def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
         if _READ.match(sql):
             raise TxRefused(
                 "bad_write", f"write {n}: a read is not a write (use a query)"
+            )
+        if not (_DML.match(sql) or _DDL.match(sql)):
+            # Unstaged-commit class: only statements the staging transaction
+            # can roll back are admitted.
+            raise TxRefused(
+                "bad_write", f"write {n}: only INSERT, UPDATE, DELETE, MERGE or DDL"
             )
         if _TX_CONTROL.match(sql):
             # Unstaged-commit class: a transaction-control statement would end
