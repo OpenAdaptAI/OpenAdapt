@@ -2654,13 +2654,20 @@ def test_popup_inputs_the_summary_omits_are_not_checked_and_never_verified() -> 
     assert verdict is not None
     assert verdict.passed is False
     assert verdict.failed_keys == ()
-    assert verdict.not_checked_keys == ("construction_year", "living_area_sqft")
+    # The popup inputs, plus the figure that came only from them.
+    assert set(verdict.not_checked_keys) == {
+        "construction_year",
+        "living_area_sqft",
+        "replacement_cost",
+    }
     by_key = {v.dossier_key: v for v in verdict.field_verdicts}
-    for key in verdict.not_checked_keys:
+    for key in ("construction_year", "living_area_sqft"):
         assert by_key[key].status == ReadbackStatus.NOT_CHECKED
         assert by_key[key].passed is False
         assert "re-read before apply" in by_key[key].reason
-    assert verdict.checked_count == len(verdict.field_verdicts) - 2
+    assert by_key["replacement_cost"].status == ReadbackStatus.NOT_CHECKED
+    assert "displayed result" in by_key["replacement_cost"].reason
+    assert verdict.checked_count == len(verdict.field_verdicts) - 3
 
 
 def test_popup_input_that_does_not_hold_its_value_stops_before_apply() -> None:

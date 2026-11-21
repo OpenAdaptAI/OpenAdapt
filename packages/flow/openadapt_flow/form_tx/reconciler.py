@@ -206,6 +206,8 @@ class ReconcilerSession:
         label: Optional[str] = None,
         selector: Optional[str] = None,
         in_popup_subroutine: Optional[str] = None,
+        from_popup_subroutine: Optional[str] = None,
+        matched_popup_result: bool = False,
     ) -> None:
         """Note that a field was written so the read-back must cover it."""
         if dossier_key and dossier_key != "human-current-field":
@@ -221,6 +223,8 @@ class ReconcilerSession:
                 selector=selector,
                 source=source,  # type: ignore[arg-type]
                 in_popup_subroutine=in_popup_subroutine,
+                from_popup_subroutine=from_popup_subroutine,
+                matched_popup_result=matched_popup_result,
             )
         )
 
@@ -1549,6 +1553,7 @@ class FormReconciler:
             )
         )
         commit_selector: Optional[str] = None
+        displayed_result: Optional[str] = None
         with popup_cm as popup_surface:
             popup_snap = _popup_snapshot(popup_surface)
 
@@ -1695,6 +1700,21 @@ class FormReconciler:
                     )
                 ]
 
+            if subroutine.result_anchor is not None:
+                displayed_result, result_err = self._read_popup_result(
+                    popup_snap, subroutine
+                )
+                if result_err is not None:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_result|{subroutine.subroutine_id}",
+                            result_err,
+                        )
+                    ]
+
             commit_selector = popup_commit.dom_selector
             popup_surface.click(commit_selector)
 
@@ -1766,6 +1786,49 @@ class FormReconciler:
             }
             return [halt]
 
+        # The value put back in the parent must be the figure the popup showed.
+        # An estimator that shows one figure and hands back another (rounded,
+        # capped, stale) stops here rather than going through unseen.
+        if displayed_result is not None and not values_equivalent(
+            displayed_result, return_after.current_value, subroutine.return_codec
+        ):
+            ctrl_sig = compute_field_signature(return_after)
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.PREFILL_VALUE_CONFLICT,
+                after_parent_snap.screen_id,
+                return_after.dom_selector,
+                f"popup_result_mismatch|{ctrl_sig}",
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                screen_id=after_parent_snap.screen_id,
+                control_id=return_after.control_id,
+                dom_selector=return_after.dom_selector,
+                field_label=return_after.label_text,
+                section_text=return_after.section_text,
+                dossier_key=subroutine.return_output_key,
+                portal_value=return_after.current_value,
+                dossier_value=displayed_result,
+                message=(
+                    f"Popup {subroutine.subroutine_id!r} showed {displayed_result!r} "
+                    f"but put {return_after.current_value!r} in "
+                    f"{subroutine.return_output_key!r}"
+                ),
+                allowed_actions=(
+                    HumanDecisionAction.PROVIDE_VALUE,
+                    HumanDecisionAction.FIXED_ON_SCREEN,
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {
+                "field_signature": ctrl_sig,
+                "control": return_after,
+            }
+            return [halt]
+
         # A value the intake already states must match what the popup put
         # back; otherwise stop before submit rather than keep the popup's.
         existing_fact = session.effective_facts.get(subroutine.return_output_key)
@@ -1816,6 +1879,8 @@ class FormReconciler:
             dossier_key=subroutine.return_output_key,
             label=return_after.label_text,
             selector=return_after.dom_selector,
+            from_popup_subroutine=subroutine.subroutine_id,
+            matched_popup_result=displayed_result is not None,
         )
         session._human_accepted_control_signatures.add(
             compute_field_signature(return_after)
@@ -1829,6 +1894,35 @@ class FormReconciler:
                 confidence=1.0,
             )
         return None
+
+    @staticmethod
+    def _read_popup_result(
+        popup_snap: FormSnapshot, subroutine: PopupSubroutineSpec
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Read the popup's displayed result: ``(value, None)`` or ``(None, why)``."""
+        assert subroutine.result_anchor is not None
+        try:
+            ctrl = match_anchor_in_snapshot(
+                subroutine.result_anchor, popup_snap, include_readonly=True
+            )
+        except AmbiguousAnchorError as exc:
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"
+            )
+        if ctrl is None or not ctrl.current_value.strip():
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} shows no result to check "
+                f"the returned value against"
+            )
+        raw = ctrl.current_value.strip()
+        try:
+            normalize_with_codec(raw, subroutine.return_codec)
+        except CodecValueError:
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} result {raw!r} is not a "
+                f"{subroutine.return_codec.kind.value} value"
+            )
+        return raw, None
 
     def _check_popup_entries_before_apply(
         self,

@@ -73,7 +73,14 @@ document.getElementById('submit').addEventListener('click', async () => {{
 </body></html>"""
 
 
-def _estimator_body(*, in_page: bool, calculate: bool, factor: int) -> str:
+def _estimator_body(
+    *,
+    in_page: bool,
+    calculate: bool,
+    factor: int,
+    offset: int = 0,
+    round_back: bool = False,
+) -> str:
     calc_btn = '<button id="calc" type="button">Calculate</button>' if calculate else ""
     if in_page:
         apply_js = (
@@ -89,6 +96,7 @@ def _estimator_body(*, in_page: bool, calculate: bool, factor: int) -> str:
   <label for="sqft">Square feet</label>
   <input id="sqft" name="sqft">
   {calc_btn}
+  <label for="result">Estimated value</label>
   <output id="result" data-readonly-output></output>
   <button id="use" type="button">Use This Value</button>
   <script>
@@ -96,8 +104,9 @@ def _estimator_body(*, in_page: bool, calculate: bool, factor: int) -> str:
     let r = '';
     const calc = document.getElementById('calc');
     if (calc) calc.addEventListener('click', () => {{
-      r = String(Number(document.getElementById('sqft').value) * {factor});
-      document.getElementById('result').textContent = r;
+      r = String(Number(document.getElementById('sqft').value) * {factor} + {offset});
+      document.getElementById('result').textContent = Number(r).toLocaleString('en-US');
+      if ({"true" if round_back else "false"}) r = String(Math.floor(Number(r) / 1000) * 1000);
     }});
     document.getElementById('use').addEventListener('click', () => {{
       if (!r) return;
@@ -108,8 +117,16 @@ def _estimator_body(*, in_page: bool, calculate: bool, factor: int) -> str:
 {close_tag}"""
 
 
-def _estimator_page(*, calculate: bool, factor: int) -> str:
-    body = _estimator_body(in_page=False, calculate=calculate, factor=factor)
+def _estimator_page(
+    *, calculate: bool, factor: int, offset: int, round_back: bool
+) -> str:
+    body = _estimator_body(
+        in_page=False,
+        calculate=calculate,
+        factor=factor,
+        offset=offset,
+        round_back=round_back,
+    )
     return f"""<!doctype html><html><head><title>Estimator</title></head>
 <body>{body}</body></html>"""
 
@@ -128,7 +145,17 @@ def _summary_page(record: dict[str, Any]) -> str:
 
 
 class _Portal:
-    def __init__(self, *, mode: str, calculate: bool = True, factor: int = RATE):
+    def __init__(
+        self,
+        *,
+        mode: str,
+        calculate: bool = True,
+        factor: int = RATE,
+        offset: int = 0,
+        round_back: bool = False,
+    ):
+        self.offset = offset
+        self.round_back = round_back
         self.mode = mode
         self.calculate = calculate
         self.factor = factor
@@ -140,11 +167,15 @@ class _Portal:
         path = req.url[len(ORIGIN) :].split("?")[0]
         if path == "/quote":
             html = _quote_page(self.mode)
-            if self.mode == "in_page" and (not self.calculate or self.factor != RATE):
+            if self.mode == "in_page":
                 html = html.replace(
                     _estimator_body(in_page=True, calculate=True, factor=RATE),
                     _estimator_body(
-                        in_page=True, calculate=self.calculate, factor=self.factor
+                        in_page=True,
+                        calculate=self.calculate,
+                        factor=self.factor,
+                        offset=self.offset,
+                        round_back=self.round_back,
                     ),
                 )
             if not self.open_window:
@@ -156,7 +187,12 @@ class _Portal:
             route.fulfill(
                 status=200,
                 content_type="text/html",
-                body=_estimator_page(calculate=self.calculate, factor=self.factor),
+                body=_estimator_page(
+                    calculate=self.calculate,
+                    factor=self.factor,
+                    offset=self.offset,
+                    round_back=self.round_back,
+                ),
             )
         elif path == "/submit" and req.method == "POST":
             self.submissions.append(json.loads(req.post_data or "{}"))
@@ -170,7 +206,7 @@ class _Portal:
             route.fulfill(status=404, body="not found")
 
 
-def _pack(mode: str) -> FormPack:
+def _pack(mode: str, result_label: Optional[str] = None) -> FormPack:
     int_codec = FieldCodecSpec(kind=FormCodecKind.INTEGER)
     return FormPack(
         pack_id=f"popup-steps-{mode}",
@@ -199,6 +235,11 @@ def _pack(mode: str) -> FormPack:
                     ),
                 ),
                 compute_anchors=(FieldAnchorSpec(label_patterns=("^Calculate$",)),),
+                result_anchor=(
+                    FieldAnchorSpec(label_patterns=(f"^{result_label}$",))
+                    if result_label
+                    else None
+                ),
                 commit_anchor=FieldAnchorSpec(label_patterns=("^Use This Value$",)),
                 parent_return_anchor=FieldAnchorSpec(
                     label_patterns=("^Dwelling coverage$",)
@@ -242,10 +283,10 @@ def _pack(mode: str) -> FormPack:
     )
 
 
-def _dossier(dwelling: Optional[int] = None) -> InputDossier:
+def _dossier(dwelling: Optional[int] = None, sqft: int = 2000) -> InputDossier:
     raw: dict[str, Any] = {
         "applicant.first_name": "Mirela",
-        "property.square_feet": 2000,
+        "property.square_feet": sqft,
     }
     if dwelling is not None:
         raw["coverage.dwelling"] = dwelling
@@ -278,7 +319,10 @@ def chromium_browser() -> Any:
 
 
 def _run(
-    browser: Browser, portal: _Portal, dossier: InputDossier
+    browser: Browser,
+    portal: _Portal,
+    dossier: InputDossier,
+    result_label: Optional[str] = None,
 ) -> tuple[Any, _Portal]:
     ctx = browser.new_context(viewport={"width": 1280, "height": 800})
     try:
@@ -289,7 +333,7 @@ def _run(
         )
         surface.goto(f"{ORIGIN}/quote")
         reconciler = FormReconciler(surface)
-        session = reconciler.create_session(_pack(portal.mode), dossier)
+        session = reconciler.create_session(_pack(portal.mode, result_label), dossier)
         result = reconciler.run_until_halt_or_done(session)
         return result, portal
     finally:
@@ -313,9 +357,15 @@ def test_two_step_estimator_runs_calculate_then_use_and_keeps_its_input_unchecke
     verdict = result.summary_verdict
     assert verdict is not None
     assert verdict.failed_keys == ()
-    assert verdict.not_checked_keys == ("property.square_feet",)
+    assert set(verdict.not_checked_keys) == {
+        "property.square_feet",
+        "coverage.dwelling",
+    }
     by_key = {v.dossier_key: v for v in verdict.field_verdicts}
-    assert by_key["coverage.dwelling"].status == ReadbackStatus.PASSED
+    # The dwelling figure came only from the popup, whose input is not checked,
+    # and no displayed result was declared to compare it with.
+    assert by_key["coverage.dwelling"].status == ReadbackStatus.NOT_CHECKED
+    assert "displayed result" in by_key["coverage.dwelling"].reason
     assert by_key["applicant.first_name"].status == ReadbackStatus.PASSED
     assert "re-read before apply" in by_key["property.square_feet"].reason
 
@@ -358,3 +408,63 @@ def test_popup_window_that_never_opens_is_a_stop_not_a_crash(
     assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
     assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
     assert "could not be run" in result.halts[0].message
+
+
+@pytest.mark.parametrize("mode", ["window", "in_page"])
+def test_popup_that_shows_one_figure_and_returns_another_stops_before_submit(
+    chromium_browser: Browser, mode: str
+) -> None:
+    # 3414 * 150 + 240 = 512,340 shown; 512,000 handed back.
+    result, portal = _run(
+        chromium_browser,
+        _Portal(mode=mode, offset=240, round_back=True),
+        _dossier(sqft=3414),
+        result_label="Estimated value",
+    )
+    assert portal.submissions == []
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    halt = result.halts[0]
+    assert halt.kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+    assert halt.portal_value == "512000"
+    assert halt.dossier_value == "512,340"
+    assert "512,340" in halt.message and "512000" in halt.message
+
+
+@pytest.mark.parametrize("mode", ["window", "in_page"])
+def test_returned_value_that_matches_the_displayed_result_proceeds(
+    chromium_browser: Browser, mode: str
+) -> None:
+    result, portal = _run(
+        chromium_browser,
+        _Portal(mode=mode, offset=240),
+        _dossier(sqft=3414),
+        result_label="Estimated value",
+    )
+    assert portal.submissions == [{"first": "Mirela", "dwelling": "512340"}], (
+        result.outcome,
+        result.halts,
+    )
+    verdict = result.summary_verdict
+    assert verdict is not None
+    by_key = {v.dossier_key: v for v in verdict.field_verdicts}
+    assert by_key["coverage.dwelling"].status == ReadbackStatus.PASSED
+    # The founder rule stands: the estimator input is still not checked.
+    assert verdict.not_checked_keys == ("property.square_feet",)
+    assert result.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert result.receipt is None
+
+
+@pytest.mark.parametrize("mode", ["window", "in_page"])
+def test_declared_result_that_cannot_be_read_stops_before_submit(
+    chromium_browser: Browser, mode: str
+) -> None:
+    result, portal = _run(
+        chromium_browser,
+        _Portal(mode=mode),
+        _dossier(),
+        result_label="Replacement cost",
+    )
+    assert portal.submissions == []
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
+    assert "shows no result" in result.halts[0].message
