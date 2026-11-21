@@ -48,7 +48,11 @@ from urllib.parse import urlsplit
 from openadapt_flow.connector.config import ConnectorSettings
 from openadapt_flow.connector.protocol import ByocGovernanceError, ByocJob
 from openadapt_flow.connector.secrets import LocalSecretStore, SecretStoreError
-from openadapt_flow.connector.storage import CustomerStorage, extract_bundle_archive
+from openadapt_flow.connector.storage import (
+    CustomerStorage,
+    extract_bundle_archive,
+    report_bytes,
+)
 from openadapt_flow.failure_signals import automation_failure_signal
 from openadapt_flow.ir import RunReport
 from openadapt_flow.runner.dispatch_envelope import (
@@ -910,6 +914,10 @@ def _execute_job(
         metrics = metrics_from_report(report)
         if readback_evidence is not None:
             metrics["wrap_readback"] = readback_evidence
+        if report_ref is not None:
+            # Only the SHA-256 of the stored report leaves; Cloud seals it with
+            # the outcome so a receipt can bind this exact report.
+            metrics["report_sha256"] = hashlib.sha256(report_bytes(report)).hexdigest()
         return ExecutionResult(
             status=status,
             metrics=metrics,

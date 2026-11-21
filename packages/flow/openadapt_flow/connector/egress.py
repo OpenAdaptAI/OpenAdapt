@@ -9,7 +9,8 @@ What may leave (and nothing else):
 
 * identifiers the control plane issued (run, org, workflow, bundle version,
   runtime validation, lease job ids);
-* SHA-256 digests (bundle archive, read-back spec, effect receipt);
+* SHA-256 digests (bundle archive, read-back spec, effect receipt, the stored
+  report);
 * closed labels (status, outcome, error code, effect verdict);
 * structural counts (steps, halts, heals, model calls, cost);
 * the opaque report key the control plane itself assigned;
@@ -188,6 +189,9 @@ def _metrics(value: Any) -> dict[str, Any]:
         if key == "wrap_readback":
             if item is not None:
                 out[key] = _wrap_readback(item)
+            continue
+        if key == "report_sha256":
+            out[key] = _hex64(item, "metrics.report_sha256")
             continue
         if key not in _METRIC_KEYS:
             raise EgressViolation(f"metric {key!r} is not on the allow-list")
