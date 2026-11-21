@@ -34,7 +34,7 @@ def _img(png: bytes) -> dict[str, Any]:
 
 def _claude_act(screen: Any, a: dict[str, Any]) -> None:
     kind = a.get("action")
-    xy = a.get("coordinate")
+    xy: Any = a.get("coordinate")
     mods = (
         [m for m in str(a.get("text") or "").split("+") if m]
         if kind and kind.endswith("click")
@@ -80,7 +80,10 @@ def _claude_act(screen: Any, a: dict[str, Any]) -> None:
 def run_claude(ctx: AgentContext, model: str, prices: dict[str, float]) -> AgentResult:
     import anthropic
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=4)
+    # The computer toolset is newer than the SDK's typed parameters.
+    client: Any = anthropic.Anthropic(
+        api_key=os.environ["ANTHROPIC_API_KEY"], max_retries=4
+    )
     screen, meter = ctx.screen, ctx.meter
     messages: list[dict[str, Any]] = [
         {
@@ -210,7 +213,7 @@ def _dump(c: Any) -> Any:
 def run_openai(ctx: AgentContext, model: str, prices: dict[str, float]) -> AgentResult:
     from openai import OpenAI
 
-    client = OpenAI(max_retries=4)
+    client: Any = OpenAI(max_retries=4)
     screen, meter = ctx.screen, ctx.meter
     history: list[Any] = [
         {
