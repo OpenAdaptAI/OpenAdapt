@@ -8488,7 +8488,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     if records_path is not None:
         print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
-        "\nEvery byte that would leave this machine is in receipt.json. "
+        "\nEvery byte that would leave this machine is in run-summary.json. "
         "Publishing is a separate, explicit step."
     )
     print(
@@ -11290,23 +11290,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_sections_parser(sub)
 
-    p = sub.add_parser(
-        "seal",
-        help=(
-            "Encrypt every file of a bundle that can hold patient data with "
-            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
-            "index, verify it, and publish it atomically at a new path"
-        ),
-        allow_abbrev=False,
-    )
-    p.add_argument("source", help="Existing workflow bundle directory")
-    p.add_argument(
-        "-o",
-        "--out",
-        required=True,
-        help="New destination directory (must not already exist)",
-    )
-    p.set_defaults(func=_cmd_seal)
+    # ``encrypt``; ``seal`` is its hidden alias for one release.
+    for verb in ("encrypt", "seal"):
+        p = sub.add_parser(
+            verb,
+            help=(
+                "Encrypt every file of a bundle that can hold patient data with "
+                "OPENADAPT_BUNDLE_KEY, bind the whole file set to one encrypted "
+                "index, verify it, and publish it atomically at a new path"
+            )
+            if verb == "encrypt"
+            else argparse.SUPPRESS,
+            allow_abbrev=False,
+        )
+        p.add_argument("source", help="Existing workflow bundle directory")
+        p.add_argument(
+            "-o",
+            "--out",
+            required=True,
+            help="New destination directory (must not already exist)",
+        )
+        p.set_defaults(func=_cmd_seal)
 
     from openadapt_flow.countersign.cli import add_countersign_parser
 
@@ -12877,7 +12881,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            "LOCAL ONLY: write a shareable run summary (run-summary.png / .json / "
             ".md) into DIR instead of contacting any host. The receipt is "
             "generated from a closed allow-list -- closed enums, counts, "
             "digests, versions -- and can carry no screenshot, OCR text, typed "
@@ -14295,7 +14299,15 @@ def main(
             from openadapt_flow.offline_seal import seal_after_run
 
             run_dir = getattr(args, "run_dir", None)
+            # The older offline Seal stays for one release, for readers that
+            # have not moved to receipt.json yet.
             note = seal_after_run(Path(run_dir) if run_dir else None)
+            if note:
+                print(note, file=sys.stderr)
+            from openadapt_flow.receipt_record import receipt_after_run
+
+            # The receipt (record/run/v1) for every run, with any outcome.
+            note = receipt_after_run(Path(run_dir) if run_dir else None)
             if note:
                 print(note, file=sys.stderr)
         return code
