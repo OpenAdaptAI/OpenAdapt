@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
@@ -138,7 +139,7 @@ def _approval(
         for a in approved
     )
     scope = sorted(str(a.get("request_sha256", "")) for a in approved)
-    values = {
+    values: dict[str, Optional[str]] = {
         "approval.principal": f"{kind}:pr-"
         + hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:16],
         "approval.scope": hashlib.sha256("\n".join(scope).encode("utf-8")).hexdigest(),
@@ -163,14 +164,20 @@ def build_statement(
         if isinstance(results, list)
         else []
     )
-    lines = [_line(i, x) for i, x in enumerate(results) if _is_write(x)][: r.MAX_LINES]
+    every_line = [_line(i, x) for i, x in enumerate(results) if _is_write(x)]
+    lines = every_line[: r.MAX_LINES]
     tally = {
         k: sum(1 for line in lines if line["check"] == k)
         for k in ("confirmed", "refuted", "not_checked")
     }
     outcome, reason = r.receipt_outcome(report.get("execution_outcome"))
-    if outcome == "VERIFIED" and tally["refuted"]:
+    # Judge every write, not only the ones that fit: a refuted write past
+    # the line limit still refuses VERIFIED, and so does any write the
+    # receipt can't show.
+    if outcome == "VERIFIED" and any(x["check"] == "refuted" for x in every_line):
         outcome, reason = "UNKNOWN", "refuted_write"
+    elif outcome == "VERIFIED" and len(every_line) > r.MAX_LINES:
+        outcome, reason = "UNKNOWN", "too_many_writes"
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
@@ -420,9 +427,18 @@ def local_registry(
             keys.append(RoleKey(entry["key_id"], entry["public_key"], "this_computer"))
     except Exception:  # noqa: BLE001 - no key on this computer: trust nothing local
         pass
-    keys += [
-        k for k in _pinned_cloud_keys(home) if k.key_id not in {x.key_id for x in keys}
-    ]
+    # Lost-revocation class: a key listed twice keeps the revoked entry, so a
+    # revocation from any source survives the merge.
+    for k in _pinned_cloud_keys(home):
+        same = [i for i, x in enumerate(keys) if x.key_id == k.key_id]
+        if not same:
+            keys.append(k)
+        elif k.status == "revoked":
+            for i in same:
+                if keys[i].status != "revoked":
+                    keys[i] = replace(
+                        keys[i], status="revoked", revoked_at=k.revoked_at
+                    )
     return keys
 
 
@@ -498,7 +514,16 @@ def verify_run_receipt(
         if r.report_subject_match(
             result.statement, file_bytes=data, canonical_sha256=canonical
         ):
+            if name != "report.json" and (run_dir / "report.json").is_file():
+                # Say which bytes it covers: never a silent pass for a
+                # report.json that changed after signing.
+                return replace(
+                    result,
+                    detail="covers report.pre-seal.json; report.json changed after signing",
+                )
             return result
     if not (run_dir / "report.json").is_file():
-        return result
+        # A run folder's receipt is checked against its report: without the
+        # signed bytes there is nothing to verify it over.
+        return r._refuse("malformed", "the run folder has no report.json")
     return r._refuse("bad_signature", "report.json changed after it was signed")
