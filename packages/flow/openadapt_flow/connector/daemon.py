@@ -83,7 +83,10 @@ def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, A
         body["halt"] = {"present": True}
     if result.outcome is not None:
         body["outcome"] = result.outcome
-    if result.status != "success" and failure_signal_sharing_enabled():
+    if result.error_code == "cancelled_after_child_start":
+        # The interrupted report cannot establish a failure kind or final effect.
+        body["error_code"] = "cancelled_after_child_start"
+    elif result.status != "success" and failure_signal_sharing_enabled():
         body["failure_signal"] = result.failure_signal or automation_failure_signal(
             None, result.status, job.target_kind
         )
