@@ -84,3 +84,20 @@ not secrets.
 
 A receipt never holds screenshots, typed values, URLs or page text. Evidence
 files are referenced only by SHA-256 digest.
+9. **Handoff payload.** A subject named `payload` binds the bytes handed to
+   another party (an MCP tool result, an HTTP body or a file): its `sha256` and
+   a closed `media_type` (`application/json`, `application/cbor`,
+   `text/plain`, `text/csv`, `application/pdf`, `application/octet-stream`).
+   Only `payload` has a media type. Given the bytes received, a verifier
+   refuses a receipt with no payload subject (`payload_not_bound`) or a
+   different digest (`payload_mismatch`), and reports `payload_bound: true`.
+10. **Approval.** `predicate.approval` is optional and omitted when absent; a
+   verifier then prints "No approval recorded". It is Flow's item approval
+   binding: `mode` (`each_item`, `problems_only`, `not_gated`),
+   `approver_kind` (`person`, `agent`, `none`) and `commitments` to
+   `principal` (`<kind>:pr-<16 hex>`, never a name), `scope` (a 64-hex digest)
+   and `approved_at` (ISO seconds), opened only from the private sidecar at
+   `approval.<key>`. `not_gated` has kind `none`; the other modes need a kind
+   and all three commitments. Lines: "Approved by a person: each item",
+   "Approved by an agent delegate: items that failed a check", "Not gated: no
+   approval was required for these writes".

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -36,6 +37,11 @@ def test_the_vector_set_is_complete():
         "confirmation-tampered",
         "confirmation-public-redaction",
         "confirmation-reason-no-answer",
+        "payload-bound",
+        "payload-mismatch",
+        "payload-missing",
+        "approval-public-card",
+        "approval-none",
     ):
         assert required in NAMES
 
@@ -43,7 +49,13 @@ def test_the_vector_set_is_complete():
 @pytest.mark.parametrize("name", NAMES)
 def test_vector(name):
     vector = json.loads((VECTORS / f"{name}.json").read_text())
-    result = r.verify_receipt(vector["document"], _registry(), openings=vector.get("openings"))
+    received = vector.get("received")
+    result = r.verify_receipt(
+        vector["document"],
+        _registry(),
+        openings=vector.get("openings"),
+        received=base64.b64decode(received) if received is not None else None,
+    )
     expected = vector["expected"]
     assert result.ok is expected["ok"], result.detail
     assert result.reason == expected["reason"]
@@ -56,6 +68,9 @@ def test_vector(name):
         assert list(result.independent) == expected.get("independent", [])
         # A confirmation line never joins or upgrades the signer lines.
         assert not set(result.confirmation_lines) & set(result.signer_lines)
+        if "approval_line" in expected:
+            assert result.approval_line == expected["approval_line"]
+        assert result.payload_bound == expected.get("payload_bound")
     else:
         assert result.outcome is None
 

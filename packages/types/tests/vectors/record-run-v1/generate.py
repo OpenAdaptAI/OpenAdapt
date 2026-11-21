@@ -234,7 +234,71 @@ def build() -> dict[str, dict]:
         unknown_schema, {"ok": False, "reason": "unknown_schema",
                          "signer_lines": [r.refusal_line("unknown_schema")]})
     _confirmation_vectors(add)
+    _handoff_vectors(vectors)
     return vectors
+
+
+HANDOFF = b'{"referral":"synthetic","status":"sent"}'
+
+
+def _handoff_vectors(vectors) -> None:
+    def put(name, description, document, expected, openings=None, received=None):
+        vectors[name] = {
+            "description": description,
+            "registry": "registry.json",
+            "document": document,
+            **({"openings": openings} if openings is not None else {}),
+            **({"received": base64.b64encode(received).decode()} if received is not None else {}),
+            "expected": expected,
+        }
+
+    values = {
+        "approval.principal": "person:pr-" + "cd" * 8,
+        "approval.scope": hashlib.sha256(b"synthetic approval scope").hexdigest(),
+        "approval.approved_at": "2026-11-20T23:30:00Z",
+    }
+    commitments, openings = r.make_openings(values, salt=_salts())
+    st = statement("VERIFIED")
+    st["subject"].append(
+        {
+            "name": "payload",
+            "digest": {"sha256": hashlib.sha256(HANDOFF).hexdigest()},
+            "media_type": "application/json",
+        }
+    )
+    st["predicate"]["approval"] = {
+        "mode": "each_item",
+        "approver_kind": "person",
+        "commitments": {k.split(".", 1)[1]: v for k, v in commitments.items()},
+    }
+    env = r.sign_statement(st, [signer("this_computer")])
+    ok = {
+        "ok": True,
+        "reason": None,
+        "outcome": "VERIFIED",
+        "demo": False,
+        "signer_lines": ["Signed by this computer"],
+        "approval_line": "Approved by a person: each item",
+    }
+    put("payload-bound", "A handoff receipt bound to the bytes the receiver got, with a person's approval.",
+        env, {**ok, "payload_bound": True, "disclosed": {k: v["value"] for k, v in openings.items()}},
+        r.private_openings(env, openings), HANDOFF)
+    put("payload-mismatch", "The receiver got different bytes from the payload the receipt signed.",
+        env, {"ok": False, "reason": "payload_mismatch", "signer_lines": [r.refusal_line("payload_mismatch")]},
+        None, HANDOFF.replace(b"sent", b"done"))
+    plain = r.sign_statement(statement("VERIFIED"), [signer("this_computer")])
+    put("payload-missing", "Handed-off bytes checked against a receipt that names no payload.",
+        plain, {"ok": False, "reason": "payload_not_bound", "signer_lines": [r.refusal_line("payload_not_bound")]},
+        None, HANDOFF)
+    put("approval-public-card", "The public card of an approved handoff: the mode and approver kind show; who, what and when stay committed.",
+        r.public_card(env, openings, reveal=[]), {**ok, "disclosed": {}})
+    put("approval-none", "A receipt with no approval block says so.",
+        plain, {**ok, "approval_line": "No approval recorded", "disclosed": {}})
+    gate = statement("VERIFIED")
+    gate["predicate"]["approval"] = {"mode": "not_gated", "approver_kind": "none", "commitments": {}}
+    put("approval-not-gated", "A run started from the customer's own software, recorded as not gated.",
+        r.sign_statement(gate, [signer("this_computer")]),
+        {**ok, "approval_line": "Not gated: no approval was required for these writes", "disclosed": {}})
 
 
 _STATES = {
