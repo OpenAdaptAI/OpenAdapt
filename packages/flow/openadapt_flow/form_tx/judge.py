@@ -460,6 +460,18 @@ class SummaryJudge:
                             f"has no expected value to compare",
                         )
                     )
+                elif binding.dossier_key in written_by_key:
+                    # The run wrote this field but there is no value to
+                    # compare: it gets a verdict, never silence.
+                    verdicts.append(
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"{binding.dossier_key!r} was written with no expected "
+                            "value, and the summary shows it empty"
+                            + _where(written_by_key[binding.dossier_key]),
+                        )
+                    )
                 continue
 
             if observed_ctrl is None:

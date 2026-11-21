@@ -9,7 +9,7 @@ recorded before any scored case ran. The runner and packs were committed at
 `3312524d5`, before the first scored case; `git diff 6392bac91 HEAD --
 packages/flow/openadapt_flow` is empty, so the engine did not change after
 the freeze. Raw rows: `results/arm_B.jsonl`, `results/arm_C.jsonl`,
-`results/arm_A.txt`, and the full console logs `results/arm_*_full.log`.
+the JSON lines in `results/arm_A_full.log`, and the full console logs `results/arm_*_full.log`.
 Counts: `summarize.py`.
 
 **These portals are no longer held out.** This change publishes them with
