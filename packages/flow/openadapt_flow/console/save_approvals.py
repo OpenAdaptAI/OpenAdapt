@@ -293,6 +293,13 @@ def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
         presentation["fields"] = [
             field.model_dump(mode="json") for field in request.fields
         ]
+        # A guarded save's source column, kept beside the request and bound
+        # to its digest (agent_guard/approval_fields.py). Local only.
+        from openadapt_flow.agent_guard.approval_fields import read_sources_for
+
+        sources = read_sources_for(run_dir, request)
+        if sources:
+            presentation["sources"] = sources
     if request.workflow_name == LEDGER_QUESTION_WORKFLOW:
         # An agent's question from its task ledger, not a save. Approve is
         # yes and decline is no; the answer saves nothing in any app.

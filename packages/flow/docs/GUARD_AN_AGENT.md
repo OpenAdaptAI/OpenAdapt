@@ -139,6 +139,66 @@ If the guard stops while a save is paused, it blocks that save before it lets
 go of the tab, because Chromium sends paused requests on when the session
 that paused them goes away.
 
+## The approval card
+
+With `approval: each_item`, or when a second reading of the source doesn't
+confirm a value, the save waits for a person. The card they answer (Desktop
+or the paired phone) lists every field the task writes:
+
+| Column | Where it comes from |
+|---|---|
+| Now | The record's value before the save, read through `verify.yaml`. Empty for a save that adds a record. |
+| Saved | The task's `intended_fields` value, or, with `write_adapter`, the value the held request carries. |
+| Source | The value the task's `provenance` cites, checked a second time against the source document. A value the document doesn't confirm is marked `Differs` and shows what the document says. |
+
+A value the guard can't read shows `not read`, never a blank, and the card
+says the approval doesn't cover it.
+
+The Now and Saved values are in the approval request and its digest, so the
+person's answer covers exactly them. The source column is kept beside the
+request in `approval_sources.json` (mode 0600), bound to the request's digest.
+None of these values leave the computer: they aren't in a notification, the
+run report, or anything Cloud receives.
+
+Turn the values off with `approval_fields: false`; the card then shows the
+screenshot only.
+
+## The ledger row
+
+After each read-back or blocked save, the guard writes two files in `--out`:
+
+- `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`): `task_id`,
+  `verdict`, `fields_checked`, `fields_differing` (field names), `hold_ms`,
+  `approver_kind`, `approval_opened_at`, `approval_decided_at`,
+  `readback_tier` and `diff_path`. It holds no record values.
+- `guard_diff.private.json` (mode 0600): for each field, the value intended,
+  the value before, the value the read-back found, and `same`, `differs` or
+  `not_read`.
+
+`verdict` is `VERIFIED`, `CAUGHT_ERROR` (a blocked save, a declined approval,
+or a read-back that shows another value or another write), `ESCALATED` (the
+save went through and couldn't be confirmed) or `FAILED` (the guard couldn't
+do its job, for example the system of record couldn't be read before the
+save).
+
+`openadapt-flow redact-report RUN_DIR` writes `guard_diff.scrubbed.json`: the
+same rows with each value replaced by a salted digest. `--no-ledger-row`
+writes neither file.
+
+### How a save is read back
+
+By default the guard reads the save back through `verify-run`, then reads the
+record once more through the same reader to fill the diff. A field the
+read-back shows with another value than the task's makes the verdict
+`REFUTED`, whatever else the read-back found.
+
+`readback_provider: <kind>` in `guard.yaml` names another reader, registered
+with `register_verifier_factory("readback:<kind>", factory)`. Only a reader
+that doesn't use the app's screen (`independent_readback`) can make a save
+`VERIFIED`. A reader that reads the app's screen in a second session
+(`screen_readback`) gives `RECONCILIATION_REQUIRED` at best. A reader that
+fails gives `RECONCILIATION_REQUIRED`.
+
 ## Run 2: a program from run 1
 
 With a `teach:` section, a run that reads back `VERIFIED` is handed to the
@@ -264,6 +324,14 @@ GUI steps, and the run-2 times are GUI times.
 - Compiling run 1 needs the recording. The recorder refuses a run it can't
   keep exactly (an agent that acts faster than a frame can be kept). The
   guard keeps guarding; only run 2 is missing.
+- The card's Now column and the diff's saved value come from one more read
+  of the record. When the task's record can't be told apart in that read (no
+  `expected_record` field is in the effect contract), or two records changed,
+  they show `not read`.
+- The phone portal shows a guard's approval only when the guard's state is
+  at most two folders below the runs folder the console watches. `--out
+  runs/<task>` puts it three folders down (`runs/<task>/guard/<guard id>`), so
+  answer those with `openadapt-flow item-approval approve` or Desktop.
 - API steps are proposed only for form posts
   (`application/x-www-form-urlencoded`). A save built by script as JSON, like
   MockMed's, stays on GUI steps. Programs from the teach dir run as durable

@@ -971,6 +971,25 @@ function saveFields(presentation) {
   }));
 }
 
+// `presentation.sources`: a guarded save's source column, `{label, source,
+// status, differs}` per field, kept by Flow beside the request and bound to its digest.
+// Anything malformed drops the column; the fields still show.
+const NOT_READ = "not read";
+function saveSources(presentation) {
+  const raw = presentation && presentation.sources;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_FIELDS) return null;
+  const ok = raw.every(
+    (row) =>
+      row &&
+      typeof row.label === "string" &&
+      (row.source === null || typeof row.source === "string") &&
+      typeof row.status === "string" &&
+      typeof row.differs === "boolean",
+  );
+  if (!ok) return null;
+  return new Map(raw.map((row) => [row.label, { source: row.source, differs: row.differs }]));
+}
+
 // `presentation.provenance`: why an agent asked for this save. The agent's
 // reason is its own account and is shown as a quote, never as a finding.
 // Lines of what it saw that read like an instruction to an agent are shown
@@ -1032,6 +1051,7 @@ async function openSave(item) {
       presentation.explanation ||
       "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.",
     fields: saveFields(presentation),
+    sources: saveSources(presentation),
     provenance: saveProvenance(presentation),
     frameUrl: null,
     frameOk: false,
@@ -1183,17 +1203,32 @@ function evidenceMarkup(card) {
   return `<button class="evidence${big ? " big" : ""}" id="evidence" type="button" data-screen>${image}${label}</button>`;
 }
 
+// The source line reuses the stop queue's side-by-side classes (stops.css).
+function sourceMarkup(card, field) {
+  if (!card.sources) return "";
+  const row = card.sources.get(field.label);
+  if (!row) return "";
+  const text = row.source === null ? "none given" : row.source === "" ? "empty" : row.source;
+  // Flow compares the values (dates, numbers) and sends the result.
+  return `<span class="stops-record">${row.differs ? '<span class="stops-flag">Differs</span> ' : ""}Source: <strong>${esc(text)}</strong></span>`;
+}
+
 function fieldsMarkup(card) {
   if (!card.fields) return "";
+  const unread = card.fields.some((field) => field.after === NOT_READ || field.before === NOT_READ);
   return `<dl class="fields" aria-label="What this save writes">${card.fields
     .map(
       (field) => `<div><dt>${esc(field.label)}</dt><dd>${
-        field.before != null && field.before !== field.after
-          ? `<s><span class="sr">Was </span>${esc(field.before)}</s>`
-          : ""
-      }${field.after === "" ? '<span class="empty">(empty)</span>' : esc(field.after)}</dd></div>`,
+        field.before === NOT_READ
+          ? '<span class="stops-record">Now: not read</span>'
+          : field.before != null && field.before !== field.after
+            ? `<s><span class="sr">Was </span>${esc(field.before)}</s>`
+            : ""
+      }${field.after === "" ? '<span class="empty">(empty)</span>' : esc(field.after)}${sourceMarkup(card, field)}</dd></div>`,
     )
-    .join("")}</dl>`;
+    .join("")}</dl>${
+    unread ? '<p class="stops-reason" role="note">A value marked not read was not checked; this approval does not cover it.</p>' : ""
+  }`;
 }
 
 function provenanceMarkup(card) {

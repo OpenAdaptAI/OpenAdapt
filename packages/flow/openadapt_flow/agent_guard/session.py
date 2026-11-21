@@ -223,6 +223,7 @@ def guard_task(
     on_attached: Optional[Callable[[], None]] = None,
     on_recorded: Optional[Callable[[int], None]] = None,
     stop: Optional[Callable[[], bool]] = None,
+    readback: Optional[Any] = None,
 ) -> GuardRun:
     """Guard one task's save in the agent's own browser and record the run.
 
@@ -253,9 +254,16 @@ def guard_task(
             # The save is still read back by verify-run; only the
             # recording's record snapshots are missing.
             notes.append(f"no record snapshots in the recording: {exc}")
+    from openadapt_flow.agent_guard.readback import load_provider
+
     guarded = GuardedSave(
-        load_verify_config(cfg.verify), out / "guard", approval=cfg.approval
+        load_verify_config(cfg.verify),
+        out / "guard",
+        approval=cfg.approval,
+        approval_fields=cfg.approval_fields,
     )
+    if readback is None:
+        readback = load_provider(cfg.readback_provider, task.params)
     started = time.monotonic()
     pw, browser, tab = _connect(
         cfg, cdp_endpoint=cdp_endpoint, page_url=page_url, attach_wait_s=attach_wait_s
@@ -279,6 +287,9 @@ def guard_task(
             response_wait_s=cfg.response_wait_s,
             events_path=out / "guard_events.jsonl",
             scope=scope,
+            readback=readback,
+            ledger_dir=out,
+            ledger_row=cfg.ledger_row,
         )
         if record:
             recorder = _RecorderThread(
