@@ -41,6 +41,9 @@ class ReadResult:
     fields: dict[str, Optional[str]] = field(default_factory=dict)
     #: SHA-256 of the body read, for the observation's evidence digest.
     evidence_sha256: Optional[str] = None
+    #: The receiver's own date order per field (``dmy``/``mdy``), when its
+    #: profile declares one. The sender's order never reads its values.
+    date_orders: dict[str, Optional[str]] = field(default_factory=dict)
 
 
 class Reader(Protocol):
@@ -154,6 +157,8 @@ class FhirSearchReader:
         matches: list[dict[str, Any]] = []
         digest = hashlib.sha256()
         pages = 0
+        seen = 0
+        declared_total: Optional[int] = None
         while url is not None:
             pages += 1
             if pages > 20:
@@ -180,11 +185,26 @@ class FhirSearchReader:
                 if not isinstance(resource, dict):
                     return ReadResult("unreachable")
                 if resource.get("resourceType") == "OperationOutcome":
+                    # Missing-evidence class: an error outcome means the search
+                    # is partial, so its matches prove nothing.
+                    issues = resource.get("issue") or []
+                    if not isinstance(issues, list) or any(
+                        not isinstance(i, dict)
+                        or i.get("severity") not in ("information", "warning")
+                        for i in issues
+                    ):
+                        return ReadResult("unreachable")
                     continue
                 if resource.get("resourceType") != self.profile.resource:
                     return ReadResult("unreachable")
+                seen += 1
                 if _text(extract_path(resource, self.profile.key_path)) == key:
                     matches.append(resource)
+            total = bundle.get("total")
+            if total is not None:
+                if type(total) is not int or total < 0:
+                    return ReadResult("unreachable")
+                declared_total = total
             try:
                 url = next_page_url(bundle)
             except ValueError:
@@ -193,6 +213,9 @@ class FhirSearchReader:
                 return ReadResult("unreachable")
             params = None
         evidence = digest.hexdigest()
+        if declared_total is not None and declared_total != seen:
+            # The server says it matched more (or fewer) than it returned.
+            return ReadResult("unreachable", evidence_sha256=evidence)
         if not matches:
             return ReadResult("not_found", evidence_sha256=evidence)
         if len(matches) > 1:
@@ -202,7 +225,15 @@ class FhirSearchReader:
             field_id: _text(extract_path(record, spec.path))
             for field_id, spec in self.profile.fields.items()
         }
-        return ReadResult("found", fields=fields, evidence_sha256=evidence)
+        return ReadResult(
+            "found",
+            fields=fields,
+            evidence_sha256=evidence,
+            date_orders={
+                field_id: spec.date_order
+                for field_id, spec in self.profile.fields.items()
+            },
+        )
 
 
 __all__ = [

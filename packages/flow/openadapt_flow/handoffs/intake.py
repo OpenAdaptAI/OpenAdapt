@@ -76,11 +76,11 @@ def judge(
     digests: dict[str, str] = {}
     for field_id, spec in sorted(handoff.fields.items()):
         value = result.fields.get(field_id)
-        seen = (
-            None
-            if value is None
-            else ledger.field_digest(value, spec.kind, spec.date_order)
-        )
+        # Wrong-reading class: the receiver's text is read in the receiver's
+        # date order. With none declared, a date that reads two ways doesn't
+        # normalize and counts as differing, never as the sender's date.
+        order = result.date_orders.get(field_id)
+        seen = None if value is None else ledger.field_digest(value, spec.kind, order)
         digests[field_id] = seen or "missing"
         if seen != spec.digest:
             differing.append(field_id)

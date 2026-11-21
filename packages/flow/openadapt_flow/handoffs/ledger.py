@@ -319,8 +319,11 @@ class HandoffLedger:
         with self._locked():
             key_digest = self.digest(key)
             for other in self.entries():
-                if other.key_digest == key_digest and other.status(moment) != "done":
-                    raise LedgerError("another open handoff already uses this key")
+                # Wrong-subject class: a key names one delivery. A done
+                # handoff's record would otherwise confirm a second delivery
+                # under the same key that never arrived.
+                if other.key_digest == key_digest:
+                    raise LedgerError("another handoff already uses this key")
             handoff = Handoff(
                 id=f"handoff:{secrets.token_hex(16)}",
                 sent_at=iso_seconds(moment),

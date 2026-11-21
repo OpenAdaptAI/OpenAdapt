@@ -322,6 +322,23 @@ def test_sign_updates_refuses_a_receipt_it_cannot_verify_or_did_not_sign(tmp_pat
     with pytest.raises(ValueError, match="unexpected update file"):
         followup.updates(run_dir)
     (run_dir / "receipt.update-x.json").unlink()
+    # A report that isn't the one the receipt signed never picks handoffs.
+    report = run_dir / "report.json"
+    signed_report = report.read_bytes()
+    report.write_bytes(signed_report + b" ")
+    with pytest.raises(ValueError, match="not the report the receipt signed"):
+        followup.sign_updates(run_dir, [referrals], signer=signer)
+    report.write_bytes(signed_report)
+    # A signed update that went missing (with its openings) breaks the history.
+    two = run_dir / "receipt.update-2.json"
+    two_private = run_dir / "receipt.update-2.private.json"
+    kept = two.read_bytes(), two_private.read_bytes()
+    two.unlink()
+    two_private.unlink()
+    with pytest.raises(ValueError, match="don't match the record"):
+        followup.verify_history(run_dir, _registry(tmp_path))
+    two.write_bytes(kept[0])
+    two_private.write_bytes(kept[1])
     # A tampered update already in the chain is never extended.
     update = run_dir / "receipt.update-2.json"
     good_update = update.read_text()

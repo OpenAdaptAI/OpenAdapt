@@ -385,6 +385,53 @@ def test_fhir_reader_ambiguous_across_pages_and_fails_closed():
     assert _reader(off_origin).read("REF-1").status == "unreachable"
 
 
+def test_fhir_reader_fails_closed_on_a_partial_search():
+    error = {"resourceType": "OperationOutcome", "issue": [{"severity": "error"}]}
+    assert _reader(Client(_bundle(_patient("REF-1"), error))).read("REF-1").status == (
+        "unreachable"
+    )
+    note = {"resourceType": "OperationOutcome", "issue": [{"severity": "warning"}]}
+    assert _reader(Client(_bundle(_patient("REF-1"), note))).read("REF-1").status == (
+        "found"
+    )
+    short = {**_bundle(_patient("REF-1")), "total": 2}
+    assert _reader(Client(short)).read("REF-1").status == "unreachable"
+
+
+def test_a_key_names_one_delivery(tmp_path):
+    ledger, h = _referral(tmp_path)
+    intake.check(ledger, h.id, "REF-0001", Fake(_found()))
+    with pytest.raises(LedgerError, match="already uses this key"):
+        _referral(tmp_path)
+
+
+def test_receiver_dates_are_read_in_the_receivers_order(tmp_path):
+    ledger = HandoffLedger(tmp_path / "handoffs")
+    h = ledger.send(
+        "REF-0009",
+        {**FIELDS, "birth_date": ("03/09/1984", "date", "mdy")},
+        counterparty="receiving clinic",
+        follow_up_hours=24,
+        system_kind="ehr",
+        run_id="run-1",
+        step=2,
+    )
+    # The receiver's text reads two ways and its profile declares no order:
+    # never read in the sender's order, so it counts as differing.
+    ambiguous = ReadResult("found", fields={**RECORD, "birth_date": "03/09/1984"})
+    after = intake.check(ledger, h.id, "REF-0009", Fake(ambiguous))
+    assert after.state == "recorded_differently"
+    assert after.last.differing_fields == ["birth_date"]
+    declared = ReadResult(
+        "found",
+        fields={**RECORD, "birth_date": "03/09/1984"},
+        date_orders={"birth_date": "mdy"},
+    )
+    assert intake.check(ledger, h.id, "REF-0009", Fake(declared)).state == (
+        "recorded_as_intended"
+    )
+
+
 # -- the receipt line ----------------------------------------------------------------
 
 

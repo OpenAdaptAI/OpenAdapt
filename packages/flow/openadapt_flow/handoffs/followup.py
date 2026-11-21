@@ -21,6 +21,7 @@ Files in the run folder:
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -162,9 +163,17 @@ def sign_updates(
             f" ({existing.detail})" if existing is not None and existing.detail else ""
         )
         raise ValueError(f"the run's receipt does not verify: {reason}{detail}")
-    report = loads_strict((run_dir / "report.json").read_text("utf-8"))
-    signed = last_signed(run_dir)
+    raw_report = (run_dir / "report.json").read_bytes()
     statement = r.loads_strict(base64.b64decode(original["payload"]))
+    subjects = {
+        x["name"]: x["digest"]["sha256"] for x in statement.get("subject") or []
+    }
+    if subjects.get("report.json") != hashlib.sha256(raw_report).hexdigest():
+        # Wrong-subject class: choose the handoffs from the very report the
+        # receipt signed, never a later or another run's report.
+        raise ValueError("report.json is not the report the receipt signed")
+    report = loads_strict(raw_report.decode("utf-8"))
+    signed = last_signed(run_dir)
     changed: list[Handoff] = []
     for handoff in place(statement, handoffs_for_run(report, list(ledgers), run_dir)):
         if signed.get(handoff.id) != _signature(handoff):
@@ -176,6 +185,13 @@ def sign_updates(
     follow_up = r.follow_up_statement(original, sequence, lines)
     envelope = r.sign_statement(follow_up, [(kid, signer.sign)])
     out = run_dir / update_file(sequence)
+    # Race class: a sequence is claimed exclusively, so two signers can't
+    # write the same update; the loser fails and signs nothing.
+    try:
+        fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        raise ValueError(f"{out.name} was written by another signer") from None
+    os.close(fd)
     _write_json(
         run_dir / update_private_file(sequence),
         r.private_openings(envelope, openings),
@@ -201,9 +217,23 @@ def verify_history(run_dir: str | Path, registry: Sequence[Any]) -> Any:
         return loads_strict(path.read_text("utf-8")) if path.is_file() else None
 
     original = load(r.RECEIPT_FILE)
+    found = updates(run_dir)
     if original is None:
+        if found or (run_dir / SIDECAR).is_file():
+            # Missing-evidence class: signed updates without their receipt are
+            # a broken history, not an unsigned run.
+            raise ValueError("signed updates are here but receipt.json is missing")
         return None
-    chain = [loads_strict(p.read_text("utf-8")) for p in updates(run_dir)]
+    # Missing-evidence class: every update the sidecar says was signed must
+    # still be here, so a dropped last update can't shorten the history.
+    recorded = [
+        rec["file"]
+        for rec in _sidecar(run_dir)["records"]
+        if rec["file"] != r.RECEIPT_FILE
+    ]
+    if sorted(recorded) != sorted(p.name for p in found):
+        raise ValueError("the signed updates don't match the record of what was signed")
+    chain = [loads_strict(p.read_text("utf-8")) for p in found]
     return r.verify_chain(
         original,
         chain,
