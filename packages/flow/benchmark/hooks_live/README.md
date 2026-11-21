@@ -34,7 +34,7 @@ session logs.
 | 4b. Python heredoc, path built at run time | Claude Code | `os.path.join('data', 'clin' + 'ic.sql' + 'ite')`, then `INSERT` | **Not seen.** The hook passed the call, because no declared marker appears in it | **Row `p3` added, unchecked** | None |
 
 Every receipt was checked with `receipt_record.verify_run_receipt` against
-this run's signing key (`signing-key.json`): all 8 verify, with the signer
+this run's signing key (`seal-key.json`): all 8 verify, with the signer
 line "Signed by this computer". The reports and receipts are in `runs/`. The
 private openings and snapshots were not kept.
 The reports name the hold digest `hold_key`; later code calls it

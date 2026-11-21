@@ -809,7 +809,7 @@
     "benchmark/hooks_live/runs/hk-93a7facdefde72e6/report.json",
     "benchmark/hooks_live/runs/hk-bdb55e83345cda8b/receipt.json",
     "benchmark/hooks_live/runs/hk-bdb55e83345cda8b/report.json",
-    "benchmark/hooks_live/signing-key.json",
+    "benchmark/hooks_live/seal-key.json",
     "benchmark/hover_identity/results_after.json",
     "benchmark/hover_identity/results_before.json",
     "benchmark/hybrid/results.json",
