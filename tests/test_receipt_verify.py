@@ -131,6 +131,14 @@ def test_writes_past_the_line_limit_still_decide_the_outcome(tail, reason):
     assert exact["predicate"]["outcome"] == "VERIFIED"
 
 
+def test_a_run_folder_without_its_report_is_not_verified(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    (run / "report.json").unlink()
+    result = verify_run_receipt(run, local_registry())
+    assert (result.ok, result.reason) == (False, "malformed")
+
+
 def test_tampering_with_the_report_is_detected(tmp_path):
     run = _run(tmp_path, "HALTED")
     write_receipt_record(run)
@@ -339,6 +347,14 @@ def test_public_seal_golden_vectors_verify_only_with_their_key_pinned(tmp_path):
             assert "unknown signer" in unpinned.output
             checked += 1
     assert checked >= 1
+    # The same key, revoked, verifies nothing.
+    keys = json.loads(registry.read_text())
+    keys["keys"][0].update(status="revoked", revoked_at="2026-11-01T00:00:00Z")
+    registry.write_text(json.dumps(keys))
+    for case in vectors["cases"]:
+        path = tmp_path / f"{case['name']}.json"
+        revoked = _verify(str(path), "--keys", str(registry))
+        assert revoked.exit_code == 1, case["name"]
 
 
 def test_receipts_trust_cloud_keys_pinned_where_seal_keys_pin_writes(

@@ -173,6 +173,9 @@ def _verify_public_seal(path: Path, data: bytes, keys: Optional[Path], say: Say)
         say("  Not verified: unknown signer")
         say(f"  (key {result.key_id} isn't pinned here; pin it with --keys FILE)")
         return 1
+    if key.status != "active":
+        say(f"  Not verified: the signing key was revoked at {key.revoked_at}")
+        return 1
     from openadapt_types.receipt import SIGNER_LINES
 
     say("  " + SIGNER_LINES[key.role].format(org=key.org or "the customer"))

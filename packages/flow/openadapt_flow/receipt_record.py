@@ -410,5 +410,7 @@ def verify_run_receipt(
         ):
             return result
     if not (run_dir / "report.json").is_file():
-        return result
+        # A run folder's receipt is checked against its report: without the
+        # signed bytes there is nothing to verify it over.
+        return r._refuse("malformed", "the run folder has no report.json")
     return r._refuse("bad_signature", "report.json changed after it was signed")
