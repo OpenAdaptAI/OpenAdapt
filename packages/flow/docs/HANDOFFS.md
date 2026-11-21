@@ -72,6 +72,11 @@ it. It rejects when your read fails. Without a read it never accepts.
 - **The pass bar.** The second party must accept no false handoff, reject no
   true one, and spend at most 2 s checking each.
 
+[benchmark/handoff_real_run](../benchmark/handoff_real_run/README.md) does
+the same with a real headless browser run against MockMed. It uses the real
+CLI for `send`, `key`, `trust` and `verify`, and the receiver reads its own
+record store.
+
 ## Trusting another party's key
 
 Each party pins the keys it trusts. Nothing in a handoff can make a key
@@ -102,7 +107,14 @@ openadapt handoff send result.json --run ~/.openadapt/runs/run-123 --post https:
 
 # On arrival, against the keys you pin
 openadapt handoff verify result.handoff.json --keys trusted-keys.json
+
+# Also record it, so `openadapt handoff list` follows it until the other side confirms
+openadapt handoff send referral.json --run RUN_DIR --out referral.handoff.json \
+  --ledger ~/.openadapt/handoffs --counterparty "receiving clinic" --key-field ref
 ```
+
+`--ledger` records the key and the text fields of the payload. It stores
+them as salted digests, never as values.
 
 `verify` exits 0 when the receipt is intact and 1 when it is refused. Add
 `--json` to get the verdict as data. `receipt.private.json` never leaves the

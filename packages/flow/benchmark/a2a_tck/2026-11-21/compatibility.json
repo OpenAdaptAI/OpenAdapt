@@ -12,7 +12,7 @@
       "AUTH-SERVER-001",
       "BIND-CUSTOM-002"
     ],
-    "timestamp": "2026-11-21T06:11:41.629424+00:00",
+    "timestamp": "2026-11-21T06:51:05.927798+00:00",
     "sut_url": "http://localhost:9999",
     "spec_version": "",
     "overall_compatibility": "75.0%",
@@ -1631,7 +1631,7 @@
   },
   "agent_card": {
     "name": "OpenAdapt",
-    "description": "Runs compiled OpenAdapt workflows on this computer and checks that they saved. Every run's result carries its signed receipt, and any agent can send a handoff to be verified.",
+    "description": "Runs compiled OpenAdapt workflows on this computer and checks that they saved. A finished run's result carries its signed receipt when Flow wrote one, and any agent can send a handoff to be verified.",
     "supportedInterfaces": [
       {
         "url": "http://127.0.0.1:9999/a2a/jsonrpc",
@@ -1656,13 +1656,13 @@
       "extensions": [
         {
           "uri": "https://openadapt.ai/extensions/handoff-receipt/v1",
-          "description": "Task results carry the run's record/run/v1 receipt (in-toto Statement in a DSSE envelope) as an openadapt.handoff/v1 artifact part; verify_handoff returns an openadapt.handoff-verdict/v1 verdict.",
+          "description": "Task results carry the run's record/run/v1 receipt (in-toto Statement in a DSSE envelope) as an openadapt.handoff-document/v1 artifact part; verify_handoff returns an openadapt.handoff-verdict/v1 verdict.",
           "params": {
-            "handoff_schema": "openadapt.handoff/v1",
-            "envelope": "dsse",
-            "media_type": "application/vnd.openadapt.handoff+json",
+            "receipt_predicate": "https://openadapt.ai/record/run/v1",
             "verdict_schema": "openadapt.handoff-verdict/v1",
-            "receipt_predicate": "https://openadapt.ai/record/run/v1"
+            "media_type": "application/vnd.openadapt.handoff+json",
+            "handoff_schema": "openadapt.handoff-document/v1",
+            "envelope": "dsse"
           }
         }
       ],
@@ -1679,7 +1679,7 @@
       {
         "id": "add_triage_note",
         "name": "add_triage_note",
-        "description": "Sandbox: add a triage note to the first referral in a synthetic clinic app. Nothing real changes. Done means: The note is in the synthetic app's record store, confirmed by reading the store directly after the save. Send a data part {\"skill\": \"add_triage_note\", \"inputs\": {...}, \"request_id\": \"...\"}. The result includes the run's signed receipt.",
+        "description": "Sandbox: add a triage note to the first referral in a synthetic clinic app. Nothing real changes. Done means: The note is in the synthetic app's record store, confirmed by reading the store directly after the save. Send a data part {\"skill\": \"add_triage_note\", \"inputs\": {...}, \"request_id\": \"...\"}. A finished run's result includes its signed receipt when Flow wrote one.",
         "tags": [
           "openadapt",
           "workflow",
@@ -1696,7 +1696,7 @@
       {
         "id": "verify_handoff",
         "name": "Verify a handoff",
-        "description": "Send another agent's result with its receipt (an openadapt.handoff/v1 document, as a data part or a application/vnd.openadapt.handoff+json file part). Returns who signed it, whether it is intact, which checks passed and which were not checked, and any confirmation read from the other party's system. A valid signature proves who signed, not that the claim is true.",
+        "description": "Send another agent's result with its receipt (an openadapt.handoff-document/v1 document, as a data part or a application/vnd.openadapt.handoff+json file part). Returns who signed it, whether it is intact, which checks passed and which were not checked, and any confirmation read from the other party's system. A valid signature proves who signed, not that the claim is true.",
         "tags": [
           "verification",
           "receipt",

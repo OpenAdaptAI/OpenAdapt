@@ -10,7 +10,7 @@ ssssssssssssssssssssssssss..s..s..s..s..s..s..s..s..s..s..s..s..s..s..s. [ 54%]
              A2A TCK Compatibility Report              
 ═══════════════════════════════════════════════════════
 SUT: http://localhost:9999
-Timestamp: 2026-11-21T06:11:41.629424+00:00
+Timestamp: 2026-11-21T06:51:05.927798+00:00
 
 OVERALL COMPATIBILITY: 75.0% (automated checks)
 
@@ -137,7 +137,7 @@ FAILED tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::
 FAILED tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[jsonrpc]
 FAILED tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[http_json]
 FAILED tests/compatibility/http_json/test_problem_details.py::TestHttpJsonErrorMediaType::test_error_content_type
-11 failed, 110 passed, 142 skipped in 1.00s
+11 failed, 110 passed, 142 skipped in 1.48s
 Command: SCRATCH/tck-src/a2a-tck/.venv314/bin/python -m pytest tests/compatibility/ --sut-host=http://localhost:9999 --tb=short --media-type-spec-version=1.0.1 -q --compatibility-report=reports/compatibility --html=reports/tck_report.html --self-contained-html --junitxml=reports/junitreport.xml
 
 tck exit 1
