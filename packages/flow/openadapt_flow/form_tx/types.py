@@ -558,6 +558,8 @@ class FieldWriteRecord(BaseModel):
     dossier_key: Optional[str] = None
     label: Optional[str] = None
     selector: Optional[str] = None
+    # The wizard screen the control was on, when known.
+    screen_id: Optional[str] = None
     source: Literal[
         "auto_fill",
         "operator_value",

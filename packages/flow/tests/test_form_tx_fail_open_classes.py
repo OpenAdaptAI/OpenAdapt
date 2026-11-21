@@ -126,7 +126,7 @@ def test_accepted_entity_row_without_read_back_is_not_checked() -> None:
         idempotency_key="k1",
     )
     extra = uncovered_subject_verdicts(read_subjects((), [rec]), [], _codec)
-    assert [v.dossier_key for v in extra] == ["entity:household[0]"]
+    assert len(extra) == 1 and extra[0].dossier_key.startswith("entity:household[0]|")
     assert extra[0].status == ReadbackStatus.NOT_CHECKED
 
 
@@ -359,3 +359,44 @@ def test_a_retry_does_not_clear_an_open_stop(page: Any) -> None:
     again = reconciler.run_until_halt_or_done(session)
     assert again.halts and again.halts[0].halt_id == first.halts[0].halt_id
     assert page.evaluate("document.body.dataset.sent") is None
+
+
+def test_digest_only_signing_cannot_issue_verified() -> None:
+    priv, _ = generate_ed25519_keypair()
+    verdict = SummaryVerdict(
+        passed=True, checked_count=1, field_verdicts=(_passed("a"),)
+    )
+    with pytest.raises(ValueError, match="pack and dossier"):
+        issue_form_tx_receipt(
+            run_id="r",
+            signing_key=priv,
+            request_id="r1",
+            pack_id="p",
+            pack_digest="d",
+            dossier_digest="d",
+            outcome=FormTxOutcome.VERIFIED_DONE,
+            summary_verdict=verdict,
+        )
+
+
+def test_current_receipt_with_a_field_stripped_does_not_verify() -> None:
+    from openadapt_flow.form_tx.receipt import receipt_readback_evidence
+
+    priv, _ = generate_ed25519_keypair()
+    verdict = SummaryVerdict(
+        passed=True, checked_count=1, field_verdicts=(_passed("a"),)
+    )
+    receipt = issue_form_tx_receipt(
+        run_id="r",
+        signing_key=priv,
+        pack=_pack("a"),
+        dossier=_dossier(a="1"),
+        outcome=FormTxOutcome.VERIFIED_DONE,
+        summary_verdict=verdict,
+    )
+    wire = receipt.model_dump(mode="json")
+    del wire["payload"]["readback_evidence"]
+    stripped = SignedFormTxReceipt.model_validate(wire)
+    assert not verify_form_tx_receipt(stripped)
+    assert receipt_readback_evidence(receipt) == "acting_session_reread"
+    assert receipt_readback_evidence(stripped) == "unknown"

@@ -47,6 +47,7 @@ from openadapt_flow.form_tx.types import (
     ReadbackStatus,
     SummaryVerdict,
     WizardScreenSpec,
+    canonical_sha256,
 )
 
 __all__ = [
@@ -178,16 +179,22 @@ def read_subjects(
     subjects: dict[str, Subject] = {}
     for w in writes:
         key = w.dossier_key or w.field_key
-        sid = f"{w.in_popup_subroutine or 'main'}|{w.selector or ''}|{w.field_key}"
+        sid = (
+            f"{w.in_popup_subroutine or 'main'}|{w.screen_id or ''}|"
+            f"{w.selector or ''}|{w.field_key}"
+        )
         subjects.setdefault(sid, Subject(subject_id=sid, key=key, label=w.label or ""))
     for rec in resolutions:
         if (
             rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
             and rec.action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL
         ):
-            sid = f"entity|{rec.field_signature}"
+            # One subject per accepted row, not per table.
+            row = canonical_sha256(rec.resolved_value)[:16]
+            sid = f"entity|{rec.field_signature}|{row}"
             subjects.setdefault(
-                sid, Subject(subject_id=sid, key=f"entity:{rec.field_signature}")
+                sid,
+                Subject(subject_id=sid, key=f"entity:{rec.field_signature}|{row}"),
             )
     return list(subjects.values())
 
@@ -196,6 +203,7 @@ def uncovered_subject_verdicts(
     subjects: Sequence[Subject],
     verdicts: Sequence[ReadbackFieldVerdict],
     codec_for: Callable[[str], FormCodecKind],
+    observations_per_key: Optional[Mapping[str, int]] = None,
 ) -> list[ReadbackFieldVerdict]:
     """absent-evidence-as-success: a subject with no verdict is not_checked.
 
@@ -203,9 +211,22 @@ def uncovered_subject_verdicts(
     subjects hold the key than there are verdicts for it, the summary cannot
     say which control it shows, so the rest are not_checked. Never passed.
     """
-    verdicts_per_key: dict[str, int] = {}
+    # A passed or failed verdict is an observation of the summary; two
+    # read-backs that resolve to the same shown value are one observation,
+    # so they account for one subject only.
+    observed: dict[str, int] = {}
+    other: dict[str, int] = {}
     for v in verdicts:
-        verdicts_per_key[v.dossier_key] = verdicts_per_key.get(v.dossier_key, 0) + 1
+        bucket = (
+            observed
+            if v.status in (ReadbackStatus.PASSED, ReadbackStatus.FAILED)
+            else other
+        )
+        bucket[v.dossier_key] = bucket.get(v.dossier_key, 0) + 1
+    verdicts_per_key: dict[str, int] = dict(other)
+    for key, n in observed.items():
+        distinct = (observations_per_key or {}).get(key, n)
+        verdicts_per_key[key] = verdicts_per_key.get(key, 0) + min(n, distinct)
     by_key: dict[str, list[Subject]] = {}
     for subject in subjects:
         by_key.setdefault(subject.key, []).append(subject)
@@ -595,9 +616,22 @@ class SummaryJudge:
                     )
                 )
 
+        observations: dict[str, set[str]] = {}
+        for rb in summary_check.field_readbacks:
+            try:
+                oc = match_anchor_in_snapshot(
+                    rb.anchor, snapshot, include_readonly=True
+                )
+            except AmbiguousAnchorError:
+                continue
+            if oc is not None:
+                observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
         verdicts.extend(
             uncovered_subject_verdicts(
-                read_subjects(writes, active_resolutions), verdicts, _codec_for
+                read_subjects(writes, active_resolutions),
+                verdicts,
+                _codec_for,
+                {k: len(v) for k, v in observations.items()},
             )
         )
 

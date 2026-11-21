@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import itertools
 import os
 import secrets
 import tempfile
@@ -45,6 +44,7 @@ __all__ = [
     "form_tx_receipt_format",
     "issue_form_tx_receipt",
     "load_or_create_ed25519_key",
+    "receipt_readback_evidence",
     "verify_form_tx_receipt",
     "verify_salted_output_digest",
 ]
@@ -193,8 +193,12 @@ def issue_form_tx_receipt(
     else:
         effective_outputs = {}
 
+    # With per-field verdicts the signed count is derived from them, so the
+    # receipt cannot claim more checked fields than it has verdicts for.
     resolved_checked_count = (
-        readback_checked_count
+        sum(1 for v in summary_verdict.field_verdicts if v.passed)
+        if summary_verdict is not None and summary_verdict.field_verdicts
+        else readback_checked_count
         if readback_checked_count is not None
         else (summary_verdict.checked_count if summary_verdict is not None else 0)
     )
@@ -233,19 +237,31 @@ def issue_form_tx_receipt(
             raise ValueError(
                 "Verified receipt requires per-field read-back verdicts, all passed"
             )
-        if pack is not None and dossier is not None:
-            passed_keys = {v.dossier_key for v in summary_verdict.field_verdicts}
-            bound_with_value = {
-                b.dossier_key
-                for b in pack.bindings
-                if dossier.facts.get(b.dossier_key) is not None
-            }
-            missing = sorted(bound_with_value - passed_keys)
-            if missing:
-                raise ValueError(
-                    "Verified receipt requires every bound field with a value "
-                    f"to pass read-back; missing: {missing}"
-                )
+        if pack is None or dossier is None:
+            # The digest-only path cannot check coverage, so it cannot sign a
+            # verified receipt.
+            raise ValueError(
+                "Verified receipt requires the pack and dossier to check coverage"
+            )
+        passed_keys = {v.dossier_key for v in summary_verdict.field_verdicts}
+        required = {
+            b.dossier_key
+            for b in pack.bindings
+            if dossier.facts.get(b.dossier_key) is not None
+        }
+        required |= {
+            r.dossier_key
+            for r in human_resolutions
+            if r.dossier_key
+            and r.action.value
+            in ("provide_value", "fixed_on_screen", "accept_portal_prefill")
+        }
+        missing = sorted(required - passed_keys)
+        if missing:
+            raise ValueError(
+                "Verified receipt requires every bound field with a value "
+                f"to pass read-back; missing: {missing}"
+            )
 
     hr_digests = tuple(salted_sha256(rec, actual_salt) for rec in human_resolutions)
     salted_outputs = {
@@ -308,24 +324,32 @@ RECEIPT_FORMAT_OLDER = "v1, older (signed before: {fields})"
 
 
 def _signed_encodings(payload: Any) -> list[tuple[str, bytes]]:
-    """The current encoding, then each older one a receipt may have been signed in.
+    """The one encoding this payload was signed in, as it arrived.
 
-    An older receipt lacks fields added later; those read as their default,
-    so each subset of later fields that hold their default is tried absent.
+    Field presence is what was signed: a later v1 field present on the wire
+    is encoded (even at its default), and one absent on the wire is left out,
+    which marks the receipt as the older format. Nothing is guessed.
     """
-    out = [(RECEIPT_FORMAT_CURRENT, canonical_json_bytes(payload))]
     data = payload.model_dump(mode="json")
-    defaulted = [k for k, d in _LATER_V1_FIELDS.items() if k in data and data[k] == d]
-    for size in range(1, len(defaulted) + 1):
-        for absent in itertools.combinations(defaulted, size):
-            older = {k: v for k, v in data.items() if k not in absent}
-            out.append(
-                (
-                    RECEIPT_FORMAT_OLDER.format(fields=", ".join(absent)),
-                    canonical_json_bytes(older),
-                )
-            )
-    return out
+    absent = [
+        k for k in _LATER_V1_FIELDS if k not in payload.model_fields_set and k in data
+    ]
+    if not absent:
+        return [(RECEIPT_FORMAT_CURRENT, canonical_json_bytes(data))]
+    older = {k: v for k, v in data.items() if k not in absent}
+    return [
+        (
+            RECEIPT_FORMAT_OLDER.format(fields=", ".join(absent)),
+            canonical_json_bytes(older),
+        )
+    ]
+
+
+def receipt_readback_evidence(receipt: SignedFormTxReceipt) -> str:
+    """Who produced the read-back, or "unknown" for a receipt that never said."""
+    if "readback_evidence" not in receipt.payload.model_fields_set:
+        return "unknown"
+    return str(receipt.payload.readback_evidence)
 
 
 def verify_form_tx_receipt(
