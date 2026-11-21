@@ -1,0 +1,1 @@
+Record any agent you already run: meter and price its model calls through a loopback proxy, scrub its screenshots and text before they leave the machine, log its actions, and hold each Save, Submit or Send for a person.
