@@ -368,18 +368,29 @@ def local_registry(
 
 
 def _pinned_cloud_keys(home: Optional[Path]) -> list["RoleKey"]:
+    """Cloud keys pinned with ``openadapt receipt keys pin`` (``seal keys pin``).
+
+    The same file the older Cloud Seal check reads
+    (:func:`openadapt_flow.agent.seal.load_pinned_registry`).
+    """
     from openadapt_types.receipt import RoleKey
 
-    path = Path(home or Path.home() / ".openadapt" / "seal") / "cloud-keys.json"
     try:
-        from openadapt_flow.offline_seal import load_registry
+        from openadapt_flow.agent.seal import load_pinned_registry
 
-        return [
-            RoleKey(k.key_id, k.public_key, "openadapt_cloud", k.status, k.revoked_at)
-            for k in load_registry(path)
-        ]
-    except (OSError, ValueError):
+        entries = load_pinned_registry()
+    except Exception:  # noqa: BLE001 - nothing pinned: trust no Cloud key
         return []
+    return [
+        RoleKey(
+            str(k["key_id"]),
+            base64.b64encode(k["raw"]).decode("ascii"),
+            "openadapt_cloud",
+            k["status"],
+            k.get("revoked_at"),
+        )
+        for k in entries
+    ]
 
 
 def load_role_registry(path: Path) -> list["RoleKey"]:
