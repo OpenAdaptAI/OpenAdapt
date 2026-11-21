@@ -319,8 +319,14 @@ def test_the_api_step_sends_what_the_page_sends(spa, tmp_path):
     page.fill("#first", "Ada")
     page.fill("#last", "Park")
     page.fill("#age", "41")
-    page.click("#save")
-    page.wait_for_load_state("networkidle")
+    with page.expect_response(
+        lambda response: (
+            response.url == f"{app.base}/api/v1/Contact"
+            and response.request.method == "POST"
+        )
+    ) as saved:
+        page.click("#save")
+    assert saved.value.status == 200
     _, gui_headers, gui_raw = app.posts[-1]
 
     result = WebFormActuator(PlaywrightSessionTransport(page)).actuate(
