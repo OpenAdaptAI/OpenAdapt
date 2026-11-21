@@ -113,6 +113,29 @@ def _python(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def local_candidate_wheels(find_links: list[str]) -> list[str]:
+    """Bind this check to the supplied first-party build, even at a published version."""
+    names = {"openadapt_types", "openadapt_flow", "openadapt_verify"}
+    candidates: dict[str, list[Path]] = {name: [] for name in names}
+    for link in find_links:
+        directory = Path(link)
+        if not directory.is_dir():
+            continue
+        for wheel in directory.glob("*.whl"):
+            distribution = wheel.name.split("-", 1)[0]
+            if distribution in candidates:
+                resolved = wheel.resolve()
+                if resolved not in candidates[distribution]:
+                    candidates[distribution].append(resolved)
+    if not any(candidates.values()):
+        return []
+    if any(len(paths) != 1 for paths in candidates.values()):
+        raise ValueError(
+            "candidate install requires exactly one Types, Flow and Verify wheel"
+        )
+    return [str(candidates[name][0]) for name in sorted(names)]
+
+
 def _site_packages(venv: Path) -> Path:
     if os.name == "nt":
         return venv / "Lib" / "site-packages"
@@ -164,7 +187,7 @@ def check(args: argparse.Namespace) -> dict:
         links = [arg for link in args.find_links for arg in ("--find-links", link)]
 
         started = time.perf_counter()
-        _pip(python, *links, args.requirement)
+        _pip(python, *links, *local_candidate_wheels(args.find_links), args.requirement)
         seconds = time.perf_counter() - started
 
         dists = [d for d in _dists(python) if _normalize(d["name"]) not in before]

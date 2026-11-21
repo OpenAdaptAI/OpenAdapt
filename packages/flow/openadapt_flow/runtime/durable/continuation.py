@@ -347,6 +347,30 @@ class ContinuationCoordinator:
             )
         return remote_permit
 
+    def require_delivery_fresh(
+        self, token: ContinuationToken, remote_permit: Any
+    ) -> None:
+        """Recheck a retained permit and local lease at the actual input edge."""
+        with self.store.state_lock():
+            record = self._validate_owned(token)
+            pending = self.store.read_pending()
+            if (
+                pending is None
+                or pending.run_id != token.run_id
+                or approval_pause_digest(pending) != token.pause_binding_sha256
+                or pending.status == "rejected"
+                or record.reject_requested
+            ):
+                raise ContinuationBusy(
+                    "the durable continuation changed or expired before input"
+                )
+            lease_deadline = _parse(record.expires_at)
+        # All lock waits, protected reads and pause validation precede the
+        # receiver's final clock sample. Bind the local lease to that sample.
+        self.authority.require_remote_delivery_fresh(
+            remote_permit, receiver_deadline=lease_deadline
+        )
+
     def acknowledge_delivery(
         self, token: ContinuationToken, remote_permit: Any
     ) -> None:
@@ -773,6 +797,9 @@ class ContinuationGuard:
                 "a prior production delivery lacks an acknowledgment receipt"
             )
         self._pending_remote_permit = self.coordinator.before_delivery(self.token)
+
+    def require_delivery_fresh(self) -> None:
+        self.coordinator.require_delivery_fresh(self.token, self._pending_remote_permit)
 
     def acknowledge_delivery(self) -> None:
         pending = self._pending_remote_permit
