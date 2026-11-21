@@ -107,13 +107,18 @@ def _isolated(monkeypatch, tmp_path):
 
 
 def _published(
-    tmp_path: Path, signer: Signer, n: int, origin: str = ORIGIN
+    tmp_path: Path,
+    signer: Signer,
+    n: int,
+    origin: str = ORIGIN,
+    provenance: str = "synthetic-tutorial",
 ) -> Claimable:
     seal = {"key_id": signer.key_id, "public_key": signer.public_key, "n": n}
     record = {"id": _id(n), "url": f"{origin}/seal#{_id(n)}", "delete_token": "secret"}
     run = tmp_path / f"run-{n}"
     run.mkdir(exist_ok=True)
-    remember(run, record, {"seal": seal}, origin, home=tmp_path / "seal-home")
+    doc = {"seal": seal, "card": {"provenance": provenance}}
+    remember(run, record, doc, origin, home=tmp_path / "seal-home")
     return Claimable(_id(n), origin, seal_claim.seal_sha256(seal), signer.key_id)
 
 
@@ -228,6 +233,7 @@ def test_after_login_is_silent_when_cloud_does_not_take_claims(tmp_path, monkeyp
     _published(tmp_path, signer, 1)
     cloud = FakeCloud(enabled=False)
     monkeypatch.setattr(seal_claim, "_signer", lambda: signer)
+    monkeypatch.setattr(seal_claim, "check_destination", lambda origin, **kw: None)
     monkeypatch.setattr("openadapt_flow.hosted.resolve_host", lambda host=None: ORIGIN)
     lines: list[str] = []
     seal_claim.after_login(transport=cloud, say=lines.append)
@@ -241,6 +247,7 @@ def test_after_login_claims_and_never_raises(tmp_path, monkeypatch):
     cloud = FakeCloud()
     cloud.store(a.id, signer, a.seal_sha256)
     monkeypatch.setattr(seal_claim, "_signer", lambda: signer)
+    monkeypatch.setattr(seal_claim, "check_destination", lambda origin, **kw: None)
     monkeypatch.setattr("openadapt_flow.hosted.resolve_host", lambda host=None: ORIGIN)
     monkeypatch.setattr(
         "openadapt_flow.hosted.resolve_token", lambda token=None, host=None: TOKEN
@@ -303,12 +310,20 @@ def test_only_a_real_login_triggers_the_claim(argv, expected):
 def test_the_login_hook_runs_only_after_a_successful_login(monkeypatch):
     calls: list = []
     monkeypatch.setattr("openadapt_flow.__main__.main", lambda argv: 3)
-    monkeypatch.setattr(seal_claim, "after_login", lambda host=None: calls.append(host))
+    monkeypatch.setattr(
+        seal_claim, "after_login", lambda host=None, **kw: calls.append((host, kw))
+    )
     assert cli._invoke_flow(["login"]) == 3
     assert calls == []
     monkeypatch.setattr("openadapt_flow.__main__.main", lambda argv: 0)
-    assert cli._invoke_flow(["login", "--host=https://x.test"]) == 0
-    assert calls == ["https://x.test"]
+    argv = ["login", "--host=https://x.test", "--destination-kind", "byoc"]
+    assert cli._invoke_flow(argv + ["--trusted-host", "https://x.test"]) == 0
+    assert calls == [
+        (
+            "https://x.test",
+            {"destination_kind": "byoc", "trusted_hosts": ["https://x.test"]},
+        )
+    ]
 
 
 def test_seals_taken_down_are_dropped_and_the_rest_claimed(tmp_path):
@@ -360,3 +375,51 @@ def test_openadapt_login_is_a_command_that_reaches_flow_login(monkeypatch):
     )
     assert result.exit_code == 0
     assert seen == [["login", "--no-browser", "--host", "https://x.test"]]
+
+
+def test_after_login_claims_only_quickstart_seals(tmp_path, monkeypatch):
+    signer = Signer()
+    practice = _published(tmp_path, signer, 1)
+    real = _published(tmp_path, signer, 2, provenance="production")
+    cloud = FakeCloud()
+    cloud.store(practice.id, signer, practice.seal_sha256)
+    cloud.store(real.id, signer, real.seal_sha256)
+    monkeypatch.setattr(seal_claim, "_signer", lambda: signer)
+    monkeypatch.setattr(seal_claim, "check_destination", lambda origin, **kw: None)
+    monkeypatch.setattr("openadapt_flow.hosted.resolve_host", lambda host=None: ORIGIN)
+    monkeypatch.setattr(
+        "openadapt_flow.hosted.resolve_token", lambda token=None, host=None: TOKEN
+    )
+    seal_claim.after_login(transport=cloud, say=lambda _line: None)
+    assert set(cloud.claims) == {practice.id}
+    # An explicit claim takes the rest.
+    seal_claim.claim_published(
+        ORIGIN,
+        TOKEN,
+        transport=cloud,
+        signer=signer,
+        home=tmp_path / "seal-home",
+        say=lambda _line: None,
+    )
+    assert set(cloud.claims) == {practice.id, real.id}
+
+
+def test_no_token_goes_to_an_untrusted_host(tmp_path, monkeypatch):
+    signer = Signer()
+    _published(tmp_path, signer, 1, origin="http://evil.test")
+    cloud = FakeCloud()
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", TOKEN)
+    monkeypatch.setattr(seal_claim, "_signer", lambda: signer)
+    seal_claim.after_login("http://evil.test", transport=cloud, say=lambda _l: None)
+    assert cloud.calls == []
+
+    from click.testing import CliRunner
+
+    monkeypatch.setattr(seal_publish, "urllib_transport", cloud)
+    result = CliRunner().invoke(
+        cli.main, ["seal", "claim", "--host", "http://evil.test"]
+    )
+    assert result.exit_code == 1
+    assert "trust" in result.output
+    assert cloud.calls == []

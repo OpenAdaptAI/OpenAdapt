@@ -353,6 +353,17 @@ def _is_login(argv: list[str]) -> bool:
     return not any(token in ("-h", "--help") for token in rest)
 
 
+def _option_values(argv: list[str], name: str) -> Optional[list[str]]:
+    """Every value of a repeatable ``--name VALUE`` option, or None."""
+    values = []
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            values.append(argv[index + 1])
+        elif token.startswith(name + "="):
+            values.append(token[len(name) + 1 :])
+    return values or None
+
+
 def _option_value(argv: list[str], name: str) -> Optional[str]:
     """The value of ``--name VALUE`` or ``--name=VALUE`` in ``argv``, if any."""
     for index, token in enumerate(argv):
@@ -391,7 +402,11 @@ def _invoke_flow(argv: list[str]) -> int:
             if code == 0:
                 from openadapt.seal_claim import after_login
 
-                after_login(_option_value(argv, "--host"))
+                after_login(
+                    _option_value(argv, "--host"),
+                    destination_kind=_option_value(argv, "--destination-kind"),
+                    trusted_hosts=_option_values(argv, "--trusted-host"),
+                )
             return code
         if argv[:1] != ["tutorial"]:
             return int(flow_main(argv))
@@ -2228,14 +2243,32 @@ def _claim_seals(argv: list[str]) -> int:
         "run_dirs", nargs="*", type=Path, help="published run folders to include"
     )
     parser.add_argument("--host", default=None, help="the Cloud you signed in to")
+    parser.add_argument(
+        "--destination-kind",
+        default=None,
+        help="as for `openadapt login`: the trust class of --host",
+    )
+    parser.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="as for `openadapt login`: an allowlisted customer origin",
+    )
     options = parser.parse_args(argv)
     try:
         from openadapt_flow.hosted import HostedError, resolve_host, resolve_token
     except ImportError:
         click.echo("This openadapt-flow cannot sign in to Cloud.", err=True)
         return 1
+    from openadapt.seal_claim import check_destination
+
     try:
         origin = resolve_host(options.host)
+        check_destination(
+            origin,
+            destination_kind=options.destination_kind,
+            trusted_hosts=options.trusted_host,
+        )
         token = resolve_token(None, host=origin)
     except HostedError as exc:
         click.echo(f"Not claimed: {exc}", err=True)

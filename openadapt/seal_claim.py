@@ -43,6 +43,8 @@ from openadapt.seal_publish import (
 )
 
 INDEX_FILE = "published-seals.json"
+#: The quickstart's Seals: the only ones claimed without being asked.
+TUTORIAL = "synthetic-tutorial"
 SCHEMA = "openadapt.local-seal-claim/v1"
 _DOMAIN = (SCHEMA + "\0").encode("utf-8")
 STATUS_PATH = "/api/local-seal-claims/status"
@@ -68,6 +70,7 @@ class Claimable:
     seal_sha256: str
     key_id: str
     run_dir: Optional[str] = None
+    provenance: Optional[str] = None
 
 
 def canonical(value: Any) -> bytes:
@@ -146,6 +149,7 @@ def remember(
             "seal_sha256": seal_sha256(doc["seal"]),
             "key_id": str(doc["seal"]["key_id"]),
             "run_dir": str(Path(run_dir).resolve()),
+            "provenance": (doc.get("card") or {}).get("provenance"),
         }
         entries = [e for e in read_index(folder) if e.get("id") != entry["id"]]
         entries.append(entry)
@@ -198,6 +202,7 @@ def _from_run_dir(run_dir: Path) -> Optional[Claimable]:
             seal_sha256=seal_sha256(seal),
             key_id=str(seal["key_id"]),
             run_dir=str(run_dir.resolve()),
+            provenance=(doc.get("card") or {}).get("provenance"),
         )
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -223,15 +228,19 @@ def find_claimable(
     *,
     run_dirs: Optional[list[Path]] = None,
     home: Optional[Path] = None,
-    include_claimed: bool = True,
+    automatic: bool = False,
 ) -> tuple[list[Claimable], int]:
     """Seals published to ``origin`` and signed by ``key_id``, oldest first.
+
+    ``automatic`` (the claim after login) takes only quickstart Seals
+    (provenance ``synthetic-tutorial``) not claimed before; any other Seal is
+    claimed only by an explicit ``openadapt seal claim``.
 
     Returns the Seals and how many published to ``origin`` were skipped
     because another key signed them (a key replaced since)."""
     found: dict[str, Claimable] = {}
     for entry in read_index(home):
-        if entry.get("claimed") and not include_claimed:
+        if automatic and (entry.get("claimed") or entry.get("provenance") != TUTORIAL):
             continue
         try:
             item = Claimable(
@@ -240,6 +249,7 @@ def find_claimable(
                 seal_sha256=str(entry["seal_sha256"]),
                 key_id=str(entry["key_id"]),
                 run_dir=entry.get("run_dir"),
+                provenance=entry.get("provenance"),
             )
         except KeyError:
             continue
@@ -377,7 +387,7 @@ def claim_published(
     home: Optional[Path] = None,
     say: Callable[[str], None] = print,
     quiet_when_none: bool = False,
-    include_claimed: bool = True,
+    automatic: bool = False,
 ) -> int:
     """Find this computer's published Seals for ``origin`` and claim them.
 
@@ -388,7 +398,7 @@ def claim_published(
         signer.key_id,
         run_dirs=run_dirs,
         home=home,
-        include_claimed=include_claimed,
+        automatic=automatic,
     )
     if other_key:
         say(
@@ -437,25 +447,48 @@ def claim_published(
     return 0
 
 
+def check_destination(
+    origin: str,
+    *,
+    destination_kind: Optional[str] = None,
+    trusted_hosts: Optional[list[str]] = None,
+) -> None:
+    """Apply the same destination rule ``login`` applies before a token is
+    sent. Raises the engine's ``HostedError`` when ``origin`` is not trusted."""
+    from openadapt_flow.hosted import resolve_destination_policy
+
+    resolve_destination_policy(
+        origin, destination_kind=destination_kind, trusted_hosts=trusted_hosts
+    )
+
+
 def after_login(
     host: Optional[str] = None,
     *,
+    destination_kind: Optional[str] = None,
+    trusted_hosts: Optional[list[str]] = None,
     transport: Optional[Transport] = None,
     say: Callable[[str], None] = print,
 ) -> None:
-    """Run after ``openadapt login`` succeeds. Silent unless Cloud takes claims
-    and there is something to claim; never raises, so login's result stands."""
+    """Run after ``openadapt login`` succeeds: claim the quickstart's Seals.
+
+    Silent unless Cloud takes claims and there is a quickstart Seal not yet
+    claimed; never raises, so login's result stands. The token goes only to
+    the host login used, under the same destination rule."""
     try:
         from openadapt_flow.hosted import resolve_host, resolve_token
 
         from openadapt.seal_publish import _module_transport
 
         origin = resolve_host(host)
+        check_destination(
+            origin, destination_kind=destination_kind, trusted_hosts=trusted_hosts
+        )
         sender = transport or _module_transport()
         if not claims_live(origin, transport=sender):
             return
         signer = _signer()
-        if not find_claimable(origin, signer.key_id, include_claimed=False)[0]:
+        if not find_claimable(origin, signer.key_id, automatic=True)[0]:
             return
         claim_published(
             origin,
@@ -464,7 +497,7 @@ def after_login(
             signer=signer,
             say=say,
             quiet_when_none=True,
-            include_claimed=False,
+            automatic=True,
         )
     except Exception:  # noqa: BLE001 - claiming is a convenience after login
         return
@@ -476,6 +509,7 @@ __all__ = [
     "claim",
     "claim_payload",
     "claim_published",
+    "check_destination",
     "claims_live",
     "find_claimable",
     "read_index",
