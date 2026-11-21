@@ -108,6 +108,22 @@ def base_budgets(root: Path, base: str) -> dict[str, int]:
         return {}
 
 
+def renamed_from(root: Path, base: str) -> dict[str, str]:
+    """New path -> old path for files git sees as renamed since ``base``."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "diff", "--name-status", "-M", base],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    renames = {}
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) == 3 and fields[0].startswith("R"):
+            renames[fields[2]] = fields[1]
+    return renames
+
+
 def policy(env: Mapping[str, str]) -> tuple[str | None, bool]:
     """(base, report_only) for a CI event; nightly and local runs are strict.
 
@@ -132,6 +148,7 @@ def check(root: Path, base: str | None = None) -> tuple[list[str], list[str]]:
     failures: list[str] = []
     notes: list[str] = []
     listed = {budget.path for budget in budgets}
+    renames = renamed_from(root, base) if base else {}
     for gone in sorted(set(before) - listed):
         if (root / gone).is_file():
             failures.append(
@@ -147,6 +164,17 @@ def check(root: Path, base: str | None = None) -> tuple[list[str], list[str]]:
                 f"{budget.path}: budget raised from {before[budget.path]} to "
                 f"{budget.lines}. Budgets never rise: put new code in a new "
                 "module and keep only the call site here."
+            )
+        origin = renames.get(budget.path)
+        if (
+            budget.path not in before
+            and origin in before
+            and budget.lines > before[origin]
+        ):
+            failures.append(
+                f"{budget.path}: renamed from {origin}, budget raised from "
+                f"{before[origin]} to {budget.lines}. A renamed file keeps its "
+                "budget; budgets never rise."
             )
         if not path.is_file():
             message = (

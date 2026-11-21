@@ -241,3 +241,20 @@ def test_dropping_the_row_of_a_removed_file_passes(tmp_path: Path) -> None:
     doc.write_text(doc.read_text().replace("| `b.py` | 10 |\n", ""))
     (root / "b.py").unlink()
     assert ratchet.check(root, "HEAD")[0] == []
+
+
+@pytest.mark.parametrize("new_budget, fails", [(12, True), (10, False), (9, False)])
+def test_a_renamed_file_keeps_its_budget(
+    tmp_path: Path, new_budget: int, fails: bool
+) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 9}))
+    _git(root, "mv", "a.py", "b.py")
+    _write(root, "b.py", min(new_budget, 12))
+    doc = root / ratchet.DOC
+    doc.write_text(
+        doc.read_text().replace("| `a.py` | 10 |", f"| `b.py` | {new_budget} |")
+    )
+    _git(root, "add", "-A")
+    failures, _notes = ratchet.check(root, "HEAD")
+    renamed = [f for f in failures if "renamed from a.py" in f]
+    assert bool(renamed) is fails
