@@ -5249,11 +5249,20 @@ class StepResult(BaseModel):
             "as proof that settled-state detection ran."
         ),
     )
-    # Drift-oracle: postconditions that deterministically FAILED but were
-    # confirmed by the optional on-prem VLM state-verifier under render drift
-    # (recorded for audit; empty unless an appliance is configured).
+    # Drift-oracle hints: postconditions that deterministically FAILED and that
+    # the optional VLM state-verifier said hold. A hint only: the
+    # postcondition stays failed and the step halts for a person to review
+    # (recorded for audit; empty unless a state verifier is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    # Model calls by placement (runtime.model_egress): identity-VLM calls that
+    # sent crops off the box, ones that ran in process, and off-box grounder
+    # calls (abstentions included). Omitted from the JSON when zero.
+    identity_vlm_calls: int = Field(default=0, ge=0, exclude_if=lambda v: v == 0)
+    local_identity_vlm_calls: int = Field(
+        default=0, ge=0, exclude_if=lambda v: v == 0
+    )
+    grounder_calls: int = Field(default=0, ge=0, exclude_if=lambda v: v == 0)
     #: The uniform page scale (for example 1.25 under 125% zoom) at which a
     #: ``region_stable`` check found its recorded content, when it was found
     #: only there. Set only when this step's own click showed the same scale.
