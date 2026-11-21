@@ -46,6 +46,7 @@ from pydantic import (
 
 from openadapt_flow import run_invocation as _run_invocation
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
+from openadapt_flow.input_evidence import FreshActuationEvent as FreshActuationEvent
 from openadapt_flow.job_authoring import (
     JobAuthoringBinding,
     check_workflow_input,
@@ -4368,37 +4369,6 @@ class ActionDeliveryUncertainty(BaseModel):
     postconditions_confirmed: Optional[bool] = None
     effects_confirmed: Optional[bool] = None
     resolved_by_contract: bool = False
-
-
-class FreshActuationEvent(BaseModel):
-    """PHI-free evidence for one pre-input actuation-frame mismatch.
-
-    The runtime records only the number and geometry of changed pixels.  It
-    does not retain the rejected frame or its pixel values.  ``retried`` is
-    true only when no earlier input edge crossed for this workflow step and a
-    bounded reacquisition remained available.
-    """
-
-    attempt: int = Field(ge=1)
-    operation: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
-    changed_pixel_count: int = Field(ge=1)
-    changed_bbox: Region
-    frame_size: tuple[int, int]
-    target_intersection: Optional[bool] = None
-    identity_intersection: Optional[bool] = None
-    retried: bool
-
-    @model_validator(mode="after")
-    def _valid_geometry(self) -> "FreshActuationEvent":
-        frame_width, frame_height = self.frame_size
-        x, y, width, height = self.changed_bbox
-        if frame_width <= 0 or frame_height <= 0:
-            raise ValueError("fresh-actuation frame size must be positive")
-        if x < 0 or y < 0 or width <= 0 or height <= 0:
-            raise ValueError("fresh-actuation bounding box must be positive")
-        if x + width > frame_width or y + height > frame_height:
-            raise ValueError("fresh-actuation bounding box exceeds the frame")
-        return self
 
 
 class IdentitySignalEvidence(BaseModel):

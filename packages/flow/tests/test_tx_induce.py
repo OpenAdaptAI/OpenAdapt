@@ -885,9 +885,9 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
             time.sleep(0.005)
 
     bg_thread = threading.Thread(target=_background_inserter, daemon=True)
+    rows_before = normalizing_server.count_rows()
     bg_thread.start()
     try:
-        rows_before = normalizing_server.count_rows()
         pack = certify_lens_on_sandbox(
             candidate,
             sample_record={
@@ -907,6 +907,7 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
         stop_bg.set()
         bg_thread.join(timeout=3.0)
 
+    assert not bg_thread.is_alive(), "background inserts did not finish"
     assert bg_counter["inserted"] >= 1
     assert pack.lens.write_mode == "patch"
     assert pack.sensitivity == 1.0
