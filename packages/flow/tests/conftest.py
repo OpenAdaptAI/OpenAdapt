@@ -79,9 +79,9 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         # OS keychain (no dialog, no write to the person's login keychain).
         "OPENADAPT_FLOW_KEY_STORE": "file",
         "OPENADAPT_ENCRYPT_AT_REST": None,
-        "OPENADAPT_ORG_RECIPIENTS": None,
-        "OPENADAPT_POLICY_FILE": str(root / ".no-policy.json"),
-        "OPENADAPT_AGE_IDENTITY_FILE": None,
+        "OPENADAPT_POLICY": None,
+        "OPENADAPT_RECOVERY_CODE": None,
+        "OPENADAPT_ORG_KEY_FILE": None,
     }
 
 

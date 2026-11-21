@@ -77,7 +77,5 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     # Never the OS keychain from tests: no dialog, no login-keychain write.
     monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
     monkeypatch.delenv("OPENADAPT_ENCRYPT_AT_REST", raising=False)
-    monkeypatch.delenv("OPENADAPT_ORG_RECIPIENTS", raising=False)
-    monkeypatch.setenv(
-        "OPENADAPT_POLICY_FILE", str(tmp_path_factory.mktemp("policy") / "none.json")
-    )
+    monkeypatch.delenv("OPENADAPT_POLICY", raising=False)
+    monkeypatch.delenv("OPENADAPT_RECOVERY_CODE", raising=False)

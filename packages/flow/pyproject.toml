@@ -54,13 +54,12 @@ dependencies = [
     # Workflow.save(encrypt=True) / load(key=...) and encrypted checkpoints work
     # out of the box in a regulated/PHI deployment; the audited AEAD substrate
     # for docs/phi_at_rest.md. Imported lazily, only on the encryption path.
-    "cryptography>=42.0",
-    # Encryption at rest is on by default (docs/phi_at_rest.md). Each encrypted
-    # recording, bundle or run has its own data key, wrapped with age (X25519)
-    # for its recipients through pyrage (MIT, Rust bindings to the audited rage
-    # crate), and this computer's device key lives in the OS keychain through
-    # keyring (MIT). Both are imported lazily, only on the encryption path.
-    "pyrage>=1.2,<2",
+    # 50 brings HPKE (RFC 9180), which wraps each encrypted set's data key
+    # (docs/phi_at_rest.md, openadapt_flow.key_hierarchy).
+    "cryptography>=50.0",
+    # Encryption at rest is on by default. Where this computer has no secure
+    # hardware key, its software device key lives in the OS keychain through
+    # keyring (MIT). Imported lazily, only on the encryption path.
     "keyring>=24",
     # The portable contracts (request, result and receipt models). They live
     # in openadapt-types, which depends only on pydantic, so a consumer of the
@@ -114,6 +113,8 @@ browser = [
     "playwright>=1.44",
 ]
 dev = [
+    # tests/test_stream_aead.py checks the sealed-set v3 payload against Tink.
+    "tink>=1.16,<2",
     # The test suite exercises record, compile and replay.
     "numpy>=1.26",
     "opencv-python>=4.9,<5.1",

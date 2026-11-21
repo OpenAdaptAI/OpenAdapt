@@ -14,9 +14,9 @@ machine), [phi_in_transit.md](phi_in_transit.md) (PHI on the wire) and
 ## Default, opt-out and strict mode
 
 Flow encrypts recordings, bundles and run directories by default, with no
-setup. Each one gets its own random data key, and that key is wrapped for
-its recipients (see [Recipients](#recipients)). By default the only recipient
-is this computer's device key.
+setup. Each one gets its own random data key, wrapped through a per-set
+bucket key to this computer's device key and, in an organization, to the
+organization's key (see [Key hierarchy](#key-hierarchy)).
 
 | | Default | `OPENADAPT_FLOW_AT_REST=strict` |
 | --- | --- | --- |
@@ -48,8 +48,8 @@ all of them. Files encrypted earlier still read under the opt-out, with the
 key that encrypted them.
 
 **Healthcare and other regulated deployments:** set
-`OPENADAPT_FLOW_AT_REST=strict`, and an organization recipient or a key from
-your secret manager. Strict mode runs:
+`OPENADAPT_FLOW_AT_REST=strict` and an organization policy
+([Organization policy](#organization-policy)). Strict mode runs:
 
 - `record`, `compile`, `induce`, `admit run`, `run`, `replay` and `resume`,
   which encrypt what they write, plaintext input included;
@@ -101,69 +101,153 @@ files included. It fails if any of them holds plaintext.
 
 What stays readable is listed under [What is not encrypted](#what-is-not-encrypted).
 
-## Recipients
+## Key hierarchy
 
-Every encrypted recording, bundle and run directory (format version 3) has
-its own random 256-bit data key. Its files are encrypted under that key with
-AES-256-GCM. The header wraps the data key for each recipient with
-[age](https://age-encryption.org) (X25519, through `pyrage`, MIT, which binds
-the audited `rage` crate). Who can open the set is the list of recipients:
+The design is the evidence-encryption memo of 2026-11-20
+(openadapt-internal `docs/design/evidence-encryption-2026-11/MEMO.md`).
+Every new recording, bundle and run directory (sealed-set format version 3)
+has three layers of keys:
 
-| Recipient | Who holds the private key | Set by |
+```
+data key (DEK, 256-bit random, one per set)
+  wrapped with HPKE (RFC 9180: DHKEM P-256, HKDF-SHA256, AES-256-GCM) to
+bucket key pair (P-256, one per set)
+  whose private half is wrapped, in a bucket record, to
+    the device runtime key    only while the set is being written
+    the device viewer key     user presence on hardware
+    organization key(s)       P-256 HPKE or RSA-OAEP-3072; required in org mode
+    a recovery key            solo mode, optional
+```
+
+- **Files.** Each file is a Tink `AES256_GCM_HKDF_1MB` stream (1 MiB
+  segments, last segment flagged, so a truncated file fails to open) under a
+  payload key derived from the DEK and the set id, with the file's path in
+  the set as associated data. `tests/test_stream_aead.py` checks the format
+  against Tink itself.
+- **Header.** `.openadapt-sealed.json` holds the set id, the key reference
+  (bucket id and fingerprint), the DEK wrapped to the bucket's public key,
+  the index, and two HMAC-SHA-256 MACs: one under a key derived from the DEK,
+  one under a key derived from the bucket's private key. The second stops
+  someone who knows the bucket's public key from writing a set this computer
+  would accept.
+- **Algorithms.** NIST-approved throughout: P-256, HKDF-SHA256, AES-256-GCM,
+  RSA-OAEP with SHA-256. All come from the `cryptography` package (50 or
+  later). This is not a FIPS 140-3 validated module unless you run it on a
+  FIPS-validated OpenSSL provider.
+
+### Where the bucket record lives
+
+| | Solo (default, no policy) | Organization mode (`mode: org`) |
 | --- | --- | --- |
-| **The device** (default) | This computer: an age identity Flow creates on first use and keeps in the OS keychain (macOS Keychain, Windows Credential Manager with DPAPI, Linux Secret Service) | Nothing to set |
-| **The organization** (optional) | Your reviewers and auditors, in your own KMS, HSM or age plugin | `OPENADAPT_ORG_RECIPIENTS=age1...` (comma-separated), or `{"recipients": ["age1..."]}` in the policy file (`OPENADAPT_POLICY_FILE`, default `~/.openadapt/policy.json`), which IT or MDM can place |
-| **A share** | Whoever you give it to | `openadapt-flow at-rest share DIR --recipient age1...` |
-| **A configured key** (legacy) | Your secret manager | `OPENADAPT_BUNDLE_KEY`, `OPENADAPT_RECORDING_KEY` |
+| Record | Inside the set's header (`records: inline`), so it travels with backups | `~/.openadapt/keys/buckets/<id>.json` plus a copy in the organization's `key_archive` (`records: archive`); never in the header |
+| Wrapped to | Device viewer key (and runtime key while open), recovery key if one exists | Device viewer key (runtime while open, local copy only), organization keys, recovery key if set |
+| Lost laptop | Backups open with the recovery key; without one they can't be opened | Every set whose record reached the archive opens with the organization key |
+| Crypto-shredding | This disk's copy only: a backup still opens with the recovery key | Every tracked copy: the local record (overwritten, then deleted) and the archive copy |
 
-- With an organization recipient, a device writes evidence the organization
-  can read later, on another computer and after the person who recorded it
-  has left. A reviewer opens it with `OPENADAPT_AGE_IDENTITY_FILE` pointing
-  at an age identity file. A malformed organization recipient stops the
-  write: evidence is never written silently without it.
-- `share` rewraps the same data key for more recipients; no file is
-  re-encrypted. Run it on the computer that wrote the set.
-- A configured key still wins: with one set and no organization recipient,
-  Flow writes the version 1 header it always wrote, keyed by that passphrase
-  (scrypt N=2^15, r=8, p=1). With both, the passphrase and the organization
-  are recipients, and the device is not.
-- age has no sender authentication, so a device-written header also carries
-  an HMAC under a key derived from the device identity. The device refuses a
-  header that names it but lacks a valid HMAC.
-- OpenAdapt Cloud never holds a key, a wrapped key or recovery material.
+A bundle keeps its runtime stanza after it is written, because programs
+replay unattended. Recordings and runs lose it when they are finalized; from
+then on the viewer key (Touch ID or Windows Hello, on hardware) opens them.
 
-**Where the device key lives.** The device identity is stored with
-`keyring` in the OS keychain, entry `openadapt-flow-at-rest`. Next to it,
+### Device keys
+
+| Platform | Provider | Status |
+| --- | --- | --- |
+| macOS | Secure Enclave runtime key; Secure Enclave viewer key with Touch ID | Interface and test double only; **not built**, pending a check on real hardware |
+| Windows | TPM key through the Platform Crypto Provider; Windows Hello viewer key | Interface and test double only; **not built**, pending a check on real hardware |
+| Linux | TPM2 key | Interface only; **not built** |
+| Everywhere today | A software P-256 key in the OS keychain through `keyring` (macOS Keychain, Windows Credential Manager with DPAPI, Linux Secret Service), else a 0600 file with a warning | Built; `at-rest status` labels it `software` |
+
+A software key protects against a copied disk, backup or ticket attachment,
+not against code running as you. `require_hardware_device_key: true` in the
+policy refuses the software key. Next to a keychain-held key,
 `~/.openadapt/keys/device-key.store.json` records which entry holds it and a
-check value; it holds no key material. If the entry is later missing, locked,
-denied or different, Flow fails closed with a clear error and never makes a
-new key over it. Where no keychain works (a headless Linux box without Secret
-Service, for example), the identity goes to `~/.openadapt/keys/device.agekey`,
-mode 0600 in a 0700 directory, with a warning. `OPENADAPT_FLOW_KEY_STORE`
-picks the store: `auto` (default), `keychain` (fail without one) or `file`.
-`OPENADAPT_FLOW_AT_REST_HOME` (or `OPENADAPT_HOME`) moves the marker and the
-file. Back the device key up: what it alone encrypts can't be read without
-it. A key file from an earlier version (`~/.openadapt/keys/at-rest.key`)
-keeps being used as the local passphrase, so nothing it encrypted is
-orphaned.
+check value (no key material). If that entry is later missing, locked or
+different, Flow fails closed and never makes a new key over it.
+`OPENADAPT_FLOW_KEY_STORE` picks the software key's store: `auto`
+(default), `keychain` or `file`.
 
-The keychain item is readable by your login session; it is not a
-non-exportable hardware key. A Secure Enclave or TPM provider (for example
-through an age plugin) would slot in behind the same recipient interface
-(`openadapt_flow.envelope`); it is not built yet.
+### Organization policy
 
-`openadapt-flow at-rest status` shows the mode, where the device key is kept,
-its public recipient and the organization recipients. It prints no key
-material.
+The organization makes its key in its own KMS or HSM and distributes a policy
+file. Flow reads the first one found, and a user file never overrides a
+machine one:
+
+1. macOS: the managed preferences profile `ai.openadapt.policy` (MDM);
+2. Windows: `HKLM\SOFTWARE\Policies\OpenAdapt`, value `Policy` (Group
+   Policy, Intune);
+3. Linux: `/etc/openadapt/policy.json`, owned by root and writable by root
+   only;
+4. `OPENADAPT_POLICY=<file>`. It may set organization mode only when it is
+   owned by root (`OPENADAPT_POLICY_TRUST_USER_FILE=1` lifts that for
+   development, and status says so).
+
+```json
+{
+  "schema": "openadapt.ai/policy/v1",
+  "org": "example-health",
+  "mode": "org",
+  "recipients": [
+    {"role": "org", "status": "active", "type": "hpke-p256",
+     "public_key": "<base64 SPKI>", "fingerprint": "sha256:…",
+     "kms_uri": "arn:aws:kms:…"},
+    {"role": "org", "status": "retired", "type": "rsa-oaep-3072-sha256",
+     "public_key": "<base64 SPKI>"}
+  ],
+  "key_archive": "file:///Volumes/keys/openadapt/",
+  "require_hardware_device_key": false,
+  "max_unarchived": 50
+}
+```
+
+- In organization mode, a missing or unreadable policy, no active
+  organization recipient, or no `key_archive` stops recording and running.
+- If the archive is unreachable, records stay local as "not yet archived"
+  (`at-rest status` counts them), and new sets stop after `max_unarchived`.
+- Only a local or mounted path (`file://`) is supported as `key_archive` so
+  far; `s3://` and `smb://` refuse.
+- OpenAdapt Cloud never distributes the organization's key or holds any key.
+
+A reviewer opens a set with the archive copy of its record in
+`~/.openadapt/keys/buckets/` and `OPENADAPT_ORG_KEY_FILE` (a PEM private
+key). Unwrapping through the KMS itself (`Decrypt`, `DeriveSharedSecret`) is
+not built yet.
+
+### Solo recovery
+
+`openadapt-flow at-rest recovery create` makes a recovery key: 32 random
+bytes shown once as a 52-character code, turned into a P-256 key with HPKE's
+DeriveKeyPair. Only its public half is stored; it becomes a recipient of
+every new set. Open with it on another computer by setting
+`OPENADAPT_RECOVERY_CODE`. Without one, a lost or reset computer means its
+encrypted runs can't be opened.
+
+### Legacy keys
+
+- `OPENADAPT_BUNDLE_KEY` and `OPENADAPT_RECORDING_KEY` still win outside
+  organization mode: Flow writes the version 1 header it always wrote,
+  keyed by that passphrase (scrypt N=2^15, r=8, p=1). They are deprecated.
+- `~/.openadapt/keys/at-rest.key` (mode 0600), the key earlier versions
+  made, still opens what it encrypted, and is still the local passphrase of
+  durable checkpoints and attended state, which keep their own containers.
+- Version 1 and 2 sets, and plaintext folders, still read.
+
+`openadapt-flow at-rest status` shows the mode, the policy source, the device
+keys, the organization fingerprints, the recovery key and the unarchived
+count. It prints no key material.
 
 ## Crypto-shredding
 
-`openadapt-flow at-rest shred DIR --yes` deletes every wrapped copy of a
-set's data key (and the salt of an older set), and deletes the durable
-checkpoints and other stores' ciphertext inside it. Nobody can open the set
-afterwards, and there is no recovery copy anywhere. The library call is
-`openadapt_flow.sealed_set.shred`, for a retention job. Copies you made
-elsewhere (backups, shares already opened) are outside its reach.
+`openadapt-flow at-rest shred DIR --yes` destroys the set's bucket key: the
+local record is overwritten and deleted, and the archive copy deleted. It
+also drops the record from the header, and deletes the durable checkpoints
+and other stores' ciphertext inside the set. It returns a shred record
+(bucket id, time, copies destroyed). The library call is
+`openadapt_flow.sealed_set.shred`, for a retention job. In solo mode it
+reaches only this disk's copy, and says so.
+
+It does not reach plaintext that leaked earlier (a screenshot pasted into a
+ticket, a crash dump), copies someone opened and saved, or a desktop
+recording's raw capture session.
 
 ## Receipts
 
@@ -175,9 +259,8 @@ digests, never the report's contents.
 **Every digest is over the plaintext.** The receipt's `subject_sha256` and
 the card's `report_sha256` are the SHA-256 of the plaintext `report.json`
 bytes, decrypted in memory. So a receipt is the same whether the run is
-encrypted, rewrapped for a share, or was never encrypted, and checking it
-needs a recipient's key to read the report. `seal verify` and the receipt
-page decrypt the report to check it.
+encrypted or not, and checking it needs a key that opens the report.
+`seal verify` and the receipt page decrypt the report to check it.
 
 The receipt page (`seal.html`) embeds the run report so it can check the
 receipt in the browser. Beside an encrypted run it is therefore a plaintext
@@ -187,45 +270,41 @@ strict mode refuses it.
 ## Desktop recordings
 
 The desktop recorders capture through openadapt-capture, which writes its
-raw session (input database and screen video) in plaintext under
-`<out>/.capture` while recording. When recording stops, Flow converts it into
-an encrypted recording and deletes the raw session, so only ciphertext is
-left. Until then, and if the process is killed before it converts, the raw
-session is plaintext on disk. Record on an encrypted volume when that window
-matters.
+raw session (input database and screen video) in plaintext while recording,
+in a private 0700 folder beside the output. When recording stops, Flow
+converts it, encrypts the converted recording into the output, and deletes
+the raw session and the converted plaintext. Until then, and if the process
+is killed before it converts, they are plaintext on disk; deleting them is not
+a secure erase. So crypto-shredding can't be claimed for a desktop recording
+(NIST SP 800-88r2 3.2.2). Record on an encrypted volume. Encrypting inside the
+recorder, before the first write, is not built yet.
 
 ## Keys
 
 | Variable | Used for |
 | --- | --- |
-| `OPENADAPT_BUNDLE_KEY` | A legacy passphrase recipient for bundles and their run directories. |
-| `OPENADAPT_RECORDING_KEY` | The same for recordings. When it is unset, recordings use `OPENADAPT_BUNDLE_KEY`. |
-| `OPENADAPT_ORG_RECIPIENTS` | Organization age recipients for every new set. |
-| `OPENADAPT_AGE_IDENTITY_FILE` | age identities a reviewer reads sets with. |
-| `OPENADAPT_FLOW_KEY_STORE` | Where the device key is kept: `auto`, `keychain` or `file`. |
+| `OPENADAPT_POLICY` | A policy file, when no machine policy exists. |
+| `OPENADAPT_RECOVERY_CODE` | The solo recovery code, to open sets on another computer. |
+| `OPENADAPT_ORG_KEY_FILE` | An organization recipient's PEM private key, for a reviewer. |
+| `OPENADAPT_FLOW_KEY_STORE` | Where the software device key is kept: `auto`, `keychain` or `file`. |
+| `OPENADAPT_BUNDLE_KEY` | Deprecated: a passphrase for bundles and their run directories (version 1 header). |
+| `OPENADAPT_RECORDING_KEY` | Deprecated: the same for recordings. |
 
-Each set is opened once per reader or writer handle. That handle reuses its
-data key to seal or open files with AES-256-GCM, a fresh random 96-bit nonce
-for each write, and the file's path in the associated data. Independent
-path-helper reads authenticate again; the module retains no reader or
-passphrase cache. Caller inputs and derived keys remain sensitive memory;
-releasing a handle does not promise erasure. AES-256-GCM and scrypt come from
-the `cryptography` package, and X25519 wrapping from `pyrage`. Durable
-checkpoints and attended state keep their own containers, under the
-configured key or a local passphrase derived from the device key (or the
-earlier `at-rest.key`).
-
-Files are encrypted whole, in memory, not as a stream: a very large file
-(a long screen video) needs its size in memory to read or write.
+Each set is opened once per reader or writer handle, which reuses its keys
+for that operation. Independent path-helper reads open the set again; the
+module retains no reader or passphrase cache. Caller inputs and derived keys
+remain sensitive memory; releasing a handle does not promise erasure. Files
+are encrypted whole in memory: a very large file needs its size in memory to
+read or write.
 
 ## Sealed sets
 
 A sealed bundle, an encrypted recording and an encrypted run directory share
 one format, the sealed set:
 
-- `.openadapt-sealed.json` holds the wrapped data key (version 3: one age
-  stanza per recipient; version 1: the salt and scrypt parameters) and an
-  index sealed with the data key. The index lists every other file with the
+- `.openadapt-sealed.json` holds the wrapped data key (version 3: wrapped
+  to the set's bucket key, see [Key hierarchy](#key-hierarchy); version 1:
+  the salt and scrypt parameters) and an index sealed with the data key. The index lists every other file with the
   SHA-256 of its bytes on disk. The header also repeats the index digest
   (`set_digest`) for an inventory that has no key; Flow trusts only the copy
   it recomputes from the authenticated index.

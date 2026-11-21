@@ -66,11 +66,10 @@ KEY_STORE_ENV: Final[str] = "OPENADAPT_FLOW_KEY_STORE"
 LEDGER_NAME: Final[str] = "plaintext-at-rest.jsonl"
 KEY_NAME: Final[str] = "at-rest.key"
 MARKER_NAME: Final[str] = "device-key.store.json"
-DEVICE_KEY_NAME: Final[str] = "device.agekey"
+DEVICE_KEY_NAME: Final[str] = "device-software.key"
 KEYCHAIN_SERVICE: Final[str] = "openadapt-flow-at-rest"
 _MARKER_SCHEMA: Final[str] = "openadapt.flow.at-rest-key-store/v1"
 _CHECK_LABEL: Final[bytes] = b"openadapt-flow/device-key-check/v1"
-_PASSPHRASE_LABEL: Final[bytes] = b"openadapt-flow/local-passphrase/v1"
 #: How long a reader waits for another process that is creating the key.
 _CREATE_WAIT_S: Final[float] = 5.0
 #: How long one keychain call may take before Flow gives up on it.
@@ -462,16 +461,18 @@ def _account() -> str:
     return f"device-key:{_home().expanduser().resolve()}"
 
 
+#: Prefix of a software device key: a P-256 private scalar, base64url.
+SOFTWARE_KEY_PREFIX: Final[str] = "OADEV-P256-1:"
+
+
 def _valid_secret(text: Optional[str]) -> bool:
-    if not text or not text.startswith("AGE-SECRET-KEY-1"):
+    if not text or not text.startswith(SOFTWARE_KEY_PREFIX):
         return False
     try:
-        import pyrage
-
-        pyrage.x25519.Identity.from_str(text)
-    except Exception:  # noqa: BLE001 - not an identity
+        raw = base64.urlsafe_b64decode(text[len(SOFTWARE_KEY_PREFIX) :].encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
         return False
-    return True
+    return len(raw) == 32
 
 
 def _check(text: str) -> str:
@@ -563,31 +564,35 @@ def device_secret(*, create: bool) -> Optional[str]:
         ) from exc
 
 
-def _derived_passphrase(secret: str) -> str:
-    """The local passphrase for the stores that take one (durable
-    checkpoints, attended state), derived from the device identity."""
-    import hashlib
-    import hmac
-
-    raw = hmac.new(secret.encode("ascii"), _PASSPHRASE_LABEL, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(raw).decode("ascii")
-
-
 def local_key() -> str:
-    """This computer's local passphrase, creating the device key on first use.
-
-    A key file from an earlier version (``at-rest.key``) is used as it is, so
-    nothing encrypted under it is orphaned.
-    """
+    """This computer's local passphrase for the stores that take one (durable
+    checkpoints, attended state, the version 1 sets an earlier version
+    wrote), created on first use at ``keys/at-rest.key`` (0600)."""
     path = local_key_path()
     try:
+        return _local_passphrase(path)
+    except OSError as exc:
+        raise LocalKeyError(
+            f"Flow could not create or read its local encryption key at {path} "
+            f"({exc}). Set OPENADAPT_BUNDLE_KEY, or {HOME_ENV} to a writable "
+            "private directory. Nothing was written."
+        ) from exc
+
+
+def _local_passphrase(path: Path) -> str:
+    with _lock:
         if path.exists():
             return _read(path)
-    except OSError as exc:
-        raise LocalKeyError(f"{path} can't be read ({exc}).") from exc
-    secret = device_secret(create=True)
-    assert secret is not None
-    return _derived_passphrase(secret)
+        _private_dir(path.parent)
+        text = base64.urlsafe_b64encode(secrets.token_bytes(_KEY_BYTES)).decode()
+        if not _link_new(path, (text + "\n").encode("ascii")):
+            return _read(path)
+        print(
+            "Created a local encryption key for recordings, bundles and runs "
+            f"at {path}. Back it up: what it encrypts can't be read without it.",
+            file=sys.stderr,
+        )
+        return text
 
 
 def _existing(path: Path, *, wait: bool) -> Optional[str]:
@@ -644,10 +649,13 @@ def _link_new(path: Path, data: bytes) -> bool:
 
 
 def _create_device(path: Path) -> str:
-    import pyrage
+    from cryptography.hazmat.primitives.asymmetric import ec
 
     _private_dir(path.parent)
-    text = str(pyrage.x25519.Identity.generate())
+    scalar = ec.generate_private_key(ec.SECP256R1()).private_numbers().private_value
+    text = SOFTWARE_KEY_PREFIX + base64.urlsafe_b64encode(
+        scalar.to_bytes(32, "big")
+    ).decode("ascii")
     choice = _store_choice()
     why_not = ""
     if choice != "file":
@@ -771,12 +779,11 @@ def existing_key() -> Optional[str]:
     and records nothing. None when there is no local key yet."""
     path = local_key_path()
     try:
-        if path.exists():
-            return _read(path)
+        if not path.exists():
+            return None
+        return _read(path)
     except OSError as exc:
         raise LocalKeyError(f"{path} can't be read ({exc}).") from exc
-    secret = device_secret(create=False)
-    return _derived_passphrase(secret) if secret is not None else None
 
 
 def default_key() -> Optional[str]:

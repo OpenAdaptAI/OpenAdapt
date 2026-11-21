@@ -1,0 +1,523 @@
+"""Encrypted by default through the key hierarchy (sealed-set v3).
+
+Every test injects device keys (hardware test doubles or the software key in
+an in-memory keychain), and replaces the machine policy sources, so no test
+reads the real OS keychain, the Secure Enclave or a TPM, or raises an OS
+dialog.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import plistlib
+from pathlib import Path
+from typing import Optional
+
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
+from openadapt_flow import at_rest, crypto, sealed_set
+from openadapt_flow import key_hierarchy as kh
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"synthetic pixels"
+TYPED = b"a synthetic typed value"
+
+
+class MemoryKeychain(at_rest.KeyStore):
+    """A keychain that lives in this test only."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+        self.broken = False
+
+    def get(self, account: str) -> Optional[str]:
+        if self.broken:
+            raise at_rest.KeyStoreUnavailable("no keychain backend (test)")
+        return self.values.get(account)
+
+    def set(self, account: str, value: str) -> None:
+        if self.broken:
+            raise at_rest.KeyStoreUnavailable("no keychain backend (test)")
+        self.values[account] = value
+
+
+@pytest.fixture
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    for name in (
+        at_rest.OPT_OUT_ENV,
+        at_rest.MODE_ENV,
+        at_rest.ENCRYPT_ENV,
+        at_rest.KEY_STORE_ENV,
+        crypto.ENV_KEY,
+        sealed_set.RECORDING_ENV_KEY,
+        kh.POLICY_ENV,
+        kh.TRUST_USER_POLICY_ENV,
+        kh.RECOVERY_CODE_ENV,
+        kh.ORG_KEY_FILE_ENV,
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", [])
+    root = tmp_path / "home"
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root))
+    keychain = MemoryKeychain()
+    at_rest.use_key_store(keychain)
+    kh.use_device_keys(None)
+    at_rest._reset_for_tests()
+    yield root, keychain
+    at_rest.use_key_store(None)
+    kh.use_device_keys(None)
+    at_rest._reset_for_tests()
+
+
+def _seal(root: Path, files: dict[str, bytes], kind: str = "run") -> None:
+    with sealed_set.writing(root, kind, sealed_set.passphrase_for(kind)) as writer:
+        for rel, data in files.items():
+            writer.write(rel, data)
+
+
+def _header(root: Path) -> dict:
+    return json.loads((root / sealed_set.HEADER).read_text())
+
+
+def _assert_ciphertext_only(root: Path) -> None:
+    for path in root.rglob("*"):
+        if path.is_file():
+            data = path.read_bytes()
+            assert TYPED not in data and not data.startswith(PNG[:8]), path
+
+
+def _p256_policy(
+    tmp_path: Path, monkeypatch, **extra
+) -> tuple[Path, ec.EllipticCurvePrivateKey]:
+    org = ec.generate_private_key(ec.SECP256R1())
+    spki = org.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    policy = {
+        "schema": kh.POLICY_SCHEMA,
+        "org": "example-health",
+        "mode": "org",
+        "recipients": [
+            {
+                "role": "org",
+                "status": "active",
+                "type": kh.HPKE_P256,
+                "public_key": base64.b64encode(spki).decode(),
+                "fingerprint": kh.fingerprint(org.public_key()),
+            }
+        ],
+        "key_archive": str(tmp_path / "archive"),
+        **extra,
+    }
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(policy))
+    monkeypatch.setenv(kh.POLICY_ENV, str(path))
+    monkeypatch.setenv(kh.TRUST_USER_POLICY_ENV, "1")
+    key_file = tmp_path / "org-key.pem"
+    key_file.write_bytes(
+        org.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return key_file, org
+
+
+# -- defaults ---------------------------------------------------------------------
+
+
+def test_a_new_run_is_v3_ciphertext_only_and_reads_back(home) -> None:
+    root, keychain = home
+    run = root.parent / "run"
+    _seal(run, {"report.json": b'{"typed": "%s"}' % TYPED, "steps/a.png": PNG})
+    header = _header(run)
+    assert header["version"] == sealed_set.ENVELOPE_VERSION
+    assert header["payload"] == "tink-aes256-gcm-hkdf-1mb"
+    assert header["stanzas"][0]["type"] == kh.STANZA_TYPE
+    record = header["bucket_record"]  # solo mode: inline, travels with backups
+    assert [s["role"] for s in record["stanzas"]] == [kh.ROLE_DEVICE_SOFTWARE]
+    assert len(keychain.values) == 1  # the software device key, in the keychain
+    _assert_ciphertext_only(run)
+    assert sealed_set.read_bytes(run / "steps" / "a.png") == PNG
+
+
+def test_another_computer_cannot_open_it(home, monkeypatch) -> None:
+    root, _keychain = home
+    run = root.parent / "run"
+    _seal(run, {"report.json": b"{}"})
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "elsewhere"))
+    at_rest.use_key_store(MemoryKeychain())
+    with pytest.raises(sealed_set.SealedSetKeyError, match="no key on this computer"):
+        sealed_set.SealedSet.open(run, None)
+
+
+def test_a_header_rewrapped_by_someone_else_is_refused(home) -> None:
+    """The bucket public key is not secret: a new DEK wrapped to it, with a
+    DEK MAC, still lacks the bucket-key MAC."""
+    root, _keychain = home
+    run = root.parent / "run"
+    _seal(run, {"report.json": b"real"})
+    header = _header(run)
+    public = serialization.load_der_public_key(
+        base64.b64decode(header["bucket_record"]["bucket_pub"])
+    )
+    dek = os.urandom(32)
+    header["stanzas"][0]["ct"] = base64.b64encode(
+        kh.hpke_seal(
+            public, dek, sealed_set._v3_wrap_info(header, header["stanzas"][0]["fpr"])
+        )
+    ).decode()
+    forged = sealed_set.V3Key(dek, header["set_id"])
+    forged.stamp(header)
+    (run / sealed_set.HEADER).write_text(json.dumps(header))
+    with pytest.raises(sealed_set.SealedSetError, match="MAC"):
+        sealed_set.read_bytes(run / "report.json")
+
+
+def test_an_edited_header_is_refused(home) -> None:
+    root, _keychain = home
+    run = root.parent / "run"
+    _seal(run, {"report.json": b"real"})
+    header = _header(run)
+    header["kind"] = "bundle"
+    (run / sealed_set.HEADER).write_text(json.dumps(header))
+    with pytest.raises(sealed_set.SealedSetError):
+        sealed_set.read_bytes(run / "report.json")
+
+
+def test_a_configured_key_keeps_the_v1_header(home, monkeypatch) -> None:
+    root, keychain = home
+    monkeypatch.setenv(crypto.ENV_KEY, "a-deployment-key-for-tests")
+    run = root.parent / "run"
+    _seal(run, {"report.json": b"{}"})
+    assert _header(run)["version"] == 1
+    assert keychain.values == {}
+
+
+def test_a_legacy_plaintext_folder_and_key_file_still_work(home) -> None:
+    root, _keychain = home
+    legacy = base64.urlsafe_b64encode(os.urandom(32)).decode()
+    keys = root / "keys"
+    keys.mkdir(parents=True, mode=0o700)
+    (keys / at_rest.KEY_NAME).write_text(legacy + "\n")
+    os.chmod(keys / at_rest.KEY_NAME, 0o600)
+    assert crypto.resolve_key(None) == legacy
+    old = root.parent / "old"
+    with sealed_set.writing(old, "run", legacy) as writer:  # what main wrote
+        writer.write("report.json", b"old")
+    assert _header(old)["version"] == 1
+    assert sealed_set.read_bytes(old / "report.json") == b"old"
+    plain = root.parent / "plain"
+    plain.mkdir()
+    (plain / "report.json").write_bytes(b"{}")
+    assert sealed_set.read_bytes(plain / "report.json") == b"{}"
+
+
+# -- hardware providers (test doubles) -------------------------------------------
+
+
+def test_runtime_stanza_only_while_open_then_the_viewer_prompts(home) -> None:
+    root, _keychain = home
+    runtime = kh.HardwareDouble(kh.ROLE_RUNTIME)
+    viewer = kh.HardwareDouble(kh.ROLE_VIEWER, presence=True)
+    kh.use_device_keys(runtime, viewer)
+    run = root.parent / "run"
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    roles = [s["role"] for s in writer._header["bucket_record"]["stanzas"]]
+    assert roles == [kh.ROLE_RUNTIME, kh.ROLE_VIEWER]
+    writer.write("report.json", TYPED)
+    writer.finalize()
+    roles = [s["role"] for s in _header(run)["bucket_record"]["stanzas"]]
+    assert roles == [kh.ROLE_VIEWER]
+    assert sealed_set.read_bytes(run / "report.json") == TYPED
+    assert viewer.prompts == 1 and runtime.unwraps == 0
+    viewer.deny = True
+    with pytest.raises(sealed_set.SealedSetError, match="cancelled"):
+        sealed_set.read_bytes(run / "report.json")
+
+
+def test_a_bundle_keeps_its_runtime_stanza_for_unattended_replay(home) -> None:
+    root, _keychain = home
+    runtime = kh.HardwareDouble(kh.ROLE_RUNTIME)
+    viewer = kh.HardwareDouble(kh.ROLE_VIEWER, presence=True)
+    kh.use_device_keys(runtime, viewer)
+    bundle = root.parent / "bundle"
+    _seal(bundle, {"workflow.json": b"{}"}, kind="bundle")
+    assert sealed_set.read_bytes(bundle / "workflow.json") == b"{}"
+    assert viewer.prompts == 0 and runtime.unwraps == 1
+
+
+def test_the_hardware_providers_are_not_built_and_fall_back_labelled(home) -> None:
+    for provider in (
+        kh.SecureEnclaveRuntimeKey(),
+        kh.SecureEnclaveViewerKey(),
+        kh.TpmRuntimeKey(),
+        kh.WindowsHelloViewerKey(),
+    ):
+        assert provider.available() is False
+    runtime, viewer = kh.device_keys(create=True)
+    assert kh.is_software(runtime) and runtime is viewer
+    assert kh.describe(kh.load_policy())["device_runtime_key"] == "software"
+
+
+def test_require_hardware_refuses_the_software_key(home, tmp_path, monkeypatch) -> None:
+    path = tmp_path / "solo-policy.json"
+    path.write_text(
+        json.dumps({"schema": kh.POLICY_SCHEMA, "require_hardware_device_key": True})
+    )
+    monkeypatch.setenv(kh.POLICY_ENV, str(path))
+    with pytest.raises(sealed_set.SealedSetError, match="hardware device key"):
+        _seal(home[0].parent / "run", {"report.json": b"{}"})
+
+
+# -- the software device key in the keychain ------------------------------------------
+
+
+def test_a_missing_keychain_entry_fails_closed_and_mints_nothing(home) -> None:
+    root, keychain = home
+    _seal(root.parent / "run", {"report.json": b"{}"})
+    keychain.values.clear()
+    with pytest.raises(sealed_set.SealedSetError, match="missing"):
+        sealed_set.read_bytes(root.parent / "run" / "report.json")
+    assert keychain.values == {}
+
+
+def test_a_locked_keychain_fails_closed(home) -> None:
+    root, keychain = home
+    _seal(root.parent / "run", {"report.json": b"{}"})
+    keychain.broken = True
+    with pytest.raises(at_rest.LocalKeyError, match="Unlock the keychain"):
+        at_rest.device_secret(create=False)
+
+
+def test_no_keychain_falls_back_to_a_private_file_with_a_warning(home, capsys) -> None:
+    root, keychain = home
+    keychain.broken = True
+    secret = at_rest.device_secret(create=True)
+    path = root / "keys" / at_rest.DEVICE_KEY_NAME
+    assert path.read_text().strip() == secret
+    if os.name == "posix":
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert "WARNING: no OS keychain is available" in capsys.readouterr().err
+
+
+def test_tests_never_reach_the_real_keychain(monkeypatch) -> None:
+    at_rest.use_key_store(None)
+    monkeypatch.delenv(at_rest.KEY_STORE_ENV, raising=False)
+    assert "PYTEST_CURRENT_TEST" in os.environ
+    assert at_rest._store_choice() == "file"
+
+
+# -- organization mode --------------------------------------------------------------
+
+
+def test_org_mode_archives_and_the_org_opens_it_elsewhere(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    key_file, org = _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    header = _header(run)
+    assert "bucket_record" not in header  # never travels with the evidence
+    archived = json.loads(
+        (tmp_path / "archive" / f"{header['key_ref']['bucket_id']}.json").read_text()
+    )
+    assert kh.ROLE_RUNTIME not in [s["role"] for s in archived["stanzas"]]
+    assert kh.fingerprint(org.public_key()) in [s["fpr"] for s in archived["stanzas"]]
+    _assert_ciphertext_only(run)
+    # A reviewer on another computer: the archive copy and the org key.
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "reviewer"))
+    at_rest.use_key_store(MemoryKeychain())
+    buckets = root.parent / "reviewer" / "keys" / "buckets"
+    buckets.mkdir(parents=True)
+    (buckets / f"{header['key_ref']['bucket_id']}.json").write_text(
+        json.dumps(archived)
+    )
+    monkeypatch.setenv(kh.ORG_KEY_FILE_ENV, str(key_file))
+    assert sealed_set.read_bytes(run / "report.json") == TYPED
+
+
+def test_org_mode_with_an_rsa_oaep_recipient(home, tmp_path, monkeypatch) -> None:
+    root, _keychain = home
+    org = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+    spki = org.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "schema": kh.POLICY_SCHEMA,
+                "mode": "org",
+                "records": "inline",
+                "recipients": [
+                    {
+                        "role": "org",
+                        "type": kh.RSA_OAEP_3072,
+                        "public_key": base64.b64encode(spki).decode(),
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv(kh.POLICY_ENV, str(policy))
+    monkeypatch.setenv(kh.TRUST_USER_POLICY_ENV, "1")
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    key_file = tmp_path / "rsa.pem"
+    key_file.write_bytes(
+        org.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "auditor"))
+    at_rest.use_key_store(MemoryKeychain())
+    monkeypatch.setenv(kh.ORG_KEY_FILE_ENV, str(key_file))
+    assert sealed_set.read_bytes(run / "report.json") == TYPED
+
+
+def test_org_mode_fails_closed_without_its_recipient_or_archive(
+    home, tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "policy.json"
+    monkeypatch.setenv(kh.POLICY_ENV, str(path))
+    monkeypatch.setenv(kh.TRUST_USER_POLICY_ENV, "1")
+    path.write_text(
+        json.dumps({"schema": kh.POLICY_SCHEMA, "mode": "org", "key_archive": "x"})
+    )
+    with pytest.raises(sealed_set.SealedSetError, match="no active organization"):
+        _seal(home[0].parent / "a", {"report.json": b"{}"})
+    _p256_policy(tmp_path, monkeypatch, key_archive=None)
+    with pytest.raises(sealed_set.SealedSetError, match="no key_archive"):
+        _seal(home[0].parent / "b", {"report.json": b"{}"})
+
+
+def test_a_user_owned_org_policy_is_not_trusted(home, tmp_path, monkeypatch) -> None:
+    if os.getuid() == 0:
+        pytest.skip("running as root")
+    _p256_policy(tmp_path, monkeypatch)
+    monkeypatch.delenv(kh.TRUST_USER_POLICY_ENV)
+    with pytest.raises(kh.KeyHierarchyError, match="not owned by root"):
+        kh.load_policy()
+
+
+def test_a_machine_policy_wins_over_the_user_one(home, tmp_path, monkeypatch) -> None:
+    _p256_policy(tmp_path, monkeypatch)
+    machine = tmp_path / "ai.openadapt.policy.plist"
+    machine.write_bytes(
+        plistlib.dumps(
+            {"Policy": json.dumps({"schema": kh.POLICY_SCHEMA, "mode": "solo"})}
+        )
+    )
+    monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", [str(machine)])
+    policy = kh.load_policy()
+    assert policy.mode == "solo" and policy.source.startswith("machine:")
+
+
+def test_an_unreachable_archive_counts_and_then_stops_recording(
+    home, tmp_path, monkeypatch
+) -> None:
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+    _p256_policy(tmp_path, monkeypatch, key_archive=str(blocker), max_unarchived=1)
+    _seal(home[0].parent / "a", {"report.json": b"{}"})
+    assert kh.unarchived_count() == 1
+    with pytest.raises(sealed_set.SealedSetError, match="not reached the organization"):
+        _seal(home[0].parent / "b", {"report.json": b"{}"})
+
+
+def test_shred_in_org_mode_destroys_every_tracked_copy(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    key_file, _org = _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    run.mkdir()
+    (run / "checkpoints").mkdir()
+    (run / "checkpoints" / "s1.enc").write_bytes(
+        crypto.encrypt_bytes(b"{}", "k" * 20, aad=crypto.CHECKPOINT_AAD)
+    )
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    writer.write("report.json", TYPED)
+    writer.finalize(adopt_external=True)
+    backup = root.parent / "backup"
+    import shutil
+
+    shutil.copytree(run, backup)
+    record = sealed_set.shred(run)
+    assert sorted(record["copies_destroyed"]) == ["archive", "local"]
+    assert record["store_files_deleted"] == ["checkpoints/s1.enc"]
+    monkeypatch.setenv(kh.ORG_KEY_FILE_ENV, str(key_file))
+    with pytest.raises(sealed_set.SealedSetError, match="shredded"):
+        sealed_set.read_bytes(run / "report.json")
+    # The backup copy holds only ciphertext and a header no record opens.
+    with pytest.raises(sealed_set.SealedSetError):
+        sealed_set.read_bytes(backup / "report.json")
+
+
+# -- solo recovery --------------------------------------------------------------------
+
+
+def test_a_recovery_code_opens_a_backup_on_a_new_computer(home, monkeypatch) -> None:
+    root, _keychain = home
+    code, recipient = kh.new_recovery_code()
+    assert len(code.replace("-", "")) == 52
+    kh.save_recovery_recipient(recipient)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "new-laptop"))
+    at_rest.use_key_store(MemoryKeychain())
+    with pytest.raises(sealed_set.SealedSetKeyError):
+        sealed_set.read_bytes(run / "report.json")
+    monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    assert sealed_set.read_bytes(run / "report.json") == TYPED
+
+
+def test_solo_shred_reaches_only_this_copy(home) -> None:
+    root, _keychain = home
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    record = sealed_set.shred(run)
+    assert record["records"] == "inline"
+    with pytest.raises(sealed_set.SealedSetError, match="shredded"):
+        sealed_set.read_bytes(run / "report.json")
+
+
+# -- the opt-out ------------------------------------------------------------------------
+
+
+def test_encrypt_zero_turns_it_off_with_one_warning_line(
+    home, capsys, monkeypatch
+) -> None:
+    root, _keychain = home
+    monkeypatch.setenv(at_rest.ENCRYPT_ENV, "0")
+    assert at_rest.seal_new("a recording", root / "rec") is False
+    assert at_rest.seal_new("a recording", root / "rec") is False
+    err = [line for line in capsys.readouterr().err.splitlines() if line]
+    assert len(err) == 1 and err[0].startswith("WARNING:")
+    ledger = (root / at_rest.LEDGER_NAME).read_text().splitlines()
+    assert json.loads(ledger[0])["reason"] == "OPENADAPT_ENCRYPT_AT_REST=0"
+
+
+def test_a_mistyped_encrypt_setting_is_refused(monkeypatch) -> None:
+    monkeypatch.setenv(at_rest.ENCRYPT_ENV, "nope")
+    with pytest.raises(ValueError):
+        at_rest.opt_out_reason()
+
+
+def test_strict_mode_ignores_the_opt_out(home, monkeypatch) -> None:
+    monkeypatch.setenv(at_rest.ENCRYPT_ENV, "0")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    assert at_rest.seal_new("a recording", "x") is True
+
+
+def test_new_artifacts_are_sealed_by_default(home) -> None:
+    assert at_rest.DEFAULT_SEALS_ARTIFACTS is True
+    assert at_rest.seals_by_default() is True

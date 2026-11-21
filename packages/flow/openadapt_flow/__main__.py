@@ -13731,9 +13731,8 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_undo:_cmd_undo_list",
         "openadapt_flow.cli_undo:_cmd_undo_approve",
         "openadapt_flow.cli_undo:_cmd_undo_run",
-        # Rewrap or shred a set's header only; no file is decrypted to disk.
+        # Shreds a set's key only; no file is decrypted to disk.
         "openadapt_flow.__main__:_cmd_report_run",
-        "openadapt_flow.cli_at_rest:_cmd_share",
         "openadapt_flow.cli_at_rest:_cmd_shred",
     }
 )
@@ -13782,6 +13781,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_service:_cmd_restart",
         "openadapt_flow.cli_service:_cmd_run",
         "openadapt_flow.cli_at_rest:_cmd_status",
+        "openadapt_flow.cli_at_rest:_cmd_recovery_create",
         "openadapt_flow.cli_no_outbound:_cmd_add",
         "openadapt_flow.cli_no_outbound:_cmd_derive",
         "openadapt_flow.cli_no_outbound:_cmd_list",
