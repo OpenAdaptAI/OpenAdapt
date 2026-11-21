@@ -4260,21 +4260,11 @@ def _load_doc_for(
 ) -> Any:
     """Load an in-memory contract document with the same phone-shape rule as :func:`_load_for`."""
 
-    import copy as _copy
-
-    from openadapt_flow.generate.demo_analysis import phone_shaped
+    from openadapt_flow.generate.compositional import apply_phone_rule
     from openadapt_flow.verifier import Contract
 
-    copied = _copy.deepcopy(dict(doc))
-    for effect in copied.get("effects") or []:
-        for value in (effect.get("match") or {}).values():
-            if (
-                isinstance(value, dict)
-                and value.get("kind") == "phone"
-                and not phone_shaped(params.get(str(value.get("param"))))
-            ):
-                value.pop("kind")
-    contract = Contract.from_dict(copied, name=name)
+    prepared = apply_phone_rule(doc, params)
+    contract = Contract.from_dict(prepared, name=name)
     contract.config._base_dir = Path(base_dir).resolve()
     return contract
 

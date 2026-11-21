@@ -536,3 +536,151 @@ def test_admit_composed_contract_rejects_weakened_or_unsafe_contracts(
     )
     assert not bad_sql.admitted
     assert any("SQL guard" in r for r in bad_sql.reasons)
+
+
+def test_update_composition_preserves_per_surface_permissions_and_excludes_identity(
+    tmp_path: Path,
+) -> None:
+    """Finding 1: read-only identity selectors are never added to target_fields,
+    and non-record surface permissions never bleed onto ``record``."""
+    db = _create_db(tmp_path)
+    manifest = _build_update_manifest(tmp_path, db)
+    # Add a shared secondary surface permission on both update variants.
+    for rel in ("update_item/a.update.yaml", "update_item/b.update.yaml"):
+        p = manifest.parent / rel
+        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        doc["verifier"]["surfaces"]["audit_row"] = {
+            "kind": "sql",
+            "sqlite_database": str(db),
+            "sql_query": "SELECT id, updated_at FROM item",
+        }
+        doc["frame"]["target_fields_by_surface"]["audit_row"] = ["audit_col"]
+        doc["frame"]["target_fields"] = sorted(
+            set(doc["frame"]["target_fields"]) | {"audit_col"}
+        )
+        p.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+
+    m_doc = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    docs = compose_field_set_docs(
+        manifest, m_doc["kinds"]["update_item"], {"id", "status", "notes"}, {}, ()
+    )
+    assert docs is not None
+    write_doc, _ = docs
+    rec_tf = write_doc["frame"]["target_fields_by_surface"]["record"]
+    assert "id" not in rec_tf  # identity selector stays read-only
+    assert "audit_col" not in rec_tf  # secondary surface col does not bleed to record
+    assert set(rec_tf) == {"status", "notes", "updated_at"}
+    assert write_doc["frame"]["target_fields_by_surface"]["audit_row"] == ["audit_col"]
+    assert set(write_doc["frame"]["target_fields"]) == {
+        "status",
+        "notes",
+        "updated_at",
+        "audit_col",
+    }
+
+
+def test_create_composition_refuses_disagreeing_pins_or_side_effects(
+    tmp_path: Path,
+) -> None:
+    """Finding 2: disagreeing invariant pins or side effects fail closed."""
+    db = _create_db(tmp_path / "pins")
+    manifest = _build_create_manifest(tmp_path / "pins", db)
+    b_path = manifest.parent / "create_item" / "b.create.yaml"
+    b_doc = yaml.safe_load(b_path.read_text(encoding="utf-8"))
+    b_doc["effects"][0]["match"]["status"] = {"literal": "Draft"}
+    b_path.write_text(yaml.safe_dump(b_doc, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(gen.GenerateError, match="no create_item contract"):
+        gen.choose(
+            manifest,
+            "create_item",
+            {"name": "Bolt", "notes": "M4", "category": "Hardware"},
+        )
+
+    db2 = _create_db(tmp_path / "side")
+    manifest2 = _build_create_manifest(tmp_path / "side", db2)
+    b_path2 = manifest2.parent / "create_item" / "b.create.yaml"
+    b_doc2 = yaml.safe_load(b_path2.read_text(encoding="utf-8"))
+    b_doc2["effects"].append(
+        {
+            "kind": "record_written",
+            "probe": "surface=record",
+            "match": {"status": {"literal": "Open"}},
+            "expected_count": 1,
+        }
+    )
+    b_path2.write_text(yaml.safe_dump(b_doc2, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(gen.GenerateError, match="no create_item contract"):
+        gen.choose(
+            manifest2,
+            "create_item",
+            {"name": "Bolt", "notes": "M4", "category": "Hardware"},
+        )
+
+
+def test_composition_declines_sql_computed_literal_1_placements(
+    tmp_path: Path,
+) -> None:
+    """Finding 3: SQL-computed literal-1 placements admission cannot perturb are declined."""
+    db = _create_db(tmp_path)
+    manifest = _build_create_manifest(tmp_path, db)
+    a_path = manifest.parent / "create_item" / "a.create.yaml"
+    a_doc = yaml.safe_load(a_path.read_text(encoding="utf-8"))
+    a_doc["verifier"]["surfaces"]["record"]["sql_query_params"] = {
+        "notes": {"param": "notes"}
+    }
+    a_doc["effects"][0]["match"]["notes"] = {"literal": "1"}
+    a_path.write_text(yaml.safe_dump(a_doc, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(gen.GenerateError, match="no create_item contract"):
+        gen.choose(
+            manifest,
+            "create_item",
+            {"name": "Bolt", "notes": "M4", "category": "Hardware"},
+        )
+
+
+def test_phone_rule_applied_before_admission_and_at_runtime(tmp_path: Path) -> None:
+    """Finding 4: a non-phone-shaped value in a ``kind: phone`` field passes
+    admission and confirms via exact comparison at runtime."""
+    db = _create_db(tmp_path)
+    manifest = _build_create_manifest(tmp_path, db)
+    for rel in ("create_item/a.create.yaml", "create_item/a.found.yaml"):
+        p = manifest.parent / rel
+        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        doc["effects"][0]["match"]["notes"] = {"param": "notes", "kind": "phone"}
+        p.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+
+    values = {"name": "Bolt", "notes": "ext 42", "category": "Hardware"}
+    contract, params = gen.choose(manifest, "create_item", values)
+    pending = begin_write(contract, params, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO item (name, notes, category, status) VALUES (?, ?, ?, ?)",
+        ("Bolt", "ext 42", "Hardware", "Open"),
+    )
+    con.commit()
+    con.close()
+    res = verify_write(pending)
+    assert res.outcome is Outcome.CONFIRMED, res.reasons
+
+    # Wrong text still refutes.
+    db2 = _create_db(tmp_path / "wrong_phone")
+    manifest2 = _build_create_manifest(tmp_path / "wrong_phone", db2)
+    for rel in ("create_item/a.create.yaml", "create_item/a.found.yaml"):
+        p = manifest2.parent / rel
+        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        doc["effects"][0]["match"]["notes"] = {"param": "notes", "kind": "phone"}
+        p.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    contract2, params2 = gen.choose(manifest2, "create_item", values)
+    pending2 = begin_write(contract2, params2, actor=BOT, ledger=MemoryLedger())
+    con2 = sqlite3.connect(db2)
+    con2.execute(
+        "INSERT INTO item (name, notes, category, status) VALUES (?, ?, ?, ?)",
+        ("Bolt", "ext 99", "Hardware", "Open"),
+    )
+    con2.commit()
+    con2.close()
+    res2 = verify_write(pending2)
+    assert res2.outcome is Outcome.REFUTED, res2.reasons
