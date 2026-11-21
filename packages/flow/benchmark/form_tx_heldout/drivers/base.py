@@ -184,13 +184,8 @@ def oracle(base: str, path: str, payload: dict | None = None) -> Any:
 
 
 def find_option(src: Source, want: str, opts: list[tuple[str, str]]) -> str | None:
-    """Value of the option matching ``want``.
+    """Value of the option whose value or text matches ``want``.
 
-    Exact match on value or text first. The naive filler also accepts the
-    first option whose text contains the wanted text (a loose label match).
+    Case and whitespace are ignored; whole-dollar amounts also match by digits.
     """
-    hit = next((v for v, t in opts if v and option_matches(want, v, t)), None)
-    if hit is None and src.kind == "naive":
-        w = norm(want)
-        hit = next((v for v, t in opts if v and w and w in norm(t)), None)
-    return hit
+    return next((v for v, t in opts if v and option_matches(want, v, t)), None)

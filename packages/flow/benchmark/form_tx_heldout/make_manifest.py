@@ -1,6 +1,7 @@
 """Write MANIFEST.json: the sha256 of every file in this directory.
 
-Run last, after answer_key.json and REFERENCE_RUNS.json are final:
+Covers the git-tracked files (``git add`` new files first). Run last, after
+answer_key.json and REFERENCE_RUNS.json are final:
 ``python -m benchmark.form_tx_heldout.make_manifest``.
 """
 
@@ -8,19 +9,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
 
+def tracked_files() -> list[str]:
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "--", "."], cwd=HERE, check=True, capture_output=True
+    ).stdout.decode()
+    return sorted(p for p in out.split("\0") if p and p != "MANIFEST.json")
+
+
 def build() -> dict:
-    files = {}
-    for p in sorted(HERE.rglob("*")):
-        if not p.is_file() or "__pycache__" in p.parts or p.name == "MANIFEST.json" or p.suffix == ".pyc":
-            continue
-        files[p.relative_to(HERE).as_posix()] = hashlib.sha256(p.read_bytes()).hexdigest()
+    files = {rel: hashlib.sha256((HERE / rel).read_bytes()).hexdigest() for rel in tracked_files()}
     manifest = {
-        "description": "sha256 of every file in benchmark/form_tx_heldout except this manifest",
+        "description": "sha256 of every git-tracked file in benchmark/form_tx_heldout except this manifest",
         "answer_key_sha256": files["answer_key.json"],
         "files": files,
     }

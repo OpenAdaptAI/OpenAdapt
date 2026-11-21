@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .case_defs import CASES, PORTAL_META, RULES
+from .case_defs import CASES, PORTAL_META, RULES, intake_vocabulary
 from .common import CREDENTIALS
 
 HERE = Path(__file__).resolve().parent
@@ -59,6 +59,8 @@ def build() -> dict:
                 "operator_script": operator_script(case, portal),
             }
     (HERE / "answer_key.json").write_text(json.dumps(key, indent=2) + "\n")
+    vocab = {p: intake_vocabulary(p) for p in CASES}
+    (HERE / "intake_vocabulary.json").write_text(json.dumps(vocab, indent=2) + "\n")
     return key
 
 

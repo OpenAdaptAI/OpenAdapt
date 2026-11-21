@@ -151,8 +151,8 @@ def fill_step(fr: Any, src: Source) -> None:
             elif src.fallback_first and not any(c for _v, _t, c in opts):
                 idx = 0
             if idx is not None and not opts[idx][2]:
-                radios.nth(idx).check()
-                fr.wait_for_timeout(60)
+                radios.nth(idx).click()
+                fr.wait_for_timeout(80)
         elif typ == "select":
             opts = fr.locator(sel).evaluate("s => Array.from(s.options).map(o => [o.value, o.text])")
             if want is not None:
@@ -168,8 +168,8 @@ def fill_step(fr: Any, src: Source) -> None:
             if want is not None:
                 on = norm(want) in ("yes", "true", "y", "1")
                 if fr.is_checked(sel) != on:
-                    fr.set_checked(sel, on)
-                    fr.wait_for_timeout(60)
+                    fr.click(sel)
+                    fr.wait_for_timeout(80)
         elif typ == "combo":
             if want is None or norm(fr.input_value(sel)) == norm(want):
                 continue
@@ -214,10 +214,14 @@ def run(page: Any, base: str, src: Source) -> str:
             page.wait_for_url("**/login**")
             continue
         if title == "Review":
-            with fr.expect_response(lambda r: "/app/api/submit" in r.url):
+            with page.expect_response(lambda r: "/app/api/submit" in r.url):
                 fr.click("#pc-submit")
-            fr.wait_for_timeout(400)
-            if fr.inner_text("#pc-submit-err").strip() if fr.locator("#pc-submit-err").count() else "":
+            fr.wait_for_function(
+                """() => { const h = document.querySelector('#root h2'); const e = document.getElementById('pc-submit-err');
+                           return (h && h.textContent.trim() === 'Quote request received') || (e && e.textContent.trim()); }""",
+                timeout=10000,
+            )
+            if fr.locator("#pc-submit-err").count():
                 return "stuck"
             continue
         if fr.locator(".pc-err").count():
@@ -225,7 +229,7 @@ def run(page: Any, base: str, src: Source) -> str:
             if stuck >= 3:
                 return "stuck"
         fill_step(fr, src)
-        with fr.expect_response(lambda r: "/app/api/save" in r.url) as resp:
+        with page.expect_response(lambda r: "/app/api/save" in r.url) as resp:
             fr.click("#pc-next")
         fr.wait_for_timeout(250)
         if resp.value.status == 200:

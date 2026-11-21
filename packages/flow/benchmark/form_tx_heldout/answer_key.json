@@ -194,7 +194,8 @@
       "expected_behavior": "submit_clean",
       "also_acceptable": [],
       "traps": [
-        "clean"
+        "clean",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Marisol",
@@ -235,7 +236,8 @@
       "also_acceptable": [],
       "traps": [
         "unknown_question",
-        "recurring_rule"
+        "recurring_rule",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Theo",
@@ -285,7 +287,8 @@
       "traps": [
         "unknown_question",
         "recurring_rule",
-        "prefill_conflict"
+        "prefill_conflict",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Imogen",
@@ -407,7 +410,8 @@
       "expected_behavior": "submit_clean",
       "also_acceptable": [],
       "traps": [
-        "clean"
+        "clean",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Priya",
@@ -450,7 +454,8 @@
         "unknown_question",
         "recurring_rule",
         "session_timeout",
-        "summary_differs"
+        "summary_differs",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Gideon",
@@ -499,8 +504,10 @@
       "also_acceptable": [],
       "traps": [
         "unknown_question",
+        "recurring_rule",
         "rule_trap",
-        "prefill_agree"
+        "prefill_agree",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Wren",
@@ -549,7 +556,8 @@
       "also_acceptable": [],
       "traps": [
         "clean",
-        "prefill_agree"
+        "prefill_agree",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Bastian",
@@ -592,7 +600,8 @@
         "unknown_question",
         "recurring_rule",
         "summary_differs",
-        "prefill_conflict"
+        "prefill_conflict",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Leontyne",
@@ -664,7 +673,8 @@
       "expected_behavior": "submit_clean",
       "also_acceptable": [],
       "traps": [
-        "clean"
+        "clean",
+        "estimator_ok"
       ],
       "expected_record": {
         "first_name": "Annika",
@@ -1103,7 +1113,8 @@
       "expected_behavior": "submit_clean",
       "also_acceptable": [],
       "traps": [
-        "clean"
+        "clean",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "61 Gullwing Rd",
@@ -1137,7 +1148,8 @@
       "expected_behavior": "submit_clean",
       "also_acceptable": [],
       "traps": [
-        "clean"
+        "clean",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "9 Brackish Cove Ln",
@@ -1218,7 +1230,8 @@
       ],
       "traps": [
         "prefill_conflict",
-        "summary_differs"
+        "summary_differs",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "238 Fernhollow Way",
@@ -1277,7 +1290,8 @@
       "also_acceptable": [],
       "traps": [
         "clean",
-        "prefill_agree"
+        "prefill_agree",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "17 Larch Hollow Ct",
@@ -1348,7 +1362,8 @@
       "expected_behavior": "needs_operator_answer",
       "also_acceptable": [],
       "traps": [
-        "unknown_question"
+        "unknown_question",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "5 Woodsmoke Ln",
@@ -1427,7 +1442,8 @@
         "submit_clean"
       ],
       "traps": [
-        "prefill_conflict"
+        "prefill_conflict",
+        "estimator_ok"
       ],
       "expected_record": {
         "street": "77 Osprey Landing",

@@ -359,12 +359,20 @@ function render() {
   } else if (S.step === 3) {
     html += '<h2>Coverage</h2>';
     const did = 'f' + rid();
-    html += row('dwelling_limit', '<label for="' + did + '">Dwelling limit</label>', '<div><input type="text" id="' + did + '" data-f="dwelling_limit" value="' + h(d.dwelling_limit) + '"> <button type="button" id="pc-calc">Calculate rebuild cost</button></div>');
+    html += row('dwelling_limit', '<label for="' + did + '">Dwelling limit</label>', '<div><input type="text" id="' + did + '" data-f="dwelling_limit" value="' + h(d.dwelling_limit) + '"></div>');
     html += radios('deductible', 'Deductible', META.deductibles, v => '$' + Number(v).toLocaleString('en-US'));
     html += text('effective_date', 'Policy start date', 'date');
   } else if (S.step === 4) { review(); return; }
-  html += '<div class="pc-actions">' + (S.step > 1 ? '<button type="button" id="pc-back">Back</button>' : '') + '<button type="button" class="go" id="pc-next">Save and continue</button></div>';
-  document.getElementById('root').innerHTML = html;
+  const root = document.getElementById('root');
+  if (S.shellStep !== S.step || !document.getElementById('pc-form')) {
+    root.innerHTML = '<div id="pc-form"></div><div class="pc-actions" id="pc-actions">' +
+      (S.step === 3 ? '<button type="button" id="pc-calc">Calculate rebuild cost</button>' : '') +
+      (S.step > 1 ? '<button type="button" id="pc-back">Back</button>' : '') +
+      '<button type="button" class="go" id="pc-next">Save and continue</button></div>';
+    S.shellStep = S.step;
+    wireActions();
+  }
+  document.getElementById('pc-form').innerHTML = html;
   wire();
 }
 function wire() {
@@ -377,6 +385,8 @@ function wire() {
   });
   const combo = root.querySelector('[data-combo]');
   if (combo) wireCombo(combo);
+}
+function wireActions() {
   const calc = document.getElementById('pc-calc'); if (calc) calc.addEventListener('click', openCalc);
   const back = document.getElementById('pc-back'); if (back) back.addEventListener('click', async () => { try { await api('/app/api/save', {step: S.step, data: S.data, partial: true}); } catch (e) { return; } await load(); });
   document.getElementById('pc-next').addEventListener('click', async () => {
@@ -432,6 +442,7 @@ function openCalc() {
   dlg.showModal();
 }
 async function review() {
+  S.shellStep = null;
   let r; try { r = await api('/app/api/review'); } catch (e) { return; }
   let html = tabs() + '<h2>Review</h2>';
   r.body.sections.forEach(s => { html += '<h3 style="font-family:sans-serif;font-size:15px">' + h(s.title) + ' <button type="button" data-edit="' + s.step + '">Edit</button></h3><table class="rv">' + s.rows.map(x => '<tr><th>' + h(x.label) + '</th><td>' + h(x.value) + '</td></tr>').join('') + '</table>'; });

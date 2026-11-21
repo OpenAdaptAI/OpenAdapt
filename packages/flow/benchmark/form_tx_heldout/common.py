@@ -267,6 +267,7 @@ class PortalSpec:
     login: dict[str, Any]
     cases: list[str]
     dev_case: str
+    intake_vocabulary: dict[str, Any] = field(default_factory=dict)
 
     def start(self, host: str = "127.0.0.1", port: int = 0) -> tuple[ThreadingHTTPServer, str]:
         return serve(self.factory(), host, port)

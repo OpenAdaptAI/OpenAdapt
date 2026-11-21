@@ -32,7 +32,9 @@ def test_answer_key_is_built_from_case_defs() -> None:
         for case in cases:
             entry = AK["cases"][case["case_id"]]
             assert entry["expected_record"] == json.loads(json.dumps(case["expected"]))
-            intake = json.loads((HERE / "cases" / portal / f"{case['case_id']}.intake.json").read_text())
+            intake = json.loads(
+                (HERE / "cases" / portal / f"{case['case_id']}.intake.json").read_text()
+            )
             assert intake == json.loads(json.dumps(case["intake"]))
 
 
@@ -45,11 +47,15 @@ def test_portal_case_counts(portal: str) -> None:
     assert len(clean) / len(spec.cases) >= 0.3
     for c in clean:
         assert AK["cases"][c]["expected_behavior"] == "submit_clean"
-    assert set(AK["portals"][portal]["field_types"]) == set(PORTAL_META[portal]["field_types"])
+    assert set(AK["portals"][portal]["field_types"]) == set(
+        PORTAL_META[portal]["field_types"]
+    )
 
 
 @pytest.mark.parametrize("case_id,case", ALL)
-def test_expected_record_covers_every_stored_field(case_id: str, case: dict[str, Any]) -> None:
+def test_expected_record_covers_every_stored_field(
+    case_id: str, case: dict[str, Any]
+) -> None:
     types = AK["portals"][case["portal"]]["field_types"]
     assert set(case["expected_record"]) == set(types)
     assert case["expected_behavior"] in AK["behavior_labels"]
@@ -68,7 +74,12 @@ def _perturb(value: Any, ftype: str) -> list[Any]:
     if ftype == "bool":
         return [not value]
     if ftype == "list":
-        extra = {"first_name": "Zed", "last_name": "Q", "dob": "2000-01-01", "relationship": "Other"}
+        extra = {
+            "first_name": "Zed",
+            "last_name": "Q",
+            "dob": "2000-01-01",
+            "relationship": "Other",
+        }
         out = [list(value) + [extra]]
         if value:
             out.append(list(value)[:-1])
@@ -77,7 +88,9 @@ def _perturb(value: Any, ftype: str) -> list[Any]:
 
 
 @pytest.mark.parametrize("case_id,case", ALL)
-def test_scorer_accepts_expected_and_rejects_any_single_change(case_id: str, case: dict[str, Any]) -> None:
+def test_scorer_accepts_expected_and_rejects_any_single_change(
+    case_id: str, case: dict[str, Any]
+) -> None:
     types = AK["portals"][case["portal"]]["field_types"]
     rec = dict(copy.deepcopy(case["expected_record"]), case_id=case_id)
     assert scoring.score_case(case_id, [rec])["correct"]
@@ -90,6 +103,29 @@ def test_scorer_accepts_expected_and_rejects_any_single_change(case_id: str, cas
             assert not res["correct"], (field, bad)
         missing = {k: v for k, v in rec.items() if k != field}
         assert field in scoring.score_case(case_id, [missing])["missing_fields"]
+
+
+@pytest.mark.parametrize("portal", sorted(PORTALS))
+def test_every_stored_field_is_in_the_key(portal: str) -> None:
+    import importlib
+
+    mod = importlib.import_module(f"benchmark.form_tx_heldout.{portal}")
+    assert list(mod.RECORD_FIELDS) and set(mod.RECORD_FIELDS) == set(
+        AK["portals"][portal]["field_types"]
+    )
+
+
+@pytest.mark.parametrize("portal", sorted(PORTALS))
+def test_intakes_stay_inside_the_published_vocabulary(portal: str) -> None:
+    vocab = PORTALS[portal].intake_vocabulary["keys"]
+    for case in CASES[portal]:
+        for key, value in case["intake"]["facts"].items():
+            assert key in vocab, (case["case_id"], key)
+            if vocab[key]["type"] == "enum":
+                assert str(value).casefold() in [
+                    v.casefold() for v in vocab[key]["values"]
+                ], (key, value)
+            assert value not in (None, "")
 
 
 def test_normalization_does_not_forgive_trap_shapes() -> None:
@@ -124,5 +160,11 @@ def test_reference_human_solves_every_scored_case() -> None:
         raise
     scored = {c for spec in PORTALS.values() for c in spec.cases}
     assert {r["case_id"] for r in results} == scored
-    bad = [r for r in results if not r["correct"] or r.get("solvability_problems") or r.get("operator_labels_not_seen")]
+    bad = [
+        r
+        for r in results
+        if not r["correct"]
+        or r.get("solvability_problems")
+        or r.get("operator_labels_not_seen")
+    ]
     assert not bad, json.dumps(bad, indent=1)

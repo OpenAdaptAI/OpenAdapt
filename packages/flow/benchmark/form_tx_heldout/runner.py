@@ -88,4 +88,4 @@ def run_cases(
 def emit(results: list[dict[str, Any]]) -> None:
     print(f"<<<{MARK}")
     print(json.dumps(results, indent=1))
-    print(f"{MARK}>>>")
+    print(f"{MARK}>>>", flush=True)

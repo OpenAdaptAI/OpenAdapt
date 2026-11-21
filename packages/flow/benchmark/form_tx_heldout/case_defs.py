@@ -261,7 +261,7 @@ CASES["harborline"] = [
             },
         },
         behavior="needs_operator_answer",
-        traps=["unknown_question", "rule_trap", "prefill_agree"],
+        traps=["unknown_question", "recurring_rule", "rule_trap", "prefill_agree"],
         operator=[_op(_CC, _CC_KEY, "Masonry Veneer")],
     ),
     _hl_case(
@@ -528,7 +528,7 @@ CASES["cobalt"] = [
 # Pinecrest Assurance (iframe app, re-render on change, modal estimator)
 # =====================================================================
 
-_PC_CONSTRUCTION = {"wood frame": "Wood frame", "brick": "Brick / masonry", "steel": "Steel / concrete", "log": "Log"}
+_PC_CONSTRUCTION = {"wood frame": "Wood frame", "brick / masonry": "Brick / masonry", "steel / concrete": "Steel / concrete", "log": "Log"}
 _PC_ROOF = {"asphalt shingle": "Asphalt shingle", "metal": "Metal", "tile": "Tile", "slate": "Slate"}
 _PC_HEAT = {"gas furnace": "Gas furnace", "electric baseboard": "Electric baseboard", "heat pump": "Heat pump",
             "oil boiler": "Oil boiler", "wood stove": "Wood stove"}
@@ -635,14 +635,14 @@ CASES["pinecrest"] = [
     _pc_case("pc-s01", "scored", _pc(**{
         "property.address_line1": "9 Brackish Cove Ln", "property.city": "Saltmarsh", "property.state": "MA",
         "property.zip": "02536", "property.year_built": 1985, "property.square_feet": 2300,
-        "property.construction_type": "brick", "property.roof_year": 2016, "property.roof_material": "slate",
+        "property.construction_type": "brick / masonry", "property.roof_year": 2016, "property.roof_material": "slate",
         "property.heating_type": "heat pump", "property.finish_level": "semi-custom",
         "coverage.deductible": 2500, "coverage.effective_date": "2026-12-20",
     })),
     _pc_case("pc-s02", "scored", _pc(**{
         "property.address_line1": "4400 Summit Overlook Dr", "property.city": "Tamarack Ridge", "property.state": "ID",
         "property.zip": "83616", "property.year_built": 2008, "property.square_feet": 3400,
-        "property.construction_type": "steel", "property.stories": "2", "property.roof_year": 2008,
+        "property.construction_type": "steel / concrete", "property.stories": "2", "property.roof_year": 2008,
         "property.roof_material": "metal", "property.heating_type": "heat pump", "property.burglar_alarm": True,
         "property.finish_level": "luxury", "coverage.deductible": 5000, "coverage.effective_date": "2027-01-15",
     }),
@@ -681,7 +681,7 @@ CASES["pinecrest"] = [
     _pc_case("pc-s07", "scored", _pc(**{
         "property.address_line1": "1210 Ridgecrest Blvd", "property.city": "Quarry Point", "property.state": "WA",
         "property.zip": "98221", "property.year_built": 2015, "property.square_feet": 3300,
-        "property.construction_type": "brick", "property.stories": "2", "property.roof_year": 2015,
+        "property.construction_type": "brick / masonry", "property.stories": "2", "property.roof_year": 2015,
         "property.roof_material": "tile", "property.heating_type": "heat pump", "property.burglar_alarm": True,
         "property.finish_level": "custom", "coverage.deductible": 2500,
     }), traps=["clean", "estimator_ok"]),
@@ -895,3 +895,85 @@ PORTAL_META["tidewater"] = {
         "make": "enum", "model": "enum", "driver_count": "int",
     },
 }
+
+
+# Every Harborline and Pinecrest case passes through the estimator; the cases
+# whose figure comes back intact carry ``estimator_ok``.
+for _portal, _wrong in (("harborline", {"hl-s03"}), ("pinecrest", {"pc-s02"})):
+    for _c in CASES[_portal]:
+        if _c["case_id"] not in _wrong and "estimator_ok" not in _c["traps"]:
+            _c["traps"].append("estimator_ok")
+
+# Intake vocabulary: every canonical key an intake may carry, per portal, with
+# its type and, for closed lists, the allowed values. Carries no case data.
+ENUMS: dict[str, dict[str, list[str]]] = {
+    "harborline": {
+        "property.state": ["AZ", "CA", "CO", "ID", "IL", "MA", "MO", "NV", "OR", "PA", "TN", "TX", "UT", "WA"],
+        "property.stories": ["1", "1.5", "2", "3"],
+        "property.exterior_wall": ["vinyl siding", "wood siding", "cedar siding", "fiber cement siding",
+                                   "brick veneer", "solid brick", "stone veneer", "stucco", "log"],
+        "property.roof_material": ["Asphalt Shingle", "Architectural Shingle", "Metal", "Clay Tile", "Wood Shake", "Slate"],
+        "property.construction_quality": ["Economy", "Standard", "Custom", "Premium"],
+    },
+    "cobalt": {
+        "applicant.license_state": ["AZ", "CA", "CO", "ID", "IL", "MA", "MO", "NC", "NV", "NH", "NJ", "NM", "NY",
+                                    "OR", "PA", "TN", "TX", "UT", "WA"],
+        "applicant.marital_status": ["Single", "Married", "Divorced", "Widowed"],
+        "driver2.relationship": ["Spouse", "Domestic partner", "Child", "Parent", "Other"],
+        "vehicle.make": ["Halden", "Kestrel", "Marlowe", "Norvik", "Solenne"],
+        "vehicle.primary_use": ["commute", "pleasure", "business"],
+        "vehicle.ownership": ["own", "finance", "lease"],
+        "garaging.state": ["AZ", "CA", "CO", "ID", "IL", "MA", "MO", "NC", "NV", "NH", "NJ", "NM", "NY",
+                           "OR", "PA", "TN", "TX", "UT", "WA"],
+        "coverage.bi_limits": ["25/50", "50/100", "100/300", "250/500"],
+    },
+    "pinecrest": {
+        "property.state": ["ID", "MA", "NC", "OR", "TN", "WA", "IL", "MO"],
+        "property.construction_type": list(_PC_CONSTRUCTION),
+        "property.roof_material": ["asphalt shingle", "metal", "tile", "slate", "wood shake"],
+        "property.heating_type": list(_PC_HEAT),
+        "property.finish_level": list(_PC_FINISH),
+        "property.stories": ["1", "2", "3+"],
+    },
+    "tidewater": {
+        "property.state": ["AZ", "CA", "CO", "ID", "MA", "ME", "NC", "NH", "OR", "RI", "VT", "WA"],
+        "property.occupancy": ["Owner occupied", "Secondary", "Seasonal", "Rental"],
+        "vehicle.make": ["Halden", "Kestrel", "Marlowe", "Norvik", "Solenne"],
+    },
+}
+_NOTES = {
+    "coverage.deductible": "whole dollars",
+    "coverage.liability_limit": "whole dollars",
+    "coverage.collision_deductible": "whole dollars",
+    "coverage.comprehensive_deductible": "whole dollars",
+    "household.driver_count": "drivers in the household, including the applicant",
+}
+
+
+def _type_of(values: list[Any]) -> str:
+    import re as _re
+
+    if all(isinstance(v, bool) for v in values):
+        return "bool"
+    if all(isinstance(v, int) and not isinstance(v, bool) for v in values):
+        return "int"
+    if all(isinstance(v, str) and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) for v in values):
+        return "date"
+    return "str"
+
+
+def intake_vocabulary(portal: str) -> dict[str, Any]:
+    seen: dict[str, list[Any]] = {}
+    for case in CASES[portal]:
+        for k, v in case["intake"]["facts"].items():
+            seen.setdefault(k, []).append(v)
+    keys = {}
+    for k in sorted(seen):
+        entry: dict[str, Any] = {"type": "enum" if k in ENUMS[portal] else _type_of(seen[k])}
+        if k in ENUMS[portal]:
+            entry["values"] = ENUMS[portal][k]
+        if k in _NOTES:
+            entry["note"] = _NOTES[k]
+        keys[k] = entry
+    return {"portal": portal, "keys": keys, "dates": "ISO 8601 (YYYY-MM-DD)",
+            "absent_key": "the fact is unknown; the intake never sends null or empty values"}

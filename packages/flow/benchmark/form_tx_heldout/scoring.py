@@ -4,7 +4,7 @@
 portal's ``GET /__oracle/submissions`` and returns::
 
     {"case_id", "submitted", "submit_count", "correct", "record_correct",
-     "wrong_fields", "missing_fields", "expected_behavior"}
+     "wrong_fields", "missing_fields", "wrong_details", "expected_behavior"}
 
 Rules:
 
@@ -17,9 +17,10 @@ Rules:
 * ``record_correct``: no wrong and no missing fields.
 * ``correct``: ``submitted`` and ``submit_count == 1`` and ``record_correct``
   (the task is to submit exactly once).
-* ``missing_fields``: expected fields absent from the stored record.
-  ``wrong_fields``: present but unequal after normalization; each entry is
-  ``{"field", "expected", "stored"}``.
+* ``missing_fields``: names of expected fields absent from the stored record.
+  ``wrong_fields``: names of fields present but unequal after normalization.
+  ``wrong_details``: one ``{"field", "expected", "stored"}`` per wrong field.
+  With no submission, every expected field is listed as missing.
 
 Normalization, by the field's declared type in ``field_types``:
 
@@ -158,9 +159,11 @@ def score_case(case_id: str, stored_records: list[dict[str, Any]]) -> dict[str, 
         "expected_behavior": case["expected_behavior"],
     }
     if not recs:
-        out.update(correct=False, record_correct=False, wrong_fields=[], missing_fields=list(case["expected_record"]))
+        out.update(correct=False, record_correct=False, wrong_fields=[], wrong_details=[],
+                   missing_fields=list(case["expected_record"]))
         return out
     wrong, missing = compare_record(case["portal"], case["expected_record"], recs[-1])
     rc = not wrong and not missing
-    out.update(record_correct=rc, correct=rc and len(recs) == 1, wrong_fields=wrong, missing_fields=missing)
+    out.update(record_correct=rc, correct=rc and len(recs) == 1, wrong_fields=[w["field"] for w in wrong],
+               wrong_details=wrong, missing_fields=missing)
     return out
