@@ -27,9 +27,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openadapt_flow.ir import Region
+from openadapt_flow.runtime.grounder import component_may_egress
 from openadapt_flow.runtime.remote_vlm import (
     _MAX_MODEL_IMAGE_DIM,
     IdentityVerdict,
+    extract_roi_crop,
     gold_crop_for_model,
 )
 
@@ -99,6 +101,13 @@ class VetoOnlyVLMGuard:
         self._state_verifier = state_verifier
         self._max_dim = max_dim
 
+    @property
+    def MAY_EGRESS(self) -> bool:
+        """Propagate screenshot-egress classification from wrapped backends."""
+        return component_may_egress(self._identity_vlm) or component_may_egress(
+            self._state_verifier
+        )
+
     def check_identity(
         self,
         recorded_png: bytes,
@@ -106,7 +115,7 @@ class VetoOnlyVLMGuard:
         *,
         roi: Optional[Region] = None,
     ) -> VetoDecision:
-        """Run a veto-only identity comparison, applying GOLD cropping if ``roi`` is set."""
+        """Run a veto-only identity comparison, applying symmetric ROI cropping if ``roi`` is set."""
         if self._identity_vlm is None:
             return VetoDecision(VetoVerdict.ABSTAIN, reason="no_identity_backend")
 
@@ -114,14 +123,17 @@ class VetoOnlyVLMGuard:
         rec_sent = recorded_png
         live_sent = live_png
         if roi is not None:
-            rec_gold = gold_crop_for_model(recorded_png, roi=roi, max_dim=self._max_dim)
-            live_gold = gold_crop_for_model(live_png, roi=roi, max_dim=self._max_dim)
-            if rec_gold.used_gold:
-                rec_sent = rec_gold.local_png
-                used_gold = True
-            if live_gold.used_gold:
-                live_sent = live_gold.local_png
-                used_gold = True
+            rec_crop = extract_roi_crop(recorded_png, roi, max_dim=self._max_dim)
+            live_crop = extract_roi_crop(live_png, roi, max_dim=self._max_dim)
+            if rec_crop is None or live_crop is None:
+                return VetoDecision(
+                    VetoVerdict.ABSTAIN,
+                    reason="identity_roi_unavailable",
+                    used_gold_crop=False,
+                )
+            rec_sent = rec_crop
+            live_sent = live_crop
+            used_gold = True
 
         try:
             compare_fn = getattr(self._identity_vlm, "compare", None)

@@ -16,6 +16,7 @@ from typing import Optional
 import pytest
 from PIL import Image, ImageDraw
 
+from openadapt_flow.runtime.grounder import component_may_egress
 from openadapt_flow.runtime.identity import IdentityVLM
 from openadapt_flow.runtime.identity_vlm import (
     VetoDecision,
@@ -26,10 +27,13 @@ from openadapt_flow.runtime.remote_vlm import (
     _MAX_MODEL_IMAGE_DIM,
     IdentityVerdict,
     RemoteGrounder,
+    RemoteIdentityVLM,
     RemoteStateVerifier,
+    RemoteVLMClient,
     _downscale_for_model,
     gold_crop_for_model,
 )
+from openadapt_flow.runtime.replayer import EgressNotPermitted, Replayer
 
 
 def _dims(png: bytes) -> tuple[int, int]:
@@ -367,3 +371,117 @@ def test_guard_state_check_uses_gold_composite_and_veto_only_semantics():
         assert dec.verdict is expected_verdict
         assert dec.used_gold_crop is True
         assert max(stub.state_calls[0][0]) <= _MAX_MODEL_IMAGE_DIM
+
+
+# --------------------------------------------------------------------------
+# 4. Review regressions: egress propagation, bounds checks, symmetric ROI
+# --------------------------------------------------------------------------
+
+
+def test_guard_propagates_egress_classification_to_replayer():
+    remote_client = RemoteVLMClient("http://127.0.0.1:9")
+    remote_id_guard = VetoOnlyVLMGuard(identity_vlm=RemoteIdentityVLM(remote_client))
+    remote_state_guard = VetoOnlyVLMGuard(
+        state_verifier=RemoteStateVerifier(remote_client)
+    )
+    local_guard = VetoOnlyVLMGuard(identity_vlm=_FakeLocalIdentity("same"))
+
+    assert component_may_egress(remote_id_guard) is True
+    assert component_may_egress(remote_state_guard) is True
+    assert component_may_egress(local_guard) is False
+
+    # Replayer refuses a wrapped remote comparator without explicit opt-in.
+    with pytest.raises(EgressNotPermitted):
+        Replayer(backend=object(), vision=object(), identity_vlm=remote_id_guard)
+
+    # With opt-in, Replayer wires it and sets the egress report flag.
+    replayer_remote = Replayer(
+        backend=object(),
+        vision=object(),
+        identity_vlm=remote_id_guard,
+        allow_model_grounding=True,
+    )
+    assert replayer_remote._screenshots_may_leave_box is True
+
+    # Purely local guard requires no opt-in and does not set the egress flag.
+    replayer_local = Replayer(
+        backend=object(), vision=object(), identity_vlm=local_guard
+    )
+    assert replayer_local._screenshots_may_leave_box is False
+
+
+@pytest.mark.parametrize(
+    "bad_point",
+    [
+        [-1, 20],
+        [999, 20],
+        [20, 999],
+        [float("nan"), 20],
+        [float("inf"), 20],
+        [True, 20],
+    ],
+)
+def test_remote_grounder_rejects_out_of_bounds_local_and_falls_back_to_global(
+    bad_point,
+):
+    roi = (900, 80, 320, 64)
+    frame = _make_synthetic_banner_frame(2560, 1440, roi=roi)
+
+    # Invalid local point must NOT be translated; must trigger global fallback.
+    stub = _StubClient(
+        ground_responses=[
+            {"point": bad_point, "confidence": 0.99},
+            {"point": [500, 200], "confidence": 0.85},
+        ]
+    )
+    match = RemoteGrounder(stub).locate(frame, "Submit", roi=roi)
+    assert len(stub.ground_calls) == 2
+    assert match is not None
+    assert match.point == (round(500 / (1024 / 2560)), round(200 / (1024 / 2560)))
+
+    # Invalid global point must return None (no proposal).
+    stub_global_bad = _StubClient(
+        ground_responses=[
+            {"point": bad_point, "confidence": 0.99},
+            {"point": [2000, 2000], "confidence": 0.99},
+        ]
+    )
+    assert RemoteGrounder(stub_global_bad).locate(frame, "Submit", roi=roi) is None
+
+
+def test_guard_identity_crops_both_frames_symmetrically_or_abstains():
+    roi = (200, 80, 320, 64)
+    large_frame = _make_synthetic_banner_frame(2560, 1440, roi=roi)
+    small_frame = _make_synthetic_banner_frame(1024, 768, roi=roi)
+
+    # Mixed sizes (one >1024px, one <=1024px): BOTH sides must get ROI crops,
+    # never a crop paired with an uncropped full screenshot.
+    backend = _FakeRemoteIdentity(IdentityVerdict.VERIFY)
+    guard = VetoOnlyVLMGuard(identity_vlm=backend)
+    dec = guard.check_identity(large_frame, small_frame, roi=roi)
+    assert dec.verdict is VetoVerdict.PASS
+    assert dec.used_gold_crop is True
+    assert len(backend.seen_dims) == 1
+    rec_dims, live_dims = backend.seen_dims[0]
+    assert rec_dims == live_dims
+    assert rec_dims[0] < 1024 and rec_dims[1] < 768
+
+    # ROI outside the smaller frame: must ABSTAIN without invoking the backend.
+    oob_roi = (1500, 80, 320, 64)
+    backend_oob = _FakeRemoteIdentity(IdentityVerdict.VERIFY)
+    dec_oob = VetoOnlyVLMGuard(identity_vlm=backend_oob).check_identity(
+        large_frame, small_frame, roi=oob_roi
+    )
+    assert dec_oob.verdict is VetoVerdict.ABSTAIN
+    assert dec_oob.reason == "identity_roi_unavailable"
+    assert dec_oob.should_halt is True
+    assert backend_oob.seen_dims == []
+
+    # Malformed bytes on one side: must ABSTAIN without invoking the backend.
+    backend_bad = _FakeRemoteIdentity(IdentityVerdict.VERIFY)
+    dec_bad = VetoOnlyVLMGuard(identity_vlm=backend_bad).check_identity(
+        large_frame, b"not-a-png", roi=roi
+    )
+    assert dec_bad.verdict is VetoVerdict.ABSTAIN
+    assert dec_bad.should_halt is True
+    assert backend_bad.seen_dims == []

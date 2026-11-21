@@ -18,6 +18,7 @@ appliance is down. Nothing here can turn an outage into a click.
 from __future__ import annotations
 
 import base64
+import math
 import os
 from dataclasses import dataclass
 from enum import Enum
@@ -98,6 +99,76 @@ def _downscale_for_model(
         return buf.getvalue(), scale
     except Exception:
         return png, 1.0
+
+
+def _png_dimensions(png: bytes) -> Optional[tuple[int, int]]:
+    """Return ``(width, height)`` for decodable image bytes, or ``None``."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        with Image.open(BytesIO(png)) as img:
+            w, h = img.size
+            return (int(w), int(h)) if w > 0 and h > 0 else None
+    except Exception:
+        return None
+
+
+def extract_roi_crop(
+    png: bytes,
+    roi: Region,
+    max_dim: int = _MAX_MODEL_IMAGE_DIM,
+    *,
+    pad_ratio: float = _GOLD_DEFAULT_PAD_RATIO,
+    min_pad_px: int = _GOLD_MIN_PAD_PX,
+) -> Optional[bytes]:
+    """Extract a padded ROI crop bounded by ``max_dim``, or ``None`` if invalid.
+
+    Unlike :func:`gold_crop_for_model`, this always crops to ``roi`` regardless
+    of whether the source frame exceeds ``max_dim`` so callers comparing two
+    frames (e.g. identity checks) never pair a cropped ROI with an uncropped
+    full screenshot.
+    """
+    if max_dim <= 0:
+        return None
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        img = Image.open(BytesIO(png)).convert("RGB")
+        w, h = img.size
+        rx, ry, rw, rh = roi
+        if rw <= 0 or rh <= 0:
+            return None
+        x0 = max(0, min(w, int(rx)))
+        y0 = max(0, min(h, int(ry)))
+        x1 = max(0, min(w, int(rx + rw)))
+        y1 = max(0, min(h, int(ry + rh)))
+        if x1 <= x0 or y1 <= y0:
+            return None
+
+        pad_x = max(min_pad_px, round((x1 - x0) * pad_ratio))
+        pad_y = max(min_pad_px, round((y1 - y0) * pad_ratio))
+        cx0 = max(0, x0 - pad_x)
+        cy0 = max(0, y0 - pad_y)
+        cx1 = min(w, x1 + pad_x)
+        cy1 = min(h, y1 + pad_y)
+
+        crop = img.crop((cx0, cy0, cx1, cy1))
+        cw, ch = crop.size
+        if max(cw, ch) > max_dim:
+            local_scale = max_dim / max(cw, ch)
+            crop = crop.resize(
+                (max(1, round(cw * local_scale)), max(1, round(ch * local_scale))),
+                Image.Resampling.LANCZOS,
+            )
+        buf = BytesIO()
+        crop.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return None
 
 
 @dataclass(frozen=True)
@@ -436,7 +507,25 @@ class RemoteGrounder:
         if not point or not isinstance(point, (list, tuple)) or len(point) != 2:
             return None
         x, y = point
-        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+        if (
+            isinstance(x, bool)
+            or isinstance(y, bool)
+            or not isinstance(x, (int, float))
+            or not isinstance(y, (int, float))
+            or not math.isfinite(x)
+            or not math.isfinite(y)
+        ):
+            return None
+        # Validate coordinates against the actual image submitted to the model
+        # before translating back to full-frame pixel space; an out-of-bounds
+        # local coordinate must fall back to global rather than landing outside
+        # the observed crop.
+        dims = _png_dimensions(sent)
+        if dims is not None:
+            sent_w, sent_h = dims
+            if x < 0 or y < 0 or x >= sent_w or y >= sent_h:
+                return None
+        elif x < 0 or y < 0:
             return None
         # The model saw a downscaled or ROI-cropped frame; map the proposal back
         # to the original screenshot's pixel space before anything acts on it.
