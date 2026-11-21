@@ -39,7 +39,7 @@ from urllib.parse import urlsplit
 import pytest
 
 from openadapt_flow.tx.induce import induce_lens_from_har, probe_put_semantics
-from openadapt_flow.tx.wire_tap import SessionWireTap, WirePolicy
+from openadapt_flow.tx.wire_tap import SessionWireTap, WirePolicy, dump_har
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tx" / "real_task_api_demo.har.json"
 LIVE_URL = os.environ.get("OAFLOW_TX_LIVE_VIKUNJA_URL", "").strip().rstrip("/")
@@ -365,8 +365,9 @@ def test_live_unprobed_lens_clobber_is_reported(live_demo) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - fixture regeneration
     base_url, out_path = sys.argv[1].rstrip("/"), Path(sys.argv[2])
-    recorded, _, _ = _record_demo(base_url)
-    out_path.write_text(json.dumps(recorded, indent=1) + "\n", encoding="utf-8")
+    recorded, demo_token, _ = _record_demo(base_url)
+    # dump_har masks the token again on top of the tap's own masking.
+    dump_har(recorded, out_path, secrets=(demo_token,))
     print(f"wrote {out_path} ({len(recorded['log']['entries'])} entries)")
 
 
