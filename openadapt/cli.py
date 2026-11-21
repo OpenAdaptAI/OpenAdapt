@@ -806,12 +806,12 @@ def _quickstart_publish_offer():
     if not _public_seals_available():
         return None
 
-    def offer(run_dir: Path, say, ask) -> bool:
+    def offer(run_dirs: list[Path] | Path, say, ask) -> bool:
         from openadapt.seal_publish import (
             PublishError,
             endpoint,
             hosted_seals_live,
-            publish,
+            publish_quickstart,
         )
 
         try:
@@ -819,19 +819,10 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say(
-            "Put this Seal online? This is the exact summary that would be "
-            f"uploaded ({run_dir / 'public-seal.json'}):"
-        )
+        if isinstance(run_dirs, Path):
+            run_dirs = [run_dirs]
         try:
-            publish(
-                run_dir,
-                interactive=True,
-                ask=ask,
-                say=say,
-                provenance="synthetic-tutorial",
-                command=_hint,
-            )
+            publish_quickstart(run_dirs, ask=ask, say=say, command=_hint)
         except PublishError as exc:
             say(str(exc))
         except (KeyboardInterrupt, EOFError):
@@ -2041,10 +2032,10 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
             "and the hour the run started, signed by this computer's Seal key. "
             "It never holds inputs, typed values, screenshots or record "
             "contents. The program name is left out unless you pass --names "
-            "(the synthetic tutorial includes it). The exact card is printed "
-            "first, and nothing is uploaded until you say yes: at the prompt, "
-            "or with --yes when there is no terminal. --yes skips the "
-            "question, not the printed card."
+            "(the synthetic tutorial includes it). The preview lists every field; "
+            "--show prints the exact upload. Seals signed by the same key have the same public "
+            "key ID. Confirm at the prompt, or pass --yes to publish without "
+            "a prompt."
         ),
         allow_abbrev=False,
     )
@@ -2064,7 +2055,12 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="write and print public-seal.json; upload nothing",
+        help="preview all public fields and write public-seal.json; upload nothing",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="write the exact upload bytes to standard output and exit without publishing",
     )
     parser.add_argument(
         "--github",
@@ -2124,7 +2120,7 @@ def _ask_line(prompt: str) -> str:
 
 def _publish_seal(argv: list[str]) -> int:
     """`openadapt seal publish [RUN_DIR]`."""
-    from openadapt.seal_publish import PublishError, publish
+    from openadapt.seal_publish import PublishError, build, public_bytes, publish
 
     options = _seal_publish_parser().parse_args(argv)
     run_dir = options.run_dir or _newest_sealed_run()
@@ -2138,6 +2134,10 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(f"Not published: {run_dir} has no seal.json.", err=True)
         return 2
     try:
+        if options.show:
+            doc = build(run_dir, names=options.names, github=options.github)
+            click.get_binary_stream("stdout").write(public_bytes(doc))
+            return 0
         publish(
             run_dir,
             yes=options.yes,

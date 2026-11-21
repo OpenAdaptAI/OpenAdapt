@@ -7603,15 +7603,12 @@ def _cmd_emit_mcp(args: argparse.Namespace) -> int:
 
 
 def _cmd_login(args: argparse.Namespace) -> int:
-    """Validate an ingest token against the hosted control plane and store the
-    host in config and the token in the OS keychain when saving is enabled.
-
-    Token resolution: ``--token`` -> ``OPENADAPT_INGEST_TOKEN`` env ->
-    OS keychain -> existing config migration token. Mint a
-    token in the dashboard at ``<host>/dashboard/settings/ingest``.
-    """
+    """Browser sign-in when no token is found, else validate the ingest token."""
+    from openadapt_flow import browser_login
     from openadapt_flow.hosted import HostedError, login
 
+    if browser_login.uses_browser(args):
+        return browser_login.run_cli(args)
     try:
         result = login(
             token=args.token,
@@ -12391,8 +12388,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "login",
         help=(
-            "Validate an ingest token against the hosted control plane and "
-            "store it in the OS keychain"
+            "Sign in to OpenAdapt Cloud through the browser, or validate an "
+            "ingest token, and keep the credential in the OS keychain"
         ),
         allow_abbrev=False,
     )
@@ -12435,6 +12432,9 @@ def build_parser() -> argparse.ArgumentParser:
             "is available (insecure fallback)"
         ),
     )
+    from openadapt_flow.browser_login import add_cli_arguments
+
+    add_cli_arguments(p)
     p.set_defaults(func=_cmd_login)
 
     p = sub.add_parser(
