@@ -154,7 +154,9 @@ class IPCHandler:
         except Exception:
             logger.exception("Shadow mode didn't close cleanly")
         try:
-            self.dispatcher.close_chrome_profiles()
+            from openadapt_desktop.chrome_profile import close_all_owned
+
+            close_all_owned()
         except Exception:
             logger.exception("Chrome profiles didn't close cleanly")
         self.send_response(msg_id, {"stopping": True})

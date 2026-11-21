@@ -57,6 +57,7 @@ from urllib.parse import urlsplit
 
 from loguru import logger
 
+from openadapt_desktop import child_process
 from openadapt_desktop.private_fs import ensure_private_dir
 
 NOTICE_TITLE = "Use a Chrome profile for OpenAdapt"
@@ -350,7 +351,7 @@ class ChromeProfileService:
         platform: str = sys.platform,
         env: dict[str, str] | None = None,
         find: Callable[[], Path] | None = None,
-        spawn: Callable[..., Any] = subprocess.Popen,
+        spawn: Callable[..., Any] = child_process.popen,
         json_version: Callable[[int], dict[str, Any]] = http_json_version,
         browser_close: Callable[[int, str], None] = send_browser_close,
         clock: Callable[[], float] = time.time,
@@ -595,8 +596,8 @@ class ChromeProfileService:
         }
         if self._platform == "win32":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        else:
-            kwargs["start_new_session"] = True
+        # No new session on POSIX: it would make Python fork the engine
+        # (child_process.py). Desktop closes the window itself on exit.
         return kwargs
 
     def _await_endpoint(self, process: Any, user_data: Path) -> _Owned:
@@ -689,3 +690,67 @@ class ChromeProfileService:
             process.kill()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Chrome terminate failed: {}", type(exc).__name__)
+
+
+# ------------------------------------------------------------- dispatcher
+
+
+_SERVICES: list[ChromeProfileService] = []
+
+
+def close_all_owned() -> None:
+    """Engine exit: close only the Chrome processes Desktop opened."""
+
+    for service in list(_SERVICES):
+        service.close_all()
+
+
+def dispatch_handlers(data_dir: Path) -> dict[str, Callable[..., dict]]:
+    """The window-wire commands, keyed on the frontend ``engine.ts`` names.
+
+    The service is built on first use. A refusal comes back as
+    ``{"ok": False, "code", "error"}`` so the window can show it; nothing is
+    attached or opened on a refusal. Neither the tray nor the local agent
+    socket lists these commands.
+    """
+
+    built: list[ChromeProfileService] = []
+
+    def service() -> ChromeProfileService:
+        if not built:
+            built.append(ChromeProfileService(data_dir))
+            _SERVICES.append(built[0])
+        return built[0]
+
+    def call(action: Callable[[], dict]) -> dict:
+        try:
+            return {"ok": True, **action()}
+        except ChromeProfileError as exc:
+            return {"ok": False, "code": exc.code, "error": exc.message}
+
+    def text(params: dict[str, Any], key: str) -> str:
+        return str(params.get(key) or "")
+
+    return {
+        "chrome_profile_notice": lambda **_p: notice(),
+        "chrome_profile_list": lambda **_p: call(service().list),
+        "chrome_profile_create": lambda **p: call(
+            lambda: service().create(
+                text(p, "name"), text(p, "notice_sha256"), p.get("acknowledged") is True
+            )
+        ),
+        "chrome_profile_acknowledge": lambda **p: call(
+            lambda: service().acknowledge(
+                text(p, "profile_id"), text(p, "notice_sha256"), p.get("acknowledged") is True
+            )
+        ),
+        "chrome_profile_open": lambda **p: call(
+            lambda: service().open(text(p, "profile_id"), p.get("url") or None)
+        ),
+        "chrome_profile_close": lambda **p: call(lambda: service().close(text(p, "profile_id"))),
+        "chrome_profile_revoke": lambda **p: call(
+            lambda: service().revoke(
+                text(p, "profile_id"), delete_data=p.get("delete_data") is True
+            )
+        ),
+    }
