@@ -122,7 +122,9 @@ def relay_redirect_location(
     target onto the tap's own origin in reverse-proxy mode.
     """
     raw = (location or "").strip()
-    if not raw or any(ch in raw for ch in "\r\n"):
+    # Browsers read a backslash as a slash, so ``/\\host`` leaves the origin
+    # even though URL parsers here treat it as a relative path.
+    if not raw or any(ch in raw for ch in "\r\n\\"):
         return None
     resolved = urljoin(request_url, raw)
     origin = _normalize_origin(resolved)

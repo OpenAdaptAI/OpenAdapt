@@ -83,6 +83,8 @@ def upstream() -> Iterator[_Upstream]:
             "/foreign": "http://127.0.0.1:1/steal",
             "/protocol-relative": "//127.0.0.1:1/steal",
             "/scheme-change": "https://127.0.0.1/steal",
+            "/backslash": "/\\127.0.0.1:1/steal",
+            "/double-backslash": "\\\\127.0.0.1:1/steal",
         }
     )
     try:
@@ -132,7 +134,16 @@ def test_dot_segment_redirect_stays_relative(upstream):
     assert status == 302 and headers["location"] == "../elsewhere"
 
 
-@pytest.mark.parametrize("path", ["/foreign", "/protocol-relative", "/scheme-change"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/foreign",
+        "/protocol-relative",
+        "/scheme-change",
+        "/backslash",
+        "/double-backslash",
+    ],
+)
 def test_redirect_off_the_tapped_origin_is_still_refused(upstream, path):
     with SessionWireTap(upstream.origin) as tap:
         status, headers, body = _call(tap.base_url, "GET", path)
