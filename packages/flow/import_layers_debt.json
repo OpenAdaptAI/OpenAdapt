@@ -136,7 +136,7 @@
     },
     {
       "module": "openadapt_flow.qualification",
-      "path": "packages/flow/openadapt_flow/qualification.py",
+      "path": "packages/flow/openadapt_flow/qualification/__init__.py",
       "edge_kind": "transitive",
       "diagnostic": "openadapt_flow.qualification: unresolvable dynamic import (importer value escape)",
       "reason": "vision-transfer",
