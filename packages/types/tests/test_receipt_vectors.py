@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 from pathlib import Path
 
@@ -14,7 +13,11 @@ pytest.importorskip("cryptography")
 from openadapt_types import receipt as r  # noqa: E402
 
 VECTORS = Path(__file__).parent / "vectors" / "record-run-v1"
-NAMES = sorted(p.stem for p in VECTORS.glob("*.json") if not p.name.startswith("registry"))
+NAMES = sorted(
+    p.stem
+    for p in VECTORS.glob("*.json")
+    if not p.name.startswith("registry") and p.stem != "jcs"
+)
 
 
 def _registry():
@@ -39,7 +42,6 @@ def test_the_vector_set_is_complete():
         "confirmation-public-redaction",
         "confirmation-reason-no-answer",
         "payload-bound",
-        "report-subjects",
         "payload-mismatch",
         "payload-missing",
         "approval-public-card",
@@ -75,30 +77,6 @@ def test_vector(name):
         assert result.payload_bound == expected.get("payload_bound")
     else:
         assert result.outcome is None
-
-
-def test_report_subjects_bind_the_two_byte_representations():
-    vector = json.loads((VECTORS / "report-subjects.json").read_text())
-    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
-    digests = {s["name"]: s["digest"]["sha256"] for s in statement["subject"]}
-    exact = vector["report_utf8"].encode("utf-8")
-    canonical = b'{"a":1,"z":2}'
-    assert json.loads(exact) == json.loads(canonical)
-    assert digests["report.json"] == hashlib.sha256(exact).hexdigest()
-    assert digests["report.canonical.json"] == hashlib.sha256(canonical).hexdigest()
-    assert digests["report.json"] != digests["report.canonical.json"]
-
-
-@pytest.mark.parametrize("replaced", ["report.json", "bundle"])
-def test_canonical_report_cannot_replace_exact_or_repeat(replaced):
-    vector = json.loads((VECTORS / "report-subjects.json").read_text())
-    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
-    if replaced == "report.json":
-        statement["subject"] = [s for s in statement["subject"] if s["name"] != replaced]
-    else:
-        next(s for s in statement["subject"] if s["name"] == replaced)["name"] = "report.canonical.json"
-    with pytest.raises(ValueError, match="subject names repeat, or the report is missing"):
-        r.statement_payload(statement)
 
 
 def test_vectors_are_byte_stable(tmp_path, monkeypatch):
@@ -179,3 +157,32 @@ def test_inconsistent_confirmations_are_refused(change):
     statement["predicate"]["confirmations"][0].update(change)
     with pytest.raises(ValueError):
         r.statement_payload(statement)
+
+
+def test_jcs_cases():
+    cases = json.loads((VECTORS / "jcs.json").read_text())["cases"]
+    assert len(cases) >= 10
+    for case in cases:
+        assert r.jcs(case["input"]) == case["canonical"]
+    # UTF-16 key order, not code point order.
+    assert r.jcs({"\uffff": 1, "\U0001f600": 2}) == '{"\U0001f600":2,"\uffff":1}'
+
+
+def test_report_digests_never_stand_in_for_each_other():
+    import hashlib
+
+    vector = json.loads((VECTORS / "report-canonical.json").read_text())
+    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
+    file_bytes = base64.b64decode(vector["report_file"])
+    canonical = r.report_canonical_sha256(vector["report"])
+    assert canonical == vector["expected"]["report_canonical_sha256"]
+    assert r.jcs(vector["report"]) == vector["expected"]["report_canonical"]
+    assert r.report_subject_match(statement, file_bytes=file_bytes) == "report.json"
+    assert r.report_subject_match(statement, canonical_sha256=canonical) == "report.canonical"
+    # Neither digest is accepted in the other's place.
+    file_digest = hashlib.sha256(file_bytes).hexdigest()
+    assert r.report_subject_match(statement, canonical_sha256=file_digest) is None
+    assert (
+        r.report_subject_match(statement, file_bytes=r.jcs(vector["report"]).encode())
+        is None
+    )

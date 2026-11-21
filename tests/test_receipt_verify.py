@@ -245,15 +245,16 @@ def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
     envelope = write_receipt_record(run)
     entry = public_key_entry()
     pin = {key: entry[key] for key in ("key_id", "public_key")}
-    canonical = hashlib.sha256(r.canonical_json(json.loads(raw)).encode()).hexdigest()
+    canonical = r.report_canonical_sha256(json.loads(raw))
     exact = hashlib.sha256(raw).hexdigest()
     assert canonical != exact
+    legacy = hashlib.sha256(r.canonical_json(json.loads(raw)).encode()).hexdigest()
     checked = r.verify_receipt(envelope, local_registry())
     assert checked.ok
     subjects = {s["name"]: s["digest"]["sha256"] for s in checked.statement["subject"]}
     assert (
         subjects["report.json"] == exact
-        and subjects["report.canonical.json"] == canonical
+        and subjects["report.canonical"] == canonical
     )
     lines = checked.statement["predicate"]["lines"]
     assert len(lines) == 1 and lines[0]["step"] == 5
@@ -264,18 +265,23 @@ def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
     )
     wire = (run / "receipt.json").read_bytes()
     assert verified_receipt_metrics(
-        wire, pinned_signer=pin, report_sha256=canonical, outcome=checked.outcome
+        wire, pinned_signer=pin, report_jcs_sha256=canonical, outcome=checked.outcome
     ) == {
         "receipt_record": envelope,
         "receipt_record_signer": pin,
     }
     with pytest.raises(ValueError, match="canonical report"):
         verified_receipt_metrics(
-            wire, pinned_signer=pin, report_sha256=exact, outcome=checked.outcome
+            wire, pinned_signer=pin, report_jcs_sha256=exact, outcome=checked.outcome
         )
+    if legacy != canonical:
+        with pytest.raises(ValueError, match="canonical report"):
+            verified_receipt_metrics(
+                wire, pinned_signer=pin, report_jcs_sha256=legacy, outcome=checked.outcome
+            )
     with pytest.raises(ValueError, match="outcome"):
         verified_receipt_metrics(
-            wire, pinned_signer=pin, report_sha256=canonical, outcome="FAILED"
+            wire, pinned_signer=pin, report_jcs_sha256=canonical, outcome="FAILED"
         )
     if fixture == "run-broken":
         # A stopped execution can still need reconciliation for a possible write.
@@ -285,7 +291,7 @@ def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
             verified_receipt_metrics(
                 wire,
                 pinned_signer=pin,
-                report_sha256=canonical,
+                report_jcs_sha256=canonical,
                 outcome=precise_outcome,
             )
     assert write_receipt_record(run) == envelope
@@ -388,9 +394,7 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(
         _item_run(report, None, tmp_path)
     envelope = json.loads((tmp_path / r.RECEIPT_FILE).read_bytes())
     entry = public_key_entry()
-    digest = hashlib.sha256(
-        r.canonical_json(json.loads(path.read_bytes())).encode()
-    ).hexdigest()
+    digest = r.report_canonical_sha256(json.loads(path.read_bytes()))
     keys = {name: entry[name] for name in ("key_id", "public_key")}
     checked = r.verify_receipt(envelope, local_registry())
     assert checked.ok and checked.outcome == "UNKNOWN"
@@ -399,7 +403,7 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(
         verified_receipt_metrics(
             (tmp_path / r.RECEIPT_FILE).read_bytes(),
             pinned_signer=keys,
-            report_sha256=digest,
+            report_jcs_sha256=digest,
             outcome=r.receipt_outcome(report.transaction_outcome)[0],
         )["receipt_record"]
         == envelope
@@ -479,15 +483,25 @@ def test_declared_but_unbound_effect_stays_visible():
 
 
 def _approved_run(tmp_path: Path, approvals: list, mode: str = "each_item") -> Path:
+    """A run whose report carries Flow's own approval block, built by its model."""
+    from openadapt_flow.approval_mode.model import (
+        ApprovalModeItemEvidence,
+        ItemApprovalRef,
+    )
+
     run = _run(tmp_path, "VERIFIED", f"approved-{mode}-{len(approvals)}")
     report = json.loads((run / "report.json").read_text())
-    report["approval"] = {
-        "schema_version": "openadapt.approval-mode-item/v1",
-        "mode": mode,
-        "decision": "approved" if approvals else "no_person",
-        "needs_person": False,
-        "approvals": approvals,
-    }
+    if mode == "not_gated":
+        decision = "not_gated"
+    else:
+        decision = "approved" if approvals else "no_person"
+    evidence = ApprovalModeItemEvidence(
+        mode=mode,
+        decision=decision,
+        needs_person=False,
+        approvals=[ItemApprovalRef.model_validate(a) for a in approvals],
+    )
+    report["approval"] = evidence.model_dump(mode="json")
     (run / "report.json").write_text(json.dumps(report))
     return run
 
@@ -541,6 +555,159 @@ def test_a_not_gated_run_says_so(tmp_path):
     assert (
         result.approval_line == "Not gated: no approval was required for these writes"
     )
+
+
+# -- routing, broken receipts and older formats ---------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+PUBLIC_SEAL_VECTORS = (
+    Path(__file__).resolve().parents[1]
+    / "packages/flow/tests/fixtures/public_seal/golden_vectors.json"
+)
+
+
+def test_a_folder_named_like_an_operation_stays_an_operation(tmp_path, monkeypatch):
+    (tmp_path / "ledger").mkdir()
+    monkeypatch.chdir(tmp_path)
+    out = CliRunner().invoke(main, ["verify", "ledger", "--help"])
+    assert "receipt" not in out.output.lower().split("usage")[0]
+    assert "Usage: openadapt verify <file|folder|link>" not in out.output
+
+
+def test_a_broken_receipt_fails_even_beside_a_seal(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "VERIFIED")
+    seal_run(run, enqueue=False)
+    (run / "receipt.json").write_text('{"not": "a receipt"}')
+    out = _verify(str(run))
+    assert out.exit_code == 1
+    assert "malformed receipt" in out.output
+
+
+def test_a_lone_seal_file_checks_its_run(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "HALTED", "lone")
+    seal_run(run, enqueue=False)
+    out = _verify(str(run / "seal.json"))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output
+    report = json.loads((run / "report.json").read_text())
+    report["model_calls"] = 9
+    (run / "report.json").write_text(json.dumps(report))
+    assert _verify(str(run / "seal.json")).exit_code != 0
+
+
+def test_an_older_run_summary_verifies_and_a_tampered_one_does_not(tmp_path):
+    good = tmp_path / "run-summary.json"
+    good.write_bytes((FIXTURES / "run-summary.json").read_bytes())
+    out = _verify(str(good))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output and "Not signed" in out.output
+    data = json.loads(good.read_text())
+    data["effects_confirmed"] = data["effects_required"] + 1
+    bad = tmp_path / "tampered.json"
+    bad.write_text(json.dumps(data))
+    assert _verify(str(bad)).exit_code == 1
+
+
+def test_public_seal_golden_vectors_verify_only_with_their_key_pinned(tmp_path):
+    vectors = json.loads(PUBLIC_SEAL_VECTORS.read_text())
+    registry = tmp_path / "keys.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "schema": r.REGISTRY_SCHEMA,
+                "keys": [
+                    {
+                        "key_id": vectors["key_id"],
+                        "public_key": vectors["public_key"],
+                        "role": "this_computer",
+                    }
+                ],
+            }
+        )
+    )
+    checked = 0
+    for case in vectors["cases"]:
+        path = tmp_path / f"{case['name']}.json"
+        path.write_text(case["body"])
+        pinned = _verify(str(path), "--keys", str(registry))
+        assert (pinned.exit_code == 0) == (case["expect"] == "valid"), case["name"]
+        if case["expect"] == "valid":
+            unpinned = _verify(str(path))
+            assert unpinned.exit_code == 1
+            assert "unknown signer" in unpinned.output
+            checked += 1
+    assert checked >= 1
+
+
+def test_receipts_trust_cloud_keys_pinned_where_seal_keys_pin_writes(
+    tmp_path, monkeypatch
+):
+    vectors = (
+        Path(r.__file__).resolve().parents[1] / "tests" / "vectors" / "record-run-v1"
+    )
+    if not vectors.is_dir():
+        pytest.skip("installed openadapt-types has no vectors")
+    registry = json.loads((vectors / "registry.json").read_text())
+    by_role = {k["role"]: k for k in registry["keys"]}
+    pinned = tmp_path / "seal-keys.json"
+    pinned.write_text(
+        json.dumps(
+            {
+                "keys": [
+                    {
+                        "key_id": by_role["openadapt_cloud"]["key_id"],
+                        "public_key": by_role["openadapt_cloud"]["public_key"],
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("OPENADAPT_SEAL_KEYS_PATH", str(pinned))
+    keys = {k.key_id: k.role for k in local_registry()}
+    assert keys[by_role["openadapt_cloud"]["key_id"]] == "openadapt_cloud"
+
+
+def test_one_delegate_answer_never_reads_as_approved_by_a_person(tmp_path):
+    delegate = {
+        **PERSON_APPROVAL,
+        "step_id": "save-2",
+        "decided_by": "automation",
+        "route": "mcp",
+        "approver_kind": "unauthenticated",
+        "approver_id": None,
+        "auth_method": "none",
+        "approver": {
+            "kind": "agent",
+            "auth": "mcp_session",
+            "id": "agent-approver-bot",
+        },
+    }
+    run = _approved_run(tmp_path, [PERSON_APPROVAL, delegate])
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    assert result.statement["predicate"]["approval"]["approver_kind"] == "agent"
+    assert result.approval_line == "Approved by an agent delegate: each item"
+
+
+def test_a_receipt_names_both_report_digests(tmp_path):
+    run = _run(tmp_path, "VERIFIED", "canonical")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    names = {s["name"]: s["digest"]["sha256"] for s in result.statement["subject"]}
+    report = json.loads((run / "report.json").read_text())
+    assert names["report.canonical"] == r.report_canonical_sha256(report)
+    # The same report written with other whitespace matches report.canonical.
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert verify_run_receipt(run, local_registry()).ok
+    report["model_calls"] = 3
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert not verify_run_receipt(run, local_registry()).ok
 
 
 @pytest.mark.parametrize("status", ["pending", "approved", "continuing"])

@@ -1230,9 +1230,9 @@ def read_run_summary(run_dir: Path | str) -> Optional[dict[str, Any]]:
             data = _json.loads((Path(run_dir) / name).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict) and str(data.get("schema_version", "")).startswith(
-            "openadapt.run-receipt/"
-        ):
+        # A summary, never the signed receipt (a DSSE envelope) that now
+        # holds the receipt.json name.
+        if isinstance(data, dict) and "payloadType" not in data:
             return data
     return None
 

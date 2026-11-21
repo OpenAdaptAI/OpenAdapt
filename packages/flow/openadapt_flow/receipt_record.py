@@ -18,6 +18,7 @@ The schema, verifier and vectors live in :mod:`openadapt_types.receipt`.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -138,10 +139,10 @@ def _approval(
     ]
     if mode == "not_gated" or not approved:
         return {"mode": mode, "approver_kind": "none", "commitments": {}}, {}
+    # The weakest approver counts: one delegate's answer among people's makes
+    # the whole run "approved by an agent delegate", never "by a person".
     kind = (
-        "person"
-        if any(a.get("decided_by") != "automation" for a in approved)
-        else "agent"
+        "person" if all(a.get("decided_by") == "human" for a in approved) else "agent"
     )
     ids = sorted(
         str(
@@ -238,11 +239,16 @@ def build_statement(
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
-    canonical = hashlib.sha256(r.canonical_json(report).encode("utf-8")).hexdigest()
-    subject = [
-        {"name": "report.json", "digest": {"sha256": report_sha256}},
-        {"name": "report.canonical.json", "digest": {"sha256": canonical}},
-    ]
+    subject = [{"name": "report.json", "digest": {"sha256": report_sha256}}]
+    try:
+        subject.append(
+            {
+                "name": "report.canonical",
+                "digest": {"sha256": r.report_canonical_sha256(report)},
+            }
+        )
+    except ValueError:  # a report JSON can't express canonically: file digest only
+        pass
     if bundle:
         subject.append({"name": "bundle", "digest": {"sha256": bundle}})
     name = report.get("workflow_name")
@@ -528,18 +534,29 @@ def local_registry(
 
 
 def _pinned_cloud_keys(home: Optional[Path]) -> list["RoleKey"]:
+    """Cloud keys pinned with ``openadapt receipt keys pin`` (``seal keys pin``).
+
+    The same file the older Cloud Seal check reads
+    (:func:`openadapt_flow.agent.seal.load_pinned_registry`).
+    """
     from openadapt_types.receipt import RoleKey
 
-    path = Path(home or Path.home() / ".openadapt" / "seal") / "cloud-keys.json"
     try:
-        from openadapt_flow.offline_seal import load_registry
+        from openadapt_flow.agent.seal import load_pinned_registry
 
-        return [
-            RoleKey(k.key_id, k.public_key, "openadapt_cloud", k.status, k.revoked_at)
-            for k in load_registry(path)
-        ]
-    except (OSError, ValueError):
+        entries = load_pinned_registry()
+    except Exception:  # noqa: BLE001 - nothing pinned: trust no Cloud key
         return []
+    return [
+        RoleKey(
+            str(k["key_id"]),
+            base64.b64encode(k["raw"]).decode("ascii"),
+            "openadapt_cloud",
+            k["status"],
+            k.get("revoked_at"),
+        )
+        for k in entries
+    ]
 
 
 def load_role_registry(path: Path) -> list["RoleKey"]:
@@ -576,28 +593,25 @@ def verify_run_receipt(
     result = r.verify_receipt(envelope, registry, openings=openings)
     if not result.ok or result.statement is None:
         return result
-    subjects = {s["name"]: s["digest"]["sha256"] for s in result.statement["subject"]}
-    # ``attach-seal`` keeps the signed bytes as report.pre-seal.json.
+    # ``attach-seal`` keeps the signed bytes as report.pre-seal.json. The
+    # file digest is checked against ``report.json`` and the canonical digest
+    # against ``report.canonical``, never one against the other.
     for name in ("report.json", "report.pre-seal.json"):
         path = run_dir / name
         if not sealed_set.is_file(path):
             continue
         try:
-            raw = sealed_set.read_bytes(path)
-            if hashlib.sha256(raw).hexdigest() != subjects.get("report.json"):
-                continue
-            canonical = subjects.get("report.canonical.json")
-            if (
-                canonical is not None
-                and hashlib.sha256(
-                    r.canonical_json(r.loads_strict(raw)).encode("utf-8")
-                ).hexdigest()
-                != canonical
-            ):
-                return r._refuse("bad_signature", "the canonical report digest differs")
-        except (OSError, ValueError, sealed_set.SealedSetError):
+            data = sealed_set.read_bytes(path)
+        except (OSError, sealed_set.SealedSetError):
             return r._refuse("malformed", "the covered report is unreadable")
-        return result
+        try:
+            canonical = r.report_canonical_sha256(loads_strict(data.decode("utf-8")))
+        except (UnicodeDecodeError, ValueError):
+            canonical = None
+        if r.report_subject_match(
+            result.statement, file_bytes=data, canonical_sha256=canonical
+        ):
+            return result
     if not sealed_set.is_file(run_dir / "report.json"):
         return result
     return r._refuse("bad_signature", "report.json changed after it was signed")

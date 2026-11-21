@@ -1,5 +1,6 @@
 """The managed sender accepts only a verified, public runner envelope."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def test_private_managed_callback_refuses_an_unusable_public_document(name):
     wire = json.dumps(_load(name)["document"]).encode()
     with pytest.raises(ValueError):
         verified_receipt_metrics(
-            wire, pinned_signer=_pin(), report_sha256="a" * 64, outcome="VERIFIED"
+            wire, pinned_signer=_pin(), report_jcs_sha256="a" * 64, outcome="VERIFIED"
         )
 
 
@@ -42,5 +43,30 @@ def test_pin_is_limited_to_public_fields_and_private_openings_stay_local():
     ):
         with pytest.raises(ValueError):
             verified_receipt_metrics(
-                data, pinned_signer=pin, report_sha256="a" * 64, outcome="VERIFIED"
+                data, pinned_signer=pin, report_jcs_sha256="a" * 64, outcome="VERIFIED"
+            )
+
+
+def test_callback_binds_only_the_jcs_digest_of_the_shared_report_vector():
+    vector = _load("report-canonical")
+    wire = json.dumps(vector["document"]).encode()
+    digest = r.report_canonical_sha256(vector["report"])
+    outcome = vector["expected"]["outcome"]
+    assert verified_receipt_metrics(
+        wire, pinned_signer=_pin(), report_jcs_sha256=digest, outcome=outcome
+    )["receipt_record"] == vector["document"]
+    # This digest vector signs STOPPED but its sample report says VERIFIED.
+    report_outcome = r.receipt_outcome(vector["report"]["execution_outcome"])[0]
+    assert report_outcome != outcome
+    with pytest.raises(ValueError, match="outcome"):
+        verified_receipt_metrics(
+            wire, pinned_signer=_pin(), report_jcs_sha256=digest, outcome=report_outcome
+        )
+    compact = hashlib.sha256(r.canonical_json(vector["report"]).encode()).hexdigest()
+    exact = hashlib.sha256(vector["report_file"].encode()).hexdigest()
+    assert len({digest, compact, exact}) == 3
+    for other in (compact, exact):
+        with pytest.raises(ValueError, match="canonical report"):
+            verified_receipt_metrics(
+                wire, pinned_signer=_pin(), report_jcs_sha256=other, outcome=outcome
             )

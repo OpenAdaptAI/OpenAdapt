@@ -11,13 +11,13 @@ def verified_receipt_metrics(
     envelope_bytes: bytes,
     *,
     pinned_signer: Mapping[str, str],
-    report_sha256: str,
+    report_jcs_sha256: str,
     outcome: str,
 ) -> dict[str, Any]:
     """Verify public bytes against the runner's pre-established public key.
 
     The caller supplies its final callback outcome in the receipt vocabulary
-    and the canonical report digest it is actually sending. Only the DSSE
+    and the RFC 8785 digest computed from its actual report. Only the DSSE
     envelope is eligible; private openings and public-card wrappers never
     belong in a runner callback.
     """
@@ -41,12 +41,9 @@ def verified_receipt_metrics(
         raise ValueError("expected one runner signature")
     if checked.outcome != outcome:
         raise ValueError("receipt outcome differs from the callback outcome")
-    digests = [
-        subject["digest"]["sha256"]
-        for subject in checked.statement["subject"]
-        if subject["name"] == "report.canonical.json"
-    ]
-    if digests != [report_sha256]:
+    if not receipt.report_subject_match(
+        checked.statement, canonical_sha256=report_jcs_sha256
+    ):
         raise ValueError("receipt does not cover the callback's canonical report")
     return {
         "receipt_record": envelope,

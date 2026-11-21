@@ -235,7 +235,64 @@ def build() -> dict[str, dict]:
                          "signer_lines": [r.refusal_line("unknown_schema")]})
     _confirmation_vectors(add)
     _handoff_vectors(vectors)
+    _canonical_vectors(vectors)
     return vectors
+
+
+#: A synthetic report with floats, nesting, unicode and unsorted keys.
+REPORT = {
+    "run_id": "run-1",
+    "execution_outcome": "VERIFIED",
+    "est_model_cost_usd": 0.0,
+    "total_ms": 20303.5,
+    "ratio": 1e-7,
+    "big": 1e21,
+    "zeta": [3, 2.5, None, True],
+    "note": "caf\u00e9 \u2014 line\nnext",
+    "alpha": {"b": 1, "a": -0.5},
+}
+
+JCS_CASES = [
+    0.0, 1.0, -0.5, 4.5, 1e-7, 1e-6, 1e20, 1e21, 123.456, 2**53 - 1,
+    "caf\u00e9\n\t\"q\"", {"b": [1, {"d": 0.1, "c": None}], "a": "x"},
+    {"\u20ac": 1, "\U0001f600": 2, "z": 3},
+    {"\uffff": 1, "\U0001f600": 2},
+]
+
+
+def _canonical_vectors(vectors) -> None:
+    file_bytes = (json.dumps(REPORT, indent=2) + "\n").encode()
+    st = statement("STOPPED")
+    st["subject"] = [
+        {"name": "report.json", "digest": {"sha256": hashlib.sha256(file_bytes).hexdigest()}},
+        {"name": "report.canonical", "digest": {"sha256": r.report_canonical_sha256(REPORT)}},
+    ]
+    vectors["report-canonical"] = {
+        "description": (
+            "A receipt naming both report digests: the file's bytes (report.json) "
+            "and the RFC 8785 canonical JSON (report.canonical)."
+        ),
+        "registry": "registry.json",
+        "document": r.sign_statement(st, [signer("this_computer")]),
+        "report": REPORT,
+        "report_file": base64.b64encode(file_bytes).decode(),
+        "expected": {
+            "ok": True,
+            "reason": None,
+            "outcome": "STOPPED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "disclosed": {},
+            "report_canonical": r.jcs(REPORT),
+            "report_canonical_sha256": r.report_canonical_sha256(REPORT),
+            "file_matches": "report.json",
+            "canonical_matches": "report.canonical",
+        },
+    }
+    vectors["jcs"] = {
+        "description": "RFC 8785 canonical JSON cases (input as JSON, expected canonical text).",
+        "cases": [{"input": c, "canonical": r.jcs(c)} for c in JCS_CASES],
+    }
 
 
 HANDOFF = b'{"referral":"synthetic","status":"sent"}'
@@ -283,21 +340,6 @@ def _handoff_vectors(vectors) -> None:
     put("payload-bound", "A handoff receipt bound to the bytes the receiver got, with a person's approval.",
         env, {**ok, "payload_bound": True, "disclosed": {k: v["value"] for k, v in openings.items()}},
         r.private_openings(env, openings), HANDOFF)
-    # The producer hashes both the original report file and the callback encoding.
-    report = '{\n  "z": 2,\n  "a": 1\n}\n'
-    canonical = r.canonical_json(json.loads(report)).encode("utf-8")
-    paired = copy.deepcopy(st)
-    next(s for s in paired["subject"] if s["name"] == "report.json")["digest"] = {
-        "sha256": hashlib.sha256(report.encode("utf-8")).hexdigest()
-    }
-    paired["subject"].extend([
-        {"name": "report.canonical.json", "digest": {"sha256": hashlib.sha256(canonical).hexdigest()}},
-        {"name": "evidence", "digest": {"sha256": hashlib.sha256(b"synthetic evidence").hexdigest()}},
-    ])
-    put("report-subjects", "A signed receipt binds the exact report file and its compact callback encoding.",
-        r.sign_statement(paired, [signer("this_computer")]),
-        {**ok, "payload_bound": True, "disclosed": {}}, received=HANDOFF)
-    vectors["report-subjects"]["report_utf8"] = report
     put("payload-mismatch", "The receiver got different bytes from the payload the receipt signed.",
         env, {"ok": False, "reason": "payload_mismatch", "signer_lines": [r.refusal_line("payload_mismatch")]},
         None, HANDOFF.replace(b"sent", b"done"))
