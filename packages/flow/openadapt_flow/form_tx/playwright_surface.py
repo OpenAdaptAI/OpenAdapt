@@ -1600,6 +1600,10 @@ class PlaywrightFormSurface:
                 stable = dom_selector.rsplit(" >> ", 1)[0] + " >> " + stable
             recheck_selector = stable
 
+        # The control's value-free identity, to find it again if the page
+        # redraws it with new ids and names.
+        identity = self._check_identity(dom_selector)
+
         if current != checked:
             loc = self._resolve_live_locator(dom_selector)
             loc.click(timeout=self._ui_profile.max_settle_ms)
@@ -1612,18 +1616,56 @@ class PlaywrightFormSurface:
         try:
             after = self._read_check_state(recheck_selector)
         except (MissingAnchorError, AmbiguousAnchorError) as exc:
-            raise SurfaceStateError(
-                f"Could not find {dom_selector!r} again after setting it: {exc}"
-            ) from exc
-        if native:
-            now = bool(after.get("propChecked"))
+            redrawn = self._find_by_check_identity(identity)
+            if redrawn is None:
+                raise SurfaceStateError(
+                    f"Could not find {dom_selector!r} again after setting it: {exc}"
+                ) from exc
+            now = bool(redrawn.checked)
         else:
-            now = after.get("ariaChecked") == "true"
+            if native:
+                now = bool(after.get("propChecked"))
+            else:
+                now = after.get("ariaChecked") == "true"
         if now != checked:
             raise SurfaceStateError(
                 f"{dom_selector!r} did not become "
                 f"{'checked' if checked else 'unchecked'} after a click"
             )
+
+    @staticmethod
+    def _identity_of(ctrl: ObservedControl) -> tuple[str, ...]:
+        return (
+            " ".join(ctrl.section_text.split()).casefold(),
+            " ".join(ctrl.group_label.split()).casefold(),
+            " ".join(ctrl.label_text.split()).casefold(),
+            ctrl.input_type.casefold(),
+            ctrl.role.casefold(),
+            ctrl.radio_value,
+        )
+
+    def _check_identity(self, dom_selector: str) -> Optional[tuple[str, ...]]:
+        """Section, labels, kind and own value of a checkbox or radio, if labelled."""
+        try:
+            snap = self.snapshot()
+        except Exception:
+            return None
+        ctrl = next((c for c in snap.controls if c.dom_selector == dom_selector), None)
+        if ctrl is None or not (ctrl.label_text.strip() or ctrl.group_label.strip()):
+            return None
+        return self._identity_of(ctrl)
+
+    def _find_by_check_identity(
+        self, identity: Optional[tuple[str, ...]]
+    ) -> Optional[ObservedControl]:
+        """The one visible control with ``identity`` after a redraw, or None."""
+        if identity is None:
+            return None
+        snap = self.snapshot()
+        same = [
+            c for c in snap.controls if c.visible and self._identity_of(c) == identity
+        ]
+        return same[0] if len(same) == 1 else None
 
     def click(self, dom_selector: str) -> None:
         """Click ``dom_selector`` and wait for settle."""
