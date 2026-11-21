@@ -270,6 +270,7 @@ def write_seal_page(
         # A page forwarded to someone else stays a local check, not third-party proof.
         host = {
             "trustWords": "checked against this computer's signing key",
+            "signer": "this_computer",
             **dict(host or {}),
         }
     if program is None or _digest_of(program) != report.get("bundle_content_digest"):
