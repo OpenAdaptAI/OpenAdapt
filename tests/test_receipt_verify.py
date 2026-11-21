@@ -438,3 +438,18 @@ def test_one_delegate_answer_never_reads_as_approved_by_a_person(tmp_path):
     assert result.ok, result.detail
     assert result.statement["predicate"]["approval"]["approver_kind"] == "agent"
     assert result.approval_line == "Approved by an agent delegate: each item"
+
+
+def test_a_receipt_names_both_report_digests(tmp_path):
+    run = _run(tmp_path, "VERIFIED", "canonical")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    names = {s["name"]: s["digest"]["sha256"] for s in result.statement["subject"]}
+    report = json.loads((run / "report.json").read_text())
+    assert names["report.canonical"] == r.report_canonical_sha256(report)
+    # The same report written with other whitespace matches report.canonical.
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert verify_run_receipt(run, local_registry()).ok
+    report["model_calls"] = 3
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert not verify_run_receipt(run, local_registry()).ok
