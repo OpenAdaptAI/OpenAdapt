@@ -226,17 +226,28 @@ class GiteaScenario:
         w = self._h("writer")
         b = self._h("bystander")
 
-        def comment(h: dict[str, str], n: str) -> Callable[[], None]:
-            return lambda: http("POST", f"{self.api}/issues/{n}/comments", body={"body": "collateral"}, headers=h)
+        # A planted side write counts as landed only when the server accepted
+        # it (status < 300): a rejected one is not evidence of a plant.
+        planted: dict[str, bool] = {}
 
-        def retitle(h: dict[str, str], n: str) -> Callable[[], None]:
-            return lambda: http("PATCH", f"{self.api}/issues/{n}", body={"title": self.title()}, headers=h)
+        def side(tag: str, method: str, url: str, body: dict[str, Any], h: dict[str, str]) -> None:
+            code, _ = http(method, url, body=body, headers=h)
+            planted[tag] = code < 300
 
-        def toggle(h: dict[str, str], n: str) -> Callable[[], None]:
+        def comment(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
+            return lambda: side(tag, "POST", f"{self.api}/issues/{n}/comments", {"body": "collateral"}, h)
+
+        def retitle(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
+            return lambda: side(tag, "PATCH", f"{self.api}/issues/{n}", {"title": self.title()}, h)
+
+        def toggle(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
             def go() -> None:
                 st = oracle("lab", n)["state"]
-                http("PATCH", f"{self.api}/issues/{n}", body={"state": "open" if st == "closed" else "closed"}, headers=h)
+                side(tag, "PATCH", f"{self.api}/issues/{n}", {"state": "open" if st == "closed" else "closed"}, h)
             return go
+
+        def landed(tag: str) -> Callable[[dict[str, Any]], bool]:
+            return lambda r: planted.get(tag, False)
 
         return [
             Trial("create", "wrong_value", {"collection": "issue", "op": "create", "fields": {"title": t, "body": "x"}},
@@ -252,16 +263,16 @@ class GiteaScenario:
                   _only(["title"]), lambda r: (oracle("lab", r["id"]) or {}).get("body") in ("", None)),
             Trial("comment", "collateral_same_actor", {"collection": "comment", "op": "create", "path": {"issue": rid},
                                                        "slot": f"x{i}", "fields": {"body": f"c {i}"}},
-                  _then(comment(w, victim)), lambda r: True),
+                  _then(comment(w, victim, "c")), landed("c")),
             Trial("create", "collateral_same_actor", {"collection": "issue", "op": "create",
                                                       "fields": {"title": t + " c", "body": "x"}},
-                  _then(toggle(w, victim)), lambda r: True),
+                  _then(toggle(w, victim, "t")), landed("t")),
             Trial("create", "collateral_same_actor_unlogged", {"collection": "issue", "op": "create",
                                                                "fields": {"title": t + " u", "body": "x"}},
-                  _then(retitle(w, victim)), lambda r: True, exposed=False),
+                  _then(retitle(w, victim, "r")), landed("r"), exposed=False),
             Trial("create", "collateral_other_actor", {"collection": "issue", "op": "create",
                                                        "fields": {"title": t + " o", "body": "x"}},
-                  _then(comment(b, victim)), lambda r: True, exposed=False),
+                  _then(comment(b, victim, "o")), landed("o"), exposed=False),
         ]
 
     def dup_landed(self, trial: Trial) -> bool:

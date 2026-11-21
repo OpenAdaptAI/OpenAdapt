@@ -360,7 +360,20 @@ class AuditReader:
     # reads -----------------------------------------------------------------
 
     def _url(self, path: str) -> str:
-        if path.startswith(("http://", "https://")) or not self.base:
+        if path.startswith(("http://", "https://")):
+            # Off-origin class: an absolute next link must stay on the log's
+            # own origin, or the credential and the evidence go elsewhere.
+            from urllib.parse import urlsplit
+
+            origin = self.base or str(getattr(self.http, "base_url", "") or "")
+            want, got = urlsplit(origin), urlsplit(path)
+            if not want.netloc or (got.scheme, got.netloc) != (
+                want.scheme,
+                want.netloc,
+            ):
+                raise AuditError("a page link points off the log's origin")
+            return path
+        if not self.base:
             return path
         return self.base + path
 
@@ -428,7 +441,20 @@ class AuditReader:
             )
             if s.items and len(raw) == 1 and isinstance(raw[0], list):
                 raw = raw[0]
-            items = [e for e in (self._event(x) for x in raw) if e is not None]
+            if s.items and not isinstance(got, Mapping):
+                # Missing-evidence class: a page that isn't an object can't
+                # hold the items, so it's not an empty page.
+                raise AuditError("the log page is not an object")
+            if not s.items and not isinstance(got, list):
+                raise AuditError("the log page is not a list")
+            items = []
+            for x in raw:
+                e = self._event(x)
+                if e is None:
+                    # Missing-evidence class: an event without an id or a
+                    # time can't be placed, so the window is unknown.
+                    raise AuditError("a log event has no id or time")
+                items.append(e)
             yield items
             if s.paging.kind == "link":
                 nxt = first(got, str(s.paging.path))
@@ -483,19 +509,29 @@ class AuditReader:
         raise AuditError("the log returned no events; the window can't be placed")
 
     def after(self, cursor: Cursor) -> Window:
-        """Every event after ``cursor`` by this actor, read to the cursor."""
+        """Every event after ``cursor`` by this actor, read to the cursor.
+
+        Placed by id, not by clock: everything the log lists before it has
+        shown every one of the cursor's own events is new, whatever its
+        timestamp. Only once all of them were seen does an event older than
+        the window end the read; a log that ends first is incomplete.
+        """
         win = Window()
         seen: set[str] = set()
-        reached = False
+        pending = set(cursor.ids)
         for items in self.pages():
             win.pages += 1
             older = False
             for e in items:
-                if cursor.at is not None and e.at < cursor.at - self.source.skew_s:
-                    older = True
-                    continue
                 if e.id in cursor.ids:
-                    reached = True
+                    pending.discard(e.id)
+                    continue
+                if (
+                    not pending
+                    and cursor.at is not None
+                    and e.at < cursor.at - self.source.skew_s
+                ):
+                    older = True
                     continue
                 if e.id in seen:
                     continue
@@ -504,16 +540,13 @@ class AuditReader:
                     win.events.append(e)
                 else:
                     win.other_actors += 1
-            # An event older than the window ends the read only once the
-            # cursor's own events were seen: one stale-stamped event must not
-            # hide a duplicate or collateral change on a later page.
-            if older and reached:
+            if older and not pending:
                 return win
             if not items:
                 break
-        if cursor.at is not None and not reached:
+        if cursor.at is not None and pending:
             # The cursor's own events are in the log, so a read that ends
-            # without reaching any of them is incomplete.
+            # before showing every one of them is incomplete.
             raise AuditError("the log ended before the cursor")
         return win
 
@@ -597,6 +630,10 @@ def check_window(
             continue
         if target in e.resources:
             own.append(e)
+            if any(r != target for r in e.resources):
+                # One event naming the target and another resource changed
+                # both: the other one is collateral too.
+                collateral.append(e)
             continue
         if (
             e.kind == "create"

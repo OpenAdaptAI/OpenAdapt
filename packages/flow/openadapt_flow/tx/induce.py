@@ -972,7 +972,16 @@ def induce_lens_from_har(
                 # NULL became "" (or the reverse): one empty value, spelled two
                 # ways. Learn it for this field; never a clobber or a replace.
                 if _null_or_empty(old_val) and _null_or_empty(new_val):
-                    if path not in null_empty_paths:
+                    # Unproven-equivalence class: learn it only from this
+                    # write sending one empty spelling and the server storing
+                    # the other, never from two reads around someone's edit.
+                    sent_empty = (
+                        curr_ex.method in {"POST", "PUT", "PATCH"}
+                        and path in flat_req
+                        and _null_or_empty(flat_req[path])
+                        and flat_req[path] != new_val
+                    )
+                    if sent_empty and path not in null_empty_paths:
                         null_empty_paths.append(path)
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server

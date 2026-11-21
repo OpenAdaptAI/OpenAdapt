@@ -228,6 +228,7 @@ def _spec(
                                 "replace": True,
                             },
                             "delete": {"method": "DELETE", "path": "/api/items/{id}"},
+                            "delete_reversible": True,
                             "scoped": scoped,
                         }
                     ],
@@ -819,13 +820,66 @@ def test_a_stale_stamped_event_does_not_end_the_read_before_the_cursor() -> None
         {"http://x/v1/events": p1, "http://x/v1/events?starting_after=evt_stale": p2},
     )
     win = r.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
-    assert [e.id for e in win.events] == ["evt_5", "evt_4"]
+    # Placed by id: listed before the cursor, the stale-stamped event counts
+    # as new too (never silently dropped).
+    assert [e.id for e in win.events] == ["evt_5", "evt_stale", "evt_4"]
+    # A page with a stale event and only one of the cursor's ids doesn't end
+    # the read: the next page's in-window duplicate is still seen.
+    p1b = {
+        "data": [
+            ev(6, 110, "customer.created", "cus_9"),
+            ev(1, 101, "customer.created", "cus_0"),
+            ev("old", 40, "customer.updated", "cus_3"),
+        ],
+        "has_more": True,
+    }
+    p2b = {
+        "data": [
+            ev(7, 101, "customer.created", "cus_9c"),
+            ev(2, 101, "customer.created", "cus_1"),
+        ],
+        "has_more": False,
+    }
+    rb = _reader(
+        src,
+        {"http://x/v1/events": p1b, "http://x/v1/events?starting_after=evt_old": p2b},
+    )
+    winb = rb.after(Cursor(at=101.0, ids=frozenset({"evt_1", "evt_2"})))
+    assert [e.id for e in winb.events] == ["evt_6", "evt_old", "evt_7"]
     # A log that never reaches the cursor is incomplete, not new.
     from openadapt_flow.txplan.audit import AuditError
 
     short = _reader(src, {"http://x/v1/events": {**p1, "has_more": False}})
     with pytest.raises(AuditError):
         short.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
+
+
+def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
+    from openadapt_flow.txplan.audit import AuditError, check_window
+
+    src = {"path": "/feed", "fields": {"id": "id", "at": "at", "actor": "by", "resource": "r", "action": "a"},
+           "actor": {"any": True}, "actions": {"create": ["made"], "update": ["set"]}}
+    # An event with no time can't be placed.
+    r = _reader(src, {"http://x/feed": [{"id": 9, "by": "u", "r": "x/1", "a": "set"}]})
+    with pytest.raises(AuditError):
+        r.after(Cursor(at=None))
+    # A page that isn't a list is not an empty page.
+    r = _reader(src, {"http://x/feed": {"error": "busy"}})
+    with pytest.raises(AuditError):
+        r.after(Cursor(at=None))
+    # A next link off the log's origin never gets the credential.
+    linked = {**src, "paging": {"kind": "link", "path": "next"}, "items": "items"}
+    r = _reader(linked, {"http://x/feed": {"items": [], "next": "https://evil.example/feed"}})
+    with pytest.raises(AuditError, match="origin"):
+        r.after(Cursor(at=None))
+    # One event naming the target and another record changed both.
+    both = [{"id": 1, "at": 10, "by": "u", "r": ["x/1", "x/2"], "a": "set"}]
+    src_list = {**src, "fields": {**src["fields"], "resource": "r.*"}}
+    audit = check_window(
+        _reader(src_list, {"http://x/feed": both}), Cursor(at=None), op="update",
+        target="x/1", collection_prefix="x/", logged=True, sleep=lambda s: None,
+    )
+    assert audit.collateral and audit.own
 
 
 def test_activity_feed_resource_from_two_parts() -> None:

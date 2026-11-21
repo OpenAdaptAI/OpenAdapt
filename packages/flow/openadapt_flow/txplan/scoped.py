@@ -139,6 +139,9 @@ def _request(
     try:
         return resp.status_code, (resp.json() if resp.content else {})
     except ValueError:
+        if method.upper() == "GET":
+            # Missing-evidence class: an unreadable read is an error, not {}.
+            raise AdapterError(f"{method} returned a body that is not JSON") from None
         return resp.status_code, {}
 
 
@@ -267,11 +270,13 @@ def _search(
     if not scoped.search:
         return None
     _, got = _request(adapter, "GET", fill(scoped.search, {"marker": marker}))
-    items = (
-        pick(got, scoped.search_items)
-        if scoped.search_items
-        else (got if isinstance(got, list) else [])
-    )
+    # Missing-evidence class: a search response of the wrong shape is an
+    # error, never an empty result.
+    if scoped.search_items and not isinstance(got, Mapping):
+        raise AdapterError("the marker search did not return an object")
+    if not scoped.search_items and not isinstance(got, list):
+        raise AdapterError("the marker search did not return a list")
+    items = pick(got, scoped.search_items) if scoped.search_items else got
     if scoped.search_items and len(items) == 1 and isinstance(items[0], list):
         items = items[0]
     return [
@@ -356,6 +361,12 @@ def scoped_write(
         raise TxSpecError(f"op {op!r} is not create, update or delete")
     if op != "create" and not rid:
         raise TxSpecError(f"an {op} needs the record id")
+    if op == "delete" and not coll.delete_reversible:
+        # Skipped-holdback class: a delete the API can't undo waits in the
+        # plan's holdback queue; a scoped write never sends it straight away.
+        raise TxSpecError(
+            f"{system}/{collection} deletes are irreversible: use a plan (holdback)"
+        )
     fields = dict(fields or {})
     where = {str(k): v for k, v in (path or {}).items()}
     adapter: RestAdapter = ctx.adapter(system)
@@ -368,8 +379,14 @@ def scoped_write(
         if op == "create"
         else str(rid) + (f":{slot}" if slot else "")
     )
+    # Wrong-target class: a cached result belongs to one endpoint, so the same
+    # system name pointed somewhere else is a different key.
     key = state.key_for(
-        task=task, system=system, collection=collection, op=op, slot=the_slot
+        task=task,
+        system=f"{system}@{spec_system.url()}",
+        collection=collection,
+        op=op,
+        slot=the_slot,
     )
     payload = sha256({"op": op, "id": rid, "path": where, "fields": fields})
     digest = sha256(
@@ -412,9 +429,12 @@ def scoped_write(
             return out
 
         baseline = None
+        recovering = entry is not None and entry.status in ("begun", "sent")
         if op != "create":
             baseline = _read(adapter, coll, str(rid), where)
-            if baseline is None:
+            # A crash after a delete landed leaves no record: recover it below,
+            # don't halt as if nothing was ever sent.
+            if baseline is None and not recovering:
                 tx["codes"] = ["missing_resource"]
                 run = _write_run(
                     state,
@@ -441,7 +461,17 @@ def scoped_write(
             cursor = Cursor.from_json(begun["cursor"]) if begun.get("cursor") else None
             baseline = begun.get("baseline", baseline)
             found, proven_absent = _recover(
-                adapter, coll, reader, cursor, op, fields, rid, where, marker, sleep
+                adapter,
+                coll,
+                reader,
+                cursor,
+                op,
+                fields,
+                rid,
+                where,
+                marker,
+                sleep,
+                baseline=baseline,
             )
             if found is not None:
                 sent_id, skip_send = found, True
@@ -462,12 +492,25 @@ def scoped_write(
                 )
             else:
                 notes.append("resent_after_proven_absent")
-        if cursor is None and reader is not None:
+        if cursor is None and reader is not None and not skip_send:
             try:
                 cursor = reader.cursor(sleep=sleep)
             except AuditError:
-                cursor = None
-                notes.append("audit_cursor_unreadable")
+                # Missing-evidence class: with a log configured, a write it
+                # can't place is never sent.
+                tx["codes"] = ["audit_cursor_unreadable"]
+                return _finish(
+                    ctx,
+                    digest,
+                    key,
+                    tx,
+                    started,
+                    outcome="HALTED",
+                    verified=None,
+                    payload=payload,
+                    result={"id": None, "codes": ["audit_cursor_unreadable"]},
+                    record_key=False,
+                )
         if op == "create" and not skip_send and marker and scoped.search:
             # The ledger may be new (another computer, a lost state folder):
             # the marker still finds a create that already landed.
@@ -732,6 +775,8 @@ def _recover(
     where: Mapping[str, Any],
     marker: Optional[str],
     sleep: Callable[[float], None],
+    *,
+    baseline: Optional[Mapping[str, Any]] = None,
 ) -> tuple[Optional[str], bool]:
     """After a crash mid-write: the record's id if the write landed, and
     whether it is proven not to have landed."""
@@ -741,15 +786,30 @@ def _recover(
         after = _read(adapter, coll, str(rid), where)
         if op == "delete":
             return (str(rid), False) if after is None else (None, True)
-        # An update that already holds is adopted; one that doesn't sets the
-        # same fields again, which is safe to repeat.
-        return (str(rid), False) if _matches(coll, after, fields) else (None, True)
+        if _matches(coll, after, fields):
+            return str(rid), False
+        # Stale-baseline class: resend only over the record as it was read
+        # before the crash; another caller's edit since is never overwritten.
+        unchanged = (
+            after is not None and baseline is not None and dict(after) == dict(baseline)
+        )
+        return None, unchanged
+    attempts = reader.source.lag.attempts if reader is not None else 1
+    wait = reader.source.lag.wait_s if reader is not None else 0.0
     if marker and scoped.search:
-        found = _search(adapter, scoped, marker, coll.id_field) or []
-        return (found[0], False) if found else (None, True)
+        # Missing-evidence class: one empty search isn't proof of absence;
+        # every poll through the lag budget must come back empty.
+        for n in range(attempts):
+            found = _search(adapter, scoped, marker, coll.id_field) or []
+            if found:
+                return found[0], False
+            if n + 1 < attempts:
+                sleep(wait)
+        return None, reader is not None
     if reader is not None and cursor is not None and "create" in reader.source.logs:
         prefix = prefix_of(scoped.audit_ref)
         complete = 0
+        unmatched_create = False
         for _ in range(reader.source.lag.attempts):
             try:
                 win = reader.after(cursor)
@@ -768,10 +828,13 @@ def _recover(
                         coll, _read(adapter, coll, other, where), fields
                     ):
                         return other, False
+                    # A create by these credentials we can't tie to a record
+                    # (a comment logged by its parent issue) may be ours.
+                    unmatched_create = True
             sleep(reader.source.lag.wait_s)
-        # The log records creates and, read to the cursor, shows none of this
-        # record through the whole lag budget.
-        return None, complete > 0
+        # Proven absent only when every poll read the log to the cursor and
+        # no create by these credentials appeared in it.
+        return None, complete == reader.source.lag.attempts and not unmatched_create
     return None, False
 
 

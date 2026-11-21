@@ -95,7 +95,12 @@ def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
     import os
 
     from openadapt_flow.txplan.proxy import default_task, run, sql_spec
-    from openadapt_flow.txplan.spec import RestSystem, TxSpec, TxSpecError, load_spec
+    from openadapt_flow.txplan.spec import (
+        RestSystem,
+        SqlSystem,
+        TxSpecError,
+        load_spec,
+    )
     from openadapt_flow.txplan.state import State
 
     if not (args.postgres or args.sqlite or args.api):
@@ -119,7 +124,16 @@ def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
             )
         else:
             assert api_spec is not None
-            spec = TxSpec(schema_version="openadapt.tx/v1", systems=api_spec.systems)
+            # Dropped-requirement class: API-only mode serves REST systems
+            # only and keeps every rule the file declares (anomaly flags,
+            # limits), never a rebuilt spec without them.
+            sql = [s.name for s in api_spec.systems if isinstance(s, SqlSystem)]
+            if sql:
+                raise TxSpecError(
+                    f"--api serves API systems only; {', '.join(sql)} is not one "
+                    "(use --postgres or --sqlite for a database)"
+                )
+            spec = api_spec
     except (ValueError, TxSpecError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
