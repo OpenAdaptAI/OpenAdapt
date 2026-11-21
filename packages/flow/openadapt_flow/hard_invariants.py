@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional, TypeGuard
 
+from openadapt_flow.verdict_sites import verdict_site
+
 InvariantName = Literal["declared_scope", "at_most_one", "no_undeclared_deletes"]
 InvariantStatus = Literal["held", "refuted", "not_checked"]
 LAYER_SCHEMA = "openadapt.hard-invariants/v1"
@@ -84,6 +86,7 @@ def _zero(
     )
 
 
+@verdict_site("hard_invariants.judge", classes="C2 C5")
 def judge_hard_invariants(
     *,
     outside_scope_changes: Optional[int],

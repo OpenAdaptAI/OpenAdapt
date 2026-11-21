@@ -1,0 +1,1244 @@
+{
+  "openadapt/cli.py": {
+    "cmp_literal": 1,
+    "swallow": 10,
+    "slice_count": 1
+  },
+  "openadapt/quickstart/engine.py": {
+    "cmp_literal": 5,
+    "swallow": 2
+  },
+  "openadapt/quickstart/notices.py": {
+    "swallow": 1
+  },
+  "openadapt/quickstart/openemr.py": {
+    "cmp_literal": 2,
+    "swallow": 2
+  },
+  "openadapt/quickstart/scene.py": {
+    "cmp_literal": 1,
+    "slice_count": 1
+  },
+  "openadapt/quickstart/view.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "openadapt/quickstart/workers.py": {
+    "cmp_literal": 1,
+    "swallow": 2
+  },
+  "openadapt/seal_claim.py": {
+    "swallow": 5
+  },
+  "openadapt/seal_publish.py": {
+    "swallow": 1
+  },
+  "openadapt/seal_view/__init__.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/__main__.py": {
+    "cmp_literal": 14,
+    "swallow": 8
+  },
+  "packages/flow/openadapt_flow/_browser_readiness.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/_prewarm.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/action_evidence.py": {
+    "cmp_literal": 2,
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/adapters/capture.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/admit_pipeline.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/admitted_composition.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/after_stop.py": {
+    "cmp_literal": 6,
+    "bool_fold": 2,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/agent/authoring.py": {
+    "cmp_literal": 3,
+    "swallow": 6
+  },
+  "packages/flow/openadapt_flow/agent/bridge.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/agent/browser_teach.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 7
+  },
+  "packages/flow/openadapt_flow/agent/bundles.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/agent/cli.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/agent/contract.py": {
+    "says_success": 3,
+    "cmp_literal": 10
+  },
+  "packages/flow/openadapt_flow/agent/example_app.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/agent/ledger.py": {
+    "cmp_literal": 11,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/agent/mailbox.py": {
+    "cmp_literal": 3,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/agent/mcp.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/agent/repair.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/agent/runner.py": {
+    "says_success": 1,
+    "cmp_literal": 12,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/agent/runs.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/agent/sandbox.py": {
+    "says_success": 2,
+    "cmp_literal": 2,
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/agent/seal.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/agent/seal_cli.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/agent/service.py": {
+    "cmp_literal": 1,
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/agent/teach.py": {
+    "cmp_literal": 8,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/agent/tutorial.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/agent_guard/capture.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/agent_guard/cdp.py": {
+    "swallow": 9
+  },
+  "packages/flow/openadapt_flow/agent_guard/commit_guard.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/agent_guard/session.py": {
+    "cmp_literal": 1,
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/approval_mode/approver.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/approval_mode/coverage.py": {
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/approval_mode/dry_run.py": {
+    "cmp_literal": 1,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/approval_mode/durable_carry.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/approval_mode/form_state.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/approval_mode/gate.py": {
+    "cmp_literal": 4,
+    "bool_fold": 3,
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/approval_mode/item_approval.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/approval_mode/model.py": {
+    "cmp_literal": 1,
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/approval_mode/named_person_binding.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/approval_mode/post.py": {
+    "cmp_literal": 9,
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/approval_mode/requirements.py": {
+    "cmp_literal": 2,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/approval_mode/switch.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/assurance.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/attest_bridge.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/authoring.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/authorization_summary.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/backends/_owned.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/backends/_page_quiescence.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/backends/_server_responses.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/backends/choice.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/backends/linux_backend.py": {
+    "swallow": 26
+  },
+  "packages/flow/openadapt_flow/backends/macos_backend.py": {
+    "swallow": 16
+  },
+  "packages/flow/openadapt_flow/backends/parallels_vm.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/backends/playwright_backend.py": {
+    "cmp_literal": 1,
+    "swallow": 71
+  },
+  "packages/flow/openadapt_flow/backends/rdp_backend.py": {
+    "swallow": 11
+  },
+  "packages/flow/openadapt_flow/backends/redirect_guard.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/backends/remote_display.py": {
+    "bool_fold": 1,
+    "swallow": 31
+  },
+  "packages/flow/openadapt_flow/backends/win_agent/keyboard_lease.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/backends/win_agent/native_value.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/backends/win_agent/server.py": {
+    "swallow": 28
+  },
+  "packages/flow/openadapt_flow/backends/windows_backend.py": {
+    "swallow": 9
+  },
+  "packages/flow/openadapt_flow/backends/windows_keyboard_lease.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/backends/worker_containment.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/backends/xfreerdp.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/browser_accessibility.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/browser_login.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/bundle_validation.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/cli_compose.py": {
+    "says_success": 1,
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/cli_deferred.py": {
+    "says_success": 1,
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/cli_hints.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/cli_local_seal.py": {
+    "bool_fold": 1,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/cli_process.py": {
+    "says_success": 1,
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/cli_receipt.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/cli_reconcile.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/cli_self_repair.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/cli_shadow.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/cli_tasks.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/cli_undo.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/cli_variants.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/cli_worklist_pool.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/cloud_seal.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/compile_agent/code_action.py": {
+    "swallow": 9,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compile_agent/harness.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/compile_agent/observe.py": {
+    "swallow": 6
+  },
+  "packages/flow/openadapt_flow/compile_agent/pipeline.py": {
+    "cmp_literal": 6,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/compile_agent/repair_bridge.py": {
+    "cmp_literal": 4,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/compile_agent/repair_selection.py": {
+    "cmp_literal": 7
+  },
+  "packages/flow/openadapt_flow/compile_agent/sandbox.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compiler/api_proposal.py": {
+    "cmp_literal": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compiler/binding_admission.py": {
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/compiler/compile.py": {
+    "bool_fold": 1,
+    "swallow": 2,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compiler/compose_authoring.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/compiler/disambiguation.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compiler/empty_result_guard.py": {
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/compiler/induction.py": {
+    "bool_fold": 3,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/compiler/lookup_detect.py": {
+    "bool_fold": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/compiler/narration_rules.py": {
+    "bool_fold": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/compiler/probing.py": {
+    "cmp_literal": 4,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/compiler/qualification_pins.py": {
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/composition.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/connector/daemon.py": {
+    "cmp_literal": 3,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/connector/executor.py": {
+    "cmp_literal": 12,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/connector/windows_service.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/console/app.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/console/attention.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/console/data.py": {
+    "cmp_literal": 5,
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/console/decision_relay.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/console/decision_supervisor.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/console/halt_detail.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/console/human_decisions.py": {
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/countersign/commitments.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/countersign/document.py": {
+    "cmp_literal": 15
+  },
+  "packages/flow/openadapt_flow/countersign/dossier.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/countersign/render.py": {
+    "says_success": 2,
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/countersign/tsa.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/countersign/vault.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/decision/calibration.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/decision/features.py": {
+    "cmp_literal": 4,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/decision/labels.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/decision/review.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/decision/synthetic.py": {
+    "says_success": 1,
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/demo_proof.py": {
+    "cmp_literal": 4,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/deployment.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/desktop_record.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/eligibility/artifact.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/eligibility/client.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/emit/mcp_governed.py": {
+    "cmp_literal": 2,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/emit/mcp_tool.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/execute/dispatch.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/execute/service.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/execution_profiles.py": {
+    "says_success": 1,
+    "cmp_literal": 17,
+    "bool_fold": 17
+  },
+  "packages/flow/openadapt_flow/extension_network.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/failure_signals.py": {
+    "says_success": 1,
+    "cmp_literal": 6
+  },
+  "packages/flow/openadapt_flow/fault_gate.py": {
+    "cmp_literal": 2,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/fleet/canary.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/fleet/hub.py": {
+    "says_success": 4
+  },
+  "packages/flow/openadapt_flow/fleet/policy.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/form_tx/playwright_surface.py": {
+    "swallow": 14
+  },
+  "packages/flow/openadapt_flow/form_tx/session_lease.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/form_tx/types.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/generate/demo_analysis.py": {
+    "slice_count": 2
+  },
+  "packages/flow/openadapt_flow/generate/zero_touch.py": {
+    "cmp_literal": 4,
+    "swallow": 2,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/guard.py": {
+    "says_success": 1,
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/halt_cleanup.py": {
+    "bool_fold": 1,
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/hard_invariants.py": {
+    "says_success": 2,
+    "cmp_literal": 2,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/hosted.py": {
+    "cmp_literal": 5,
+    "swallow": 8
+  },
+  "packages/flow/openadapt_flow/intake/param_gate.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/integrations/agents/__init__.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/integrations/agents/skills.py": {
+    "cmp_literal": 6
+  },
+  "packages/flow/openadapt_flow/interactive_recorder.py": {
+    "swallow": 20
+  },
+  "packages/flow/openadapt_flow/interchange/conformance.py": {
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/interop/types.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/ir.py": {
+    "cmp_literal": 10,
+    "bool_fold": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/jit/adapters.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/jit/authority.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/jit/compile_agent.py": {
+    "cmp_literal": 3,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/jit/dispatch_authority.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/jit/lifecycle.py": {
+    "cmp_literal": 2,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/learn.py": {
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/learning/branch_teach.py": {
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/learning/gate.py": {
+    "cmp_literal": 6,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/learning/interpreter.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/learning/teach.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/learning/trace.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/mockloan/fault_server.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/mockmed/fault_server.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/multi_surface_record.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/network_capture.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/offline_seal.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/onprem_service.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/operator_profile.py": {
+    "cmp_literal": 7
+  },
+  "packages/flow/openadapt_flow/plain_outcome.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/policy.py": {
+    "cmp_literal": 1,
+    "bool_fold": 6,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/privacy.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/provenance.py": {
+    "says_success": 1,
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/public_seal.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/qualification/__init__.py": {
+    "cmp_literal": 7,
+    "bool_fold": 9,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/qualification_drills.py": {
+    "swallow": 6
+  },
+  "packages/flow/openadapt_flow/qualification_faults.py": {
+    "cmp_literal": 4,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/qualification_identity_evidence.py": {
+    "cmp_literal": 3,
+    "bool_fold": 3
+  },
+  "packages/flow/openadapt_flow/qualification_oracle_gate.py": {
+    "cmp_literal": 1,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/qualification_proposal.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/qualify/campaign.py": {
+    "says_success": 3,
+    "cmp_literal": 4,
+    "bool_fold": 4,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/qualify/faults.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/qualify/result.py": {
+    "says_success": 3,
+    "cmp_literal": 15
+  },
+  "packages/flow/openadapt_flow/readback_ladder.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/receipt.py": {
+    "says_success": 1,
+    "cmp_literal": 9,
+    "bool_fold": 8
+  },
+  "packages/flow/openadapt_flow/reconcile/__init__.py": {
+    "says_success": 5,
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 1,
+    "else_success": 2
+  },
+  "packages/flow/openadapt_flow/record_check_binding.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/record_check_synthesis.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/record_sor.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/recorder.py": {
+    "swallow": 17
+  },
+  "packages/flow/openadapt_flow/registry.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/auto_repair.py": {
+    "says_success": 1,
+    "cmp_literal": 5,
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/campaign.py": {
+    "cmp_literal": 2,
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/cli.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/repair/cloud_review.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/hold.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/lifecycle.py": {
+    "cmp_literal": 5
+  },
+  "packages/flow/openadapt_flow/repair/preflight_queue.py": {
+    "cmp_literal": 3,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/readmission.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/relabel.py": {
+    "cmp_literal": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/repair/self_repair.py": {
+    "cmp_literal": 8,
+    "bool_fold": 7,
+    "swallow": 15,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/repair/standard_change.py": {
+    "cmp_literal": 4,
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/report.py": {
+    "cmp_literal": 5,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/rest_setup.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/retention.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/retention_apply.py": {
+    "cmp_literal": 1,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/reward/models.py": {
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/reward/oracles.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/reward/worker.py": {
+    "cmp_literal": 1,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/rl_env/desktop.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/rl_env/environment.py": {
+    "swallow": 10
+  },
+  "packages/flow/openadapt_flow/rl_env/parallel.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/rl_env/record_grader.py": {
+    "cmp_literal": 2,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/rl_env/reward.py": {
+    "says_success": 2,
+    "cmp_literal": 5,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/rl_env/trainers.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/rl_env/validate.py": {
+    "says_success": 1,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/rl_env/validate_desktop.py": {
+    "says_success": 1,
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/rl_env/windows_guest.py": {
+    "swallow": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/rollback.py": {
+    "cmp_literal": 3,
+    "bool_fold": 2,
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/rollback_qualify.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/run_authorization.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/run_gate.py": {
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runner/evidence.py": {
+    "cmp_literal": 7,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runner/hosted_adapter.py": {
+    "says_success": 1,
+    "cmp_literal": 7,
+    "bool_fold": 1,
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/runner/verify.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/actuators/api.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/actuators/form_eval.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/runtime/actuators/session_headers.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/actuators/web_form.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/runtime/admitted_composition.py": {
+    "says_success": 3,
+    "cmp_literal": 10,
+    "bool_fold": 2,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/authorization.py": {
+    "bool_fold": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/checks/app_sources.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/checks/duplicate_record.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/composition.py": {
+    "says_success": 2,
+    "cmp_literal": 5,
+    "bool_fold": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/control_overlay.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/runtime/durable/attended.py": {
+    "cmp_literal": 11,
+    "bool_fold": 1,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/durable/attended_state.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/durable/authority.py": {
+    "cmp_literal": 6,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/durable/checkpoint.py": {
+    "bool_fold": 1,
+    "swallow": 1,
+    "slice_count": 2
+  },
+  "packages/flow/openadapt_flow/runtime/durable/continuation.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/runtime/durable/controller.py": {
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/runtime/durable/program_checkpoint.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/durable/resume.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effect_watch.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/_common.py": {
+    "bool_fold": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/adapter.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/compensation.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/deferred_report.py": {
+    "says_success": 1,
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/runtime/effects/desktop_readback.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/desktop_readback_sessions.py": {
+    "swallow": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/effect.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/effect_model.py": {
+    "bool_fold": 2,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/email_delivery.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/fhir.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/effects/file_arrival.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/frame.py": {
+    "says_success": 1,
+    "cmp_literal": 2,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/fresh_session.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/graphql.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/history.py": {
+    "says_success": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/late_write.py": {
+    "says_success": 1,
+    "cmp_literal": 2
+  },
+  "packages/flow/openadapt_flow/runtime/effects/onscreen.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/runtime/effects/pipeline_safety.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/rest.py": {
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/effects/smart_auth.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/effects/sql.py": {
+    "swallow": 7
+  },
+  "packages/flow/openadapt_flow/runtime/effects/ui_readback.py": {
+    "cmp_literal": 3,
+    "swallow": 10
+  },
+  "packages/flow/openadapt_flow/runtime/grounder.py": {
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/runtime/heal.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/runtime/healing/governance.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/runtime/healing/perturbation.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/runtime/hover_evidence.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/identity.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/identity_census.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/identity_looks.py": {
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/runtime/list_guard.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/preparation.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/process_v1.py": {
+    "says_success": 1,
+    "cmp_literal": 10
+  },
+  "packages/flow/openadapt_flow/runtime/remote_vlm.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/runtime/replayer.py": {
+    "cmp_literal": 26,
+    "bool_fold": 12,
+    "swallow": 62,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/runtime/resolver.py": {
+    "cmp_literal": 1,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/surfaces.py": {
+    "swallow": 9
+  },
+  "packages/flow/openadapt_flow/runtime/variant_router.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime/worklist_pool.py": {
+    "cmp_literal": 3,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/runtime_validation.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/sanitized_artifact.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/scaffold_verifier.py": {
+    "cmp_literal": 7,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/seal_batch.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/seal_timestamp.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/sections.py": {
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/shadow.py": {
+    "says_success": 1,
+    "bool_fold": 1,
+    "swallow": 4
+  },
+  "packages/flow/openadapt_flow/shadow_db.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/shadow_report.py": {
+    "says_success": 1,
+    "cmp_literal": 3
+  },
+  "packages/flow/openadapt_flow/skills.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/subroutines.py": {
+    "cmp_literal": 2,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/taskgen/validate.py": {
+    "says_success": 1,
+    "cmp_literal": 2,
+    "bool_fold": 3,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/taskgen/workbench.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/teach_scope.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1,
+    "swallow": 8
+  },
+  "packages/flow/openadapt_flow/terminal_verification_v2.py": {
+    "says_success": 1,
+    "cmp_literal": 30,
+    "bool_fold": 7
+  },
+  "packages/flow/openadapt_flow/transaction.py": {
+    "says_success": 1,
+    "cmp_literal": 13,
+    "bool_fold": 7,
+    "swallow": 1,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/tutorial.py": {
+    "cmp_literal": 5,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/tx/induce.py": {
+    "swallow": 1,
+    "slice_count": 3
+  },
+  "packages/flow/openadapt_flow/tx/lens.py": {
+    "says_success": 1,
+    "else_success": 1
+  },
+  "packages/flow/openadapt_flow/tx/wire_tap.py": {
+    "bool_fold": 2,
+    "swallow": 3
+  },
+  "packages/flow/openadapt_flow/undo_proposal.py": {
+    "cmp_literal": 5,
+    "bool_fold": 1,
+    "swallow": 4,
+    "slice_count": 1
+  },
+  "packages/flow/openadapt_flow/validation/behavioral_generalization.py": {
+    "says_success": 1,
+    "cmp_literal": 3,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/validation/dense_surface.py": {
+    "cmp_literal": 7,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/validation/hardening/fixtures.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/validation/identity_ladder.py": {
+    "cmp_literal": 2,
+    "bool_fold": 1
+  },
+  "packages/flow/openadapt_flow/validation/identity_looks_dense.py": {
+    "cmp_literal": 7,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/validation/identity_rates.py": {
+    "cmp_literal": 4
+  },
+  "packages/flow/openadapt_flow/validation/known_ids_dense.py": {
+    "cmp_literal": 8
+  },
+  "packages/flow/openadapt_flow/validation/pixel_identity_aligned.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/validation/vlm_identity_probe.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/verifier.py": {
+    "says_success": 4,
+    "cmp_literal": 39,
+    "swallow": 9
+  },
+  "packages/flow/openadapt_flow/verifier_audit/targets/appworld_worker.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/verify_run.py": {
+    "says_success": 4,
+    "cmp_literal": 36,
+    "bool_fold": 2,
+    "swallow": 5
+  },
+  "packages/flow/openadapt_flow/vision/imgops.py": {
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/visualize/builder.py": {
+    "cmp_literal": 3,
+    "bool_fold": 2
+  },
+  "packages/flow/openadapt_flow/visualize/projection.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/visualize/render.py": {
+    "cmp_literal": 1
+  },
+  "packages/flow/openadapt_flow/wire_check.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/wrap/candidate.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/wrap/cli.py": {
+    "says_success": 1,
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/wrap/mcp.py": {
+    "swallow": 1
+  },
+  "packages/flow/openadapt_flow/wrap/publish.py": {
+    "says_success": 1,
+    "swallow": 2
+  },
+  "packages/flow/openadapt_flow/write_ledger.py": {
+    "says_success": 1,
+    "cmp_literal": 7
+  },
+  "packages/flow/openadapt_flow/write_receipt.py": {
+    "cmp_literal": 9,
+    "bool_fold": 3
+  },
+  "scripts/ci/attestation.py": {
+    "bool_fold": 2
+  },
+  "scripts/ci/check_windows_governed_safety.py": {
+    "says_success": 2,
+    "cmp_literal": 4
+  },
+  "scripts/ci/flow_shard_measurement.py": {
+    "cmp_literal": 1,
+    "bool_fold": 1
+  },
+  "scripts/ci/newest_green.py": {
+    "cmp_literal": 2
+  },
+  "scripts/ci/nightly_report.py": {
+    "slice_count": 1
+  },
+  "scripts/ci/protected_safety_review.py": {
+    "cmp_literal": 2,
+    "swallow": 1
+  },
+  "scripts/ci/tests/test_flow_shard_measurement.py": {
+    "cmp_literal": 2
+  }
+}
