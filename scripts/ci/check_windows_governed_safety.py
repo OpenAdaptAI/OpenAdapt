@@ -114,20 +114,37 @@ def check(evidence: Any) -> list[str]:
         assert isinstance(record, dict)
         if seed is not None:
             problems.extend(_diff_from_seed(phase, rows, seed, target))
-        written = [r for r in rows if r.get("note")]
+        seed_by_id = (
+            {r.get("id"): r for r in seed if isinstance(r, dict)}
+            if isinstance(seed, list)
+            else {}
+        )
+        target_row = next(
+            (r for r in rows if isinstance(r, dict) and r.get("id") == target),
+            None,
+        )
+        target_seed = seed_by_id.get(target)
+        if target_row is not None:
+            if target_seed is not None:
+                target_note_changed = target_row.get("note") != target_seed.get("note")
+            else:
+                target_note_changed = bool(target_row.get("note"))
+        else:
+            target_note_changed = False
+
+        written = [r for r in rows if isinstance(r, dict) and r.get("note")]
         siblings = [r["id"] for r in written if r.get("id") != target]
         if siblings:
             problems.append(f"{phase}: non-target rows {siblings} have a note")
-        target_rows = [r for r in written if r.get("id") == target]
         outcome = record.get("outcome")
         if phase == "held":
-            if written:
+            if written or target_note_changed:
                 problems.append("held: the held run wrote")
             if outcome == "VERIFIED":
                 problems.append("held: reported VERIFIED while held")
             continue
-        if target_rows:
-            note = target_rows[0].get("note")
+        if target_note_changed:
+            note = target_row.get("note") if target_row is not None else None
             if note != expected:
                 problems.append(f"{phase}: the target holds an unexpected note")
             if outcome != "VERIFIED":
