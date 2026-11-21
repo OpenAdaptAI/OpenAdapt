@@ -12,6 +12,8 @@ Each test pins the fail-closed behaviour the review asks for. On origin/main
    appliance.
 6. A pinned model that is unavailable never falls back to another placement
    or model.
+7. Every frame sent off the box is on a local append-only ledger, written
+   before the call, halted runs included; no ledger line, no call.
 """
 
 from __future__ import annotations
@@ -320,3 +322,152 @@ def test_unavailable_pinned_model_never_falls_back_to_appliance(wiring, monkeypa
     )
     _build(runtime_config=runtime, phi_mode=False)
     assert not isinstance(wiring.get("fallback"), RemoteGrounder)
+
+
+def test_regulated_profile_keeps_tls_and_loopback_appliances(wiring, monkeypatch):
+    for url in ("https://10.20.30.40:8443", "http://127.0.0.1:8000"):
+        wiring.clear()
+        monkeypatch.setenv("OPENADAPT_FLOW_VLM_URL", url)
+        runtime = RuntimeSection(phi_grounding_allowlist=["10.20.30.40", "127.0.0.1"])
+        authorization = SimpleNamespace(
+            execution_profile="regulated", qualification_case_id=None
+        )
+        _build(
+            runtime_config=runtime,
+            phi_mode=True,
+            governed_authorization=authorization,
+        )
+        assert _wired_appliance_handles(wiring) == [
+            "identity_vlm",
+            "state_verifier",
+            "grounder",
+        ], url
+
+
+@pytest.mark.parametrize(
+    "url, allowed",
+    [
+        ("https://vlm.internal:8443", True),
+        ("http://127.0.0.1:8000", True),
+        ("http://[::1]:8000", True),
+        ("http://localhost:8000", True),
+        ("http://10.20.30.40:8000", False),
+        ("http://localhost.evil.example:8000", False),
+        ("ftp://vlm.internal", False),
+        ("vlm.internal:8000", False),
+        ("", False),
+    ],
+)
+def test_regulated_transport_rule(url, allowed):
+    from openadapt_flow.runtime.model_transport import regulated_transport_refusal
+
+    assert (regulated_transport_refusal(url) is None) is allowed
+
+
+def test_appliance_still_backs_an_unpinned_run(wiring, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_VLM_URL", "https://vlm.internal:8443")
+    _build(runtime_config=RuntimeSection(), phi_mode=False)
+    assert isinstance(wiring.get("fallback"), RemoteGrounder)
+
+
+# --------------------------------------------------------------------------
+# 7. The egress ledger, and grounder calls that abstained.
+# --------------------------------------------------------------------------
+
+
+class _OffBoxGrounder:
+    MAY_EGRESS = True
+    base_url = "https://vlm.internal:8443"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def locate(self, screen_png, intent, ocr_text=None):
+        self.calls += 1
+        return None  # abstains after the frame was sent
+
+
+def _ledger_lines(path):
+    import json
+
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_off_box_frame_is_ledgered_before_the_call(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENADAPT_FLOW_EGRESS_LEDGER", raising=False)
+    inner = _OffBoxGrounder()
+    rp = Replayer(FakeBackend(), grounder=inner, allow_model_grounding=True)
+    rp._egress.bind_run(tmp_path / "runs" / "r1")
+    rp._egress.step_id = "s1"
+    frame = _png()
+    assert rp.grounder.locate(frame, "open the chart") is None
+    assert inner.calls == 1
+    (line,) = _ledger_lines(tmp_path / "runs" / "egress-ledger.jsonl")
+    assert line["component"] == "grounder"
+    assert line["destination"] == "vlm.internal"
+    assert line["run"] == "r1" and line["step"] == "s1"
+    import hashlib
+
+    assert line["frames"] == [
+        {"sha256": hashlib.sha256(frame).hexdigest(), "bytes": len(frame)}
+    ]
+    mode = (tmp_path / "runs" / "egress-ledger.jsonl").stat().st_mode & 0o777
+    assert mode == 0o600
+
+    # The abstaining call still counts as an off-box model call.
+    result = StepResult(step_id="s1", intent="open the chart", ok=False)
+    rp._egress.drain(result)
+    assert result.grounder_calls == 1
+    assert Replayer._result_model_calls(result) == 1
+
+
+def test_no_ledger_line_means_no_call(tmp_path, monkeypatch):
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+    monkeypatch.setenv("OPENADAPT_FLOW_EGRESS_LEDGER", str(blocker / "ledger.jsonl"))
+    inner = _OffBoxGrounder()
+    vlm = _OffBoxIdentityVLM("same")
+    verifier = _Verifier("yes")
+    rp = Replayer(
+        FakeBackend(),
+        grounder=inner,
+        identity_vlm=vlm,
+        state_verifier=verifier,
+        allow_model_grounding=True,
+    )
+    rp._egress.bind_run(tmp_path / "run")
+    crop = _crop_png()
+    assert rp.grounder.locate(crop, "x") is None
+    assert rp.identity_vlm.same_or_different(crop, crop) == "different"
+    assert rp.state_verifier.holds(crop, "x") is False
+    assert (inner.calls, vlm.calls, verifier.calls) == (0, 0, 0)
+
+
+def test_halted_run_frames_are_on_the_ledger(tmp_path, monkeypatch):
+    from tests.test_drift_oracle import _run, _text_present_pc
+
+    monkeypatch.delenv("OPENADAPT_FLOW_EGRESS_LEDGER", raising=False)
+    verifier = _Verifier("yes")
+    report, _backend = _run(
+        tmp_path, [_step(_text_present_pc("Patient list"))], verifier
+    )
+    assert report.success is False
+    (line,) = _ledger_lines(tmp_path / "egress-ledger.jsonl")
+    assert line["component"] == "state_verifier"
+    assert line["step"] == "s1"
+    assert report.model_calls == 1
+
+
+def test_in_process_identity_vlm_counts_as_local(monkeypatch, tmp_path):
+    vlm = _OffBoxIdentityVLM("different")
+    vlm.MAY_EGRESS = False
+    rp = Replayer(FakeBackend(), identity_vlm=vlm)
+    crop = _crop_png()
+    monkeypatch.setattr(rp, "_identifier_crops", lambda *a, **k: (crop, crop))
+    step, workflow, res = _identity_step()
+    result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+    rp._identity_gate_error(step, res, crop, {}, workflow, tmp_path, result)
+    assert vlm.calls == 1
+    assert Replayer._result_model_calls(result) == 0
+    assert Replayer._result_local_model_calls(result) == 1
+    assert rp._egress.entries == []
