@@ -142,11 +142,14 @@ def extract_roi_crop(
         rx, ry, rw, rh = roi
         if rw <= 0 or rh <= 0:
             return None
-        x0 = max(0, min(w, int(rx)))
-        y0 = max(0, min(h, int(ry)))
-        x1 = max(0, min(w, int(rx + rw)))
-        y1 = max(0, min(h, int(ry + rh)))
-        if x1 <= x0 or y1 <= y0:
+        x0 = int(rx)
+        y0 = int(ry)
+        x1 = int(rx + rw)
+        y1 = int(ry + rh)
+        # Require the entire requested subject region to be visible inside the
+        # image; a partly clipped ROI would omit part of the identifier on one
+        # side while forwarding a nonempty crop.
+        if x0 < 0 or y0 < 0 or x1 > w or y1 > h:
             return None
 
         pad_x = max(min_pad_px, round((x1 - x0) * pad_ratio))
@@ -517,15 +520,14 @@ class RemoteGrounder:
         ):
             return None
         # Validate coordinates against the actual image submitted to the model
-        # before translating back to full-frame pixel space; an out-of-bounds
-        # local coordinate must fall back to global rather than landing outside
-        # the observed crop.
+        # before translating back to full-frame pixel space; if dimensions
+        # cannot be established or the point falls outside the observed image,
+        # treat it as a miss (local retries globally; global returns None).
         dims = _png_dimensions(sent)
-        if dims is not None:
-            sent_w, sent_h = dims
-            if x < 0 or y < 0 or x >= sent_w or y >= sent_h:
-                return None
-        elif x < 0 or y < 0:
+        if dims is None:
+            return None
+        sent_w, sent_h = dims
+        if x < 0 or y < 0 or x >= sent_w or y >= sent_h:
             return None
         # The model saw a downscaled or ROI-cropped frame; map the proposal back
         # to the original screenshot's pixel space before anything acts on it.

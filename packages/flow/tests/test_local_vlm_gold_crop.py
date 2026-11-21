@@ -466,6 +466,19 @@ def test_guard_identity_crops_both_frames_symmetrically_or_abstains():
     assert rec_dims == live_dims
     assert rec_dims[0] < 1024 and rec_dims[1] < 768
 
+    # ROI partially clipped on the smaller frame (x=900..1220 exceeds 1024):
+    # must ABSTAIN without invoking the backend rather than comparing a partial
+    # crop against a full crop.
+    clipped_roi = (900, 80, 320, 64)
+    backend_clipped = _FakeRemoteIdentity(IdentityVerdict.VERIFY)
+    dec_clipped = VetoOnlyVLMGuard(identity_vlm=backend_clipped).check_identity(
+        large_frame, small_frame, roi=clipped_roi
+    )
+    assert dec_clipped.verdict is VetoVerdict.ABSTAIN
+    assert dec_clipped.reason == "identity_roi_unavailable"
+    assert dec_clipped.should_halt is True
+    assert backend_clipped.seen_dims == []
+
     # ROI outside the smaller frame: must ABSTAIN without invoking the backend.
     oob_roi = (1500, 80, 320, 64)
     backend_oob = _FakeRemoteIdentity(IdentityVerdict.VERIFY)
