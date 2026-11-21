@@ -535,18 +535,20 @@ def test_strict_holds_back_qualification_trials(
         )
 
 
-def test_a_local_key_bundle_under_the_opt_out_refuses_to_run(
+def test_a_local_key_bundle_under_the_opt_out_still_runs_sealed(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
+    """The opt-out stops new encryption, not reading what was encrypted:
+    and a sealed bundle still runs into a sealed run directory."""
     from tests.test_after_stop_mockmed import _workflow
 
     bundle = tmp_path / "bundle"
     with sealed_set.writing(bundle, "bundle", crypto.resolve_key(None)):
         _workflow().save(bundle)
     monkeypatch.setenv(at_rest.OPT_OUT_ENV, "desktop")
-    with pytest.raises(sealed_set.SealedSetError):
-        _mockmed_run(tmp_path, bundle, tmp_path / "run")
-    assert not (tmp_path / "run").exists()
+    _mockmed_run(tmp_path, bundle, tmp_path / "run")
+    assert sealed_set.is_sealed(tmp_path / "run")
+    _assert_ciphertext_only(tmp_path / "run")
 
 
 @pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")

@@ -26,7 +26,7 @@ organization's key (see [Key hierarchy](#key-hierarchy)).
 | Cross-window recordings (`record --surface`) | Logged | Held back before the command runs |
 | Bundles from `compile`, `induce`, `admit` | Encrypted | Encrypted |
 | Run directories (report, step screenshots, crops, frames, evidence) | Encrypted | Encrypted |
-| A run with an approval gate, an attended draft, a business-decision state or `--save-healed-to` | Logged, under this computer's key; refused with a configured key | Refused before it runs |
+| A run with an approval gate, an attended draft, a business-decision state or `--save-healed-to` | Logged for a plaintext bundle; refused for an encrypted one (the default since this release) | Refused before it runs |
 | The bundle, skill library and compiled fix of `teach` | Encrypted from encrypted input; otherwise logged | Encrypted |
 | The sanitized review copy and approved archive of `push` | Encrypted from encrypted input; otherwise logged | Encrypted |
 | The receipt page (`seal.html`) beside an encrypted run | Logged: it embeds the run report | Not written |
@@ -570,6 +570,10 @@ marks as logged. Also:
   `admission-decision.json`.
 - Bundles encrypted with the older `Workflow.save(encrypt=True)` library call
   and no `seal`: only `workflow.json` and `templates/` are encrypted there.
+- Attended continuation (`execute_attended_action`, the Desktop and
+  console path) of an encrypted run directory is not built yet. A run
+  directory from before this release keeps running in plaintext (logged),
+  with its attended state in its own encrypted containers.
 - Commands outside the list above, `repair` among them, refuse sealed input
   rather than decrypt it to disk. Each says so before it reads anything.
 

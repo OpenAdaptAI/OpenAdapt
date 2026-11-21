@@ -175,13 +175,27 @@ def run_with_output(
     # By default (docs/phi_at_rest.md) every run directory is sealed too.
     seal_run = at_rest.strict() or bundle_sealed or at_rest.seals_by_default()
     downgraded = False
-    if seal_run and not at_rest.strict() and not at_rest.explicit_key():
-        # Under this computer's own key, a run feature whose state can't be
+    if (
+        seal_run
+        and not bundle_sealed
+        and not at_rest.strict()
+        and not at_rest.explicit_key()
+    ):
+        # The run of a plaintext bundle with a feature whose state can't be
         # sealed yet runs in plaintext, named on stderr and in the ledger,
-        # rather than being refused. Strict mode and a configured key refuse.
+        # rather than being refused. A sealed bundle never yields a plaintext
+        # run; strict mode and a configured key refuse.
+        run_path_now = Path(run_dir)
+        legacy_plain = (
+            run_path_now.is_dir()
+            and not _sealed.is_sealed(run_path_now)
+            and any(run_path_now.iterdir())
+        )
         held = (
             "a healed bundle (--save-healed-to)"
             if save_healed_to is not None
+            else "plaintext state from before encryption was the default"
+            if legacy_plain
             else replayer._sealed_run_unsupported(workflow)
         )
         if held is not None:
