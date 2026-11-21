@@ -305,6 +305,8 @@ def resolve_unique_option(
         "Select",
         "Choose one",
         "Please choose",
+        "Choose",
+        "-- Choose one --",
     ),
 ) -> ObservedOption:
     """Resolve exactly one ``ObservedOption`` matching ``intended_value`` or fail closed.
