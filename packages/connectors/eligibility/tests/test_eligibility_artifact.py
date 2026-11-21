@@ -10,8 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-
-from openadapt_flow.eligibility.artifact import (
+from openadapt_eligibility.artifact import (
     BOUNDARY_FILE,
     RESULTS_CSV,
     TRANSACTIONS_DIR,
@@ -22,7 +21,7 @@ from openadapt_flow.eligibility.artifact import (
     write_and_verify,
     write_eligibility_artifacts,
 )
-from openadapt_flow.eligibility.client import (
+from openadapt_eligibility.client import (
     ApplicationMode,
     BenefitSelection,
     EligibilityRequest,
@@ -318,7 +317,7 @@ def test_atomic_promotion_failure_leaves_no_consumable_transaction(
 def test_every_staged_contract_is_verified_before_promotion(
     tmp_path, monkeypatch, target
 ):
-    import openadapt_flow.eligibility.artifact as artifact_module
+    import openadapt_eligibility.artifact as artifact_module
 
     real_write = artifact_module._write_exclusive
 
@@ -365,7 +364,7 @@ def test_index_promotion_failure_rolls_back_promoted_transaction(tmp_path, monke
 
 
 def test_independent_effect_failure_rolls_back_new_transaction(tmp_path, monkeypatch):
-    import openadapt_flow.eligibility.artifact as artifact_module
+    import openadapt_eligibility.artifact as artifact_module
 
     monkeypatch.setattr(artifact_module, "all_confirmed", lambda _verdicts: False)
     with pytest.raises(RuntimeError, match="did not confirm"):
@@ -615,3 +614,26 @@ def test_committed_file_symlink_substitution_is_refused(tmp_path):
         write_eligibility_artifacts(
             active_result(), tmp_path, request=request(), policy=volume_policy()
         )
+
+
+def test_write_exclusive_preserves_exact_bytes_and_refuses_overwrite(tmp_path):
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
+    from openadapt_eligibility.artifact import _write_exclusive
+
+    @settings(
+        max_examples=30,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
+    @given(payload=st.binary(max_size=2048))
+    def _check(payload: bytes) -> None:
+        path = tmp_path / "evidence.bin"
+        path.unlink(missing_ok=True)
+        _write_exclusive(path, payload)
+        assert path.read_bytes() == payload
+        with pytest.raises(FileExistsError):
+            _write_exclusive(path, b"replacement")
+        assert path.read_bytes() == payload
+
+    _check()
