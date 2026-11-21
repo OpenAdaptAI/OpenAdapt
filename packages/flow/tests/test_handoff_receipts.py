@@ -339,6 +339,34 @@ def test_sign_updates_refuses_a_receipt_it_cannot_verify_or_did_not_sign(tmp_pat
         followup.verify_history(run_dir, _registry(tmp_path))
     two.write_bytes(kept[0])
     two_private.write_bytes(kept[1])
+    # One signer at a time: a held lock refuses, and signs nothing.
+    lock = run_dir / ".receipt-update.lock"
+    lock.write_text("")
+    with pytest.raises(ValueError, match="another signer holds"):
+        followup.sign_updates(run_dir, [referrals], signer=signer)
+    lock.unlink()
+    # A publication interrupted after its files but before the sidecar is
+    # completed by the next call, never left as a broken history.
+    import json as _json
+
+    sidecar = run_dir / followup.SIDECAR
+    data = _json.loads(sidecar.read_text())
+    last = data["records"].pop()
+    sidecar.write_text(_json.dumps(data))
+    (run_dir / ".receipt-update.pending.json").write_text(
+        _json.dumps(
+            {
+                "file": last["file"],
+                "private": last["file"].replace(".json", ".private.json"),
+                "lines": last["lines"],
+            }
+        )
+    )
+    with pytest.raises(ValueError):  # the history doesn't verify meanwhile
+        followup.verify_history(run_dir, _registry(tmp_path))
+    followup._finish_pending(run_dir, _registry(tmp_path))  # what the next call runs
+    assert not (run_dir / ".receipt-update.pending.json").exists()
+    assert followup.verify_history(run_dir, _registry(tmp_path)).ok
     # A tampered update already in the chain is never extended.
     update = run_dir / "receipt.update-2.json"
     good_update = update.read_text()

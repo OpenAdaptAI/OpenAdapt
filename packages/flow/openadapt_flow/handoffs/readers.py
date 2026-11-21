@@ -204,6 +204,9 @@ class FhirSearchReader:
             if total is not None:
                 if type(total) is not int or total < 0:
                     return ReadResult("unreachable")
+                if declared_total is not None and total != declared_total:
+                    # Pages that disagree on the total can hide a partial search.
+                    return ReadResult("unreachable")
                 declared_total = total
             try:
                 url = next_page_url(bundle)

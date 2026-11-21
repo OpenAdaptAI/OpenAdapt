@@ -396,6 +396,13 @@ def test_fhir_reader_fails_closed_on_a_partial_search():
     )
     short = {**_bundle(_patient("REF-1")), "total": 2}
     assert _reader(Client(short)).read("REF-1").status == "unreachable"
+    # Pages that disagree on the total are a partial search.
+    first = {
+        **_bundle(_patient("REF-1"), next_url="https://receiver.test/fhir/Patient?p=2"),
+        "total": 2,
+    }
+    second = {**_bundle(_patient("REF-2")), "total": 1}
+    assert _reader(Client(first, second)).read("REF-1").status == "unreachable"
 
 
 def test_a_key_names_one_delivery(tmp_path):

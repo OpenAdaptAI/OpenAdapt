@@ -133,6 +133,43 @@ def updates(run_dir: Path) -> list[Path]:
     return [Path(run_dir) / update_file(n) for n in numbers]
 
 
+def _pending_path(run_dir: Path) -> Path:
+    return run_dir / ".receipt-update.pending.json"
+
+
+def _finish_pending(run_dir: Path, registry: Sequence[Any]) -> None:
+    """Complete or roll back an update whose publication was interrupted.
+
+    The pending note is written before any update file; if the update it
+    names is now a whole signed record, its sidecar entry is added, and
+    otherwise the partial files are removed. Either way the note goes."""
+    from openadapt_types import receipt as r
+
+    from openadapt_flow.offline_seal import loads_strict
+
+    pending = _pending_path(run_dir)
+    if not pending.is_file():
+        return
+    note = json.loads(pending.read_text("utf-8"))
+    out = run_dir / str(note["file"])
+    private = run_dir / str(note["private"])
+    complete = False
+    try:
+        envelope = loads_strict(out.read_text("utf-8"))
+        complete = r.verify_receipt(envelope, registry).ok and private.is_file()
+    except (OSError, ValueError):
+        complete = False
+    if complete:
+        data = _sidecar(run_dir)
+        if note["file"] not in [rec["file"] for rec in data["records"]]:
+            data["records"].append({"file": note["file"], "lines": note["lines"]})
+            _write_json(run_dir / SIDECAR, data, private=True)
+    else:
+        for partial in (out, private):
+            partial.unlink(missing_ok=True)
+    pending.unlink()
+
+
 def sign_updates(
     run_dir: str | Path,
     ledgers: Sequence[HandoffLedger],
@@ -141,21 +178,46 @@ def sign_updates(
 ) -> Optional[Path]:
     """Sign one follow-up for every handoff of the run whose line changed
     since it was last signed. None when nothing changed. Needs the run's
-    receipt (``receipt.json``)."""
+    receipt (``receipt.json``).
 
+    Race class: one signer at a time per run (an exclusive lock from the
+    history check through publication), and an interrupted publication is
+    completed or rolled back by the next call."""
+
+    run_dir = Path(run_dir)
+    lock = run_dir / ".receipt-update.lock"
+    try:
+        fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ValueError(
+            f"another signer holds {lock.name}; remove it if no signer is running"
+        ) from None
+    os.close(fd)
+    try:
+        return _sign_updates_locked(run_dir, ledgers, signer=signer)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _sign_updates_locked(
+    run_dir: Path,
+    ledgers: Sequence[HandoffLedger],
+    *,
+    signer: Any,
+) -> Optional[Path]:
     from openadapt_types import receipt as r
 
     from openadapt_flow.offline_seal import loads_strict
 
-    run_dir = Path(run_dir)
-    original = loads_strict((run_dir / r.RECEIPT_FILE).read_text("utf-8"))
-    # Extend only a chain that verifies as it stands, signed by this key
-    # alone: the receipt and every update already written. verify_chain
-    # refuses a follow-up from any other key.
     kid = r.key_id(signer.public_raw())
     own = r.RoleKey(
         kid, base64.b64encode(signer.public_raw()).decode("ascii"), "this_computer"
     )
+    _finish_pending(run_dir, [own])
+    original = loads_strict((run_dir / r.RECEIPT_FILE).read_text("utf-8"))
+    # Extend only a chain that verifies as it stands, signed by this key
+    # alone: the receipt and every update already written. verify_chain
+    # refuses a follow-up from any other key.
     existing = verify_history(run_dir, [own])
     if existing is None or not existing.ok:
         reason = existing.reason if existing is not None else "no receipt"
@@ -187,11 +249,19 @@ def sign_updates(
     out = run_dir / update_file(sequence)
     # Race class: a sequence is claimed exclusively, so two signers can't
     # write the same update; the loser fails and signs nothing.
-    try:
-        fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-    except FileExistsError:
-        raise ValueError(f"{out.name} was written by another signer") from None
-    os.close(fd)
+    if out.exists():
+        raise ValueError(f"{out.name} was written by another signer")
+    # Durable before any update file: what this update is, so an
+    # interrupted publication can be completed or rolled back.
+    _write_json(
+        _pending_path(run_dir),
+        {
+            "file": out.name,
+            "private": update_private_file(sequence),
+            "lines": [{"handoff": h.id, "signed": _signature(h)} for h in changed],
+        },
+        private=True,
+    )
     _write_json(
         run_dir / update_private_file(sequence),
         r.private_openings(envelope, openings),
@@ -199,6 +269,7 @@ def sign_updates(
     )
     _write_json(out, envelope, private=False)
     record_signed(run_dir, out.name, changed)
+    _pending_path(run_dir).unlink()
     return out
 
 

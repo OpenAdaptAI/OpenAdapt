@@ -263,7 +263,11 @@ def _history(
 
     from openadapt_types import receipt as r
 
-    orphans = any(run_dir.glob("receipt.update-*.json"))
+    from openadapt_flow.handoffs.followup import SIDECAR
+
+    orphans = (
+        any(run_dir.glob("receipt.update-*.json")) or (run_dir / SIDECAR).is_file()
+    )
     if not (run_dir / r.RECEIPT_FILE).is_file() and not orphans:
         return {"error": "no receipt.json in the run"} if sign else None
     try:
