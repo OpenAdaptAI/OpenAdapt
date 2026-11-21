@@ -139,7 +139,7 @@ def _approval(
         for a in approved
     )
     scope = sorted(str(a.get("request_sha256", "")) for a in approved)
-    values = {
+    values: dict[str, Optional[str]] = {
         "approval.principal": f"{kind}:pr-"
         + hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:16],
         "approval.scope": hashlib.sha256("\n".join(scope).encode("utf-8")).hexdigest(),
