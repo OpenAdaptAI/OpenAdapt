@@ -1328,7 +1328,10 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 },
             }
         )
-        ok = len(verified) == len(counted) and not collateral
+        # An applied write with no undo (DDL, or no undo images) is still in
+        # place: the plan is not rolled back, whatever the rows show.
+        not_undone = [k for k, v in per_write.items() if v == "no_undo"]
+        ok = len(verified) == len(counted) and not collateral and not not_undone
         outcome = "ROLLED_BACK" if ok else "RECONCILIATION_REQUIRED"
         approval = state.approval_record(digest)
         run = _write_run(

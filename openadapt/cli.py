@@ -1919,7 +1919,9 @@ def plan(command_ctx: click.Context) -> None:
 def proxy(command_ctx: click.Context) -> None:
     """Hold the database credentials; give the agent tools that preview, apply once and undo."""
     _require_supported_python()
-    proxy_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.proxy_cli",))
+    proxy_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_flow.txplan.proxy_cli",)
+    )
     if proxy_main is None:
         click.echo(
             "Error: this openadapt-flow installation has no proxy command.", err=True
@@ -1929,7 +1931,7 @@ def proxy(command_ctx: click.Context) -> None:
     # Click drops a bare "--"; restore it from argv so the agent's arguments stay its own.
     if "--" in sys.argv and "--" not in args:
         tail = sys.argv[sys.argv.index("--") + 1 :]
-        if tail and args[-len(tail):] == tail:
+        if tail and args[-len(tail) :] == tail:
             args = args[: -len(tail)] + ["--"] + tail
     sys.exit(int(proxy_main(args) or 0))
 
@@ -2016,7 +2018,9 @@ def receipt(command_ctx: click.Context) -> None:
                 command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
             )
             if agent_main is None:
-                click.echo("Not verified: this openadapt-agent can't check that format.")
+                click.echo(
+                    "Not verified: this openadapt-agent can't check that format."
+                )
                 return 1
             return int(agent_main(argv) or 0)
 

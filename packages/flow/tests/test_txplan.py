@@ -783,6 +783,36 @@ def test_proxy_insert_and_delete_round_trip_and_policy_auto_approve(
     assert _all(db) == before
 
 
+def test_sql_apply_refuses_a_plan_without_its_planned_values(tmp_path: Path) -> None:
+    from openadapt_flow.txplan.state import read_json, write_private
+
+    db = _users(tmp_path / "app.sqlite", n=20)
+    before = _all(db)
+    proxy = _proxy(db, max_rows=100)
+    got = proxy.preview("UPDATE users SET role = 'viewer' WHERE id = 4")
+    state = proxy.ctx.state
+    private = state.plan_dir(state.find_plan(got["plan"])) / "private.json"
+    data = read_json(private)
+    for w in data["writes"]:
+        w.pop("staged_after", None)
+    write_private(private, data)
+    proxy.key("y")
+    out = proxy.apply(got["plan"])
+    assert out["outcome"] != "VERIFIED" and out["tx"]["sent"] == 0, out
+    assert _all(db) == before
+
+
+def test_undo_of_a_write_it_cannot_undo_is_not_rolled_back(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=5)
+    proxy = _proxy(db, max_rows=100)
+    got = proxy.preview("CREATE TABLE extra (id INTEGER PRIMARY KEY)")
+    proxy.key("y")
+    assert proxy.apply(got["plan"])["outcome"] == "VERIFIED"
+    undone = proxy.undo(got["plan"])
+    assert undone["outcome"] == "RECONCILIATION_REQUIRED", undone
+    assert undone["tx"]["no_generated_undo"] == 1
+
+
 def test_proxy_commits_only_the_planned_diff(tmp_path: Path) -> None:
     db = _users(tmp_path / "app.sqlite", n=20)
     proxy = _proxy(db, max_rows=100)
