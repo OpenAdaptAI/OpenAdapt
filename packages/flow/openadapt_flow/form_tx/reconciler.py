@@ -1017,9 +1017,7 @@ class FormReconciler:
         """True when a control seen in ``snapshot`` is no longer on the page."""
         fresh = surface.snapshot()
         now = {c.dom_selector for c in fresh.controls}
-        return any(
-            c.visible and c.dom_selector not in now for c in snapshot.controls
-        )
+        return any(c.visible and c.dom_selector not in now for c in snapshot.controls)
 
     def _collect_ungrounded_required_halts(
         self,

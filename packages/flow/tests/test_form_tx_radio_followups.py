@@ -114,7 +114,9 @@ def _open(browser: Any, locked: bool = False) -> tuple[Any, Any, list[dict[str, 
     ctx.route(f"{ORIGIN}/**", handle)
     page = ctx.new_page()
     profile = UIProfileSpec(
-        profile_id="rerender-test", debounce_grace_ms=40, settle_window_ms=80,
+        profile_id="rerender-test",
+        debounce_grace_ms=40,
+        settle_window_ms=80,
         max_settle_ms=4000,
     )
     surface = PlaywrightFormSurface(page, profile, base_origin=ORIGIN)
