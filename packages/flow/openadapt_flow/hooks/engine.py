@@ -35,7 +35,7 @@ import time
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
 from openadapt_flow.hooks import HOOKS_DIR, SYSTEMS_FILE
 from openadapt_flow.hooks.agents import HookInput, HookOutput
@@ -237,6 +237,7 @@ class Engine:
                 f"record and release it with `openadapt hooks approve "
                 f"{held.get('write_id')}`.",
             )
+        mode: Literal["allow", "ask", "block"]
         if intent.kind == "unknown_write":
             mode = systems.unknown_write
             why = (
