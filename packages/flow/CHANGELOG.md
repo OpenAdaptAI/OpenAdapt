@@ -92,6 +92,10 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
+  A durable checkpoint store counts as such a handle: it keeps the keys it
+  derived from its explicit key for its own lifetime. Without that, each
+  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
+  instead of 3.5 s (131 derivations, now 1).
 
 ## v3.3.0 (2026-11-19)
 
