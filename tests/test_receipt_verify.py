@@ -552,6 +552,17 @@ def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
     assert "Approved by a person: each item" in out.output
 
 
+def test_earlier_approvals_never_make_a_declined_item_read_as_approved(tmp_path):
+    from openadapt_flow.receipt_record import _approval
+
+    run = _approved_run(tmp_path, [PERSON_APPROVAL])
+    report = json.loads((run / "report.json").read_text())
+    for decision in ("declined", "needs_person", "no_person", None):
+        block = dict(report["approval"], decision=decision)
+        approval, values = _approval({"approval": block})
+        assert (approval["approver_kind"], values) == ("none", {}), decision
+
+
 def test_an_unapproved_run_says_no_approval_recorded(tmp_path):
     run = _run(tmp_path, "VERIFIED")
     write_receipt_record(run)

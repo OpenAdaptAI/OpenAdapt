@@ -1177,6 +1177,7 @@ ChainRefusal = Literal[
     "out_of_sequence",
     "changed_original",
     "mixed_demo",
+    "different_signer",
 ]
 
 
@@ -1225,9 +1226,10 @@ def verify_chain(
 ) -> ChainVerification:
     """Verify a receipt and its follow-up records, in order.
 
-    Each follow-up must verify on its own, name the original's payload
-    digest in ``follows``, count 1, 2, 3 in ``sequence``, and copy every
-    other predicate field and the subjects unchanged. Any failure refuses
+    Each follow-up must verify on its own, be signed only by keys that
+    signed the original, name the original's payload digest in ``follows``,
+    count 1, 2, 3 in ``sequence``, and copy every other predicate field and
+    the subjects unchanged. Any failure refuses
     the whole chain. A valid chain shows the original's confirmation lines
     and then each update's, labelled ``Update N``.
     """
@@ -1240,6 +1242,7 @@ def verify_chain(
             False, "original_is_follow_up", "the first record is a follow-up", first
         )
     digest = payload_sha256(original)
+    original_keys = {signer.key_id for signer in first.signers}
     lines = list(first.confirmation_lines)
     checked: list[ReceiptVerification] = []
     for index, update in enumerate(updates):
@@ -1258,6 +1261,12 @@ def verify_chain(
             # A demo-key update can't extend a real chain, or the reverse.
             return ChainVerification(
                 False, "mixed_demo", f"update {index + 1}", first, tuple(checked)
+            )
+        update_keys = {signer.key_id for signer in result.signers}
+        if not update_keys or not update_keys <= original_keys:
+            # Another key in the registry can't speak for the original's signer.
+            return ChainVerification(
+                False, "different_signer", f"update {index + 1}", first, tuple(checked)
             )
         predicate = result.statement["predicate"]
         follows = predicate.get("follows")

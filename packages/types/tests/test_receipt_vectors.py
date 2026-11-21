@@ -195,7 +195,7 @@ CHAINS = sorted(p.stem for p in VECTORS.glob("chain-*.json"))
 
 def test_the_chain_vectors_are_there():
     assert {"chain-valid", "chain-wrong-original", "chain-out-of-sequence",
-            "chain-tampered", "chain-empty"} <= set(CHAINS)
+            "chain-tampered", "chain-empty", "chain-different-signer"} <= set(CHAINS)
 
 
 @pytest.mark.parametrize("name", CHAINS)
