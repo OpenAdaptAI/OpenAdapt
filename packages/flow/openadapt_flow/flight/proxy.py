@@ -628,7 +628,7 @@ class FlightProxy:
             try:
                 ops = translate_anthropic(raw) if dialect == "anthropic" else translate_openai(raw)
                 op_dicts = [
-                    {k: v for k, v in asdict(op).items() if v not in (None, (), 0, 0.0, False)}
+                    {k: v for k, v in asdict(op).items() if v is not None and v != ()}
                     for op in ops
                 ]
             except (UnsupportedAction, KeyError, TypeError, ValueError) as exc:

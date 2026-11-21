@@ -174,7 +174,7 @@ def classify(
             f"the action can't be classified ({refused})",
         )
     op_dicts = tuple(
-        {k: v for k, v in asdict(op).items() if v not in (None, (), 0, 0.0, False)}
+        {k: v for k, v in asdict(op).items() if v is not None and v != ()}
         for op in ops
     )
     pointer_op = None
