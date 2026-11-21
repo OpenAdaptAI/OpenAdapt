@@ -320,9 +320,7 @@ def _dispatch(tmp_path: Path, program: dict[str, Any], **overrides: Any) -> Path
 
 
 @pytest.fixture
-def runner(
-    monkeypatch: pytest.MonkeyPatch, replay_handoff: dict[str, Any]
-) -> dict[str, Any]:
+def runner(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """The managed CLI up to the replay, which is recorded instead of run.
 
     The toy bundle is not certified, so the run gate's refusing gates are
@@ -341,11 +339,10 @@ def runner(
         )
 
     monkeypatch.setattr(run_gate, "evaluate_run_gate", gate)
-    return replay_handoff
+    return _capture_replay_handoff(monkeypatch)
 
 
-@pytest.fixture
-def replay_handoff(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def _capture_replay_handoff(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Capture the verified binding at the CLI replay boundary."""
     seen: dict[str, Any] = {}
 
@@ -400,12 +397,12 @@ def _run(
 def test_run_and_resume_recheck_the_locally_admitted_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    replay_handoff: dict[str, Any],
     setting: str,
 ) -> None:
     from openadapt_flow.cli_program_dispatch import restore_verified_program_dispatch
     from openadapt_flow.policy import load_policy, policy_contract_sha256
 
+    replay_handoff = _capture_replay_handoff(monkeypatch)
     policy = "clinical-write"
     options = ()
     if setting != "default":
