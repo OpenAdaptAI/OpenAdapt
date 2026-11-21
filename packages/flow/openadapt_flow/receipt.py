@@ -1216,8 +1216,29 @@ def render_receipt_png(receipt: RunReceipt) -> Any:
     return image
 
 
+#: The run summary's files. Before Flow 3.5 the summary was ``receipt.json``;
+#: that name now holds the run's signed receipt (``record/run/v1``).
+SUMMARY_STEM = "run-summary"
+
+
+def read_run_summary(run_dir: Path | str) -> Optional[dict[str, Any]]:
+    """The run's ``run-receipt/v2`` summary, from ``run-summary.json`` or an older ``receipt.json``."""
+    import json as _json
+
+    for name in (f"{SUMMARY_STEM}.json", "receipt.json"):
+        try:
+            data = _json.loads((Path(run_dir) / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and str(data.get("schema_version", "")).startswith(
+            "openadapt.run-receipt/"
+        ):
+            return data
+    return None
+
+
 def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
-    """Write ``receipt.json``, ``receipt.md``, and ``receipt.png`` locally.
+    """Write the run summary: ``run-summary.json``, ``.md`` and ``.png``, locally.
 
     Purely local: this function performs no network I/O and never uploads.
     """
@@ -1228,10 +1249,10 @@ def write_receipt(receipt: RunReceipt, out_dir: Path | str) -> dict[str, Path]:
         raise ReceiptError(f"receipt failed integrity validation: {exc}") from exc
     directory = Path(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    json_path = directory / "receipt.json"
+    json_path = directory / f"{SUMMARY_STEM}.json"
     json_path.write_bytes(receipt.canonical_json() + b"\n")
-    md_path = directory / "receipt.md"
+    md_path = directory / f"{SUMMARY_STEM}.md"
     md_path.write_text(render_receipt_markdown(receipt), encoding="utf-8")
-    png_path = directory / "receipt.png"
+    png_path = directory / f"{SUMMARY_STEM}.png"
     render_receipt_png(receipt).save(png_path, format="PNG")
     return {"json": json_path, "markdown": md_path, "png": png_path}
