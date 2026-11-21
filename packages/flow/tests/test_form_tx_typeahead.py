@@ -128,6 +128,25 @@ def portal(chromium_browser: Any) -> Any:
                 '<span style="position:absolute;inset:0;z-index:5"></span></span>',
             )
             route.fulfill(status=200, content_type="text/html", body=covered)
+        elif parts.path == "/quote-redraw":
+            # After a pick the page redraws the input with a new id.
+            redraw = PAGE.replace(
+                "          city.setAttribute('aria-expanded', 'false');\n        });",
+                "          city.setAttribute('aria-expanded', 'false');\n"
+                "          const fresh = city.cloneNode();\n"
+                "          fresh.id = 'c' + Math.random().toString(36).slice(2, 8);\n"
+                "          fresh.value = it.label;\n"
+                "          fresh.dataset.code = it.value;\n"
+                "          document.querySelector('label[for=city]').htmlFor = fresh.id;\n"
+                "          city.replaceWith(fresh);\n"
+                "        });",
+            ).replace(
+                "body: JSON.stringify({city: city.value, code: city.dataset.code || ''})",
+                "body: JSON.stringify({city: document.querySelector('form input').value, "
+                "code: document.querySelector('form input').dataset.code || ''})",
+            )
+            assert redraw != PAGE
+            route.fulfill(status=200, content_type="text/html", body=redraw)
         elif parts.path == "/api/suggest":
             q = parse_qs(parts.query).get("q", [""])[0]
             queries.append(q)
@@ -285,3 +304,15 @@ def test_error_on_the_submit_click_is_reported_as_delivery_uncertain(
     assert res.safe_to_retry is False
     assert res.halts[0].message.startswith("After the submit click")
     assert submissions == []
+
+
+def test_pick_that_redraws_the_input_is_checked_on_the_redrawn_control(
+    portal: Any,
+) -> None:
+    surface, submissions, _ = portal
+    surface.goto("http://portal.local/quote-redraw")
+    res = _run(
+        surface, _pack(_city_binding()), _dossier(**{"address.city": "Salem, OR"})
+    )
+    assert not res.halts, [h.message for h in res.halts]
+    assert submissions == [{"city": "Salem, OR", "code": "slm-or"}]
