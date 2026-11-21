@@ -1130,10 +1130,14 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
     )
 
 
-def _print_terminal_receipt(run_dir: Path, report, *, require_opt_in: bool = False) -> None:
+def _print_terminal_receipt(
+    run_dir: Path, report, *, require_opt_in: bool = False
+) -> None:
     from openadapt_flow.receipt_record import receipt_after_run
 
-    note = receipt_after_run(run_dir, require_opt_in=require_opt_in, expected_report=report)
+    note = receipt_after_run(
+        run_dir, require_opt_in=require_opt_in, expected_report=report
+    )
     if note:
         print(note, file=sys.stderr)
 
@@ -14287,8 +14291,7 @@ def main(
             args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
-            # The terminal handler owns the signed receipt. Keep the older
-            # offline Seal on its existing post-command path for one release.
+            # Terminal handlers sign receipts. Keep the old Seal here for one release.
             from openadapt_flow.receipt_record import after_run_notes
 
             run_dir = getattr(args, "run_dir", None)
