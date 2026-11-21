@@ -79,10 +79,10 @@ The examples live in [`examples/local_state/`](../examples/local_state/).
 
 | Example | State | Status |
 | --- | --- | --- |
-| `notepad-save` | `~/openadapt-examples/note.txt`, text equals the note | See CAPABILITIES.md for the lab evidence |
-| `textedit-save` | The same file, saved from TextEdit as plain text | See CAPABILITIES.md |
-| `windows-dark-mode` | `HKCU\...\Themes\Personalize` `AppsUseLightTheme` and `SystemUsesLightTheme` are `0` | Check only; see below |
-| `macos-dark-mode` | `NSGlobalDomain` `AppleInterfaceStyle` is `Dark` | Check only; see below |
+| `notepad-save` | `~/openadapt-examples/note.txt`, text equals the note | End to end on Windows 11 (lab): record, compile, replay, check `verified`. Turn Notepad's status bar off (View > Status bar) so replay can confirm the typing |
+| `textedit-save` | The same file, saved from TextEdit as plain text | Not run yet |
+| `windows-dark-mode` | `HKCU\...\Themes\Personalize` `AppsUseLightTheme` and `SystemUsesLightTheme` are `0` | Check only (real registry reads); see below |
+| `macos-dark-mode` | `NSGlobalDomain` `AppleInterfaceStyle` is `Dark` | Not run yet |
 
 ## What it can't check, and why
 

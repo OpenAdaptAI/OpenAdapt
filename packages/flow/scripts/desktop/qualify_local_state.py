@@ -19,8 +19,12 @@ For one example under ``examples/local_state/<name>/``:
 
 The guest needs the checker installed at ``C:\\oa\\lsc`` (``venv`` with
 ``pydantic pyyaml cryptography httpx idna``, and the worktree's
-``packages/flow`` and ``packages/types`` under ``src``); this script prints
-what is missing.
+``packages/flow`` and ``packages/types`` under ``src``, on ``PYTHONPATH``). Install it before a run: the script
+doesn't check.
+
+Notepad needs its status bar off (View > Status bar) on the lab host: its
+editor exposes no readable UIA value, so replay confirms typing by OCR of
+the whole screen, and the status bar's character count is other new text.
 
 Usage, from packages/flow::
 
