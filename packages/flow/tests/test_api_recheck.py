@@ -40,6 +40,7 @@ class Record:
         self.found = True
         self.fail = False
         self.identity: Any = "7"
+        self.source_scope: Any = {"system": "test-ehr", "resource": "Patient"}
 
     def read(self) -> Readback:
         if self.fail:
@@ -66,6 +67,7 @@ class Log:
         self.hidden = 0
         self.logs: tuple[Any, ...] = ("create", "update", "delete")
         self.fail = False
+        self.stream_scope: Any = {"stream": "test-audit", "actor": "agent-1"}
 
     def add(self, id: str, kind: str, by: str, on: bool, stamp: float = 0.0) -> None:
         self.entries.append(
@@ -630,6 +632,8 @@ def test_a_state_is_only_recheckable_with_the_same_host_secret(
 
 def test_read_failure_reasons_carry_no_upstream_text() -> None:
     class Leaky:
+        source_scope = {"system": "test-ehr", "resource": "Patient"}
+
         def read(self) -> Readback:
             raise ReadFailed("GET https://sor.example/Patient/7 returned 500")
 
@@ -727,3 +731,99 @@ def test_a_redacted_value_in_the_read_back_fails_the_read() -> None:
     )
     with pytest.raises(ReadFailed):
         source.read()
+
+
+def test_fhir_projection_omitted_field_none_fails_the_read() -> None:
+    """FHIR _flatten inserts None for missing paths; VerifierReadback must refuse it."""
+    verifier = _Verifier()
+    verifier.record = {"id": "7", "meta": {"versionId": "1"}, "note": None}
+    source = VerifierReadback(
+        verifier, _Effect(), None, fields=["note"], version_path="meta.versionId"
+    )
+    with pytest.raises(ReadFailed):
+        source.read()
+
+
+def test_redacting_verifier_wrapper_and_masked_whole_record_are_refused() -> None:
+    from openadapt_flow.runtime.effects.adapter import (
+        RedactingVerifier,
+        RedactionPolicy,
+    )
+    from openadapt_flow.runtime.effects.rest import RestRecordVerifier
+    from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
+
+    class _Eff:
+        match = {"note": "A"}
+
+    rest = RestRecordVerifier("https://sor.invalid", **mockmed_rest_read_kwargs())
+    wrapped = RedactingVerifier(rest, RedactionPolicy(redact_fields=["secret"]))
+    with pytest.raises(ValueError, match="redacts evidence"):
+        VerifierReadback(wrapped, _Eff(), None)
+
+    # Even if an un-annotated verifier returns a masked undeclared field,
+    # whole-record digesting must refuse it before hashing.
+    class _RestMasked(_Verifier):
+        substrate = "rest"
+        base_url = "https://sor.invalid"
+
+    masked = _RestMasked()
+    masked.record = {"id": "7", "note": "A", "secret": "[redacted]"}
+    source = VerifierReadback(masked, _Eff(), None, fields=["note"])
+    with pytest.raises(ReadFailed, match="redacted"):
+        source.read()
+
+
+def test_source_stream_actor_and_first_identity_bindings_are_enforced() -> None:
+    log = Log()
+    rec, state, sched = _setup(log, first_identity="7")
+    assert _run(state, rec, sched, log).outcome == "VERIFIED"
+
+    # Mismatched first_identity at begin fails.
+    with pytest.raises(ReadFailed, match="first check"):
+        _setup(log, first_identity="999")
+
+    # Different record source scope with identical local id/fields/version -> NOT_CHECKED.
+    other_rec = Record({"name.family": "Lovelace", "birthDate": "1815-12-10"})
+    other_rec.source_scope = {"system": "other-tenant-ehr", "resource": "Patient"}
+    out = _run(state, other_rec, sched, log)
+    assert out.outcome == "NOT_CHECKED" and "record source" in out.reason
+
+    # Unavailable source binding -> ReadFailed on begin, NOT_CHECKED on recheck.
+    unbound_rec = Record({"name.family": "Lovelace", "birthDate": "1815-12-10"})
+    unbound_rec.source_scope = None
+    with pytest.raises(ReadFailed, match="source binding"):
+        begin(unbound_rec, target=TARGET, first_outcome="VERIFIED", window_s=5)
+    assert _run(state, unbound_rec, sched, log).outcome == "NOT_CHECKED"
+
+    # Different log stream/actor with identical checkpoint -> NOT_CHECKED.
+    other_log = Log()
+    other_log.stream_scope = {"stream": "other-audit", "actor": "agent-2"}
+    out = _run(state, rec, sched, other_log)
+    assert out.outcome == "NOT_CHECKED" and "log stream" in out.reason
+
+    # Unavailable log stream binding -> ReadFailed on begin, NOT_CHECKED on recheck.
+    unbound_log = Log()
+    unbound_log.stream_scope = None
+    with pytest.raises(ReadFailed, match="stream and actor"):
+        begin(rec, target=TARGET, first_outcome="VERIFIED", window_s=5, log=unbound_log)
+    assert _run(state, rec, sched, unbound_log).outcome == "NOT_CHECKED"
+
+
+def test_incomplete_log_returns_not_checked_even_when_fields_changed_or_missing() -> (
+    None
+):
+    log = Log()
+    rec, state, sched = _setup(log)
+    log.reach = False
+    rec.fields["birthDate"] = "1815-12-11"
+    out = _run(state, rec, sched, log)
+    assert out.outcome == "NOT_CHECKED" and "checkpoint" in out.reason
+
+    rec.found = False
+    out2 = _run(state, rec, sched, log)
+    assert out2.outcome == "NOT_CHECKED" and "checkpoint" in out2.reason
+
+    # A proven caller mutation in the available page still refutes immediately.
+    log.add("bad1", "delete", "self", False)
+    out3 = _run(state, rec, sched, log)
+    assert out3.outcome == "REFUTED"

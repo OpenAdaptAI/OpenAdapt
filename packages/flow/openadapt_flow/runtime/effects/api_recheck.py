@@ -44,7 +44,7 @@ the log from the checkpoint and judges:
 
 The local clock only decides when the recheck is due. Which log entries are
 in the window is decided by the log's own checkpoint and entry ids, never by
-comparing clocks: Medplum's server clock ran about 1.5 s off the client's.
+comparing clocks: remote server clocks routinely drift relative to the client.
 
 The recheck can only keep or lower the first result. It never turns a first
 result that wasn't verified into ``VERIFIED``.
@@ -84,6 +84,8 @@ STATE_KEYS: tuple[str, ...] = (
     "salt",
     "key_check",
     "target",
+    "source_mac",
+    "log_scope_mac",
     "first_outcome",
     "read_at",
     "window_s",
@@ -396,6 +398,13 @@ def _window_ok(window_s: Any) -> bool:
     )
 
 
+def _source_binding(obj: Any, attr: str) -> Any:
+    raw = getattr(obj, attr, None)
+    if callable(raw):
+        return raw()
+    return raw
+
+
 def begin(
     record: RecordSource,
     *,
@@ -404,6 +413,7 @@ def begin(
     window_s: float,
     log: Optional[ActivityLog] = None,
     own_events: Mapping[str, Op] | None = None,
+    first_identity: Any = None,
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """The private recheck state, taken right after the first check.
@@ -411,6 +421,8 @@ def begin(
     ``target``: the record's reference (``Patient/123``); bound, never
     re-read from the state. ``first_outcome``: the first check's outcome; a
     recheck of anything but ``VERIFIED`` stays ``NOT_CHECKED``.
+    ``first_identity``: optional record id observed by the first check; when
+    supplied, the baseline read must land on the same record id.
     ``own_events``: ``{entry id: operation}`` for the write's own log
     entries, which the first check already judged; they may land after the
     checkpoint while the log lags. They are exempt only when the log
@@ -418,15 +430,22 @@ def begin(
 
     The log checkpoint is taken before the read, so an entry between the two
     reads shows up in the window rather than in the baseline. Raises
-    :class:`ReadFailed` when either source can't be read or the record is
-    not there (a baseline of "absent" would verify a deletion), and
-    ``ValueError`` for a window that isn't a positive number of seconds up
-    to :data:`MAX_WINDOW_S` or for malformed events.
+    :class:`ReadFailed` when either source can't be read, lacks a source or
+    stream/actor binding, or the record is not there (a baseline of "absent"
+    would verify a deletion), and ``ValueError`` for a window that isn't a
+    positive number of seconds up to :data:`MAX_WINDOW_S` or for malformed
+    events.
     """
 
     if not _window_ok(window_s):
         raise ValueError("the recheck window must be a positive number of seconds")
     own = _events({} if own_events is None else own_events)
+    source_scope = _source_binding(record, "source_scope")
+    if source_scope is None:
+        raise ReadFailed("the record source carries no source binding")
+    log_scope = None if log is None else _source_binding(log, "stream_scope")
+    if log is not None and log_scope is None:
+        raise ReadFailed("the log source carries no stream and actor binding")
     salt = secrets.token_bytes(32)
     key = _key(salt)
     checkpoint = None if log is None else dict(log.checkpoint())
@@ -438,6 +457,18 @@ def begin(
     if seen.identity is None:
         raise ReadFailed("the read-back did not show the record's identity")
     try:
+        source_mac = _mac(key, "source", _canonical(source_scope).decode("ascii"))
+        log_scope_mac = (
+            None
+            if log_scope is None
+            else _mac(key, "log-scope", _canonical(log_scope).decode("ascii"))
+        )
+        if first_identity is not None and _canonical(seen.identity) != _canonical(
+            first_identity
+        ):
+            raise ReadFailed(
+                "the baseline read did not match the first check's observed record"
+            )
         if checkpoint is not None:
             _canonical(checkpoint)
         fields_mac = _fields_mac(key, seen)
@@ -451,6 +482,8 @@ def begin(
         "salt": salt.hex(),
         "key_check": _mac(key, "key-check", SCHEMA),
         "target": _mac(key, "target", str(target)),
+        "source_mac": source_mac,
+        "log_scope_mac": log_scope_mac,
         "first_outcome": str(first_outcome),
         "read_at": read_at,
         "window_s": float(window_s),
@@ -490,9 +523,22 @@ def state_problem(state: Any) -> Optional[str]:
         return f"the recheck state is not an {SCHEMA} document"
     if set(state) != set(STATE_KEYS):
         return "the recheck state must hold exactly " + ", ".join(STATE_KEYS)
-    for name in ("salt", "key_check", "target", "identity_mac", "fields_mac"):
+    for name in (
+        "salt",
+        "key_check",
+        "target",
+        "source_mac",
+        "identity_mac",
+        "fields_mac",
+    ):
         if not isinstance(state[name], str) or not _HEX64.match(state[name]):
             return f"the recheck state's {name} is not 64 hex digits"
+    log_scope_mac = state["log_scope_mac"]
+    if state["log"] is None:
+        if log_scope_mac is not None:
+            return "the recheck state carries a log_scope_mac without a log checkpoint"
+    elif not isinstance(log_scope_mac, str) or not _HEX64.match(log_scope_mac):
+        return "the recheck state's log_scope_mac is not 64 hex digits"
     version = state["version_mac"]
     if version is not None and (
         not isinstance(version, str) or not _HEX64.match(version)
@@ -589,6 +635,45 @@ def recheck(
             state,
             at=started,
         )
+    source_scope = _source_binding(record, "source_scope")
+    if source_scope is None:
+        return _not_checked(
+            "the record source carries no source binding", state, at=started
+        )
+    try:
+        source_mac = _mac(key, "source", _canonical(source_scope).decode("ascii"))
+    except (TypeError, ValueError):
+        return _not_checked(
+            "the record source binding has no exact JSON form", state, at=started
+        )
+    if not hmac.compare_digest(source_mac, state["source_mac"]):
+        return _not_checked(
+            "the record source does not match the source the state was taken with",
+            state,
+            at=started,
+        )
+    if log is not None:
+        log_scope = _source_binding(log, "stream_scope")
+        if log_scope is None:
+            return _not_checked(
+                "the log source carries no stream and actor binding", state, at=started
+            )
+        try:
+            log_scope_mac = _mac(
+                key, "log-scope", _canonical(log_scope).decode("ascii")
+            )
+        except (TypeError, ValueError):
+            return _not_checked(
+                "the log stream binding has no exact JSON form", state, at=started
+            )
+        if state["log_scope_mac"] is None or not hmac.compare_digest(
+            log_scope_mac, state["log_scope_mac"]
+        ):
+            return _not_checked(
+                "the log stream or actor does not match the log the state was taken with",
+                state,
+                at=started,
+            )
     try:
         excused = {
             _event_mac(key, i, k)
@@ -706,6 +791,8 @@ def recheck(
             "NOT_CHECKED",
             "the read-back now lands on a different record than the first read",
         )
+    if window is not None and not window.reached:
+        return result("NOT_CHECKED", "the log read did not reach the checkpoint")
     if not hmac.compare_digest(fields_now, state["fields_mac"]):
         if (
             other_on_target
@@ -731,8 +818,6 @@ def recheck(
             "NOT_CHECKED",
             "an exempted log entry is attributed to another author or operation",
         )
-    if window is not None and not window.reached:
-        return result("NOT_CHECKED", "the log read did not reach the checkpoint")
     if window is not None and window.hidden:
         return result(
             "NOT_CHECKED",
@@ -849,23 +934,78 @@ class VerifierReadback:
             or int(tier) != 1
         ):
             raise ValueError("the verifier does not read the system of record")
+        self._substrate = substrate
+        self._projected = substrate in _PROJECTED_SUBSTRATES
         if version_path is None and (
-            substrate in _PROJECTED_SUBSTRATES
-            or tuple(getattr(verifier, "drop_fields", ()))
+            self._projected or tuple(getattr(verifier, "drop_fields", ()))
         ):
             raise ValueError(
                 "a projected read needs a named server version (version_path)"
             )
-        policy = getattr(verifier, "redaction", None)
-        if policy is not None:
-            compared = [*self.fields, identity_path]
-            if version_path is not None:
-                compared.append(version_path)
+        compared = [*self.fields, identity_path]
+        if version_path is not None:
+            compared.append(version_path)
+        for policy in self._redaction_policies(verifier):
             if version_path is None or any(
                 policy.is_redacted(path) or policy.is_redacted(path.split(".")[0])
                 for path in compared
             ):
                 raise ValueError("the verifier redacts evidence the recheck compares")
+
+    @staticmethod
+    def _redaction_policies(verifier: Any) -> list[Any]:
+        policies: list[Any] = []
+        seen: set[int] = set()
+        cur: Any = verifier
+        while cur is not None and id(cur) not in seen:
+            seen.add(id(cur))
+            for attr in ("redaction", "_policy"):
+                pol = cur.__dict__.get(attr) if hasattr(cur, "__dict__") else None
+                if pol is None:
+                    pol = getattr(cur, attr, None)
+                if (
+                    pol is not None
+                    and hasattr(pol, "is_redacted")
+                    and pol not in policies
+                ):
+                    policies.append(pol)
+            cur = getattr(cur, "_inner", None)
+        return policies
+
+    def source_scope(self) -> Optional[dict[str, Any]]:
+        """Identify the underlying API endpoint and resource query, or None if unavailable."""
+        cur: Any = self.verifier
+        seen: set[int] = set()
+        while cur is not None and id(cur) not in seen:
+            seen.add(id(cur))
+            inner = getattr(cur, "_inner", None)
+            if inner is None:
+                break
+            cur = inner
+        base = (
+            getattr(cur, "base_url", None)
+            or getattr(cur, "endpoint", None)
+            or getattr(cur, "url", None)
+        )
+        if not isinstance(base, str) or not base.strip():
+            return None
+        scope: dict[str, Any] = {
+            "substrate": self._substrate,
+            "endpoint": base.rstrip("/"),
+            "identity_path": self.identity_path,
+        }
+        for attr in (
+            "records_path",
+            "records_key",
+            "resource_type",
+            "search_params",
+            "query",
+            "variables",
+        ):
+            val = getattr(cur, attr, None)
+            if val is not None:
+                scope[attr] = val
+        return scope
 
     def read(self) -> Readback:
         try:
@@ -883,7 +1023,9 @@ class VerifierReadback:
         if identity is _MISSING or identity is None:
             raise ReadFailed("the record carries no identity")
         fields = {f: _dotted(rec, f) for f in self.fields}
-        if any(v is _MISSING for v in fields.values()):
+        if any(
+            v is _MISSING or (self._projected and v is None) for v in fields.values()
+        ):
             raise ReadFailed("the record lacks a declared field")
         if self.version_path:
             version = _dotted(rec, self.version_path)
@@ -903,6 +1045,8 @@ class VerifierReadback:
                 )
                 if isinstance(holder, dict):
                     holder.pop(parts[-1], None)
+            if _redacted(trimmed):
+                raise ReadFailed("the read-back carries redacted values")
             version = hashlib.sha256(_canonical(trimmed)).hexdigest()
         if _redacted([identity, fields, version]):
             raise ReadFailed("the read-back carries redacted values")
