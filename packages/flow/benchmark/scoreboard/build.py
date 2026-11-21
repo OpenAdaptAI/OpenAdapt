@@ -299,7 +299,29 @@ def claims() -> dict[str, Any]:
             if k not in ("ground_truth", "verify_outcome")
         }
         claimed = [r for r in rows if t(r)]
+        # The denominators a headline needs: bad saves where an injected fault
+        # fired, bad saves the agent made itself on a control item, and items
+        # whose fault never fired, with how many of each verify-run flagged.
+        not_reached = [
+            r
+            for r in rows
+            if r["fault"] not in CONTROLS and r.get("fault_applied", "x") == ""
+        ]
+        bad_rows = [
+            r for r in rows if r["ground_truth"] != "correct" and r not in not_reached
+        ]
+        injected = [r for r in bad_rows if r["fault"] not in CONTROLS]
+        self_made = [r for r in bad_rows if r["fault"] in CONTROLS]
+        denominators = {
+            "injected_bad_saves": len(injected),
+            "injected_caught": sum(caught(r) for r in injected),
+            "agent_made_bad_saves": len(self_made),
+            "agent_made_caught": sum(caught(r) for r in self_made),
+            "fault_not_reached": len(not_reached),
+            "fault_not_reached_flagged": sum(caught(r) for r in not_reached),
+        }
         out[f"{run.parent.parent.name}/{run.name}"] = {
+            "denominators": denominators,
             "rebuilt_state": bool(info.get("rebuilt_state")),
             "source_run": info.get("source_run"),
             "verify_run_git_head": info.get("verify_run_git_head"),
@@ -529,6 +551,21 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
             f"{hc['checked']} of {hc['claimed_success_items']} checked against the "
             f"ledger; the ledger agrees with the row on {hc['agrees_with_row']} "
             "(evidence in hand_check.json).",
+            *(
+                [
+                    "- Denominators: "
+                    f"{d['injected_caught']} of {d['injected_bad_saves']} bad saves "
+                    "where an injected fault fired were caught by verify-run; "
+                    f"{d['agent_made_caught']} of {d['agent_made_bad_saves']} bad "
+                    "saves the agent made itself on a clean-save control item "
+                    "were caught; "
+                    "fault-not-reached items verify-run did not report as "
+                    f"verified: {d['fault_not_reached_flagged']} of "
+                    f"{d['fault_not_reached']} (outside the table's bad saves)."
+                ]
+                if (d := c.get("denominators"))
+                else []
+            ),
             f"- Model spend: ${c['cost_usd']}.",
             "",
         ]

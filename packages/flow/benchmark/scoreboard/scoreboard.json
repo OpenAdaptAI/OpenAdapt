@@ -2780,6 +2780,14 @@
   },
   "claims": {
     "mockmed/2026-10-19-b": {
+      "denominators": {
+        "injected_bad_saves": 30,
+        "injected_caught": 30,
+        "agent_made_bad_saves": 0,
+        "agent_made_caught": 0,
+        "fault_not_reached": 0,
+        "fault_not_reached_flagged": 0
+      },
       "rebuilt_state": false,
       "source_run": null,
       "verify_run_git_head": null,
@@ -3191,6 +3199,14 @@
       }
     },
     "openemr_referral/2026-10-19-a": {
+      "denominators": {
+        "injected_bad_saves": 30,
+        "injected_caught": 25,
+        "agent_made_bad_saves": 0,
+        "agent_made_caught": 0,
+        "fault_not_reached": 1,
+        "fault_not_reached_flagged": 1
+      },
       "rebuilt_state": false,
       "source_run": null,
       "verify_run_git_head": null,
@@ -3560,6 +3576,14 @@
       }
     },
     "openemr_referral/2026-11-20-a": {
+      "denominators": {
+        "injected_bad_saves": 30,
+        "injected_caught": 30,
+        "agent_made_bad_saves": 0,
+        "agent_made_caught": 0,
+        "fault_not_reached": 1,
+        "fault_not_reached_flagged": 1
+      },
       "rebuilt_state": false,
       "source_run": null,
       "verify_run_git_head": null,
@@ -3929,6 +3953,14 @@
       }
     },
     "openemr_referral/heldout-2026-11-20-a": {
+      "denominators": {
+        "injected_bad_saves": 30,
+        "injected_caught": 30,
+        "agent_made_bad_saves": 1,
+        "agent_made_caught": 1,
+        "fault_not_reached": 1,
+        "fault_not_reached_flagged": 1
+      },
       "rebuilt_state": false,
       "source_run": null,
       "verify_run_git_head": null,
@@ -4306,6 +4338,14 @@
       }
     },
     "openemr_referral/rejudge-1375-2026-10-19": {
+      "denominators": {
+        "injected_bad_saves": 5,
+        "injected_caught": 5,
+        "agent_made_bad_saves": 0,
+        "agent_made_caught": 0,
+        "fault_not_reached": 0,
+        "fault_not_reached_flagged": 0
+      },
       "rebuilt_state": true,
       "source_run": "2026-10-19-a",
       "verify_run_git_head": "9850b62747975d3b913efe44e77707a2b2b72f39",

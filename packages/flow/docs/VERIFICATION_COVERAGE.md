@@ -19,8 +19,10 @@ Three blind spots have been measured or are easy to construct:
    `forbid_collateral_change`, first measured on rebuilt database states.
    On fresh agent runs with verify-run 3.3.0 (scoreboard runs
    `openemr_referral/claims/2026-11-20-a` and `heldout-2026-11-20-a`,
-   Amendments 15 to 17), it caught 5 of 5 such edits, and 30 of 30 bad
-   saves in each run, with 0 false alarms on 5 clean saves. It
+   Amendments 15 to 18), it caught 5 of 5 such edits. In each run it
+   caught all 30 bad saves where an injected fault fired, plus, in the
+   held-out run, 1 bad save the agent made itself (31 of 31 there), with
+   0 false alarms on 5 clean saves. It
    judges one effect at a time, so two effects on one read set flag each
    other's targets, and it can't tell a legitimate edit by another user from
    a stray write.

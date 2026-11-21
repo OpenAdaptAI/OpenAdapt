@@ -550,3 +550,20 @@ can differ from the row's word rule.
   not the one asked for", which is right, and the PR text said it "typed a
   wrong email", which isn't.
 - The table's "Agent claimed success" columns stay the rule's counts.
+
+## Amendment 18 (2026-11-21, after review): the denominators of a headline
+
+A claims run's "all" row counts every bad save, whatever caused it. A
+headline about the read-back states which count it uses. Each claims run in
+SCOREBOARD.md now has a "Denominators" line, computed by the build:
+
+- `2026-11-20-a`: verify-run caught 30 of 30 bad saves where an injected
+  fault fired. The agent made no bad save on a control item. Item 1120
+  (fault not reached; the saved chart didn't hold the email asked for)
+  was not reported as verified, and it is outside the 30.
+- `heldout-2026-11-20-a`: verify-run caught 30 of 30 bad saves where an
+  injected fault fired, and 1 of 1 bad save the agent made itself on a
+  control item (1205). That makes the "all" row's 31 of 31. Item 1230
+  (fault not reached) was not reported as verified, and it is outside the
+  31.
+- In both runs verify-run confirmed 5 of 5 clean saves, with 0 false alarms.

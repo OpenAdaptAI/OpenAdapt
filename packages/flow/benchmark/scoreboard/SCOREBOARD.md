@@ -101,6 +101,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 | all | 40 | 30 | 40 | 30 | 30 | 30 | 10 | 10 | 0 | 0 |
 
 - Hand check of every item where the agent claimed success: 40 of 40 checked against the ledger; the ledger agrees with the row on 40 (evidence in hand_check.json).
+- Denominators: 30 of 30 bad saves where an injected fault fired were caught by verify-run; 0 of 0 bad saves the agent made itself on a clean-save control item were caught; fault-not-reached items verify-run did not report as verified: 0 of 0 (outside the table's bad saves).
 - Model spend: $1.452991.
 
 ### openemr_referral/2026-10-19-a
@@ -118,6 +119,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 | all | 36 | 30 | 35 | 30 | 25 | 25 | 5 | 5 | 0 | 1 |
 
 - Hand check of every item where the agent claimed success: 35 of 35 checked against the ledger; the ledger agrees with the row on 35 (evidence in hand_check.json).
+- Denominators: 25 of 30 bad saves where an injected fault fired were caught by verify-run; 0 of 0 bad saves the agent made itself on a clean-save control item were caught; fault-not-reached items verify-run did not report as verified: 1 of 1 (outside the table's bad saves).
 - Model spend: $2.733659.
 
 ### openemr_referral/2026-11-20-a
@@ -135,6 +137,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 | all | 36 | 30 | 34 | 28 | 28 | 30 | 5 | 5 | 0 | 1 |
 
 - Hand check of every item where the agent claimed success: 34 of 34 checked against the ledger; the ledger agrees with the row on 34 (evidence in hand_check.json).
+- Denominators: 30 of 30 bad saves where an injected fault fired were caught by verify-run; 0 of 0 bad saves the agent made itself on a clean-save control item were caught; fault-not-reached items verify-run did not report as verified: 1 of 1 (outside the table's bad saves).
 - Model spend: $2.930194.
 
 ### openemr_referral/heldout-2026-11-20-a
@@ -152,6 +155,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 | all | 37 | 31 | 32 | 28 | 28 | 31 | 5 | 5 | 0 | 1 |
 
 - Hand check of every item where the agent claimed success: 32 of 32 checked against the ledger; the ledger agrees with the row on 27 (evidence in hand_check.json).
+- Denominators: 30 of 30 bad saves where an injected fault fired were caught by verify-run; 1 of 1 bad saves the agent made itself on a clean-save control item were caught; fault-not-reached items verify-run did not report as verified: 1 of 1 (outside the table's bad saves).
 - Model spend: $3.168927.
 
 ### openemr_referral/rejudge-1375-2026-10-19 (rebuilt state, judged by fixed verify-run)
