@@ -95,14 +95,17 @@ class MedplumLab:
             "MEDPLUM_ACTOR": self.actor("writer"),
         }
 
+    def psql(self, sql: str) -> str:
+        return self.fx.psql(sql)
+
     def oracle_patient(self, rid: str) -> Optional[dict[str, Any]]:
-        out = self.fx.psql(
+        out = self.psql(
             "SELECT content FROM \"Patient\" WHERE deleted = false AND id = '%s';" % rid.replace("'", "")
         ).strip()
         return json.loads(out) if out else None
 
     def oracle_count(self, family: str) -> int:
-        out = self.fx.psql(
+        out = self.psql(
             "SELECT count(*) FROM \"Patient\" WHERE deleted = false AND content::jsonb #>> '{name,0,family}' = '%s';"
             % family.replace("'", "")
         )
@@ -198,6 +201,33 @@ class GiteaLab:
 
 
 LABS = {"medplum": MedplumLab, "gitea": GiteaLab}
+
+#: Run the bench on another machine than the containers: ``user@host`` of an
+#: SSH login whose ``wsl -d Ubuntu-24.04`` runs Docker, with the lab ports
+#: forwarded to this machine's loopback. Only the oracle's ``docker exec``
+#: goes over SSH.
+REMOTE = os.environ.get("API_SCOPED_SSH", "")
+REMOTE_KEY = os.environ.get("API_SCOPED_SSH_KEY", str(Path.home() / ".ssh" / "oalab_ed25519"))
+
+
+def remote_psql(container: str, sql: str) -> str:
+    import shlex
+
+    cmd = "docker exec -i " + shlex.quote(container) + " psql -U medplum -d medplum -At -v ON_ERROR_STOP=1"
+    proc = subprocess.run(
+        ["ssh", "-i", REMOTE_KEY, "-o", "BatchMode=yes", REMOTE, f"wsl -d Ubuntu-24.04 -- {cmd}"],
+        input=sql, capture_output=True, text=True, timeout=60,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"remote psql failed: {proc.stderr[-300:]}")
+    return proc.stdout
+
+
+if REMOTE:
+    def _psql(self: MedplumLab, sql: str) -> str:
+        return remote_psql("oa-api-scoped-medplum-postgres-1", sql)
+
+    MedplumLab.psql = _psql  # type: ignore[attr-defined]
 
 
 def wait_port(url: str, seconds: float = 300) -> None:

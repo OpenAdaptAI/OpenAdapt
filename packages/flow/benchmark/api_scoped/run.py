@@ -39,6 +39,8 @@ from openadapt_flow.txplan.state import State  # noqa: E402
 
 FAMILIES = ["Synthwood", "Testerly", "Fixtureson", "Mockford", "Sampleton", "Placeholm"]
 GIVEN = ["Ada", "Bo", "Cy", "Di", "Ed", "Flo", "Gus", "Hal"]
+#: Names carry the run, so a record from an earlier run never counts as this run's.
+RUN = format(int(time.time()) % 16**5, "05x")
 
 
 class Trial:
@@ -104,7 +106,7 @@ class MedplumScenario:
     def patient(self) -> dict[str, Any]:
         r = self.rng
         return {
-            "name": [{"family": f"{r.choice(FAMILIES)}-{r.randrange(16**6):06x}", "given": [r.choice(GIVEN)]}],
+            "name": [{"family": f"{r.choice(FAMILIES)}-{RUN}-{r.randrange(16**6):06x}", "given": [r.choice(GIVEN)]}],
             "birthDate": f"{r.randint(1940, 2010)}-{r.randint(1, 12):02d}-{r.randint(1, 28):02d}",
             "gender": r.choice(["female", "male", "other", "unknown"]),
             "address": [{"city": r.choice(["Springfield", "Riverton", "Lakeside"]), "country": "XX"}],
@@ -138,6 +140,8 @@ class MedplumScenario:
         rid = self.rng.choice(self.seeds)
         p = self.patient()
         oracle = self.lab.oracle_patient
+        # The fault leaves gender unwritten, so the intent must change it.
+        new_gender = next(g for g in ("other", "female", "male") if g != (oracle(rid) or {}).get("gender"))
         out = [
             Trial("create", "wrong_value", {"collection": "patient", "op": "create", "fields": p},
                   _with(p, birthDate="1901-01-01"),
@@ -151,8 +155,10 @@ class MedplumScenario:
             Trial("update", "duplicate", {"collection": "patient", "op": "update", "rid": rid,
                                           "fields": {"birthDate": p["birthDate"]}}, _twice(), None),
             Trial("update", "partial_write", {"collection": "patient", "op": "update", "rid": rid,
-                                              "fields": {"birthDate": "1977-07-07", "gender": "other"}},
-                  _only(["birthDate"]), lambda r, rid=rid: (oracle(rid) or {}).get("birthDate") == "1977-07-07"),
+                                              "fields": {"birthDate": "1977-07-07", "gender": new_gender}},
+                  _only(["birthDate"]),
+                  lambda r, rid=rid, g=new_gender: (oracle(rid) or {}).get("birthDate") == "1977-07-07"
+                  and (oracle(rid) or {}).get("gender") != g),
         ]
         victim = self.other(rid)
         out.append(Trial("update", "collateral_same_actor",
@@ -184,7 +190,7 @@ class GiteaScenario:
         return {"Authorization": f"token {self.lab.token(role)}"}
 
     def title(self) -> str:
-        return f"Synthetic task {self.rng.randrange(16**6):06x}"
+        return f"Synthetic task {RUN}-{self.rng.randrange(16**6):06x}"
 
     def seed(self, n: int) -> None:
         for _ in range(n):
@@ -262,7 +268,8 @@ class GiteaScenario:
         if trial.kwargs["collection"] != "issue":
             return True
         title = trial.kwargs["fields"]["title"]
-        c, got = http("GET", f"{self.api}/issues?state=all&type=issues&q={title.replace(' ', '%20')}&limit=50",
+        # Newest issues first, no search index (the index trails the write).
+        c, got = http("GET", f"{self.api}/issues?state=all&type=issues&sort=newest&limit=20",
                       headers=self._h("oracle"))
         return sum(1 for x in got if x["title"] == title) == 2
 
@@ -278,6 +285,10 @@ def run_one(ctx: Ctx, system: str, trial: Trial, task: str) -> dict[str, Any]:
     except TxRefused as exc:
         out = {"outcome": "REFUSED", "codes": [exc.code], "notes": []}
     out["seconds"] = round(time.monotonic() - t0, 3)
+    if out.get("run_dir"):
+        tx = json.loads((Path(out["run_dir"]) / "report.json").read_text()).get("tx", {})
+        out["audit"] = tx.get("audit")
+        out["mismatched_fields"] = tx.get("mismatched_fields")
     return out
 
 
@@ -357,6 +368,8 @@ def _row(out: dict[str, Any]) -> dict[str, Any]:
         "replayed": bool(out.get("replayed")),
         "receipt": bool(out.get("receipt")),
         "seconds": out.get("seconds"),
+        "audit": out.get("audit"),
+        "mismatched_fields": out.get("mismatched_fields"),
     }
 
 

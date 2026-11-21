@@ -37,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Op = Literal["create", "update", "delete"]
 Kind = Literal["create", "update", "delete", "read", "unknown"]
+_ALL_OPS: tuple[Op, ...] = ("create", "update", "delete")
 
 
 class AuditError(RuntimeError):
@@ -207,12 +208,20 @@ class AuditSource(_Closed):
     actions: dict[Kind, list[str]] = Field(default_factory=dict)
     #: The writes this log records. A write it doesn't record can't be
     #: confirmed in it, and a collateral write of that kind can't be seen.
-    logs: list[Op] = Field(default_factory=lambda: ["create", "update", "delete"])
+    logs: list[Op] = Field(default_factory=lambda: list(_ALL_OPS))
     actor: Actor
     lag: Lag = Field(default_factory=Lag)
     #: Pages to read, newest first, before giving up on reaching the cursor.
     #: The list must be served newest first.
     max_pages: int = Field(default=40, ge=1, le=10_000)
+    #: The log may legitimately hold no events yet (a new account). Otherwise
+    #: an empty log is read as unreadable.
+    may_be_empty: bool = False
+    #: How far out of request order the log's server times can be. The cursor
+    #: keeps the ids of every event this close to the newest one, and a window
+    #: reads back this far before the cursor. An event stamped more than this
+    #: before an event written earlier is outside the window.
+    skew_s: float = Field(default=2.0, ge=0, le=600)
 
 
 class ScopedCollection(_Closed):
@@ -393,12 +402,12 @@ class AuditReader:
     def pages(self) -> Any:
         """Pages of events, newest first."""
         s = self.source
-        params = {k: self._fill(v) for k, v in s.params.items()}
+        params: dict[str, Any] = {k: self._fill(v) for k, v in s.params.items()}
         path: Optional[str] = self._fill(s.path)
         page_no = 1
         for _ in range(s.max_pages):
             assert path is not None
-            q = dict(params)
+            q: dict[str, Any] = dict(params)
             if s.paging.kind == "page":
                 q[str(s.paging.param)] = page_no
             if s.paging.size_param:
@@ -429,25 +438,52 @@ class AuditReader:
                 return
         raise AuditError("the log did not reach the cursor within max_pages")
 
-    def cursor(self) -> Cursor:
-        """The newest event's server time and the ids at that time."""
-        for items in self.pages():
-            if not items:
+    def cursor(self, sleep: Any = time.sleep) -> Cursor:
+        """The newest event's server time, and the ids of every event within
+        ``skew_s`` of it.
+
+        Server times are not always in request order (an event can be stamped
+        after one that was written later), so the window is placed by ids, and
+        time only bounds how far back to look.
+
+        An empty first page is read again: a log that is empty for a moment
+        (a search that came back empty) would otherwise make every older event
+        look new. Still empty after the lag budget, the log is unreadable,
+        unless the source says it may be empty.
+        """
+        skew = self.source.skew_s
+        for _ in range(self.source.lag.attempts):
+            top: Optional[float] = None
+            ids: set[str] = set()
+            for items in self.pages():
+                if not items:
+                    break
+                if top is None:
+                    top = max(e.at for e in items)
+                ids.update(e.id for e in items if e.at >= top - skew)
+                if any(e.at < top - skew for e in items):
+                    break
+            if top is not None:
+                return Cursor(at=top, ids=frozenset(ids))
+            if self.source.may_be_empty:
                 return Cursor(at=None)
-            top = max(e.at for e in items)
-            return Cursor(at=top, ids=frozenset(e.id for e in items if e.at == top))
-        return Cursor(at=None)
+            sleep(self.source.lag.wait_s)
+        raise AuditError("the log returned no events; the window can't be placed")
 
     def after(self, cursor: Cursor) -> Window:
         """Every event after ``cursor`` by this actor, read to the cursor."""
         win = Window()
         seen: set[str] = set()
+        reached = False
         for items in self.pages():
             win.pages += 1
             older = False
             for e in items:
-                if cursor.at is not None and (e.at < cursor.at or (e.at == cursor.at and e.id in cursor.ids)):
+                if cursor.at is not None and e.at < cursor.at - self.source.skew_s:
                     older = True
+                    continue
+                if e.id in cursor.ids:
+                    reached = True
                     continue
                 if e.id in seen:
                     continue
@@ -456,8 +492,14 @@ class AuditReader:
                     win.events.append(e)
                 else:
                     win.other_actors += 1
-            if older or not items:
+            if older:
                 return win
+            if not items:
+                break
+        if cursor.at is not None and not reached:
+            # The cursor's own events are in the log, so a read that ends
+            # without reaching any of them is incomplete.
+            raise AuditError("the log ended before the cursor")
         return win
 
 
@@ -515,12 +557,22 @@ def check_window(
     win = Window()
     if not logged and src.lag.settle_s:
         sleep(src.lag.settle_s)
+    error: Optional[AuditError] = None
     for attempts in range(1, src.lag.attempts + 1):
-        win = reader.after(cursor)
+        try:
+            win = reader.after(cursor)
+        except AuditError as exc:
+            # A read that didn't reach the cursor: timing, read again.
+            error = exc
+            sleep(src.lag.wait_s)
+            continue
+        error = None
         own = [e for e in win.events if target in e.resources and e.kind == op]
         if not logged or len(own) >= expect_own:
             break
         sleep(src.lag.wait_s)
+    if error is not None:
+        raise error
     own, collateral, creates, unknown = [], [], [], []
     for e in win.events:
         if e.kind == "read":

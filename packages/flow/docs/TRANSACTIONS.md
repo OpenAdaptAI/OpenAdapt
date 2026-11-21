@@ -128,6 +128,13 @@ direct write is refused and batch writes go through a plan. `openadapt wrap`
 systems. Like the hooks, this layer is advisory against an agent that holds
 its own credentials to the system.
 
+## API and SaaS systems
+
+A hosted API has no frame to diff. For those systems, `openadapt proxy --api`
+checks each write by reading the record back and by reading the system's own
+event or audit log for other changes by the same credentials. See
+[API_VERIFICATION.md](API_VERIFICATION.md).
+
 ## Lab results
 
 `benchmark/ext_tx/run.py` runs every flow against real apps on the lab

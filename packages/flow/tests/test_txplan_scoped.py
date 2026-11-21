@@ -21,8 +21,6 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from openadapt_flow.txplan import engine  # noqa: E402
-from openadapt_flow.txplan.adapters import RestAdapter  # noqa: E402
 from openadapt_flow.txplan.audit import AuditReader, AuditSource, Cursor, pick  # noqa: E402
 from openadapt_flow.txplan.engine import Ctx, TxRefused  # noqa: E402
 from openadapt_flow.txplan.scoped import ApiTools, default_send, scoped_write  # noqa: E402
@@ -184,6 +182,8 @@ def _spec(url: str, *, search: bool = True, idem: bool = False, logs: Optional[l
         },
         "actor": {"path": "/api/me", "field": "login"},
         "lag": {"attempts": 4, "wait_s": 0},
+        # Each test's store starts with an empty log.
+        "may_be_empty": True,
     }
     if logs is not None:
         audit["logs"] = logs
@@ -542,7 +542,8 @@ def test_event_stream_shape_pages_by_last_id() -> None:
 
     p1 = {"data": [ev(4, 104, "customer.updated", "cus_1", "req_a"),
                    ev(3, 103, "invoice.finalized", "in_1", None)], "has_more": True}
-    p2 = {"data": [ev(2, 102, "customer.created", "cus_2", "req_b")], "has_more": False}
+    p2 = {"data": [ev(2, 102, "customer.created", "cus_2", "req_b"),
+                   ev(1, 101, "customer.created", "cus_0", "req_0")], "has_more": False}
     src = {"pattern": "event_stream", "path": "/v1/events", "items": "data",
            "paging": {"kind": "cursor", "param": "starting_after", "has_more": "has_more"},
            "fields": {"id": "id", "at": "created", "actor": "request.id",
@@ -550,9 +551,24 @@ def test_event_stream_shape_pages_by_last_id() -> None:
            "actions": {"create": ["customer.created"], "update": ["customer.updated"]},
            "actor": {"any": True}}
     r = _reader(src, {"http://x/v1/events": p1, "http://x/v1/events?starting_after=evt_3": p2})
-    win = r.after(Cursor(at=101.0))
+    win = r.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
     # The automatic invoice event names no request, so it isn't this caller's.
     assert [(e.id, e.kind) for e in win.events] == [("evt_4", "update"), ("evt_2", "create")]
+
+
+def test_a_log_that_comes_back_empty_is_not_read_as_new() -> None:
+    """A search that returns nothing for a moment must not place the cursor at
+    the start of the log, where every old event would look like this write's."""
+    from openadapt_flow.txplan.audit import AuditError
+
+    src = {"path": "/feed", "fields": {"id": "id", "at": "at", "actor": "by", "resource": "r", "action": "a"},
+           "actor": {"any": True}, "lag": {"attempts": 3, "wait_s": 0}}
+    r = _reader(src, {"http://x/feed": []})
+    with pytest.raises(AuditError):
+        r.cursor(sleep=lambda s: None)
+    r2 = _reader(src, {"http://x/feed": [{"id": 9, "at": 50, "by": "u", "r": "x/1", "a": "made"}]})
+    with pytest.raises(AuditError):
+        r2.after(Cursor(at=40.0, ids=frozenset({"7"})))
 
 
 def test_activity_feed_resource_from_two_parts() -> None:
@@ -575,7 +591,12 @@ def test_activity_feed_resource_from_two_parts() -> None:
 def test_one_mcp_endpoint_serves_sql_and_api_tools(lab: Any, tmp_path: Path) -> None:
     import sqlite3
 
-    from openadapt_flow.txplan.proxy import McpServer, Proxy, child_environment, sql_spec
+    from openadapt_flow.txplan.proxy import (
+        McpServer,
+        Proxy,
+        child_environment,
+        sql_spec,
+    )
 
     store, url, state = lab
     db = tmp_path / "app.db"

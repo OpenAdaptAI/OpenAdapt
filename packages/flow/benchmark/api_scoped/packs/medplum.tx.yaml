@@ -32,6 +32,8 @@ systems:
       logs: [create, update, delete]
       actor: {value_env: MEDPLUM_ACTOR}
       lag: {attempts: 12, wait_s: 0.25}
+      # Measured: AuditEvent times run up to about 2 s out of request order.
+      skew_s: 5
     collections:
       - name: patient
         list: {path: /fhir/R4/Patient}

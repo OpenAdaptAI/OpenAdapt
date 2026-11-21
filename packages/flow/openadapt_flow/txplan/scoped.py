@@ -68,7 +68,7 @@ HARD = (
     "collateral_mutation",
 )
 #: Not verified: the read-back or the log never settled.
-SOFT = ("readback_lag", "audit_lag", "audit_unreadable", "recovery_unproven")
+SOFT = ("audit_lag", "audit_unreadable", "recovery_unproven")
 
 Send = Callable[..., Optional[str]]
 _ABSENT = object()
@@ -381,7 +381,7 @@ def scoped_write(
                 notes.append("resent_after_proven_absent")
         if cursor is None and reader is not None:
             try:
-                cursor = reader.cursor()
+                cursor = reader.cursor(sleep=sleep)
             except AuditError:
                 cursor = None
                 notes.append("audit_cursor_unreadable")
@@ -518,9 +518,15 @@ def _verify(
     logged = op in reader.source.logs
     if op == "update" and scoped.logged_fields is not None:
         logged = logged and any(f in scoped.logged_fields for f in fields)
+    if op == "update" and baseline is not None and _matches(coll, baseline, fields):
+        # The record already held the intent: a server may skip a write that
+        # changes nothing, and log nothing for it.
+        logged = False
+        notes.append("no_change_update")
     try:
         audit: Audit = check_window(
-            reader, cursor, op=op, target=target, collection_prefix=prefix_of(scoped.audit_ref),
+            reader, cursor, op=op,  # type: ignore[arg-type]
+            target=target, collection_prefix=prefix_of(scoped.audit_ref),
             logged=logged, sleep=sleep,
         )
     except AuditError as exc:
@@ -530,7 +536,7 @@ def _verify(
     detail["audit"] = audit.summary()
     if not audit.caught_up:
         codes.append("audit_lag")
-    if not logged:
+    if not logged and "no_change_update" not in notes:
         notes.append(f"log_does_not_record_{op}")
     own_ops = [e for e in audit.own if e.kind == op]
     if len(own_ops) > 1:
@@ -586,8 +592,14 @@ def _recover(
         return (found[0], False) if found else (None, True)
     if reader is not None and cursor is not None and "create" in reader.source.logs:
         prefix = prefix_of(scoped.audit_ref)
+        complete = 0
         for _ in range(reader.source.lag.attempts):
-            win = reader.after(cursor)
+            try:
+                win = reader.after(cursor)
+            except AuditError:
+                sleep(reader.source.lag.wait_s)
+                continue
+            complete += 1
             for e in win.events:
                 if e.kind != "create":
                     continue
@@ -598,9 +610,9 @@ def _recover(
                     if other and _matches(coll, _read(adapter, coll, other, where), fields):
                         return other, False
             sleep(reader.source.lag.wait_s)
-        # The log records creates and shows none of this record after the
-        # cursor, through the whole lag budget.
-        return None, True
+        # The log records creates and, read to the cursor, shows none of this
+        # record through the whole lag budget.
+        return None, complete > 0
     return None, False
 
 
