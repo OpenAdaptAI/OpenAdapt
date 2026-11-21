@@ -214,3 +214,5 @@ e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets
 # PR #2299: the literal GitLab-shaped string is explicitly SYNTHETIC-CREDENTIAL
 # in the auth-reference refusal matrix. This exact historical test finding only.
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
+# #2293 squash merge: the same `self._signing_key: Ed25519PrivateKey` annotation already ignored at 7571d9c8 (no secret).
+5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
