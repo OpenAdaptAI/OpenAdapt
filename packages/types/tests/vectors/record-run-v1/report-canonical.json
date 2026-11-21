@@ -1,0 +1,48 @@
+{
+  "description": "A receipt naming both report digests: the file's bytes (report.json) and the RFC 8785 canonical JSON (report.canonical).",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoxLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjEsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjoxLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImRpc2Nsb3N1cmUiOnsiY29tbWl0bWVudHMiOnt9LCJ2ZXJzaW9uIjoib3BlbmFkYXB0LnB1YmxpYy1kaXNjbG9zdXJlL3YxIn0sImxpbmVzIjpbeyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbXSwib3BlcmF0aW9uIjoid3JpdGUiLCJzdGVwIjoyLCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn0seyJjaGVjayI6InJlZnV0ZWQiLCJub3RfY2hlY2tlZCI6WyJmaWVsZF92YWx1ZXMiXSwib3BlcmF0aW9uIjoiaXJyZXZlcnNpYmxlX3dyaXRlIiwic3RlcCI6NCwic3RyZW5ndGgiOiJyZWFkX2JhY2siLCJ0YXJnZXRfa2luZCI6Imd1aSJ9XSwibW9kZWxfY2FsbHMiOjAsIm91dGNvbWUiOiJTVE9QUEVEIiwicHJvZ3JhbSI6eyJpZCI6InByb2ctNWJiMjFhYTBmMmU2YWMzMiIsInZlcnNpb25fc2hhMjU2IjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiJ9LCJyZWFzb25fY29kZSI6ImhhbHRlZCIsInN0YXJ0ZWRfaG91ciI6IjIwMjYtMTEtMjBUMjM6MDA6MDBaIiwic3RlcHMiOnsib2siOjQsInRvdGFsIjo1fX0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL29wZW5hZGFwdC5haS9yZWNvcmQvcnVuL3YxIiwic3ViamVjdCI6W3siZGlnZXN0Ijp7InNoYTI1NiI6IjQyOGI4MGUyMWRjNTBiMjQ1YmExNjA2MzI3ZTEzYTE2NmQ3ODJmNWNiZjYxZmNjZWEyYjhlNWI4MWE4ZDNmZDcifSwibmFtZSI6InJlcG9ydC5qc29uIn0seyJkaWdlc3QiOnsic2hhMjU2IjoiNDZkNjBhNDgzZjk5YjVmNmQwZDFhNTM1OTgyYWQ0MTdhZjA3NTliMDFmYzhjYjk3YjY0YzFkOWZjZjRjM2NlNSJ9LCJuYW1lIjoicmVwb3J0LmNhbm9uaWNhbCJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "2XMBRq2Vz2yr08l0jUPid5giztbJGn/C65TixecZB6RBI0c56geaosDAmxqEchiJ2Ap4KuenpwekzQlIR6++CQ=="
+      }
+    ]
+  },
+  "expected": {
+    "canonical_matches": "report.canonical",
+    "demo": false,
+    "disclosed": {},
+    "file_matches": "report.json",
+    "ok": true,
+    "outcome": "STOPPED",
+    "reason": null,
+    "report_canonical": "{\"alpha\":{\"a\":-0.5,\"b\":1},\"big\":1e+21,\"est_model_cost_usd\":0,\"execution_outcome\":\"VERIFIED\",\"note\":\"caf\u00e9 \u2014 line\\nnext\",\"ratio\":1e-7,\"run_id\":\"run-1\",\"total_ms\":20303.5,\"zeta\":[3,2.5,null,true]}",
+    "report_canonical_sha256": "46d60a483f99b5f6d0d1a535982ad417af0759b01fc8cb97b64c1d9fcf4c3ce5",
+    "signer_lines": [
+      "Signed by this computer"
+    ]
+  },
+  "registry": "registry.json",
+  "report": {
+    "alpha": {
+      "a": -0.5,
+      "b": 1
+    },
+    "big": 1e+21,
+    "est_model_cost_usd": 0.0,
+    "execution_outcome": "VERIFIED",
+    "note": "caf\u00e9 \u2014 line\nnext",
+    "ratio": 1e-07,
+    "run_id": "run-1",
+    "total_ms": 20303.5,
+    "zeta": [
+      3,
+      2.5,
+      null,
+      true
+    ]
+  },
+  "report_file": "ewogICJydW5faWQiOiAicnVuLTEiLAogICJleGVjdXRpb25fb3V0Y29tZSI6ICJWRVJJRklFRCIsCiAgImVzdF9tb2RlbF9jb3N0X3VzZCI6IDAuMCwKICAidG90YWxfbXMiOiAyMDMwMy41LAogICJyYXRpbyI6IDFlLTA3LAogICJiaWciOiAxZSsyMSwKICAiemV0YSI6IFsKICAgIDMsCiAgICAyLjUsCiAgICBudWxsLAogICAgdHJ1ZQogIF0sCiAgIm5vdGUiOiAiY2FmXHUwMGU5IFx1MjAxNCBsaW5lXG5uZXh0IiwKICAiYWxwaGEiOiB7CiAgICAiYiI6IDEsCiAgICAiYSI6IC0wLjUKICB9Cn0K"
+}
