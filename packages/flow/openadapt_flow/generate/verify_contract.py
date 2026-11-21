@@ -139,6 +139,44 @@ def _strict_pins(
         match[alias] = {"literal": "1"}
 
 
+#: Columns that mark a row as deleted (as ``SqlBuilder.live`` reads them).
+_LIVENESS = ("deleted", "is_deleted", "deleted_at")
+_FLAG_VALUES = {"0", "1", "true", "false", "t", "f"}
+
+
+def _already_there_role(
+    schema: Schema, table: str, col: str, role: ColumnRole
+) -> Optional[ColumnRole]:
+    """The part of a role an "already there" (``found``) contract checks.
+
+    A record that is already there may have been entered by a person, with
+    values a create never sets: a number, a language, a filled-in optional
+    field. So ``found`` checks only the task's own values, plus a column
+    that says the record is deleted, archived or switched off (a soft-delete
+    column, or a yes/no flag every demonstration set the same way): a
+    trashed or archived look-alike is not "already there"."""
+
+    base = _found_role(role)
+    if base is None:
+        return None
+    if col in _LIVENESS:
+        return base
+    column = schema.tables[table].column(col)
+    value: Optional[str] = None
+    if base.role == "constant":
+        value = base.value
+    elif base.role == "strict":
+        value = base.detail.get("constant")
+    if (
+        value is not None
+        and str(value).strip().lower() in _FLAG_VALUES
+        and column is not None
+        and column.kind in ("number", "bool")
+    ):
+        return base
+    return None
+
+
 class GenerateError(RuntimeError):
     """The generator can't go on; the message says why."""
 
@@ -548,8 +586,10 @@ def analyze(
                 col = anchor_t.column(loc.columns[0])
             elif loc.hops and loc.hops[0].kind == "fk":
                 col = anchor_t.column(loc.hops[0].column)
-            if (col is not None and col.nullable) or (
-                loc.hops and loc.hops[0].kind == "child"
+            if (
+                (col is not None and col.nullable)
+                or (loc.hops and loc.hops[0].kind == "child")
+                or (col is not None and not loc.hops and _empty_default(col))
             ):
                 if p not in plan.optional:
                     plan.optional.append(p)
@@ -758,17 +798,43 @@ def _break_ties_across(plans: Sequence[KindPlan]) -> None:
 
 
 def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
-    """An update parameter no demonstration gives (``new_zip``), placed at
-    the main table's column of the same name after a leading ``new_`` or
-    ``set_`` (``zip``), when one exists. Compared exactly by the column's
-    type. Reported as placed by name; a demonstration that gives it replaces
-    this."""
+    """A parameter no demonstration gives (``new_zip``), placed at the main
+    table's column of the same name after a leading ``new_`` or ``set_``
+    (``zip``), when one exists; else at the one text column whose name holds
+    the parameter's words in order (``mac_address`` in
+    ``_custom_mac_address_1``), never a key column. Compared exactly by the
+    column's type. Reported as placed by name; a demonstration that gives it
+    replaces this."""
 
     if not plan.anchor:
         return None
+    table = schema.tables[plan.anchor]
     name = re.sub(r"^(new|set)_", "", param)
-    col = schema.tables[plan.anchor].column(name)
-    if col is None or name in schema.tables[plan.anchor].primary_key:
+    col = table.column(name)
+    if col is None:
+        # By analogy: the one column whose name holds the parameter's words
+        # in order, between other words (a custom field stored as
+        # ``_app_mac_address_1``). Two candidates, or none: not placed.
+        words = [w for w in re.split(r"[^a-z0-9]+", name.lower()) if w]
+        hits = []
+        for c in table.columns:
+            have = [w for w in re.split(r"[^a-z0-9]+", c.name.lower()) if w]
+            if words and any(
+                have[i : i + len(words)] == words
+                for i in range(len(have) - len(words) + 1)
+            ):
+                hits.append(c)
+        if (
+            len(hits) != 1
+            or hits[0].kind != "text"
+            or hits[0].auto
+            or hits[0].name in table.primary_key
+            or _is_key_column(table, hits[0].name)
+        ):
+            return None
+        col = hits[0]
+        name = col.name
+    if name in table.primary_key:
         return None
     rule = {
         "number": "number",
@@ -779,6 +845,30 @@ def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     if col.kind not in ("text", "number", "bool", "date", "datetime"):
         return None
     return Location((), (name,), rule)
+
+
+def _empty_default(col: Any) -> bool:
+    """A text column that can't hold NULL but whose default is empty (or
+    which has none, so the app writes the empty string when a field is left
+    out): a create task may leave its value out, and the contract then
+    checks the column is empty."""
+
+    if col.kind != "text" or col.auto:
+        return False
+    d = col.default
+    if d is None:
+        return True
+    d = re.sub(r"::[A-Za-z ]+$", "", str(d).strip())
+    return d in ("", "''", '""')
+
+
+def _is_key_column(table: Any, name: str) -> bool:
+    """A column that names another row (a declared foreign key, or an
+    ``_id`` column): a value placed by name never goes there."""
+
+    if any(name == fk.column for fk in table.foreign_keys):
+        return True
+    return name.endswith("_id")
 
 
 def _children(
@@ -1876,6 +1966,8 @@ class Variant:
     fields: list[str]
     lists: dict[str, int] = field(default_factory=dict)
     dispatch_value: Optional[str] = None
+    #: Update changes the task gives as null: the column is emptied.
+    cleared: list[str] = field(default_factory=list)
     files: dict[str, str] = field(
         default_factory=dict
     )  # create | found | update -> path
@@ -1883,9 +1975,11 @@ class Variant:
 
     @property
     def slug(self) -> str:
-        parts = sorted(self.fields) + [
-            f"{k}x{n}" for k, n in sorted(self.lists.items())
-        ]
+        parts = (
+            sorted(self.fields)
+            + [f"{k}x{n}" for k, n in sorted(self.lists.items())]
+            + [f"{k}x0" for k in sorted(self.cleared)]
+        )
         if self.dispatch_value is not None:
             parts.insert(0, f"{self.dispatch_value}")
         text = "+".join(parts)
@@ -1986,6 +2080,18 @@ def build_contract(
     if variant.dispatch_value is not None:
         locations.update(plan.dispatch_locations.get(variant.dispatch_value, {}))
     identity_params = []
+    for p in sorted(variant.cleared):
+        # A change the task gives as null empties its column; only a column
+        # of the main record itself can be checked that way.
+        loc = locations.get(p)
+        if plan.mode != "update" or p not in plan.changes or loc is None or loc.hops:
+            raise Unpinned(
+                f"{p} is given as null, and its place can't be checked empty"
+            )
+        for c in loc.columns:
+            alias = _add_column(main, f"empty__{_alias(c)}", b.empty("t", anchor, c))
+            match[alias] = {"literal": "1"}
+            target_fields.update([alias, c])
     for p in sorted(fields):
         loc = locations.get(p)
         if loc is None or (loc.hops and loc.hops[0].kind == "child"):
@@ -2025,7 +2131,11 @@ def build_contract(
             settings.strict_pins,
         )
         for col, full in sorted(roles.items()):
-            role = _found_role(full) if flavor == "found" else full
+            role = (
+                _already_there_role(schema, anchor, col, full)
+                if flavor == "found"
+                else full
+            )
             if role is None:
                 continue
             _pin(
@@ -2099,6 +2209,12 @@ def build_contract(
         or (not found and g.empty_when_null)
         or (not found and plan.mode == "create" and set(g.co_owners) & fields)
     ]
+    if found:
+        # Already there: a value the main record holds is checked there. The
+        # row the write would add beside it (a log of the change) is history
+        # of how it got there, which a record entered another way lacks.
+        on_main = set(identity_params)
+        groups = [(p, g) for p, g in groups if p not in on_main]
     groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
     # A child row names its record by the record's identity: for an update
     # only the values that pick the target, never the ones it changes (the
@@ -2159,7 +2275,9 @@ def build_contract(
             for col, full in sorted(_strict(g.roles, settings.strict_pins).items()):
                 if full.role == "link":
                     continue
-                role = _found_role(full) if found else full
+                role = (
+                    _already_there_role(schema, g.table, col, full) if found else full
+                )
                 if role is None:
                     continue
                 _pin(
@@ -3082,7 +3200,7 @@ def propose(
     reader_account: str = "",
     validate: bool = True,
     grant_trigger_flag: bool = False,
-    only: Optional[tuple[str, list[str], dict[str, int]]] = None,
+    only: Optional[tuple[Any, ...]] = None,
     schema_sha256: str = "",
     demos_sha256: str = "",
 ) -> dict[str, Any]:
@@ -3609,6 +3727,9 @@ def propose(
             "fields": _settable(p),
             "identity": sorted(p.identity),
             "lists": sorted(p.lists),
+            # The keys of one demonstrated item of each list (``choose``
+            # turns a list of plain values into items with the one key).
+            "list_items": {k: sorted(g.params) for k, g in sorted(p.lists.items())},
             "dispatch": p.dispatch,
             "variants": [],
         }
@@ -3792,11 +3913,21 @@ def _settable(p: KindPlan) -> dict[str, Any]:
     }
 
 
-def _fits(spec: Mapping[str, Any], given: set[str], lists: Mapping[str, int]) -> bool:
-    """Does a task's field set fit a kind's settable fields?"""
+def _fits(
+    spec: Mapping[str, Any],
+    given: set[str],
+    lists: Mapping[str, int],
+    cleared: Sequence[str] = (),
+) -> bool:
+    """Does a task's field set fit a kind's settable fields? ``cleared``: an
+    update's changes given as null (each must be a change of the kind)."""
 
     if not spec:
         return False
+    if cleared:
+        if "identity" not in spec or not set(cleared) <= set(spec["changes"]):
+            return False
+        given = set(given) | set(cleared)
     if set(lists) - set(spec.get("lists") or []) or any(
         not (1 <= n <= MAX_LIST) for n in lists.values()
     ):
@@ -3813,7 +3944,7 @@ def _emit_one(
     schema: Schema,
     plans: Sequence[KindPlan],
     kinds: Sequence[KindSpec],
-    only: tuple[str, list[str], dict[str, int]],
+    only: tuple[Any, ...],
     out: Path,
     settings: Settings,
     excused: Mapping[str, set[str]],
@@ -3823,13 +3954,14 @@ def _emit_one(
     """The contracts of one field set, built as ``propose`` builds the
     listed ones, checked by the SQL guard and a dry read."""
 
-    kind, fields, lists = only
+    kind, fields, lists = only[:3]
+    cleared = sorted(only[3]) if len(only) > 3 else []  # type: ignore[misc]
     plan = next((p for p in plans if p.kind == kind), None)
     if plan is None or plan.refused or not plan.mode:
         raise GenerateError(f"kind {kind!r} has no contracts")
-    if not _fits(_settable(plan), set(fields), lists):
+    if not _fits(_settable(plan), set(fields), lists, cleared):
         raise GenerateError(f"kind {kind!r} has no contract for these fields")
-    v = Variant(kind, sorted(fields), lists=dict(lists))
+    v = Variant(kind, sorted(fields), lists=dict(lists), cleared=cleared)
     files: dict[str, str] = {}
     flavors = ["create", "found"] if plan.mode == "create" else ["update", "found"]
     for flavor in flavors:
@@ -3927,6 +4059,49 @@ def _questions_md(
 # -- at run time ---------------------------------------------------------------------------
 
 
+def adapt_values(entry: Mapping[str, Any], values: Mapping[str, Any]) -> dict[str, Any]:
+    """A task's values in the shape the demonstrations gave them, from the
+    manifest's ``list_items`` (list parameter -> the keys of one item):
+
+    - an empty list is no list (nothing given);
+    - a list of plain values, for a list whose demonstrated items had one
+      key, becomes items with that key (``["remote"]`` ->
+      ``[{"name": "remote"}]``).
+
+    Anything else is passed as given (and stops if no contract fits)."""
+
+    items = entry.get("list_items") or {}
+    out = dict(values)
+    for k, v in values.items():
+        if not isinstance(v, list):
+            continue
+        if not v:
+            out[k] = None
+            continue
+        keys = list(items.get(k) or [])
+        if len(keys) == 1 and all(
+            not isinstance(x, (dict, list)) and x is not None for x in v
+        ):
+            out[k] = [{keys[0]: x} for x in v]
+    return out
+
+
+def _cleared(
+    entry: Mapping[str, Any], values: Mapping[str, Any], given: set[str]
+) -> list[str]:
+    """An update's changes given as null, when the task gives no other
+    change: the task empties those fields (``new_description: null``). When
+    another change is given, a null is a field left out."""
+
+    spec = entry.get("fields") or {}
+    if entry.get("mode") != "update" or "changes" not in spec:
+        return []
+    changes = set(spec["changes"])
+    if given & changes:
+        return []
+    return sorted(k for k, v in values.items() if v is None and k in changes)
+
+
 def choose(
     manifest_path: Path,
     kind: str,
@@ -3957,11 +4132,15 @@ def choose(
     entry = (manifest.get("kinds") or {}).get(kind)
     if not entry or not entry.get("variants"):
         raise GenerateError(f"no contract for kind {kind!r}")
+    values = adapt_values(entry, values)
     given = {k for k, v in values.items() if v is not None and not isinstance(v, list)}
     lists = {k: len(v) for k, v in values.items() if isinstance(v, list)}
+    cleared = _cleared(entry, values, given)
     dispatch = entry.get("dispatch")
     for var in entry["variants"]:
         if set(var["fields"]) != given or dict(var.get("lists") or {}) != lists:
+            continue
+        if sorted(var.get("cleared") or []) != cleared:
             continue
         if dispatch and str(values.get(dispatch)) != str(var.get("dispatch_value")):
             continue
@@ -3973,7 +4152,7 @@ def choose(
         if _exists(found, params):
             return found, params
         return _load_for(base / var[entry["mode"]], params), params
-    files = _field_set(manifest_path, manifest, kind, entry, given, lists)
+    files = _field_set(manifest_path, manifest, kind, entry, given, lists, cleared)
     if files is not None:
         params = {**flatten(values), **dict(extra_params or {})}
         base = manifest_path.parent
@@ -3984,6 +4163,7 @@ def choose(
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
+        + (f" (emptied: {cleared})" if cleared else "")
         + ": record a demonstration that gives them, or the task is stopped"
     )
 
@@ -3995,6 +4175,7 @@ def _field_set(
     entry: Mapping[str, Any],
     given: set[str],
     lists: Mapping[str, int],
+    cleared: Sequence[str] = (),
 ) -> Optional[dict[str, str]]:
     """The contracts of a field set the manifest doesn't list, built from the
     same inputs as the listed ones (``propose(only=...)``). None when the set
@@ -4002,7 +4183,7 @@ def _field_set(
 
     spec = entry.get("fields") or {}
     inputs = manifest.get("field_sets")
-    if not inputs or not _fits(spec, given, lists):
+    if not inputs or not _fits(spec, given, lists, cleared):
         return None
     demo_dir = Path(inputs["demos"])
     if inputs.get("generator_sha256") != generator_digest():
@@ -4040,7 +4221,7 @@ def _field_set(
         answers=dict(inputs["answers"]),
         environment_id=str(inputs.get("environment_id") or ""),
         validate=bool(inputs.get("validate", True)),
-        only=(kind, sorted(given), dict(lists)),
+        only=(kind, sorted(given), dict(lists), sorted(cleared)),
         schema_sha256=str(inputs["schema_sha256"]),
         demos_sha256=str(inputs["demos_sha256"]),
     )
