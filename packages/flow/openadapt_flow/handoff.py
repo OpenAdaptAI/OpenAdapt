@@ -386,17 +386,28 @@ def _confirmations(statement: Mapping[str, Any], result: Any) -> list[dict[str, 
 def _received_bytes(
     doc_payload: Mapping[str, Any], supplied: Optional[bytes]
 ) -> tuple[Optional[bytes], Optional[str]]:
-    """The payload bytes the receiver has, checked against the handoff's digest."""
-    data: Optional[bytes] = None
-    if supplied is not None:
-        data = supplied
-    elif "content_base64" in doc_payload:
+    """The payload bytes the receiver has, checked against the handoff's digest.
+
+    One representation only: ``content`` or ``content_base64``, never both,
+    and bytes supplied out of band must equal an inline copy. Everything the
+    receiver checks is derived from the bytes returned here.
+    """
+    inline = [k for k in ("content", "content_base64") if k in doc_payload]
+    if len(inline) > 1:
+        return None, "the handoff carries its payload two ways"
+    inline_data: Optional[bytes] = None
+    if "content_base64" in doc_payload:
         try:
-            data = base64.b64decode(str(doc_payload["content_base64"]), validate=True)
+            inline_data = base64.b64decode(
+                str(doc_payload["content_base64"]), validate=True
+            )
         except ValueError:
             return None, "the inline payload is not base64"
     elif "content" in doc_payload:
-        data = _canonical(doc_payload["content"])
+        inline_data = _canonical(doc_payload["content"])
+    if supplied is not None and inline_data is not None and supplied != inline_data:
+        return None, "the supplied payload differs from the one in the handoff"
+    data = supplied if supplied is not None else inline_data
     if data is not None and _sha256(data) != doc_payload.get("sha256"):
         return None, "the payload does not match its digest in the handoff"
     return data, None
@@ -538,14 +549,14 @@ class ReceiverRecord:
 
 
 def _payload_value(document: Mapping[str, Any], supplied: Optional[bytes]) -> Any:
+    """The claim to check, from the same bytes the signature check bound."""
     doc_payload = document.get("payload") or {}
+    data, problem = _received_bytes(doc_payload, supplied)
+    if problem is not None or data is None:
+        raise HandoffError(problem or "the payload is not available to check")
     if "content" in doc_payload:
+        # _received_bytes checked the digest over this content's canonical form.
         return doc_payload["content"]
-    data = supplied
-    if data is None and "content_base64" in doc_payload:
-        data = base64.b64decode(str(doc_payload["content_base64"]), validate=True)
-    if data is None:
-        raise HandoffError("the payload is not available to check")
     try:
         return json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):

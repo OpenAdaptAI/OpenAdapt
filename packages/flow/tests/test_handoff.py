@@ -478,6 +478,44 @@ def test_decide_accepts_only_what_the_receivers_own_record_shows(run_dir, signer
     assert refused.decision == "reject" and calls == []
 
 
+def test_the_checked_claim_is_always_the_signed_bytes(run_dir, signer):
+    """A second payload copy, inline or supplied, never reaches the receiver."""
+    registry = _registry(signer)
+    receipt = h.receipt_for_run(run_dir)
+    seen = []
+
+    def check(claim):
+        seen.append(claim)
+        return h.ReceiverRecord("recorded_as_intended")
+
+    signed = {"ref": "ref-1", "note": "note A"}
+    forged = {"ref": "ref-1", "note": "unsigned note"}
+    doc = h.make_handoff(signed, receipt, signer=signer)
+    assert "content" in doc["payload"]
+    both = json.loads(json.dumps(doc))
+    both["payload"]["content_base64"] = base64.b64encode(
+        json.dumps(signed, sort_keys=True, separators=(",", ":")).encode()
+    ).decode()
+    both["payload"]["content"] = forged
+    assert h.decide(both, registry, check).decision == "reject"
+    as_bytes = h.make_handoff(
+        json.dumps(signed).encode(),
+        receipt,
+        signer=signer,
+        media_type="application/json",
+    )
+    assert "content_base64" in as_bytes["payload"]
+    two = json.loads(json.dumps(as_bytes))
+    two["payload"]["content"] = forged
+    assert h.decide(two, registry, check).decision == "reject"
+    # Supplied bytes must equal the inline copy.
+    other = json.dumps(forged).encode()
+    assert h.decide(doc, registry, check, payload=other).decision == "reject"
+    assert seen == []
+    assert h.decide(as_bytes, registry, check).decision == "accept"
+    assert seen == [signed]
+
+
 def test_the_handoff_group_is_shared_whichever_module_registers_first():
     import argparse
 
