@@ -8,7 +8,15 @@ deterministic test surfaces through one contract with zero per-app logic.
 from __future__ import annotations
 
 import re
-from typing import ContextManager, Optional, Protocol, Sequence, runtime_checkable
+from typing import (
+    Any,
+    ContextManager,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    runtime_checkable,
+)
 
 from openadapt_flow.form_tx.codecs import collapse_whitespace
 from openadapt_flow.form_tx.types import (
@@ -110,13 +118,22 @@ def _matches_any_pattern(text: str, patterns: Sequence[str]) -> bool:
     return False
 
 
+def _cell_norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
 def match_anchor_in_snapshot(
     anchor: FieldAnchorSpec,
     snapshot: FormSnapshot,
     *,
     include_readonly: bool = False,
+    facts: Optional[Mapping[str, Any]] = None,
 ) -> Optional[ObservedControl]:
     """Deterministically resolve ``anchor`` to at most one ``ObservedControl``.
+
+    With ``anchor.row_cell_dossier_keys`` and ``facts`` (dossier key to fact
+    or value), several matches narrow to the one whose table row has a cell
+    equal to each of those values.
 
     Raises ``AmbiguousAnchorError`` when more than one visible control matches.
     Returns ``None`` when no visible control matches (for example, a conditional
@@ -176,6 +193,24 @@ def match_anchor_in_snapshot(
         ]
         if len(both) == 1:
             return both[0]
+
+    if len(candidates) > 1 and anchor.row_cell_dossier_keys and facts is not None:
+        wanted = []
+        for key in anchor.row_cell_dossier_keys:
+            fact = facts.get(key)
+            value = getattr(fact, "value", fact)
+            if value is None or not str(value).strip():
+                wanted = []
+                break
+            wanted.append(_cell_norm(str(value)))
+        if wanted:
+            in_row = [
+                c
+                for c in candidates
+                if all(w in {_cell_norm(cell) for cell in c.row_cells} for w in wanted)
+            ]
+            if len(in_row) == 1:
+                return in_row[0]
 
     if len(candidates) > 1:
         labels = [

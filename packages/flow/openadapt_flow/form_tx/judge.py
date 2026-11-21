@@ -8,13 +8,16 @@ missing controls, mismatched values, or missing required outputs.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
 from openadapt_flow.form_tx.codecs import (
+    _MONTH_MAP,
     CodecValueError,
     collapse_whitespace,
     normalize_with_codec,
+    parse_iso_date_strict,
     values_equivalent,
 )
 from openadapt_flow.form_tx.surface import (
@@ -168,6 +171,40 @@ def _text_pair_matches(
     return False
 
 
+def _pattern_value(pattern: str, text: str) -> Any:
+    """The one value ``pattern``'s first group finds in ``text``.
+
+    ``None`` when it finds nothing, ``False`` when matches disagree.
+    """
+    try:
+        found = {
+            collapse_whitespace(m.group(1))
+            for m in re.finditer(pattern, text or "")
+            if m.groups() and m.group(1) and m.group(1).strip()
+        }
+    except re.error:
+        return False
+    if not found:
+        return None
+    if len(found) > 1:
+        return False
+    return found.pop()
+
+
+def _split_date_expected(day: Any, month: Any, year: Any) -> Optional[str]:
+    """ISO date from day, month (number or name) and year values, or None."""
+    try:
+        d = int(str(day).strip())
+        y = int(str(year).strip())
+        m_raw = str(month).strip()
+        m = int(m_raw) if m_raw.isdigit() else _MONTH_MAP.get(m_raw.casefold())
+        if m is None:
+            return None
+        return parse_iso_date_strict(f"{y:04d}-{m:02d}-{d:02d}")
+    except (ValueError, CodecValueError):
+        return None
+
+
 def _extract_present_outputs(
     snapshot: FormSnapshot,
     output_specs: Sequence[OutputExtractionSpec],
@@ -183,6 +220,17 @@ def _extract_present_outputs(
         except AmbiguousAnchorError:
             invalid_keys.add(spec.output_key)
             continue
+        if ctrl is None and spec.value_pattern:
+            found = _pattern_value(spec.value_pattern, snapshot.page_text)
+            if found is False:
+                invalid_keys.add(spec.output_key)
+                continue
+            if found:
+                try:
+                    extracted[spec.output_key] = normalize_with_codec(found, spec.codec)
+                except CodecValueError:
+                    invalid_keys.add(spec.output_key)
+                continue
         if ctrl is None:
             # A read-only summary may show the output (a quote number, a
             # premium) as page text rather than in a control.
@@ -235,6 +283,7 @@ class SummaryJudge:
         known_outputs: Optional[Mapping[str, Any]] = None,
         supplemental_facts: Optional[Mapping[str, DossierFact]] = None,
         writes: Sequence[FieldWriteRecord] = (),
+        uncovered: Optional[Mapping[str, str]] = None,
     ) -> SummaryVerdict:
         """Navigate/search if configured, verify all read-backs, and extract outputs."""
         active_surface = surface if surface is not None else self._surface
@@ -376,6 +425,8 @@ class SummaryJudge:
         declared_keys = {
             binding.dossier_key for binding in summary_check.field_readbacks
         }
+        for sd in summary_check.split_date_readbacks:
+            declared_keys |= {sd.day_key, sd.month_key, sd.year_key}
         expected_keys = {
             binding.dossier_key
             for binding in active_pack.bindings
@@ -588,6 +639,91 @@ class SummaryJudge:
                         f"under codec {binding.codec.kind.value!r}",
                     )
                 )
+
+        # A date typed in day, month and year boxes, shown as one value.
+        for sd in summary_check.split_date_readbacks:
+            keys = (sd.day_key, sd.month_key, sd.year_key)
+            facts3 = [expected_facts.get(k) for k in keys]
+            if all(f is None for f in facts3):
+                continue
+            provs = [
+                f.provenance if f is not None else ProvenanceKind.INTAKE_DOCUMENT
+                for f in facts3
+            ]
+            expected_iso = (
+                _split_date_expected(*(f.value for f in facts3))
+                if all(f is not None for f in facts3)
+                else None
+            )
+            shown: Optional[str] = None
+            reason = ""
+            try:
+                ctrl = match_anchor_in_snapshot(
+                    sd.anchor, snapshot, include_readonly=True
+                )
+                if ctrl is not None:
+                    shown = ctrl.current_value
+                else:
+                    pair = match_text_pair_in_snapshot(sd.anchor, snapshot)
+                    shown = pair.value if pair is not None else None
+            except AmbiguousAnchorError as exc:
+                reason = f"Date is shown more than once: {exc}"
+            if expected_iso is None:
+                for k, prov in zip(keys, provs):
+                    verdicts.append(
+                        _not_checked(
+                            k, prov, "Day, month and year do not form a date to compare"
+                        )
+                    )
+                continue
+            if shown is None or not shown.strip():
+                for k, prov in zip(keys, provs):
+                    verdicts.append(
+                        _not_checked(
+                            k, prov, reason or "The summary does not show this date"
+                        )
+                    )
+                continue
+            try:
+                shown_iso = parse_iso_date_strict(shown, date_order=sd.date_order)
+            except CodecValueError:
+                shown_iso = None
+            for k, prov in zip(keys, provs):
+                if shown_iso == expected_iso:
+                    verdicts.append(
+                        ReadbackFieldVerdict(
+                            dossier_key=k,
+                            codec_kind=FormCodecKind.ISO_DATE,
+                            passed=True,
+                            status=ReadbackStatus.PASSED,
+                            provenance=prov,
+                            reason="Read back as one date with its day, month and year",
+                        )
+                    )
+                elif shown_iso is None:
+                    verdicts.append(
+                        _not_checked(k, prov, f"Shown date {shown!r} could not be read")
+                    )
+                else:
+                    verdicts.append(
+                        _failed(
+                            k,
+                            FormCodecKind.ISO_DATE,
+                            prov,
+                            f"Summary shows the date {shown_iso}, not {expected_iso}",
+                        )
+                    )
+
+        # Fields no binding covers that held a value this run did not set.
+        for label, shown in sorted((uncovered or {}).items()):
+            verdicts.append(
+                _not_checked(
+                    f"unbound:{label}",
+                    ProvenanceKind.INTAKE_DOCUMENT,
+                    f"No binding covers {label!r}, which held {shown!r} that this "
+                    "run did not set",
+                )
+            )
 
         # A value that came only from a popup is no better checked than the
         # popup inputs that produced it. If one of those inputs is not
