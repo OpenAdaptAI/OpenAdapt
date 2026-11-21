@@ -87,7 +87,7 @@ def _controlling_tty() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--term-program", default="Apple_Terminal")
