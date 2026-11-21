@@ -79,12 +79,15 @@ PACK = FormPack(
         _lab("applicant.last_name", "Last name"),
         _lab("applicant.date_of_birth", "Date of birth", ControlKind.DATE, ISO),
         _lab("applicant.email", "Email"),
+        # The type-ahead lists whole addresses ("<street> <unit>, <city>,
+        # <ST> <zip>", seen on the dev case). Type the start of the street,
+        # then choose the one suggestion equal to the intake's whole address.
         _lab(
-            "residence.address_line1",
+            "residence.address_full",
             "Street address",
             ControlKind.PORTAL_COMBOBOX,
-            EXACT,
-        ),
+            TEXT,
+        ).model_copy(update={"typeahead_query_chars": 6}),
         _lab("coverage.start_date", "Policy start date", ControlKind.DATE, ISO),
         _lab("building.sprinklered", SPRINKLER, ControlKind.RADIO_GROUP, BOOL),
         _lab("coverage.deductible", "Deductible", ControlKind.RADIO_GROUP, MONEY),
@@ -165,4 +168,13 @@ PACK = FormPack(
 
 
 def derived_facts(raw: dict[str, Any]) -> dict[str, Any]:
-    return {}
+    """The intake's address in the form the address type-ahead lists it."""
+    line1 = str(raw.get("residence.address_line1") or "").strip()
+    city = str(raw.get("residence.city") or "").strip()
+    state = str(raw.get("residence.state") or "").strip()
+    zip_ = str(raw.get("residence.zip") or "").strip()
+    if not (line1 and city and state and zip_):
+        return {}
+    line2 = str(raw.get("residence.address_line2") or "").strip()
+    street = f"{line1} {line2}" if line2 else line1
+    return {"residence.address_full": f"{street}, {city}, {state} {zip_}"}
