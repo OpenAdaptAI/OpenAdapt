@@ -776,3 +776,123 @@ def test_split_date_and_sentence_quote_number_read_back(
     else:
         assert done.outcome == FormTxOutcome.READBACK_REFUTED, done.what_happened
         assert all(statuses[k] == ReadbackStatus.FAILED for k in keys)
+
+
+# ---------------------------------------------------------------------------
+# 5. Intake values no binding enters; radio groups named by their row; a
+# form that asks one question at a time in the same control.
+
+
+@pytest.mark.parametrize("ignored", [False, True])
+def test_intake_value_no_binding_enters_keeps_the_run_from_verified(
+    site: tuple[_Site, str], browser: Any, ignored: bool
+) -> None:
+    s, base = site
+    s.pages["/"] = _UNBOUND.replace(' value="Jasper Vellacott"', "")
+    pack = _unbound_pack(declare_paperless=True)
+    if ignored:
+        pack = pack.model_copy(update={"ignored_intake_keys": ("drivers.additional",)})
+    _, _, reconciler, session = _start(
+        browser,
+        base,
+        "/",
+        pack,
+        _dossier(**{"applicant.first_name": "Avery", "drivers.additional": "Pavel"}),
+    )
+    done = reconciler.run_until_halt_or_done(session)
+    assert len(s.records) == 1
+    if ignored:
+        assert done.outcome == FormTxOutcome.VERIFIED_DONE, done.what_happened
+        assert "intake:drivers.additional" in done.receipt.payload.not_covered
+    else:
+        assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE, done.what_happened
+        assert "intake:drivers.additional" in done.summary_verdict.not_checked_keys
+
+
+_ROW_RADIO = """
+<main id="step"><table>
+<tr><th>Completed a driver training course?:</th><td>
+<label><input type="radio" name="tc" value="Y"> Yes</label>
+<label><input type="radio" name="tc" value="N"> No</label><span id="m"></span></td></tr>
+</table><button type="button" id="next">Next</button></main>
+<script>
+document.getElementById('next').onclick = () => { document.getElementById('m').textContent = 'Required'; };
+</script>
+"""
+
+
+def test_radio_group_without_legend_is_named_by_its_row(
+    site: tuple[_Site, str], browser: Any
+) -> None:
+    s, base = site
+    s.pages["/"] = _ROW_RADIO
+    pack = _step_pack().model_copy(update={"unbound_controls": ()})
+    _, _, reconciler, session = _start(browser, base, "/", pack, _dossier())
+    stop = reconciler.run_until_halt_or_done(session)
+    (halt,) = stop.halts
+    assert halt.field_label == "Completed a driver training course?"
+
+
+_ONE_AT_A_TIME = """
+<main id="ask"><label for="answer" id="q">First name</label><input id="answer" name="answer">
+<button type="button" id="next">Continue</button></main>
+<script>
+const Q = ['First name', 'Last name'];
+const A = {};
+let i = 0;
+document.getElementById('next').onclick = () => {
+  A[Q[i]] = document.getElementById('answer').value;
+  i += 1;
+  if (i < Q.length) {
+    document.getElementById('q').textContent = Q[i];
+    document.getElementById('answer').value = '';
+    return;
+  }
+  fetch('/api/submit', {method: 'POST', body: JSON.stringify(A)}).then(() => {
+    document.getElementById('ask').outerHTML = '<section id="done"><h2>Quote issued</h2><dl>' +
+      '<dt>First name</dt><dd>' + A['First name'] + '</dd><dt>Last name</dt><dd>' + A['Last name'] + '</dd></dl></section>';
+  });
+};
+</script>
+"""
+
+
+def test_one_question_at_a_time_in_the_same_control_advances(
+    site: tuple[_Site, str], browser: Any
+) -> None:
+    s, base = site
+    s.pages["/"] = _ONE_AT_A_TIME
+    pack = FormPack(
+        pack_id="test-ask",
+        domain_schema="test.quote/v1",
+        ui_profile_id=_PROFILE.profile_id,
+        bindings=(
+            _bind("applicant.first_name", "First name"),
+            _bind("applicant.last_name", "Last name"),
+        ),
+        screens=(
+            WizardScreenSpec(
+                screen_id="ask",
+                landmark_selector="#ask",
+                next_button_anchor=FieldAnchorSpec(label_patterns=("^Continue$",)),
+            ),
+        ),
+        summary_check=SummaryCheckSpec(
+            summary_landmark_selector="#done",
+            field_readbacks=(
+                _shown("applicant.first_name", "First name"),
+                _shown("applicant.last_name", "Last name"),
+            ),
+        ),
+        max_commit_mutations=1,
+    )
+    _, _, reconciler, session = _start(
+        browser,
+        base,
+        "/",
+        pack,
+        _dossier(**{"applicant.first_name": "Avery", "applicant.last_name": "Quist"}),
+    )
+    done = reconciler.run_until_halt_or_done(session)
+    assert s.records == [{"First name": "Avery", "Last name": "Quist"}]
+    assert done.outcome != FormTxOutcome.VALIDATION_BLOCKED, done.what_happened

@@ -260,8 +260,14 @@ def _field_label(ctrl: Optional[ObservedControl]) -> str:
     """The name a person reads for ``ctrl``: a radio's group, else its label."""
     if ctrl is None:
         return ""
-    if is_radio(ctrl) and ctrl.group_label.strip():
-        return ctrl.group_label
+    if is_radio(ctrl):
+        if ctrl.group_label.strip():
+            return ctrl.group_label
+        # A group with no legend is named by its table row's header cell.
+        header = collapse_whitespace(ctrl.row_cells[0]) if ctrl.row_cells else ""
+        header = header.rstrip(":*").strip()
+        if header and header.casefold() != ctrl.label_text.strip().casefold():
+            return header
     return ctrl.label_text
 
 
@@ -727,7 +733,9 @@ def _locate_errored_control(
                 was = old_rows.get(
                     f"label|{collapse_whitespace(_field_label(c)).casefold()}"
                 )
-            if was is None or not now or now == was or now in was:
+            # Only strict growth counts: the old row text is still there and
+            # something was added to it (a "Required" marker).
+            if was is None or not now or now == was or was not in now:
                 continue
             added = now.replace(was, " ").strip() if was and was in now else now
             grew.append((c, collapse_whitespace(added)))
@@ -1681,8 +1689,12 @@ class FormReconciler:
                 keys |= set(anchor.row_cell_dossier_keys)
         return keys
 
-    def _unconsumed_intake_keys(self, session: ReconcilerSession) -> list[str]:
+    def _unconsumed_intake_keys(
+        self, session: ReconcilerSession, *, include_ignored: bool = True
+    ) -> list[str]:
         consumed = self._consumed_keys(session.pack)
+        if not include_ignored:
+            consumed |= set(session.pack.ignored_intake_keys)
         out = []
         for key, fact in session.dossier.facts.items():
             if key in consumed:
@@ -2928,6 +2940,9 @@ class FormReconciler:
             supplemental_facts=session.effective_facts,
             writes=session.writes,
             uncovered=session._uncovered,
+            unentered_intake_keys=self._unconsumed_intake_keys(
+                session, include_ignored=False
+            ),
         )
         extracted_outputs = dict(verdict.extracted_outputs)
         if not verdict.passed or verdict.missing_required_outputs:
@@ -3522,10 +3537,14 @@ class FormReconciler:
                         safe_to_retry=True,
                     )
 
+                # The visible field labels are part of the screen: a form that
+                # asks one question at a time in the same control advances
+                # when the question changes.
                 before_sig = (
                     snapshot.screen_id,
                     snapshot.url_origin_and_path,
                     snapshot.title,
+                    tuple(_field_label(c) for c in _editable_fields(snapshot)),
                 )
                 active_surface.click(next_ctrl.dom_selector)
                 post_snap = active_surface.snapshot(
@@ -3541,6 +3560,7 @@ class FormReconciler:
                     post_snap.screen_id,
                     post_snap.url_origin_and_path,
                     post_snap.title,
+                    tuple(_field_label(c) for c in _editable_fields(post_snap)),
                 )
                 if post_errors and (after_sig == before_sig or post_snap.banner_errors):
                     return self._emit_validation_blocked(

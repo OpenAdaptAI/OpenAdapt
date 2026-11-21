@@ -284,6 +284,7 @@ class SummaryJudge:
         supplemental_facts: Optional[Mapping[str, DossierFact]] = None,
         writes: Sequence[FieldWriteRecord] = (),
         uncovered: Optional[Mapping[str, str]] = None,
+        unentered_intake_keys: Sequence[str] = (),
     ) -> SummaryVerdict:
         """Navigate/search if configured, verify all read-backs, and extract outputs."""
         active_surface = surface if surface is not None else self._surface
@@ -722,6 +723,16 @@ class SummaryJudge:
                     ProvenanceKind.INTAKE_DOCUMENT,
                     f"No binding covers {label!r}, which held {shown!r} that this "
                     "run did not set",
+                )
+            )
+
+        # Intake values no binding entered: the record may lack them.
+        for key in sorted(set(unentered_intake_keys)):
+            verdicts.append(
+                _not_checked(
+                    f"intake:{key}",
+                    ProvenanceKind.INTAKE_DOCUMENT,
+                    f"The intake has a value for {key!r}, but no binding enters it",
                 )
             )
 
