@@ -198,9 +198,9 @@ class Win32TextReader:
         if not _edit_class(name.value):
             return EditEvidence.NON_EDIT
         # A zero GWL_STYLE is valid only when the call left no Win32 error.
-        ctypes.set_last_error(0)
+        getattr(ctypes, "set_last_error")(0)
         style = self._user.GetWindowLongW(hwnd, -16)  # GWL_STYLE
-        if style == 0 and ctypes.get_last_error() != 0:
+        if style == 0 and getattr(ctypes, "get_last_error")() != 0:
             return EditEvidence.STYLE_UNAVAILABLE
         if style & ES_PASSWORD or self._message(hwnd, EM_GETPASSWORDCHAR) != 0:
             return EditEvidence.PROTECTED
