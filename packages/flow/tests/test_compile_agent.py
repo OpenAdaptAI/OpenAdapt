@@ -821,10 +821,20 @@ def test_server_needs_reemit_identifies_pre_2154_server(tmp_path: Path) -> None:
     )
     assert compiler.server_needs_reemit() is True
 
-    # 3. Modern server emitted with mcp_request_scope -> up to date
+    # 3. Request-context scope, but the program runs on the server's event
+    # loop (before run_compiled_tool) -> needs re-emit
     server_path.write_text(
-        '"""Modern server with request-context scope."""\n'
+        '"""Server with request-context scope."""\n'
         "from openadapt_flow.request_binding import mcp_request_scope\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is True
+
+    # 4. Current template: request scope and the off-loop dispatch -> up to date
+    server_path.write_text(
+        '"""Current server."""\n'
+        "from openadapt_flow.request_binding import mcp_request_scope\n"
+        "from openadapt_flow.compile_agent import run_compiled_tool\n"
         'mcp = FastMCP("demo")\n'
     )
     assert compiler.server_needs_reemit() is False
