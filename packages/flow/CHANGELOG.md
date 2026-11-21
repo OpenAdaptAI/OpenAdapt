@@ -105,11 +105,11 @@
   In reverse-proxy mode only the upstream origin is allowed; in browser route
   mode, any origin on the tap's allowlist. Other targets are still refused, and
   the tap never follows a redirect itself (#2392).
-- On the guarded native path, typing, keys and hotkeys use a one-shot focus
-  lease bound to the live control and the exact frame that authorized the
-  input. A typed value is checked against two complete, independent reads; a
-  failed check leaves the step unverified (`input_verified=False`). An
-  uncertain lease releases held keys before any input (#2313).
+- A Windows agent that advertises `native_keyboard_lease_v1` binds native
+  typing, keys and hotkeys to a one-shot focus lease over the live control and
+  the frame that authorized the input. If focus changes during delivery, no
+  further key goes down and held keys are released. A complete native value
+  observation needs two agreeing independent reads (#2313).
 - A repair candidate id that would leave the repair store is refused (#2369).
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same
@@ -121,11 +121,10 @@
 - An admitted managed run, and its resume, keep the policy the local Standard
   gate chose when neither the CLI nor the deployment names one, instead of
   exiting with code 2 (#2401).
-- Lens route roles come from a route's observed effects when its mutation
-  response identifies the record, so an app that creates with `PUT` or updates
-  with `POST` gets the right roles, and a whole-record replace answering 200
-  counts as an update. Without that evidence, roles still fall back to the
-  HTTP method (#2393).
+- Lens route induction can take a route's role from its observed effects
+  instead of its HTTP method, so some apps that create with `PUT` or update
+  with `POST` get the right roles. Where the trace does not show the effect,
+  roles still follow the method (#2393).
 - Generated verify contracts stop fewer correct writes: five generator causes
   of false stops are fixed, each by one schema-independent rule (#2418).
 - `import openadapt_flow` loads its `ir` re-exports on first use, and the
@@ -141,7 +140,7 @@
   release with `sanitization_config()`, which sanitized reuse and approval bind
   to.
 - On Python 3.11 and newer, the lock moves Pillow, filelock and other
-  dependencies to the first release that fixes an open security advisory. The
+  dependencies to a release that fixes an open security advisory. The
   Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
 
 ## v3.3.0 (2026-11-19)
