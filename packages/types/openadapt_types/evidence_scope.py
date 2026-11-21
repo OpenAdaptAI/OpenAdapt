@@ -16,7 +16,9 @@ that check did not see:
   record again, when one is scheduled.
 - ``not_covered``: what the evidence did not cover. It always lists
   ``server_side_async_effects`` and ``outbound_effects``: no read-back sees a
-  job the server runs later, or a message it sends out.
+  job the server runs later, or a message it sends out. A producer that did
+  not record when its read-back ran lists ``read_back_time`` instead of a
+  ``read_back_at`` (a run report has no per-read time yet).
 
 The block holds only closed values (enums, a timestamp, a count), like the
 rest of a ``record/run/v1`` predicate. It is additive: a receipt without it
@@ -83,6 +85,7 @@ NotCovered = Literal[
     "fields_not_read",
     "other_records",
     "other_actors",
+    "read_back_time",
 ]
 #: Listed on every receipt: no read-back observes these.
 ALWAYS_NOT_COVERED: Final[tuple[NotCovered, ...]] = (
@@ -130,7 +133,7 @@ class EvidenceScopeV1(_Closed):
     recheck_window_s: Optional[StrictInt] = Field(
         default=None, ge=0, le=_MAX_RECHECK_S
     )
-    not_covered: list[NotCovered] = Field(min_length=2, max_length=6)
+    not_covered: list[NotCovered] = Field(min_length=2, max_length=7)
 
     @model_validator(mode="after")
     def _consistent(self) -> "EvidenceScopeV1":
@@ -146,14 +149,16 @@ class EvidenceScopeV1(_Closed):
         if self.word == "VERIFIED":
             if level not in VERIFIED_LEVELS or self.basis is None:
                 raise ValueError("VERIFIED needs level 3 or 4 and a basis")
-            if self.read_back_at is None:
-                raise ValueError("VERIFIED needs read_back_at")
+            if self.read_back_at is None and "read_back_time" not in self.not_covered:
+                raise ValueError("VERIFIED needs read_back_at, or says it has none")
         if self.word == "SHOWN" and not (
             CheckLevel.SAME_SCREEN <= level <= CheckLevel.REOPENED
         ):
             raise ValueError("SHOWN is a level 1 or 2 re-read of the acting screen")
         if self.word == "CONFIRMED" and level is not CheckLevel.COUNTERPARTY_CONFIRMED:
             raise ValueError("CONFIRMED is level 5, the counterparty's acknowledgment")
+        if self.read_back_at is not None and "read_back_time" in self.not_covered:
+            raise ValueError("a block with read_back_at covers the read-back time")
         if self.recheck_window_s is not None and self.read_back_at is None:
             raise ValueError("a recheck window needs read_back_at")
         return self

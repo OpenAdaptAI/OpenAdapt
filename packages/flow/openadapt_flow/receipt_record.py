@@ -133,6 +133,13 @@ def build_statement(
         outcome, reason = "UNKNOWN", "refuted_write"
     elif outcome == "VERIFIED" and len(every_line) > r.MAX_LINES:
         outcome, reason = "UNKNOWN", "too_many_writes"
+    scope = _evidence_scope(report, outcome)
+    if scope is None and outcome == "VERIFIED" and isinstance(
+        report.get("readback"), Mapping
+    ):
+        # Receipts say VERIFIED only on a level 3 or 4 read (check_level).
+        outcome, reason = "UNKNOWN", "below_verified_level"
+        scope = _evidence_scope(report, outcome)
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
@@ -185,9 +192,39 @@ def build_statement(
                 "version": r.PUBLIC_DISCLOSURE_VERSION,
                 "commitments": commitments,
             },
+            **({"evidence_scope": scope} if scope is not None else {}),
         },
     }
     return statement, openings
+
+
+def _evidence_scope(
+    report: Mapping[str, Any], outcome: str
+) -> Optional[dict[str, Any]]:
+    """The run's evidence-scope block, or None when it can't be stated.
+
+    None for a ``VERIFIED`` receipt whose evidence doesn't reach the word
+    ``VERIFIED`` (the caller then lowers the outcome), and for a ``VERIFIED``
+    report with no ``readback`` block (made no save, or written before the
+    block existed), which keeps its earlier receipt shape.
+    """
+    from openadapt_types.evidence_scope import predicate_evidence_scope_problem
+
+    from openadapt_flow.evidence_basis import evidence_scope_for_run
+
+    readback = report.get("readback")
+    readback = readback if isinstance(readback, Mapping) else None
+    if readback is None and outcome == "VERIFIED":
+        return None
+    try:
+        scope = evidence_scope_for_run(readback, outcome)
+    except ValueError:
+        return None
+    if predicate_evidence_scope_problem(
+        {"outcome": outcome, "evidence_scope": scope}
+    ):
+        return None
+    return scope
 
 
 def _write(path: Path, payload: Mapping[str, Any], *, private: bool = False) -> None:

@@ -116,5 +116,9 @@ def evidence_scope_for_run(
         confirmed=level > CheckLevel.UNCHECKED,
         minimum=minimum,
         read_back_at=read_back_at if level > CheckLevel.UNCHECKED else None,
-        not_covered=("changes_after_read_back",),
+        not_covered=(
+            "changes_after_read_back",
+            # A run report records no per-read time yet.
+            *(("read_back_time",) if read_back_at is None else ()),
+        ),
     )

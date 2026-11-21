@@ -321,3 +321,88 @@ def test_every_block_lists_what_no_read_back_sees() -> None:
             "server_side_async_effects",
             "outbound_effects",
         ]
+
+
+# -- the run receipt (record/run/v1) -------------------------------------------
+
+
+def _run_report(checked_how, outcome="VERIFIED"):
+    report = {
+        "workflow_name": "ladder-test",
+        "started_at": "2026-11-21T12:34:56Z",
+        "execution_outcome": outcome,
+        "model_calls": 0,
+        "results": [{"step_id": "save", "ok": True}],
+    }
+    if checked_how is not None:
+        report["readback"] = {
+            "minimum": "separate_session",
+            "checked_how": checked_how,
+            "label": checked_how,
+            "below_minimum": False,
+            "saves": [],
+        }
+    return report
+
+
+def _statement(report):
+    from openadapt_types import receipt as r
+
+    from openadapt_flow.receipt_record import build_statement
+
+    statement, _ = build_statement(report, "1" * 64, salt=lambda: "2" * 64)
+    # The signer's own check: refuses a block that disagrees with the outcome.
+    r.statement_payload(statement)
+    return statement["predicate"]
+
+
+@pytest.mark.parametrize(
+    ("checked_how", "word", "basis"),
+    [
+        ("separate_session", "VERIFIED", "separate_session"),
+        ("system_of_record", "VERIFIED", "owned_connection"),
+    ],
+)
+def test_run_receipt_states_its_evidence_scope(checked_how, word, basis) -> None:
+    predicate = _statement(_run_report(checked_how))
+    scope = predicate["evidence_scope"]
+    assert predicate["outcome"] == "VERIFIED"
+    assert (scope["check_level"], scope["word"], scope["basis"]) == (
+        checked_how,
+        word,
+        basis,
+    )
+    # The report has no per-read time, and the block says so.
+    assert "read_back_at" not in scope
+    assert "read_back_time" in scope["not_covered"]
+    # Same level, word and basis as the runtime and verify-run paths.
+    assert _key(scope) == _key(_runtime_scope(to_verification_tier(
+        CheckLevel.from_label(checked_how)
+    )))
+
+
+def test_run_receipt_never_says_verified_below_level_3() -> None:
+    predicate = _statement(_run_report("reopened"))
+    assert predicate["outcome"] == "UNKNOWN"
+    assert predicate["reason_code"] == "below_verified_level"
+    assert predicate["evidence_scope"]["word"] == "RECORDED"
+
+
+def test_run_receipt_without_a_readback_block_keeps_its_old_shape() -> None:
+    from openadapt_types import receipt as r
+
+    predicate = _statement(_run_report(None))
+    assert predicate["outcome"] == "VERIFIED"
+    assert "evidence_scope" not in predicate
+    # And a statement without the block serializes with no trace of it.
+    statement, _ = __import__(
+        "openadapt_flow.receipt_record", fromlist=["build_statement"]
+    ).build_statement(_run_report(None), "1" * 64, salt=lambda: "2" * 64)
+    assert b"evidence_scope" not in r.statement_payload(statement)
+
+
+def test_stopped_run_receipt_is_recorded() -> None:
+    predicate = _statement(_run_report("separate_session", outcome="HALTED"))
+    assert predicate["outcome"] == "STOPPED"
+    assert predicate["evidence_scope"]["word"] == "RECORDED"
+    assert "basis" not in predicate["evidence_scope"]

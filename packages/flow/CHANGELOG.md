@@ -25,10 +25,13 @@
   receipt word: `VERIFIED` (levels 3 and 4 only, always with a basis:
   `separate_session`, `system_api`, `activity_log`, `db_frame` or
   `owned_connection`), `SHOWN`, `CONFIRMED`, `ATTESTED` or `RECORDED`.
-  `verify-run` and `tx` receipts carry an additive `evidence_scope` block
+  Run receipts (`record/run/v1`), `verify-run` and `tx` receipts carry an
+  additive `evidence_scope` block
   (`openadapt.evidence-scope/v1`) that states the level, basis, wire scope,
   read-back time, recheck window and what the check did not cover. Receipts
-  without the block still verify.
+  without the block still verify. A run receipt whose report shows a save
+  checked below level 3 is `UNKNOWN` (`below_verified_level`), never
+  `VERIFIED`; no built-in profile produces such a run.
 
 ### Fixes
 
