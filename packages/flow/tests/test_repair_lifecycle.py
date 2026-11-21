@@ -842,3 +842,21 @@ def test_cli_non_interactive_approve_requires_approved_by(bundles, tmp_path, cap
     )
     assert args.func(args) == 1
     assert "--approved-by" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "candidate_id",
+    ["../outside", "a/b", "..", "nested/../../x", "/etc/passwd", "a\\b", "", ".hidden"],
+)
+def test_store_refuses_a_candidate_id_that_is_not_a_plain_name(tmp_path, candidate_id):
+    store = RepairStore(tmp_path / "store")
+    with pytest.raises(RepairLifecycleError, match="refused: candidate id"):
+        store.load_candidate(candidate_id)
+    assert not (tmp_path / "outside.json").exists()
+
+
+def test_store_keeps_plain_candidate_ids_inside_candidates(tmp_path):
+    store = RepairStore(tmp_path / "store")
+    for candidate_id in ("cand_0123456789abcdef", "synthetic-capture-repair", "v1.2"):
+        path = store.candidate_path(candidate_id)
+        assert path == tmp_path / "store" / "candidates" / f"{candidate_id}.json"
