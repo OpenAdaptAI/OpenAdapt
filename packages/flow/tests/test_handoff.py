@@ -23,7 +23,11 @@ from openadapt_flow.receipt_record import PRIVATE_FILE, write_receipt_record  # 
 from openadapt_flow.seal_keys import SoftwareSigner  # noqa: E402
 
 VECTORS = (
-    Path(__file__).resolve().parents[2] / "types" / "tests" / "vectors" / "record-run-v1"
+    Path(__file__).resolve().parents[2]
+    / "types"
+    / "tests"
+    / "vectors"
+    / "record-run-v1"
 )
 
 REPORT = {
@@ -33,7 +37,12 @@ REPORT = {
     "started_at": "2026-11-21T01:02:03Z",
     "results": [
         {"step_id": "s1", "ok": True},
-        {"step_id": "s2", "ok": True, "effect_verified": True, "postconditions_ok": True},
+        {
+            "step_id": "s2",
+            "ok": True,
+            "effect_verified": True,
+            "postconditions_ok": True,
+        },
     ],
 }
 
@@ -107,6 +116,57 @@ def test_binding_keeps_the_signer_and_names_the_payload(run_dir, signer):
         h.make_handoff({"x": 1}, original, signer=_signer())
 
 
+def test_binding_refuses_this_keyid_with_a_bad_signature(run_dir, signer):
+    """A crafted envelope naming this computer's keyid never gets re-signed."""
+    original = h.receipt_for_run(run_dir)
+    statement = json.loads(base64.b64decode(original["payload"]))
+    statement["predicate"]["model_calls"] = 99
+    forged_payload = base64.b64encode(r.canonical_json(statement).encode()).decode()
+    kid = original["signatures"][0]["keyid"]
+    for sig in ["AAAA", original["signatures"][0]["sig"]]:
+        forged = dict(
+            original, payload=forged_payload, signatures=[{"keyid": kid, "sig": sig}]
+        )
+        with pytest.raises(h.HandoffError, match="didn't sign that receipt"):
+            h.make_handoff({"x": 1}, forged, signer=signer)
+
+
+def test_a_post_is_never_redirected(monkeypatch):
+    import urllib.error
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from threading import Thread
+
+    from openadapt_flow.cli_handoff import post_handoff
+
+    followed = []
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            # 302 is the code urllib would follow (as a GET) by default.
+            self.send_response(302)
+            self.send_header("Location", "/elsewhere")
+            self.end_headers()
+
+        def do_GET(self):  # noqa: N802
+            followed.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Redirect)
+    Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            post_handoff(f"http://127.0.0.1:{server.server_address[1]}/inbox", {"a": 1})
+        assert caught.value.code == 302
+        assert followed == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_an_unbound_receipt_is_refused_once_the_payload_is_checked(run_dir, signer):
     """Missing: a receipt that names no payload doesn't vouch for this one."""
     doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
@@ -166,7 +226,9 @@ def test_a_handoff_with_extra_fields_or_another_schema_is_refused(run_dir, signe
     assert h.verify_handoff({**doc, "signer_role": "openadapt_cloud"}, []).reason == (
         "malformed"
     )
-    assert h.verify_handoff({**doc, "schema": "other/v1"}, []).reason == "unknown_schema"
+    assert (
+        h.verify_handoff({**doc, "schema": "other/v1"}, []).reason == "unknown_schema"
+    )
     assert h.verify_handoff(b"not json", []).reason == "malformed"
 
 
@@ -223,9 +285,14 @@ def test_confirmation_lines_come_from_the_shared_verifier(name, independent):
     assert verdict.signer_lines == ["Signed by this computer"]
     if independent:
         assert verdict.independent_confirmations == 1
-        assert any("read back from the other party" in line for line in verdict.what_this_proves)
+        assert any(
+            "read back from the other party" in line
+            for line in verdict.what_this_proves
+        )
     else:
-        assert any("rests on the signer's word" in line for line in verdict.what_this_proves)
+        assert any(
+            "rests on the signer's word" in line for line in verdict.what_this_proves
+        )
 
 
 def test_a_tampered_confirmation_is_refused():
@@ -247,12 +314,26 @@ def test_cli_send_and_verify_inline_and_detached(run_dir, signer, tmp_path, caps
     payload = tmp_path / "result.json"
     payload.write_text('{"outcome": "done"}')
     out = tmp_path / "result.handoff.json"
-    assert flow_main(["handoff", "send", str(payload), "--run", str(run_dir), "--out", str(out)]) == 0
-    assert flow_main(["handoff", "verify", str(out), "--keys", str(keys), "--json"]) == 0
+    assert (
+        flow_main(
+            ["handoff", "send", str(payload), "--run", str(run_dir), "--out", str(out)]
+        )
+        == 0
+    )
+    assert (
+        flow_main(["handoff", "verify", str(out), "--keys", str(keys), "--json"]) == 0
+    )
     verdict = json.loads(capsys.readouterr().out)
-    assert verdict["integrity"] == "intact" and verdict["signer_roles"] == ["this_computer"]
+    assert verdict["integrity"] == "intact" and verdict["signer_roles"] == [
+        "this_computer"
+    ]
 
-    assert flow_main(["handoff", "send", str(payload), "--run", str(run_dir), "--detached"]) == 0
+    assert (
+        flow_main(
+            ["handoff", "send", str(payload), "--run", str(run_dir), "--detached"]
+        )
+        == 0
+    )
     detached = h.detached_path(payload)
     assert detached.is_file()
     assert flow_main(["handoff", "verify", str(detached), "--keys", str(keys)]) == 0
@@ -266,16 +347,30 @@ def test_cli_send_and_verify_inline_and_detached(run_dir, signer, tmp_path, caps
     assert flow_main(["handoff", "verify", str(out), "--keys", str(other)]) == 1
 
 
-def test_cli_key_and_trust_pin_the_other_party_by_name(run_dir, signer, tmp_path, capsys):
+def test_cli_key_and_trust_pin_the_other_party_by_name(
+    run_dir, signer, tmp_path, capsys
+):
     key = tmp_path / "sender-key.json"
-    key.write_text(json.dumps({k: v for k, v in signer.registry_entry().items() if k != "status"}))
+    key.write_text(
+        json.dumps({k: v for k, v in signer.registry_entry().items() if k != "status"})
+    )
     keys = tmp_path / "trusted.json"
-    args = ["handoff", "trust", str(key), "--org", "Example Clinic", "--keys", str(keys)]
+    args = [
+        "handoff",
+        "trust",
+        str(key),
+        "--org",
+        "Example Clinic",
+        "--keys",
+        str(keys),
+    ]
     assert flow_main(args) == 0
     registry = r.parse_registry(json.loads(keys.read_text()))
     assert [(k.role, k.org) for k in registry] == [("customer_key", "Example Clinic")]
     doc = _bound({"outcome": "done"}, run_dir, signer)
-    assert h.verify_handoff(doc, registry).signer_lines == ["Signed by Example Clinic's key"]
+    assert h.verify_handoff(doc, registry).signer_lines == [
+        "Signed by Example Clinic's key"
+    ]
     bad = ["handoff", "trust", str(key), "--org", "x" * 80, "--keys", str(keys)]
     assert flow_main(bad) == 2
     key.write_text('{"key_id": "seal-ed25519-0000000000000000", "public_key": "AAAA"}')
@@ -322,7 +417,12 @@ def test_cli_send_posts_to_a_local_webhook(run_dir, signer, tmp_path):
         payload = tmp_path / "p.json"
         payload.write_text('{"outcome": "done"}')
         url = f"http://127.0.0.1:{server.server_address[1]}/inbox"
-        assert flow_main(["handoff", "send", str(payload), "--run", str(run_dir), "--post", url]) == 0
+        assert (
+            flow_main(
+                ["handoff", "send", str(payload), "--run", str(run_dir), "--post", url]
+            )
+            == 0
+        )
     finally:
         server.shutdown()
     content_type, body = received[0]
@@ -365,8 +465,13 @@ def test_decide_accepts_only_what_the_receivers_own_record_shows(run_dir, signer
 
     assert decision({"ref": "ref-1", "note": "note A"}, broken).decision == "reject"
     # No own read: never accepted on the receipt alone.
-    unchecked = h.decide(h.make_handoff({"ref": "ref-1"}, receipt, signer=signer), registry)
-    assert unchecked.decision == "unchecked" and unchecked.what_this_proves[-1] == h.UNCHECKED_LINE
+    unchecked = h.decide(
+        h.make_handoff({"ref": "ref-1"}, receipt, signer=signer), registry
+    )
+    assert (
+        unchecked.decision == "unchecked"
+        and unchecked.what_this_proves[-1] == h.UNCHECKED_LINE
+    )
     # A refused receipt is rejected before the receiver reads anything.
     calls = []
     refused = h.decide(h.make_handoff({"ref": "ref-1"}, receipt), [], calls.append)
@@ -386,7 +491,13 @@ def test_the_handoff_group_is_shared_whichever_module_registers_first():
         register(sub)
         if not list_first:
             handoff_group(sub).add_parser("list")
-        assert sorted(handoff_group(sub).choices) == ["key", "list", "send", "trust", "verify"]
+        assert sorted(handoff_group(sub).choices) == [
+            "key",
+            "list",
+            "send",
+            "trust",
+            "verify",
+        ]
 
 
 @pytest.mark.parametrize(
@@ -397,7 +508,9 @@ def test_the_handoff_group_is_shared_whichever_module_registers_first():
         ("payload-missing.json", "payload_not_bound"),
     ],
 )
-def test_the_shared_payload_vectors_give_the_same_answer_through_a_handoff(name, reason):
+def test_the_shared_payload_vectors_give_the_same_answer_through_a_handoff(
+    name, reason
+):
     case = _vector(name)
     received = base64.b64decode(case["received"])
     doc = h.make_handoff(received, case["document"], detached=True)
@@ -408,14 +521,38 @@ def test_the_shared_payload_vectors_give_the_same_answer_through_a_handoff(name,
         assert verdict.ok and verdict.payload["bound"] is True
 
 
-def test_send_records_the_handoff_in_the_ledger_handoff_list_reads(run_dir, signer, tmp_path):
+def test_send_records_the_handoff_in_the_ledger_handoff_list_reads(
+    run_dir, signer, tmp_path
+):
     ledger_mod = pytest.importorskip("openadapt_flow.handoffs.ledger")
     payload = tmp_path / "referral.json"
-    payload.write_text(json.dumps({"ref": "ref-77", "note": "Follow-up in 2 weeks", "n": 3}))
+    payload.write_text(
+        json.dumps({"ref": "ref-77", "note": "Follow-up in 2 weeks", "n": 3})
+    )
     ledger = tmp_path / "ledger"
-    args = ["handoff", "send", str(payload), "--run", str(run_dir), "--out", str(tmp_path / "o.json")]
-    assert flow_main([*args, "--ledger", str(ledger), "--counterparty", "receiving clinic",
-                      "--key-field", "ref"]) == 0
+    args = [
+        "handoff",
+        "send",
+        str(payload),
+        "--run",
+        str(run_dir),
+        "--out",
+        str(tmp_path / "o.json"),
+    ]
+    assert (
+        flow_main(
+            [
+                *args,
+                "--ledger",
+                str(ledger),
+                "--counterparty",
+                "receiving clinic",
+                "--key-field",
+                "ref",
+            ]
+        )
+        == 0
+    )
     (entry,) = ledger_mod.HandoffLedger(ledger).entries()
     assert entry.counterparty == "receiving clinic"
     assert entry.source == "agent_handoff" and entry.run_id == run_dir.name
@@ -424,5 +561,18 @@ def test_send_records_the_handoff_in_the_ledger_handoff_list_reads(run_dir, sign
     assert "Follow-up" not in stored and "ref-77" not in stored
     assert entry.key_digest == ledger_mod.HandoffLedger(ledger).digest("ref-77")
     # A key that another open handoff uses is refused, and nothing is sent.
-    assert flow_main([*args, "--ledger", str(ledger), "--counterparty", "x", "--key-field", "ref"]) == 2
+    assert (
+        flow_main(
+            [
+                *args,
+                "--ledger",
+                str(ledger),
+                "--counterparty",
+                "x",
+                "--key-field",
+                "ref",
+            ]
+        )
+        == 2
+    )
     assert flow_main([*args, "--counterparty", "x"]) == 2

@@ -52,8 +52,12 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     s.add_argument("payload", help="the file to hand off ('-' reads stdin)")
     source = s.add_mutually_exclusive_group(required=True)
-    source.add_argument("--run", metavar="RUN_DIR", help="the run whose receipt.json to attach")
-    source.add_argument("--receipt", metavar="FILE", help="a receipt.json or receipt.card.json")
+    source.add_argument(
+        "--run", metavar="RUN_DIR", help="the run whose receipt.json to attach"
+    )
+    source.add_argument(
+        "--receipt", metavar="FILE", help="a receipt.json or receipt.card.json"
+    )
     s.add_argument(
         "--public",
         action="store_true",
@@ -179,6 +183,11 @@ def _post_allowed(url: str) -> bool:
         return False
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
 def post_handoff(url: str, document: dict[str, Any], *, timeout: float = 30.0) -> int:
     """POST a handoff document as its own media type. Returns the HTTP status."""
     from openadapt_flow.handoff import MEDIA_TYPE
@@ -191,7 +200,10 @@ def post_handoff(url: str, document: dict[str, Any], *, timeout: float = 30.0) -
         headers={"Content-Type": MEDIA_TYPE},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - scheme checked
+    # No redirects: an allowed URL must not hand the document on to a target
+    # _post_allowed would refuse. A 3xx raises HTTPError (an OSError).
+    opener = urllib.request.build_opener(_NoRedirect)
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - scheme checked
         return int(response.status)
 
 
@@ -260,7 +272,10 @@ def cmd_send(args: argparse.Namespace) -> int:
         print("handoff send: --ledger needs --counterparty", file=sys.stderr)
         return 2
     if (args.counterparty or args.key_field) and not args.ledger:
-        print("handoff send: --counterparty and --key-field go with --ledger", file=sys.stderr)
+        print(
+            "handoff send: --counterparty and --key-field go with --ledger",
+            file=sys.stderr,
+        )
         return 2
     try:
         data = _read(args.payload)
@@ -285,7 +300,9 @@ def cmd_send(args: argparse.Namespace) -> int:
         print(f"handoff send: {exc}", file=sys.stderr)
         return 2
     except RuntimeError as exc:
-        print(f"handoff send: no receipt key to bind the payload ({exc})", file=sys.stderr)
+        print(
+            f"handoff send: no receipt key to bind the payload ({exc})", file=sys.stderr
+        )
         return 2
     except (OSError, ValueError) as exc:
         print(f"handoff send: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -359,7 +376,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
                 payload = beside.read_bytes()
         registry = h.load_registry(Path(args.keys) if args.keys else None)
     except RegistryError as exc:
-        print(f"handoff verify: the key registry is refused ({exc.reason})", file=sys.stderr)
+        print(
+            f"handoff verify: the key registry is refused ({exc.reason})",
+            file=sys.stderr,
+        )
         return 2
     except (OSError, ValueError) as exc:
         print(f"handoff verify: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -380,7 +400,11 @@ def cmd_key(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 - no usable key: say so, sign nothing
         print(f"handoff key: no receipt key on this computer ({exc})", file=sys.stderr)
         return 2
-    print(json.dumps({"key_id": entry["key_id"], "public_key": entry["public_key"]}, indent=2))
+    print(
+        json.dumps(
+            {"key_id": entry["key_id"], "public_key": entry["public_key"]}, indent=2
+        )
+    )
     return 0
 
 
@@ -401,9 +425,17 @@ def cmd_trust(args: argparse.Namespace) -> int:
             if path.is_file()
             else {"schema": r.REGISTRY_SCHEMA, "keys": []}
         )
-        if not isinstance(entry, dict) or set(entry) - {"key_id", "public_key", "status"}:
+        if not isinstance(entry, dict) or set(entry) - {
+            "key_id",
+            "public_key",
+            "status",
+        }:
             raise ValueError("the key file is one `handoff key` entry")
-        keys = [k for k in registry.get("keys", []) if k.get("key_id") != entry.get("key_id")]
+        keys = [
+            k
+            for k in registry.get("keys", [])
+            if k.get("key_id") != entry.get("key_id")
+        ]
         keys.append(
             {
                 "key_id": entry.get("key_id"),
@@ -421,6 +453,11 @@ def cmd_trust(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"handoff trust: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
-    path.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"handoff: {args.org}'s key {entry['key_id']} is trusted in {path}", file=sys.stderr)
+    path.write_text(
+        json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(
+        f"handoff: {args.org}'s key {entry['key_id']} is trusted in {path}",
+        file=sys.stderr,
+    )
     return 0

@@ -157,6 +157,35 @@ def _subject_media_type(media_type: str) -> str:
     return essence if essence in allowed else "application/octet-stream"
 
 
+def _signed_by(envelope: Mapping[str, Any], kid: str, public_raw: bytes) -> bool:
+    """True when ``envelope`` carries a valid DSSE signature by ``kid``."""
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from openadapt_types import receipt as r
+
+    if (
+        not isinstance(envelope, Mapping)
+        or envelope.get("payloadType") != r.PAYLOAD_TYPE
+    ):
+        return False
+    try:
+        signed = r.pae(
+            r.PAYLOAD_TYPE, base64.b64decode(str(envelope["payload"]), validate=True)
+        )
+        key = Ed25519PublicKey.from_public_bytes(public_raw)
+    except (KeyError, ValueError):
+        return False
+    for sig in envelope.get("signatures") or []:
+        if not isinstance(sig, Mapping) or sig.get("keyid") != kid:
+            continue
+        try:
+            key.verify(base64.b64decode(str(sig.get("sig")), validate=True), signed)
+            return True
+        except (InvalidSignature, ValueError):
+            return False
+    return False
+
+
 def bind_payload(
     receipt: Mapping[str, Any], data: bytes, media_type: str, signer: Any
 ) -> dict[str, Any]:
@@ -172,7 +201,9 @@ def bind_payload(
     receipt = _check_receipt_document(receipt)
     envelope = receipt["envelope"] if r.is_receipt_card(receipt) else receipt
     kid = r.key_id(signer.public_raw())
-    if kid not in {s.get("keyid") for s in envelope.get("signatures") or []}:
+    # Verify this computer's own signature before re-signing: a keyid with a
+    # bad sig must never turn into a valid receipt.
+    if not _signed_by(envelope, kid, signer.public_raw()):
         raise HandoffError(
             "this computer's key didn't sign that receipt, so it can't bind a "
             "payload to it"
@@ -474,7 +505,12 @@ def verify_handoff(
 # -- the receiver's own record ------------------------------------------------------
 
 #: States a receiver's own read can return, as in a counterparty confirmation.
-RECEIVER_STATES = ("recorded_as_intended", "recorded_differently", "not_found", "unreadable")
+RECEIVER_STATES = (
+    "recorded_as_intended",
+    "recorded_differently",
+    "not_found",
+    "unreadable",
+)
 
 ACCEPT_LINE = (
     "Accepted: your own system shows the record the handoff describes. That "
