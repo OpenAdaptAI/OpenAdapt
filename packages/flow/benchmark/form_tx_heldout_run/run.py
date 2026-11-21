@@ -24,9 +24,33 @@ from typing import Any, Optional
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))  # packages/flow
 
-from benchmark.form_tx_heldout.portals import PORTALS  # noqa: E402
-from benchmark.form_tx_heldout.scoring import load_answer_key, score_case  # noqa: E402
-from benchmark.form_tx_heldout_run.packs import PACKS, dossier_for  # noqa: E402
+import importlib  # noqa: E402
+
+# --suite picks the portal set: "heldout" (the first four, now a dev set) or
+# "heldout2" (the second held-out set). Each has its own packs module.
+SUITES = {
+    "heldout": ("benchmark.form_tx_heldout", "benchmark.form_tx_heldout_run.packs"),
+    "heldout2": ("benchmark.form_tx_heldout2", "benchmark.form_tx_heldout_run.packs2"),
+}
+_SUITE = {"name": "heldout"}
+
+
+def _use_suite(name: str) -> None:
+    global PORTALS, load_answer_key, score_case, PACKS, dossier_for
+    portals_pkg, packs_mod = SUITES[name]
+    PORTALS = importlib.import_module(portals_pkg + ".portals").PORTALS
+    scoring = importlib.import_module(portals_pkg + ".scoring")
+    load_answer_key, score_case = scoring.load_answer_key, scoring.score_case
+    packs = importlib.import_module(packs_mod)
+    PACKS, dossier_for = packs.PACKS, packs.dossier_for
+    _SUITE["name"] = name
+
+
+PORTALS: Any = None
+load_answer_key: Any = None
+score_case: Any = None
+PACKS: Any = None
+dossier_for: Any = None
 from openadapt_flow.form_tx.learning import RuleAccumulator  # noqa: E402
 from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface  # noqa: E402
 from openadapt_flow.form_tx.reconciler import FormReconciler  # noqa: E402
@@ -90,6 +114,18 @@ _LABEL_JS = r"""
 """
 
 
+def _locate_any_frame(page: Any, selector: str) -> Any:
+    """The halted control, in whichever frame holds it (locators pierce open shadow roots)."""
+    for frame in [page.main_frame, *page.frames]:
+        try:
+            loc = frame.locator(selector)
+            if loc.count():
+                return loc.first
+        except Exception:  # noqa: BLE001
+            continue
+    return page.locator(selector).first
+
+
 def visible_label(page: Any, halt: Any) -> str:
     """The label a person reads next to the halted control."""
     if halt.field_label:
@@ -137,6 +173,7 @@ def _harborline_estimator(page: Any, intake: dict[str, Any]) -> bool:
 
 
 OPERATOR_TOOLS = {"harborline": _harborline_estimator}
+OPERATOR_TOOLS_ON = {"on": False}
 POSTHOC = {"on": False}
 
 
@@ -184,6 +221,7 @@ def operator_decision(
 
     if (
         halt.kind == FormHaltKind.POPUP_CONTRACT_FAILED
+        and OPERATOR_TOOLS_ON["on"]
         and portal in OPERATOR_TOOLS
         and intake is not None
         and HumanDecisionAction.FIXED_ON_SCREEN in allowed
@@ -214,7 +252,7 @@ def operator_decision(
         and HumanDecisionAction.FIXED_ON_SCREEN in allowed
     ):
         try:
-            loc = page.locator(halt.dom_selector).first
+            loc = _locate_any_frame(page, halt.dom_selector)
             if loc.evaluate("e => e.tagName") == "SELECT":
                 loc.select_option(label=str(entry["value"]))
             else:
@@ -239,7 +277,7 @@ def run_case(
     spec = PORTALS[pid]
     _post(f"{base}/__oracle/load_case", {"case_id": case_id})
     intake = json.loads(
-        (HERE.parent / "form_tx_heldout" / "cases" / pid / f"{case_id}.intake.json").read_text()
+        (HERE.parent / SUITES[_SUITE["name"]][0].split(".")[-1] / "cases" / pid / f"{case_id}.intake.json").read_text()
     )
     script = answer_key["cases"][case_id].get("operator_script", {})
     out: dict[str, Any] = {"portal": pid, "case_id": case_id, "halts": []}
@@ -359,8 +397,17 @@ def main(argv: list[str]) -> int:
         help="labelled post-hoc row: harborline pack P1 and operator sign-in on a "
         "session-expired stop (see RESULTS.md)",
     )
+    ap.add_argument("--suite", choices=tuple(SUITES), default="heldout")
+    ap.add_argument(
+        "--operator-estimator",
+        action="store_true",
+        help="frozen first run only: the operator runs harborline's estimator by "
+        "hand (deviation D2). Off for every later run.",
+    )
     ap.add_argument("portals", nargs="*")
     args = ap.parse_args(argv)
+    _use_suite(args.suite)
+    OPERATOR_TOOLS_ON["on"] = args.operator_estimator
     answer_key = load_answer_key()
     portals = args.portals or list(PORTALS)
     with sync_playwright() as pw:
