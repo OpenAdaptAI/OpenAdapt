@@ -61,15 +61,23 @@ def check_readback(
     group, such as a list's row count).
     """
 
+    def text() -> str:
+        # The page's text and the values of its form controls (an edit form
+        # shows the saved record in its inputs).
+        vals = page.evaluate(
+            "() => Array.from(document.querySelectorAll('input, select, textarea')).map(e => e.value).join(' ')"
+        )
+        return page.inner_text("body") + " " + str(vals)
+
     for raw in steps:
         st = fill(raw, values)
         if "expect_text" in st:
-            low = page.inner_text("body").casefold()
+            low = text().casefold()
             missing = [t for t in st["expect_text"] if str(t).casefold() not in low]
             if missing:
                 return f"missing {missing}"
         elif "expect_digits" in st:
-            digits = re.sub(r"\D", "", page.inner_text("body"))
+            digits = re.sub(r"\D", "", text())
             missing = [
                 t
                 for t in st["expect_digits"]

@@ -1,0 +1,58 @@
+{
+ "scenario": "esp-partial",
+ "rep": 1,
+ "fault": "partial",
+ "note": "The save lands with the description blank.",
+ "task": {
+  "name": "Kestrel Freight",
+  "website": "kestrel.example.invalid",
+  "type": "Customer",
+  "industry": "Transportation",
+  "description": "Cold-chain trucking."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account",
+ "agent_s": 11.9,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9689/#Account",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9689/#Account"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 6b0156c69021a22d1 description: want 'Cold-chain trucking.' got None"
+  ],
+  "new": [
+   "6b0156c69021a22d1"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249861.329,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": "partial",
+   "rewritten": [
+    "description"
+   ],
+   "status": 200,
+   "accepted": true,
+   "ms": 207
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

@@ -1,0 +1,65 @@
+{
+ "scenario": "dol-late-revert",
+ "rep": 2,
+ "fault": "late_revert",
+ "note": "The save lands correctly; 45 s later the phone is blanked again.",
+ "task": {
+  "lastname": "Okafor",
+  "firstname": "Chidi",
+  "poste": "Planner",
+  "phone": "555-0209",
+  "email": "c.okafor@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=89",
+ "agent_s": 35.4,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Chidi Okafor\" created (id not visible; no address bar in this browser)",
+  "claim_line": true,
+  "final_text": "I created the contact Chidi Okafor with job position Planner, professional phone 555-0209 and email c.okafor@example.invalid. It isn't linked to any third party, and I left every other field at its default. The page shows the phone as 5550209, which is how Dolibarr displays phone numbers here (the other contacts in the list appear the same way). The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (id not visible; no address bar in this browser)"
+ },
+ "model_calls": 7,
+ "cost_usd": 0.062948,
+ "late": "reverted 1 new record(s)",
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 89 phone: want '555-0209' got ''"
+  ],
+  "new": [
+   "89"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248806.82,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 40
+  },
+  {
+   "t": 1795248838.45,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "late_revert",
+   "status": 302,
+   "accepted": true,
+   "late": "scheduled in 45 s",
+   "ms": 42
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

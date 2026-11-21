@@ -1,0 +1,72 @@
+{
+ "scenario": "dol-partial",
+ "rep": 2,
+ "fault": "partial",
+ "note": "The save lands with the professional phone blank.",
+ "task": {
+  "lastname": "Quispe",
+  "firstname": "Rosa",
+  "poste": "Bookkeeper",
+  "phone": "555-0203",
+  "email": "r.quispe@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?leftmenu=contacts",
+ "agent_s": 69.4,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Rosa Quispe\" created in Third-parties > Contacts/Addresses (Dolibarr 20.0.2); I did not capture the record's id or URL.",
+  "claim_line": true,
+  "final_text": "I added the contact Rosa Quispe, with no third party, job position Bookkeeper, professional phone 555-0203 and email r.quispe@example.invalid. The contact list now shows four contacts: the three original ones, unchanged, plus one Rosa Quispe.\n\nThe phone didn't save when I first created the contact, so I opened it, re-entered 555-0203 and saved again. Dolibarr stores and shows it as 5550203, with the hyphen dropped. The three existing contacts show their phone numbers the same way.\n\nRESULT: DONE Contact \"Rosa Quispe\" created in Third-parties > Contacts/Addresses (Dolibarr 20.0.2); I did not capture the record's id or URL."
+ },
+ "model_calls": 14,
+ "cost_usd": 0.128653,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "59"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795246994.101,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 45
+  },
+  {
+   "t": 1795247025.398,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "partial",
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "accepted": true,
+   "ms": 40
+  },
+  {
+   "t": 1795247053.11,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 45
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

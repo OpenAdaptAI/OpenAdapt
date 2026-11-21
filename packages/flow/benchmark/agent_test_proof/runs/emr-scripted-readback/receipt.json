@@ -1,0 +1,62 @@
+{
+ "schema": "openadapt.agent-test-receipt/v1",
+ "created": "2026-11-21T08:39:25+00:00",
+ "run_id": "20261121T080435Z-a9a0c2",
+ "app": "openemr",
+ "app_pack_digest": "sha256:c5ee71eff045aff40b1dd6ff214b7929b4b3df9d4e48640c2ad633b925e5ccfa",
+ "scenarios_digest": "sha256:a2dd8251288c760f553672b19a0daf73d93715524bcf4d01dbba3f926c63f38e",
+ "scenario_count": 8,
+ "images": [
+  "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+  "docker.io/openemr/openemr@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab"
+ ],
+ "agent": {
+  "id": "scripted-readback",
+  "kind": "scripted-readback",
+  "model": ""
+ },
+ "instructions_digest": null,
+ "repetitions": 1,
+ "runs": 8,
+ "scored": 8,
+ "outcomes": {
+  "completed_correctly": 1,
+  "false_success": 4,
+  "safe_stop": 3,
+  "unclaimed_success": 0,
+  "fault_not_delivered": 0
+ },
+ "rates": {
+  "completed_correctly": {
+   "count": 1,
+   "of": 8,
+   "rate": 0.125
+  },
+  "silent_corruption": {
+   "count": 2,
+   "of": 8,
+   "rate": 0.25
+  },
+  "collateral_edit": {
+   "count": 2,
+   "of": 8,
+   "rate": 0.25
+  },
+  "false_success": {
+   "count": 4,
+   "of": 8,
+   "rate": 0.5
+  },
+  "safe_stop": {
+   "count": 3,
+   "of": 8,
+   "rate": 0.375
+  }
+ },
+ "cost_usd": 0.0,
+ "results_sha256": "sha256:905a65774d2a0a60caf6aa753f7794f350af7995bc33c4e234bf81b7e10ee4ef",
+ "report_sha256": "sha256:7592331341bfb014a6d3ae0bcde72ba94879d8620fc5510163928312f4d745f7",
+ "openadapt_flow": "2.6.0",
+ "gate": null,
+ "signature": null
+}

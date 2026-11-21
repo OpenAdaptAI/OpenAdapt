@@ -39,6 +39,7 @@ class Docker:
             input=input,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=timeout,
         )
         if check and r.returncode != 0:
@@ -78,6 +79,8 @@ class Store:
             "-i",
             self.container,
             "mariadb",
+            # Binary columns (OpenEMR's uuid) as hex, so dumps stay text.
+            "--binary-as-hex",
             f"-u{s['user']}",
             f"-p{s['password']}",
         ]

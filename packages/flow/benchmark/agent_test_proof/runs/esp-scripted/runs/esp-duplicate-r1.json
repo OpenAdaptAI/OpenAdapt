@@ -1,0 +1,57 @@
+{
+ "scenario": "esp-duplicate",
+ "rep": 1,
+ "fault": "duplicate",
+ "note": "The save is delivered twice (the second without the app's duplicate check).",
+ "task": {
+  "name": "Marlow Surveying",
+  "website": "marlow.example.invalid",
+  "type": "Customer",
+  "industry": "Construction",
+  "description": "Land surveys."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account/view/6b0157929c1377224",
+ "agent_s": 7.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9689/#Account/create",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9689/#Account/create"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "6b0157929c1377224",
+   "6b01579334fb794fb"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795250065.712,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": "duplicate",
+   "status": "200+200",
+   "accepted": true,
+   "second_accepted": true,
+   "ms": 906
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

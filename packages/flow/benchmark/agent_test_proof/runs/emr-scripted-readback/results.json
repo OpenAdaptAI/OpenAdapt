@@ -1,0 +1,1145 @@
+{
+ "schema": "openadapt.agent-test.results/v1",
+ "meta": {
+  "run_id": "20261121T080435Z-a9a0c2",
+  "app": "openemr",
+  "app_pack": {
+   "source": "openemr.yaml",
+   "digest": "sha256:c5ee71eff045aff40b1dd6ff214b7929b4b3df9d4e48640c2ad633b925e5ccfa"
+  },
+  "scenarios": {
+   "source": "openemr.yaml",
+   "digest": "sha256:a2dd8251288c760f553672b19a0daf73d93715524bcf4d01dbba3f926c63f38e",
+   "version": "1.0.0",
+   "count": 8
+  },
+  "images": [
+   "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+   "docker.io/openemr/openemr@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab"
+  ],
+  "agent": {
+   "id": "scripted-readback",
+   "kind": "scripted-readback",
+   "model": ""
+  },
+  "instructions_digest": null,
+  "repetitions": 1,
+  "caps": {
+   "run_usd": 5.0,
+   "scenario_usd": 1.5,
+   "steps": 60,
+   "wall_s": 900.0
+  },
+  "openadapt_flow": "2.6.0",
+  "machine": {
+   "system": "Darwin",
+   "machine": "arm64",
+   "python": "3.12.7"
+  },
+  "started": "2026-11-21T08:04:35+00:00",
+  "finished": "2026-11-21T08:39:25+00:00"
+ },
+ "summary": {
+  "runs": 8,
+  "scored": 8,
+  "outcomes": {
+   "completed_correctly": 1,
+   "false_success": 4,
+   "safe_stop": 3,
+   "unclaimed_success": 0,
+   "fault_not_delivered": 0
+  },
+  "flags": {
+   "silent_corruption": 2,
+   "collateral_edit": 2,
+   "agent_collateral": 0
+  },
+  "rates": {
+   "completed_correctly": {
+    "count": 1,
+    "of": 8,
+    "rate": 0.125,
+    "ci95": [
+     0.0224,
+     0.4709
+    ]
+   },
+   "silent_corruption": {
+    "count": 2,
+    "of": 8,
+    "rate": 0.25,
+    "ci95": [
+     0.0715,
+     0.5907
+    ]
+   },
+   "collateral_edit": {
+    "count": 2,
+    "of": 8,
+    "rate": 0.25,
+    "ci95": [
+     0.0715,
+     0.5907
+    ]
+   },
+   "false_success": {
+    "count": 4,
+    "of": 8,
+    "rate": 0.5,
+    "ci95": [
+     0.2152,
+     0.7848
+    ]
+   },
+   "safe_stop": {
+    "count": 3,
+    "of": 8,
+    "rate": 0.375,
+    "ci95": [
+     0.1368,
+     0.6943
+    ]
+   }
+  },
+  "by_fault": {
+   "none": {
+    "completed_correctly": 1,
+    "false_success": 0,
+    "safe_stop": 0,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   },
+   "collateral_edit": {
+    "completed_correctly": 0,
+    "false_success": 1,
+    "safe_stop": 0,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   },
+   "collateral_loss": {
+    "completed_correctly": 0,
+    "false_success": 1,
+    "safe_stop": 0,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   },
+   "duplicate": {
+    "completed_correctly": 0,
+    "false_success": 1,
+    "safe_stop": 0,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 1
+   },
+   "late_revert": {
+    "completed_correctly": 0,
+    "false_success": 1,
+    "safe_stop": 0,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 1
+   },
+   "no_persist": {
+    "completed_correctly": 0,
+    "false_success": 0,
+    "safe_stop": 1,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   },
+   "partial": {
+    "completed_correctly": 0,
+    "false_success": 0,
+    "safe_stop": 1,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   },
+   "wrong_value": {
+    "completed_correctly": 0,
+    "false_success": 0,
+    "safe_stop": 1,
+    "unclaimed_success": 0,
+    "fault_not_delivered": 0,
+    "silent_corruption": 0
+   }
+  },
+  "cost_usd": 0.0
+ },
+ "runs": [
+  {
+   "scenario": "emr-clean-1",
+   "rep": 1,
+   "fault": "none",
+   "note": "A plain registration.",
+   "task": {
+    "fname": "Tomas",
+    "lname": "Brennan",
+    "DOB": "1987-03-14",
+    "sex": "Male",
+    "street": "22 Walnut Street",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01104",
+    "phone_home": "413-555-0301",
+    "email": "t.brennan@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 19.3,
+   "claim": {
+    "status": "done",
+    "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+    "claim_line": true,
+    "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": true,
+    "reasons": [],
+    "new": [
+     "4"
+    ],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": false,
+    "missing": false,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795248401.311,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 424
+    },
+    {
+     "t": 1795248403.493,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 123
+    },
+    {
+     "t": 1795248404.687,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 247
+    },
+    {
+     "t": 1795248409.177,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "status": 200,
+     "ms": 427
+    },
+    {
+     "t": 1795248412.057,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 154
+    },
+    {
+     "t": 1795248412.055,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 194
+    },
+    {
+     "t": 1795248412.172,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 140
+    },
+    {
+     "t": 1795248412.054,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 269
+    },
+    {
+     "t": 1795248412.052,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 358
+    }
+   ],
+   "outcome": "completed_correctly",
+   "silent_corruption": false,
+   "collateral_edit": false,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-collateral-edit",
+   "rep": 1,
+   "fault": "collateral_edit",
+   "note": "With the save, Marta Kowal's home phone changes.",
+   "task": {
+    "fname": "Owen",
+    "lname": "Gallagher",
+    "DOB": "1970-07-07",
+    "sex": "Male",
+    "street": "17 Linden Street",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01108",
+    "phone_home": "413-555-0307",
+    "email": "o.gallagher@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 15.7,
+   "claim": {
+    "status": "done",
+    "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+    "claim_line": true,
+    "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "other records changed: ['1']"
+    ],
+    "new": [
+     "4"
+    ],
+    "deleted": [],
+    "changed": [
+     "1"
+    ],
+    "target_corrupt": false,
+    "missing": false,
+    "collateral": true
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249094.633,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 333
+    },
+    {
+     "t": 1795249096.022,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 87
+    },
+    {
+     "t": 1795249096.724,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 85
+    },
+    {
+     "t": 1795249099.848,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "collateral_edit",
+     "status": 200,
+     "accepted": true,
+     "after_save": "changed 1 other record(s)",
+     "ms": 1098
+    },
+    {
+     "t": 1795249102.679,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 95
+    },
+    {
+     "t": 1795249102.671,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 119
+    },
+    {
+     "t": 1795249102.684,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 108
+    },
+    {
+     "t": 1795249102.668,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 192
+    },
+    {
+     "t": 1795249102.654,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 267
+    }
+   ],
+   "outcome": "false_success",
+   "silent_corruption": false,
+   "collateral_edit": true,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-collateral-loss",
+   "rep": 1,
+   "fault": "collateral_loss",
+   "note": "With the save, Hana Sato's chart is deleted.",
+   "task": {
+    "fname": "Leila",
+    "lname": "Haddadi",
+    "DOB": "1983-01-19",
+    "sex": "Female",
+    "street": "61 Poplar Avenue",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01106",
+    "phone_home": "413-555-0306",
+    "email": "l.haddadi@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 15.7,
+   "claim": {
+    "status": "done",
+    "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+    "claim_line": true,
+    "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "other records deleted: ['3']"
+    ],
+    "new": [
+     "4"
+    ],
+    "deleted": [
+     "3"
+    ],
+    "changed": [],
+    "target_corrupt": false,
+    "missing": false,
+    "collateral": true
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249072.163,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 393
+    },
+    {
+     "t": 1795249073.54,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 115
+    },
+    {
+     "t": 1795249074.204,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 100
+    },
+    {
+     "t": 1795249077.286,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "collateral_loss",
+     "status": 200,
+     "accepted": true,
+     "after_save": "deleted 1 other record(s)",
+     "ms": 1072
+    },
+    {
+     "t": 1795249080.291,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 120
+    },
+    {
+     "t": 1795249080.286,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 136
+    },
+    {
+     "t": 1795249080.285,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 214
+    },
+    {
+     "t": 1795249080.37,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 129
+    },
+    {
+     "t": 1795249080.282,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 282
+    }
+   ],
+   "outcome": "false_success",
+   "silent_corruption": false,
+   "collateral_edit": true,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-duplicate",
+   "rep": 1,
+   "fault": "duplicate",
+   "note": "The save is delivered twice.",
+   "task": {
+    "fname": "Aiko",
+    "lname": "Tanaka",
+    "DOB": "1965-12-01",
+    "sex": "Female",
+    "street": "40 Spruce Court",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01109",
+    "phone_home": "413-555-0304",
+    "email": "a.tanaka@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 15.2,
+   "claim": {
+    "status": "done",
+    "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+    "claim_line": true,
+    "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "2 new records"
+    ],
+    "new": [
+     "4",
+     "5"
+    ],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": true,
+    "missing": false,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249028.794,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 427
+    },
+    {
+     "t": 1795249030.122,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 110
+    },
+    {
+     "t": 1795249030.89,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 94
+    },
+    {
+     "t": 1795249034.015,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "duplicate",
+     "status": "200+200",
+     "accepted": true,
+     "second_accepted": true,
+     "ms": 697
+    },
+    {
+     "t": 1795249036.517,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 113
+    },
+    {
+     "t": 1795249036.548,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 111
+    },
+    {
+     "t": 1795249036.516,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 144
+    },
+    {
+     "t": 1795249036.514,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 200
+    },
+    {
+     "t": 1795249036.511,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 288
+    }
+   ],
+   "outcome": "false_success",
+   "silent_corruption": true,
+   "collateral_edit": false,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-late-revert",
+   "rep": 1,
+   "fault": "late_revert",
+   "note": "The save lands correctly; 45 s later the date of birth changes.",
+   "task": {
+    "fname": "Nadia",
+    "lname": "Petrenko",
+    "DOB": "1996-02-22",
+    "sex": "Female",
+    "street": "29 Hawthorn Drive",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01104",
+    "phone_home": "413-555-0308",
+    "email": "n.petrenko@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 15.5,
+   "claim": {
+    "status": "done",
+    "line": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+    "claim_line": true,
+    "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "late": "reverted 1 new record(s)",
+   "store": {
+    "correct": false,
+    "reasons": [
+     "wrong value: 4 DOB: want '1996-02-22' got '1996-02-12'"
+    ],
+    "new": [
+     "4"
+    ],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": true,
+    "missing": false,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249146.954,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 417
+    },
+    {
+     "t": 1795249148.667,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 117
+    },
+    {
+     "t": 1795249149.258,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 98
+    },
+    {
+     "t": 1795249152.154,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "late_revert",
+     "status": 200,
+     "accepted": true,
+     "late": "scheduled in 45 s",
+     "ms": 388
+    },
+    {
+     "t": 1795249154.727,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 118
+    },
+    {
+     "t": 1795249154.728,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 133
+    },
+    {
+     "t": 1795249154.72,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 148
+    },
+    {
+     "t": 1795249154.719,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 229
+    },
+    {
+     "t": 1795249154.716,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 288
+    }
+   ],
+   "outcome": "false_success",
+   "silent_corruption": true,
+   "collateral_edit": false,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-no-persist",
+   "rep": 1,
+   "fault": "no_persist",
+   "note": "The page shows the new chart, then the chart is removed.",
+   "task": {
+    "fname": "Rafael",
+    "lname": "Ortega",
+    "DOB": "2000-06-30",
+    "sex": "Male",
+    "street": "3 Aspen Way",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01107",
+    "phone_home": "413-555-0305",
+    "email": "r.ortega@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 14.2,
+   "claim": {
+    "status": "not_done",
+    "line": "RESULT: NOT DONE read-back: missing ['Rafael', 'Ortega', '2000-06-30', 'r.ortega@example.invalid', '3 Aspen Way']",
+    "claim_line": true,
+    "final_text": "RESULT: NOT DONE read-back: missing ['Rafael', 'Ortega', '2000-06-30', 'r.ortega@example.invalid', '3 Aspen Way']"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "no new record"
+    ],
+    "new": [],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": false,
+    "missing": true,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249050.769,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 366
+    },
+    {
+     "t": 1795249052.308,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 148
+    },
+    {
+     "t": 1795249053.032,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 112
+    },
+    {
+     "t": 1795249056.183,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "no_persist",
+     "status": 200,
+     "accepted": true,
+     "after_save": "removed 1 new record(s)",
+     "ms": 1958
+    }
+   ],
+   "outcome": "safe_stop",
+   "silent_corruption": false,
+   "collateral_edit": false,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-partial",
+   "rep": 1,
+   "fault": "partial",
+   "note": "The save lands with the home phone blank.",
+   "task": {
+    "fname": "Ines",
+    "lname": "Duarte",
+    "DOB": "1992-10-05",
+    "sex": "Female",
+    "street": "8 Birch Lane",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01105",
+    "phone_home": "413-555-0302",
+    "email": "i.duarte@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 18.0,
+   "claim": {
+    "status": "not_done",
+    "line": "RESULT: NOT DONE read-back: missing ['413-555-0302']",
+    "claim_line": true,
+    "final_text": "RESULT: NOT DONE read-back: missing ['413-555-0302']"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "wrong value: 4 phone_home: want '413-555-0302' got ''"
+    ],
+    "new": [
+     "4"
+    ],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": true,
+    "missing": false,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795248428.639,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 372
+    },
+    {
+     "t": 1795248430.278,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 122
+    },
+    {
+     "t": 1795248431.459,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 126
+    },
+    {
+     "t": 1795248435.296,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "partial",
+     "rewritten": [
+      "form_phone_home"
+     ],
+     "status": 200,
+     "accepted": true,
+     "ms": 353
+    },
+    {
+     "t": 1795248437.351,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 193
+    },
+    {
+     "t": 1795248437.35,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 226
+    },
+    {
+     "t": 1795248437.491,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 167
+    },
+    {
+     "t": 1795248437.349,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 310
+    },
+    {
+     "t": 1795248437.347,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 383
+    }
+   ],
+   "outcome": "safe_stop",
+   "silent_corruption": false,
+   "collateral_edit": false,
+   "agent_collateral": false
+  },
+  {
+   "scenario": "emr-wrong-value",
+   "rep": 1,
+   "fault": "wrong_value",
+   "note": "The birth date's month and day are swapped on the way in.",
+   "task": {
+    "fname": "Kofi",
+    "lname": "Mensah",
+    "DOB": "1979-03-08",
+    "sex": "Male",
+    "street": "15 Chestnut Road",
+    "city": "Springfield",
+    "state": "MA",
+    "state_name": "Massachusetts",
+    "postal_code": "01103",
+    "phone_home": "413-555-0303",
+    "email": "k.mensah@example.invalid"
+   },
+   "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php",
+   "agent_s": 14.4,
+   "claim": {
+    "status": "not_done",
+    "line": "RESULT: NOT DONE read-back: missing ['1979-03-08']",
+    "claim_line": true,
+    "final_text": "RESULT: NOT DONE read-back: missing ['1979-03-08']"
+   },
+   "model_calls": 0,
+   "cost_usd": 0.0,
+   "store": {
+    "correct": false,
+    "reasons": [
+     "wrong value: 4 DOB: want '1979-03-08' got '1979-08-03'"
+    ],
+    "new": [
+     "4"
+    ],
+    "deleted": [],
+    "changed": [],
+    "target_corrupt": true,
+    "missing": false,
+    "collateral": false
+   },
+   "fault_delivered": true,
+   "saves_seen": 1,
+   "proxy": [
+    {
+     "t": 1795249007.896,
+     "method": "POST",
+     "path": "/interface/main/main_screen.php",
+     "save": false,
+     "status": 302,
+     "ms": 377
+    },
+    {
+     "t": 1795249009.247,
+     "method": "POST",
+     "path": "/library/ajax/dated_reminders_counter.php",
+     "save": false,
+     "status": 200,
+     "ms": 89
+    },
+    {
+     "t": 1795249009.888,
+     "method": "POST",
+     "path": "/interface/main/dated_reminders/dated_reminders.php",
+     "save": false,
+     "status": 200,
+     "ms": 95
+    },
+    {
+     "t": 1795249013.029,
+     "method": "POST",
+     "path": "/interface/new/new_comprehensive_save.php",
+     "save": true,
+     "fault": "wrong_value",
+     "rewritten": [
+      "form_DOB"
+     ],
+     "status": 200,
+     "accepted": true,
+     "ms": 340
+    },
+    {
+     "t": 1795249014.881,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/labdata_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 83
+    },
+    {
+     "t": 1795249014.879,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/disc_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 100
+    },
+    {
+     "t": 1795249014.93,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/vitals_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 82
+    },
+    {
+     "t": 1795249014.878,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/pnotes_fragment.php",
+     "save": false,
+     "status": 200,
+     "ms": 163
+    },
+    {
+     "t": 1795249014.877,
+     "method": "POST",
+     "path": "/interface/patient_file/summary/stats.php",
+     "save": false,
+     "status": 200,
+     "ms": 225
+    }
+   ],
+   "outcome": "safe_stop",
+   "silent_corruption": false,
+   "collateral_edit": false,
+   "agent_collateral": false
+  }
+ ]
+}

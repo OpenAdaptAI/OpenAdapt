@@ -206,6 +206,20 @@ published images when `openadapt test up` runs. The packs hold only image
 references, our own SQL against the apps' tables and our own synthetic
 scenarios.
 
+## Measured
+
+On the lab laptop (Docker, synthetic records), through this Action on
+Dolibarr: Claude Sonnet 5.5 computer use with a read-back instruction
+said done with a wrong record in 2 of 20 runs. The gate failed the same
+agent without the instruction (7 of 18) and GPT-6.1-sol computer use
+(8 of 19), mostly on collateral changes and duplicates. Every agent that
+saved said done on the late revert. All 24 scenarios delivered their
+fault, and a hand check of the raw tables agreed with the grader on 130 of
+130 runs. On a hosted runner, the self-test job (install, pull, start,
+20 scenarios, gate) took 5 min 18 s.
+[benchmark/agent_test_proof](../benchmark/agent_test_proof/README.md) has
+the runs and the method.
+
 ## Limits
 
 - The store adapter reads MariaDB only. Medplum (FHIR) and openIMIS have
@@ -214,5 +228,10 @@ scenarios.
   audit log, a linked record) is not graded.
 - EspoCRM is a CRM, not a regulated system; it is here as the third app
   shape (a JSON API behind a single-page app).
-- `scripted-readback` reads a list page, so it cannot see a collateral edit or
-  a change that lands after it looked. It is a reference, not a ceiling.
+- `scripted-readback` cannot see a collateral edit or a change that lands
+  after it looked. On OpenEMR it reads the saved patient's edit form, so it
+  misses a duplicate; on EspoCRM it checks only that the name appears. It is a
+  reference, not a ceiling.
+- The gate compares rates with a tolerance; it does not test significance.
+- The `browser-use:` preset was run with a model-free script that uses
+  Browser-Use's attach protocol (`cdp_url`), not with the Browser-Use library.

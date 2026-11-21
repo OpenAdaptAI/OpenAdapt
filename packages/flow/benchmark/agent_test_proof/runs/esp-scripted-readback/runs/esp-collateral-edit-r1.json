@@ -1,0 +1,58 @@
+{
+ "scenario": "esp-collateral-edit",
+ "rep": 1,
+ "fault": "collateral_edit",
+ "note": "With the save, Alder Logistics' industry changes.",
+ "task": {
+  "name": "Nettle Print",
+  "website": "nettle.example.invalid",
+  "type": "Customer",
+  "industry": "Manufacturing",
+  "description": "Labels and packaging."
+ },
+ "end_url": "http://127.0.0.1:9689/#Account",
+ "agent_s": 12.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE read back http://127.0.0.1:9689/#Account",
+  "claim_line": true,
+  "final_text": "RESULT: DONE read back http://127.0.0.1:9689/#Account"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records changed: ['c2a8a42aae789fe9b']"
+  ],
+  "new": [
+   "6b015703030143478"
+  ],
+  "deleted": [],
+  "changed": [
+   "c2a8a42aae789fe9b"
+  ],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249921.617,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": "collateral_edit",
+   "status": 200,
+   "accepted": true,
+   "after_save": "changed 1 other record(s)",
+   "ms": 1228
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

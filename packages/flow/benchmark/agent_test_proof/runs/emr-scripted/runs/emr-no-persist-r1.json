@@ -1,0 +1,84 @@
+{
+ "scenario": "emr-no-persist",
+ "rep": 1,
+ "fault": "no_persist",
+ "note": "The page shows the new chart, then the chart is removed.",
+ "task": {
+  "fname": "Rafael",
+  "lname": "Ortega",
+  "DOB": "2000-06-30",
+  "sex": "Male",
+  "street": "3 Aspen Way",
+  "city": "Springfield",
+  "state": "MA",
+  "state_name": "Massachusetts",
+  "postal_code": "01107",
+  "phone_home": "413-555-0305",
+  "email": "r.ortega@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1",
+ "agent_s": 11.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": true,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249392.576,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 446
+  },
+  {
+   "t": 1795249394.197,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 96
+  },
+  {
+   "t": 1795249395.009,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 136
+  },
+  {
+   "t": 1795249398.219,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": "no_persist",
+   "status": 200,
+   "accepted": true,
+   "after_save": "removed 1 new record(s)",
+   "ms": 2051
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

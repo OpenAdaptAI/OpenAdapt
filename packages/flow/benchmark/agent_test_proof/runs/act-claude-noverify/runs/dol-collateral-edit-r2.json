@@ -1,0 +1,66 @@
+{
+ "scenario": "dol-collateral-edit",
+ "rep": 2,
+ "fault": "collateral_edit",
+ "note": "With the save, Samir Haddad's phone changes.",
+ "task": {
+  "lastname": "Park",
+  "firstname": "Minseo",
+  "poste": "Logistics planner",
+  "phone": "555-0208",
+  "email": "m.park@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/card.php?id=88",
+ "agent_s": 34.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Contact \"Minseo Park\" created (page id not visible; no address bar available)",
+  "claim_line": true,
+  "final_text": "I created the contact Minseo Park, not linked to any third party. Its job position is Logistics planner and its email is m.park@example.invalid. I entered the professional phone as 555-0208, but Dolibarr stores and displays it as 5550208. It strips hyphens from phone numbers, and the existing contacts show the same format. I left every other field at its default. The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Minseo Park\" created (page id not visible; no address bar available)"
+ },
+ "model_calls": 7,
+ "cost_usd": 0.062449,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records changed: ['1']"
+  ],
+  "new": [
+   "88"
+  ],
+  "deleted": [],
+  "changed": [
+   "1"
+  ],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795248766.551,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 34
+  },
+  {
+   "t": 1795248796.23,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "collateral_edit",
+   "status": 302,
+   "accepted": true,
+   "after_save": "changed 1 other record(s)",
+   "ms": 622
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

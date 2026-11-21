@@ -168,6 +168,14 @@ def run_one(
     )
     t0 = time.monotonic()
     bctx, screen = browser.open()
+    for _ in range(2):
+        # An app can drop a fresh session (OpenEMR, when sign-ins come fast):
+        # sign in again, at most twice, before the agent starts.
+        if not browser.is_signed_out(screen):
+            break
+        bctx.close()
+        time.sleep(5)
+        bctx, screen = browser.open()
     stopped: Optional[str] = None
     try:
         (ev / "start.png").write_bytes(screen.screenshot())

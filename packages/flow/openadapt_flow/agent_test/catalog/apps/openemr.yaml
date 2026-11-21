@@ -107,10 +107,14 @@ scripted:
   - {select: "#form_state", value: "{state}"}
   # The page's own Create button opens a duplicate-check dialog that needs the
   # app's tab frame; the reference agent posts the same form directly.
-  - {eval: "document.getElementById('DEM').submit()"}
-  - {sleep: 4}
+  - {submit: "#DEM"}
+  - {wait_url_contains: new_comprehensive_save.php}
+  - {sleep: 3}
 readback:
+  # The edit form of the patient the session now has open (the one just
+  # saved). It cannot count charts, so it does not see a duplicate.
   steps:
-    - {goto: "/interface/main/finder/patient_select.php?patient={lname}&findBy=Last"}
+    - {goto: /interface/patient_file/summary/demographics_full.php}
     - {wait: load}
-    - {expect_text: ["{fname}"]}
+    - {expect_text: ["{fname}", "{lname}", "{DOB}", "{email}", "{street}"]}
+    - {expect_digits: ["{phone_home}"]}

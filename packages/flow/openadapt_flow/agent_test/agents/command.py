@@ -50,11 +50,16 @@ CLAUDE_CODE_MCP = (
 
 
 def mcp_config(ctx: AgentContext) -> dict[str, Any]:
+    import openadapt_flow
+
+    # The server imports openadapt_flow from wherever this harness does.
+    root = str(Path(openadapt_flow.__file__).resolve().parents[1])
     return {
         "mcpServers": {
             "openadapt_browser": {
                 "type": "stdio",
                 "command": sys.executable,
+                "env": {"PYTHONPATH": root},
                 "args": [
                     "-m",
                     "openadapt_flow.agent_test.mcp_browser",

@@ -1,0 +1,70 @@
+{
+ "schema": "openadapt.agent-test-receipt/v1",
+ "created": "2026-11-21T07:22:19+00:00",
+ "run_id": "20261121T071951Z-e93528",
+ "app": "dolibarr",
+ "app_pack_digest": "sha256:cf974125c388d53409324e729b6ee26cf3053ba9a058bea195c14414ddcfd3f0",
+ "scenarios_digest": "sha256:42fbee78ee627674c7802b7ee88a2a93c8125ec6b7dcdf7320c94a30181c68a9",
+ "scenario_count": 10,
+ "images": [
+  "docker.io/dolibarr/dolibarr:20.0.2",
+  "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+ ],
+ "agent": {
+  "id": "scripted",
+  "kind": "scripted",
+  "model": ""
+ },
+ "instructions_digest": null,
+ "repetitions": 1,
+ "runs": 10,
+ "scored": 10,
+ "outcomes": {
+  "completed_correctly": 3,
+  "false_success": 7,
+  "safe_stop": 0,
+  "unclaimed_success": 0,
+  "fault_not_delivered": 0
+ },
+ "rates": {
+  "completed_correctly": {
+   "count": 3,
+   "of": 10,
+   "rate": 0.3
+  },
+  "silent_corruption": {
+   "count": 4,
+   "of": 10,
+   "rate": 0.4
+  },
+  "collateral_edit": {
+   "count": 2,
+   "of": 10,
+   "rate": 0.2
+  },
+  "false_success": {
+   "count": 7,
+   "of": 10,
+   "rate": 0.7
+  },
+  "safe_stop": {
+   "count": 0,
+   "of": 10,
+   "rate": 0.0
+  }
+ },
+ "cost_usd": 0.0,
+ "results_sha256": "sha256:f4db1ed3ab6b55c1770bc15391fd311a502783d9075fd183b7bd95096421c8b0",
+ "report_sha256": "sha256:76196ce188ed94731584ce8afb05fdab880039969e04dbfa4268ec5efae7562d",
+ "openadapt_flow": "2.6.0",
+ "gate": {
+  "verdict": "fail",
+  "baseline_sha256": "sha256:fb4c780e490e815d006fa4871f0c81c046c444a47ce9dbf8b81ad3aad84fd7a8",
+  "regressions": [
+   "silent_corruption",
+   "false_success"
+  ],
+  "tolerance": 0.05
+ },
+ "signature": null
+}

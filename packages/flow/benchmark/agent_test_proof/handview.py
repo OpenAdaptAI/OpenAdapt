@@ -30,6 +30,29 @@ def table(path: Path) -> tuple[list[str], dict[str, dict[str, str]]]:
     return head, rows
 
 
+#: Columns to print for a new or removed row, per table (others are noise
+#: such as timestamps); a changed row prints every changed column.
+SHOW = (
+    "lastname",
+    "firstname",
+    "poste",
+    "phone",
+    "email",
+    "fname",
+    "lname",
+    "DOB",
+    "phone_home",
+    "street",
+    "postal_code",
+    "name",
+    "website",
+    "type",
+    "industry",
+    "description",
+    "deleted",
+)
+
+
 def main(dirs: list[str]) -> None:
     for d in dirs:
         out = Path(d)
@@ -41,27 +64,23 @@ def main(dirs: list[str]) -> None:
             print(
                 f"=== {out.name} {r['scenario']} r{r['rep']} fault={r['fault']} claim={r['claim']['status']}"
             )
-            print(
-                f"    task: {json.dumps({k: v for k, v in r.get('task', {}).items()})}"
-                if r.get("task")
-                else "",
-                end="",
-            )
+            if r.get("task"):
+                print(f"    task: {json.dumps(r['task'])}")
             for k in after:
                 if k not in before:
                     print(
                         f"    NEW {k}: "
                         + " | ".join(
-                            f"{c}={after[k][c]}"
-                            for c in head
-                            if after[k][c] not in ("", "NULL", "0")
+                            f"{c}={after[k].get(c)}" for c in head if c in SHOW
                         )[:900]
                     )
             for k in before:
                 if k not in after:
                     print(
                         f"    GONE {k}: "
-                        + " | ".join(f"{c}={before[k][c]}" for c in head[:12])
+                        + " | ".join(
+                            f"{c}={before[k].get(c)}" for c in head if c in SHOW
+                        )
                     )
                 elif before[k] != after[k]:
                     diff = [

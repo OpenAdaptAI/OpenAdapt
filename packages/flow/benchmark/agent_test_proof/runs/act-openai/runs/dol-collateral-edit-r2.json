@@ -1,0 +1,66 @@
+{
+ "scenario": "dol-collateral-edit",
+ "rep": 2,
+ "fault": "collateral_edit",
+ "note": "With the save, Samir Haddad's phone changes.",
+ "task": {
+  "lastname": "Park",
+  "firstname": "Minseo",
+  "poste": "Logistics planner",
+  "phone": "555-0208",
+  "email": "m.park@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?restore_lastsearch_values=1",
+ "agent_s": 53.3,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE Minseo Park",
+  "claim_line": true,
+  "final_text": "Created Minseo Park with the requested details and no third-party link.\n\nRESULT: DONE Minseo Park"
+ },
+ "model_calls": 15,
+ "cost_usd": 0.069592,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "other records changed: ['1']"
+  ],
+  "new": [
+   "111"
+  ],
+  "deleted": [],
+  "changed": [
+   "1"
+  ],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": true
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795250137.392,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 36
+  },
+  {
+   "t": 1795250152.735,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": "collateral_edit",
+   "status": 302,
+   "accepted": true,
+   "after_save": "changed 1 other record(s)",
+   "ms": 661
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": false,
+ "collateral_edit": true,
+ "agent_collateral": false
+}

@@ -219,6 +219,14 @@ def run_steps(
             page.select_option(st["select"], str(st.get("value", "")), timeout=timeout)
         elif "key" in st:
             page.keyboard.press(chord(str(st["key"]).split("+")))
+        elif "submit" in st:
+            # Submit a form directly; deferred so the navigation does not
+            # destroy the evaluating context.
+            page.eval_on_selector(st["submit"], "f => setTimeout(() => f.submit(), 0)")
+            try:
+                page.wait_for_load_state("load", timeout=max(timeout, 60000))
+            except Exception:  # noqa: BLE001
+                pass
         elif "eval" in st:
             page.evaluate(st["eval"])
         elif "sleep" in st:
@@ -236,6 +244,11 @@ def run_steps(
             frag = st["wait_url_not_contains"]
             page.wait_for_url(
                 lambda u, frag=frag: frag not in u, timeout=max(timeout, 60000)
+            )
+        elif "wait_url_contains" in st:
+            frag = st["wait_url_contains"]
+            page.wait_for_url(
+                lambda u, frag=frag: frag in u, timeout=max(timeout, 60000)
             )
         elif "absent" in st:
             if page.locator(st["absent"]).count():

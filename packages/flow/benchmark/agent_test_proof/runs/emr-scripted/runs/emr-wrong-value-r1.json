@@ -1,0 +1,128 @@
+{
+ "scenario": "emr-wrong-value",
+ "rep": 1,
+ "fault": "wrong_value",
+ "note": "The birth date's month and day are swapped on the way in.",
+ "task": {
+  "fname": "Kofi",
+  "lname": "Mensah",
+  "DOB": "1979-03-08",
+  "sex": "Male",
+  "street": "15 Chestnut Road",
+  "city": "Springfield",
+  "state": "MA",
+  "state_name": "Massachusetts",
+  "postal_code": "01103",
+  "phone_home": "413-555-0303",
+  "email": "k.mensah@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1",
+ "agent_s": 13.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1",
+  "claim_line": true,
+  "final_text": "RESULT: DONE http://127.0.0.1:9683/interface/patient_file/summary/demographics.php?set_pid=4&is_new=1"
+ },
+ "model_calls": 0,
+ "cost_usd": 0.0,
+ "store": {
+  "correct": false,
+  "reasons": [
+   "wrong value: 4 DOB: want '1979-03-08' got '1979-08-03'"
+  ],
+  "new": [
+   "4"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": true,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249246.737,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 467
+  },
+  {
+   "t": 1795249248.621,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 122
+  },
+  {
+   "t": 1795249249.358,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 121
+  },
+  {
+   "t": 1795249253.099,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": "wrong_value",
+   "rewritten": [
+    "form_DOB"
+   ],
+   "status": 200,
+   "accepted": true,
+   "ms": 394
+  },
+  {
+   "t": 1795249255.692,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 157
+  },
+  {
+   "t": 1795249255.688,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 176
+  },
+  {
+   "t": 1795249255.704,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 160
+  },
+  {
+   "t": 1795249255.687,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 291
+  },
+  {
+   "t": 1795249255.684,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "save": false,
+   "status": 200,
+   "ms": 357
+  }
+ ],
+ "outcome": "false_success",
+ "silent_corruption": true,
+ "collateral_edit": false,
+ "agent_collateral": false
+}

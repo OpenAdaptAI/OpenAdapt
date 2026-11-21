@@ -1,0 +1,401 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b015386865087d18b5613cb08763d1b",
+     "call_id": "call_Gec8opvN4MbPU3KpuSsDRmSv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b015389873c87d18786485539316004",
+     "call_id": "call_iS0BACmEb9NUBSHS1TQgdjlS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 110,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b01538c950487d1a2724aca11bd00f2",
+     "call_id": "call_7rkEP80TI3GMo9znmRb0LCSS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 101,
+       "y": 373
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b0153900a9087d1a674d9b115785ef8",
+     "call_id": "call_F8K1QId4Zb9FBiKZe4wS1PxU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Abara",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 656,
+       "y": 199
+      },
+      {
+       "text": "Nkem",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 651,
+       "y": 294
+      },
+      {
+       "text": "Office manager",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 685,
+       "y": 477
+      },
+      {
+       "text": "555-0201",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 681,
+       "y": 548
+      },
+      {
+       "text": "n.abara@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 499,
+       "type": "scroll",
+       "x": 1194,
+       "y": 668
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b015394e7e887d19730caa1c5092084",
+     "call_id": "call_s9nugGvclmwyx3u2ta2cpDW2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 718,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b015398575c87d1815d199409b3e681",
+     "call_id": "call_XudktDsngCNaiyaapGpRHnIE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b01539bf76887d18b8014b30f16482f",
+     "call_id": "call_2VsruA1vJhmGh2DXhrtGS5zy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 544,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b01539f558487d18c03fcda0eead759",
+     "call_id": "call_kBapImaPaEH379pfOoyM1NB0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 486,
+       "y": 158
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b0153a3f0cc87d187fc2a6bd2ad9829",
+     "call_id": "call_rCaYmHSgIEjAHkhBqJFqMbbN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1121,
+       "y": 154
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b0153a81be887d184b45e63fa1dc432",
+     "call_id": "call_ealSeGuYANcFV22lvOgHMIHt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 452,
+       "y": 270
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_084d6c3d71c524f1016b0153abc91487d1ab4afb0fcb1d1897",
+     "call_id": "call_SHdQgJjuSVSroN5UAjvlZXe3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 397,
+       "y": 271
+      },
+      {
+       "type": "wait"
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 4",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 110,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 101,
+   "y": 373,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 5
+  },
+  {
+   "a": "click",
+   "x": 656,
+   "y": 199,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 4
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 294,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 14
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 477,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 8
+  },
+  {
+   "a": "click",
+   "x": 681,
+   "y": 548,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "chars": 23
+  },
+  {
+   "a": "scroll",
+   "x": 1194,
+   "y": 668,
+   "dx": 0,
+   "dy": 499
+  },
+  {
+   "a": "click",
+   "x": 718,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 544,
+   "y": 100
+  },
+  {
+   "a": "move",
+   "x": 486,
+   "y": 158
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1121,
+   "y": 154,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 452,
+   "y": 270,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 397,
+   "y": 271
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ]
+}

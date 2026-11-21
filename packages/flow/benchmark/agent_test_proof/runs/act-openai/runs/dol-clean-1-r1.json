@@ -1,0 +1,59 @@
+{
+ "scenario": "dol-clean-1",
+ "rep": 1,
+ "fault": "none",
+ "note": "A plain contact.",
+ "task": {
+  "lastname": "Abara",
+  "firstname": "Nkem",
+  "poste": "Office manager",
+  "phone": "555-0201",
+  "email": "n.abara@example.invalid"
+ },
+ "end_url": "http://127.0.0.1:9681/contact/list.php?restore_lastsearch_values=1",
+ "agent_s": 48.7,
+ "claim": {
+  "status": "done",
+  "line": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 4"
+ },
+ "model_calls": 12,
+ "cost_usd": 0.057828,
+ "store": {
+  "correct": true,
+  "reasons": [],
+  "new": [
+   "91"
+  ],
+  "deleted": [],
+  "changed": [],
+  "target_corrupt": false,
+  "missing": false,
+  "collateral": false
+ },
+ "fault_delivered": true,
+ "saves_seen": 1,
+ "proxy": [
+  {
+   "t": 1795249025.452,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 36
+  },
+  {
+   "t": 1795249045.369,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 55
+  }
+ ],
+ "outcome": "completed_correctly",
+ "silent_corruption": false,
+ "collateral_edit": false,
+ "agent_collateral": false
+}
