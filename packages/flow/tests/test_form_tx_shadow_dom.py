@@ -15,7 +15,7 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface
-from openadapt_flow.form_tx.surface import match_anchor_in_snapshot
+from openadapt_flow.form_tx.surface import AmbiguousAnchorError, match_anchor_in_snapshot
 from openadapt_flow.form_tx.types import FieldAnchorSpec, ObservedOption, UIProfileSpec
 
 SHADOW_PAGE = r"""<!doctype html>
@@ -275,3 +275,64 @@ def test_ui_profile_routes_into_iframe_and_its_shadow_root(app: Any) -> None:
 def test_ui_profile_rejects_invalid_frame_pattern() -> None:
     with pytest.raises(ValueError):
         _profile(frame_path_patterns=("(",))
+
+
+SLOTTED_PAGE = r"""<!doctype html>
+<html><body>
+<h1>Quote</h1>
+<x-slot-host id="host">
+  <span slot="extra"><label for="amount">Slotted amount</label><input id="amount" name="amount"></span>
+  <input id="ghost" name="ghost" style="display:none">
+</x-slot-host>
+<script>
+class XSlotHost extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({mode: 'open'});
+    root.innerHTML = `
+      <label for="amount">Shadow amount</label><input id="amount" name="amount">
+      <label for="ghost">Ghost field</label><input id="ghost" name="ghost">
+      <slot name="extra"></slot>`;
+  }
+}
+customElements.define('x-slot-host', XSlotHost);
+</script>
+</body></html>"""
+
+
+def _serve_one(app: Any, body: str) -> None:
+    app.page.route(
+        app.origin + "/slotted",
+        lambda route: route.fulfill(status=200, content_type="text/html", body=body),
+    )
+    app.page.goto(app.origin + "/slotted")
+
+
+def test_shadow_selector_is_unique_across_slotted_light_dom(app: Any) -> None:
+    _serve_one(app, SLOTTED_PAGE)
+    surface = PlaywrightFormSurface(app.page, _profile(), base_origin=app.origin)
+    snap = surface.snapshot()
+    shadow = _by_label(snap, "^Shadow amount$")
+    slotted = _by_label(snap, "^Slotted amount$")
+    # The shadow input shares id and name with a slotted light-DOM input, so
+    # "#host >> #amount" would match both: the selector must be longer.
+    assert shadow.dom_selector.startswith("#host >> ")
+    assert shadow.dom_selector != "#host >> #amount"
+    assert app.page.locator(shadow.dom_selector).count() == 1
+    surface.fill_text(shadow.dom_selector, "250000")
+    surface.fill_text(slotted.dom_selector, "1000")
+    after = surface.snapshot()
+    assert _by_label(after, "^Shadow amount$").current_value == "250000"
+    assert _by_label(after, "^Slotted amount$").current_value == "1000"
+
+
+def test_shadow_selector_with_a_hidden_light_dom_duplicate_is_refused(
+    app: Any,
+) -> None:
+    _serve_one(app, SLOTTED_PAGE)
+    surface = PlaywrightFormSurface(app.page, _profile(), base_origin=app.origin)
+    surface.snapshot()
+    # A hidden light-DOM input shares the id: only one of the two is visible,
+    # but the surface must not act on whichever happens to show.
+    with pytest.raises(AmbiguousAnchorError):
+        surface.fill_text("#host >> #ghost", "x")
+    assert app.page.locator("#host >> #ghost").nth(0).input_value() == ""
