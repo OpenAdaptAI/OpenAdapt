@@ -98,9 +98,22 @@ def browser() -> Any:
             b.close()
 
 
-def _open(browser: Any, locked: bool = False) -> tuple[Any, Any, list[dict[str, Any]]]:
+def _random_names(page: str) -> str:
+    """The same page, but the radio group's name is new on every redraw."""
+    return (
+        page.replace("const p = rid(),", "const an = rid(), p = rid(),")
+        .replace('name="alarm"', 'name="${an}"')
+        .replace("input[name=alarm]", "input[type=radio]")
+    )
+
+
+def _open(
+    browser: Any, locked: bool = False, random_names: bool = False
+) -> tuple[Any, Any, list[dict[str, Any]]]:
     submissions: list[dict[str, Any]] = []
     body = PAGE.replace("<script>", f"<script>const LOCKED = {str(locked).lower()};", 1)
+    if random_names:
+        body = _random_names(body)
 
     def handle(route: Any) -> None:
         path = urlsplit(route.request.url).path
@@ -226,3 +239,19 @@ def test_checkbox_that_does_not_change_stops_before_submit(browser: Any) -> None
     assert result.halts
     assert result.halts[0].kind == FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET
     assert "did not become checked" in result.halts[0].message
+
+
+def test_radio_group_renamed_on_every_redraw_is_found_again_by_its_labels(
+    browser: Any,
+) -> None:
+    ctx, surface, submissions = _open(browser, random_names=True)
+    try:
+        reconciler = FormReconciler(surface)
+        session = reconciler.create_session(_pack(), _dossier())
+        result = reconciler.run_until_halt_or_done(session)
+    finally:
+        ctx.close()
+    assert not result.halts, [h.message for h in result.halts]
+    assert submissions == [
+        {"alarm": "no", "pool": True, "garage": "Detached", "roof": "metal"}
+    ]
