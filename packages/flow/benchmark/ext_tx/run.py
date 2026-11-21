@@ -718,6 +718,15 @@ def main() -> int:
     finally:
         removed = doli_cleanup(sql)
         log(f"dolibarr cleanup: removed {removed} lab rows")
+        results["dolibarr_lab_rows_left"] = doli_cleanup(sql)
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from receipts_tally import tally
+
+            results["receipts"] = tally(ctx.state.root)
+        except Exception as exc:  # noqa: BLE001 - reported, never hidden
+            results["receipts"] = {"error": f"{type(exc).__name__}: {exc}"}
+        results["code_sha"] = os.environ.get("LAB_CODE_SHA", "")
         results["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         results["summary"] = summarize(results)
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

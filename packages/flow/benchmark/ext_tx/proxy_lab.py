@@ -291,6 +291,14 @@ def main() -> int:
         "trigger_probe": trigger,
         "mcp_sdk_session": mcp_ok,
     }
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from receipts_tally import tally
+
+        summary["receipts"] = tally(proxy.ctx.state.root)
+    except Exception as exc:  # noqa: BLE001 - reported, never hidden
+        summary["receipts"] = {"error": f"{type(exc).__name__}: {exc}"}
+    summary["code_sha"] = os.environ.get("LAB_CODE_SHA", "")
     result = {
         "schema": "openadapt.ext-tx-proxy-lab/v1",
         "app": "PostgreSQL 16 (synthetic schema)",
