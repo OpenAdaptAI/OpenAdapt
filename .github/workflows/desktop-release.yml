@@ -273,6 +273,17 @@ jobs:
                 exit 1
               fi
             done
+            # desktop-test.yml leaves macOS and Windows on Python 3.11 to the
+            # nightly run once a version is released; an unreleased version's
+            # push run keeps them. Require them by name, so a release never
+            # ships on the trimmed matrix.
+            for os in macos-latest windows-latest; do
+              job="desktop test / Python engine tests (${os}, py3.11)"
+              if ! grep -qxF "$(printf 'success\t%s' "${job}")" "${RUNNER_TEMP}/jobs.tsv"; then
+                echo "Refusing to release: no successful '${job}' job in run $1." >&2
+                exit 1
+              fi
+            done
             if grep -E $'^(failure|cancelled|timed_out)\tdesktop (test|build) / ' "${RUNNER_TEMP}/jobs.tsv"; then
               echo "Refusing to release: a desktop job did not pass." >&2
               exit 1
