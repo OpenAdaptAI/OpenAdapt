@@ -343,3 +343,19 @@ def test_decide_accepts_only_what_the_receivers_own_record_shows(run_dir, signer
     calls = []
     refused = h.decide(h.make_handoff({"ref": "ref-1"}, receipt), [], calls.append)
     assert refused.decision == "reject" and calls == []
+
+
+def test_the_handoff_group_is_shared_whichever_module_registers_first():
+    import argparse
+
+    from openadapt_flow.cli_handoff import handoff_group, register
+
+    for list_first in (True, False):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        if list_first:
+            handoff_group(sub).add_parser("list")
+        register(sub)
+        if not list_first:
+            handoff_group(sub).add_parser("list")
+        assert sorted(handoff_group(sub).choices) == ["key", "list", "send", "trust", "verify"]

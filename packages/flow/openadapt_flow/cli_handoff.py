@@ -19,16 +19,31 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+def handoff_group(sub: argparse._SubParsersAction) -> argparse._SubParsersAction:
+    """The ``handoff`` group's subcommands, created once and shared.
+
+    ``send``, ``verify``, ``key`` and ``trust`` register here; the
+    counterparty confirmations' ``list`` registers into the same group,
+    whichever module registers first.
+    """
+    parser = sub.choices.get("handoff")
+    if parser is None:
+        parser = sub.add_parser(
+            "handoff",
+            help=(
+                "Hand a result to another agent with its run's receipt, verify "
+                "one on arrival, and follow handoffs to other parties"
+            ),
+            allow_abbrev=False,
+        )
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action
+    return parser.add_subparsers(dest="handoff_command", required=True)
+
+
 def register(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser(
-        "handoff",
-        help=(
-            "Attach a run's receipt to what one agent hands another, and "
-            "verify one on arrival"
-        ),
-        allow_abbrev=False,
-    )
-    hsub = p.add_subparsers(dest="handoff_command", required=True)
+    hsub = handoff_group(sub)
 
     s = hsub.add_parser(
         "send",
