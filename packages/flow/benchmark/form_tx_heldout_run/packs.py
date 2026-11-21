@@ -244,14 +244,28 @@ HARBORLINE_PACK = FormPack(
 # ---------------------------------------------------------------- cobalt
 # A single-page app: the step is named by the progress bar, fields by their
 # aria-labelledby text. Type-ahead comboboxes fetch suggestions only after
-# text is typed; the frozen surface opens a listbox by clicking, so the pack
-# can bind them but the layer may not be able to choose an option.
+# text is typed. Its radio groups are ARIA radios (div role=radio) named only
+# by their own text, which the surface reports with an empty label; each
+# option is therefore bound by its position on the dev case's screens and
+# set as a yes/no choice from a fact restated from the intake
+# ("<key>==<option>"). A position that holds a different control on another
+# case does not match, so the portal's own required-field error stops the run.
 COBALT_PROFILE = UIProfileSpec(
     profile_id="heldout_spa_aria",
     error_banner_selectors=(".cr-error[role='alert']",),
+    field_error_selectors=(".cr-error",),
     auth_wall_selectors=('input[type="password"]',),
     modal_dialog_selectors=('[role="dialog"][aria-modal="true"]',),
 )
+
+COBALT_RADIOS: dict[str, tuple[int, int, tuple[str, ...], str]] = {
+    # dossier key: (step, field position in the step card, options, shown label)
+    "applicant.marital_status": (1, 6, ("Single", "Married", "Divorced", "Widowed"), "Marital status"),
+    "vehicle.primary_use": (3, 4, ("Commute", "Pleasure", "Business"), "Primary use"),
+    "vehicle.ownership": (3, 8, ("Own", "Finance", "Lease"), "Ownership"),
+    "coverage.bi_limits": (4, 1, ("25/50", "50/100", "100/300", "250/500"), "Bodily injury liability"),
+}
+CHOICE_SEP = "=="
 
 
 def _cr_step(n: int, next_label: str) -> WizardScreenSpec:
@@ -263,18 +277,82 @@ def _cr_step(n: int, next_label: str) -> WizardScreenSpec:
 
 
 def _label(key: str, label: str, kind: ControlKind = ControlKind.TEXT,
-           codec: FieldCodecSpec = TEXT) -> FieldBindingSpec:
+           codec: FieldCodecSpec = TEXT, *, portal_default: bool = False) -> FieldBindingSpec:
     return FieldBindingSpec(
         binding_id=f"b_{key}",
         dossier_key=key,
         anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
         control_kind=kind,
         codec=codec,
+        prefill_policy=(
+            PrefillPolicy.OVERWRITE_WITH_DOSSIER
+            if portal_default
+            else PrefillPolicy.HALT_ON_CONFLICT
+        ),
     )
 
 
+def _cr_choice_bindings() -> tuple[FieldBindingSpec, ...]:
+    out: list[FieldBindingSpec] = []
+    for key, (_step, pos, options, _shown_label) in COBALT_RADIOS.items():
+        for j, opt in enumerate(options, start=1):
+            out.append(
+                FieldBindingSpec(
+                    binding_id=f"b_{key}_{j}",
+                    dossier_key=f"{key}{CHOICE_SEP}{opt}",
+                    anchor=FieldAnchorSpec(
+                        css_selector=(
+                            f"#app > section > div:nth-of-type({pos}) > "
+                            f"div:nth-of-type(2) > div:nth-of-type({j})"
+                        ),
+                        role="radio",
+                    ),
+                    control_kind=ControlKind.CHECKBOX,
+                    codec=BOOL,
+                    # The option's text is its value, so the surface reads every
+                    # option as non-empty; a checked state that disagrees with the
+                    # intake is set from the intake.
+                    prefill_policy=PrefillPolicy.OVERWRITE_WITH_DOSSIER,
+                )
+            )
+    return tuple(out)
+
+
+def _cr_choice_readbacks() -> tuple[FieldBindingSpec, ...]:
+    out: list[FieldBindingSpec] = []
+    for key, (_step, _pos, options, shown_label) in COBALT_RADIOS.items():
+        for opt in options:
+            others = tuple(o for o in options if o != opt)
+            out.append(
+                _shown(
+                    f"{key}{CHOICE_SEP}{opt}",
+                    shown_label,
+                    FieldCodecSpec(
+                        kind=FormCodecKind.ENUM_MAP,
+                        enum_aliases={"true": (opt,), "false": others},
+                    ),
+                )
+            )
+    return tuple(out)
+
+
+CR_STATES = {
+    "AZ": "Arizona", "CA": "California", "CO": "Colorado", "ID": "Idaho", "IL": "Illinois",
+    "MA": "Massachusetts", "MO": "Missouri", "NC": "North Carolina", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "OR": "Oregon", "PA": "Pennsylvania", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "WA": "Washington",
+}
+CR_STATE = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP,
+    enum_aliases={code: (f"{name} ({code})",) for code, name in CR_STATES.items()},
+)
+CR_DED = FieldCodecSpec(kind=FormCodecKind.ENUM_MAP, enum_aliases={
+    "0": ("No coverage",), "250": ("$250",), "500": ("$500",), "1000": ("$1,000",),
+})
+
 COBALT_PACK = FormPack(
-    pack_id="heldout.cobalt.auto",
+    pack_id="heldout.cobalt.auto.v2",
     domain_schema="personal_lines.auto",
     ui_profile_id=COBALT_PROFILE.profile_id,
     bindings=(
@@ -284,29 +362,61 @@ COBALT_PACK = FormPack(
                FieldCodecSpec(kind=FormCodecKind.ISO_DATE)),
         _label("applicant.email", "Email address"),
         _label("applicant.license_state", "State where licensed",
-               ControlKind.PORTAL_COMBOBOX, EXACT),
+               ControlKind.PORTAL_COMBOBOX, CR_STATE),
         _label("vehicle.year", "Model year", ControlKind.SELECT, INT),
         _label("vehicle.make", "Make", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.model", "Model", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.annual_miles", "Estimated annual mileage", codec=INT),
         _label("vehicle.commute_miles_one_way", r"One-way commute \(miles\)", codec=INT),
         _label("garaging.zip", "Garaging ZIP code"),
-        _label("garaging.city", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT),
+        _label("garaging.city_state", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.lienholder", "Lienholder or lessor name"),
+        _label("coverage.collision_deductible", "Collision deductible", ControlKind.SELECT,
+               INT, portal_default=True),
+        _label("coverage.comprehensive_deductible", "Comprehensive deductible",
+               ControlKind.SELECT, INT, portal_default=True),
+        *_cr_choice_bindings(),
     ),
     screens=(
         WizardScreenSpec(
             screen_id="cr_review",
             landmark_selector=".progress > div:nth-child(5).on",
             is_commit_screen=True,
-            commit_button_anchor=FieldAnchorSpec(label_patterns=(r"^(Submit|Buy|Get)",)),
+            commit_button_anchor=FieldAnchorSpec(label_patterns=(r"^Get my quote$",)),
         ),
         _cr_step(1, "Continue"),
         _cr_step(2, "Continue"),
         _cr_step(3, "Continue"),
         _cr_step(4, "Review quote"),
     ),
-    summary_check=SummaryCheckSpec(),
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#quote-id",
+        field_readbacks=(
+            _shown("applicant.first_name", "First name"),
+            _shown("applicant.last_name", "Last name"),
+            _shown("applicant.date_of_birth", "Date of birth", DATE_MDY),
+            _shown("applicant.email", "Email address"),
+            _shown("applicant.license_state", "State where licensed", CR_STATE),
+            _shown("vehicle.year", "Model year", INT),
+            _shown("vehicle.make", "Make", EXACT),
+            _shown("vehicle.model", "Model", EXACT),
+            _shown("vehicle.annual_miles", "Estimated annual mileage", INT),
+            _shown("vehicle.commute_miles_one_way", r"One-way commute \(miles\)", INT),
+            _shown("garaging.zip", "Garaging ZIP code"),
+            _shown("garaging.city_state", "Garaging city", EXACT),
+            _shown("vehicle.lienholder", "Lienholder or lessor name"),
+            _shown("coverage.collision_deductible", "Collision deductible", CR_DED),
+            _shown("coverage.comprehensive_deductible", "Comprehensive deductible", CR_DED),
+            *_cr_choice_readbacks(),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.id",
+                anchor=FieldAnchorSpec(css_selector="#quote-id"),
+                required=False,
+            ),
+        ),
+    ),
     max_commit_mutations=1,
 )
 
@@ -608,6 +718,11 @@ def _derived_facts(raw: dict[str, Any]) -> dict[str, Any]:
         out["property.city_state"] = f"{raw['property.city']}, {raw['property.state']}"
     if raw.get("garaging.city") and raw.get("garaging.state"):
         out["garaging.city_state"] = f"{raw['garaging.city']}, {raw['garaging.state']}"
+    for key, (_s, _p, options, _l) in COBALT_RADIOS.items():
+        if raw.get(key) not in (None, ""):
+            picked = str(raw[key]).casefold()
+            for opt in options:
+                out[f"{key}{CHOICE_SEP}{opt}"] = opt.casefold() == picked
     if raw.get("property.square_feet") not in (None, ""):
         out["property.area_unit"] = "sq ft"
     return out
