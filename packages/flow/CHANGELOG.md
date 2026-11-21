@@ -100,14 +100,16 @@
   derived from its explicit key for its own lifetime. Without that, each
   checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
   instead of 3.5 s (131 derivations, now 1).
-- The wire tap relays a redirect that stays on an allowed origin instead of
-  answering 502, so it can front a form app that answers a save with
-  Post/Redirect/Get. A redirect to another origin is still refused, and the tap
-  never follows one itself (#2392).
-- Native typing, keys and hotkeys need a one-shot focus lease bound to the live
-  control and the exact frame that authorized the input, and a typed value must
-  be read back completely from two independent sources. Anything uncertain
-  releases held keys and produces no keyboard receipt (#2313).
+- The wire tap relays a redirect to an allowed origin instead of answering
+  502, so it can front a form app that answers a save with Post/Redirect/Get.
+  In reverse-proxy mode only the upstream origin is allowed; in browser route
+  mode, any origin on the tap's allowlist. Other targets are still refused, and
+  the tap never follows a redirect itself (#2392).
+- On the guarded native path, typing, keys and hotkeys use a one-shot focus
+  lease bound to the live control and the exact frame that authorized the
+  input. A typed value is checked against two complete, independent reads; a
+  failed check leaves the step unverified (`input_verified=False`). An
+  uncertain lease releases held keys before any input (#2313).
 - A repair candidate id that would leave the repair store is refused (#2369).
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same
@@ -119,15 +121,18 @@
 - An admitted managed run, and its resume, keep the policy the local Standard
   gate chose when neither the CLI nor the deployment names one, instead of
   exiting with code 2 (#2401).
-- Lens route roles come from each route's observed effects rather than its
-  HTTP method, so an app that creates with `PUT` or updates with `POST` gets
-  the right roles, and a whole-record replace answering 200 counts as an
-  update (#2393).
+- Lens route roles come from a route's observed effects when its mutation
+  response identifies the record, so an app that creates with `PUT` or updates
+  with `POST` gets the right roles, and a whole-record replace answering 200
+  counts as an update. Without that evidence, roles still fall back to the
+  HTTP method (#2393).
 - Generated verify contracts stop fewer correct writes: five generator causes
   of false stops are fixed, each by one schema-independent rule (#2418).
 - `import openadapt_flow` loads its `ir` re-exports on first use, and the
   qualification models and several replayer helpers moved into their own
-  modules. Every public name is re-exported unchanged (#2439, #2451, #2454,
+  modules. Names still import explicitly from their old modules;
+  `from openadapt_flow.qualification import *` no longer includes
+  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
   #2455, #2456, #2459).
 
 ### Requirements
@@ -135,8 +140,9 @@
 - The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
   release with `sanitization_config()`, which sanitized reuse and approval bind
   to.
-- Locked dependencies move to the first fixed release of each package with an
-  open security advisory, including Pillow, aiohttp and filelock (#2383).
+- On Python 3.11 and newer, the lock moves Pillow, filelock and other
+  dependencies to the first release that fixes an open security advisory. The
+  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
 
 ## v3.3.0 (2026-11-19)
 
