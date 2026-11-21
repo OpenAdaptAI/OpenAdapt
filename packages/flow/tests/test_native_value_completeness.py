@@ -10,6 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from openadapt_flow.approval_mode.window_fields import valid_value_observation
 from openadapt_flow.backends.win_agent.native_value import (
     PROOF_SCHEMA,
     NativeOwner,
@@ -78,6 +79,7 @@ def test_exact_complete_values_require_both_sources_and_utf16_proof(value):
     assert result.proof is not None
     proof = result.proof.payload()
     assert valid_value_proof(value, proof)
+    assert valid_value_observation(value, proof, "a" * 64, pid=OWNER.pid)
     assert proof["utf16_units"] == len(utf16_bytes(value)) // 2
     assert proof["hwnd"] == OWNER.hwnd and proof["pid"] == OWNER.pid
 
@@ -239,6 +241,17 @@ def test_client_proof_rejects_missing_fake_or_legacy_completeness(key, value):
     proof = result.proof.payload()
     proof[key] = value
     assert not valid_value_proof("é𝄞 ", proof)
+    assert not valid_value_observation("é𝄞 ", proof, "a" * 64, pid=OWNER.pid)
+
+
+def test_host_rejects_a_proof_version_understood_only_by_the_guest(monkeypatch):
+    from openadapt_flow.backends.win_agent import native_value
+
+    monkeypatch.setattr(native_value, "PROOF_SCHEMA", "future-proof-format")
+    target, _ = control("exact")
+    proof = observe(target, Reader("exact")).proof.payload()
+    assert valid_value_proof("exact", proof)
+    assert not valid_value_observation("exact", proof, "a" * 64, pid=OWNER.pid)
 
 
 class User32:

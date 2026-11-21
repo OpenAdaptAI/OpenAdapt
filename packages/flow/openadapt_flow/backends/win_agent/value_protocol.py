@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping
 
-from .native_value import valid_value_proof
+from openadapt_flow.approval_mode.window_fields import valid_value_observation
+
+from .native_value import valid_value_proof as valid_value_proof
 
 SCOPE_KEYS = ("automation_id", "role", "name", "window_name")
 READ_KEYS = frozenset(
@@ -28,19 +29,6 @@ ROW_KEYS = frozenset({"rows", "rows_truncated", "rows_complete", "preview_rows"}
 
 def locator_scope(locator: Mapping[str, Any]) -> dict[str, Any]:
     return {key: locator.get(key) for key in SCOPE_KEYS}
-
-
-def valid_value_observation(
-    value: object, proof: object, identity: object, *, pid: int | None = None
-) -> bool:
-    return (
-        isinstance(value, str)
-        and isinstance(identity, str)
-        and re.fullmatch(r"[0-9a-f]{64}", identity) is not None
-        and isinstance(proof, dict)
-        and valid_value_proof(value, proof)
-        and (pid is None or proof["pid"] == pid)
-    )
 
 
 def valid_structural_response(
