@@ -268,7 +268,12 @@ def test_the_page_verifies_the_quickstarts_real_seal(browser, runs):
         signer = reader.page.locator("[data-signer]")
         assert signer.get_attribute("data-signer") == "signed"
         assert "Signed by this computer" in signer.inner_text()
-        assert "older format" in signer.inner_text()
+        # The format is in the Raw tab, not the headline.
+        assert "older format" not in signer.inner_text().lower()
+        reader.page.locator("[data-tab='raw']").click()
+        fmt = reader.page.locator("[data-format]").inner_text()
+        assert fmt == "Format: local-seal/v1, still verifies"
+        reader.page.locator("[data-tab='summary']").click()
         assert reader.page.locator("h1").inner_text() == "Saved and checked"
         stats = reader.page.locator("dl").inner_text()
         assert "6/6" in stats and "2/2" in stats
@@ -294,11 +299,14 @@ def test_try_changing_it_flips_a_copy_and_restore_verifies_again(browser, runs):
         text = changed.inner_text()
         assert "execution_outcome" in text and "VERIFIED" in text and "HALTED" in text
         assert "→" in text
+        assert "This changed copy fails: outcome VERIFIED → HALTED. The receipt no longer matches." in text
         assert "The published files are unchanged; this was a copy in your browser" in text
         signer = reader.page.locator("[data-signer]").inner_text()
         assert signer.startswith("Not verified")
-        # The other two changes are offered inline.
-        another = reader.page.get_by_role("group", name="Try another change")
+        # The other two changes appear only after "Try another change".
+        assert not reader.page.locator("#receipt-changes").is_visible()
+        reader.page.get_by_role("button", name="Try another change").click()
+        another = reader.page.get_by_role("group", name="Other changes")
         assert another.get_by_role("button").count() == 2
         another.get_by_role("button", name="Change the outcome in the receipt").click()
         assert "bad_signature" in reader.verdict("Fails. The Ed25519")
@@ -381,6 +389,7 @@ def test_buttons_wrap_inside_their_card(browser, runs, width):
         page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
         page.get_by_role("button", name="Try changing it").click()
         page.locator("[data-verdict='fails']").wait_for(timeout=15_000)
+        page.get_by_role("button", name="Try another change").click()
         if width < 900:
             page.locator("[data-tab='program']").click()
         page.locator(".opg-node", has_text="Click Save Encounter").first.click()
