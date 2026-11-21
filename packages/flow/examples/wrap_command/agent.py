@@ -30,7 +30,8 @@ def _ref(listing: str, name: str, near: str | None = None) -> str:
 
 async def main() -> int:
     from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp.shared._httpx_utils import create_mcp_http_client
 
     url = os.environ["OPENADAPT_MCP_URL"]
     headers = {"Authorization": "Bearer " + os.environ["OPENADAPT_MCP_TOKEN"]}
@@ -42,42 +43,47 @@ async def main() -> int:
         raise SystemExit("the task names no referral")
     record = found.group(1)
     note = task.rsplit(": ", 1)[1].strip()
-    async with streamablehttp_client(url, headers=headers) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    # The same calls work with the MCP 1 and MCP 2 client SDKs.
+    async with create_mcp_http_client(headers=headers) as http:
+        async with streamable_http_client(url, http_client=http) as streams:
+            read, write = streams[0], streams[1]
+            async with ClientSession(read, write) as session:
+                await session.initialize()
 
-            async def call(name: str, **args: str) -> str:
-                result = await session.call_tool(name, args)
-                text = "".join(getattr(c, "text", "") for c in result.content)
-                if text.startswith("Stopped:"):
-                    raise SystemExit(text)
-                return text
+                async def call(name: str, **args: str) -> str:
+                    result = await session.call_tool(name, args)
+                    text = "".join(getattr(c, "text", "") for c in result.content)
+                    if text.startswith("Stopped:"):
+                        raise SystemExit(text)
+                    return text
 
-            listing = await call("observe")
-            triage_done = typed = False
-            for _ in range(20):
-                if "Encounter saved" in listing:
-                    await call("finish", summary="saved the note")
-                    return 0
-                if "# Referral Tasks" in listing:
-                    listing = await call("click", ref=_ref(listing, "Open", record))
-                elif "# New Encounter" in listing:
-                    if not triage_done:
-                        triage_done = True
-                        listing = await call("click", ref=_ref(listing, "Triage"))
-                    elif not typed:
-                        typed = True
+                listing = await call("observe")
+                triage_done = typed = False
+                for _ in range(20):
+                    if "Encounter saved" in listing:
+                        await call("finish", summary="saved the note")
+                        return 0
+                    if "# Referral Tasks" in listing:
+                        listing = await call("click", ref=_ref(listing, "Open", record))
+                    elif "# New Encounter" in listing:
+                        if not triage_done:
+                            triage_done = True
+                            listing = await call("click", ref=_ref(listing, "Triage"))
+                        elif not typed:
+                            typed = True
+                            listing = await call(
+                                "type_text", text=note, ref=_ref(listing, "Note")
+                            )
+                        else:
+                            listing = await call(
+                                "click", ref=_ref(listing, "Save Encounter")
+                            )
+                    elif "New Encounter" in listing:
                         listing = await call(
-                            "type_text", text=note, ref=_ref(listing, "Note")
+                            "click", ref=_ref(listing, "New Encounter")
                         )
                     else:
-                        listing = await call(
-                            "click", ref=_ref(listing, "Save Encounter")
-                        )
-                elif "New Encounter" in listing:
-                    listing = await call("click", ref=_ref(listing, "New Encounter"))
-                else:
-                    raise SystemExit("unexpected page")
+                        raise SystemExit("unexpected page")
     return 1
 
 
