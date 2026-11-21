@@ -622,6 +622,8 @@ def test_email_release_sends_once_even_after_a_crash(
     assert len(mail.messages) == 1 and out["outcome"] == "VERIFIED"
     undone = engine.undo_plan(ctx, plan["digest"])
     assert undone["tx"]["irreversible_released"] == 1
+    # A sent email can't be taken back: the plan is not rolled back.
+    assert undone["outcome"] == "RECONCILIATION_REQUIRED"
 
 
 # -- receipts ------------------------------------------------------------------
@@ -796,10 +798,46 @@ def test_sql_apply_refuses_a_plan_without_its_planned_values(tmp_path: Path) -> 
     for w in data["writes"]:
         w.pop("staged_after", None)
     write_private(private, data)
-    proxy.key("y")
-    out = proxy.apply(got["plan"])
-    assert out["outcome"] != "VERIFIED" and out["tx"]["sent"] == 0, out
-    assert _all(db) == before
+    with pytest.raises(TxRefused) as exc:
+        proxy.apply(got["plan"])
+    assert exc.value.code == "plan_tampered" and _all(db) == before
+
+
+def test_transaction_control_is_never_a_write(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=5)
+    proxy = _proxy(db, max_rows=100)
+    for sql in (
+        "COMMIT",
+        "end",
+        "BEGIN",
+        "SAVEPOINT a",
+        "ROLLBACK",
+        "PRAGMA foreign_keys = OFF",
+    ):
+        with pytest.raises(TxRefused) as exc:
+            proxy.preview(sql)
+        assert exc.value.code == "bad_write", sql
+
+
+def test_a_key_press_with_several_plans_waiting_approves_none(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=50)
+    proxy = _proxy(db, max_rows=1)
+    a = proxy.preview("UPDATE users SET active = 0 WHERE id <= 10")
+    b = proxy.preview("UPDATE users SET active = 0 WHERE id <= 20")
+    assert a["approval"].startswith("waiting") and b["approval"].startswith("waiting")
+    assert "2 plans are waiting" in proxy.key("y")
+    with pytest.raises(TxRefused):
+        proxy.apply(a["plan"])
+
+
+def test_rest_path_values_are_one_segment() -> None:
+    from openadapt_flow.txplan.adapters import AdapterError, RestAdapter
+
+    fill = RestAdapter._fill
+    assert fill("/c/{id}", {"id": "a/../b?x=1"}) == "/c/a%2F..%2Fb%3Fx%3D1"
+    for bad in (".", ".."):
+        with pytest.raises(AdapterError):
+            fill("/c/{id}", {"id": bad})
 
 
 def test_undo_of_a_write_it_cannot_undo_is_not_rolled_back(tmp_path: Path) -> None:
@@ -992,9 +1030,13 @@ def test_proxy_commits_only_the_planned_values(tmp_path: Path) -> None:
     )
     priv_path.write_text(json.dumps(priv))
     before = _all(db)
-    with pytest.raises(TxRefused):
+    # The edited private plan no longer matches the digest a person approves.
+    with pytest.raises(TxRefused) as exc:
+        proxy.key("y")
+    assert exc.value.code == "plan_tampered"
+    with pytest.raises(TxRefused) as exc:
         proxy.apply(got["plan"])
-    assert _all(db) == before
+    assert exc.value.code == "plan_tampered" and _all(db) == before
 
 
 def test_proxy_time_defaults_are_volatile_and_random_values_are_flagged(
