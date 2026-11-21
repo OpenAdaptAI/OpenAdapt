@@ -617,12 +617,23 @@ def test_committed_file_symlink_substitution_is_refused(tmp_path):
 
 
 def test_write_exclusive_preserves_exact_bytes_and_refuses_overwrite(tmp_path):
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
     from openadapt_eligibility.artifact import _write_exclusive
 
-    payload = b"\x00\x01\r\n\x1aeligibility-binary-bytes\xff"
-    path = tmp_path / "evidence.bin"
-    _write_exclusive(path, payload)
-    assert path.read_bytes() == payload
-    with pytest.raises(FileExistsError):
-        _write_exclusive(path, b"replacement")
-    assert path.read_bytes() == payload
+    @settings(
+        max_examples=30,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
+    @given(payload=st.binary(max_size=2048))
+    def _check(payload: bytes) -> None:
+        path = tmp_path / "evidence.bin"
+        path.unlink(missing_ok=True)
+        _write_exclusive(path, payload)
+        assert path.read_bytes() == payload
+        with pytest.raises(FileExistsError):
+            _write_exclusive(path, b"replacement")
+        assert path.read_bytes() == payload
+
+    _check()
