@@ -53,6 +53,7 @@ __all__ = [
     "CommandSource",
     "HttpSource",
     "SecondFactorRefused",
+    "check_step_shape",
     "has_one_time_steps",
     "normalize_code",
     "obtain",
@@ -215,6 +216,26 @@ def obtain(
     if kind == "approval":
         return None
     return normalize_code(value)
+
+
+def check_step_shape(step: Any) -> Any:
+    """``ir.Step``'s validator for ``one_time``; returns the step or raises."""
+
+    if step.one_time == "code" and not (
+        step.action.value == "type" and step.secret and step.param and step.text is None
+    ):
+        raise ValueError(
+            "a one-time code step is a secret TYPE step that names its param "
+            "and carries no text"
+        )
+    if step.one_time == "approval" and (
+        step.action.value != "wait"
+        or step.secret
+        or step.param is not None
+        or step.text is not None
+    ):
+        raise ValueError("a one-time approval step is a WAIT with no input")
+    return step
 
 
 def has_one_time_steps(workflow: Any) -> bool:
