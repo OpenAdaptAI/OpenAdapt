@@ -138,7 +138,12 @@ class _FlowFirstGroup(click.Group):
             and root_name == "verify"
             and len(raw) > 1
             and not raw[1].startswith("-")
-            and (Path(raw[1]).exists() or _is_seal_link(raw[1]))
+            and (
+                Path(raw[1]).exists()
+                or "/" in raw[1]
+                or raw[1].endswith((".json", ".cbor"))
+                or _is_seal_link(raw[1])
+            )
         ):
             # `openadapt verify <file|folder|link>` checks a receipt; the
             # verify subcommands (serve, ledger, effect, ...) are never paths.
