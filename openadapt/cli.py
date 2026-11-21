@@ -138,7 +138,13 @@ class _FlowFirstGroup(click.Group):
             and root_name == "verify"
             and len(raw) > 1
             and not raw[1].startswith("-")
-            and (Path(raw[1]).exists() or _is_seal_link(raw[1]))
+            and raw[1] not in _verify_operations(self.commands.get("verify"))
+            and (
+                Path(raw[1]).exists()
+                or "/" in raw[1]
+                or raw[1].endswith((".json", ".cbor"))
+                or _is_seal_link(raw[1])
+            )
         ):
             # `openadapt verify <file|folder|link>` checks a receipt; the
             # verify subcommands (serve, ledger, effect, ...) are never paths.
@@ -1992,9 +1998,23 @@ def receipt(command_ctx: click.Context) -> None:
     )
 
 
+def _verify_operations(group: Optional[click.Command]) -> set[str]:
+    """`openadapt verify` subcommands and operations: never read as a path."""
+    from openadapt.cli_tasks import FLOW_NAMES, NATIVE_ROUTES
+
+    names = {
+        route.split()[1]
+        for route in FLOW_NAMES.values()
+        if route.startswith("verify ") and len(route.split()) > 1
+    }
+    names |= {path[1] for path in NATIVE_ROUTES if path[0] == "verify"}
+    names |= set(getattr(group, "commands", {}) or {})
+    return names
+
+
 def _verify_receipts(argv: list[str], agent: Callable[[list[str]], int]) -> int:
     """`openadapt verify <file|folder|link> [--keys FILE]`: any receipt, any format."""
-    if not argv or argv[0] in ("-h", "--help"):
+    if not argv or any(arg in ("-h", "--help") for arg in argv):
         click.echo(
             "Usage: openadapt verify <file|folder|link> [--keys FILE]\n\n"
             "Checks a receipt and prints who signed it. Fails closed on an "

@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
+from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
     build_statement,
     local_registry,
@@ -24,8 +25,6 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
-
-from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
@@ -227,3 +226,215 @@ def test_the_public_allow_list_is_inside_todays_public_fields():
             schema, field = source.split(":")
             known = card_fields if schema == "public-card/v1" else evidence_fields
             assert field in known, (version, path, source)
+
+
+def _approved_run(tmp_path: Path, approvals: list, mode: str = "each_item") -> Path:
+    """A run whose report carries Flow's own approval block, built by its model."""
+    from openadapt_flow.approval_mode.model import (
+        ApprovalModeItemEvidence,
+        ItemApprovalRef,
+    )
+
+    run = _run(tmp_path, "VERIFIED", f"approved-{mode}-{len(approvals)}")
+    report = json.loads((run / "report.json").read_text())
+    if mode == "not_gated":
+        decision = "not_gated"
+    else:
+        decision = "approved" if approvals else "no_person"
+    evidence = ApprovalModeItemEvidence(
+        mode=mode,
+        decision=decision,
+        needs_person=False,
+        approvals=[ItemApprovalRef.model_validate(a) for a in approvals],
+    )
+    report["approval"] = evidence.model_dump(mode="json")
+    (run / "report.json").write_text(json.dumps(report))
+    return run
+
+
+PERSON_APPROVAL = {
+    "step_id": "save",
+    "request_sha256": "sha256:" + "3" * 64,
+    "answer_sha256": "sha256:" + "4" * 64,
+    "decision": "approved",
+    "decided_by": "human",
+    "route": "desktop_run_it",
+    "approver_kind": "cloud_user",
+    "approver_id": "usr_synthetic01",
+    "auth_method": "cloud_aal2",
+}
+
+
+def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
+    run = _approved_run(tmp_path, [PERSON_APPROVAL])
+    write_receipt_record(run)
+    payload = base64.b64decode(
+        json.loads((run / "receipt.json").read_text())["payload"]
+    )
+    assert b"usr_synthetic01" not in payload
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    approval = result.statement["predicate"]["approval"]
+    assert (approval["mode"], approval["approver_kind"]) == ("each_item", "person")
+    assert set(approval["commitments"]) == {"principal", "scope"}
+    assert result.approval_line == "Approved by a person: each item"
+    assert result.disclosed["approval.principal"].startswith("person:pr-")
+    out = _verify(str(run))
+    assert "Approved by a person: each item" in out.output
+
+
+def test_an_unapproved_run_says_no_approval_recorded(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok
+    assert "approval" not in result.statement["predicate"]
+    assert result.approval_line == "No approval recorded"
+    assert "No approval recorded" in _verify(str(run)).output
+
+
+def test_a_not_gated_run_says_so(tmp_path):
+    run = _approved_run(tmp_path, [], mode="not_gated")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert (
+        result.approval_line == "Not gated: no approval was required for these writes"
+    )
+
+
+# -- routing, broken receipts and older formats ---------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+PUBLIC_SEAL_VECTORS = (
+    Path(__file__).resolve().parents[1]
+    / "packages/flow/tests/fixtures/public_seal/golden_vectors.json"
+)
+
+
+def test_a_folder_named_like_an_operation_stays_an_operation(tmp_path, monkeypatch):
+    (tmp_path / "ledger").mkdir()
+    monkeypatch.chdir(tmp_path)
+    out = CliRunner().invoke(main, ["verify", "ledger", "--help"])
+    assert "receipt" not in out.output.lower().split("usage")[0]
+    assert "Usage: openadapt verify <file|folder|link>" not in out.output
+
+
+def test_a_broken_receipt_fails_even_beside_a_seal(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "VERIFIED")
+    seal_run(run, enqueue=False)
+    (run / "receipt.json").write_text('{"not": "a receipt"}')
+    out = _verify(str(run))
+    assert out.exit_code == 1
+    assert "malformed receipt" in out.output
+
+
+def test_a_lone_seal_file_checks_its_run(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "HALTED", "lone")
+    seal_run(run, enqueue=False)
+    out = _verify(str(run / "seal.json"))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output
+    report = json.loads((run / "report.json").read_text())
+    report["model_calls"] = 9
+    (run / "report.json").write_text(json.dumps(report))
+    assert _verify(str(run / "seal.json")).exit_code != 0
+
+
+def test_an_older_run_summary_verifies_and_a_tampered_one_does_not(tmp_path):
+    good = tmp_path / "run-summary.json"
+    good.write_bytes((FIXTURES / "run-summary.json").read_bytes())
+    out = _verify(str(good))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output and "Not signed" in out.output
+    data = json.loads(good.read_text())
+    data["effects_confirmed"] = data["effects_required"] + 1
+    bad = tmp_path / "tampered.json"
+    bad.write_text(json.dumps(data))
+    assert _verify(str(bad)).exit_code == 1
+
+
+def test_public_seal_golden_vectors_verify_only_with_their_key_pinned(tmp_path):
+    vectors = json.loads(PUBLIC_SEAL_VECTORS.read_text())
+    registry = tmp_path / "keys.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "schema": r.REGISTRY_SCHEMA,
+                "keys": [
+                    {
+                        "key_id": vectors["key_id"],
+                        "public_key": vectors["public_key"],
+                        "role": "this_computer",
+                    }
+                ],
+            }
+        )
+    )
+    checked = 0
+    for case in vectors["cases"]:
+        path = tmp_path / f"{case['name']}.json"
+        path.write_text(case["body"])
+        pinned = _verify(str(path), "--keys", str(registry))
+        assert (pinned.exit_code == 0) == (case["expect"] == "valid"), case["name"]
+        if case["expect"] == "valid":
+            unpinned = _verify(str(path))
+            assert unpinned.exit_code == 1
+            assert "unknown signer" in unpinned.output
+            checked += 1
+    assert checked >= 1
+
+
+def test_receipts_trust_cloud_keys_pinned_where_seal_keys_pin_writes(
+    tmp_path, monkeypatch
+):
+    vectors = (
+        Path(r.__file__).resolve().parents[1] / "tests" / "vectors" / "record-run-v1"
+    )
+    if not vectors.is_dir():
+        pytest.skip("installed openadapt-types has no vectors")
+    registry = json.loads((vectors / "registry.json").read_text())
+    by_role = {k["role"]: k for k in registry["keys"]}
+    pinned = tmp_path / "seal-keys.json"
+    pinned.write_text(
+        json.dumps(
+            {
+                "keys": [
+                    {
+                        "key_id": by_role["openadapt_cloud"]["key_id"],
+                        "public_key": by_role["openadapt_cloud"]["public_key"],
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("OPENADAPT_SEAL_KEYS_PATH", str(pinned))
+    keys = {k.key_id: k.role for k in local_registry()}
+    assert keys[by_role["openadapt_cloud"]["key_id"]] == "openadapt_cloud"
+
+
+def test_one_delegate_answer_never_reads_as_approved_by_a_person(tmp_path):
+    delegate = {
+        **PERSON_APPROVAL,
+        "step_id": "save-2",
+        "decided_by": "automation",
+        "route": "mcp",
+        "approver_kind": "unauthenticated",
+        "approver_id": None,
+        "auth_method": "none",
+        "approver": {
+            "kind": "agent",
+            "auth": "mcp_session",
+            "id": "agent-approver-bot",
+        },
+    }
+    run = _approved_run(tmp_path, [PERSON_APPROVAL, delegate])
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    assert result.statement["predicate"]["approval"]["approver_kind"] == "agent"
+    assert result.approval_line == "Approved by an agent delegate: each item"

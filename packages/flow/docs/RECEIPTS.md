@@ -48,6 +48,17 @@ other party's system at 2026-11-20T23:41:07Z". That line never merges with or
 upgrades the signer line: "Signed by this computer" still means only that this
 computer signed the statement.
 
+A receipt handed to another party can also be **bound to the bytes it hands
+over**: a `payload` subject names the SHA-256 and media type of the MCP tool
+result, HTTP body or file. The receiver checks the bytes it got against it.
+And it says **how its writes were approved**, from Flow's item approval
+binding ([APPROVAL_AND_VERIFICATION.md](APPROVAL_AND_VERIFICATION.md)): the
+approval mode (`each_item`, `problems_only` or `not_gated`) and the kind of
+approver (a person or an agent delegate) are visible; who approved, the
+scope and the time are commitments. A receipt with no approval block says
+"No approval recorded", so a receipt never implies authority it doesn't
+record.
+
 ## Who signed it
 
 Each signature names a key id. The verifier's pinned key registry maps that

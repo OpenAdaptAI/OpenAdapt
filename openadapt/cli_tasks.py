@@ -98,7 +98,6 @@ FLOW_NAMES = {
     "run": "run",
     "sanitize": "compile --sanitize",
     "scaffold-verifier": "compile --scaffold-verifier",
-    "encrypt": "setup encrypt",
     "seal": "setup encrypt",
     "sections": "record sections",
     "serve-execute": "services execute",

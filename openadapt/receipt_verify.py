@@ -41,6 +41,12 @@ def _registry(keys: Optional[Path]) -> list[Any]:
 def _describe(result: Any, say: Say, indent: str = "  ") -> None:
     for line in result.signer_lines:
         say(f"{indent}{line}")
+    if result.ok:
+        # Separate lines: they never merge with or upgrade the signer line.
+        for line in getattr(result, "confirmation_lines", ()):
+            say(f"{indent}{line}")
+        if getattr(result, "approval_line", ""):
+            say(f"{indent}{result.approval_line}")
     if not result.ok:
         if result.detail:
             say(f"{indent}({result.detail})")
@@ -144,14 +150,39 @@ def verify_path(
         return 1
     if schema == "openadapt.run-receipt/v2":
         return _verify_run_summary(path, doc, say)
-    if schema in ("openadapt.local-seal/v1", "openadapt.public-seal/v1") or (
-        isinstance(doc, dict)
-        and ("seal_signature" in doc or {"card", "seal"} <= set(doc))
-    ):
-        _legacy_label(say, path, str(schema or "seal-signature/v1"))
+    if schema == "openadapt.local-seal/v1":
+        # A Seal is over its run's report: check the folder it sits in.
+        _legacy_label(say, path, "local-seal/v1")
+        legacy_extra = list(extra) if keys is None else ["--keys", str(keys)]
+        return legacy_folder(path.parent, legacy_extra)
+    if isinstance(doc, dict) and {"card", "seal"} <= set(doc):
+        return _verify_public_seal(path, data, keys, say)
+    if isinstance(doc, dict) and "seal_signature" in doc:
+        _legacy_label(say, path, "seal-signature/v1")
         return invoke_agent(["seal", "verify", str(path), *extra])
     say(f"{path}  Not verified: unknown receipt format ({schema or 'no schema'})")
     return 1
+
+
+def _verify_public_seal(path: Path, data: bytes, keys: Optional[Path], say: Say) -> int:
+    """``public-seal/v1``: its signature, and its key must be pinned here."""
+    from openadapt_flow.public_seal import verify_public_seal
+
+    _legacy_label(say, path, "public-seal/v1")
+    result = verify_public_seal(data)
+    if not result.ok:
+        say(f"  Not verified: {result.reason}")
+        return 1
+    pinned = {k.key_id: k for k in _registry(keys)}
+    key = pinned.get(str(result.key_id))
+    if key is None:
+        say("  Not verified: unknown signer")
+        say(f"  (key {result.key_id} isn't pinned here; pin it with --keys FILE)")
+        return 1
+    from openadapt_types.receipt import SIGNER_LINES
+
+    say("  " + SIGNER_LINES[key.role].format(org=key.org or "the customer"))
+    return 0
 
 
 def _verify_folder(
@@ -162,21 +193,40 @@ def _verify_folder(
     say: Say,
     legacy_folder: Callable[[Path, list[str]], int],
 ) -> int:
+    def signed(d: Path) -> bool:
+        return (d / "receipt.json").is_file() or (d / "seal.json").is_file()
+
     runs = (
         [folder]
-        if (folder / "report.json").is_file()
-        else sorted(
-            c for c in folder.iterdir() if c.is_dir() and (c / "report.json").is_file()
-        )
+        if signed(folder)
+        else sorted(c for c in folder.iterdir() if c.is_dir() and signed(c))
     )
     with_receipt = [r for r in runs if _is_record(r / "receipt.json")]
-    sealed_only = [
-        r for r in runs if r not in with_receipt and (r / "seal.json").is_file()
+    # A receipt.json that is neither a receipt nor an older run summary is a
+    # broken receipt: it fails, and a seal.json beside it doesn't rescue it.
+    broken = [
+        r
+        for r in runs
+        if r not in with_receipt
+        and (r / "receipt.json").is_file()
+        and not _is_summary(r / "receipt.json")
     ]
-    if not with_receipt and not sealed_only:
+    sealed_only = [
+        r
+        for r in runs
+        if r not in with_receipt and r not in broken and (r / "seal.json").is_file()
+    ]
+    unsigned = [r for r in runs if r not in with_receipt + broken + sealed_only]
+    if not runs:
         say(f"Not verified: no receipt in {folder} (no receipt.json or seal.json)")
         return 1
     failed = 0
+    for run in broken:
+        say(f"{run / 'receipt.json'}  Not verified: malformed receipt")
+        failed += 1
+    for run in unsigned:
+        say(f"{run}  Not verified: no receipt.json or seal.json")
+        failed += 1
     if with_receipt:
         registry = _registry(keys)
         for run in with_receipt:
@@ -186,7 +236,7 @@ def _verify_folder(
         legacy_extra = [*extra] if keys is None else ["--keys", str(keys)]
         for run in sealed_only:
             failed += 1 if legacy_folder(run, legacy_extra) else 0
-    total = len(with_receipt) + len(sealed_only)
+    total = len(runs)
     say(f"{total - failed} of {total} verified")
     return 0 if failed == 0 else 1
 
@@ -200,6 +250,16 @@ def _is_record(path: Path) -> bool:
         return is_receipt_envelope(_load_json(path))
     except (OSError, ValueError):
         return False
+
+
+def _is_summary(path: Path) -> bool:
+    try:
+        doc = _load_json(path)
+    except (OSError, ValueError):
+        return False
+    return isinstance(doc, dict) and str(doc.get("schema_version", "")).startswith(
+        "openadapt.run-receipt/"
+    )
 
 
 def _verify_run_summary(path: Path, doc: Any, say: Say) -> int:

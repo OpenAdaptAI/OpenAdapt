@@ -95,7 +95,19 @@ NotChecked = Literal[
     "field_values",
     "postconditions",
 ]
-SubjectName = Literal["report.json", "bundle", "evidence"]
+SubjectName = Literal["report.json", "bundle", "evidence", "payload"]
+#: The media type of a handed-off payload (the ``payload`` subject only).
+PayloadMediaType = Literal[
+    "application/json",
+    "application/cbor",
+    "text/plain",
+    "text/csv",
+    "application/pdf",
+    "application/octet-stream",
+]
+ApprovalMode = Literal["each_item", "problems_only", "not_gated"]
+#: Who answered, as Flow's item approval records it (decided_by).
+ApproverKind = Literal["person", "agent", "none"]
 
 Role = Literal[
     "this_computer", "customer_key", "openadapt_cloud", "public_log", "demo"
@@ -115,6 +127,8 @@ ReceiptRefusal = Literal[
     "opening_mismatch",
     "disclosure_not_allowed",
     "inconsistent",
+    "payload_mismatch",
+    "payload_not_bound",
     "verifier_unavailable",
 ]
 
@@ -147,6 +161,24 @@ class Digest(_Closed):
 class Subject(_Closed):
     name: SubjectName
     digest: Digest
+    #: Only on ``payload``: the bytes handed to another party (an MCP tool
+    #: result, an HTTP body or a file), by digest and media type.
+    media_type: Optional[PayloadMediaType] = None
+
+
+_APPROVAL_KEY = re.compile(r"principal|scope|approved_at")
+
+
+class Approval(_Closed):
+    """Who approved the run's writes, from Flow's item approval binding.
+
+    The principal, the scope and the time are salted commitments; a public
+    card shows only the mode and the approver kind.
+    """
+
+    mode: ApprovalMode
+    approver_kind: ApproverKind
+    commitments: dict[StrictStr, StrictStr] = Field(max_length=3)
 
 
 class Program(_Closed):
@@ -259,11 +291,13 @@ class RunPredicateV1(_Closed):
     #: Counterparty confirmations; omitted from the payload when empty, so a
     #: receipt without one is byte-identical to one made before they existed.
     confirmations: list[Confirmation] = Field(default_factory=list, max_length=64)
+    #: The approval binding; omitted when the run recorded none.
+    approval: Optional[Approval] = None
 
 
 class RunStatementV1(_Closed):
     type_: Literal["https://in-toto.io/Statement/v1"] = Field(alias="_type")
-    subject: list[Subject] = Field(min_length=1, max_length=3)
+    subject: list[Subject] = Field(min_length=1, max_length=4)
     predicateType: Literal["https://openadapt.ai/record/run/v1"]
     predicate: RunPredicateV1
 
@@ -271,6 +305,11 @@ class RunStatementV1(_Closed):
         out = self.model_dump(mode="json", by_alias=True)
         if not out["predicate"]["confirmations"]:
             del out["predicate"]["confirmations"]
+        if out["predicate"]["approval"] is None:
+            del out["predicate"]["approval"]
+        for subject in out["subject"]:
+            if subject["media_type"] is None:
+                del subject["media_type"]
         return out
 
 
@@ -300,12 +339,33 @@ def _check_confirmation(c: Confirmation, steps: set[int]) -> Optional[str]:
     return None
 
 
+def _check_approval(a: Approval) -> Optional[str]:
+    for key, value in a.commitments.items():
+        if not _APPROVAL_KEY.fullmatch(key) or not re.fullmatch(_SHA256_HEX[1:-1], value):
+            return f"approval commitment {key!r} is not a known field"
+    if a.mode == "not_gated" and a.approver_kind != "none":
+        return "a not_gated run names no approver"
+    if a.approver_kind == "none":
+        if a.commitments:
+            return "an approval with no approver commits to nothing"
+    elif not {"principal", "scope"} <= set(a.commitments):
+        return "an approval names its approver's principal and scope"
+    return None
+
+
 def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     """A closed statement that contradicts itself is refused, never repaired."""
     p = statement.predicate
     names = [s.name for s in statement.subject]
     if len(set(names)) != len(names) or "report.json" not in names:
         return "subject names repeat, or the report is missing"
+    for subject in statement.subject:
+        if (subject.name == "payload") != (subject.media_type is not None):
+            return "only the payload subject has a media type, and it always has one"
+    if p.approval is not None:
+        problem = _check_approval(p.approval)
+        if problem:
+            return problem
     for path, value in p.disclosure.commitments.items():
         if path not in DISCLOSURE_FIELDS or not re.fullmatch(_SHA256_HEX[1:-1], value):
             return f"disclosure path {path!r} is not a known field"
@@ -411,6 +471,12 @@ def make_openings(
     return commitments, openings
 
 
+_APPROVAL_PATH = re.compile(r"approval\.(principal|scope|approved_at)")
+_APPROVAL_VALUES: Final[Mapping[str, re.Pattern[str]]] = {
+    "principal": re.compile(r"(person|agent):pr-[a-f0-9]{16}"),
+    "scope": re.compile(r"[a-f0-9]{64}"),
+    "approved_at": _ISO_SECONDS,
+}
 _CONFIRMATION_PATH = re.compile(
     r"confirmations\.([0-9]{1,2})\.(counterparty|observed_at|reason|field\.[0-9]{1,2})"
 )
@@ -432,6 +498,11 @@ def confirmation_path(index: int, key: str) -> str:
 
 
 def _value_problem(path: str, value: Any) -> Optional[str]:
+    approval = _APPROVAL_PATH.fullmatch(path)
+    if approval:
+        if not (isinstance(value, str) and _APPROVAL_VALUES[approval.group(1)].fullmatch(value)):
+            return f"{path!r} does not match its field's pattern"
+        return None
     found = _CONFIRMATION_PATH.fullmatch(path)
     if found:
         if not isinstance(value, str):
@@ -700,6 +771,10 @@ class ReceiptVerification:
     #: API). Decided only from the read method; the signer's role comes
     #: from the pinned registry.
     independent: tuple[bool, ...] = ()
+    #: "No approval recorded", or how the run's writes were approved.
+    approval_line: str = ""
+    #: True when ``payload`` bytes were given and match the payload subject.
+    payload_bound: Optional[bool] = None
 
 
 _REFUSAL_LINES: Final[Mapping[str, str]] = {
@@ -714,6 +789,8 @@ _REFUSAL_LINES: Final[Mapping[str, str]] = {
     "opening_mismatch": "Not verified: a disclosed value doesn't match the receipt",
     "disclosure_not_allowed": "Not verified: the card reveals a field it may not",
     "inconsistent": "Not verified: the receipt contradicts itself",
+    "payload_mismatch": "Not verified: these bytes aren't the payload the receipt signed",
+    "payload_not_bound": "Not verified: the receipt isn't bound to a payload",
     "malformed": "Not verified: malformed receipt",
     "verifier_unavailable": "Not verified: install cryptography to check signatures",
 }
@@ -756,12 +833,16 @@ def verify_receipt(
     registry: Sequence[RoleKey],
     *,
     openings: Optional[Mapping[str, Any]] = None,
+    received: Optional[bytes] = None,
 ) -> ReceiptVerification:
     """Verify a receipt (a DSSE envelope) or a public card against pinned keys.
 
     ``document`` is the envelope (``receipt.json``) or a card
     (``openadapt.receipt-card/v1``). ``openings`` is the private sidecar for
-    an envelope; its values are checked against the commitments. A card's
+    an envelope; its values are checked against the commitments.
+    ``received`` is the bytes a receiver got in a handoff; the receipt must
+    name them as its ``payload`` subject (``payload_not_bound`` or
+    ``payload_mismatch`` otherwise). A card's
     openings must be on its disclosure version's allow-list.
 
     Fails closed: an unknown key, role or schema, any bad signature, a demo
@@ -860,6 +941,9 @@ def verify_receipt(
     for index, c in enumerate(statement.predicate.confirmations):
         for key, value in c.commitments.items():
             commitments[confirmation_path(index, key)] = value
+    if statement.predicate.approval is not None:
+        for key, value in statement.predicate.approval.commitments.items():
+            commitments[f"approval.{key}"] = value
     disclosed: dict[str, str] = {}
     private = False
     if card_openings is not None:
@@ -897,9 +981,19 @@ def verify_receipt(
     for c in ordered:
         if c.line not in lines:
             lines.append(c.line)
+    payload_bound: Optional[bool] = None
+    if received is not None:
+        bound = next((x for x in statement.subject if x.name == "payload"), None)
+        if bound is None:
+            return _refuse("payload_not_bound", "the receipt names no payload")
+        if bound.digest.sha256 != hashlib.sha256(received).hexdigest():
+            return _refuse("payload_mismatch", "the bytes received aren't the payload signed")
+        payload_bound = True
     confirmations = statement.predicate.confirmations
     return ReceiptVerification(
         True,
+        approval_line=approval_line(statement.predicate.approval),
+        payload_bound=payload_bound,
         confirmation_lines=tuple(
             confirmation_line(c, disclosed.get(confirmation_path(i, "observed_at")))
             for i, c in enumerate(confirmations)
@@ -913,6 +1007,20 @@ def verify_receipt(
         disclosed=disclosed,
         private=private,
     )
+
+
+def approval_line(a: Optional[Approval]) -> str:
+    """The verifier's approval line, as every verifier prints it."""
+    if a is None:
+        return "No approval recorded"
+    if a.mode == "not_gated":
+        return "Not gated: no approval was required for these writes"
+    if a.approver_kind == "none":
+        mode = "each item" if a.mode == "each_item" else "items that fail a check"
+        return f"Approval required for {mode}; no item was approved"
+    who = "a person" if a.approver_kind == "person" else "an agent delegate"
+    how = "each item" if a.mode == "each_item" else "items that failed a check"
+    return f"Approved by {who}: {how}"
 
 
 def confirmation_line(c: Confirmation, observed_at: Optional[str] = None) -> str:
@@ -1002,6 +1110,8 @@ __all__ = [
     "add_signature",
     "canonical_json",
     "commitment",
+    "Approval",
+    "approval_line",
     "Confirmation",
     "confirmation_line",
     "confirmation_path",
