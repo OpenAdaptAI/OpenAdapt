@@ -514,6 +514,28 @@ _SNAPSHOT_WALKER_JS = r"""
         return '';
     };
 
+    // The open dialog that holds ``el`` (crossing shadow roots), or null.
+    const MODAL_SELECTORS = [
+        ...(cfg.modalDialogSelectors || []),
+        ...((cfg.modalRules || []).map((r) => r.container_selector).filter(Boolean)),
+    ];
+    const closestOpenModal = (el) => {
+        let cur = el.parentElement || (el.getRootNode && el.getRootNode().host) || null;
+        while (cur && cur !== document.documentElement) {
+            for (const sel of MODAL_SELECTORS) {
+                let hit = false;
+                try {
+                    hit = cur.matches(sel);
+                } catch (e) {
+                    hit = false;
+                }
+                if (hit && isOpenModal(cur)) return cur;
+            }
+            cur = cur.parentElement || (cur.getRootNode && cur.getRootNode().host) || null;
+        }
+        return null;
+    };
+
     // 1. Controls
     const rawControlNodes = safeQueryAll(
         document,
@@ -640,6 +662,10 @@ _SNAPSHOT_WALKER_JS = r"""
             error_text: errorText,
             options,
             is_secret: isSecret,
+            modal_container: (() => {
+                const m = closestOpenModal(el);
+                return m ? computeDomSelector(m) : '';
+            })(),
         });
     }
 
@@ -1302,6 +1328,7 @@ class PlaywrightFormSurface:
                     error_text=str(item.get("error_text") or ""),
                     options=opts,
                     is_secret=is_secret,
+                    modal_container=str(item.get("modal_container") or ""),
                 )
             )
 

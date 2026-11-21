@@ -320,6 +320,20 @@ class PopupSubroutineSpec(BaseModel):
     popup_url_pattern: Optional[str] = None
     popup_title_pattern: Optional[str] = None
     bindings: tuple[FieldBindingSpec, ...] = ()
+    # Buttons clicked in order after the bindings are filled and before
+    # ``commit_anchor``, for estimators that need, say, Calculate before the
+    # result can be applied. Each one must match exactly one control.
+    compute_anchors: tuple[FieldAnchorSpec, ...] = ()
+    # "window": the trigger opens a child window. "in_page": the trigger opens
+    # a dialog in the same page; only controls that were not on the page
+    # before the trigger count as the dialog's, and the commit button must be
+    # gone afterwards.
+    popup_mode: Literal["window", "in_page"] = "window"
+    # The popup's own displayed result, read just before apply. When set, the
+    # value the popup puts back in the parent must equal it under
+    # ``return_codec``, or the run stops before submit. A declared result that
+    # cannot be read is also a stop.
+    result_anchor: Optional[FieldAnchorSpec] = None
     commit_anchor: FieldAnchorSpec
     parent_return_anchor: FieldAnchorSpec
     return_output_key: str = Field(min_length=1)
@@ -434,6 +448,8 @@ class ObservedControl(BaseModel):
     error_text: str = ""
     options: tuple[ObservedOption, ...] = ()
     is_secret: bool = False
+    # Selector of the open dialog that holds this control, if any.
+    modal_container: str = ""
 
     @model_validator(mode="after")
     def _scrub_secret_fields(self) -> "ObservedControl":
@@ -571,6 +587,10 @@ class FieldWriteRecord(BaseModel):
     # read-back of the application's record, so the field stays not_checked
     # unless the summary shows it.
     checked_before_apply: bool = False
+    # For a popup return: the popup that produced it, and whether the value
+    # put back in the parent matched the popup's own displayed result.
+    from_popup_subroutine: Optional[str] = None
+    matched_popup_result: bool = False
 
 
 class ReadbackStatus(str, Enum):
