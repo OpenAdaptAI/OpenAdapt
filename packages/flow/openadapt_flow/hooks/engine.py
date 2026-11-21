@@ -41,6 +41,7 @@ from openadapt_flow.hooks import HOOKS_DIR, SYSTEMS_FILE
 from openadapt_flow.hooks.agents import HookInput, HookOutput
 from openadapt_flow.hooks.classify import Intent, classify, write_key
 from openadapt_flow.hooks.systems import SystemsError, SystemsFile, load_systems
+from openadapt_flow.private_file import open_binary
 
 REPORT_SCHEMA = "openadapt.hook-report/v1"
 _RUN_OUTCOME = {
@@ -70,12 +71,21 @@ def _private_dir(path: Path) -> Path:
 def _write_json(path: Path, payload: Any, *, private: bool = True) -> None:
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
     data = (json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n").encode()
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o644)
+    # A raw-byte descriptor (no Windows newline translation), every byte written.
+    fd = open_binary(
+        tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o644
+    )
     try:
-        os.write(fd, data)
+        _write_all(fd, data)
     finally:
         os.close(fd)
     os.replace(tmp, path)
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view) :]
 
 
 def _read_json(path: Path) -> Optional[dict[str, Any]]:
@@ -113,11 +123,11 @@ class Engine:
     def _log(self, entry: Mapping[str, Any]) -> None:
         self._sub("")
         line = json.dumps({"at": _now(), **entry}, sort_keys=True, default=str)
-        fd = os.open(
+        fd = open_binary(
             self.state / "log.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
         )
         try:
-            os.write(fd, (line + "\n").encode("utf-8"))
+            _write_all(fd, (line + "\n").encode("utf-8"))
         finally:
             os.close(fd)
 
