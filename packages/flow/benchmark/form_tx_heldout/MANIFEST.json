@@ -1,13 +1,13 @@
 {
   "description": "sha256 of every git-tracked file in benchmark/form_tx_heldout except this manifest",
-  "answer_key_sha256": "948f695aaddcb1d30db0316d1da6af73fce7adfa6b60dc5c5ef14edc8ec27227",
+  "answers_sha256": "948f695aaddcb1d30db0316d1da6af73fce7adfa6b60dc5c5ef14edc8ec27227",
   "files": {
-    "README.md": "de62b94dcba1cd0e106d474920101eb0ddb0cace877947ae7d6a75d593117b6c",
+    "README.md": "4560673c356139432df7aabdd847c1bb9738c809deca3d19179dd3de252bc6e6",
     "REFERENCE_RUNS.json": "d1e8e45d08034a9f8d9b074079c62f3b0124466f7e1b5ea76e07ef45841a4f35",
     "__init__.py": "69614a328f302618c7716d3385c45f9c0a625760c550f26f672b83b4b6fbf403",
-    "answer_key.json": "948f695aaddcb1d30db0316d1da6af73fce7adfa6b60dc5c5ef14edc8ec27227",
-    "build_cases.py": "cc1ad1a7ffd3e9a05d2911d1a27fa2b4231adcdc1f260fca635e9c8ea76071c7",
-    "case_defs.py": "656db36bc1a345da85fbdabff6b8a756c7a95617cbf9e47d6d3b310b805edde9",
+    "answers.json": "948f695aaddcb1d30db0316d1da6af73fce7adfa6b60dc5c5ef14edc8ec27227",
+    "build_cases.py": "b6a160d872d5da846f4b33b7094406ba77b33e72f213ba36b4250d8e3f80af0c",
+    "case_defs.py": "739dea2780800e61c45907c805e28dd2516aee0e00894a9d068e7138d5217271",
     "cases/cobalt/cr-dev.intake.json": "8a35cfe6bf1ec5d4a1db9c0cef2564189118a9cd6ee43b7bfec8c8aea209c549",
     "cases/cobalt/cr-s01.intake.json": "a9b0a0cb916f7e86ed652ecf7cc3d0fc822a22717d7d629fec4f645132eeb57a",
     "cases/cobalt/cr-s02.intake.json": "3ab22c68add6fab6eaa18c681ea5ba000055d8c33efd5d65504abf2e7ab15b89",
@@ -56,13 +56,13 @@
     "fixtures/portal_logins.json": "237d3a7726284bac1310091400d20eb74e1fc1c44363e72d67a2a5f4d488cc6d",
     "harborline.py": "13ea78283f9caa09f1f629239c43a6782e356d9c05a93b568adb8420a5808905",
     "intake_vocabulary.json": "720c3ab2e612e24c693aea4da26748a578711a01c7c04592a3647026daf7cc43",
-    "make_manifest.py": "cacf0f0917930a2b069981f115f602b6bc2bc4d6f59f2bebdc18f610188761a1",
+    "make_manifest.py": "f33fca58a2f60651ac10bb0cb181f7b6574896b414c1d550f4e9797598ae37a5",
     "naive_filler.py": "699d6c7eb62043adfdc82307e97fb5a5f1fae799dad6a1ae0ad3a60dbc060c43",
     "pinecrest.py": "4b35ded5ad6551b2a7c6a3a5832807db62f8395c9ff9a7f51720c55eabbdd318",
     "portals.py": "1cac1e25506832a194e1629f0d9cc3d06800e0ed43a3b8310bb354a90fadc683",
     "reference_human.py": "1d0d5b93e86f22935049a3a168fb54aefaf633a6c3fc51c487b2c15756b03984",
     "runner.py": "d155c511f361cb176cb9f3c34a31576e352e520ddaee71551284ef0084229381",
-    "scoring.py": "79c1c366c58e80e15b1df7f8d502cd2cacf31303611e535a345944c8fc42621d",
+    "scoring.py": "0563710efd99703e3c8895c9ddd856beb2f599e20ff8caf95e2c976c91c8e29f",
     "tidewater.py": "1f6975ed43561fee75983787babbe4577bf66bdcd3b497bb19f2102e8de0cb39"
   }
 }

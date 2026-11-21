@@ -53,8 +53,10 @@ from openadapt_flow.form_tx.types import (
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
+    ReadbackFieldVerdict,
     ReadbackStatus,
     SummaryCheckSpec,
+    SummaryVerdict,
     UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
@@ -1443,7 +1445,11 @@ def test_entity_table_prefill_conflict_dismiss_accept_and_broken_dismiss() -> No
             idempotency_key="idem_accept_spouse",
         ),
     )
-    assert done_b.outcome == FormTxOutcome.VERIFIED_DONE
+    # The kept entity row has no read-back, so it is not_checked: the run
+    # cannot end verified_done with a receipt (absent-evidence-as-success).
+    assert done_b.outcome == FormTxOutcome.READBACK_INCOMPLETE
+    assert done_b.receipt is None
+    assert any(k.startswith("entity:") for k in done_b.summary_verdict.not_checked_keys)
     assert len(surface_b.household_rows) == 2
 
     # Path C: Fail-closed when dismiss click fails to remove row
@@ -1861,6 +1867,27 @@ def test_summary_judge_catches_silent_server_corruption_dropped_field_and_lookup
     )
 
 
+def _all_bound_passed(pack: FormPack, dossier: InputDossier) -> SummaryVerdict:
+    """A passing verdict for every bound field the dossier has a value for."""
+    keys = sorted(
+        {b.dossier_key for b in pack.bindings if dossier.facts.get(b.dossier_key)}
+    )
+    return SummaryVerdict(
+        passed=True,
+        checked_count=len(keys),
+        field_verdicts=tuple(
+            ReadbackFieldVerdict(
+                dossier_key=k,
+                codec_kind=FormCodecKind.WHITESPACE_COLLAPSE,
+                passed=True,
+                status=ReadbackStatus.PASSED,
+                provenance=ProvenanceKind.INTAKE_DOCUMENT,
+            )
+            for k in keys
+        ),
+    )
+
+
 def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     tmp_path: Path,
 ) -> None:
@@ -1877,8 +1904,7 @@ def test_ed25519_key_persistence_and_single_bit_receipt_tamper_detection(
     dossier = _build_dossier(has_pool="No")
     receipt = issue_form_tx_receipt(
         run_id="run_tamper_test",
-        readback_passed=True,
-        readback_checked_count=10,
+        summary_verdict=_all_bound_passed(pack, dossier),
         pack=pack,
         dossier=dossier,
         signing_key=created_key,
@@ -2233,8 +2259,7 @@ def test_receipt_raw_seed_loading_and_strict_validation_edges(tmp_path: Path) ->
     # Passing (priv, pub) keypair tuple directly
     rcpt = issue_form_tx_receipt(
         run_id="r_tuple",
-        readback_passed=True,
-        readback_checked_count=1,
+        summary_verdict=_all_bound_passed(pack, dossier),
         pack=pack,
         dossier=dossier,
         signing_key=(priv, pub),

@@ -216,3 +216,10 @@ e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
 # #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
 5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+# PR #2429: sha256 digests of the synthetic held-out benchmark's answers file in
+# MANIFEST.json, under the old "answer_key" names (renamed to answers.json and
+# answers_sha256, so new commits no longer match). Digests, not keys.
+36be56dcd6fdc9adc97567bce272ab81d2a528ff:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:3
+36be56dcd6fdc9adc97567bce272ab81d2a528ff:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:8
+3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:3
+3146a82dd83641e83021d7034aaf03411c635555:packages/flow/benchmark/form_tx_heldout/MANIFEST.json:generic-api-key:6
