@@ -18,6 +18,7 @@ owner-only state folder.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from openadapt_flow.txplan.adapters import (
     AdapterError,
+    Diverged,
     MailAdapter,
     SqlAdapter,
     adapter_for,
@@ -45,7 +47,11 @@ from openadapt_flow.txplan.state import (
 
 PLAN_SCHEMA = "openadapt.tx-plan/v1"
 REPORT_SCHEMA = "openadapt.tx-report/v1"
-OPS = ("create", "update", "delete", "send")
+OPS = ("create", "update", "delete", "send", "sql")
+#: Ledger states after which a key is free again.
+FREE = ("undone", "cancelled", "refused")
+_DDL = re.compile(r"^\s*(create|alter|drop|truncate|rename|comment|grant|revoke)\b", re.I)
+_READ = re.compile(r"^\s*(select|with|show|explain|pragma|values)\b", re.I)
 #: Test hook: exit right after the Nth send, before its outcome is recorded.
 CRASH_ENV = "OPENADAPT_TX_CRASH_AFTER_SEND"
 
@@ -254,6 +260,79 @@ def _line(
 # -- plan ----------------------------------------------------------------------
 
 
+def _counts(diff: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+    """A staged diff as counts per table (what plan.json may hold)."""
+    if not diff:
+        return None
+    out: dict[str, dict[str, int]] = {}
+    for what in ("added", "removed"):
+        for rid in diff[what]:
+            t = out.setdefault(rid.split("/", 1)[0], {"added": 0, "changed": 0, "removed": 0})
+            t[what] += 1
+    for rid in diff["changed"]:
+        t = out.setdefault(rid.split("/", 1)[0], {"added": 0, "changed": 0, "removed": 0})
+        t["changed"] += 1
+    return out
+
+
+def _row_anomalies(spec: TxSpec, writes: Sequence[Mapping[str, Any]], rows: Mapping[int, Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Blast-radius and row-value rules, from the staged transaction's rows."""
+    found = []
+    touched = sum(
+        len(d["added"]) + len(d["removed"]) + len(d["changed"])
+        for w in writes
+        if (d := w.get("staged_diff"))
+    )
+    for rule in spec.anomalies:
+        if rule.max_rows is not None and touched > rule.max_rows:
+            found.append({"label": rule.label, "write": None, "detail": "rows", "value": touched})
+        if rule.table and rule.column:
+            hits = sum(
+                1
+                for n, before in rows.items()
+                for rid, row in before.items()
+                if rid.split("/", 1)[0] == rule.table and same(row.get(rule.column), rule.equals)
+            )
+            if hits:
+                found.append({"label": rule.label, "write": None, "detail": f"{rule.table}.{rule.column}", "value": hits})
+    for n, w in enumerate(writes):
+        if w.get("ddl"):
+            found.append({"label": "schema change: no generated undo", "write": n, "detail": "ddl"})
+    return found
+
+
+def _row_digests(adapter: Any, rid: str, row: Mapping[str, Any]) -> dict[str, str]:
+    from openadapt_flow.txplan.adapters import digest as _d
+
+    table = rid.split("/", 1)[0]
+    return {c: _d(v) for c, v in row.items() if not adapter._ignored(table, c)}
+
+
+def _undo_sql(state: State, adapter: Any, w: Mapping[str, Any], entry: Any, images: Any, digest: str) -> str:
+    if w.get("ddl") or not images:
+        return "no_undo"
+    rids = [*images.get("after", {}), *images.get("before", {})]
+    current = adapter.current_digests(rids)
+    for rid, want in images.get("after", {}).items():
+        if current.get(rid) != want:
+            return "changed_since_apply"
+    for rid in images.get("before", {}):
+        if rid not in images.get("after", {}) and current.get(rid) is not None:
+            return "changed_since_apply"  # a removed row came back
+    state.record(w["key"], "undo_begun", plan=digest, payload=entry.payload)
+    try:
+        adapter.compensate_sql(images)
+    except AdapterError as exc:
+        state.record(w["key"], "uncertain", plan=digest, payload=entry.payload, reason=f"undo: {exc}"[:120])
+        return "undo_failed"
+    now_ = adapter.current_digests(rids + list(images.get("added_pk", {})))
+    ok = all(now_.get(r) is None for r in images.get("added_pk", {})) and all(
+        now_.get(r) == _row_digests(adapter, r, item["row"]) for r, item in images.get("before", {}).items()
+    )
+    state.record(w["key"], "undone", plan=digest, payload=entry.payload, read_back=ok)
+    return "undone" if ok else "undo_refuted"
+
+
 def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(w, Mapping):
         raise TxRefused("bad_write", f"write {n} is not an object")
@@ -264,6 +343,22 @@ def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
     op = w.get("op")
     if op not in OPS:
         raise TxRefused("bad_write", f"write {n}: op must be one of {OPS}")
+    if op == "sql":
+        if not isinstance(system, SqlSystem):
+            raise TxRefused("bad_write", f"write {n}: a SQL statement needs a sql system")
+        sql = (w.get("fields") or {}).get("sql") if isinstance(w.get("fields"), Mapping) else None
+        if not isinstance(sql, str) or not sql.strip():
+            raise TxRefused("bad_write", f"write {n}: sql needs fields.sql")
+        sql = sql.strip().rstrip(";").strip()
+        if ";" in sql:
+            raise TxRefused("bad_write", f"write {n}: one statement per write")
+        if _READ.match(sql):
+            raise TxRefused("bad_write", f"write {n}: a read is not a write (use a query)")
+        ddl = bool(_DDL.match(sql))
+        if ddl and system.dialect == "mysql":
+            raise TxRefused("bad_write", f"write {n}: MySQL commits DDL at once, so it can't be staged")
+        return {"system": system.name, "collection": "statement", "op": "sql", "id": None,
+                "fields": {"sql": sql}, "label": str(w.get("label") or "")[:80], "ddl": ddl}
     if isinstance(system, MailSystem) != (op == "send"):
         raise TxRefused("bad_write", f"write {n}: {op} doesn't fit a {system.kind} system")
     if isinstance(system, RestSystem):
@@ -291,7 +386,11 @@ def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
 def _anomalies(spec: TxSpec, writes: Sequence[Mapping[str, Any]], baselines: Sequence[Any]) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for rule in spec.anomalies:
-        if rule.max_writes is not None and len(writes) > rule.max_writes:
+        if rule.max_writes is None and not (rule.field or rule.op or rule.clears):
+            continue  # a row rule (max_rows, table/column): see _row_anomalies
+        if rule.max_writes is not None:
+            if len(writes) <= rule.max_writes:
+                continue
             found.append({"label": rule.label, "write": None, "detail": f"{len(writes)} writes"})
             continue
         for n, (w, base) in enumerate(zip(writes, baselines)):
@@ -345,6 +444,25 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
     if not writes:
         raise TxRefused("empty_plan", "a plan needs at least one write")
     slots = _slots(writes)
+    # A statement's record is the set of rows it changes or removes, read from
+    # a first staged run: a regenerated UPDATE that touches the same rows gets
+    # the same key whatever its values. A statement that only inserts has no
+    # such identity; its slot is the table, so a second insert into it in the
+    # same task is a possible replay that a person must approve.
+    sql_idx: dict[str, list[int]] = {}
+    for n, w in enumerate(writes):
+        if w["op"] == "sql":
+            sql_idx.setdefault(w["system"], []).append(n)
+    for name, idx in sql_idx.items():
+        _, pre = ctx.adapter(name).stage([writes[i] for i in idx], [None] * len(idx))
+        for i, res in zip(idx, pre):
+            d = res["staged_diff"]
+            touched = sorted([*d["changed"], *d["removed"]])
+            if touched:
+                slots[i] = "rows:" + sha256(touched)[:32]
+            else:
+                tables = sorted({r.split("/", 1)[0] for r in d["added"]})
+                slots[i] = "insert:" + ",".join(tables) if tables else "noop"
     for w, slot in zip(writes, slots):
         if w["op"] in ("update", "delete"):
             dup = [x for x in writes if x is not w and x["system"] == w["system"]
@@ -362,8 +480,12 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
     for n, w in enumerate(writes):
         entry = state.entry(w["key"])
         w["ledger"] = "free"
-        if entry is not None and entry.status not in ("undone", "cancelled"):
+        if entry is not None and entry.status not in FREE:
             w["ledger"] = "replay" if entry.payload == w["payload_sha256"] else "replay_mismatch"
+            if w["ledger"] == "replay_mismatch" and w["op"] == "sql":
+                # A raw statement's identity is the rows it touches, which new work
+                # can share: a person decides, and policy never approves it.
+                w["ledger"] = "possible_replay"
             replays.append({"write": n, "status": w["ledger"], "prior_plan": entry.plan[:12]})
     baselines: list[Optional[dict]] = []
     for w in writes:
@@ -379,10 +501,11 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
     dry_run: dict[str, str] = {}
     queued = 0
     staged: dict[str, list[int]] = {}
+    staged_rows: dict[int, dict[str, Any]] = {}
     for n, (w, base, scope) in enumerate(zip(writes, baselines, scopes)):
         adapter = ctx.adapter(w["system"])
         dry_run[w["system"]] = adapter.dry_run
-        if w["ledger"] != "free":
+        if w["ledger"] not in ("free", "possible_replay"):
             continue
         if isinstance(adapter, SqlAdapter):
             staged.setdefault(w["system"], []).append(n)
@@ -393,15 +516,26 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
     for name, idx in staged.items():
         diff, results = ctx.adapter(name).stage([writes[i] for i in idx], [baselines[i] for i in idx])
         _merge(predicted[f"{name}:*"], _staged_to_prediction(diff))
+        for i, res in zip(idx, results):
+            if writes[i]["op"] == "sql":
+                writes[i]["staged_diff"] = res["staged_diff"]
+                writes[i]["staged_rows"] = res["rows"]
+                staged_rows[i] = res.get("before_rows", {})
     summary: dict[str, int] = {}
     for w in writes:
-        verb = {"create": "created", "update": "updated", "delete": "deleted", "send": "queued"}[w["op"]]
+        verb = {"create": "created", "update": "updated", "delete": "deleted", "send": "queued",
+                "sql": "statements"}[w["op"]]
         if w["irreversible"] and w["op"] == "delete":
             verb = "deleted after holdback"
         k = f"{w['system']}.{w['collection']} {verb}"
         summary[k] = summary.get(k, 0) + 1
     anomalies = _anomalies(spec, writes, baselines)
+    anomalies += _row_anomalies(spec, writes, staged_rows)
     for r in replays:
+        if r["status"] == "possible_replay":
+            anomalies.append(
+                {"label": "possible replay: this task already wrote these rows (or this table) with another statement", "write": r["write"], "detail": "possible_replay"}
+            )
         if r["status"] == "replay_mismatch":
             anomalies.append(
                 {"label": "replays an applied write with a different payload", "write": r["write"], "detail": "replay_mismatch"}
@@ -413,7 +547,7 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
             other = {rid.split("/", 1)[0] for rid in pred["changed"]} | set(pred["added"]) | {
                 rid.split("/", 1)[0] for rid in pred["removed"]
             }
-            if other - declared:
+            if declared and other - declared:
                 anomalies.append(
                     {"label": "side effects in undeclared tables", "write": None, "detail": str(len(other - declared))}
                 )
@@ -425,7 +559,10 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
         "nonce": secrets.token_hex(8),
         "holdback_s": spec.holdback_s,
         "writes": [
-            {k: w[k] for k in ("system", "collection", "op", "id", "slot", "key", "payload_sha256", "irreversible", "ledger")}
+            {
+                **{k: w[k] for k in ("system", "collection", "op", "id", "slot", "key", "payload_sha256", "irreversible", "ledger")},
+                **({"ddl": w["ddl"], "staged_diff": _counts(w.get("staged_diff"))} if w["op"] == "sql" else {}),
+            }
             for w in writes
         ],
         "baseline_sha256": [None if b is None else sha256(b) for b in baselines],
@@ -477,6 +614,8 @@ def _readback(ctx: Ctx, w: Mapping[str, Any], base: Any, result: Mapping[str, An
     adapter = ctx.adapter(w["system"])
     if isinstance(adapter, MailAdapter):
         return None, None
+    if w["op"] == "sql":
+        return True, None  # committed only when its own diff matched the plan
     rid = str(result.get("id") or w.get("id"))
     got = adapter.read(w["collection"], rid)
     if w["op"] == "delete":
@@ -509,7 +648,16 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         # Every key before any send: a mismatched replay refuses the whole plan.
         for n, w in enumerate(writes):
             entry = state.entry(w["key"])
-            if entry is not None and entry.status not in ("undone", "cancelled") and entry.payload != w["payload_sha256"]:
+            if (
+                entry is not None
+                and entry.status not in FREE
+                and entry.payload != w["payload_sha256"]
+                and w.get("ledger") != "possible_replay"
+            ):
+                tx["blocked_double_effects"] = tx.get("blocked_double_effects", 0) + 1
+        approval_peek = state.approval_record(digest) or {}
+        for w in writes:
+            if w.get("ledger") == "possible_replay" and approval_peek.get("decided_by") != "human":
                 tx["blocked_double_effects"] = tx.get("blocked_double_effects", 0) + 1
         if tx.get("blocked_double_effects"):
             raise refuse(
@@ -537,7 +685,9 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if stop:
                 results.append(_line(ok=False, verified=None, irreversible=w["irreversible"], payload=payload, code="not_sent"))
                 continue
-            if entry is not None and entry.status not in ("undone", "cancelled"):
+            if w.get("ledger") == "possible_replay" and entry is not None and entry.status == "applied":
+                entry = None  # a person approved it as new work: a new attempt under the key
+            if entry is not None and entry.status not in FREE:
                 if entry.status in ("applied", "held", "released"):
                     tx["replays"] = tx.get("replays", 0) + 1
                     results.append(_line(ok=True, verified=None, irreversible=w["irreversible"], payload=payload, code="replay_not_sent"))
@@ -567,6 +717,12 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             try:
                 result = ctx.adapter(w["system"]).apply(w, base, key)
+            except Diverged:
+                state.record(key, "refused", plan=digest, payload=payload, reason="diverged")
+                stop = "diverged"
+                tx["diverged"] = tx.get("diverged", 0) + 1
+                results.append(_line(ok=False, verified=False, irreversible=False, payload=payload, code="diverged_rolled_back"))
+                continue
             except AdapterError as exc:
                 state.record(key, "uncertain", plan=digest, payload=payload, reason=str(exc)[:120])
                 stop = "send_failed"
@@ -575,9 +731,12 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             sent += 1
             if crash_after and sent >= crash_after:
                 os._exit(70)
+            rows_image = result.pop("_images", None)
             state.record(key, "applied", plan=digest, payload=payload, result=result)
             verified, got = _readback(ctx, w, base, result)
             images[key] = {"result": result, "after": _norm(spec.system(w["system"]), w, got)}
+            if rows_image is not None:
+                images[key]["rows"] = rows_image
             results.append(_line(ok=bool(verified), verified=verified, irreversible=False, payload=payload,
                                  code="confirmed" if verified else "refuted"))
         after = ctx.frames(list(priv["frames"]))
@@ -633,6 +792,9 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 state.record(key, "cancelled", plan=digest, payload=entry.payload)
                 per_write[key] = "cancelled"
                 continue
+            if entry.status == "cancelled":
+                per_write[key] = "cancelled"
+                continue
             if entry.status == "released":
                 per_write[key] = "irreversible_released"
                 continue
@@ -644,6 +806,9 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             result = entry.result or {"id": w.get("id")}
             adapter = ctx.adapter(w["system"])
+            if w["op"] == "sql":
+                per_write[key] = _undo_sql(state, adapter, w, entry, (images.get(key) or {}).get("rows"), digest)
+                continue
             rid = str(result.get("id") or w.get("id"))
             current = adapter.read(w["collection"], rid)
             want = (images.get(key) or {}).get("after")
@@ -675,15 +840,20 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             e = state.entry(w["key"])
             rid = f"{w['collection']}/{(e.result.get('id') if e else None) or w.get('id')}"
             own[rid] = w["key"]
+        counted = [k for k, v in per_write.items() if v in ("undone", "undo_refuted", "frame_differs", "changed_since_apply", "undo_failed", "unresolved")]
+        # Undo images name the rows a statement touched: those are the write's own.
+        for w in writes:
+            img = (images.get(w["key"]) or {}).get("rows") or {}
+            for rid in [*img.get("before", {}), *img.get("added_pk", {})]:
+                own.setdefault(rid, w["key"])
         collateral = [r for r in leftover if r not in own]
         for r in leftover:
             if r in own and per_write.get(own[r]) == "undone":
                 per_write[own[r]] = "frame_differs"
-        counted = [k for k, v in per_write.items() if v in ("undone", "undo_refuted", "frame_differs", "changed_since_apply", "undo_failed", "unresolved")]
         verified = [k for k in counted if per_write[k] == "undone" and not collateral]
         for w in writes:
             code = per_write.get(w["key"])
-            if code in (None, "not_this_plan", "cancelled", "already_undone"):
+            if code in (None, "not_this_plan", "cancelled", "already_undone", "no_undo"):
                 continue
             results.append(
                 _line(
@@ -700,6 +870,7 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 "undo_verified": len(verified),
                 "cancelled": sum(1 for v in per_write.values() if v == "cancelled"),
                 "irreversible_released": sum(1 for v in per_write.values() if v == "irreversible_released"),
+                "no_generated_undo": sum(1 for v in per_write.values() if v == "no_undo"),
                 "collateral_changes": len(collateral),
                 "codes": {c: sum(1 for v in per_write.values() if v == c) for c in sorted(set(per_write.values()))},
             }
@@ -792,6 +963,12 @@ def summary_lines(plan: Mapping[str, Any]) -> list[str]:
         lines.append(
             f"  {scope}: predicted {added} added, {len(pred['changed'])} changed, {len(pred['removed'])} removed"
         )
+        tables = _counts({"added": [f"{t}/+{i}" for t, n in pred["added"].items() for i in range(n)],
+                          "removed": pred["removed"], "changed": pred["changed"]}) or {}
+        if len(tables) > 1 or scope.endswith(":*"):
+            for table, c in sorted(tables.items()):
+                parts = [f"{v} rows {k}" for k, v in c.items() if v]
+                lines.append(f"    {table}: {', '.join(parts)}")
     details = plan.get("anomaly_details") or plan["anomalies"]
     lines.append(f"  {len(details)} anomal{'y' if len(details) == 1 else 'ies'}")
     for a in details:

@@ -158,7 +158,7 @@ class SqlSystem(_Closed):
     connect_args: dict[str, object] = Field(default_factory=dict)
     password_env: Optional[str] = None
     #: The tables a plan may write, each with its key column.
-    tables: dict[str, str] = Field(min_length=1)
+    tables: dict[str, str] = Field(default_factory=dict)
     #: Tables whose rows the frame doesn't compare (a session table, a cache).
     #: Declare them before a measured run.
     frame_ignore_tables: list[str] = Field(default_factory=list)
@@ -211,16 +211,25 @@ class Anomaly(_Closed):
     label: str = Field(min_length=1, max_length=60)
     field: Optional[str] = None
     above: Optional[float] = None
-    op: Optional[Literal["create", "update", "delete", "send"]] = None
+    op: Optional[Literal["create", "update", "delete", "send", "sql"]] = None
     #: A field set from a non-empty value to an empty one.
     clears: bool = False
     max_writes: Optional[int] = Field(default=None, ge=1)
+    #: SQL: more rows than this touched in total (the blast radius).
+    max_rows: Optional[int] = Field(default=None, ge=0)
+    #: SQL: rows of ``table`` whose ``column`` equals ``equals`` before the
+    #: statement ("3 admins"), from the staged transaction.
+    table: Optional[str] = None
+    column: Optional[str] = None
+    equals: Optional[object] = None
 
     @model_validator(mode="after")
     def _check(self) -> "Anomaly":
         if self.above is not None and self.field is None:
             raise ValueError(f"anomaly {self.label}: above needs field")
-        if not any([self.field, self.op, self.max_writes, self.clears]):
+        if (self.table is None) != (self.column is None):
+            raise ValueError(f"anomaly {self.label}: table and column go together")
+        if not any([self.field, self.op, self.max_writes, self.clears, self.max_rows is not None, self.table]):
             raise ValueError(f"anomaly {self.label}: says nothing to check")
         return self
 

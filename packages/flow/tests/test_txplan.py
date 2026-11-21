@@ -462,3 +462,130 @@ def test_cli_create_show_approve_apply(tmp_path: Path, capsys: pytest.CaptureFix
     assert main(["approve", digest, "--automation"]) == 0
     assert main(["apply", "--tx", str(spec), digest]) == 0
     assert main(["apply", "--tx", str(spec), digest]) == 3
+
+
+# -- raw SQL statements and the credential-holding proxy ------------------------
+
+
+def _users(path: Path, n: int = 500) -> Path:
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT, active INTEGER)")
+    con.execute("CREATE TABLE logins (id INTEGER PRIMARY KEY, user_id INTEGER)")
+    for i in range(1, n + 1):
+        con.execute("INSERT INTO users VALUES (?, ?, ?, 1)", (i, f"user {i}", "admin" if i in (3, 30, 300) else "member"))
+    con.commit()
+    con.close()
+    return path
+
+
+def _proxy(db: Path, **kw: Any):  # type: ignore[no-untyped-def]
+    from openadapt_flow.txplan.proxy import Proxy, sql_spec
+
+    spec = sql_spec(sqlite=str(db), flags=["users.role=admin"], **kw)
+    return Proxy(Ctx(spec=spec, state=State()), task="T-proxy")
+
+
+def _all(db: Path) -> list[tuple]:
+    con = sqlite3.connect(db)
+    try:
+        return sorted(con.execute("SELECT * FROM users").fetchall())
+    finally:
+        con.close()
+
+
+def test_proxy_bulk_update_shows_exact_diff_then_applies_once_and_undoes(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite")
+    before = _all(db)
+    proxy = _proxy(db)
+    got = proxy.preview("UPDATE users SET active = 0 WHERE id <= 412")
+    assert got["tables"] == {"users": {"added": 0, "changed": 412, "removed": 0}}
+    assert "rows where users.role = admin" in got["anomalies"]
+    assert "users: 412 rows changed" in got["summary"] and "= admin: users.role = 3" in got["summary"]
+    assert got["approval"].startswith("waiting for a person") and _all(db) == before
+    with pytest.raises(TxRefused):
+        proxy.apply(got["plan"])
+    assert proxy.key("y").startswith("approved")
+    out = proxy.apply(got["plan"])
+    assert out["outcome"] == "VERIFIED" and out["tx"]["missed_effects"] == 0
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT count(*) FROM users WHERE active = 0").fetchone()[0] == 412
+    con.close()
+    undone = proxy.undo(got["plan"])
+    assert undone["outcome"] == "ROLLED_BACK", undone
+    assert _all(db) == before
+
+
+def test_proxy_insert_and_delete_round_trip_and_policy_auto_approve(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=20)
+    before = _all(db)
+    proxy = _proxy(db, max_rows=5)
+    a = proxy.preview("INSERT INTO users (name, role, active) VALUES ('new', 'member', 1)")
+    assert a["approval"] == "approved by policy"
+    assert proxy.apply(a["plan"])["outcome"] == "VERIFIED"
+    b = proxy.preview("DELETE FROM users WHERE id IN (4, 5)")
+    assert b["approval"] == "approved by policy"
+    assert proxy.apply(b["plan"])["outcome"] == "VERIFIED"
+    assert proxy.undo(b["plan"])["outcome"] == "ROLLED_BACK"
+    assert proxy.undo(a["plan"])["outcome"] == "ROLLED_BACK"
+    assert _all(db) == before
+
+
+def test_proxy_commits_only_the_planned_diff(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=20)
+    proxy = _proxy(db, max_rows=100)
+    got = proxy.preview("UPDATE users SET name = 'x' WHERE active = 1")
+    con = sqlite3.connect(db)  # another writer between the dry run and apply
+    con.execute("UPDATE users SET active = 0 WHERE id = 7")
+    con.commit()
+    con.close()
+    snapshot = _all(db)
+    with pytest.raises(TxRefused) as exc:
+        proxy.apply(got["plan"])
+    assert exc.value.code == "plan_stale" and _all(db) == snapshot
+
+
+def test_proxy_regenerated_statement_after_restore_is_held_not_applied(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=50)
+    proxy = _proxy(db, max_rows=100)
+    a = proxy.preview("UPDATE users SET name = 'refund 100' WHERE id = 9")
+    proxy.apply(a["plan"])
+    # Restored agent regenerates the same intent with a different payload.
+    b = proxy.preview("UPDATE users SET name = 'refund 100 (ref 2)' WHERE id = 9")
+    assert b["ledger"] == "possible_replay" and b["approval"].startswith("waiting")
+    with pytest.raises(TxRefused) as exc:
+        proxy.apply(b["plan"])
+    assert exc.value.code in ("not_approved", "replay_mismatch")
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT name FROM users WHERE id = 9").fetchone()[0] == "refund 100"
+    con.close()
+    # The identical statement now changes nothing: its dry run is empty.
+    c = proxy.preview("UPDATE users SET name = 'refund 100' WHERE id = 9")
+    assert c["tables"] == {}
+
+
+def test_proxy_mcp_endpoint_needs_its_token_and_scrubs_the_child(tmp_path: Path) -> None:
+    import httpx
+
+    from openadapt_flow.txplan.proxy import McpServer, child_environment
+
+    db = _users(tmp_path / "app.sqlite", n=5)
+    server = McpServer(_proxy(db, max_rows=10))
+    server.start()
+    try:
+        assert httpx.post(server.url, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).status_code == 401
+        h = {"Authorization": f"Bearer {server.token}"}
+        init = httpx.post(server.url, headers=h, json={"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                                        "params": {"protocolVersion": "2025-06-18"}}).json()
+        assert init["result"]["capabilities"] == {"tools": {}}
+        names = [t["name"] for t in httpx.post(server.url, headers=h, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list"}).json()["result"]["tools"]]
+        assert names == ["sql_query", "sql_preview", "sql_apply", "sql_undo"]
+        call = httpx.post(server.url, headers=h, json={"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "sql_preview", "arguments": {"sql": "UPDATE users SET active = 0 WHERE id = 2"}}}).json()
+        body = json.loads(call["result"]["content"][0]["text"])
+        assert body["approval"] == "approved by policy"
+    finally:
+        server.stop()
+    env = child_environment({"DATABASE_URL": "postgres://u:pw@h/db", "X": "postgres://u:pw@h/db",
+                             "PGPASSWORD": "pw", "PATH": "/bin"}, ["postgres://u:pw@h/db"])
+    assert env == {"PATH": "/bin"}

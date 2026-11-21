@@ -48,6 +48,20 @@ class AdapterError(RuntimeError):
     """A read or a write failed. For a write, delivery is unknown."""
 
 
+class Diverged(AdapterError):
+    """The statement did something other than the plan showed. Nothing landed."""
+
+
+def _shape(diff: Mapping[str, Any]) -> tuple[Any, ...]:
+    """A diff, comparable across runs: ids added by a sequence can differ, so
+    added rows count per table."""
+    added: dict[str, int] = {}
+    for rid in diff["added"]:
+        t = rid.split("/", 1)[0]
+        added[t] = added.get(t, 0) + 1
+    return (sorted(added.items()), sorted(diff["removed"]), sorted((k, tuple(v)) for k, v in diff["changed"].items()))
+
+
 # -- values --------------------------------------------------------------------
 
 
@@ -370,6 +384,8 @@ class SqlAdapter:
         }
 
     def _begin(self, cur: Any) -> None:
+        if self.system.dialect == "postgresql":
+            return  # the DB-API driver opens a transaction on the first statement
         cur.execute("BEGIN" if self.system.dialect != "mysql" else "START TRANSACTION")
 
     def _ident(self, name: str) -> str:
@@ -425,7 +441,11 @@ class SqlAdapter:
         cols = [str(d[0]) for d in cur.description]
         return cols, list(cur.fetchall())
 
-    def frame_cur(self, cur: Any) -> dict[str, dict[str, str]]:
+    def frame_cur(
+        self, cur: Any, rows_out: Optional[dict[str, Any]] = None
+    ) -> dict[str, dict[str, str]]:
+        """Every table's rows as column digests. With ``rows_out``, also keep
+        each row's tagged values there (in memory, for undo images)."""
         out: dict[str, dict[str, str]] = {}
         total = 0
         for table in self._tables(cur):
@@ -445,6 +465,10 @@ class SqlAdapter:
                     seen[base] = seen.get(base, 0) + 1
                     rid = f"~{base}#{seen[base]}"
                 out[f"{table}/{rid}"] = digs
+                if rows_out is not None:
+                    rows_out[f"{table}/{rid}"] = {
+                        "pk": pk, "row": {c: tag(v) for c, v in rec.items()}
+                    }
         return out
 
     def frame(self, collection: Optional[str] = None) -> dict[str, dict[str, str]]:
@@ -492,9 +516,12 @@ class SqlAdapter:
     def _exec(self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]) -> dict[str, Any]:
         table = str(write["collection"])
         key = self.system.tables.get(table)
-        if key is None:
+        if key is None and write["op"] != "sql":
             raise AdapterError(f"table {table} is not declared")
         op = write["op"]
+        if op == "sql":
+            cur.execute(str((write.get("fields") or {})["sql"]))
+            return {"rows": max(0, int(cur.rowcount or 0))}
         fields = {k: untag(v) for k, v in (write.get("fields") or {}).items()}
         t = self._ident(table)
         if op == "create":
@@ -539,8 +566,22 @@ class SqlAdapter:
             cur = con.cursor()
             self._begin(cur)
             try:
-                before = self.frame_cur(cur)
-                results = [self._exec(cur, w, b) for w, b in zip(writes, baselines)]
+                rows: dict[str, Any] = {}
+                before = self.frame_cur(cur, rows)
+                results = []
+                prev = before
+                for w, b in zip(writes, baselines):
+                    result = self._exec(cur, w, b)
+                    if w["op"] == "sql":
+                        now_ = self.frame_cur(cur)
+                        result["staged_diff"] = diff_frames(prev, now_)
+                        result["before_rows"] = {
+                            rid: rows[rid]["row"]
+                            for rid in [*result["staged_diff"]["removed"], *result["staged_diff"]["changed"]]
+                            if rid in rows
+                        }
+                        prev = now_
+                    results.append(result)
                 after = self.frame_cur(cur)
             finally:
                 con.rollback()
@@ -552,6 +593,8 @@ class SqlAdapter:
         raise NotImplementedError("SQL plans are staged as one transaction")
 
     def apply(self, write: Mapping[str, Any], baseline: Optional[Record], key: str) -> dict[str, Any]:
+        if write["op"] == "sql":
+            return self._apply_sql(write)
         con = self.connect()
         try:
             cur = con.cursor()
@@ -566,6 +609,94 @@ class SqlAdapter:
         finally:
             con.close()
 
+    def _apply_sql(self, write: Mapping[str, Any]) -> dict[str, Any]:
+        """Run one statement; commit only if its diff, read inside the same
+        transaction, is exactly the diff the plan showed. Keep the undo images."""
+        want = write.get("staged_diff")
+        if not isinstance(want, Mapping):
+            raise AdapterError("the plan has no staged diff for this statement")
+        con = self.connect()
+        try:
+            cur = con.cursor()
+            self._begin(cur)
+            try:
+                rows: dict[str, Any] = {}
+                before = self.frame_cur(cur, rows)
+                result = self._exec(cur, write, None)
+                after_rows: dict[str, Any] = {}
+                after = self.frame_cur(cur, after_rows)
+                diff = diff_frames(before, after)
+                if _shape(diff) != _shape(want):
+                    con.rollback()
+                    raise Diverged("the statement's diff is not the planned diff; rolled back")
+                images = {
+                    "before": {r: rows[r] for r in [*diff["removed"], *diff["changed"]]},
+                    "after": {r: after[r] for r in [*diff["added"], *diff["changed"]]},
+                    "added_pk": {r: after_rows[r] for r in diff["added"]},
+                }
+            except Diverged:
+                raise
+            except Exception:
+                con.rollback()
+                raise
+            con.commit()
+            return {**result, "_images": images}
+        finally:
+            con.close()
+
+    def compensate_sql(self, images: Mapping[str, Any]) -> None:
+        """Undo one statement from its images, in one transaction: delete what
+        it added, restore what it changed, reinsert what it removed."""
+        con = self.connect()
+        try:
+            cur = con.cursor()
+            self._begin(cur)
+            try:
+                for rid, item in images.get("added_pk", {}).items():
+                    self._delete_row(cur, rid, item)
+                for rid, item in images.get("before", {}).items():
+                    table = rid.split("/", 1)[0]
+                    pk, row = item["pk"], item["row"]
+                    if not pk:
+                        raise AdapterError(f"{table} has no primary key: no generated undo")
+                    where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
+                    cur.execute(f"SELECT 1 FROM {self._ident(table)} WHERE {where}",
+                                tuple(untag(row[c]) for c in pk))
+                    if cur.fetchall():
+                        cols = [c for c in row if c not in pk]
+                        sets = ", ".join(f"{self._ident(c)} = {self.ph}" for c in cols)
+                        if cols:
+                            cur.execute(
+                                f"UPDATE {self._ident(table)} SET {sets} WHERE {where}",
+                                (*(untag(row[c]) for c in cols), *(untag(row[c]) for c in pk)),
+                            )
+                    else:
+                        cols = list(row)
+                        cur.execute(
+                            f"INSERT INTO {self._ident(table)} ({', '.join(self._ident(c) for c in cols)}) "
+                            f"VALUES ({', '.join([self.ph] * len(cols))})",
+                            tuple(untag(row[c]) for c in cols),
+                        )
+            except Exception:
+                con.rollback()
+                raise
+            con.commit()
+        finally:
+            con.close()
+
+    def _delete_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
+        table = rid.split("/", 1)[0]
+        pk, row = item["pk"], item["row"]
+        if not pk:
+            raise AdapterError(f"{table} has no primary key: no generated undo")
+        where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
+        cur.execute(f"DELETE FROM {self._ident(table)} WHERE {where}", tuple(untag(row[c]) for c in pk))
+
+    def current_digests(self, rids: Sequence[str]) -> dict[str, Optional[dict[str, str]]]:
+        """The current column digests of some frame rows (None when gone)."""
+        frame = self.frame()
+        return {r: frame.get(r) for r in rids}
+
     def compensate(
         self, write: Mapping[str, Any], baseline: Optional[Record], result: Mapping[str, Any], key: str
     ) -> None:
@@ -575,12 +706,14 @@ class SqlAdapter:
             inverse = {"op": "delete", "collection": write["collection"], "id": rid}
         elif op == "update":
             assert baseline is not None
-            inverse = {
-                "op": "update",
-                "collection": write["collection"],
-                "id": rid,
-                "fields": {k: baseline.get(k) for k in (write.get("fields") or {})},
-            }
+            # The whole before-image, not just the planned columns: a column the
+            # database set itself (ON UPDATE CURRENT_TIMESTAMP, a trigger on the
+            # same row) is restored too, by naming its old value explicitly.
+            current = self.read(write["collection"], rid) or {}
+            fields = {
+                k: v for k, v in baseline.items() if k in current and not same(current.get(k), v)
+            } or {k: baseline.get(k) for k in (write.get("fields") or {})}
+            inverse = {"op": "update", "collection": write["collection"], "id": rid, "fields": fields}
         elif op == "delete":
             assert baseline is not None
             inverse = {"op": "create", "collection": write["collection"], "fields": dict(baseline)}
