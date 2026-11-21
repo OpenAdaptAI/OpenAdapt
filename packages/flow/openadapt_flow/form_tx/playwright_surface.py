@@ -698,7 +698,8 @@ _SNAPSHOT_WALKER_JS = r"""
                 'input:not([type="hidden"]), select, textarea, [role="combobox"], [role="checkbox"], [role="radio"]'
             );
             if (innerControls.length <= 1) {
-                for (const sel of (cfg.fieldErrorSelectors || [])) {
+                // An alert inside the field's own box is that field's error.
+                for (const sel of [...(cfg.fieldErrorSelectors || []), ...(cfg.errorBannerSelectors || [])]) {
                     for (const errNode of safeQueryAll(container, sel)) {
                         if (errNode === el || isInteractiveElement(errNode)) continue;
                         if (isVisible(errNode)) {
@@ -738,6 +739,47 @@ _SNAPSHOT_WALKER_JS = r"""
         return null;
     };
 
+    // The text of a control's own row: the nearest table row or list item,
+    // else the largest ancestor holding no other field (a radio group is one
+    // field). Table rows also give their cell texts.
+    const FIELD_SEL = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]), select, textarea, [role="combobox"], [role="checkbox"], [role="radio"]';
+    const fieldCount = (node) => {
+        let n = 0;
+        const groups = new Set();
+        for (const x of safeQueryAll(node, FIELD_SEL)) {
+            const isRadio = (x.tagName === 'INPUT' && (x.getAttribute('type') || '').toLowerCase() === 'radio') ||
+                (x.getAttribute('role') || '').toLowerCase() === 'radio';
+            if (isRadio) {
+                const g = x.getAttribute('name') ||
+                    (x.closest('[role="radiogroup"]') ? computeDomSelector(x.closest('[role="radiogroup"]')) : '');
+                if (g) {
+                    if (groups.has(g)) continue;
+                    groups.add(g);
+                }
+            }
+            n += 1;
+        }
+        return n;
+    };
+    const rowInfoFor = (el) => {
+        const row = el.closest('tr, [role="row"], li');
+        if (row) {
+            const cells = Array.from(row.children)
+                .filter((c) => c.tagName === 'TD' || c.tagName === 'TH' ||
+                    ['cell', 'gridcell', 'rowheader'].includes((c.getAttribute('role') || '').toLowerCase()))
+                .map((c) => cleanText(c.textContent));
+            return {text: cleanText(row.textContent).slice(0, 500), cells};
+        }
+        let box = el.parentElement;
+        let best = null;
+        while (box && box !== document.body && box !== document.documentElement && box.tagName !== 'FORM') {
+            if (fieldCount(box) > 1) break;
+            best = box;
+            box = box.parentElement;
+        }
+        return {text: best ? cleanText(best.textContent).slice(0, 500) : '', cells: []};
+    };
+
     // 1. Controls
     const rawControlNodes = safeQueryAll(
         document,
@@ -758,7 +800,7 @@ _SNAPSHOT_WALKER_JS = r"""
         const domSelector = computeDomSelector(el);
         const nameAttr = el.getAttribute('name') || '';
         const idAttr = el.id || '';
-        const labelText = resolveLabelText(el, tag, inputType, role);
+        let labelText = resolveLabelText(el, tag, inputType, role);
         const sectionText = resolveSectionText(el);
         const isSecret = detectSecret(el, inputType, nameAttr, idAttr);
 
@@ -851,6 +893,15 @@ _SNAPSHOT_WALKER_JS = r"""
             currentValue = '';
         } else if (tag === 'output' || el.hasAttribute('data-readonly-output')) {
             currentValue = cleanText(el.value !== undefined ? el.value : el.textContent);
+            // An output with no label of its own that shows "Label: value"
+            // is read as that label and that value.
+            if (!labelText) {
+                const m = /^([^:]{2,80}):\s*(\S.*)$/.exec(currentValue);
+                if (m) {
+                    labelText = cleanText(m[1]);
+                    currentValue = cleanText(m[2]);
+                }
+            }
         } else {
             currentValue = String(el.value ?? '');
         }
@@ -906,6 +957,10 @@ _SNAPSHOT_WALKER_JS = r"""
             radio_value: radioValue,
             radio_group: radioGroup,
             group_label: groupLabel,
+            ...(() => {
+                const ri = rowInfoFor(el);
+                return {row_text: ri.text, row_cells: ri.cells};
+            })(),
 
             modal_container: (() => {
                 const m = closestOpenModal(el);
@@ -1887,6 +1942,7 @@ class PlaywrightFormSurface:
         context_id = self._document_context_id()
         raw = self._page.evaluate(_SNAPSHOT_WALKER_JS, walker_cfg)
         text_pairs = self._read_text_pairs()
+        page_text = self._read_page_text()
         if self._document_context_id() != context_id:
             raise SurfaceContextError("Form document changed while taking a snapshot")
         self._last_snapshot_context_id = context_id
@@ -1929,6 +1985,8 @@ class PlaywrightFormSurface:
                     radio_value=str(item.get("radio_value") or ""),
                     radio_group=str(item.get("radio_group") or ""),
                     group_label=str(item.get("group_label") or ""),
+                    row_text=str(item.get("row_text") or ""),
+                    row_cells=tuple(str(c) for c in (item.get("row_cells") or ())),
                     modal_container=str(item.get("modal_container") or ""),
                 )
             )
@@ -1976,7 +2034,20 @@ class PlaywrightFormSurface:
             banner_errors=tuple(str(b) for b in (raw.get("banner_errors") or ())),
             inflight_mutations=self.inflight_mutations,
             text_pairs=text_pairs,
+            page_text=page_text,
         )
+
+    def _read_page_text(self) -> str:
+        """The page's visible text, capped; empty when it cannot be read."""
+        try:
+            return str(
+                self._page.evaluate(
+                    "() => (document.body ? document.body.innerText || '' : '').slice(0, 50000)"
+                )
+                or ""
+            )
+        except Exception:
+            return ""
 
     def _read_text_pairs(self) -> tuple[ObservedTextPair, ...]:
         """Read label and value pairs shown as page text.

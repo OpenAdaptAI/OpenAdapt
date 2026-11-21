@@ -110,6 +110,9 @@ class FormHaltKind(str, Enum):
     MODAL_CONFIRMATION_REQUIRED = "modal_confirmation_required"
     AUTH_WALL_DETECTED = "auth_wall_detected"
     MUTATION_BUDGET_EXCEEDED = "mutation_budget_exceeded"
+    # A sign-in or a jump back interrupted the run after fields were entered,
+    # and some of them cannot be re-checked before submit.
+    FIELDS_NOT_RECHECKED = "fields_not_rechecked"
 
 
 class FormTxOutcome(str, Enum):
@@ -297,6 +300,11 @@ class FieldAnchorSpec(BaseModel):
     section_patterns: tuple[str, ...] = ()
     css_selector: Optional[str] = None
     role: Optional[str] = None
+    # When several controls match (a results table with one "Select" button
+    # per row), keep only the one whose table row has a cell equal to the
+    # value of each of these dossier keys. Without facts, or with no single
+    # row left, the anchor stays ambiguous.
+    row_cell_dossier_keys: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _require_at_least_one_signal(self) -> "FieldAnchorSpec":
@@ -337,6 +345,12 @@ class FieldBindingSpec(BaseModel):
     # Type-ahead comboboxes: type only this many leading characters of the
     # formatted value before reading suggestions. None types the whole value.
     typeahead_query_chars: Optional[int] = Field(default=None, ge=1, le=200)
+    # Values a blank form shows before anyone types (seen on the dev case's
+    # first screen). A control still showing one of these, that this run has
+    # not written, holds no client data, so the dossier value is written
+    # over it. With no dossier value it still stops. Never applies to a
+    # control the run already wrote.
+    portal_default_values: tuple[str, ...] = ()
 
 
 class EntityTableSpec(BaseModel):
@@ -411,6 +425,11 @@ class WizardScreenSpec(BaseModel):
     next_button_anchor: Optional[FieldAnchorSpec] = None
     is_commit_screen: bool = False
     commit_button_anchor: Optional[FieldAnchorSpec] = None
+    # A CSS selector (a tab, a step link, a "Change" link) that brings this
+    # screen back. After a sign-in or a jump back interrupts the run, the
+    # layer returns to the earliest visited screen that has one and walks
+    # forward again, re-checking every field, before it submits.
+    revisit_selector: Optional[str] = None
 
 
 class OutputExtractionSpec(BaseModel):
@@ -422,6 +441,24 @@ class OutputExtractionSpec(BaseModel):
     anchor: FieldAnchorSpec
     codec: FieldCodecSpec = Field(default_factory=FieldCodecSpec)
     required: bool = True
+    # A regular expression with one group, searched in the page's visible
+    # text, for an output shown inside a sentence ("Quote number FC-Q-1 was
+    # issued"). Used when the anchor finds no control or text pair. Every
+    # match must give the same value.
+    value_pattern: Optional[str] = None
+
+
+class SplitDateReadbackSpec(BaseModel):
+    """A date entered in day, month and year boxes but shown as one value."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    anchor: FieldAnchorSpec
+    day_key: str = Field(min_length=1)
+    month_key: str = Field(min_length=1)
+    year_key: str = Field(min_length=1)
+    # How the summary orders a numeric date ("03/04/1988").
+    date_order: Literal["YMD", "MDY", "DMY"] = "MDY"
 
 
 class SummaryCheckSpec(BaseModel):
@@ -435,7 +472,17 @@ class SummaryCheckSpec(BaseModel):
     search_submit_anchor: Optional[FieldAnchorSpec] = None
     search_by_output_key: Optional[str] = None
     field_readbacks: tuple[FieldBindingSpec, ...] = ()
+    split_date_readbacks: tuple[SplitDateReadbackSpec, ...] = ()
     outputs: tuple[OutputExtractionSpec, ...] = ()
+
+
+class UnboundControlSpec(BaseModel):
+    """A control the pack does not fill, and the value it shows when blank."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    anchor: FieldAnchorSpec
+    blank_values: tuple[str, ...] = ("",)
 
 
 class FormPack(BaseModel):
@@ -454,6 +501,12 @@ class FormPack(BaseModel):
     screens: tuple[WizardScreenSpec, ...] = ()
     summary_check: Optional[SummaryCheckSpec] = None
     max_commit_mutations: int = Field(default=1, ge=0, le=10)
+    # Controls the pack knowingly leaves alone, with the value a blank form
+    # shows in each. Every other visible control that no binding covers is
+    # watched: free text holding a value the run did not type stops before
+    # submit, and any other value it did not set keeps the run from
+    # ``verified_done``. These are listed as not covered on the receipt.
+    unbound_controls: tuple["UnboundControlSpec", ...] = ()
 
     def digest(self) -> str:
         return canonical_sha256(self)
@@ -498,6 +551,11 @@ class ObservedControl(BaseModel):
     # radiogroup container), and the group's visible label, if any.
     radio_group: str = ""
     group_label: str = ""
+    # Text of the control's own row: the nearest table row or list item, else
+    # the largest ancestor that holds no other field. ``row_cells`` lists the
+    # row's cell texts when it is a table row.
+    row_text: str = ""
+    row_cells: tuple[str, ...] = ()
 
     # Selector of the open dialog that holds this control, if any.
     modal_container: str = ""
@@ -570,6 +628,8 @@ class FormSnapshot(BaseModel):
     banner_errors: tuple[str, ...] = ()
     inflight_mutations: int = 0
     text_pairs: tuple[ObservedTextPair, ...] = ()
+    # The visible text of the page (capped), for outputs shown in a sentence.
+    page_text: str = ""
 
 
 class FormHaltItem(BaseModel):
@@ -763,6 +823,12 @@ class FormTxReceiptPayload(BaseModel):
     readback_passed: bool
     readback_not_checked_count: int = Field(default=0, ge=0)
     salted_output_digests: dict[str, str] = Field(default_factory=dict)
+    # What the receipt covers: the dossier keys whose read-back passed. A
+    # receipt says nothing about any other field. ``not_covered`` names the
+    # controls the run saw but did not check (pack-declared unbound controls,
+    # shown at their blank value) and intake keys no binding entered.
+    covered_keys: tuple[str, ...] = ()
+    not_covered: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _verified_means_fully_checked(self) -> "FormTxReceiptPayload":

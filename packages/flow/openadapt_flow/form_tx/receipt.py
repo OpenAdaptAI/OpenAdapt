@@ -147,6 +147,7 @@ def issue_form_tx_receipt(
     receipt_id: Optional[str] = None,
     salt_hex: Optional[str] = None,
     timestamp_utc: Optional[str] = None,
+    not_covered: Sequence[str] = (),
 ) -> SignedFormTxReceipt:
     """Issue a value-scrubbed, Ed25519-signed ``SignedFormTxReceipt``."""
     priv_key = _coerce_private_key(signing_key)
@@ -245,6 +246,18 @@ def issue_form_tx_receipt(
             len(summary_verdict.not_checked_keys) if summary_verdict is not None else 0
         ),
         salted_output_digests=salted_outputs,
+        covered_keys=(
+            tuple(
+                sorted(
+                    v.dossier_key
+                    for v in summary_verdict.field_verdicts
+                    if v.passed and not v.dossier_key.startswith("__")
+                )
+            )
+            if summary_verdict is not None
+            else ()
+        ),
+        not_covered=tuple(not_covered),
     )
 
     payload_bytes = canonical_json_bytes(payload)

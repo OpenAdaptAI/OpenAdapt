@@ -38,6 +38,7 @@ from openadapt_flow.form_tx.surface import (
     MissingAnchorError,
     collapse_radio_groups,
     compute_field_signature,
+    is_radio,
     match_anchor_in_snapshot,
     match_text_pair_in_snapshot,
     radio_group_key,
@@ -206,6 +207,19 @@ class ReconcilerSession:
         # Keyed by field, selector and popup, so a popup input never hides a
         # main-form write of the same dossier key.
         self._writes: dict[tuple[str, str, str], FieldWriteRecord] = {}
+        # Screens in the order this run reached them, and whether a sign-in
+        # or a jump back interrupted the run after fields were entered. An
+        # interrupted run re-walks its screens (or stops) before submit.
+        self._screens_visited: list[str] = []
+        self._interrupted: bool = False
+        self._rewalks: int = 0
+        # Controls no binding covers, keyed by label: the value each showed
+        # that this run did not set (keeps the run from verified_done), the
+        # value first seen (a later change is reported too), and the
+        # pack-declared ones seen at their blank value (named on the receipt).
+        self._uncovered: dict[str, str] = {}
+        self._unbound_first_seen: dict[str, str] = {}
+        self._not_covered: set[str] = set()
 
     def record_write(
         self,
@@ -240,6 +254,40 @@ class ReconcilerSession:
     @property
     def writes(self) -> tuple[FieldWriteRecord, ...]:
         return tuple(self._writes.values())
+
+
+def _field_label(ctrl: Optional[ObservedControl]) -> str:
+    """The name a person reads for ``ctrl``: a radio's group, else its label."""
+    if ctrl is None:
+        return ""
+    if is_radio(ctrl) and ctrl.group_label.strip():
+        return ctrl.group_label
+    return ctrl.label_text
+
+
+_FREE_TEXT_INPUT_TYPES = frozenset(
+    {"", "text", "email", "tel", "number", "search", "url", "date", "month"}
+)
+
+
+def _is_free_text(ctrl: ObservedControl) -> bool:
+    if ctrl.tag.casefold() == "textarea":
+        return True
+    if ctrl.role.casefold() == "combobox":
+        return ctrl.tag.casefold() == "input"
+    return (
+        ctrl.tag.casefold() == "input"
+        and ctrl.input_type.casefold() in _FREE_TEXT_INPUT_TYPES
+    )
+
+
+def _key_tokens(key: str) -> set[str]:
+    last = key.rsplit(".", 1)[-1]
+    return {t for t in re.split(r"[^a-z0-9]+", last.casefold()) if t}
+
+
+def _label_tokens(label: str) -> set[str]:
+    return {t for t in re.split(r"[^a-z0-9]+", label.casefold()) if t}
 
 
 def _is_action_button(ctrl: ObservedControl) -> bool:
@@ -531,7 +579,7 @@ def _surface_action_halt(
 ) -> FormHaltItem:
     """A stop for a person when the surface could not act on a control."""
     target = ctrl.dom_selector if ctrl is not None else locator
-    label = ctrl.label_text if ctrl is not None else ""
+    label = _field_label(ctrl)
     sig = (
         compute_field_signature(ctrl)
         if ctrl is not None
@@ -617,6 +665,79 @@ def _auth_wall_reason(
     if expired:
         return f"session ended: {expired}"
     return None
+
+
+def _editable_fields(snapshot: FormSnapshot) -> list[ObservedControl]:
+    """Visible, enabled, non-button fields, one per radio group."""
+    return [
+        c
+        for c in collapse_radio_groups(snapshot.controls)
+        if c.visible
+        and not c.disabled
+        and not c.readonly
+        and not c.is_secret
+        and not _is_action_button(c)
+        and c.tag.casefold() != "output"
+    ]
+
+
+def _locate_errored_control(
+    snapshot: FormSnapshot,
+    before: Optional[FormSnapshot] = None,
+) -> tuple[Optional[ObservedControl], str]:
+    """The field a validation stop is about, and the message for it.
+
+    In order: a field with its own error text; a field whose label an error
+    banner names; a field whose row gained text after the click (a "Required"
+    marker next to it); a required field left empty. ``(None, "")`` when no
+    field can be named.
+    """
+    fields = _editable_fields(snapshot)
+    for c in snapshot.controls:
+        if c.visible and c.error_text.strip():
+            return c, collapse_whitespace(c.error_text)
+
+    banners = [collapse_whitespace(b).casefold() for b in snapshot.banner_errors]
+    if banners:
+        named: list[tuple[int, ObservedControl]] = []
+        for c in fields:
+            label = collapse_whitespace(_field_label(c)).rstrip(":*").strip()
+            if len(label) < 4:
+                continue
+            if any(label.casefold() in b for b in banners):
+                named.append((len(label), c))
+        if named:
+            named.sort(key=lambda item: -item[0])
+            if len(named) == 1 or named[0][0] > named[1][0]:
+                return named[0][1], "; ".join(snapshot.banner_errors)
+
+    if before is not None:
+        old_rows: dict[str, str] = {}
+        for c in collapse_radio_groups(before.controls):
+            old_rows[c.dom_selector] = collapse_whitespace(c.row_text)
+            old_rows.setdefault(
+                f"label|{collapse_whitespace(_field_label(c)).casefold()}",
+                collapse_whitespace(c.row_text),
+            )
+        grew: list[tuple[ObservedControl, str]] = []
+        for c in fields:
+            now = collapse_whitespace(c.row_text)
+            was = old_rows.get(c.dom_selector)
+            if was is None:
+                was = old_rows.get(
+                    f"label|{collapse_whitespace(_field_label(c)).casefold()}"
+                )
+            if was is None or not now or now == was or now in was:
+                continue
+            added = now.replace(was, " ").strip() if was and was in now else now
+            grew.append((c, collapse_whitespace(added)))
+        if grew:
+            return grew[0][0], grew[0][1]
+
+    for c in fields:
+        if c.required and _is_control_empty(c):
+            return c, "required and empty"
+    return None, ""
 
 
 def _collect_surface_errors(snapshot: FormSnapshot) -> list[str]:
@@ -1045,7 +1166,7 @@ class FormReconciler:
                         screen_id=snapshot.screen_id,
                         control_id=ctrl.control_id,
                         dom_selector=ctrl.dom_selector,
-                        field_label=ctrl.label_text,
+                        field_label=_field_label(ctrl),
                         section_text=ctrl.section_text,
                         dossier_key=dossier_key,
                         dossier_value=intended_value,
@@ -1131,7 +1252,7 @@ class FormReconciler:
                 screen_id=snapshot.screen_id,
                 control_id=ctrl.control_id,
                 dom_selector=ctrl.dom_selector,
-                field_label=ctrl.label_text,
+                field_label=_field_label(ctrl),
                 section_text=ctrl.section_text,
                 dossier_key=dossier_key,
                 dossier_value=intended_value,
@@ -1260,7 +1381,10 @@ class FormReconciler:
 
             try:
                 ctrl = match_anchor_in_snapshot(
-                    binding.anchor, snapshot, include_readonly=False
+                    binding.anchor,
+                    snapshot,
+                    include_readonly=False,
+                    facts=session.effective_facts,
                 )
             except AmbiguousAnchorError as exc:
                 sig = f"ambiguous_anchor|{binding.binding_id}|{binding.dossier_key}"
@@ -1306,6 +1430,20 @@ class FormReconciler:
             )
             is_empty = _is_control_empty(ctrl, binding.placeholder_values)
             fact = session.effective_facts.get(binding.dossier_key)
+            # A blank-form default (pack data) holds no client data: with a
+            # dossier value it is written over. Never for a control this run
+            # already wrote, so a reset to the default is still re-checked.
+            if (
+                not is_empty
+                and not was_filled_by_session
+                and fact is not None
+                and binding.portal_default_values
+                and any(
+                    _control_matches_fact(ctrl, default, binding)
+                    for default in binding.portal_default_values
+                )
+            ):
+                is_empty = True
 
             # Prefill Value Conflict Check
             if not is_empty and not was_filled_by_session:
@@ -1326,13 +1464,13 @@ class FormReconciler:
                         screen_id=snapshot.screen_id,
                         control_id=ctrl.control_id,
                         dom_selector=ctrl.dom_selector,
-                        field_label=ctrl.label_text,
+                        field_label=_field_label(ctrl),
                         section_text=ctrl.section_text,
                         dossier_key=binding.dossier_key,
                         portal_value=ctrl.current_value,
                         dossier_value=fact.value if fact is not None else None,
                         message=(
-                            f"Prefilled value on {ctrl.label_text or ctrl.dom_selector!r} "
+                            f"Prefilled value on {_field_label(ctrl) or ctrl.dom_selector!r} "
                             f"conflicts with grounded dossier state for {binding.dossier_key!r}"
                         ),
                         allowed_actions=(
@@ -1384,7 +1522,7 @@ class FormReconciler:
                     session.record_write(
                         source="auto_fill",
                         dossier_key=binding.dossier_key,
-                        label=ctrl.label_text,
+                        label=_field_label(ctrl),
                         selector=ctrl.dom_selector,
                         in_popup_subroutine=in_popup_subroutine,
                     )
@@ -1397,6 +1535,339 @@ class FormReconciler:
                         return True, True, None
 
         return edited_any, False, None
+
+    @staticmethod
+    def _note_screen(session: ReconcilerSession, screen_id: str) -> None:
+        """Track screen order; a jump back to a screen already left interrupts the run.
+
+        Landing back on the first screen is itself a full re-walk, so it
+        clears the interruption instead.
+        """
+        visited = session._screens_visited
+        if screen_id not in visited:
+            visited.append(screen_id)
+            return
+        if visited[-1] == screen_id:
+            return
+        idx = visited.index(screen_id)
+        del visited[idx + 1 :]
+        if idx == 0:
+            session._interrupted = False
+        elif session.writes:
+            session._interrupted = True
+
+    def _recheck_after_interruption(
+        self,
+        surface: FormSurfaceBackend,
+        session: ReconcilerSession,
+        snapshot: FormSnapshot,
+        current_screen: WizardScreenSpec,
+    ) -> Any:
+        """Before submit on an interrupted run: re-walk the screens, or stop.
+
+        Returns ``"rewalk"`` after clicking back to the earliest visited
+        screen that can be revisited (the forward walk then re-checks and
+        re-fills every bound field), a stop naming each field entered on
+        another screen when no screen can be revisited, or ``None``.
+        """
+        if not session._interrupted:
+            return None
+        earlier = [
+            sid for sid in session._screens_visited if sid != current_screen.screen_id
+        ]
+        specs = {spec.screen_id: spec for spec in session.pack.screens}
+        on_screen = {c.dom_selector for c in snapshot.controls if c.visible}
+        elsewhere = sorted(
+            {
+                collapse_whitespace(w.label or "") or w.field_key
+                for w in session.writes
+                if not w.in_popup_subroutine and (w.selector or "") not in on_screen
+            }
+        )
+        if not earlier and not elsewhere:
+            session._interrupted = False
+            return None
+        target = next(
+            (
+                specs[sid]
+                for sid in earlier
+                if sid in specs and specs[sid].revisit_selector
+            ),
+            None,
+        )
+        if target is None:
+            target = next(
+                (
+                    spec
+                    for spec in session.pack.screens
+                    if spec.revisit_selector
+                    and spec.screen_id != current_screen.screen_id
+                    and not spec.is_commit_screen
+                ),
+                None,
+            )
+        if target is not None and session._rewalks < 2:
+            session._rewalks += 1
+            try:
+                surface.click(str(target.revisit_selector))
+            except Exception as exc:  # noqa: BLE001
+                if not _is_surface_action_error(exc):
+                    raise
+            else:
+                session._interrupted = False
+                session._screens_visited = []
+                return "rewalk"
+        if not elsewhere:
+            session._interrupted = False
+            return None
+        sig = f"recheck|{current_screen.screen_id}|{','.join(elsewhere)}"
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.FIELDS_NOT_RECHECKED,
+            snapshot.screen_id,
+            current_screen.screen_id,
+            sig,
+        )
+        msg = (
+            "A sign-in or a jump back interrupted this quote after fields were "
+            "entered, and these fields cannot be re-checked from here before "
+            f"submit: {elsewhere}"
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.FIELDS_NOT_RECHECKED,
+            screen_id=snapshot.screen_id,
+            field_label=elsewhere[0],
+            portal_value=list(elsewhere),
+            message=msg,
+            allowed_actions=(
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            ),
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return self._build_result(
+            session,
+            outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+            safe_to_retry=True,
+            halts=(halt,),
+            what_happened=msg,
+        )
+
+    @staticmethod
+    def _consumed_keys(pack: FormPack) -> set[str]:
+        keys = {b.dossier_key for b in pack.bindings}
+        for sub in pack.popup_subroutines:
+            keys |= {b.dossier_key for b in sub.bindings}
+            keys.add(sub.return_output_key)
+            if sub.condition_dossier_key:
+                keys.add(sub.condition_dossier_key)
+        for rule in pack.modal_rules:
+            if rule.dossier_flag_key:
+                keys.add(rule.dossier_flag_key)
+        if pack.summary_check is not None:
+            keys |= {b.dossier_key for b in pack.summary_check.field_readbacks}
+            for sd in pack.summary_check.split_date_readbacks:
+                keys |= {sd.day_key, sd.month_key, sd.year_key}
+            if pack.summary_check.search_by_output_key:
+                keys.add(pack.summary_check.search_by_output_key)
+        for spec in pack.screens:
+            for anchor in (spec.next_button_anchor, spec.commit_button_anchor):
+                if anchor is not None:
+                    keys |= set(anchor.row_cell_dossier_keys)
+        for sub in pack.popup_subroutines:
+            for anchor in (sub.trigger_anchor, sub.commit_anchor, *sub.compute_anchors):
+                keys |= set(anchor.row_cell_dossier_keys)
+        return keys
+
+    def _unconsumed_intake_keys(self, session: ReconcilerSession) -> list[str]:
+        consumed = self._consumed_keys(session.pack)
+        out = []
+        for key, fact in session.dossier.facts.items():
+            if key in consumed:
+                continue
+            value = getattr(fact, "value", None)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+            out.append(key)
+        return sorted(out)
+
+    def _scan_unbound_controls(
+        self, session: ReconcilerSession, snapshot: FormSnapshot
+    ) -> Optional[FormHaltItem]:
+        """Watch every visible field no binding covers.
+
+        Free text holding a value this run did not type stops. Any other
+        value it did not set is kept as ``uncovered`` (the run then cannot
+        end ``verified_done``). An empty field whose label names an intake
+        key that no binding enters stops. Pack-declared unbound controls at
+        their blank value are only named on the receipt.
+        """
+        pack = session.pack
+        bound_selectors: set[str] = set()
+        bound_groups: set[str] = set()
+        anchors = [b.anchor for b in pack.bindings]
+        for sub in pack.popup_subroutines:
+            anchors.extend([sub.trigger_anchor, sub.parent_return_anchor])
+        for anchor in anchors:
+            try:
+                m = match_anchor_in_snapshot(
+                    anchor,
+                    snapshot,
+                    include_readonly=True,
+                    facts=session.effective_facts,
+                )
+            except AmbiguousAnchorError:
+                continue
+            if m is not None:
+                bound_selectors.add(m.dom_selector)
+                group = radio_group_key(m)
+                if group is not None:
+                    bound_groups.add(group)
+        declared: dict[str, Any] = {}
+        for spec in pack.unbound_controls:
+            try:
+                m = match_anchor_in_snapshot(
+                    spec.anchor,
+                    snapshot,
+                    include_readonly=True,
+                    facts=session.effective_facts,
+                )
+            except AmbiguousAnchorError:
+                continue
+            if m is not None:
+                declared[m.dom_selector] = spec
+                group = radio_group_key(m)
+                if group is not None:
+                    declared[f"group|{group}"] = spec
+        unconsumed: Optional[list[str]] = None
+        fold = FieldCodecSpec(kind=FormCodecKind.CASEFOLD)
+
+        for ctrl in _editable_fields(snapshot):
+            if ctrl.modal_container:
+                continue
+            group = radio_group_key(ctrl)
+            if ctrl.dom_selector in bound_selectors or (
+                group is not None and group in bound_groups
+            ):
+                continue
+            ctrl_sig = compute_field_signature(ctrl)
+            if (
+                ctrl.dom_selector in session._filled_selectors
+                or ctrl_sig in session._human_accepted_control_signatures
+            ):
+                continue
+            label = collapse_whitespace(_field_label(ctrl)) or ctrl.dom_selector
+            empty = _is_control_empty(ctrl)
+            shown = ""
+            if not empty:
+                shown = ctrl.current_value
+                if ctrl.options:
+                    opt = [o for o in ctrl.options if o.value == ctrl.current_value]
+                    if len(opt) == 1 and opt[0].label:
+                        shown = opt[0].label
+            spec = declared.get(ctrl.dom_selector) or (
+                declared.get(f"group|{group}") if group is not None else None
+            )
+            if spec is not None:
+                blank = (empty and "" in spec.blank_values) or any(
+                    values_equivalent(b, shown, fold)
+                    or values_equivalent(b, ctrl.current_value, fold)
+                    for b in spec.blank_values
+                    if b
+                )
+                if blank:
+                    session._not_covered.add(label)
+                else:
+                    session._uncovered[label] = shown
+                continue
+            if empty:
+                if not _is_free_text(ctrl):
+                    continue
+                if unconsumed is None:
+                    unconsumed = self._unconsumed_intake_keys(session)
+                label_toks = _label_tokens(label)
+                for key in unconsumed:
+                    toks = _key_tokens(key)
+                    if not toks or not toks <= label_toks:
+                        continue
+                    fact = session.dossier.facts.get(key)
+                    halt_id = _deterministic_halt_id(
+                        session.run_id,
+                        FormHaltKind.UNGROUNDED_REQUIRED_FIELD,
+                        snapshot.screen_id,
+                        ctrl.dom_selector,
+                        f"unbound_intake|{key}|{ctrl_sig}",
+                    )
+                    halt = FormHaltItem(
+                        halt_id=halt_id,
+                        kind=FormHaltKind.UNGROUNDED_REQUIRED_FIELD,
+                        screen_id=snapshot.screen_id,
+                        control_id=ctrl.control_id,
+                        dom_selector=ctrl.dom_selector,
+                        field_label=label,
+                        section_text=ctrl.section_text,
+                        dossier_key=key,
+                        dossier_value=getattr(fact, "value", None),
+                        message=(
+                            f"The intake has {key!r}, but no binding enters it, and "
+                            f"the field {label!r} is empty"
+                        ),
+                        allowed_actions=(
+                            HumanDecisionAction.PROVIDE_VALUE,
+                            HumanDecisionAction.FIXED_ON_SCREEN,
+                            HumanDecisionAction.ESCALATE_TO_OWNER,
+                            HumanDecisionAction.ABORT_RUN,
+                        ),
+                    )
+                    session._halt_metadata[halt_id] = {
+                        "field_signature": ctrl_sig,
+                        "control": ctrl,
+                        "binding": None,
+                    }
+                    return halt
+                continue
+            first = session._unbound_first_seen.setdefault(label, shown)
+            if _is_free_text(ctrl):
+                halt_id = _deterministic_halt_id(
+                    session.run_id,
+                    FormHaltKind.PREFILL_VALUE_CONFLICT,
+                    snapshot.screen_id,
+                    ctrl.dom_selector,
+                    ctrl_sig,
+                )
+                halt = FormHaltItem(
+                    halt_id=halt_id,
+                    kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                    screen_id=snapshot.screen_id,
+                    control_id=ctrl.control_id,
+                    dom_selector=ctrl.dom_selector,
+                    field_label=label,
+                    section_text=ctrl.section_text,
+                    portal_value=ctrl.current_value,
+                    message=(
+                        f"{label!r} holds a value this run did not type, and no "
+                        "binding covers it"
+                    ),
+                    allowed_actions=(
+                        HumanDecisionAction.ACCEPT_PORTAL_PREFILL,
+                        HumanDecisionAction.PROVIDE_VALUE,
+                        HumanDecisionAction.FIXED_ON_SCREEN,
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
+                        HumanDecisionAction.ABORT_RUN,
+                    ),
+                    available_options=ctrl.options,
+                )
+                session._halt_metadata[halt_id] = {
+                    "field_signature": ctrl_sig,
+                    "control": ctrl,
+                    "binding": None,
+                }
+                return halt
+            note = shown if first == shown else f"{shown} (was {first})"
+            session._uncovered[label] = note
+        return None
 
     @staticmethod
     def _controls_were_replaced(
@@ -1420,7 +1891,10 @@ class FormReconciler:
         for candidate_binding in bindings:
             try:
                 matched = match_anchor_in_snapshot(
-                    candidate_binding.anchor, snapshot, include_readonly=False
+                    candidate_binding.anchor,
+                    snapshot,
+                    include_readonly=False,
+                    facts=session.effective_facts,
                 )
             except AmbiguousAnchorError:
                 continue
@@ -1485,11 +1959,11 @@ class FormReconciler:
                 screen_id=snapshot.screen_id,
                 control_id=ctrl.control_id,
                 dom_selector=ctrl.dom_selector,
-                field_label=ctrl.label_text,
+                field_label=_field_label(ctrl),
                 section_text=ctrl.section_text,
                 dossier_key=binding.dossier_key if binding is not None else None,
                 message=(
-                    f"Required control {ctrl.label_text or ctrl.dom_selector!r} has no "
+                    f"Required control {_field_label(ctrl) or ctrl.dom_selector!r} has no "
                     f"grounded value in dossier"
                 ),
                 allowed_actions=(
@@ -1597,10 +2071,16 @@ class FormReconciler:
         """Execute ``subroutine``, returning ``None`` on verified return or halts on failure."""
         try:
             trigger_ctrl = match_anchor_in_snapshot(
-                subroutine.trigger_anchor, parent_snapshot, include_readonly=False
+                subroutine.trigger_anchor,
+                parent_snapshot,
+                include_readonly=False,
+                facts=session.effective_facts,
             )
             return_before = match_anchor_in_snapshot(
-                subroutine.parent_return_anchor, parent_snapshot, include_readonly=True
+                subroutine.parent_return_anchor,
+                parent_snapshot,
+                include_readonly=True,
+                facts=session.effective_facts,
             )
         except AmbiguousAnchorError as exc:
             sig = f"popup_anchor|{subroutine.subroutine_id}"
@@ -1799,7 +2279,10 @@ class FormReconciler:
                 popup_snap = _popup_snapshot(popup_surface)
                 try:
                     step_ctrl = match_anchor_in_snapshot(
-                        step_anchor, popup_snap, include_readonly=False
+                        step_anchor,
+                        popup_snap,
+                        include_readonly=False,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError as exc:
                     step_ctrl = None
@@ -1851,7 +2334,10 @@ class FormReconciler:
 
             try:
                 popup_commit = match_anchor_in_snapshot(
-                    subroutine.commit_anchor, popup_snap, include_readonly=False
+                    subroutine.commit_anchor,
+                    popup_snap,
+                    include_readonly=False,
+                    facts=session.effective_facts,
                 )
             except AmbiguousAnchorError as exc:
                 popup_commit = None
@@ -1914,6 +2400,7 @@ class FormReconciler:
             subroutine.parent_return_anchor,
             after_parent_snap,
             include_readonly=True,
+            facts=session.effective_facts,
         )
         if return_after is None or not _is_valid_non_zero_return_value(
             return_after.current_value, subroutine.return_codec
@@ -2140,7 +2627,10 @@ class FormReconciler:
                 fact = session.effective_facts.get(binding.dossier_key)
                 try:
                     ctrl = match_anchor_in_snapshot(
-                        binding.anchor, snap, include_readonly=False
+                        binding.anchor,
+                        snap,
+                        include_readonly=False,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError:
                     ctrl = None
@@ -2270,6 +2760,7 @@ class FormReconciler:
         errors: Sequence[str],
         *,
         safe_to_retry: bool,
+        before: Optional[FormSnapshot] = None,
     ) -> FormTxResult:
         bound = session._bound_surface or self._surface
         auth_reason = _auth_wall_reason(
@@ -2283,20 +2774,30 @@ class FormReconciler:
                 auth_reason,
                 delivery_uncertain=(not safe_to_retry) or session._commit_attempted,
             )
-        errored_ctrl = next(
-            (c for c in snapshot.controls if c.visible and c.error_text.strip()),
-            None,
-        )
+        errored_ctrl, field_message = _locate_errored_control(snapshot, before)
+        if errored_ctrl is not None:
+            name = collapse_whitespace(_field_label(errored_ctrl))
+            if name and not any(name.casefold() in e.casefold() for e in errors):
+                errors = [*errors, f"{name}: {field_message or 'not accepted'}"]
         matched_binding: Optional[FieldBindingSpec] = None
         if errored_ctrl is not None:
             for b in session.pack.bindings:
                 try:
                     m = match_anchor_in_snapshot(
-                        b.anchor, snapshot, include_readonly=False
+                        b.anchor,
+                        snapshot,
+                        include_readonly=False,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError:
                     continue
-                if m is not None and m.dom_selector == errored_ctrl.dom_selector:
+                if m is not None and (
+                    m.dom_selector == errored_ctrl.dom_selector
+                    or (
+                        radio_group_key(m) is not None
+                        and radio_group_key(m) == radio_group_key(errored_ctrl)
+                    )
+                ):
                     matched_binding = b
                     break
 
@@ -2324,7 +2825,7 @@ class FormReconciler:
             screen_id=snapshot.screen_id,
             control_id=errored_ctrl.control_id if errored_ctrl else None,
             dom_selector=errored_ctrl.dom_selector if errored_ctrl else None,
-            field_label=errored_ctrl.label_text if errored_ctrl else "",
+            field_label=_field_label(errored_ctrl),
             section_text=errored_ctrl.section_text if errored_ctrl else "",
             dossier_key=matched_binding.dossier_key if matched_binding else None,
             portal_value=list(errors),
@@ -2413,6 +2914,7 @@ class FormReconciler:
             human_resolutions=session.human_resolutions,
             supplemental_facts=session.effective_facts,
             writes=session.writes,
+            uncovered=session._uncovered,
         )
         extracted_outputs = dict(verdict.extracted_outputs)
         if not verdict.passed or verdict.missing_required_outputs:
@@ -2462,6 +2964,10 @@ class FormReconciler:
             commit_mutations_observed=delta_mutations,
             summary_verdict=verdict,
             outputs=extracted_outputs,
+            not_covered=(
+                *sorted(session._not_covered),
+                *(f"intake:{k}" for k in self._unconsumed_intake_keys(session)),
+            ),
         )
         return self._build_result(
             session,
@@ -2748,7 +3254,10 @@ class FormReconciler:
                             continue
                     try:
                         trig = match_anchor_in_snapshot(
-                            sub.trigger_anchor, snapshot, include_readonly=False
+                            sub.trigger_anchor,
+                            snapshot,
+                            include_readonly=False,
+                            facts=session.effective_facts,
                         )
                     except AmbiguousAnchorError:
                         # Delegated to _run_popup_subroutine to emit structured halt
@@ -2844,10 +3353,31 @@ class FormReconciler:
 
             # 6. Screen Transition / Commit & Validation Check
             current_screen = _identify_wizard_screen(snapshot, pack.screens)
+            if current_screen is not None:
+                self._note_screen(session, current_screen.screen_id)
+
+            # Controls no binding covers, before the screen is left.
+            unbound_halt = self._scan_unbound_controls(session, snapshot)
+            if unbound_halt is not None:
+                return self._build_result(
+                    session,
+                    outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+                    safe_to_retry=True,
+                    halts=(unbound_halt,),
+                    what_happened=unbound_halt.message,
+                )
+
             if current_screen is not None and (
                 current_screen.is_commit_screen
                 or current_screen.commit_button_anchor is not None
             ):
+                recheck = self._recheck_after_interruption(
+                    active_surface, session, snapshot, current_screen
+                )
+                if recheck == "rewalk":
+                    continue
+                if isinstance(recheck, FormTxResult):
+                    return recheck
                 if current_screen.commit_button_anchor is None:
                     raise ValueError(
                         f"Commit screen {current_screen.screen_id!r} has no commit_button_anchor"
@@ -2857,6 +3387,7 @@ class FormReconciler:
                         current_screen.commit_button_anchor,
                         snapshot,
                         include_readonly=False,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError as exc:
                     sig = f"commit_anchor|{current_screen.screen_id}"
@@ -2923,6 +3454,7 @@ class FormReconciler:
                         post_snap,
                         post_errors,
                         safe_to_retry=(delta == 0),
+                        before=snapshot,
                     )
 
                 return self._finalize_commit(
@@ -2938,6 +3470,7 @@ class FormReconciler:
                         current_screen.next_button_anchor,
                         snapshot,
                         include_readonly=False,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError as exc:
                     sig = f"next_anchor|{current_screen.screen_id}"
@@ -3002,6 +3535,7 @@ class FormReconciler:
                         post_snap,
                         post_errors,
                         safe_to_retry=True,
+                        before=snapshot,
                     )
                 if after_sig == before_sig:
                     return self._emit_validation_blocked(
@@ -3012,6 +3546,7 @@ class FormReconciler:
                             f"Screen {current_screen.screen_id!r} did not advance after clicking Next"
                         ],
                         safe_to_retry=True,
+                        before=snapshot,
                     )
                 continue
 
@@ -3259,7 +3794,15 @@ class FormReconciler:
 
         if action == HumanDecisionAction.PROVIDE_VALUE:
             val = resolution.provided_value
-            if val is None or (isinstance(val, str) and not val.strip()):
+            # Clearing a prefilled value is a value too ("leave it blank").
+            clearing = (
+                active_halt.kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+                and isinstance(val, str)
+                and not val.strip()
+            )
+            if not clearing and (
+                val is None or (isinstance(val, str) and not val.strip())
+            ):
                 raise ValueError("PROVIDE_VALUE requires a non-empty provided_value")
 
             if effective_dossier_key:
@@ -3508,6 +4051,16 @@ class FormReconciler:
                     )
                     return _cache_and_return(res)
                 _append_record("authenticated")
+                # A sign-in in the middle may have reset what was entered.
+                if session.writes:
+                    session._interrupted = True
+                res = self.run_until_halt_or_done(session, surface=active_surface)
+                return _cache_and_return(res)
+
+            if active_halt.kind == FormHaltKind.FIELDS_NOT_RECHECKED:
+                # The operator checked those fields on their screens.
+                session._interrupted = False
+                _append_record("rechecked_by_operator")
                 res = self.run_until_halt_or_done(session, surface=active_surface)
                 return _cache_and_return(res)
 
@@ -3534,7 +4087,10 @@ class FormReconciler:
             if live_ctrl is None and binding is not None:
                 try:
                     live_ctrl = match_anchor_in_snapshot(
-                        binding.anchor, post_snap, include_readonly=True
+                        binding.anchor,
+                        post_snap,
+                        include_readonly=True,
+                        facts=session.effective_facts,
                     )
                 except AmbiguousAnchorError:
                     live_ctrl = None
