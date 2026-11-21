@@ -13,7 +13,12 @@ from openadapt_flow.backends.windows_backend import (
     WindowsBackend,
 )
 from openadapt_flow.ir import StructuralLocator
-from tests.test_approval_form_fields import _agent, _Control, _UNSUPPORTED_PROPERTY, _window
+from tests.test_approval_form_fields import (
+    _agent,
+    _Control,
+    _UNSUPPORTED_PROPERTY,
+    _window,
+)
 
 
 class CountedControl(_Control):
@@ -748,7 +753,9 @@ def test_unsupported_password_status_needs_win32_edit_evidence(
 ):
     evidence = _Evidence(plain)
     monkeypatch.setattr(native_value, "_PASSWORD_EVIDENCE", [evidence])
-    monkeypatch.setattr(native_value, "is_uia_not_supported", lambda value: value is _UNSUPPORTED)
+    monkeypatch.setattr(
+        native_value, "is_uia_not_supported", lambda value: value is _UNSUPPORTED
+    )
     control = _unsupported_status_control(raw, hwnd)
     if allowed:
         native_value.require_non_sensitive_value(control)
@@ -809,7 +816,8 @@ def test_only_uias_authenticated_unknown_is_the_unsupported_sentinel(monkeypatch
     client = SimpleNamespace(IUIAutomation=SimpleNamespace(CheckNotSupported=check))
     monkeypatch.setitem(sys.modules, "comtypes", SimpleNamespace(IUnknown=_Unknown))
     monkeypatch.setitem(
-        sys.modules, "uiautomation.uiautomation",
+        sys.modules,
+        "uiautomation.uiautomation",
         SimpleNamespace(_AutomationClient=SimpleNamespace(instance=lambda: client)),
     )
     for malformed in (None, 0, False, "unknown", object(), ctypes.POINTER(_Unknown)()):
@@ -820,8 +828,12 @@ def test_only_uias_authenticated_unknown_is_the_unsupported_sentinel(monkeypatch
     assert calls == [token, foreign]
 
 
-@pytest.mark.parametrize("style,error,allowed", [(0, 0, True), (0, 5, False), (0x20, 0, False)])
-def test_plain_edit_requires_a_successful_style_read(monkeypatch, style, error, allowed):
+@pytest.mark.parametrize(
+    "style,error,allowed", [(0, 0, True), (0, 5, False), (0x20, 0, False)]
+)
+def test_plain_edit_requires_a_successful_style_read(
+    monkeypatch, style, error, allowed
+):
     last = [99]
     messages = []
 
@@ -834,7 +846,9 @@ def test_plain_edit_requires_a_successful_style_read(monkeypatch, style, error, 
         last[:] = [error]
         return style
 
-    monkeypatch.setattr(ctypes, "set_last_error", lambda n: last.__setitem__(0, n), raising=False)
+    monkeypatch.setattr(
+        ctypes, "set_last_error", lambda n: last.__setitem__(0, n), raising=False
+    )
     monkeypatch.setattr(ctypes, "get_last_error", lambda: last[0], raising=False)
     reader = object.__new__(native_value.Win32TextReader)
     reader._user = SimpleNamespace(GetClassNameW=get_class, GetWindowLongW=get_style)
@@ -845,7 +859,12 @@ def test_plain_edit_requires_a_successful_style_read(monkeypatch, style, error, 
 
 
 @pytest.mark.parametrize(
-    "pattern,expected", [(ctypes.pointer(_Unknown()), True), (None, False), (ctypes.POINTER(_Unknown)(), False)]
+    "pattern,expected",
+    [
+        (ctypes.pointer(_Unknown()), True),
+        (None, False),
+        (ctypes.POINTER(_Unknown)(), False),
+    ],
 )
 def test_unsupported_availability_uses_the_exact_pattern_answer(
     monkeypatch, pattern, expected
@@ -861,7 +880,11 @@ def test_unsupported_availability_uses_the_exact_pattern_answer(
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=lambda _: None, is_uia_not_supported=lambda value: value is _UNSUPPORTED, pattern_presence=native_value.pattern_presence),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=lambda _: None,
+            is_uia_not_supported=lambda value: value is _UNSUPPORTED,
+            pattern_presence=native_value.pattern_presence,
+        ),
     )
     observed = server._form_boolean_observation(target, 30041)
     assert observed.value is expected and observed.detail is None
@@ -893,7 +916,11 @@ def test_unanswerable_availability_still_refuses(monkeypatch, property_id):
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=lambda _: None, is_uia_not_supported=lambda value: value is _UNSUPPORTED, pattern_presence=native_value.pattern_presence),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=lambda _: None,
+            is_uia_not_supported=lambda value: value is _UNSUPPORTED,
+            pattern_presence=native_value.pattern_presence,
+        ),
     )
     observed = server._form_boolean_observation(target, property_id)
     assert observed.value is None
@@ -918,7 +945,11 @@ def test_availability_fallback_stops_when_the_guard_refuses(monkeypatch):
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=guard, is_uia_not_supported=lambda value: value is _UNSUPPORTED, pattern_presence=native_value.pattern_presence),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=guard,
+            is_uia_not_supported=lambda value: value is _UNSUPPORTED,
+            pattern_presence=native_value.pattern_presence,
+        ),
     )
     observed = server._form_boolean_observation(target, 30041)
     assert observed.value is None and calls == []

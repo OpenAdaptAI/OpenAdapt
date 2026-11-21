@@ -442,7 +442,9 @@ def test_raw_boolean_failure_detail_uses_only_original_reads(
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=guard, is_uia_not_supported=lambda _: False),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=guard, is_uia_not_supported=lambda _: False
+        ),
     )
     observation = server._form_boolean_observation(Target(), property_id)
     assert observation.value is None
@@ -471,7 +473,9 @@ def test_supported_boolean_values_have_no_failure_detail(
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=guard, is_uia_not_supported=lambda _: False),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=guard, is_uia_not_supported=lambda _: False
+        ),
     )
     observed = server._form_boolean_observation(target, property_id)
     assert observed.value is value and observed.detail is None
@@ -492,7 +496,10 @@ def test_state_first_unknown_prevents_later_probe_or_pattern_reads(
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=lambda _: None, is_uia_not_supported=lambda _: False),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=lambda _: None,
+            is_uia_not_supported=lambda _: False,
+        ),
     )
     observed = server._form_field_state(target)
     assert not observed.complete and observed.state is None
@@ -516,7 +523,10 @@ def test_state_recheck_unknown_stops_before_the_next_property(monkeypatch):
     monkeypatch.setattr(
         server,
         "_native_value_api",
-        lambda: SimpleNamespace(require_non_sensitive_structure=lambda _: None, is_uia_not_supported=lambda _: False),
+        lambda: SimpleNamespace(
+            require_non_sensitive_structure=lambda _: None,
+            is_uia_not_supported=lambda _: False,
+        ),
     )
     observed = server._form_field_state(target)
     assert not observed.complete and observed.reason == "state_capability_changed"

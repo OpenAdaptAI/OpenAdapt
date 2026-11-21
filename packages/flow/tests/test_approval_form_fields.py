@@ -475,7 +475,9 @@ class _Control:
             # window root. A synthetic value provider answers explicitly.
             password = (
                 _UNSUPPORTED_PROPERTY
-                if value is None and control_type in {"WindowControl", "ButtonControl", "PaneControl", "TextControl"}
+                if value is None
+                and control_type
+                in {"WindowControl", "ButtonControl", "PaneControl", "TextControl"}
                 else False
             )
         self.IsPassword = password
@@ -586,7 +588,9 @@ def _agent(monkeypatch, window, desktop=None):
     monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop or _Desktop())
     import openadapt_flow.backends.win_agent.native_value as native
 
-    monkeypatch.setattr(native, "is_uia_not_supported", lambda raw: raw is _UNSUPPORTED_PROPERTY)
+    monkeypatch.setattr(
+        native, "is_uia_not_supported", lambda raw: raw is _UNSUPPORTED_PROPERTY
+    )
     controls = {}
 
     def attach(control, parent=None):
@@ -846,7 +850,9 @@ def test_a_failed_child_read_never_turns_an_unknown_subtree_into_a_mask(
     assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
 
 
-def test_unsupported_password_on_nonvalue_root_and_button_keeps_real_fields(monkeypatch):
+def test_unsupported_password_on_nonvalue_root_and_button_keeps_real_fields(
+    monkeypatch,
+):
     class CaptionOnly(_Control):
         value_calls = 0
 
@@ -863,7 +869,8 @@ def test_unsupported_password_on_nonvalue_root_and_button_keeps_real_fields(monk
     assert button.GetPropertyValueEx(30019, 1) is _UNSUPPORTED_PROPERTY
     projection = perform("window-form-fields", {"hwnd": 7, "pid": 10})
     assert [(f["kind"], f["text"]) for f in projection["fields"]] == [
-        ("text", "Synthetic caption"), ("edit", "synthetic field")
+        ("text", "Synthetic caption"),
+        ("edit", "synthetic field"),
     ]
     sys.modules["uiautomation"].GetRootControl = lambda: root
     read = perform("read", {"locator": {"automation_id": "field"}})
@@ -872,7 +879,9 @@ def test_unsupported_password_on_nonvalue_root_and_button_keeps_real_fields(monk
 
 
 @pytest.mark.parametrize("capability", [True, None, "malformed"])
-def test_unproved_value_or_capability_on_structural_type_blocks_projection(monkeypatch, capability):
+def test_unproved_value_or_capability_on_structural_type_blocks_projection(
+    monkeypatch, capability
+):
     class Container(_Control):
         content_reads = 0
 
