@@ -788,7 +788,8 @@ def _hold_row_versions(cfg: VerifyConfig, execution_id: str) -> dict[str, Any]:
 
     spec = cfg.frame.row_versions  # type: ignore[union-attr]
     try:
-        held = rv.open_held(spec, _db_connect(cfg.frame.database.read))  # type: ignore[union-attr,arg-type]
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        held = rv.open_held(spec, _db_connect(read))  # type: ignore[arg-type]
     except Exception as exc:  # noqa: BLE001 - not held -> the judge stops
         return rv.baseline_detail(None, type(exc).__name__)
     rv.hold(execution_id, held)
@@ -832,9 +833,8 @@ def _judge_row_versions(
         targets = _version_targets(
             cfg, before, effects, verdicts, spec.target_field, spec.target_surface
         )
-        result = rv.judge_row_versions(
-            spec, held, _db_connect(cfg.frame.database.read), targets  # type: ignore[union-attr,arg-type]
-        )
+        read = cfg.frame.database.read  # type: ignore[union-attr]
+        result = rv.judge_row_versions(spec, held, _db_connect(read), targets)
     if frame.versions is None or result.status != "held":
         frame.versions = result
     return _apply_version_result(frame, result)

@@ -2384,6 +2384,8 @@ _VERSION_REASONS = {
     "so a save in the window could be hidden",
     "ambiguous_xmax": "the target's row was replaced under a shared lock, so one "
     "save can't be told from two",
+    "created_target": "the record an update or found check names was created in "
+    "the window, not saved over",
 }
 
 

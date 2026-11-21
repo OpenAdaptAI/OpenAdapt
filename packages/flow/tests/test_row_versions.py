@@ -125,7 +125,9 @@ class _Cur:
 
 
 class _Conn:
-    def __init__(self, rows: list[tuple], members: Optional[list[tuple]] = None) -> None:
+    def __init__(
+        self, rows: list[tuple], members: Optional[list[tuple]] = None
+    ) -> None:
         self._rows, self._members, self.autocommit = rows, members, False
 
     def cursor(self) -> _Cur:
@@ -178,16 +180,25 @@ def test_judge_never_reads_a_shared_lock_as_one_writer() -> None:
     xmin by chance; if that multixact names another updater, not checked."""
 
     v = _judge(
-        ("100", "105"), ("105", "0"), changed=True, members=[("103", "upd"), ("104", "keysh")]
+        ("100", "105"),
+        ("105", "0"),
+        changed=True,
+        members=[("103", "upd"), ("104", "keysh")],
     )
     assert (v.status, v.problem) == ("not_checked", "ambiguous_xmax")
     # Lockers only, or the writer itself as the updater: still one writer.
-    assert _judge(
-        ("100", "105"), ("105", "0"), changed=True, members=[("104", "keysh")]
-    ).status == "held"
-    assert _judge(
-        ("100", "105"), ("105", "0"), changed=True, members=[("105", "nokeyupd")]
-    ).status == "held"
+    assert (
+        _judge(
+            ("100", "105"), ("105", "0"), changed=True, members=[("104", "keysh")]
+        ).status
+        == "held"
+    )
+    assert (
+        _judge(
+            ("100", "105"), ("105", "0"), changed=True, members=[("105", "nokeyupd")]
+        ).status
+        == "held"
+    )
 
 
 def test_judge_stops_without_the_held_read() -> None:
@@ -201,11 +212,10 @@ def test_judge_stops_on_a_missing_row() -> None:
         spec, _Held({}), lambda: _Conn([("1", "5", "0")]), [("1", True, True)]
     )
     assert (v.status, v.problem) == ("not_checked", "missing")
-    # A record created in the window has no earlier version: not judged.
-    v = rv.judge_row_versions(
-        spec, _Held({}), lambda: _Conn([]), [("9", False, False)]
-    )
-    assert v.status == "held"
+    # A record created in the window (a duplicate made instead of the
+    # update) has no earlier version: never held.
+    v = rv.judge_row_versions(spec, _Held({}), lambda: _Conn([]), [("9", False, False)])
+    assert (v.status, v.problem) == ("not_checked", "created_target")
 
 
 def test_spec_is_postgresql_only_and_plain_names() -> None:
@@ -238,7 +248,11 @@ def _generated(dialect: str, query: str, *, read_same: bool = True) -> dict:
         "verifier": {
             "kind": "surfaces",
             "surfaces": {
-                "record": {"kind": "sql", **(read if read_same else other), "sql_query": query}
+                "record": {
+                    "kind": "sql",
+                    **(read if read_same else other),
+                    "sql_query": query,
+                }
             },
         },
         "effects": [
@@ -251,7 +265,7 @@ def _generated(dialect: str, query: str, *, read_same: bool = True) -> dict:
 GENERATED = (
     'SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."name" AS TEXT) AS "name", '
     'CASE WHEN CAST(t."minimum_stock" AS numeric) = CAST(%(v0)s AS numeric) '
-    'THEN \'1\' ELSE \'0\' END AS "p__minimum_stock" FROM "part_part" t'
+    "THEN '1' ELSE '0' END AS \"p__minimum_stock\" FROM \"part_part\" t"
 )
 
 
@@ -283,7 +297,7 @@ def test_detects_the_row_versions_of_a_generated_read() -> None:
         _generated(
             "postgresql",
             'SELECT CAST(t."id" AS TEXT) AS "id", CASE WHEN (SELECT COUNT(*) '
-            'FROM "part_tag" g WHERE g.part_id = t.id) = 1 THEN \'1\' ELSE '
+            "FROM \"part_tag\" g WHERE g.part_id = t.id) = 1 THEN '1' ELSE "
             '\'0\' END AS "p__tags" FROM "part_part" t',
         ),
     ],
@@ -380,6 +394,20 @@ def test_lost_update_stops(pg: Engine, tmp_path: Path, gap: bool) -> None:
     assert r.evidence["frame"]["versions"]["problem"] == "extra_steps"
 
 
+def test_duplicate_instead_of_update_stops(pg: Engine, tmp_path: Path) -> None:
+    """The agent adds a second record with the asked values instead of
+    saving the existing one; the effect matches the new record."""
+
+    def act() -> None:
+        request_bookkeeping(pg)
+        pg.run("INSERT INTO asset (tag, name) VALUES ('LT-100', 'Laptop B')")
+
+    doc = rename_contract(pg)
+    doc["frame"]["target_fields"] = ["name", "tag"]
+    r = check(pg, doc, {"tag": "LT-100", "name": "Laptop B"}, act, tmp_path)
+    assert _outcome(r) != "CONFIRMED", r.reasons
+
+
 def test_same_value_rewrite_twice_stops(pg: Engine, tmp_path: Path) -> None:
     def act() -> None:
         rename(pg, "Laptop B")
@@ -452,6 +480,4 @@ def test_held_read_is_a_read_only_snapshot(pg: Engine) -> None:
     finally:
         held.close()
     with pytest.raises(Exception):
-        rv.open_held(
-            rv.FrameRowVersions(table="no_such_table"), _db_connect(pg.read)
-        )
+        rv.open_held(rv.FrameRowVersions(table="no_such_table"), _db_connect(pg.read))

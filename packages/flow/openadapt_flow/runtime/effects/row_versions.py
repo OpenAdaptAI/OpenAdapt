@@ -25,8 +25,10 @@ in this process until the judge, and closes it there. A judge in another
 process, a read that fails, or a target the held read can't find stops the
 run as not checked. Never a pass.
 
-A target that existed may have been written by at most one transaction, and
-one that changed by exactly one: two writers mean another user's save sits
+Every target must have existed at the baseline: a record created in the
+window (a duplicate made instead of the update) has no earlier version, so
+it stops the run as not checked. A target may have been written by at most
+one transaction, and one that changed by exactly one: two writers mean another user's save sits
 inside the window. That is the lost-update rule of ``versions.py`` (one step
 per save) with the row's own transaction ids as the steps.
 
@@ -289,9 +291,20 @@ def judge_row_versions(
 
     seen: set[Optional[str]] = set()
     for target, existed, changed in targets:
-        if target in seen or not existed:
-            continue  # created in the window: no earlier version to overwrite
+        if target in seen:
+            continue
         seen.add(target)
+        if not existed:
+            # An update or a found check names a record that was there. One
+            # created in the window (a duplicate made instead of the update)
+            # has no earlier version, so this source can't vouch for it.
+            stop(
+                "not_checked",
+                "created_target",
+                "the record an update or found check names was created in the "
+                "window, not saved over",
+            )
+            continue
         if target is None:
             stop(
                 "not_checked",

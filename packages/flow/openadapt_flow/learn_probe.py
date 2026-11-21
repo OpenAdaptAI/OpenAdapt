@@ -207,7 +207,8 @@ def propose(
     n = max(1, len(learnable))
     proposal = _learn.propose(eps, users=users, k=1, n=n, source="read-only probe")
     for body in (proposal.get("kinds") or {}).values():
-        kept, held = [], []
+        kept: list[Any] = []
+        held: list[Any] = []
         for e in body.get("excuses") or []:
             (held if e.get("change") == "added" else kept).append(e)
         for e in held:
@@ -346,10 +347,12 @@ def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     database's change log."""
 
     frame = data.get("frame") if isinstance(data, Mapping) else None
-    database = frame.get("database") if isinstance(frame, Mapping) else None
+    if not isinstance(frame, Mapping):
+        return None
+    database = frame.get("database")
     if not isinstance(database, Mapping) or database.get("dialect") != "postgresql":
         return None
-    surfaces: set[str] = set()
+    names: set[str] = set()
     for effect in data.get("effects") or []:
         if not isinstance(effect, Mapping):
             return None
@@ -360,12 +363,13 @@ def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         probe = str(effect.get("probe") or "")
         if not probe.startswith("surface="):
             return None
-        surfaces.add(probe[len("surface=") :].split("|", 1)[0].strip())
-    if len(surfaces) != 1:
+        names.add(probe[len("surface=") :].split("|", 1)[0].strip())
+    if len(names) != 1:
         return None
-    (surface,) = surfaces
-    verifier = data.get("verifier") if isinstance(data, Mapping) else None
-    source = ((verifier or {}).get("surfaces") or {}).get(surface)
+    (surface,) = names
+    verifier = data.get("verifier")
+    surfaces = verifier.get("surfaces") if isinstance(verifier, Mapping) else None
+    source = surfaces.get(surface) if isinstance(surfaces, Mapping) else None
     if not isinstance(source, Mapping) or source.get("kind") != "sql":
         return None
     read = database.get("read") or {}

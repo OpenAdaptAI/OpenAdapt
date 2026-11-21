@@ -223,7 +223,26 @@ one whose every declared record is new (`count_new_only`), or one that
 reads the target's versions (`frame.versions`). In an update with no
 version source, another user's edit that the agent's stale save reverts
 leaves nothing changed, and only the bookkeeping move stopped it, so such
-contracts keep stopping. No person approves them: the
+contracts keep stopping unless the probe can give them a version source.
+
+On PostgreSQL it can, for a contract whose write effects all read one
+surface, and whose read is one `SELECT ... FROM <table> t` (no other
+`FROM`) over the frame's own connection with the identity field taken from
+one column. The probe then writes `frame.row_versions` (table and key
+column) beside the excuse. At check time the verifier opens a read-only
+REPEATABLE READ transaction before it reads the baseline and keeps it open
+until the judge. That transaction still sees the target row's version from
+the baseline, and that version's `xmax` names the transaction that replaced
+it. If it equals the current row's `xmin`, one transaction saved the
+target. Anything else means two or more did, and the frame is refuted as a
+lost update. A judge in another process, a failed read, or a replaced
+version whose `xmax` could be a shared lock naming another updater makes the
+frame not checked. A last-saved marker (`xmin` alone, `updated_at`,
+`ON UPDATE CURRENT_TIMESTAMP`) is not used: it reads the same after one
+save as after two. MySQL and MariaDB updates get no automatic source; they
+need `frame.versions` over a history table, or the database's change log.
+
+No person approves them: the
 rows were read, the relation is derived from the schema, and the requests
 are checked to be read-only. A contract that already has `frame.learned`
 is refused, so a person reconciles the two. Receipts name the source.
