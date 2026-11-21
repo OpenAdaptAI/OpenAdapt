@@ -351,6 +351,10 @@ class FieldBindingSpec(BaseModel):
     # over it. With no dossier value it still stops. Never applies to a
     # control the run already wrote.
     portal_default_values: tuple[str, ...] = ()
+    # A field the form may leave blank. Without this, a bound field the page
+    # shows with no intake value stops before submit; with it, a blank one is
+    # named on the receipt as not covered, never as covered.
+    optional: bool = False
 
 
 class EntityTableSpec(BaseModel):
@@ -472,6 +476,11 @@ class SummaryCheckSpec(BaseModel):
     search_submit_anchor: Optional[FieldAnchorSpec] = None
     search_by_output_key: Optional[str] = None
     field_readbacks: tuple[FieldBindingSpec, ...] = ()
+    # Read-backs on the pre-submit review screen. Checked just before the
+    # commit click: a value shown there that differs from the intake stops
+    # before submit (a value the portal derived or changed). A value the
+    # review does not show is left to the post-submit read-back.
+    review_readbacks: tuple[FieldBindingSpec, ...] = ()
     split_date_readbacks: tuple[SplitDateReadbackSpec, ...] = ()
     outputs: tuple[OutputExtractionSpec, ...] = ()
 

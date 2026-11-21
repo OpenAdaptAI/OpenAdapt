@@ -221,6 +221,8 @@ class ReconcilerSession:
         self._uncovered: dict[str, str] = {}
         self._unbound_first_seen: dict[str, str] = {}
         self._not_covered: set[str] = set()
+        # Optional bound fields the page showed and the run left blank.
+        self._optional_blank: set[str] = set()
 
     def record_write(
         self,
@@ -1545,6 +1547,77 @@ class FormReconciler:
 
         return edited_any, False, None
 
+    def _review_mismatch_halt(
+        self, session: ReconcilerSession, snapshot: FormSnapshot
+    ) -> Optional[FormHaltItem]:
+        """Stop before submit when the review screen shows a different value."""
+        check = session.pack.summary_check
+        if check is None or not check.review_readbacks:
+            return None
+        from openadapt_flow.form_tx.judge import (
+            _observed_control_matches,
+            _text_pair_matches,
+        )
+
+        for rb in check.review_readbacks:
+            fact = session.effective_facts.get(rb.dossier_key)
+            if fact is None:
+                continue
+            try:
+                ctrl = match_anchor_in_snapshot(
+                    rb.anchor, snapshot, include_readonly=True
+                )
+                pair = (
+                    match_text_pair_in_snapshot(rb.anchor, snapshot)
+                    if ctrl is None
+                    else None
+                )
+            except AmbiguousAnchorError:
+                continue
+            if ctrl is None and pair is None:
+                continue
+            ok = (
+                _observed_control_matches(fact.value, ctrl, rb)
+                if ctrl is not None
+                else pair is not None and _text_pair_matches(fact.value, pair, rb)
+            )
+            if ok:
+                continue
+            shown = (
+                ctrl.current_value if ctrl is not None else (pair.value if pair else "")
+            )
+            label = (
+                _field_label(ctrl) if ctrl is not None else (pair.label if pair else "")
+            ) or rb.dossier_key
+            sig = f"review|{rb.dossier_key}|{shown}"
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.PREFILL_VALUE_CONFLICT,
+                snapshot.screen_id,
+                rb.dossier_key,
+                sig,
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                screen_id=snapshot.screen_id,
+                field_label=collapse_whitespace(label).rstrip(":").strip(),
+                dossier_key=rb.dossier_key,
+                portal_value=shown,
+                dossier_value=fact.value,
+                message=(
+                    f"The review page shows {shown!r} for {label!r}, but the intake "
+                    f"has {fact.value!r}; nothing was submitted"
+                ),
+                allowed_actions=(
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {"field_signature": sig}
+            return halt
+        return None
+
     @staticmethod
     def _note_screen(session: ReconcilerSession, screen_id: str) -> None:
         """Track screen order; a jump back to a screen already left interrupts the run.
@@ -1927,18 +2000,33 @@ class FormReconciler:
             group = radio_group_key(ctrl)
             if binding is None and group is not None:
                 binding = matched_by_group.get(group)
-            is_required = ctrl.required or (
-                binding is not None and binding.required_in_pack
-            )
-            if not is_required:
-                continue
-
             ctrl_sig = compute_field_signature(ctrl)
             fact = (
                 session.effective_facts.get(binding.dossier_key)
                 if binding is not None
                 else None
             )
+            # A bound field the page shows, with no intake value, that nobody
+            # answered: a value no one supplied must never be covered
+            # (absent-evidence-as-success). It stops, unless the pack marks
+            # it optional; then it is named on the receipt as not covered.
+            unanswered = (
+                binding is not None
+                and fact is None
+                and _is_control_empty(ctrl, binding.placeholder_values)
+                and ctrl.dom_selector not in session._filled_selectors
+                and ctrl_sig not in session._human_accepted_control_signatures
+            )
+            if unanswered and binding is not None and binding.optional:
+                session._optional_blank.add(binding.dossier_key)
+                continue
+            is_required = (
+                ctrl.required
+                or (binding is not None and binding.required_in_pack)
+                or unanswered
+            )
+            if not is_required:
+                continue
             if (
                 fact is not None
                 and binding is not None
@@ -1976,6 +2064,9 @@ class FormReconciler:
                 message=(
                     f"Required control {_field_label(ctrl) or ctrl.dom_selector!r} has no "
                     f"grounded value in dossier"
+                    if not unanswered or ctrl.required
+                    else f"{_field_label(ctrl) or ctrl.dom_selector!r} is shown with no "
+                    "intake value; answer it, or the pack must mark it optional"
                 ),
                 allowed_actions=(
                     HumanDecisionAction.PROVIDE_VALUE,
@@ -2980,6 +3071,7 @@ class FormReconciler:
             outputs=extracted_outputs,
             not_covered=(
                 *sorted(session._not_covered),
+                *(f"optional-blank:{k}" for k in sorted(session._optional_blank)),
                 *(f"intake:{k}" for k in self._unconsumed_intake_keys(session)),
             ),
         )
@@ -3392,6 +3484,15 @@ class FormReconciler:
                     continue
                 if isinstance(recheck, FormTxResult):
                     return recheck
+                review_halt = self._review_mismatch_halt(session, snapshot)
+                if review_halt is not None:
+                    return self._build_result(
+                        session,
+                        outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+                        safe_to_retry=True,
+                        halts=(review_halt,),
+                        what_happened=review_halt.message,
+                    )
                 if current_screen.commit_button_anchor is None:
                     raise ValueError(
                         f"Commit screen {current_screen.screen_id!r} has no commit_button_anchor"
