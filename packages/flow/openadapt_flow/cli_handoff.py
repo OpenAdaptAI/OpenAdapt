@@ -431,10 +431,15 @@ def cmd_trust(args: argparse.Namespace) -> int:
             "status",
         }:
             raise ValueError("the key file is one `handoff key` entry")
-        keys = [
+        if not isinstance(registry, dict):
+            raise ValueError("the keys file must be a JSON object")
+        raw_keys = registry.get("keys", [])
+        if not isinstance(raw_keys, list):
+            raise ValueError("the keys file 'keys' field must be a list")
+        keys: list[Any] = [
             k
-            for k in registry.get("keys", [])
-            if k.get("key_id") != entry.get("key_id")
+            for k in raw_keys
+            if not isinstance(k, dict) or k.get("key_id") != entry.get("key_id")
         ]
         keys.append(
             {
