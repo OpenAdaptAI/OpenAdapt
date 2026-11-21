@@ -294,6 +294,9 @@ class FieldBindingSpec(BaseModel):
     triggers_re_render: bool = False
     required_in_pack: bool = False
     placeholder_values: tuple[str, ...] = ("", "-- Select --", "Select...", "Choose...")
+    # Type-ahead comboboxes: type only this many leading characters of the
+    # formatted value before reading suggestions. None types the whole value.
+    typeahead_query_chars: Optional[int] = Field(default=None, ge=1, le=200)
 
 
 class EntityTableSpec(BaseModel):

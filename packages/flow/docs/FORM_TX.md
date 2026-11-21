@@ -100,11 +100,26 @@ Measured on four held-out synthetic portals
   and controls inside shadow DOM are invisible.
 - A popup routine has one apply button; an estimator that needs Calculate and
   then Use This Value stops for a person.
-- A type-ahead that fetches suggestions only after typing cannot be filled:
-  the surface opens a listbox by clicking, finds none, and the run raises an
-  error instead of stopping.
 - An unchecked native radio reads as holding its value attribute, so a pack
   must set radios from the intake rather than treat them as prefill.
+
+### Type-aheads and surface errors
+
+A `portal_combobox` binding on a combobox that is itself a text input is
+filled by typing: the surface clears it, types the formatted value (or only
+its first `typeahead_query_chars` characters) one key at a time, waits for the
+page to settle and reads the one visible listbox. It chooses a suggestion
+only when exactly one matches under the binding's codec. None or several
+stop for an operator, with the suggestions shown; it never takes the first.
+After choosing, the control must show the chosen suggestion or the intended
+value, or the run stops. A combobox that is not a text input is still opened
+by clicking.
+
+When the surface cannot act on a control (it vanished, matched twice, its
+listbox or popup never appeared, or the page never settled), the run stops
+for an operator (`ambiguous_option_or_target`) instead of raising. Nothing is
+submitted after such a stop. An error on or after the submit click ends
+`delivery_uncertain` with `safe_to_retry` false.
 
 `SignedFormTxReceipt` signs the local runner's statement. Its signature proves
 integrity under that local key. It is not a server attestation, external witness,

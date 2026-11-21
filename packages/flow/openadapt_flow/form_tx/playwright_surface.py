@@ -1831,6 +1831,55 @@ class PlaywrightFormSurface:
             for o in (state.get("options") or ())
         )
 
+    def type_portal_combobox_query(
+        self, dom_selector: str, query: str
+    ) -> tuple[ObservedOption, ...]:
+        """Type ``query`` into an editable combobox and read the suggestions.
+
+        Clears the input, sends one key event per character (so input and
+        keyup handlers that fetch suggestions run as they would for a person),
+        waits for the surface to settle, then reads the one visible listbox.
+        Raises ``MissingAnchorError`` when no listbox appears and
+        ``AmbiguousAnchorError`` when several do.
+        """
+        if not query:
+            raise MissingAnchorError(
+                f"Empty type-ahead query for {dom_selector!r}; nothing to type"
+            )
+        loc = self._resolve_live_locator(dom_selector)
+        if not loc.is_editable():
+            raise MissingAnchorError(
+                f"Combobox {dom_selector!r} does not accept typed text"
+            )
+        timeout = self._ui_profile.max_settle_ms
+        loc.click(timeout=timeout)
+        loc.fill("", timeout=timeout)
+        loc.press_sequentially(str(query), delay=25, timeout=timeout)
+        self.wait_for_quiescence()
+
+        deadline = time.monotonic() + (timeout / 1000.0)
+        state = self._read_portal_listbox_state(dom_selector)
+        while state.get("status") == "missing_listbox" and time.monotonic() < deadline:
+            self._sleep_ms(25.0)
+            state = self._read_portal_listbox_state(dom_selector)
+
+        status = state.get("status")
+        if status == "ambiguous_listbox":
+            raise AmbiguousAnchorError(
+                f"Multiple visible portal listboxes ({state.get('count')}) open for {dom_selector!r}"
+            )
+        if status != "ok":
+            raise MissingAnchorError(
+                f"No suggestions appeared after typing into {dom_selector!r}"
+            )
+        return tuple(
+            ObservedOption(
+                value=str(o.get("value") or ""),
+                label=str(o.get("label") or ""),
+            )
+            for o in (state.get("options") or ())
+        )
+
     def choose_portal_combobox_option(
         self, dom_selector: str, option: ObservedOption
     ) -> None:
