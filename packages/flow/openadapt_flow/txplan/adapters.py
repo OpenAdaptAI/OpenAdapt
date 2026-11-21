@@ -357,8 +357,19 @@ class RestAdapter:
             else:
                 raise AdapterError("a list did not return a list")
             fresh = 0
+            page_ids: set[str] = set()
             for item in items:
-                rid = f"{coll.name}/{item.get(coll.id_field)}"
+                ident = item.get(coll.id_field) if isinstance(item, Mapping) else None
+                if ident in (None, ""):
+                    # Missing-evidence class: a row without its identity can't
+                    # be placed in the frame.
+                    raise AdapterError(f"a {coll.name} row has no {coll.id_field}")
+                rid = f"{coll.name}/{ident}"
+                if rid in page_ids or rid in out:
+                    # One identity per row across the whole scan: a repeat
+                    # means the pages shifted, so the frame can't be trusted.
+                    raise AdapterError(f"the list repeated {rid}")
+                page_ids.add(rid)
                 if rid not in out:
                     fresh += 1
                 out[rid] = column_digests(self.normalize(coll, item))
