@@ -67,6 +67,13 @@
   browser dialog is retried instead of failing the recording or run.
 - A click on a `<label>` and the click the browser forwards to its control
   record as one action.
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
 
 ## v3.3.0 (2026-11-19)
 

@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- `openadapt quickstart` keeps the browser hidden and shows each step in the
+  terminal, so it no longer opens a window over your work. `--watch` shows
+  the window, and the older `--headed` still does too. `--headless` is now the
+  default and changes nothing. The Seal page is no longer opened at the end:
+  the finale prints a link to it (an OSC 8 hyperlink where the terminal
+  supports one, the `file://` address elsewhere, Terminal.app included), and
+  `--open` opens it.
+- A run whose starting screen never finishes drawing (it stopped before its
+  first click and wrote nothing) runs once more in a new folder. When the
+  second try stops the same way, the quickstart says why in plain words and
+  skips the break-it act instead of printing that OpenAdapt "stopped, but not
+  at the check this act sets off".
+- The quickstart's output is at most 100 columns wide, and each step's timing
+  follows its text instead of sitting at the window's right edge.
+- The screen and the database are shown as text side by side in every
+  terminal, with the saved message read from the screen. The screenshot is
+  drawn under them only where the terminal answers an image-protocol query
+  (iTerm2, Kitty, Ghostty). WezTerm drew blank rows for it and gets the text
+  unless `OPENADAPT_INLINE_IMAGES=iterm2` is set.
+- The "Put this Seal online?" question shows four lines on what would be
+  uploaded and the path of the full JSON instead of printing the JSON.
+  Answering `show` prints the full card and asks again; the default is still
+  No. `openadapt seal publish --show` prints the full card and uploads nothing.
+- `openadapt quickstart` no longer prints that it is also available as
+  `openadapt demo quickstart`.
+- The documented first command is `uvx --python 3.12 openadapt@latest
+  quickstart`, and the printed next steps under `uvx` use `openadapt@latest`.
+  Under `uvx` on Python 3.13 or newer, the launcher reruns the same command
+  with Python 3.12 (`uvx --python 3.12 openadapt@<this version> ...`) instead of
+  stopping. Elsewhere on those Pythons it prints that one-line command first.
+
 ## v1.23.0 (2026-11-19)
 
 ### Fixes
