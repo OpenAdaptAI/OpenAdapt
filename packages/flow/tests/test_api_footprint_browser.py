@@ -188,7 +188,7 @@ def gui_save(page, title):
 def capture_save(app, context, page, tmp_path):
     rec = tmp_path / "capture"
     rec.mkdir()
-    capture = nc.NetworkCapture(context).start()
+    capture = nc.NetworkCapture(context, bodies="raw").start()
     try:
         open_editor(app, page)
         start = time.monotonic()

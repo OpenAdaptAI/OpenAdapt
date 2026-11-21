@@ -91,7 +91,9 @@ def drive(
     from openadapt_flow.network_capture import NetworkCapture
 
     context = browser.new_context(viewport={"width": 1280, "height": 900})
-    capture = NetworkCapture(context).start() if recording is not None else None
+    capture = (
+        NetworkCapture(context, bodies="raw").start() if recording is not None else None
+    )
     t0 = time.monotonic()
     events: list[dict[str, Any]] = []
     page = context.new_page()

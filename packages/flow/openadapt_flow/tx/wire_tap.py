@@ -1082,10 +1082,10 @@ class SessionWireTap:
         }
         return _scrub_har_value(har_doc, self._policy.secrets)
 
-    def save_har(self, path: str | Path) -> Path:
-        """Write ``export_har()`` to ``path`` as UTF-8 JSON."""
+    def save_har(self, path: str | Path, *, raw_bodies: bool = False) -> Path:
+        """Write the session to ``path`` as sealed HAR (bodies minimized)."""
         out_path = Path(path)
-        dump_har(self, out_path, secrets=self._policy.secrets)
+        dump_har(self, out_path, secrets=self._policy.secrets, raw_bodies=raw_bodies)
         return out_path
 
     def import_har(
@@ -1885,8 +1885,23 @@ def dump_har(
     path: Optional[str | Path] = None,
     *,
     secrets: Iterable[str] = (),
+    keep_fields: Optional[Iterable[str]] = None,
+    raw_bodies: bool = False,
 ) -> str:
-    """Serialize a ``SessionWireTap`` or HAR dictionary to secret-masked HAR 1.2 JSON."""
+    """Serialize a ``SessionWireTap`` or HAR dictionary to secret-masked HAR 1.2 JSON.
+
+    Bodies are minimized by default (:mod:`openadapt_flow.capture_privacy`):
+    only ``keep_fields`` values survive (default: the policy's id and version
+    fields), the rest become keyed hashes. ``raw_bodies=True`` keeps them for
+    debugging; a file is always sealed under the at-rest key
+    (``write_private_record``). TODO(#2423): use the key hierarchy's data key.
+    """
+    from openadapt_flow.capture_privacy import (
+        BodyMinimizer,
+        is_minimized_har,
+        minimize_har,
+    )
+
     raw_har: Mapping[str, Any] = (
         har_or_tap.export_har()
         if isinstance(har_or_tap, SessionWireTap)
@@ -1894,6 +1909,18 @@ def dump_har(
     )
     secret_tuple = tuple(s for s in secrets if s)
     scrubbed = _scrub_har_value(dict(raw_har), secret_tuple)
+    if not raw_bodies and not is_minimized_har(scrubbed):
+        policy = (
+            har_or_tap.policy
+            if isinstance(har_or_tap, SessionWireTap)
+            else WirePolicy()
+        )
+        fields = (
+            (*policy.id_fields, *policy.version_fields)
+            if keep_fields is None
+            else tuple(keep_fields)
+        )
+        scrubbed = minimize_har(scrubbed, BodyMinimizer(fields))
     payload = json.dumps(scrubbed, indent=2, sort_keys=False)
     if path is not None:
         out = Path(path)
@@ -1952,8 +1979,29 @@ def load_har(
             "entries": list(entries),
         }
     }
+    from openadapt_flow.capture_privacy import HAR_FIELD, is_minimized_har
+
+    if is_minimized_har(data):
+        # Kept declared fields come back as JSON text; withheld values do not.
+        normalized["log"][HAR_FIELD] = log[HAR_FIELD]
+        normalized["log"]["entries"] = [
+            _restore_minimized_entry(e) if isinstance(e, Mapping) else e
+            for e in entries
+        ]
     secret_tuple = tuple(s for s in secrets if s)
     return _scrub_har_value(normalized, secret_tuple)
+
+
+def _restore_minimized_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """A minimized entry with each body replaced by its kept JSON fields."""
+    from openadapt_flow.capture_privacy import HAR_FIELD, restore_kept_json
+
+    out = json.loads(json.dumps(entry))
+    for side, key in (("request", "postData"), ("response", "content")):
+        container = (out.get(side) or {}).get(key)
+        if isinstance(container, dict) and isinstance(container.get(HAR_FIELD), dict):
+            container["text"] = restore_kept_json(container[HAR_FIELD]).decode("utf-8")
+    return out
 
 
 def har_to_summary(

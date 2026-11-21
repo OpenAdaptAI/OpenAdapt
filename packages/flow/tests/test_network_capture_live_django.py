@@ -134,7 +134,7 @@ def test_a_django_admin_recording_keeps_no_rendered_token(django_admin, tmp_path
             pytest.skip(f"chromium unavailable: {exc}")
         try:
             context = browser.new_context()
-            capture = nc.NetworkCapture(context).start()
+            capture = nc.NetworkCapture(context, bodies="raw").start()
             t0 = time.monotonic()
             page = context.new_page()
             page.goto(f"{base}/admin/login/?next=/admin/auth/group/add/")

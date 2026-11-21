@@ -22,6 +22,10 @@ order the browser finished them:
 {"seq": 0, "t": -2.102, "method": "GET", "url": "http://127.0.0.1:9811/", "status": 302, ...}
 ```
 
+The header's `bodies` is `"minimized"` (the default) or `"raw"`; a file
+without it was written before minimization existed and is raw.
+`network_capture.bodies_mode(recording_dir)` reads it.
+
 `meta.json` also records `network_capture: {"file": "network.jsonl",
 "exchanges": N}`.
 
@@ -51,6 +55,36 @@ order the browser finished them:
 
 Static assets (images, fonts, style sheets, scripts, media, manifests) are
 not captured.
+
+## Bodies: minimized by default
+
+`record --capture-network-bodies minimized` (the default) parses each body in
+memory and writes only what the recording declared
+(`openadapt_flow/capture_privacy.py`):
+
+- **Kept:** the values of the recording's `--param` and `--identifier`
+  fields, wherever they appear in a JSON, url-encoded or plain multipart
+  body, or a URL query.
+- **Hashed:** every other value, as `hmac-sha256:<hex>` under a key made
+  for this capture and never written. Equal values hash equally within one
+  file; hashes from different files can't be compared, and a short value
+  (a birth date) can't be recovered by trying candidates.
+- **Opaque:** HTML, plain text, binary, a cut body or a multipart body
+  with a file keeps only its length, content type and hash.
+
+So `form`, `body` and `response_text` are replaced by `form_minimized`,
+`body_minimized` and `response_minimized`, each `{"kept": [[path, value]],
+"withheld": [[path, hash]]}` (bodies also carry `format`, `bytes`,
+`content_type` and a whole-body `hmac`), and `url`, `frame_url` and
+`location` have undeclared query values hashed. Not minimized: URL path
+segments (`/patients/1234`) and JSON keys that look like field names.
+
+Readers find no body in a minimized file and propose nothing from it: no
+API step, no undo proposal, no record check from the app's reads. Record
+with `--capture-network-bodies raw` for those and for debugging. Raw is
+refused unless the recording is encrypted (the default for web recordings;
+not with `--no-encrypt`) or `OPENADAPT_FLOW_PLAINTEXT_AT_REST` allows
+plaintext. The redaction below applies to raw bodies.
 
 ## Redaction, before anything is written
 
@@ -83,9 +117,9 @@ JSON body, a password-like or token-like field is replaced field by field,
 whatever the length of its value.
 
 Replacement is by exact value (and its URL-encoded form), longest value
-first. Business values the person typed (names, dates, addresses) are not
-redacted, as in `events.jsonl`. Treat a recording with capture as you treat
-any recording: it can contain patient or customer data.
+first. In a raw capture, business values the person typed (names, dates,
+addresses) are not redacted, as in `events.jsonl`. Treat a recording with
+capture as you treat any recording: it can contain patient or customer data.
 
 ## Lining up requests and events
 

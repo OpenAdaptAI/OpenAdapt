@@ -113,7 +113,10 @@ def _record_with_capture(fixture: Fixture, url: str, out: Path) -> Path:
     def launch(*args: Any, **kwargs: Any):
         backend, close = original(*args, **kwargs)
         captures.append(
-            (NetworkCapture(backend.page.context).start(), time.monotonic())
+            (
+                NetworkCapture(backend.page.context, bodies="raw").start(),
+                time.monotonic(),
+            )
         )
         return backend, close
 
