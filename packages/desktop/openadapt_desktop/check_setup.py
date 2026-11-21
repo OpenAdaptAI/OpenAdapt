@@ -471,7 +471,7 @@ def get_check_setup(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
     inputs = dispatcher._task_inputs(workflow_id)
     secrets = frozenset(str(item["name"]) for item in inputs if item.get("secret"))
     recording = _recording_dir(dispatcher, workflow_id)
-    qualification = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
+    qualification = dispatcher.get_qualification(workflow_id=workflow_id)
     plan = _plan(qualification) if qualification.get("ok") else {"writes": [], "unproven": []}
 
     if recording is None:
@@ -611,10 +611,10 @@ def accept_record_check(dispatcher: Any, workflow_id: str, *, answered_by: str) 
             "OpenAdapt has no record check to propose for this workflow. "
             "Answer the questions in Check it."
         )
-    current = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
+    current = dispatcher.get_qualification(workflow_id=workflow_id)
     if not current.get("project") or current.get("draft_environment"):
         _start_project(dispatcher, workflow_id)
-        current = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
+        current = dispatcher.get_qualification(workflow_id=workflow_id)
     plan = _plan(current)
     quiet = setup.get("quiet_steps")
     if quiet:

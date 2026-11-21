@@ -13,8 +13,6 @@ import type {
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { Button, Callout, Card, CardHead, Field, Pill } from "../ui/primitives";
 
-const POLICY = "record-write";
-
 const GUIDED_FAULT_CASES: {
   id: string;
   kind: QualificationCaseKind;
@@ -216,7 +214,7 @@ export function QualificationLifecycle({
     try {
       const response = await engineInvoke<QualificationResponse>(command, {
         workflow_id: workflowId,
-        policy: POLICY,
+        ...(project.policy ? { policy: project.policy } : {}),
         ...params,
       });
       if (!response.ok) {
@@ -301,7 +299,7 @@ export function QualificationLifecycle({
         CMD.IMPORT_QUALIFICATION_RESULTS,
         {
           workflow_id: workflowId,
-          policy: POLICY,
+          ...(project.policy ? { policy: project.policy } : {}),
           signed_results_json: await file.text(),
         },
       );
