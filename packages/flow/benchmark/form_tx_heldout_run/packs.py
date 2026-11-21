@@ -20,6 +20,7 @@ from openadapt_flow.form_tx.types import (
     FormCodecKind,
     FormPack,
     InputDossier,
+    OutputExtractionSpec,
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
@@ -66,23 +67,33 @@ def _bind(
 
 
 BOOL = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO)
+MONEY = FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$")
 NEGATED_SUFFIX = ".is_no"
 
 
-def _yes_no_radios(key: str, name: str) -> tuple[FieldBindingSpec, FieldBindingSpec]:
-    return tuple(  # type: ignore[return-value]
-        FieldBindingSpec(
-            binding_id=f"b_{name}_{value}",
-            dossier_key=dossier_key,
-            anchor=FieldAnchorSpec(css_selector=f'input[name="{name}"][value="{value}"]'),
-            control_kind=ControlKind.CHECKBOX,
-            codec=BOOL,
-            # The frozen surface reads an unchecked native radio as holding its
-            # value attribute, so every radio looks prefilled and would stop.
-            # Seen on the dev case; these radios are set from the intake.
-            prefill_policy=PrefillPolicy.OVERWRITE_WITH_DOSSIER,
-        )
-        for value, dossier_key in (("Y", key), ("N", key + NEGATED_SUFFIX))
+def _radio(key: str, name: str) -> FieldBindingSpec:
+    """A native Yes/No radio group as one field (an unchecked group reads empty)."""
+    return FieldBindingSpec(
+        binding_id=f"b_{name}",
+        dossier_key=key,
+        anchor=_name(name),
+        control_kind=ControlKind.RADIO_GROUP,
+        codec=BOOL,
+    )
+
+
+def _shown(
+    key: str, label: str, codec: FieldCodecSpec = TEXT, *, section: str = ""
+) -> FieldBindingSpec:
+    """A read-back of a value shown as page text next to ``label``."""
+    return FieldBindingSpec(
+        binding_id=f"rb_{key}",
+        dossier_key=key,
+        anchor=FieldAnchorSpec(
+            label_patterns=(f"^{label}$",),
+            section_patterns=(section,) if section else (),
+        ),
+        codec=codec,
     )
 
 
@@ -103,8 +114,12 @@ def _hl_step(n: int) -> WizardScreenSpec:
     )
 
 
+LOSSES = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP, enum_aliases={"3": ("3 or more",)}
+)
+
 HARBORLINE_PACK = FormPack(
-    pack_id="heldout.harborline.home",
+    pack_id="heldout.harborline.home.v2",
     domain_schema="personal_lines.homeowners",
     ui_profile_id=HARBORLINE_PROFILE.profile_id,
     bindings=(
@@ -135,10 +150,8 @@ HARBORLINE_PACK = FormPack(
         _bind("coverage.effective_date", "eff_date", ControlKind.DATE, DATE_MDY),
         _bind("coverage.deductible", "deductible", ControlKind.SELECT, INT, portal_default=True),
         _bind("coverage.liability_limit", "liability", ControlKind.SELECT, INT, portal_default=True),
-        # Yes/No radio pairs: one checkbox-style binding per radio, the "No"
-        # radio bound to the negation of the intake fact (see dossier_for).
-        *_yes_no_radios("property.has_pool", "pool"),
-        *_yes_no_radios("property.pool_fenced", "pool_fenced"),
+        _radio("property.has_pool", "pool"),
+        _radio("property.pool_fenced", "pool_fenced"),
         FieldBindingSpec(
             binding_id="b_cov_a_launcher",
             dossier_key="coverage.dwelling_a",
@@ -151,10 +164,18 @@ HARBORLINE_PACK = FormPack(
             subroutine_id="hl_rce",
             trigger_anchor=FieldAnchorSpec(label_patterns=(r"^Estimate RC",)),
             popup_url_pattern="/tools/rce",
+            # The estimator pre-sets its grade; it is overwritten from the intake.
             bindings=(
-                _bind("property.construction_quality", "quality", ControlKind.SELECT, EXACT),
+                _bind(
+                    "property.construction_quality",
+                    "quality",
+                    ControlKind.SELECT,
+                    EXACT,
+                    portal_default=True,
+                ),
             ),
-            commit_anchor=FieldAnchorSpec(label_patterns=(r"^Calculate",)),
+            compute_anchors=(FieldAnchorSpec(label_patterns=(r"^Calculate$",)),),
+            commit_anchor=FieldAnchorSpec(label_patterns=(r"^Use This Value$",)),
             parent_return_anchor=_name("cov_a"),
             return_output_key="coverage.dwelling_a",
             return_codec=INT,
@@ -176,10 +197,42 @@ HARBORLINE_PACK = FormPack(
         _hl_step(3),
         _hl_step(4),
     ),
-    # The confirmation page shows the stored values as plain table text, not
-    # as form controls, so the frozen surface cannot read any of them back.
-    # The contract names the page; every field ends not_checked.
-    summary_check=SummaryCheckSpec(summary_landmark_selector="#appno"),
+    # The confirmation page shows the stored values as table text.
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#appno",
+        field_readbacks=(
+            _shown("applicant.first_name", "First Name"),
+            _shown("applicant.last_name", "Last Name"),
+            _shown("applicant.date_of_birth", r"Date of Birth \(MM/DD/YYYY\)", DATE_MDY),
+            _shown("applicant.phone", "Phone"),
+            _shown("applicant.email", "E-mail"),
+            _shown("history.prior_policy_number", r"Prior Harborline Policy No\. \(if any\)"),
+            _shown("property.address_line1", "Street Address"),
+            _shown("property.city", "City"),
+            _shown("property.state", "State", EXACT),
+            _shown("property.zip", "ZIP Code"),
+            _shown("property.year_built", "Year Built", INT),
+            _shown("property.square_feet", r"Total Living Area \(sq ft\)", INT),
+            _shown("property.stories", "Number of Stories", EXACT),
+            _shown("property.construction_class", "Construction Class", EXACT),
+            _shown("property.roof_year", r"Roof Covering Last Replaced \(Year\)", INT),
+            _shown("property.roof_material", "Roof Covering Material", EXACT),
+            _shown("history.prior_claims_5yr", r"Number of Losses \(Last 5 Yrs\)", LOSSES),
+            _shown("coverage.dwelling_a", r"Dwelling Coverage \(A\)", MONEY),
+            _shown("coverage.effective_date", r"Policy Effective Date \(MM/DD/YYYY\)", DATE_MDY),
+            _shown("coverage.deductible", "All Peril Deductible", MONEY),
+            _shown("coverage.liability_limit", r"Personal Liability \(E\)", MONEY),
+            _shown("property.has_pool", r"Swimming Pool on Premises\?", BOOL),
+            _shown("property.pool_fenced", r"Is the pool enclosed by a locking fence\?", BOOL),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.application_no",
+                anchor=FieldAnchorSpec(css_selector="#appno"),
+                required=False,
+            ),
+        ),
+    ),
     max_commit_mutations=1,
 )
 
@@ -232,7 +285,7 @@ COBALT_PACK = FormPack(
         _label("vehicle.make", "Make", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.model", "Model", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.annual_miles", "Estimated annual mileage", codec=INT),
-        _label("vehicle.commute_miles_one_way", "One-way commute \\(miles\\)", codec=INT),
+        _label("vehicle.commute_miles_one_way", "One-way commute \(miles\)", codec=INT),
         _label("garaging.zip", "Garaging ZIP code"),
         _label("garaging.city", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.lienholder", "Lienholder or lessor name"),
@@ -287,10 +340,6 @@ def dossier_for(intake: dict[str, Any], request_id: str) -> InputDossier:
         for key, value in intake["facts"].items()
         if value is not None and value != ""
     }
-    for key, fact in list(facts.items()):
-        if isinstance(fact.value, bool):
-            neg = key + NEGATED_SUFFIX
-            facts[neg] = fact.model_copy(update={"key": neg, "value": not fact.value})
     return InputDossier(dossier_id=f"intake:{intake['case_id']}", request_id=request_id, facts=facts)
 
 
@@ -298,27 +347,6 @@ def _intake_value(value: Any) -> Any:
     return value
 
 
-# ------------------------------------------------------- post-hoc (labelled)
-# Written after the scored run, from what it showed; never replaces the
-# frozen row. P1: the estimator's Quality Grade select is pre-set to
-# "Standard", so it is overwritten from the intake like the other defaults.
-HARBORLINE_PACK_POSTHOC_P1 = HARBORLINE_PACK.model_copy(
-    update={
-        "pack_id": "heldout.harborline.home.posthoc_p1",
-        "popup_subroutines": (
-            HARBORLINE_PACK.popup_subroutines[0].model_copy(
-                update={
-                    "bindings": (
-                        _bind(
-                            "property.construction_quality",
-                            "quality",
-                            ControlKind.SELECT,
-                            EXACT,
-                            portal_default=True,
-                        ),
-                    )
-                }
-            ),
-        ),
-    }
-)
+# The first run's post-hoc pack P1 (estimator grade overwritten from the
+# intake) is part of the v2 pack; the name is kept for run.py --posthoc.
+HARBORLINE_PACK_POSTHOC_P1 = HARBORLINE_PACK
