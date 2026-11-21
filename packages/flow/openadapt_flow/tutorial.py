@@ -322,6 +322,13 @@ def record_tutorial(
     from openadapt_flow.recorder import Recorder
 
     delay = _validated_presentation_delay(presentation_delay_s)
+    if encryption_key is None:
+        from openadapt_flow import at_rest
+        from openadapt_flow import sealed_set as _sealed
+
+        # Encrypted by default, like `record` (docs/phi_at_rest.md).
+        if at_rest.seal_new("a recording", recording_dir):
+            encryption_key = _sealed.recording_key()
     _http_json(f"{base_url.rstrip('/')}/api/reset", method="POST", body={})
     entry_url = f"{base_url.rstrip('/')}/{TUTORIAL_ENTRY_QUERY}"
     backend, close = PlaywrightBackend.launch(entry_url, headless=not headed)

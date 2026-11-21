@@ -260,6 +260,7 @@ def record_desktop_capture(
     recorder_factory: Optional[RecorderFactory] = None,
     convert: Optional[ConvertFn] = None,
     stop: Optional[Callable[[], bool]] = None,
+    encryption_key: Optional[str] = None,
     announce: bool = True,
 ) -> Path:
     """Record a live desktop demonstration and convert it to a recording.
@@ -339,8 +340,86 @@ def record_desktop_capture(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    final_dir = out_dir
+    staging: Optional[Path] = None
+    if encryption_key:
+        # The converted recording is sealed into out_dir; the raw session and
+        # the converter's plaintext output live beside it, privately, only
+        # until they are sealed and deleted.
+        import secrets
+
+        staging = out_dir.parent / f".{out_dir.name}.plain-{secrets.token_hex(4)}"
+        staging.mkdir(mode=0o700)
+        out_dir = staging / "recording"
+        out_dir.mkdir()
+        if capture_dir is None:
+            capture_dir = staging / "capture"
     cap_dir = Path(capture_dir) if capture_dir is not None else out_dir / ".capture"
     cap_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        recording = _capture_and_convert(
+            recorder_factory=recorder_factory,
+            convert=convert,
+            announce=announce,
+            task_description=task_description,
+            stop=stop,
+            cap_dir=cap_dir,
+            out_dir=out_dir,
+            params=params,
+            ready_timeout_s=ready_timeout_s,
+            backend_kind=backend_kind,
+            identifier_region=identifier_region,
+            replay_window=replay_window,
+            replay_window_title=replay_window_title,
+            readiness_text=readiness_text,
+            window=window,
+        )
+        if staging is None:
+            return recording
+        _seal_recording(Path(recording), final_dir, encryption_key)  # type: ignore[arg-type]
+        return final_dir
+    finally:
+        if staging is not None:
+            import shutil
+
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _seal_recording(plain: Path, dest: Path, key: str) -> None:
+    """Encrypt a converted recording into ``dest`` (a sealed set)."""
+    from openadapt_flow import sealed_set
+
+    if dest.exists() and any(dest.iterdir()):
+        raise sealed_set.SealedSetError(
+            f"{dest} is not empty; record into a new directory"
+        )
+    with sealed_set.writing(dest, "recording", key) as writer:
+        for path in sorted(p for p in plain.rglob("*") if p.is_file()):
+            rel = path.relative_to(plain).as_posix()
+            if rel.startswith(".capture/"):
+                continue
+            writer.write(rel, path.read_bytes())
+
+
+def _capture_and_convert(
+    *,
+    recorder_factory: Optional[RecorderFactory],
+    convert: Optional[ConvertFn],
+    announce: bool,
+    task_description: str,
+    stop: Optional[Callable[[], bool]],
+    cap_dir: Path,
+    out_dir: Path,
+    params: Optional[dict[str, str]],
+    ready_timeout_s: float,
+    backend_kind: Optional[str],
+    identifier_region: Optional[tuple[int, int, int, int]],
+    replay_window: Optional[str],
+    replay_window_title: Optional[str],
+    readiness_text: Optional[str],
+    window: Optional[dict[str, Optional[str]]],
+) -> Any:
+    """Run the capture session, then convert it into ``out_dir``."""
 
     # Injected factories keep the tested 2-arg ``(task, capture_dir)`` shape;
     # the DEFAULT factory carries the window spec through to the capture

@@ -172,7 +172,21 @@ def run_with_output(
     # Strict mode seals the run of a plaintext bundle too. Otherwise the
     # plaintext run directory is named on stderr and in the ledger
     # (docs/phi_at_rest.md).
-    seal_run = at_rest.strict() or bundle_sealed
+    # By default (docs/phi_at_rest.md) every run directory is sealed too.
+    seal_run = at_rest.strict() or bundle_sealed or at_rest.seals_by_default()
+    downgraded = False
+    if seal_run and not at_rest.strict() and not at_rest.explicit_key():
+        # Under this computer's own key, a run feature whose state can't be
+        # sealed yet runs in plaintext, named on stderr and in the ledger,
+        # rather than being refused. Strict mode and a configured key refuse.
+        held = (
+            "a healed bundle (--save-healed-to)"
+            if save_healed_to is not None
+            else replayer._sealed_run_unsupported(workflow)
+        )
+        if held is not None:
+            at_rest.unsealed_write(f"a run directory with {held}", run_dir)
+            seal_run, downgraded = False, True
     if save_healed_to is not None and seal_run:
         # The healed copy is written as a plaintext bundle: hold it back
         # before anything runs rather than decrypt a sealed bundle to disk.
@@ -183,7 +197,13 @@ def run_with_output(
     run_path = Path(run_dir)
     passphrase = None
     if seal_run and _sealed.active_writer(run_path) is None:
-        passphrase = _sealed.passphrase_for("bundle")
+        from openadapt_flow import crypto as _crypto_keys
+
+        # Under the opt-out an existing key still seals the run of a sealed
+        # bundle: encrypted input never yields plaintext output.
+        passphrase = _sealed.passphrase_for("bundle") or _crypto_keys.resolve_read_key(
+            None
+        )
         if not passphrase:
             raise _sealed.SealedSetKeyError(
                 _sealed.missing_key_message(bundle_path, "bundle")
@@ -218,7 +238,7 @@ def run_with_output(
         if first_local_delivery:
             ownership.enter_context(local_delivery_owner(run_path))
         if passphrase is None:
-            if _sealed.active_writer(run_path) is None:
+            if _sealed.active_writer(run_path) is None and not downgraded:
                 if not at_rest.plaintext_allowed("a run directory"):
                     at_rest.unsealed_write("a run directory", run_dir)
                 if replayer.checkpoint_key is None:

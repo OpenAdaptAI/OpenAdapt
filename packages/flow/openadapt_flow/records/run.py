@@ -109,8 +109,11 @@ def write_sealed_reads(report: Any, receipt_json: Path | str) -> Optional[Path]:
     out = Path(receipt_json).parent / "records.json"
     import json
 
-    out.write_text(
-        json.dumps([r.model_dump(mode="json") for r in sealed], indent=2) + "\n",
-        encoding="utf-8",
+    from openadapt_flow import sealed_set
+
+    # The values read are record data: encrypted when written beside an
+    # encrypted run (a "*" run file), plaintext otherwise.
+    sealed_set.write_text(
+        out, json.dumps([r.model_dump(mode="json") for r in sealed], indent=2) + "\n"
     )
     return out

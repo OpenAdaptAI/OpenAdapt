@@ -17,6 +17,33 @@
 
 ## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
+### Encryption at rest by default
+
+- Recordings (web, the quickstart and tutorial, and desktop once converted),
+  compiled bundles and every run directory (report, step screenshots, crops,
+  frames, evidence, `REPORT.md`) are now encrypted at rest by default, with
+  no setup. Each set has its own data key, wrapped with age (X25519, through
+  `pyrage`) for its recipients: this computer's device key, kept in the OS
+  keychain through `keyring` (macOS Keychain, Windows Credential Manager,
+  Linux Secret Service; a 0600 file with a warning where none works), and
+  optional organization recipients (`OPENADAPT_ORG_RECIPIENTS` or a policy
+  file). `openadapt-flow at-rest status|share|shred` shows the key and
+  recipients, wraps a set for more recipients, and crypto-shreds it.
+- A configured `OPENADAPT_BUNDLE_KEY` or `OPENADAPT_RECORDING_KEY` still wins
+  and keeps the header Flow always wrote. A key file from an earlier version
+  (`~/.openadapt/keys/at-rest.key`) keeps working. Plaintext folders still
+  read.
+- `OPENADAPT_ENCRYPT_AT_REST=0`, or `--no-encrypt` on `record`, `compile`,
+  `run` and `replay`, turns it off with a one-line warning and a ledger line.
+- A missing, locked or replaced keychain entry fails closed with a clear
+  error; Flow never makes a new key over it.
+- Receipts (`seal.json`, `receipt.*`, `public-seal.json`) stay plaintext and
+  are now written for encrypted runs too; their digests are over the
+  plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
+  page and the quickstart read encrypted runs. The receipt page embeds the
+  report, so beside an encrypted run it is logged as a plaintext copy.
+- New core dependencies: `pyrage` and `keyring`.
+
 ### Features
 
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,

@@ -64,13 +64,18 @@ HEADER: Final[str] = ".openadapt-sealed.json"
 FORMAT: Final[str] = "openadapt-flow-sealed-set"
 FORMAT_VERSION: Final[int] = 1
 SEALED_SUFFIX: Final[str] = ".enc"
+#: Format version 3: a random data key wrapped for recipients
+#: (:mod:`openadapt_flow.envelope`).
+ENVELOPE_VERSION: Final[int] = 3
 _LEGACY_DERIVATION_FIELDS: Final[frozenset[str]] = frozenset(
     {"salt", "kdf", "kdf_n", "kdf_r", "kdf_p"}
 )
 
 Kind = Literal["bundle", "recording", "run", "library", "sanitized"]
 Codec = Literal["set", "plain", "external"]
-Classification = Literal["phi", "structural"]
+#: ``export`` is a plaintext file a person asked for (the receipt page),
+#: kept beside an encrypted run and recorded in the plaintext ledger.
+Classification = Literal["phi", "structural", "export"]
 
 _INDEX_AAD: Final[bytes] = b"openadapt-flow/sealed-set/index/"
 _FILE_AAD: Final[bytes] = b"openadapt-flow/sealed-set/file/"
@@ -264,6 +269,24 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind(".attended_action.lease", "structural", "an action lease marker"),
     FileKind("*.lock", "structural", "a lock file"),
+    # The receipt files stay readable without the key: they hold signatures,
+    # outcomes, counts and SHA-256 digests over the plaintext report.json,
+    # never its contents (docs/phi_at_rest.md, "Receipts").
+    FileKind("seal.json", "structural", "the signed run receipt over report.json"),
+    FileKind("seal.anchor.json", "structural", "the receipt's transparency-log proof"),
+    FileKind("seal.tsa.json", "structural", "the receipt's timestamp record"),
+    FileKind("seal.tsr", "structural", "the receipt's RFC 3161 timestamp token"),
+    FileKind("seal.publish.json", "structural", "where the public receipt was posted"),
+    FileKind("public-seal.json", "structural", "the allow-listed public card"),
+    FileKind("receipt.json", "structural", "the allow-listed run receipt"),
+    FileKind("receipt.md", "structural", "the allow-listed run receipt as text"),
+    FileKind("receipt.png", "structural", "the allow-listed run receipt as an image"),
+    FileKind(
+        "seal.html",
+        "export",
+        "the receipt page a person opens; it embeds report.json, so it is a "
+        "plaintext copy of the run's inputs, named on stderr and in the ledger",
+    ),
     FileKind("checkpoints/*", "phi", "durable checkpoints (already encrypted)"),
     FileKind(
         "*",
@@ -365,11 +388,19 @@ def missing_key_message(root: Path | str, kind: str) -> str:
     )
 
 
-def _require_passphrase(root: Path, kind: str, key: Optional[str]) -> str:
-    resolved = passphrase_for(kind, key)
-    if not resolved:
-        raise SealedSetKeyError(missing_key_message(root, kind))
-    return resolved
+def _require_passphrase(root: Path, kind: str, key: Optional[str]) -> Optional[str]:
+    """The passphrase to open ``root`` with. A version 3 set needs none (its
+    recipients may be this computer's device identity), so None is allowed
+    there; an older set without a passphrase refuses here."""
+    resolved = passphrase_for(kind, key) or crypto.resolve_read_key(None)
+    if resolved:
+        return resolved
+    try:
+        if read_header(root).get("version") == ENVELOPE_VERSION:
+            return None
+    except SealedSetError:
+        pass
+    raise SealedSetKeyError(missing_key_message(root, kind))
 
 
 def _file_aad(kind: str, rel: str) -> bytes:
@@ -461,7 +492,7 @@ def read_header(root: Path | str) -> dict[str, object]:
         raise SealedSetError(f"unreadable sealed-set header: {exc}") from exc
     if not isinstance(header, dict) or header.get("format") != FORMAT:
         raise SealedSetError("not an openadapt-flow sealed set")
-    if header.get("version") not in (FORMAT_VERSION, 2):
+    if header.get("version") not in (FORMAT_VERSION, 2, ENVELOPE_VERSION):
         raise SealedSetError(
             f"sealed-set format version {header.get('version')!r} is not supported"
         )
@@ -482,8 +513,60 @@ def _wrapping_aad(header: dict[str, object]) -> bytes:
     ).encode("utf-8")
 
 
-def _data_key(header: dict[str, object], passphrase: str) -> bytes:
+def _passphrase_aad(header: dict[str, object]) -> bytes:
+    return b"openadapt-flow/sealed-set/passphrase-wrap/v3\0" + json.dumps(
+        {name: header[name] for name in ("format", "version", "kind", "data_key_id")},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _envelope_data_key(header: dict[str, object], passphrase: Optional[str]) -> bytes:
+    """A version 3 set's DEK: through this computer's device identity or a
+    reviewer identity, else the legacy passphrase recipient."""
+    from openadapt_flow import envelope
+
+    if header.get("shredded"):
+        raise SealedSetError(
+            "this encrypted set was shredded: its wrapped keys were deleted, so "
+            "nobody can open it"
+        )
+    data_key_id = header.get("data_key_id")
+    if not isinstance(data_key_id, str) or len(data_key_id) != 32:
+        raise SealedSetError("sealed-set envelope metadata is malformed")
+    try:
+        dek = envelope.unwrap(dict(header))
+    except envelope.EnvelopeError as exc:
+        raise SealedSetError(str(exc)) from exc
+    if dek is not None:
+        return dek
+    wrapped = header.get("passphrase")
+    if passphrase and isinstance(wrapped, str):
+        try:
+            dek = crypto.decrypt_bytes(
+                base64.b64decode(wrapped, validate=True),
+                passphrase,
+                aad=_passphrase_aad(header),
+            )
+        except ValueError as exc:
+            raise SealedSetError("sealed-set passphrase wrap is malformed") from exc
+        if len(dek) == 32:
+            return dek
+    raise SealedSetKeyError(
+        "no key on this computer opens this encrypted set: it is wrapped for "
+        + (", ".join(str(r) for r in header.get("recipients") or []) or "no one")  # type: ignore[union-attr]
+        + (" and a passphrase" if isinstance(wrapped, str) else "")
+        + ". Set OPENADAPT_AGE_IDENTITY_FILE to a recipient's identity, or the "
+        "passphrase it was sealed with. Nothing was read."
+    )
+
+
+def _data_key(header: dict[str, object], passphrase: Optional[str]) -> bytes:
     """Unwrapped data keys stay in memory; no fallback key resolution here."""
+    if header.get("version") == ENVELOPE_VERSION:
+        return _envelope_data_key(header, passphrase)
+    if not passphrase:
+        raise SealedSetKeyError("no key is configured to open this sealed set")
     try:
         if header.get("version") == 2:
             wrapped = header.get("wrapped_key")
@@ -519,7 +602,7 @@ def _data_key(header: dict[str, object], passphrase: str) -> bytes:
         raise SealedSetError("sealed-set key header is malformed") from exc
 
 
-def _derive(header: dict[str, object], passphrase: str) -> crypto.SetKey:
+def _derive(header: dict[str, object], passphrase: Optional[str]) -> crypto.SetKey:
     return crypto.SetKey(_data_key(header, passphrase))
 
 
@@ -658,7 +741,7 @@ def _adoptable(root: Path, kind: str, rel: str) -> Optional[Codec]:
     ``plain`` for a structural file the inventory names, ``external`` for
     ciphertext of another keyed store, ``None`` for plaintext (refused)."""
     entry = classify(kind, rel)  # type: ignore[arg-type]
-    if entry is not None and entry.classification == "structural":
+    if entry is not None and entry.classification in ("structural", "export"):
         return "plain"
     if crypto.is_encrypted((root / rel).read_bytes()):
         return "external"
@@ -704,6 +787,70 @@ def _reconcile_run_files(
 # -- writing -----------------------------------------------------------------
 
 
+def _explicit_passphrase(passphrase: Optional[str]) -> bool:
+    """Whether ``passphrase`` is a configured key rather than this computer's
+    local one (which the device recipient replaces in a version 3 set)."""
+    if not passphrase:
+        return False
+    from openadapt_flow import at_rest
+
+    return passphrase != at_rest.existing_key()
+
+
+def _new_envelope(
+    kind: str, passphrase: Optional[str]
+) -> Optional[tuple[dict[str, object], bytes, Optional[str]]]:
+    """A version 3 header for a new set, its DEK and the device identity that
+    MACs it; None for a configured passphrase with no organization recipient
+    (the version 1 header Flow always wrote)."""
+    from openadapt_flow import envelope
+
+    try:
+        org = envelope.org_recipients()
+    except envelope.EnvelopeError as exc:
+        raise SealedSetError(f"Not writing an encrypted {kind}: {exc}") from exc
+    explicit = _explicit_passphrase(passphrase)
+    if explicit and not org:
+        return None
+    device: Optional[str] = None
+    recipients: list[str] = []
+    if not explicit:
+        device = envelope.device_identity(create=True)
+        assert device is not None
+        recipients.append(envelope.device_recipient(device))
+    recipients += [r for r in org if r not in recipients]
+    dek = secrets.token_bytes(32)
+    header: dict[str, object] = {
+        "format": FORMAT,
+        "version": ENVELOPE_VERSION,
+        "kind": kind,
+        "cipher": "AES-256-GCM",
+        "wrap": "age-x25519",
+        "data_key_id": secrets.token_hex(16),
+        "recipients": recipients,
+    }
+    header["age"] = envelope.wrap(dek, header, recipients)
+    if explicit:
+        header["passphrase"] = base64.b64encode(
+            crypto.encrypt_bytes(dek, passphrase, aad=_passphrase_aad(header))
+        ).decode("ascii")
+    return header, dek, device
+
+
+def _own_device(header: dict[str, object]) -> Optional[str]:
+    """This computer's device identity when ``header`` names it."""
+    if header.get("version") != ENVELOPE_VERSION:
+        return None
+    from openadapt_flow import envelope
+
+    device = envelope.device_identity(create=False)
+    if device is None:
+        return None
+    if envelope.device_recipient(device) in (header.get("recipients") or []):  # type: ignore[operator]
+        return device
+    return None
+
+
 class SealedSetWriter:
     """Write a sealed set file by file, ciphertext only, then finalize it.
 
@@ -718,13 +865,14 @@ class SealedSetWriter:
         self,
         root: Path | str,
         kind: Kind,
-        passphrase: str,
+        passphrase: Optional[str],
         *,
         resume: bool = False,
     ) -> None:
         self.root = Path(root)
         self.kind: Kind = kind
         self._codecs: dict[str, Codec] = {}
+        self._device: Optional[str] = None
         self._hashes: dict[str, str] = {}
         self._lines: dict[str, list[bytes]] = {}
         self._lock = threading.RLock()
@@ -732,12 +880,13 @@ class SealedSetWriter:
         with mutation_lock(self.root):
             self._initialize(passphrase, resume=resume)
 
-    def _initialize(self, passphrase: str, *, resume: bool) -> None:
+    def _initialize(self, passphrase: Optional[str], *, resume: bool) -> None:
         kind = self.kind
         if resume and is_sealed(self.root):
             opened = SealedSet.open(self.root, passphrase, expect=kind)
             self._header: dict[str, object] = dict(opened._header)
             self._key = opened._key
+            self._device = _own_device(self._header)
             self._header_revision = _sha256((self.root / HEADER).read_bytes())
             for rel, entry in opened._files.items():
                 self._codecs[rel] = entry["codec"]  # type: ignore[assignment]
@@ -746,6 +895,14 @@ class SealedSetWriter:
         if is_sealed(self.root):
             raise SealedSetError(f"{self.root} is already a sealed set")
         self.root.mkdir(parents=True, exist_ok=True)
+        envelope_header = _new_envelope(kind, passphrase)
+        if envelope_header is not None:
+            self._header, dek, self._device = envelope_header
+            self._key = crypto.SetKey(dek)
+            self._write_header()
+            return
+        if not passphrase:
+            raise SealedSetKeyError(missing_key_message(self.root, kind))
         salt = crypto.SetKey.new_salt()
         self._header = {
             "format": FORMAT,
@@ -760,6 +917,14 @@ class SealedSetWriter:
         self._write_header()
 
     def _write_header(self) -> None:
+        if self._header.get("version") == ENVELOPE_VERSION:
+            from openadapt_flow import envelope
+
+            self._header.pop("device_mac", None)
+            if self._device is not None:
+                self._header["device_mac"] = envelope.device_mac(
+                    self._header, self._device
+                )
         raw = json.dumps(self._header, indent=2, sort_keys=True).encode("utf-8")
         _atomic_write(self.root / HEADER, raw)
         self._header_revision = _sha256(raw)
@@ -794,7 +959,7 @@ class SealedSetWriter:
         entry = self._classified(rel)
         with self._mutation():
             old = self._codecs.get(rel)
-            if entry.classification == "structural":
+            if entry.classification in ("structural", "export"):
                 codec: Codec = "plain"
                 blob = data
             else:
@@ -1189,8 +1354,121 @@ def require_readable(path: Path | str, what: str) -> None:
         )
 
 
+# -- recipients and shredding --------------------------------------------------
+
+
+def _replace_header(root: Path, header: dict[str, object]) -> None:
+    raw = json.dumps(header, indent=2, sort_keys=True).encode("utf-8")
+    path = root / HEADER
+    tmp = path.with_name(f".{HEADER}.{secrets.token_hex(6)}.tmp")
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(raw)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+    if os.name == "posix":
+        fd = os.open(root, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+def recipients_of(root: Path | str) -> list[str]:
+    """The public recipients a version 3 set is wrapped for (no key needed)."""
+    header = read_header(root)
+    listed = (
+        header.get("recipients") if header.get("version") == ENVELOPE_VERSION else []
+    )
+    return [str(r) for r in listed or []]  # type: ignore[union-attr]
+
+
+def add_recipients(root: Path | str, recipients: list[str]) -> list[str]:
+    """Wrap a version 3 set's data key for more recipients (a share, or an
+    organization recipient added later). No file is re-encrypted. Run it on
+    the computer that wrote the set, so its device MAC stays valid."""
+    from openadapt_flow import envelope
+
+    base = Path(_abs(root))
+    with mutation_lock(base):
+        header = read_header(base)
+        if header.get("version") != ENVELOPE_VERSION:
+            raise SealedSetError(
+                f"{base} is an older encrypted set (version "
+                f"{header.get('version')}); only version 3 sets have recipients"
+            )
+        SealedSet.open(base, None)  # the set must verify before it is shared
+        dek = _data_key(header, None)
+        wanted = list(header.get("recipients") or [])  # type: ignore[call-overload]
+        for item in recipients:
+            text = str(envelope.parse_recipient(item))
+            if text not in wanted:
+                wanted.append(text)
+        header["recipients"] = wanted
+        header["age"] = envelope.wrap(dek, header, wanted)
+        device = _own_device(header)
+        header.pop("device_mac", None)
+        if device is not None:
+            header["device_mac"] = envelope.device_mac(header, device)
+        _replace_header(base, header)
+        return wanted
+
+
+def shred(root: Path | str) -> list[str]:
+    """Crypto-shred a sealed set: delete every wrapped copy of its data key,
+    and the durable checkpoints and other stores' ciphertext inside it.
+
+    The set's own files stay on disk as ciphertext that no key opens. Returns
+    the set-relative paths of the other stores' files that were deleted. This
+    can't be undone; there is no recovery copy anywhere.
+    """
+    base = Path(_abs(root))
+    removed: list[str] = []
+    with mutation_lock(base):
+        header = read_header(base)
+        for name in (
+            "age",
+            "passphrase",
+            "wrapped_key",
+            "salt",
+            "kdf",
+            "kdf_n",
+            "kdf_r",
+            "kdf_p",
+            "device_mac",
+        ):
+            header.pop(name, None)
+        header["shredded"] = True
+        if header.get("version") != ENVELOPE_VERSION:
+            # Without its salt (v1) or wrapped key (v2) the DEK can't be
+            # derived; record the set as shredded the same way.
+            header["version"] = ENVELOPE_VERSION
+            header.setdefault("data_key_id", secrets.token_hex(16))
+        _replace_header(base, header)
+        for rel in _disk_files(base):
+            path = base / rel
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            if data[: len(crypto.SET_FILE_MAGIC)] == crypto.SET_FILE_MAGIC:
+                continue  # the set's own ciphertext, now unopenable
+            if crypto.is_encrypted(data):
+                path.unlink()
+                removed.append(rel)
+    return removed
+
+
 __all__ = [
     "BUNDLE_FILES",
+    "ENVELOPE_VERSION",
+    "add_recipients",
+    "recipients_of",
+    "shred",
     "HEADER",
     "LIBRARY_FILES",
     "RECORDING_ENV_KEY",

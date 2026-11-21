@@ -55,6 +55,13 @@ dependencies = [
     # out of the box in a regulated/PHI deployment; the audited AEAD substrate
     # for docs/phi_at_rest.md. Imported lazily, only on the encryption path.
     "cryptography>=42.0",
+    # Encryption at rest is on by default (docs/phi_at_rest.md). Each encrypted
+    # recording, bundle or run has its own data key, wrapped with age (X25519)
+    # for its recipients through pyrage (MIT, Rust bindings to the audited rage
+    # crate), and this computer's device key lives in the OS keychain through
+    # keyring (MIT). Both are imported lazily, only on the encryption path.
+    "pyrage>=1.2,<2",
+    "keyring>=24",
     # The portable contracts (request, result and receipt models). They live
     # in openadapt-types, which depends only on pydantic, so a consumer of the
     # models never installs this package's vision stack; openadapt_flow.contracts

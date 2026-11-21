@@ -284,9 +284,16 @@ def _verified_private_seal(run_dir: Path) -> tuple[LocalSealV1, dict[str, Any]]:
     _check_signature(seal)
     for name in ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if not path.is_file():
+        from openadapt_flow.offline_seal import _report_bytes, _report_is_file
+
+        if not _report_is_file(path):
             continue
-        raw = path.read_bytes()
+        # The card's report_sha256 is the receipt's subject: the digest of the
+        # plaintext report, decrypted in memory when the run is encrypted.
+        try:
+            raw = _report_bytes(path)
+        except OSError as exc:
+            raise PublicSealError("report_unreadable", str(path)) from exc
         if hashlib.sha256(raw).hexdigest() != seal.subject_sha256:
             continue
         try:

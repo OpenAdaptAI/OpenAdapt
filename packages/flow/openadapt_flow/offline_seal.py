@@ -403,10 +403,14 @@ def seal_run(
     credential (:mod:`openadapt_flow.report_redaction`), unless
     ``allow_unredacted``: a Seal makes a report shareable.
     """
+    from openadapt_flow import sealed_set
+
     run_dir = Path(run_dir)
     report_path = run_dir / "report.json"
     try:
-        raw = report_path.read_bytes()
+        # The receipt covers the plaintext report bytes, in an encrypted run
+        # directory too (docs/phi_at_rest.md, "Receipts").
+        raw = sealed_set.read_bytes(report_path)
         report = loads_strict(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise LocalSealError("report_unreadable", str(report_path)) from exc
@@ -473,11 +477,7 @@ def seal_after_run(
         return None
     from openadapt_flow import sealed_set
 
-    if sealed_set.is_sealed(Path(run_dir)):
-        # The offline Seal rewrites report.json in place; that is not built
-        # for an encrypted run directory yet, so say so instead of skipping.
-        return "offline seal not written: the run directory is encrypted at rest"
-    if not (Path(run_dir) / "report.json").is_file():
+    if not sealed_set.is_file(Path(run_dir) / "report.json"):
         return None
     try:
         home = seal_home(env)
@@ -611,7 +611,8 @@ def _check_authorization(
     from openadapt_flow.run_authorization import check_run
 
     try:
-        report = loads_strict(report_path.read_bytes())  # the bytes the Seal covers
+        # The bytes the receipt covers: the plaintext, decrypted in memory.
+        report = loads_strict(_report_bytes(report_path))
     except (OSError, ValueError):
         return dataclasses.replace(found, ok=False, reason="malformed")
     problem = check_run(LocalSealV1.model_validate(seal).wire(), report, auth)
@@ -640,6 +641,26 @@ def _started_epoch(value: Any) -> Optional[int]:
     if when.tzinfo is None:
         return None
     return int(when.timestamp())
+
+
+def _report_bytes(path: Path) -> bytes:
+    """A run report's plaintext bytes, decrypted in memory when the run
+    directory is encrypted."""
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.read_bytes(path)
+    except sealed_set.SealedSetError as exc:
+        raise OSError(str(exc)) from exc
+
+
+def _report_is_file(path: Path) -> bool:
+    from openadapt_flow import sealed_set
+
+    try:
+        return sealed_set.is_file(path)
+    except sealed_set.SealedSetError:
+        return path.is_file()
 
 
 def verify_run(
@@ -678,9 +699,9 @@ def verify_run(
     strict = strict or require_anchor
     for name in ("report.json",) if strict else ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if not path.is_file():
+        if not _report_is_file(path):
             continue
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        digest = hashlib.sha256(_report_bytes(path)).hexdigest()
         result = verify_local_seal(seal, digest, registry)
         if result.reason == "subject_mismatch":
             continue

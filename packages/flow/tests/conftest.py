@@ -75,6 +75,13 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST": "test suite: synthetic data",
         "OPENADAPT_FLOW_AT_REST_HOME": str(root / ".at-rest-home"),
         "OPENADAPT_FLOW_AT_REST": None,
+        # The device key goes to a file in the isolated home, never to the
+        # OS keychain (no dialog, no write to the person's login keychain).
+        "OPENADAPT_FLOW_KEY_STORE": "file",
+        "OPENADAPT_ENCRYPT_AT_REST": None,
+        "OPENADAPT_ORG_RECIPIENTS": None,
+        "OPENADAPT_POLICY_FILE": str(root / ".no-policy.json"),
+        "OPENADAPT_AGE_IDENTITY_FILE": None,
     }
 
 
