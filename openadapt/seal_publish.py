@@ -405,6 +405,10 @@ def upload(
         "delete_token": token,
     }
     _write_record(run_dir, record)
+    # Noted next to the Seal key, so `openadapt login` can claim it later.
+    from openadapt.seal_claim import remember
+
+    remember(run_dir, record, doc, origin)
     return record
 
 
