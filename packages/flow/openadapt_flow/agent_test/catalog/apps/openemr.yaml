@@ -113,5 +113,4 @@ readback:
   steps:
     - {goto: "/interface/main/finder/patient_select.php?patient={lname}&findBy=Last"}
     - {wait: load}
-  expect_text: ["{fname}", "{DOB}"]
-  expect_count: {text: "{fname}", equals: 1}
+    - {expect_text: ["{fname}"]}

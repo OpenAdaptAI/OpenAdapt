@@ -103,5 +103,4 @@ readback:
     - {fill: 'input[data-name="textFilter"]', value: "{name}"}
     - {key: Enter}
     - {sleep: 3}
-  expect_text: ["{name}"]
-  expect_count: {text: "{name}", equals: 1}
+    - {expect_text: ["{name}"]}

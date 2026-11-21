@@ -104,5 +104,9 @@ readback:
   steps:
     - {goto: "/contact/list.php?search_lastname={lastname}&search_firstname={firstname}"}
     - {wait: load}
-  expect_text: ["{email}", "{phone}", "{poste}"]
-  expect_count: {text: "{email}", equals: 1}
+    # Exactly one contact with this name.
+    - {expect_regex: 'List\((\d+)\)', equals: 1}
+    - {click: 'table.liste a[href*="contact/card.php?id="]'}
+    - {wait: load}
+    - {expect_text: ["{email}", "{poste}"]}
+    - {expect_digits: ["{phone}"]}

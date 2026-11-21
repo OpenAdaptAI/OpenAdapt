@@ -38,16 +38,37 @@ def main(dirs: list[str]) -> None:
             ev = out / "evidence" / f"{r['scenario']}-r{r['rep']}"
             _, before = table(ev / "table_before_raw.tsv")
             head, after = table(ev / "table_after_raw.tsv")
-            print(f"=== {out.name} {r['scenario']} r{r['rep']} fault={r['fault']} claim={r['claim']['status']}")
-            print(f"    task: {json.dumps({k: v for k, v in r.get('task', {}).items()})}" if r.get("task") else "", end="")
+            print(
+                f"=== {out.name} {r['scenario']} r{r['rep']} fault={r['fault']} claim={r['claim']['status']}"
+            )
+            print(
+                f"    task: {json.dumps({k: v for k, v in r.get('task', {}).items()})}"
+                if r.get("task")
+                else "",
+                end="",
+            )
             for k in after:
                 if k not in before:
-                    print(f"    NEW {k}: " + " | ".join(f"{c}={after[k][c]}" for c in head if after[k][c] not in ("", "NULL", "0"))[:900])
+                    print(
+                        f"    NEW {k}: "
+                        + " | ".join(
+                            f"{c}={after[k][c]}"
+                            for c in head
+                            if after[k][c] not in ("", "NULL", "0")
+                        )[:900]
+                    )
             for k in before:
                 if k not in after:
-                    print(f"    GONE {k}: " + " | ".join(f"{c}={before[k][c]}" for c in head[:12]))
+                    print(
+                        f"    GONE {k}: "
+                        + " | ".join(f"{c}={before[k][c]}" for c in head[:12])
+                    )
                 elif before[k] != after[k]:
-                    diff = [f"{c}: {before[k].get(c)!r} -> {after[k].get(c)!r}" for c in head if before[k].get(c) != after[k].get(c)]
+                    diff = [
+                        f"{c}: {before[k].get(c)!r} -> {after[k].get(c)!r}"
+                        for c in head
+                        if before[k].get(c) != after[k].get(c)
+                    ]
                     print(f"    CHANGED {k}: " + "; ".join(diff)[:600])
             print(f"    agent said: {r['claim'].get('line', '')[:200]}")
 

@@ -1,0 +1,51 @@
+name: agent-test-lab-gate
+
+# The lab proof: the `openadapt test` Action, run by `act` on a self-hosted
+# runner against an app stack already running on the lab host. Not a
+# GitHub workflow (it lives outside .github/workflows); see README.md here.
+#
+#   act workflow_dispatch -W packages/flow/benchmark/agent_test_proof/lab-gate.yml \
+#     -P ubuntu-latest=-self-hosted --input agent=claude-cu --input baseline=... \
+#     --input app_host=<lab host> --input docker='<docker command>' -s ANTHROPIC_API_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      app: {default: dolibarr}
+      agent: {default: scripted}
+      model: {default: ""}
+      instructions: {default: ""}
+      baseline: {default: ""}
+      repetitions: {default: "1"}
+      out: {default: lab-out}
+      port: {default: "9680"}
+      app_host: {required: true}
+      docker: {required: true}
+      spend_cap_usd: {default: "5"}
+
+jobs:
+  agent-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Agent test
+        uses: ./.github/actions/openadapt-test
+        with:
+          app: ${{ inputs.app }}
+          agent: ${{ inputs.agent }}
+          model: ${{ inputs.model }}
+          instructions: ${{ inputs.instructions }}
+          baseline: ${{ inputs.baseline }}
+          repetitions: ${{ inputs.repetitions }}
+          out: ${{ inputs.out }}
+          port: ${{ inputs.port }}
+          start-app: "false"
+          app-host: ${{ inputs.app_host }}
+          docker: ${{ inputs.docker }}
+          spend-cap-usd: ${{ inputs.spend_cap_usd }}
+          install: none
+          upload-artifact: "false"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENADAPT_TEST_TOTAL_CAP_USD: "40"

@@ -13,7 +13,9 @@ CI pipeline a regression to catch without a model.
 
 from __future__ import annotations
 
+import re
 import time
+from typing import Any
 
 from openadapt_flow.agent_test.agents.common import AgentContext, AgentResult
 from openadapt_flow.agent_test.browser import run_steps
@@ -35,29 +37,51 @@ def run_scripted(ctx: AgentContext, readback: bool) -> AgentResult:
         )
     if not readback:
         return AgentResult(f"RESULT: DONE {page.url}")
-    rb = app.readback
-    if not rb:
+    steps = app.readback.get("steps") or []
+    if not steps:
         return AgentResult("RESULT: NOT DONE the app pack has no readback")
-    time.sleep(float(rb.get("settle_s", 2)))
+    time.sleep(float(app.readback.get("settle_s", 2)))
     try:
-        run_steps(page, ctx.base_url, rb.get("steps") or [], ctx.values)
-        text = page.inner_text("body")
+        problem = check_readback(page, ctx.base_url, steps, ctx.values)
     except Exception as exc:  # noqa: BLE001
         return AgentResult(f"RESULT: NOT DONE the read-back failed: {exc}"[:300])
-    low = text.casefold()
-    missing = [
-        t
-        for t in fill(rb.get("expect_text") or [], ctx.values)
-        if str(t).casefold() not in low
-    ]
-    if missing:
-        return AgentResult(f"RESULT: NOT DONE read-back is missing {missing}")
-    cnt = rb.get("expect_count")
-    if cnt:
-        needle = str(fill(cnt["text"], ctx.values)).casefold()
-        n = low.count(needle)
-        if n != int(cnt["equals"]):
-            return AgentResult(
-                f"RESULT: NOT DONE read-back found {n} matching records, not {cnt['equals']}"
-            )
+    if problem:
+        return AgentResult(f"RESULT: NOT DONE read-back: {problem}"[:300])
     return AgentResult(f"RESULT: DONE read back {page.url}")
+
+
+def check_readback(
+    page: Any, base: str, steps: list[dict[str, Any]], values: dict[str, Any]
+) -> str:
+    """Run read-back steps; the first failed check, or "" when every check holds.
+
+    Check steps: ``expect_text`` (each string on the page, ignoring case),
+    ``expect_digits`` (each value's digits in the page's digits, for phones
+    an app formats), ``expect_regex`` with ``equals`` (the pattern's first
+    group, such as a list's row count).
+    """
+
+    for raw in steps:
+        st = fill(raw, values)
+        if "expect_text" in st:
+            low = page.inner_text("body").casefold()
+            missing = [t for t in st["expect_text"] if str(t).casefold() not in low]
+            if missing:
+                return f"missing {missing}"
+        elif "expect_digits" in st:
+            digits = re.sub(r"\D", "", page.inner_text("body"))
+            missing = [
+                t
+                for t in st["expect_digits"]
+                if re.sub(r"\D", "", str(t)) not in digits
+            ]
+            if missing:
+                return f"missing {missing}"
+        elif "expect_regex" in st:
+            m = re.search(st["expect_regex"], page.inner_text("body"))
+            got = m.group(1) if m else None
+            if got is None or str(got) != str(st["equals"]):
+                return f"{st['expect_regex']} gave {got}, not {st['equals']}"
+        else:
+            run_steps(page, base, [st], {})
+    return ""
