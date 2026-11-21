@@ -68,7 +68,10 @@ def main():
                 elif st[0] == "check": loc.check()
                 elif st[0] == "click": loc.click()
                 elif st[0] == "press": loc.press(st[3])
-                page.wait_for_timeout(700)
+                try:
+                    page.wait_for_timeout(700)
+                except Exception:
+                    page = main; main.wait_for_timeout(700)
             dump(page, "end")
         finally:
             server.shutdown(); b.close()
