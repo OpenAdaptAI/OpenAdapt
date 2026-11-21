@@ -676,6 +676,25 @@ class TestSiblingChromeDerivation:
         hashed = verify_template_identity(tmpl, heading_band)
         assert hashed.status == "abstain"
 
+    def test_lowercase_entity_name_with_date_verifies_without_sibling_rows(self):
+        from openadapt_flow.runtime.identity_template import (
+            _punctuation_metadata_complete,
+            build_identity_template,
+            verify_template_identity,
+        )
+
+        # Lowercase entity names have bearing=False for coverage but still
+        # carry name evidence when no sibling-row exclusion applies.
+        band = "acme 2026-08-15"
+        assert verify_target_identity(band, band).status == "verified"
+
+        tmpl = build_identity_template(band)
+        assert tmpl is not None
+        assert tmpl.sibling_generic_hashes == []
+        assert "sibling_generic_hashes" not in tmpl.model_dump()
+        assert _punctuation_metadata_complete(tmpl) is True
+        assert verify_template_identity(tmpl, band).status == "verified"
+
     def test_derive_sibling_chrome_words_requires_multiple_rows(self):
         from openadapt_flow.runtime.identity import derive_sibling_chrome_words
 

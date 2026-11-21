@@ -253,6 +253,9 @@ def _populate_band(
         )
         for raw, token in zip(raw_words, words)
     ]
+    tmpl.sibling_generic_hashes = (
+        sorted(_hash(salt, word) for word in extra_generic) if extra_generic else []
+    )
     tmpl.punctuation_policy = _PUNCTUATION_POLICY
     tmpl.punctuation_indices = [
         i for i, t in enumerate(words) if _id._punctuation_token(t)
@@ -791,10 +794,11 @@ def _band_match_template_normalized(
         if not explained[j] and _id._name_shaped(raw_tok, obs[j])
     )
 
+    extra_generic_keys = frozenset(tmpl.sibling_generic_hashes)
     evidence_short = (
         (punctuation_witness and not _template_punctuation_agrees(tmpl, obs))
         or _id.identity_evidence_shortfall(
-            [_template_identity_kind(t, canon) for t in toks],
+            [_template_identity_kind(t, canon, extra_generic_keys) for t in toks],
             matched,
             raw_matched,
             # No plaintext to inspect: every token counts as look-alike, the
@@ -888,13 +892,16 @@ def _noise_band_match_template(
     )
 
 
-def _template_identity_kind(t, canon) -> Optional[_id.IdentityKind]:
+def _template_identity_kind(
+    t, canon, extra_generic_keys: frozenset[str] = frozenset()
+) -> Optional[_id.IdentityKind]:
     """Key-space port of :func:`identity.identity_kind` from shape flags.
 
     A template stores no date flag, so a date is a token with a digit that is
     neither identifier-shaped nor alphabetic and is at least as long as the
-    shortest written date (``1/1/80``). Generic column words are excluded from
-    names by hashing them with the bundle salt, as the plaintext path does.
+    shortest written date (``1/1/80``). Generic column words (and any opt-in
+    sibling-derived chrome hashes) are excluded from names by hashing them with
+    the bundle salt, as the plaintext path does.
     """
     if t.digit and not t.idsh and not t.alpha and t.n >= 6:
         return "date"
@@ -904,8 +911,8 @@ def _template_identity_kind(t, canon) -> Optional[_id.IdentityKind]:
         t.alpha
         and t.name
         and t.n >= _id.ID_CARRY_NAME_MIN
-        and t.bearing is not False
         and t.c not in {canon(w) for w in _id._GENERIC_IDENTITY_CANON}
+        and t.c not in extra_generic_keys
     ):
         return "name"
     return None

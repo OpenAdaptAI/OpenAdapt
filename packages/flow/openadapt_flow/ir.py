@@ -370,6 +370,14 @@ class IdentityTemplate(BaseModel):
         ),
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
+    sibling_generic_hashes: list[str] = Field(
+        default_factory=list,
+        exclude_if=lambda value: not value,
+        description=(
+            "Salted hashes of OCR-canonical non-identifying chrome tokens "
+            "derived from sibling rows (opt-in). Omitted when empty."
+        ),
+    )
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
         default=None,
