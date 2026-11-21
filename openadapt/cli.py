@@ -1709,6 +1709,31 @@ def verify_serve(contracts: str, state: Optional[str]) -> None:
     sys.exit(int(agent_main(argv) or 0))
 
 
+@verify.command(
+    "draft",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def verify_draft(ctx: click.Context) -> None:
+    """Draft a write contract with a model; admit it only if OpenAdapt
+    qualifies it on a sandbox.
+
+    `openadapt verify draft --describe openapi.json --trace demo.har
+    --task task.yaml --sandbox sandbox.yaml --out DIR`. The model (key from
+    ANTHROPIC_API_KEY) works at setup only; an admitted contract runs with no
+    model calls. `--help` lists every option.
+    """
+    _require_supported_python()
+    try:
+        from openadapt_flow.verify_draft.draft import main as draft_main
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    sys.exit(int(draft_main(list(ctx.args)) or 0))
+
+
 def _protected_ledger_requested() -> bool:
     name = "OPENADAPT_LEDGER_AUTHORITY_CONFIG"
     if name not in os.environ:

@@ -1,0 +1,34 @@
+{
+ "admitted": false,
+ "rounds": 3,
+ "person_decisions": 0,
+ "seconds": 240.9,
+ "model_usd": 0.4366,
+ "reason": "refused after 3 round(s): [FAILED] clean clean-1: the write with payload 1. Expected confirmed, got REFUTED. Reasons: lost update: the target moved more than one version in the window, and only one save is the agent's\n[FAILED] stopped after the first clean write was not confirmed: fix that first (no fault was planted this round)",
+ "contract": null,
+ "questions": [],
+ "rounds_detail": [
+  {
+   "admitted": false,
+   "cases": 17,
+   "passed": 16,
+   "failed": [
+    "lost_update"
+   ],
+   "problems": [],
+   "attribution_problems": []
+  },
+  {
+   "admitted": false,
+   "cases": 1,
+   "passed": 0,
+   "failed": [
+    "clean-1"
+   ],
+   "problems": [
+    "stopped after the first clean write was not confirmed: fix that first (no fault was planted this round)"
+   ],
+   "attribution_problems": []
+  }
+ ]
+}
