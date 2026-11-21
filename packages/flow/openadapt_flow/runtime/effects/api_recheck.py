@@ -38,8 +38,8 @@ comparing clocks: Medplum's server clock ran about 1.5 s off the client's.
 The recheck can only keep or lower the first result. It never turns a first
 result that wasn't verified into ``VERIFIED``.
 
-Sources are adapters. :class:`VerifierReadback` wraps any verifier adapter on
-main (REST, FHIR, GraphQL, SQL), so the read-back half works with what exists
+Sources are adapters. :class:`VerifierReadback` wraps a REST, FHIR or GraphQL
+verifier on main, so the read-back half works with what exists
 today. The log half is the :class:`ActivityLog` protocol; a reader of a
 system's audit or event log implements it with a thin wrapper. This module
 imports nothing from ``tx`` or ``txplan``.
@@ -91,6 +91,8 @@ _ALL_OPS: tuple[Op, ...] = ("create", "update", "delete")
 
 #: The coordinator's basis names this module can produce.
 BASIS_API = "system_api"
+#: The verifier substrates whose read goes through the system's API.
+API_SUBSTRATES = frozenset({"rest", "fhir", "graphql"})
 BASIS_LOG = "activity_log"
 #: Always listed: a read of the record and the log can't see these.
 ALWAYS_NOT_COVERED: tuple[str, ...] = (
@@ -491,7 +493,10 @@ def recheck(
                 "a change to another actor",
             )
         if not seen.found:
-            return result("REFUTED", "the record is gone since the first read")
+            return result(
+                "REFUTED",
+                "no single record shows the declared values since the first read",
+            )
         return result(
             "REFUTED", "the record no longer shows the values the first read showed"
         )
@@ -554,7 +559,13 @@ def _dotted(record: Any, path: str) -> Any:
 
 
 class VerifierReadback:
-    """A :class:`RecordSource` over any verifier adapter on main.
+    """A :class:`RecordSource` over a REST, FHIR or GraphQL verifier on main.
+
+    Only an independent, system-of-record verifier is accepted: a screen
+    read-back or a database read is not an API read-back, so it can't carry
+    the ``system_api`` basis. Rebuilding this source at recheck time needs
+    the pre-write ``EffectState``, which holds the records as read; only the
+    recheck state is free of values.
 
     Each read runs ``verifier.verify(effect, before)`` against the pre-write
     baseline, as the first check did. CONFIRMED with exactly one matched
@@ -585,6 +596,18 @@ class VerifierReadback:
         self.version_path = version_path
         self.ignore = tuple(ignore)
         self.context = context
+        substrate = str(getattr(verifier, "substrate", ""))
+        if substrate not in API_SUBSTRATES:
+            raise ValueError(
+                f"a {substrate or 'unnamed'} verifier is not an API read-back"
+            )
+        tier_of = getattr(verifier, "verification_tier_for", None)
+        tier = tier_of(effect) if callable(tier_of) else verifier.verification_tier
+        if (
+            getattr(verifier, "independent_system_of_record", False) is not True
+            or int(tier) != 1
+        ):
+            raise ValueError("the verifier does not read the system of record")
 
     def read(self) -> Readback:
         try:
@@ -602,7 +625,11 @@ class VerifierReadback:
         rec = records[0]
         if self.version_path:
             raw = _dotted(rec, self.version_path)
-            version = None if raw is None else str(raw)
+            if raw is None:
+                # A named version that isn't there would silently drop the
+                # check that catches A to B to A.
+                raise ReadFailed(f"the record has no {self.version_path}")
+            version = str(raw)
         else:
             trimmed = json.loads(_canonical(rec))
             for path in self.ignore:
@@ -623,6 +650,7 @@ class VerifierReadback:
 __all__ = [
     "ALWAYS_NOT_COVERED",
     "ActivityLog",
+    "API_SUBSTRATES",
     "BASIS_API",
     "BASIS_LOG",
     "LogEntry",

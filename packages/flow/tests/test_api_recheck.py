@@ -157,7 +157,7 @@ def test_record_gone_refutes() -> None:
     rec, state, sched = _setup()
     rec.found = False
     out = _run(state, rec, sched)
-    assert out.outcome == "REFUTED" and "gone" in out.reason
+    assert out.outcome == "REFUTED" and "no single record" in out.reason
 
 
 def test_changed_value_by_another_actor_is_not_checked() -> None:
@@ -417,3 +417,66 @@ def test_rest_readback_over_http_catches_an_undeclared_field_change() -> None:
         assert out.outcome == "NOT_CHECKED", out.reason
     finally:
         stop()
+
+
+def test_state_survives_a_json_round_trip() -> None:
+    log = Log()
+    rec, state, sched = _setup(log)
+    stored = json.loads(json.dumps(state))
+    assert _run(stored, rec, sched, log).outcome == "VERIFIED"
+
+
+class _Verdict:
+    def __init__(self, status: str, records: list[dict[str, Any]]) -> None:
+        self.verdict = type("V", (), {"value": status})()
+        self.matched_records = records
+        self.reason = ""
+
+
+class _Verifier:
+    substrate = "fhir"
+    verification_tier = 1
+    independent_system_of_record = True
+
+    def __init__(self) -> None:
+        self.record: dict[str, Any] = {"id": "7", "meta": {"versionId": "1"}}
+
+    def verify(self, effect: Any, before: Any, context: Any = None) -> _Verdict:
+        return _Verdict("confirmed", [dict(self.record)])
+
+
+class _Effect:
+    match = {"id": "7"}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"independent_system_of_record": False},
+        {"verification_tier": 2},
+        {"substrate": "sql"},
+        {"substrate": "onscreen"},
+    ],
+)
+def test_only_an_independent_api_verifier_is_a_readback(change: dict[str, Any]) -> None:
+    verifier = _Verifier()
+    for name, value in change.items():
+        setattr(verifier, name, value)
+    with pytest.raises(ValueError):
+        VerifierReadback(verifier, _Effect(), None)
+
+
+def test_screen_tier_for_this_effect_is_refused() -> None:
+    verifier = _Verifier()
+    verifier.verification_tier_for = lambda effect: 4  # type: ignore[attr-defined]
+    with pytest.raises(ValueError):
+        VerifierReadback(verifier, _Effect(), None)
+
+
+def test_missing_named_version_fails_the_read() -> None:
+    verifier = _Verifier()
+    source = VerifierReadback(verifier, _Effect(), None, version_path="meta.versionId")
+    assert source.read().version == "1"
+    verifier.record = {"id": "7"}
+    with pytest.raises(ReadFailed):
+        source.read()
