@@ -37,6 +37,9 @@ from typing import Any, Mapping, Optional, Sequence
 from openadapt_flow.handoffs.ledger import Handoff, HandoffLedger
 
 KIND = "counterparty_confirmation"
+#: A line commits to at most 34 values: counterparty, observed_at, reason
+#: and up to 31 fields.
+_MAX_FIELDS = 31
 
 _READ_METHOD = {
     "x12_999": "acknowledgment_message",
@@ -108,14 +111,14 @@ def to_line(handoff: Handoff) -> ConfirmationLine:
     field_ids: list[str] = []
     differing = 0
     if last is not None and last.strength == "field_readback" and state != "sent":
-        for index, field_id in enumerate(sorted(handoff.fields)[:32]):
+        for index, field_id in enumerate(sorted(handoff.fields)[:_MAX_FIELDS]):
             seen = last.observed_digests.get(field_id) or handoff.fields[field_id].digest
             if seen == "missing":
                 seen = hashlib.sha256(b"missing").hexdigest()
             differs = field_id in last.differing_fields
             differing += differs
             values[f"field.{index}"] = (
-                f"{field_id[:32]}:{seen}" + (":differs" if differs else "")
+                f"{field_id}:{seen}" + (":differs" if differs else "")
             )
             field_ids.append(field_id)
     line = {

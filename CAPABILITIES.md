@@ -196,6 +196,10 @@ improvising or retrying when something is off.
 | Learn the record check from the recording, when the person looks the record up after saving | Released ([#1290](https://github.com/OpenAdaptAI/OpenAdapt/pull/1290)) | Synthetic | `record --verify` |
 | A record check's duplicate key can be several fields together, such as last name, first name and birth date: the check fails when more than one record carries all of them, counting records that were already there | Released ([#1393](https://github.com/OpenAdaptAI/OpenAdapt/issues/1393)) | Synthetic (OpenEMR-shaped patient rows) | verify.yaml `record.duplicate_key: [lname, fname, DOB]`, `confirm_params(idempotency_key=[...])`, `Effect.composite_key` |
 | Checked later: a save confirmed by a later report or acknowledgment, never counted as done until then | Released ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)) | Synthetic | `SAVED_AWAITING_CHECK` |
+| Counterparty confirmations for payer claims: each claim with a deferred check is a handoff, and the payer's 999 or 277CA moves it to `acknowledged` (received or accepted, status only) or back to `sent` with a reason (rejected, no answer by the deadline, two claims on one key). The deferred check settles exactly as before | In a pull request | Synthetic (X12 999 and 277CA fixtures, unit tests) | `deferred settle`, `openadapt_flow/handoffs/payer.py`, [HANDOFFS.md](packages/flow/docs/HANDOFFS.md) |
+| Counterparty confirmations by read-back: the sender records what it sent (as digests), then reads the other party's system by a profile (data) and reports `recorded_as_intended`, `recorded_differently` with the differing field ids, or `sent` with a reason (not found, matched twice, unreachable). One comparator for every producer | In a pull request | Real app: a second, synthetic OpenEMR 7.0.3 as the receiving clinic, written through its REST API and read back through FHIR with a read-only token (RESULTS_LINK) | `openadapt_flow/handoffs/`, [HANDOFFS.md](packages/flow/docs/HANDOFFS.md) |
+| Open handoffs by state, with who still needs to follow up | In a pull request | Unit tests | `openadapt handoff list` |
+| Receipt lines for counterparty confirmations (`predicate.confirmations[]` in `record/run/v1`), committed and checked against the receipt schema | In a pull request | Unit tests: a statement with six confirmations signs and verifies | `openadapt_flow/handoffs/line.py` |
 | Keep the server's own answer to a save as lower-level evidence on the receipt | Released ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | Released ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
 | Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | Released ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
@@ -417,6 +421,7 @@ A test fails when a command has no file or this list is out of date.
 - `console`
 - `deferred`
 - `explain`
+- `handoff`: Show open handoffs to other parties (claims, referrals) by state, and who still needs to follow up. It reads local ledgers only. See `packages/flow/docs/HANDOFFS.md`.
 - `item-approval`
 - `replay`
 - `resume`

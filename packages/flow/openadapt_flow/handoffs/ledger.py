@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -69,7 +70,7 @@ ATTENTION: frozenset[str] = frozenset(
 )
 Status = Literal["needs_follow_up", "waiting", "done"]
 
-_FIELD_ID = r"^[a-z][a-z0-9_]{0,47}$"
+_FIELD_ID = re.compile(r"[a-z][a-z0-9_]{0,31}")
 _DIGEST = r"^[0-9a-f]{64}$"
 _LABEL_MAX = 80
 _SALT_FILE = ".salt"
@@ -293,7 +294,14 @@ class HandoffLedger:
         if follow_up_hours <= 0:
             raise LedgerError("follow_up_hours must be positive")
         specs: dict[str, FieldSpec] = {}
+        if len(fields) > 31:
+            raise LedgerError("a handoff compares at most 31 fields")
         for field_id, spec in fields.items():
+            if not _FIELD_ID.fullmatch(field_id):
+                raise LedgerError(
+                    f"field id {field_id!r} must be lower case, digits and _, "
+                    "at most 32 characters"
+                )
             value, kind = spec[0], spec[1]
             order = spec[2] if len(spec) > 2 else None  # type: ignore[misc]
             digest = self.field_digest(value, kind, order)
