@@ -460,3 +460,25 @@ def test_recording_refuses_a_code_field_without_a_source_or_with_an_input(
     with pytest.raises(CredentialFieldError):
         rec.type_text("a note")
     assert backend.typed == []
+
+
+def test_the_dashboard_seal_vector_opens_here() -> None:
+    """The same vector openadapt-cloud's secondFactorSeal.ts produced."""
+
+    import hashlib
+
+    vector = json.loads(
+        (
+            Path(__file__).parent / "fixtures" / "second_factor_seal_vector.json"
+        ).read_text()
+    )
+    scalar = int.from_bytes(
+        hashlib.sha256(vector["run_key_seed"].encode()).digest(), "big"
+    )
+    key = ec.derive_private_key(scalar, ec.SECP256R1())
+    public = key.public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    )
+    assert _b64(public) == vector["run_public_key"]
+    opened = sf.open_sealed_code(key, vector["request_id"], vector["sealed"])
+    assert sf.normalize_code(opened) == vector["code"]
