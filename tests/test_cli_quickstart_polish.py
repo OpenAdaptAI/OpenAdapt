@@ -98,22 +98,45 @@ def test_quickstart_options_reach_the_story(story_calls, monkeypatch, argv, expe
 @pytest.mark.parametrize(
     ("argv", "display", "visible"),
     [
-        ([], True, True),
+        # Hidden by default, with or without a display: nothing takes over
+        # the screen unless asked.
+        ([], True, False),
         ([], False, False),
         (["--headless"], True, False),
+        (["--watch"], True, True),
         (["--headed"], False, True),
     ],
 )
-def test_the_browser_shows_when_a_display_is_available(
+def test_the_browser_shows_only_with_watch(
     story_calls, monkeypatch, argv, display, visible
 ):
     monkeypatch.setattr(
         "openadapt.quickstart.engine.display_available", lambda: display
     )
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: "darwin")
     with CliRunner().isolated_filesystem():
         result = CliRunner().invoke(cli_main, ["quickstart", *argv, "--out", "qs"])
     assert result.exit_code == 0, result.output
     assert story_calls[0]["visible"] is visible
+
+
+def test_watch_without_a_display_on_linux_stays_hidden(story_calls, monkeypatch):
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", "--watch", "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    assert story_calls[0]["visible"] is False
+    assert "browser stays hidden" in result.output
+
+
+@pytest.mark.parametrize(("argv", "opened"), [([], False), (["--open"], True)])
+def test_the_seal_page_opens_only_with_open(story_calls, argv, opened):
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", *argv, "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    assert story_calls[0]["open_seal"] is opened
 
 
 def test_an_older_flow_runs_its_own_tutorial(monkeypatch, engine_calls):

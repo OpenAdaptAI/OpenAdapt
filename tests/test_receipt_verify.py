@@ -1,0 +1,495 @@
+"""`openadapt verify` and the run receipt Flow writes (record/run/v1).
+
+Real signing and real verification with a throwaway key under tmp_path:
+receipts for stopped runs, tamper detection, unknown signers, embedded
+content, and older formats that must still verify.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+pytest.importorskip("openadapt_flow.receipt_record")
+
+from openadapt_flow.receipt_record import (  # noqa: E402
+    build_statement,
+    local_registry,
+    receipt_after_run,
+    verify_run_receipt,
+    write_receipt_record,
+)
+from openadapt_types import receipt as r  # noqa: E402
+
+from openadapt.cli import main  # noqa: E402
+
+BUNDLE = "2" * 64
+
+
+@pytest.fixture(autouse=True)
+def _isolated(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal-home"))
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY", raising=False)
+    monkeypatch.delenv("OPENADAPT_RECEIPT", raising=False)
+
+
+def _run(tmp_path: Path, outcome: str = "HALTED", name: str = "run") -> Path:
+    run = tmp_path / name
+    run.mkdir()
+    report = {
+        "run_id": f"{name}-1",
+        "workflow_name": "MockMed referral",
+        "execution_outcome": outcome,
+        "started_at": "2026-11-20T23:14:00Z",
+        "bundle_content_digest": BUNDLE,
+        "model_calls": 0,
+        "results": [
+            {"ok": True, "effect_verified": True, "postconditions_ok": True},
+            {"ok": outcome == "VERIFIED", "effect_verified": outcome == "VERIFIED"},
+            {"ok": True},
+        ],
+    }
+    (run / "report.json").write_text(json.dumps(report))
+    return run
+
+
+def _verify(*args: str):
+    return CliRunner().invoke(main, ["verify", *args], catch_exceptions=False)
+
+
+def test_a_stopped_run_gets_a_receipt_and_stays_stopped(tmp_path):
+    run = _run(tmp_path, "HALTED")
+    assert receipt_after_run(run) == f"receipt: {run / 'receipt.json'}"
+    private = run / "receipt.private.json"
+    assert private.stat().st_mode & 0o077 == 0
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok and result.outcome == "STOPPED"
+    assert result.signer_lines == ("Signed by this computer",)
+    lines = result.statement["predicate"]["lines"]
+    assert [line["check"] for line in lines] == ["confirmed", "refuted"]
+    out = _verify(str(run))
+    assert out.exit_code == 0, out.output
+    assert "Signed by this computer" in out.output
+    assert "Outcome: STOPPED" in out.output
+
+
+def test_the_receipt_never_holds_values_from_the_report(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    text = (run / "receipt.json").read_text()
+    payload = base64.b64decode(json.loads(text)["payload"]).decode()
+    for secret in ("MockMed", "run-1", "2026-11-20T23:14"):
+        assert secret not in payload
+    assert "MockMed" in (run / "receipt.private.json").read_text()
+
+
+@pytest.mark.parametrize(
+    "run_outcome", ["HALTED", "COMPLETED_UNVERIFIED", "ROLLED_BACK", None, "WEIRD"]
+)
+def test_signing_never_upgrades(run_outcome):
+    report = {"execution_outcome": run_outcome, "results": []}
+    statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
+    assert statement["predicate"]["outcome"] != "VERIFIED"
+
+
+def test_a_verified_report_with_a_refuted_write_is_not_verified():
+    report = {
+        "execution_outcome": "VERIFIED",
+        "results": [{"ok": False, "effect_verified": False}],
+    }
+    statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
+    assert statement["predicate"]["outcome"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    "tail,reason",
+    [
+        ([{"effect_verified": False}], "refuted_write"),
+        ([{"effect_verified": True}], "too_many_writes"),
+    ],
+)
+def test_writes_past_the_line_limit_still_decide_the_outcome(tail, reason):
+    """A receipt shows at most MAX_LINES writes; it never says VERIFIED over
+    writes it left out."""
+    from openadapt_types.receipt import MAX_LINES
+
+    confirmed = [{"ok": True, "effect_verified": True}] * MAX_LINES
+    report = {"execution_outcome": "VERIFIED", "results": confirmed + tail}
+    statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
+    predicate = statement["predicate"]
+    assert (predicate["outcome"], predicate["reason_code"]) == ("UNKNOWN", reason)
+    assert len(predicate["lines"]) == MAX_LINES
+    exact, _ = build_statement(
+        {"execution_outcome": "VERIFIED", "results": confirmed},
+        "1" * 64,
+        flow_version="3.5.0",
+    )
+    assert exact["predicate"]["outcome"] == "VERIFIED"
+
+
+def test_a_run_folder_without_its_report_is_not_verified(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    (run / "report.json").unlink()
+    result = verify_run_receipt(run, local_registry())
+    assert (result.ok, result.reason) == (False, "malformed")
+    out = _verify(str(run))
+    assert out.exit_code != 0 and "no report.json" in out.output
+
+
+def test_a_pre_seal_match_says_which_report_it_covers(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    (run / "report.pre-seal.json").write_bytes((run / "report.json").read_bytes())
+    (run / "report.json").write_text("{}")
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok and "report.json changed" in result.detail
+    assert "report.json changed" in _verify(str(run)).output
+
+
+def test_a_revocation_survives_a_keys_file_listing_the_key_active(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow import receipt_record as rr
+
+    key = r.RoleKey("k" * 16, "A" * 44, "openadapt_cloud")
+    revoked = r.RoleKey(
+        key.key_id, key.public_key, "openadapt_cloud", "revoked", "2026-11-01T00:00:00Z"
+    )
+    monkeypatch.setattr(rr, "_pinned_cloud_keys", lambda home: [revoked])
+    merged = [k for k in local_registry(extra=[key]) if k.key_id == key.key_id]
+    assert [(k.status, k.revoked_at) for k in merged] == [
+        ("revoked", "2026-11-01T00:00:00Z")
+    ]
+
+
+def test_legacy_routes_never_drop_a_requested_check(tmp_path, monkeypatch):
+    from openadapt import receipt_verify as rv
+
+    calls = []
+
+    def folder(path, extra):
+        calls.append((path, extra))
+        return 0
+
+    def route(target, **kw):
+        return rv.verify_path(
+            target,
+            say=lambda s: None,
+            invoke_flow=None,
+            invoke_agent=None,
+            legacy_folder=folder,
+            legacy_link=lambda u, e: 0,
+            is_link=lambda t: t.startswith("https://"),
+            **kw,
+        )
+
+    keys = tmp_path / "keys.json"
+    keys.write_text("{}")
+    # A hosted link can't be pinned with --keys: refused, not ignored.
+    assert route("https://openadapt.ai/s/x", keys=keys) == 1
+    seal = tmp_path / "run" / "seal.json"
+    seal.parent.mkdir()
+    seal.write_text(json.dumps({"schema": "openadapt.local-seal/v1"}))
+    assert route(str(seal), keys=keys, extra=["--strict"]) == 0
+    assert calls[-1] == (seal.parent, ["--strict", "--keys", str(keys)])
+    # The folder route forwards the same options.
+    assert route(str(seal.parent), keys=keys, extra=["--strict"]) == 0
+    assert calls[-1] == (seal.parent, ["--strict", "--keys", str(keys)])
+    # Another file that claims to be a Seal never stands for the folder's.
+    other = seal.with_name("copy.json")
+    other.write_text(seal.read_text())
+    assert route(str(other)) == 1 and len(calls) == 2
+    # A link is checked with its signer pinned here.
+    links = []
+    rv.verify_path(
+        "https://openadapt.ai/s/x",
+        say=lambda s: None,
+        invoke_flow=None,
+        invoke_agent=None,
+        legacy_folder=folder,
+        legacy_link=lambda u, e: links.append(e) or 0,
+        is_link=lambda t: True,
+    )
+    assert links == [["--require-pinned"]]
+
+
+def test_a_hosted_seal_needs_its_key_pinned_here():
+    from openadapt import seal_publish
+
+    class Result:
+        ok, reason, key_id = True, None, "seal-ed25519-" + "1" * 16
+
+    class Engine:
+        @staticmethod
+        def verify_public_seal(doc):
+            return Result()
+
+    class Response:
+        status = 200
+        body = json.dumps({"card": {}, "seal": {}}).encode()
+
+    said = []
+    original = seal_publish._engine
+    seal_publish._engine = lambda: Engine()
+    try:
+        code = seal_publish.check_link(
+            "https://app.openadapt.ai/seal#" + "a" * 43,
+            transport=lambda *a: Response(),
+            say=said.append,
+            pinned=lambda kid: False,
+        )
+    finally:
+        seal_publish._engine = original
+    assert code == 1 and any("unknown signer" in x for x in said)
+
+
+def test_tampering_with_the_report_is_detected(tmp_path):
+    run = _run(tmp_path, "HALTED")
+    write_receipt_record(run)
+    report = json.loads((run / "report.json").read_text())
+    report["execution_outcome"] = "VERIFIED"
+    (run / "report.json").write_text(json.dumps(report))
+    out = _verify(str(run))
+    assert out.exit_code == 1
+    assert "changed after it was signed" in out.output
+
+
+def test_tampering_with_the_receipt_is_detected(tmp_path):
+    run = _run(tmp_path, "HALTED")
+    write_receipt_record(run)
+    envelope = json.loads((run / "receipt.json").read_text())
+    payload = base64.b64decode(envelope["payload"]).replace(b'"STOPPED"', b'"VERIFIED"')
+    envelope["payload"] = base64.b64encode(payload).decode()
+    (run / "receipt.json").write_text(json.dumps(envelope))
+    out = _verify(str(run / "receipt.json"))
+    assert out.exit_code == 1
+    assert "Not verified" in out.output and "Outcome" not in out.output
+
+
+def test_an_unknown_signer_fails_closed(tmp_path, monkeypatch):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "another-computer"))
+    out = _verify(str(run / "receipt.json"))
+    assert out.exit_code == 1
+    assert "Not verified: unknown signer" in out.output
+
+
+def test_a_receipt_with_an_embedded_image_is_refused(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    private = json.loads((run / "receipt.private.json").read_text())
+    private["openings"]["program_name"]["value"] = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+    )
+    (run / "receipt.private.json").write_text(json.dumps(private))
+    result = verify_run_receipt(run, local_registry())
+    assert (result.ok, result.reason) == (False, "embedded_content")
+
+
+def test_the_builder_refuses_a_screenshot_as_a_value():
+    report = {"workflow_name": "iVBORw0KGgo" + "A" * 200, "results": []}
+    statement, openings = build_statement(report, "1" * 64, flow_version="3.5.0")
+    # The name fails its field pattern, so it is never committed at all.
+    assert "program_name" not in openings
+    assert r._statement_embedded(statement) is None
+
+
+def test_receipts_are_on_by_default_and_can_be_turned_off(tmp_path):
+    run = _run(tmp_path)
+    assert receipt_after_run(run, env={"OPENADAPT_RECEIPT": "off"}) is None
+    assert not (run / "receipt.json").exists()
+
+
+def test_an_older_run_summary_in_receipt_json_moves_aside(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    (run / "receipt.json").write_text(
+        json.dumps({"schema_version": "openadapt.run-receipt/v2"})
+    )
+    write_receipt_record(run)
+    assert r.is_receipt_envelope(json.loads((run / "receipt.json").read_text()))
+    assert json.loads((run / "run-summary.json").read_text())["schema_version"] == (
+        "openadapt.run-receipt/v2"
+    )
+
+
+def test_a_folder_with_only_an_older_seal_still_verifies(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "HALTED", "old")
+    seal_run(run, enqueue=False)
+    out = _verify(str(run))
+    assert "older format" in out.output
+    assert out.exit_code == 0, out.output
+
+
+def test_the_private_openings_are_not_a_receipt(tmp_path):
+    run = _run(tmp_path)
+    write_receipt_record(run)
+    out = _verify(str(run / "receipt.private.json"))
+    assert out.exit_code == 1
+    assert "private" in out.output
+
+
+def test_verify_subcommands_still_route(tmp_path):
+    out = CliRunner().invoke(main, ["verify", "--help"])
+    assert out.exit_code == 0
+    assert "ledger" in out.output and "effect" in out.output
+
+
+def test_the_shared_vectors_verify_through_the_launcher(tmp_path):
+    vectors = (
+        Path(r.__file__).resolve().parents[1] / "tests" / "vectors" / "record-run-v1"
+    )
+    if not vectors.is_dir():
+        pytest.skip("installed openadapt-types has no vectors")
+    vector = json.loads((vectors / "cloud-countersign.json").read_text())
+    path = tmp_path / "card.json"
+    path.write_text(json.dumps(vector["document"]))
+    out = _verify(str(path), "--keys", str(vectors / "registry.json"))
+    assert out.exit_code == 0, out.output
+    assert "Countersigned by OpenAdapt Cloud" in out.output
+
+
+def test_the_public_allow_list_is_inside_todays_public_fields():
+    """openadapt.public-disclosure/v1 never reveals more than public-card/v1 did."""
+    from openadapt_flow.public_seal import IdentityClaim, PublicCardV1
+
+    card_fields = set(PublicCardV1.model_fields) | {
+        f"identity_claim.{name}" for name in IdentityClaim.model_fields
+    }
+    # public-evidence-receipt/v1 (openadapt-cloud src/lib/evidenceReceipts.ts).
+    evidence_fields = {"outcome", "runtime.version", "calls.model_call_count"}
+    for version, allowed in r.PUBLIC_DISCLOSURE.items():
+        for path, source in allowed.items():
+            schema, field = source.split(":")
+            known = card_fields if schema == "public-card/v1" else evidence_fields
+            assert field in known, (version, path, source)
+
+
+# -- routing, broken receipts and older formats ---------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+PUBLIC_SEAL_VECTORS = (
+    Path(__file__).resolve().parents[1]
+    / "packages/flow/tests/fixtures/public_seal/golden_vectors.json"
+)
+
+
+def test_a_folder_named_like_an_operation_stays_an_operation(tmp_path, monkeypatch):
+    (tmp_path / "ledger").mkdir()
+    monkeypatch.chdir(tmp_path)
+    out = CliRunner().invoke(main, ["verify", "ledger", "--help"])
+    assert "receipt" not in out.output.lower().split("usage")[0]
+    assert "Usage: openadapt verify <file|folder|link>" not in out.output
+
+
+def test_a_broken_receipt_fails_even_beside_a_seal(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "VERIFIED")
+    seal_run(run, enqueue=False)
+    (run / "receipt.json").write_text('{"not": "a receipt"}')
+    out = _verify(str(run))
+    assert out.exit_code == 1
+    assert "malformed receipt" in out.output
+
+
+def test_a_lone_seal_file_checks_its_run(tmp_path):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = _run(tmp_path, "HALTED", "lone")
+    seal_run(run, enqueue=False)
+    out = _verify(str(run / "seal.json"))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output
+    report = json.loads((run / "report.json").read_text())
+    report["model_calls"] = 9
+    (run / "report.json").write_text(json.dumps(report))
+    assert _verify(str(run / "seal.json")).exit_code != 0
+
+
+def test_an_older_run_summary_verifies_and_a_tampered_one_does_not(tmp_path):
+    good = tmp_path / "run-summary.json"
+    good.write_bytes((FIXTURES / "run-summary.json").read_bytes())
+    out = _verify(str(good))
+    assert out.exit_code == 0, out.output
+    assert "older format" in out.output and "Not signed" in out.output
+    data = json.loads(good.read_text())
+    data["effects_confirmed"] = data["effects_required"] + 1
+    bad = tmp_path / "tampered.json"
+    bad.write_text(json.dumps(data))
+    assert _verify(str(bad)).exit_code == 1
+
+
+def test_public_seal_golden_vectors_verify_only_with_their_key_pinned(tmp_path):
+    vectors = json.loads(PUBLIC_SEAL_VECTORS.read_text())
+    registry = tmp_path / "keys.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "schema": r.REGISTRY_SCHEMA,
+                "keys": [
+                    {
+                        "key_id": vectors["key_id"],
+                        "public_key": vectors["public_key"],
+                        "role": "this_computer",
+                    }
+                ],
+            }
+        )
+    )
+    checked = 0
+    for case in vectors["cases"]:
+        path = tmp_path / f"{case['name']}.json"
+        path.write_text(case["body"])
+        pinned = _verify(str(path), "--keys", str(registry))
+        assert (pinned.exit_code == 0) == (case["expect"] == "valid"), case["name"]
+        if case["expect"] == "valid":
+            unpinned = _verify(str(path))
+            assert unpinned.exit_code == 1
+            assert "unknown signer" in unpinned.output
+            checked += 1
+    assert checked >= 1
+    # The same key, revoked, verifies nothing.
+    keys = json.loads(registry.read_text())
+    keys["keys"][0].update(status="revoked", revoked_at="2026-11-01T00:00:00Z")
+    registry.write_text(json.dumps(keys))
+    for case in vectors["cases"]:
+        path = tmp_path / f"{case['name']}.json"
+        revoked = _verify(str(path), "--keys", str(registry))
+        assert revoked.exit_code == 1, case["name"]
+
+
+def test_receipts_trust_cloud_keys_pinned_where_seal_keys_pin_writes(
+    tmp_path, monkeypatch
+):
+    vectors = (
+        Path(r.__file__).resolve().parents[1] / "tests" / "vectors" / "record-run-v1"
+    )
+    if not vectors.is_dir():
+        pytest.skip("installed openadapt-types has no vectors")
+    registry = json.loads((vectors / "registry.json").read_text())
+    by_role = {k["role"]: k for k in registry["keys"]}
+    pinned = tmp_path / "seal-keys.json"
+    pinned.write_text(
+        json.dumps(
+            {
+                "keys": [
+                    {
+                        "key_id": by_role["openadapt_cloud"]["key_id"],
+                        "public_key": by_role["openadapt_cloud"]["public_key"],
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("OPENADAPT_SEAL_KEYS_PATH", str(pinned))
+    keys = {k.key_id: k.role for k in local_registry()}
+    assert keys[by_role["openadapt_cloud"]["key_id"]] == "openadapt_cloud"
