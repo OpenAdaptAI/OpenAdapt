@@ -57,7 +57,7 @@
    "case_id": "cv-dev",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 2.1,
+   "seconds": 2.2,
    "events": [
     "quote CVH-Q027001"
    ],
@@ -152,7 +152,7 @@
    "case_id": "cv-s04",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 2.2,
+   "seconds": 2.1,
    "events": [
     "quote CVH-Q027001"
    ],
@@ -198,7 +198,7 @@
    "case_id": "cv-s06",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 2.1,
+   "seconds": 2.2,
    "events": [
     "estimator shown 567000, field 525,280",
     "quote CVH-Q027001"
@@ -222,7 +222,7 @@
    "case_id": "cv-s07",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 3.9,
+   "seconds": 3.8,
    "events": [
     "session expired at step 4",
     "restart from step 1",
@@ -270,7 +270,7 @@
    "case_id": "pb-dev",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 2.1,
+   "seconds": 1.1,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -293,7 +293,7 @@
    "case_id": "pb-s01",
    "filler": "reference",
    "outcome": "submitted",
-   "seconds": 1.0,
+   "seconds": 2.1,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -529,7 +529,7 @@
    "case_id": "cv-s02",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 1.8,
+   "seconds": 2.0,
    "events": [
     "quote CVH-Q027001"
    ],
@@ -559,7 +559,7 @@
    "case_id": "cv-s03",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.4,
+   "seconds": 2.2,
    "events": [
     "estimator shown 358000, field 358,000",
     "quote CVH-Q027001"
@@ -649,7 +649,7 @@
    "case_id": "cv-s06",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.2,
+   "seconds": 1.1,
    "events": [
     "estimator shown 567000, field 525,280",
     "quote CVH-Q027001"
@@ -680,7 +680,7 @@
    "case_id": "cv-s07",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.0,
+   "seconds": 3.2,
    "events": [
     "session expired at step 4",
     "quote CVH-Q027001"
@@ -767,7 +767,7 @@
    "case_id": "pb-s01",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.2,
+   "seconds": 2.1,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -789,7 +789,7 @@
    "case_id": "pb-s02",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.3,
+   "seconds": 2.2,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -820,7 +820,7 @@
    "case_id": "pb-s03",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.1,
+   "seconds": 2.3,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -843,7 +843,7 @@
    "case_id": "pb-s04",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.2,
+   "seconds": 2.3,
    "events": [
     "quote PBM-41001-Q"
    ],
@@ -873,7 +873,7 @@
    "case_id": "pb-s05",
    "filler": "naive",
    "outcome": "submitted",
-   "seconds": 2.2,
+   "seconds": 2.4,
    "events": [
     "quote PBM-41001-Q"
    ],
