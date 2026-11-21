@@ -315,6 +315,84 @@ def operator_decision(
     return res(HumanDecisionAction.ESCALATE_TO_OWNER)
 
 
+CONTROL_LOG: dict[str, str] = {"dir": ""}
+
+
+def _write_control_log(case: dict[str, Any]) -> None:
+    """One JSON file per case: every bound control as last seen, with intake.
+
+    For each pack binding: the intake value, and the control it matched on the
+    last observed screen (label, value, options, row cells, error text). Also
+    every unbound visible control and the page text. Synthetic data only.
+    """
+    out_dir = CONTROL_LOG["dir"]
+    session = case.get("_session")
+    if not out_dir or session is None or session._last_observation is None:
+        return
+    from openadapt_flow.form_tx.surface import match_anchor_in_snapshot
+
+    snap = session._last_observation
+    bound: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for b in session.pack.bindings:
+        fact = session.effective_facts.get(b.dossier_key)
+        try:
+            ctrl = match_anchor_in_snapshot(b.anchor, snap, include_readonly=True)
+        except Exception as exc:  # noqa: BLE001
+            ctrl = None
+            err = repr(exc)[:200]
+        else:
+            err = ""
+        if ctrl is not None:
+            seen.add(ctrl.dom_selector)
+        bound.append(
+            {
+                "binding_id": b.binding_id,
+                "dossier_key": b.dossier_key,
+                "intake": None if fact is None else fact.value,
+                "observed": None
+                if ctrl is None
+                else {
+                    "label": ctrl.label_text,
+                    "group_label": ctrl.group_label,
+                    "value": ctrl.current_value,
+                    "checked": ctrl.checked,
+                    "options": [o.model_dump() for o in ctrl.options],
+                    "row_cells": list(ctrl.row_cells),
+                    "error_text": ctrl.error_text,
+                },
+                "match_error": err,
+            }
+        )
+    unbound = [
+        {
+            "label": c.label_text,
+            "value": c.current_value,
+            "selector": c.dom_selector,
+            "options": [o.model_dump() for o in c.options],
+        }
+        for c in snap.controls
+        if c.visible and c.dom_selector not in seen
+    ]
+    path = Path(out_dir) / f"{case['case_id']}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "case_id": case["case_id"],
+                "screen_id": snap.screen_id,
+                "url": snap.url_origin_and_path,
+                "bound": bound,
+                "unbound": unbound,
+                "banners": list(snap.banner_errors),
+                "page_text": snap.page_text,
+            },
+            indent=1,
+            default=str,
+        )
+    )
+
+
 def run_case(
     browser: Any,
     base: str,
@@ -468,8 +546,15 @@ def main(argv: list[str]) -> int:
         help="frozen first run only: the operator runs harborline's estimator by "
         "hand (deviation D2). Off for every later run.",
     )
+    ap.add_argument(
+        "--control-log",
+        default="",
+        help="directory for one per-control JSON log per case (intake value, "
+        "observed value, label, option map, page text); synthetic data only",
+    )
     ap.add_argument("portals", nargs="*")
     args = ap.parse_args(argv)
+    CONTROL_LOG["dir"] = args.control_log
     _use_suite(args.suite)
     OPERATOR_TOOLS_ON["on"] = args.operator_estimator
     answer_key = load_answer_key()
@@ -525,6 +610,7 @@ def main(argv: list[str]) -> int:
                         if args.arm == "C":
                             pack, learned = maybe_learn(acc, pack, case, qualify)
                             case["learning"] = learned
+                        _write_control_log(case)
                         case.pop("_session", None)
                         print(MARK + " " + json.dumps(case, default=str), flush=True)
                 finally:
