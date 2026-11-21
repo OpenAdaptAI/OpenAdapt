@@ -579,6 +579,10 @@ class _EffectRoutes:
     delete: Optional[_HarExchange]
 
 
+def _canonical_value(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
 def _record_id(rec: Mapping[str, Any], field_name: str) -> Optional[str]:
     val = rec.get(field_name)
     if isinstance(val, bool) or not isinstance(val, (str, int)):
@@ -1082,6 +1086,12 @@ def induce_lens_from_har(
             elif path not in create_defaults_list:
                 create_defaults_list.append(path)
 
+    requested_values: set[tuple[str, str]] = set()
+    for ex in scoped:
+        if ex.method in {"POST", "PUT", "PATCH"} and ex.req_data:
+            for req_path, req_val in _flatten_record(ex.req_data).items():
+                requested_values.add((req_path, _canonical_value(req_val)))
+
     for _eid, history in entity_snapshots.items():
         for idx in range(1, len(history)):
             prev_rec = _flatten_record(history[idx - 1][1])
@@ -1095,8 +1105,17 @@ def induce_lens_from_har(
                 if new_val == old_val:
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
-                # changed it, or server metadata key not in user-supplied fields.
-                if _looks_like_metadata_or_volatile(path, new_val):
+                # changed it, or server metadata key not in user-supplied fields. A
+                # value some write in the trace asked for is the user's edit, not a
+                # server change, so it never makes the field volatile.
+                if (
+                    _looks_like_metadata_or_volatile(path, new_val)
+                    and (
+                        path,
+                        _canonical_value(new_val),
+                    )
+                    not in requested_values
+                ):
                     if path not in volatile_list:
                         volatile_list.append(path)
                 elif (
@@ -1539,6 +1558,20 @@ def _pick_wrong_wire_value(
     return "__wrong_wire_value__"
 
 
+def _probe_inconclusive(candidate: EntityLensSpec) -> EntityLensSpec:
+    """Fail safe when the probe could not create or read back its own record.
+
+    Without a probe, nothing says whether the update route patches or replaces.
+    A full-record write keeps every other field under either semantics, while
+    a partial write can clear them on a replace route. So an update lens the
+    probe could not check is returned in ``replace`` mode, never left as an
+    unverified ``patch``.
+    """
+    if candidate.write_mode == "create":
+        return candidate
+    return candidate.model_copy(update={"write_mode": "replace"})
+
+
 def probe_put_semantics(
     candidate: EntityLensSpec,
     *,
@@ -1561,11 +1594,11 @@ def probe_put_semantics(
             candidate, seed, auth_headers=auth_headers, created_ids=created_ids
         )
         if eid is None:
-            return candidate
+            return _probe_inconclusive(candidate)
 
         status, etag_0, r0 = _read_one_entity(candidate, eid, auth_headers=auth_headers)
         if status < 200 or status >= 300 or r0 is None:
-            return candidate
+            return _probe_inconclusive(candidate)
 
         codecs = dict(candidate.field_codecs)
         volatile_list = list(candidate.volatile_fields)
@@ -2120,11 +2153,11 @@ def certify_lens_on_sandbox(
                     ]
                     if untouched_business_keys:
                         probe_delta = dict(sample_update)
-                        clobber_key = untouched_business_keys[0]
+                        clobber_keys = untouched_business_keys
                     else:
                         first_upd_k = next(iter(sample_update.keys()))
                         probe_delta = {first_upd_k: sample_update[first_upd_k]}
-                        fallback_keys = [
+                        clobber_keys = [
                             k
                             for k in sample_record.keys()
                             if k != lens.id_field
@@ -2132,18 +2165,20 @@ def certify_lens_on_sandbox(
                             and k in r0
                             and not _VOLATILE_NAME_RE.search(k)
                         ]
-                        clobber_key = fallback_keys[0] if fallback_keys else ""
 
-                    if clobber_key:
-                        w_url = _format_endpoint_url(
-                            lens.base_url, lens.write_endpoint, entity_id=eid_3
-                        )
-                        w_hdrs = dict(auth_headers or {})
-                        if etag0 and lens.write_endpoint.etag_header:
-                            w_hdrs["If-Match"] = etag0
-
-                        # First attempt raw unmerged partial payload; if server preserves frame
-                        # (PATCH), explicitly inject a wiped untouched field on the wire.
+                    w_url = _format_endpoint_url(
+                        lens.base_url, lens.write_endpoint, entity_id=eid_3
+                    )
+                    w_hdrs = dict(auth_headers or {})
+                    if etag0 and lens.write_endpoint.etag_header:
+                        w_hdrs["If-Match"] = etag0
+                    p3_detail = "fault not delivered: the server refused every clobber"
+                    # A server may refuse the fault itself (a required field cannot
+                    # be emptied). Only a clobber that actually landed tests the
+                    # judge, so try the untouched fields until one lands.
+                    for clobber_key in clobber_keys:
+                        # First attempt raw unmerged partial payload; if server preserves
+                        # frame (PATCH), explicitly inject a wiped untouched field.
                         wst, _, _ = _http_json(
                             lens.write_endpoint.method,
                             w_url,
@@ -2172,23 +2207,29 @@ def certify_lens_on_sandbox(
                                 headers=w_hdrs,
                             )
 
-                        st1, _, r1 = _read_one_entity(
+                        st1, etag_1, r1 = _read_one_entity(
                             lens, eid_3, auth_headers=auth_headers
                         )
-                        if 200 <= st1 < 300 and r1 is not None:
-                            verdict = active_judge.evaluate(
-                                r0,
-                                r1,
-                                probe_delta,
-                                volatile_fields=lens.volatile_fields,
-                                field_codecs=lens.field_codecs,
-                            )
-                            p3_reject = not verdict.passed
-                            p3_detail = (
-                                f"Rejected clobbered frame field {clobber_key!r}"
-                                if p3_reject
-                                else f"FALSE ACCEPT: ignored clobbered field {clobber_key!r}"
-                            )
+                        if etag_1 and lens.write_endpoint.etag_header:
+                            w_hdrs["If-Match"] = etag_1
+                        if not (200 <= st1 < 300 and r1 is not None):
+                            continue
+                        if r1.get(clobber_key) == r0.get(clobber_key):
+                            continue
+                        verdict = active_judge.evaluate(
+                            r0,
+                            r1,
+                            probe_delta,
+                            volatile_fields=lens.volatile_fields,
+                            field_codecs=lens.field_codecs,
+                        )
+                        p3_reject = not verdict.passed
+                        p3_detail = (
+                            f"Rejected clobbered frame field {clobber_key!r}"
+                            if p3_reject
+                            else f"FALSE ACCEPT: ignored clobbered field {clobber_key!r}"
+                        )
+                        break
         probes.append(
             CertificationProbeResult(
                 probe_name="fault_partial_clobber",

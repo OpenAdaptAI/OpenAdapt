@@ -195,6 +195,34 @@ def test_fixture_holds_no_bearer_token() -> None:
                 assert "ey" not in header["value"]
 
 
+def test_unprobeable_update_lens_fails_safe_to_replace() -> None:
+    """A trace with no create gives the probe nothing safe to write to."""
+    har = _fixture_har()
+    entries = har["log"]["entries"]
+    update_only = {
+        "log": {
+            **har["log"],
+            "entries": [
+                e
+                for e in entries
+                if e["request"]["method"] != "PUT"
+                and e["request"]["method"] != "DELETE"
+                and "/projects/" not in e["request"]["url"]
+            ],
+        }
+    }
+    lens = induce_lens_from_har(update_only)
+    assert lens.write_endpoint.method == "POST"
+    assert lens.write_mode == "patch"
+    # Point the probe at a closed local port: it cannot create its record.
+    unreachable = lens.model_copy(update={"base_url": "http://127.0.0.1:9"})
+    probed = probe_put_semantics(
+        unreachable, sample_record={"title": "x"}, sample_update={"priority": 2}
+    )
+    # Nothing says the route patches, so the lens sends whole records.
+    assert probed.write_mode == "replace"
+
+
 # ---------------------------------------------------------------------------
 # Live application (lab only)
 # ---------------------------------------------------------------------------
@@ -256,6 +284,55 @@ def test_live_probe_finds_the_replace_route(live_demo) -> None:
     probed = _probed(lens, token)
     assert probed.write_mode == "replace"
     assert "due_date" not in probed.volatile_fields
+
+
+@live
+def test_live_trace_that_edits_a_date_keeps_it_in_the_frame(live_demo) -> None:
+    """A date the demonstration changed is the user's edit, not server noise."""
+    _, token, project_id = live_demo
+    status, task = _call(
+        LIVE_URL, "PUT", f"/api/v1/projects/{project_id}/tasks", SEED_TASK, token
+    )
+    assert status in (200, 201)
+    tid = task["id"]
+    with SessionWireTap(
+        LIVE_URL, WirePolicy(max_mutations=None, secrets=(token,))
+    ) as tap:
+        b = tap.base_url
+        _call(b, "GET", f"/api/v1/tasks/{tid}", token=token)
+        _call(
+            b,
+            "POST",
+            f"/api/v1/tasks/{tid}",
+            {**task, "due_date": "2027-01-05T09:00:00Z"},
+            token,
+        )
+        _call(b, "GET", f"/api/v1/tasks/{tid}", token=token)
+        har = tap.export_har()
+    lens = induce_lens_from_har(har)
+    assert "due_date" not in lens.volatile_fields
+    assert "updated" in lens.volatile_fields
+
+
+@live
+def test_live_certification_delivers_the_clobber_it_judges(live_demo) -> None:
+    from openadapt_flow.tx.induce import certify_lens_on_sandbox
+
+    har, token, _ = live_demo
+    lens = _probed(induce_lens_from_har(har), token)
+    report = certify_lens_on_sandbox(
+        lens,
+        sample_record={k: v for k, v in SEED_TASK.items() if k != "due_date"},
+        sample_update={"priority": 4},
+        auth_headers={"Authorization": "Bearer " + token},
+    )
+    probes = {p.probe_name: p for p in report.probes}
+    assert probes["clean_roundtrip"].passed
+    clobber = probes["fault_partial_clobber"]
+    assert clobber.passed, clobber.detail
+    assert "FALSE ACCEPT" not in clobber.detail
+    # The report never authorizes execution on its own.
+    assert report.certified is False
 
 
 @live
