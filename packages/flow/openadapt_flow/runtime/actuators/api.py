@@ -44,7 +44,7 @@ runtime package) stays cheap and model-free.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -201,7 +201,12 @@ class ApiActuator:
         return f"{self.base_url}{url_template}"
 
     def actuate(
-        self, binding: ApiBinding, params: dict[str, str]
+        self,
+        binding: ApiBinding,
+        params: dict[str, str],
+        *,
+        delivery_boundary: Optional[Callable[[Callable[[], Any]], Any]] = None,
+        strict_delivery: bool = False,
     ) -> ApiActuationResult:
         """Perform ``binding``'s write, substituting ``params``; classify safely.
 
@@ -244,15 +249,44 @@ class ApiActuator:
         import requests  # lazy
 
         timeout = binding.timeout_s or self.default_timeout_s
-        try:
-            resp = self._get_session().request(
+        from openadapt_flow.backend import StructuralResolutionRefused
+
+        session = self._get_session()
+        if strict_delivery:
+            # A retry, auth resend or response hook can issue another write
+            # inside request(), outside the runtime's one-use boundary.
+            adapter_for = getattr(session, "get_adapter", None)
+            if not callable(adapter_for):
+                raise StructuralResolutionRefused(
+                    "managed API transport cannot prove its single-request policy"
+                )
+            adapter = adapter_for(url)
+            retries = getattr(adapter, "max_retries", None)
+            if (
+                getattr(retries, "total", None) not in (0, False)
+                or getattr(session, "auth", None) is not None
+                or any(getattr(session, "hooks", {}).values())
+            ):
+                raise StructuralResolutionRefused(
+                    "managed API transport must not retry or resend requests"
+                )
+
+        def send() -> Any:
+            return session.request(
                 binding.method.upper(),
                 url,
                 params=query or None,
                 json=body if body else None,
                 headers=headers or None,
                 timeout=timeout,
+                allow_redirects=False,
             )
+
+        try:
+            resp = send() if delivery_boundary is None else delivery_boundary(send)
+        except StructuralResolutionRefused:
+            # The runtime proved this particular request was not sent.
+            raise
         except (
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
