@@ -275,8 +275,12 @@ def write_receipt_record(
     signer: Optional["SealSigner"] = None,
     home: Optional[Path] = None,
     flow_version: Optional[str] = None,
+    handoff_ledgers: Sequence[Any] = (),
 ) -> dict[str, Any]:
     """Write ``receipt.json`` and ``receipt.private.json`` for a finished run.
+
+    ``handoff_ledgers`` (``openadapt_flow.handoffs.HandoffLedger``): the run's
+    handoffs in them go on the receipt as counterparty confirmation lines.
 
     Idempotent: an existing receipt over the same report bytes is kept. A
     receipt over different bytes is never silently replaced.
@@ -323,6 +327,23 @@ def write_receipt_record(
     if flow_version is None:
         from openadapt_flow import __version__ as flow_version
     statement, openings = build_statement(report, digest, flow_version=flow_version)
+    placed: list[Any] = []
+    if handoff_ledgers:
+        from openadapt_flow.handoffs.line import (
+            attach_confirmations,
+            handoffs_for_run,
+            place,
+        )
+
+        handoffs = handoffs_for_run(report, list(handoff_ledgers), run_dir)
+        if handoffs:
+            try:
+                placed = place(statement, handoffs)
+                statement, openings = attach_confirmations(
+                    statement, openings, handoffs
+                )
+            except ValueError as exc:
+                raise ReceiptRecordError("handoff_unplaceable", str(exc)) from exc
     chosen = signer or signer_for(home)
     try:
         kid = r.key_id(chosen.public_raw())
@@ -331,6 +352,10 @@ def write_receipt_record(
         raise ReceiptRecordError(exc.code, str(exc)) from exc
     _write(run_dir / PRIVATE_FILE, r.private_openings(envelope, openings), private=True)
     _write(out, envelope)
+    if placed:
+        from openadapt_flow.handoffs.followup import record_signed
+
+        record_signed(run_dir, RECEIPT_FILE, placed)
     return envelope
 
 
@@ -349,8 +374,14 @@ def receipt_after_run(
     try:
         from openadapt_flow.offline_seal import seal_home, signer_for
 
+        from openadapt_flow.handoffs.registry import ledgers_for
+
         home = seal_home(env)
-        write_receipt_record(Path(run_dir), signer=signer_for(home, env=env))
+        write_receipt_record(
+            Path(run_dir),
+            signer=signer_for(home, env=env),
+            handoff_ledgers=ledgers_for(env),
+        )
     except ImportError:
         return "receipt not written: openadapt-types is older than 0.25"
     except ReceiptRecordError as exc:

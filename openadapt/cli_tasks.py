@@ -65,6 +65,7 @@ FLOW_NAMES = {
     "fleet": "services fleet",
     "for-each": "run --for-each",
     "guard": "run --guard",
+    "handoff": "verify handoff",
     "induce": "compile --induce",
     "intake": "teach --intake",
     "item-approval": "approve --item",
