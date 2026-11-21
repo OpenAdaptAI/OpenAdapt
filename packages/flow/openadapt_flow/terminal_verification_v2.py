@@ -32,6 +32,15 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.delivery_permit_payload import (
+    PERMIT_V3_ARTIFACT_SCHEMA,
+    AnyProductionDeliveryPermitPayload,
+    ProductionDeliveryPermitV3Payload,
+    parse_delivery_permit_payload,
+)
+from openadapt_flow.delivery_permit_payload import (
+    ProductionDeliveryPermitPayload as ProductionDeliveryPermitPayload,
+)
 from openadapt_flow.ir import (
     EffectVerificationEvidence,
     ManagedResultLossEvidence,
@@ -1240,63 +1249,6 @@ class ProductionExecutionAuthorityPayload(ClosedSignedModel):
         ).hexdigest()
 
 
-class ProductionDeliveryPermitPayload(ClosedSignedModel):
-    schema_version: Literal["openadapt.production-delivery-permit-payload/v2"] = (
-        PERMIT_PAYLOAD_SCHEMA
-    )
-    execution_authority_id: str = Field(pattern=_UUID_RE)
-    execution_authority_sha256: str = Field(pattern=_SHA256_RE)
-    permit_id: str = Field(pattern=_ID_RE)
-    run_id: str = Field(pattern=_UUID_RE)
-    flow_run_id_sha256: str = Field(pattern=_SHA256_RE)
-    run_request_sha256: str = Field(pattern=_SHA256_RE)
-    action_request_sha256: str = Field(pattern=_SHA256_RE)
-    admission_artifact_sha256: str = Field(pattern=_SHA256_RE)
-    evidence_identity_sha256: str = Field(pattern=_SHA256_RE)
-    environment_digest: str = Field(pattern=_SHA256_RE)
-    qualification_signer_registry_sha256: str = Field(pattern=_SHA256_RE)
-    qualification_signer_registry_revision: StrictInt = Field(
-        ge=1, le=JS_MAX_SAFE_INTEGER
-    )
-    qualification_signer_registry_checked_at: str
-    qualification_signer_registry_expires_at: str
-    input_edge_sequence: StrictInt = Field(ge=1, le=JS_MAX_SAFE_INTEGER)
-    authority_sequence: StrictInt = Field(ge=0, le=JS_MAX_SAFE_INTEGER)
-    issued_at: str
-
-    @model_validator(mode="after")
-    def _valid_permit_time(self) -> "ProductionDeliveryPermitPayload":
-        checked = _parse_utc(
-            self.qualification_signer_registry_checked_at,
-            field="permit registry checked_at",
-        )
-        expires = _parse_utc(
-            self.qualification_signer_registry_expires_at,
-            field="permit registry expires_at",
-        )
-        issued = _parse_utc(self.issued_at, field="permit issued_at")
-        if not checked <= issued < expires:
-            raise ValueError("permit was not issued under a fresh signer registry")
-        if issued - checked > MAX_PERMIT_SNAPSHOT_AGE:
-            raise ValueError(
-                "permit registry check is stale; the issuing authority must "
-                "recheck the signer registry within 60 seconds of permit issue"
-            )
-        if hashlib.sha256(self.run_id.encode("utf-8")).hexdigest() != (
-            self.flow_run_id_sha256
-        ):
-            raise ValueError("permit run identity digest is invalid")
-        return self
-
-    def canonical_bytes(self) -> bytes:
-        return canonical_json(self)
-
-    def payload_sha256(self) -> str:
-        return hashlib.sha256(
-            PERMIT_PAYLOAD_DOMAIN + self.canonical_bytes()
-        ).hexdigest()
-
-
 class ProductionDeliveryReceiptPayload(ClosedSignedModel):
     schema_version: Literal["openadapt.production-delivery-receipt-payload/v2"] = (
         DELIVERY_RECEIPT_PAYLOAD_SCHEMA
@@ -1326,10 +1278,11 @@ class ProductionDeliveryReceiptPayload(ClosedSignedModel):
 
 
 class ProductionDeliveryPermitArtifact(ClosedSignedModel):
-    schema_version: Literal["openadapt.production-delivery-permit-artifact/v2"] = (
-        PERMIT_ARTIFACT_SCHEMA
-    )
-    payload: ProductionDeliveryPermitPayload
+    schema_version: Literal[
+        "openadapt.production-delivery-permit-artifact/v2",
+        "openadapt.production-delivery-permit-artifact/v3",
+    ] = PERMIT_ARTIFACT_SCHEMA
+    payload: ProductionDeliveryPermitV3Payload | ProductionDeliveryPermitPayload
     payload_sha256: str = Field(pattern=_SHA256_RE)
     signer: DeliveryAuthoritySigner
     signature: str = Field(min_length=86, max_length=86)
@@ -1342,15 +1295,20 @@ class ProductionDeliveryPermitArtifact(ClosedSignedModel):
 
     @model_validator(mode="after")
     def _verify_artifact(self) -> "ProductionDeliveryPermitArtifact":
-        payload = ProductionDeliveryPermitPayload.model_validate(
-            self.payload.model_dump(mode="json")
+        payload = parse_delivery_permit_payload(self.payload.model_dump(mode="json"))
+        expected_schema = (
+            PERMIT_V3_ARTIFACT_SCHEMA
+            if isinstance(payload, ProductionDeliveryPermitV3Payload)
+            else PERMIT_ARTIFACT_SCHEMA
         )
+        if self.schema_version != expected_schema:
+            raise ValueError("delivery permit artifact and payload versions differ")
         if self.payload_sha256 != payload.payload_sha256():
             raise ValueError("delivery permit payload digest is invalid")
         _verify_authority_signature(
             self.signer,
             self.signature,
-            PERMIT_PAYLOAD_DOMAIN + payload.canonical_bytes(),
+            payload.signing_bytes(),
             field="delivery permit",
         )
         return self
@@ -1360,6 +1318,13 @@ class ProductionDeliveryPermitArtifact(ClosedSignedModel):
 
     def artifact_sha256(self) -> str:
         return hashlib.sha256(self.canonical_bytes()).hexdigest()
+
+
+class ProductionDeliveryPermitV3Artifact(ProductionDeliveryPermitArtifact):
+    schema_version: Literal["openadapt.production-delivery-permit-artifact/v3"] = (
+        PERMIT_V3_ARTIFACT_SCHEMA
+    )
+    payload: ProductionDeliveryPermitV3Payload
 
 
 class ProductionDeliveryReceiptArtifact(ClosedSignedModel):
@@ -1597,6 +1562,23 @@ def sign_production_delivery_permit(
     )
 
 
+def sign_production_delivery_permit_v3(
+    payload: ProductionDeliveryPermitV3Payload,
+    private_key: Ed25519PrivateKey,
+) -> ProductionDeliveryPermitV3Artifact:
+    """Sign the closed v3 start deadline under the separate v3 domain."""
+    validated = ProductionDeliveryPermitV3Payload.model_validate(
+        payload.model_dump(mode="json")
+    )
+    signature = private_key.sign(validated.signing_bytes())
+    return ProductionDeliveryPermitV3Artifact(
+        payload=validated,
+        payload_sha256=validated.payload_sha256(),
+        signer=_authority_signer(private_key),
+        signature=urlsafe_b64encode(signature).decode("ascii").rstrip("="),
+    )
+
+
 def sign_production_delivery_receipt(
     payload: ProductionDeliveryReceiptPayload,
     private_key: Ed25519PrivateKey,
@@ -1680,6 +1662,12 @@ class ProductionDeliveryPermit(ClosedSignedModel):
         )
         if not issued <= delivered < registry_expires:
             raise ValueError("delivery receipt chronology is invalid")
+        if isinstance(permit_payload, ProductionDeliveryPermitV3Payload):
+            deadline = _parse_utc(
+                permit_payload.delivery_not_after, field="permit delivery_not_after"
+            )
+            if delivered >= deadline:
+                raise ValueError("delivery receipt is after the signed input deadline")
         return self
 
     @classmethod
@@ -1700,7 +1688,7 @@ class ProductionDeliveryPermit(ClosedSignedModel):
         )
 
     @property
-    def _permit(self) -> ProductionDeliveryPermitPayload:
+    def _permit(self) -> AnyProductionDeliveryPermitPayload:
         return self.permit_artifact.payload
 
     @property
@@ -1844,7 +1832,7 @@ class ProductionPendingDeliveryPermit(ClosedSignedModel):
         )
 
     @property
-    def _permit(self) -> ProductionDeliveryPermitPayload:
+    def _permit(self) -> AnyProductionDeliveryPermitPayload:
         return self.permit_artifact.payload
 
     @property
