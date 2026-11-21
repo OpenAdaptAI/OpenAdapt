@@ -391,9 +391,12 @@
       card.appendChild(renderConflictBox(halt));
     }
 
+    // A value conflict can be resolved by entering the correct value, so it
+    // needs the input too. Only an entity-row conflict has no single value.
     if (
       halt.kind === 'ungrounded_required_field' ||
-      (!isConflict && allowedActions.includes('provide_value'))
+      (halt.kind !== 'prefill_entity_conflict' &&
+        allowedActions.includes('provide_value'))
     ) {
       card.appendChild(renderOperatorInputBlock(halt));
     }

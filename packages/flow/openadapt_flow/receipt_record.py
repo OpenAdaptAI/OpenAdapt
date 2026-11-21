@@ -119,7 +119,9 @@ def _approval(
         for a in block.get("approvals") or []
         if isinstance(a, Mapping) and a.get("decision") == "approved"
     ]
-    if mode == "not_gated" or not approved:
+    # The item's final decision decides: earlier "approved" answers never
+    # make a declined, waiting or unanswered item read as approved.
+    if mode == "not_gated" or block.get("decision") != "approved" or not approved:
         return {"mode": mode, "approver_kind": "none", "commitments": {}}, {}
     # The weakest approver counts: one delegate's answer among people's makes
     # the whole run "approved by an agent delegate", never "by a person".
@@ -245,11 +247,16 @@ def build_statement(
 def _write(path: Path, payload: Mapping[str, Any], *, private: bool = False) -> None:
     tmp = path.with_name(path.name + ".tmp")
     data = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    fd = os.open(
+    from openadapt_flow.private_file import open_binary
+
+    # A raw-byte descriptor (no Windows newline translation), every byte written.
+    fd = open_binary(
         tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if private else 0o644
     )
     try:
-        os.write(fd, data)
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view) :]
     finally:
         os.close(fd)
     os.replace(tmp, path)

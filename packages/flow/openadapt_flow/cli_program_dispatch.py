@@ -43,7 +43,7 @@ def bind_verified_program_run(
     workflow: Any,
     params: Any,
     worklists: Any,
-    policy_source: str,
+    policy_source: str | None,
     effect_verifier: Any,
     api_actuator: Any,
 ) -> int | None:
@@ -72,7 +72,7 @@ def restore_verified_program_dispatch(
     manifest: Any,
     workflow: Any,
     *,
-    policy_source: str,
+    policy_source: str | None,
     effect_verifier: Any,
     api_actuator: Any,
 ) -> tuple[Any, Any]:
