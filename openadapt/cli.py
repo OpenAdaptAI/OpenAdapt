@@ -342,6 +342,38 @@ class _LauncherSpellingStream:
         return getattr(self._stream, name)
 
 
+def _is_login(argv: list[str]) -> bool:
+    """``login`` or ``setup login``, not its help."""
+    if argv[:1] == ["login"]:
+        rest = argv[1:]
+    elif argv[:2] == ["setup", "login"]:
+        rest = argv[2:]
+    else:
+        return False
+    return not any(token in ("-h", "--help") for token in rest)
+
+
+def _option_values(argv: list[str], name: str) -> Optional[list[str]]:
+    """Every value of a repeatable ``--name VALUE`` option, or None."""
+    values = []
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            values.append(argv[index + 1])
+        elif token.startswith(name + "="):
+            values.append(token[len(name) + 1 :])
+    return values or None
+
+
+def _option_value(argv: list[str], name: str) -> Optional[str]:
+    """The value of ``--name VALUE`` or ``--name=VALUE`` in ``argv``, if any."""
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            return argv[index + 1]
+        if token.startswith(name + "="):
+            return token[len(name) + 1 :]
+    return None
+
+
 def _invoke_flow(argv: list[str]) -> int:
     """Invoke the canonical engine once and return its exit code."""
     if not _python_supported():
@@ -365,6 +397,17 @@ def _invoke_flow(argv: list[str]) -> int:
         alias_context = suppress_alias_notices()
     with alias_context:
         _correct_released_flow_x11_sonames()
+        if _is_login(argv):
+            code = int(flow_main(argv))
+            if code == 0:
+                from openadapt.seal_claim import after_login
+
+                after_login(
+                    _option_value(argv, "--host"),
+                    destination_kind=_option_value(argv, "--destination-kind"),
+                    trusted_hosts=_option_values(argv, "--trusted-host"),
+                )
+            return code
         if argv[:1] != ["tutorial"]:
             return int(flow_main(argv))
         # The tutorial is the first-run path and ends by printing next steps.
@@ -806,12 +849,12 @@ def _quickstart_publish_offer():
     if not _public_seals_available():
         return None
 
-    def offer(run_dir: Path, say, ask) -> bool:
+    def offer(run_dirs: list[Path] | Path, say, ask) -> bool:
         from openadapt.seal_publish import (
             PublishError,
             endpoint,
             hosted_seals_live,
-            publish,
+            publish_quickstart,
         )
 
         try:
@@ -819,19 +862,10 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say(
-            "Put this Seal online? This is the exact summary that would be "
-            f"uploaded ({run_dir / 'public-seal.json'}):"
-        )
+        if isinstance(run_dirs, Path):
+            run_dirs = [run_dirs]
         try:
-            publish(
-                run_dir,
-                interactive=True,
-                ask=ask,
-                say=say,
-                provenance="synthetic-tutorial",
-                command=_hint,
-            )
+            publish_quickstart(run_dirs, ask=ask, say=say, command=_hint)
         except PublishError as exc:
             say(str(exc))
         except (KeyboardInterrupt, EOFError):
@@ -1436,6 +1470,26 @@ for _verb, _help in (
 
 
 @main.command(
+    "login",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def login(command_ctx: click.Context) -> None:
+    """Sign in to OpenAdapt Cloud: `openadapt login` (same as `setup login`).
+
+    Every argument passes to `openadapt-flow login` unchanged. After a
+    successful sign-in, Seals this computer published are claimed into your
+    workspace when Cloud supports it.
+    """
+    _require_supported_python()
+    _run_flow(["login", *command_ctx.args])
+
+
+@main.command(
     "pull",
     context_settings={
         "ignore_unknown_options": True,
@@ -1926,7 +1980,8 @@ def seal(command_ctx: click.Context) -> None:
     [RUN_DIR]` uploads the run's public Seal (counts, outcomes and digests
     only) after you say yes and prints its link; `openadapt seal unpublish
     RUN_DIR` takes it down, and `openadapt seal verify <link>` checks a hosted
-    Seal's signature here. Also `openadapt seal keys pin` to pin Cloud's Seal
+    Seal's signature here. `openadapt seal claim` puts the Seals you published
+    in your Cloud workspace after `openadapt login` (login does it for you). Also `openadapt seal keys pin` to pin Cloud's Seal
     keys after a person confirms them. Every other argument passes to
     `openadapt-agent seal` unchanged.
     """
@@ -1938,6 +1993,8 @@ def seal(command_ctx: click.Context) -> None:
         sys.exit(_publish_seal(args[1:]))
     if args[:1] == ["unpublish"]:
         sys.exit(_unpublish_seal(args[1:]))
+    if args[:1] == ["claim"]:
+        sys.exit(_claim_seals(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and _is_seal_link(args[1]):
         sys.exit(_verify_seal_link(args[1], args[2:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
@@ -2041,10 +2098,10 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
             "and the hour the run started, signed by this computer's Seal key. "
             "It never holds inputs, typed values, screenshots or record "
             "contents. The program name is left out unless you pass --names "
-            "(the synthetic tutorial includes it). The exact card is printed "
-            "first, and nothing is uploaded until you say yes: at the prompt, "
-            "or with --yes when there is no terminal. --yes skips the "
-            "question, not the printed card."
+            "(the synthetic tutorial includes it). The preview lists every field; "
+            "--show prints the exact upload. Seals signed by the same key have the same public "
+            "key ID. Confirm at the prompt, or pass --yes to publish without "
+            "a prompt."
         ),
         allow_abbrev=False,
     )
@@ -2064,7 +2121,12 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="write and print public-seal.json; upload nothing",
+        help="preview all public fields and write public-seal.json; upload nothing",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="write the exact upload bytes to standard output and exit without publishing",
     )
     parser.add_argument(
         "--github",
@@ -2124,7 +2186,7 @@ def _ask_line(prompt: str) -> str:
 
 def _publish_seal(argv: list[str]) -> int:
     """`openadapt seal publish [RUN_DIR]`."""
-    from openadapt.seal_publish import PublishError, publish
+    from openadapt.seal_publish import PublishError, build, public_bytes, publish
 
     options = _seal_publish_parser().parse_args(argv)
     run_dir = options.run_dir or _newest_sealed_run()
@@ -2138,6 +2200,10 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(f"Not published: {run_dir} has no seal.json.", err=True)
         return 2
     try:
+        if options.show:
+            doc = build(run_dir, names=options.names, github=options.github)
+            click.get_binary_stream("stdout").write(public_bytes(doc))
+            return 0
         publish(
             run_dir,
             yes=options.yes,
@@ -2154,6 +2220,73 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(str(exc), err=True)
         return exc.exit_code
     return 0
+
+
+def _claim_seals(argv: list[str]) -> int:
+    """`openadapt seal claim [RUN_DIR...]`: claim published Seals into your workspace."""
+    from openadapt.seal_claim import claim_published, claims_live
+    from openadapt.seal_publish import host_of, urllib_transport
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal claim",
+        description=(
+            "Claim the Seals this computer published into the Cloud workspace "
+            "you signed in to with `openadapt login`, so they show on the "
+            "dashboard. The proof is a signature by this computer's Seal key; "
+            "the delete token is never sent. `openadapt login` does this for "
+            "you. Name run folders (or a quickstart folder) to include Seals "
+            "published by an older openadapt."
+        ),
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "run_dirs", nargs="*", type=Path, help="published run folders to include"
+    )
+    parser.add_argument("--host", default=None, help="the Cloud you signed in to")
+    parser.add_argument(
+        "--destination-kind",
+        default=None,
+        help="as for `openadapt login`: the trust class of --host",
+    )
+    parser.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="as for `openadapt login`: an allowlisted customer origin",
+    )
+    options = parser.parse_args(argv)
+    try:
+        from openadapt_flow.hosted import HostedError, resolve_host, resolve_token
+    except ImportError:
+        click.echo("This openadapt-flow cannot sign in to Cloud.", err=True)
+        return 1
+    from openadapt.seal_claim import check_destination
+
+    try:
+        origin = resolve_host(options.host)
+        check_destination(
+            origin,
+            destination_kind=options.destination_kind,
+            trusted_hosts=options.trusted_host,
+        )
+        token = resolve_token(None, host=origin)
+    except HostedError as exc:
+        click.echo(f"Not claimed: {exc}", err=True)
+        click.echo(f"Sign in first: {_hint('login')}", err=True)
+        return 1
+    if not claims_live(origin, transport=urllib_transport):
+        click.echo(f"{host_of(origin)} does not take Seal claims yet.", err=True)
+        return 1
+    try:
+        return claim_published(
+            origin,
+            token,
+            run_dirs=[p.expanduser() for p in options.run_dirs],
+            transport=urllib_transport,
+        )
+    except Exception as exc:  # noqa: BLE001 - e.g. no Seal key on this computer
+        click.echo(f"Not claimed: {type(exc).__name__}: {exc}", err=True)
+        return 1
 
 
 def _unpublish_seal(argv: list[str]) -> int:

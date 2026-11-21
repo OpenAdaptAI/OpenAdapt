@@ -15,13 +15,19 @@ on:
 permissions:
   contents: read
 
-# Cancel a pull request's earlier run when it gets a new commit; runs on
-# main always finish.
+# Cancel a pull request's earlier run when it gets a new commit; a run on
+# main that has started always finishes.
 concurrency:
-  # A pull request's newer push cancels its older run. Every other event (the
-  # merge queue, main, schedules, dispatches) gets a group of its own, so it
-  # is never cancelled or replaced.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A pull request's newer push cancels its older run. Pushes to main share
+  # one group: one analysis runs at a time, and the newest waiting push
+  # replaces an older waiting one, since its tree contains the older one's
+  # code. Nothing is cancelled once it runs. In 20.7 hours on 2026-11-20,
+  # 35 merges each analyzed all three languages, for 563 runner-minutes;
+  # replayed under this rule, 29 runs would have used about 458. No
+  # release reads this workflow. After a burst of merges, a cancelled
+  # CodeQL run on main means it was replaced, not that main is red. The merge queue, schedules and dispatches each get a
+  # group of their own.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
