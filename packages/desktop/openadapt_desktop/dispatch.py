@@ -3862,7 +3862,7 @@ class EngineDispatcher:
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before export")
             if not qualified["graph"]["bundle"]["encrypted"]:
-                raise ValueError("Seal and encrypt this workflow version before export")
+                raise ValueError("Encrypt this workflow version before export")
             row = self.services.db.get_bundle(workflow_id) or {}
             exports = self.config.data_dir / "exports"
             staging = exports / f".{workflow_id}-{uuid.uuid4().hex}.zip"
@@ -3915,7 +3915,7 @@ class EngineDispatcher:
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before deployment")
             if not qualified["graph"]["bundle"]["encrypted"]:
-                raise ValueError("Seal and encrypt this workflow version before deployment")
+                raise ValueError("Encrypt this workflow version before deployment")
             if not self.services.flow_bridge.supports_command("push"):
                 raise ValueError("The bundled Flow runtime does not support governed deployment")
             env = bundle_key_environment(workflow_id)

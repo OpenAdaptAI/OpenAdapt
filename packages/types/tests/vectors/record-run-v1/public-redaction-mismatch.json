@@ -1,0 +1,39 @@
+{
+  "description": "A card whose opened value doesn't match its commitment.",
+  "document": {
+    "disclosure_version": "openadapt.public-disclosure/v1",
+    "envelope": {
+      "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoyLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjIsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjowLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImRpc2Nsb3N1cmUiOnsiY29tbWl0bWVudHMiOnsiZmxvd192ZXJzaW9uIjoiODJlMjJlN2Y0YTg1OTE3MmE1MWFiOGI0NTQxZmIzNWE2MjhiZmZlYjNlNjFhZTk3YmI1YjFlNWNjOWJiNWFjMCIsImdpdGh1Yl9sb2dpbiI6IjM4ZTVmZDkxNDcwZWRiZTc2MGVjZWUyNzVhZGYxNDVhMTUyNWRlZjhlMzNiOGFmZWRiNTQwN2U1MmU0MTliZTMiLCJwcm9ncmFtX25hbWUiOiJkZjdjZjBlY2U3NWQ0NGNjOTRkMDYyOWEyYTNhNTczOTY1YzY1MDk5M2E2ODExNjliNDE5ZTBjNDM5M2EzNzAxIiwicnVuX2lkIjoiZmM4N2JkMzU0NmQzYTk1ZDNiYzIwNmMwYzkyNDllMGRkMmNiZDAxZTIzYjMxODBlZjM5MGUwMDBkZjM0ZmMwZCJ9LCJ2ZXJzaW9uIjoib3BlbmFkYXB0LnB1YmxpYy1kaXNjbG9zdXJlL3YxIn0sImxpbmVzIjpbeyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbXSwib3BlcmF0aW9uIjoid3JpdGUiLCJzdGVwIjoyLCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn0seyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbImZpZWxkX3ZhbHVlcyJdLCJvcGVyYXRpb24iOiJpcnJldmVyc2libGVfd3JpdGUiLCJzdGVwIjo0LCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn1dLCJtb2RlbF9jYWxscyI6MCwib3V0Y29tZSI6IlZFUklGSUVEIiwicHJvZ3JhbSI6eyJpZCI6InByb2ctNWJiMjFhYTBmMmU2YWMzMiIsInZlcnNpb25fc2hhMjU2IjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiJ9LCJyZWFzb25fY29kZSI6InZlcmlmaWVkIiwic3RhcnRlZF9ob3VyIjoiMjAyNi0xMS0yMFQyMzowMDowMFoiLCJzdGVwcyI6eyJvayI6NSwidG90YWwiOjV9fSwicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vb3BlbmFkYXB0LmFpL3JlY29yZC9ydW4vdjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSJ9LCJuYW1lIjoicmVwb3J0Lmpzb24ifSx7ImRpZ2VzdCI6eyJzaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sIm5hbWUiOiJidW5kbGUifV19",
+      "payloadType": "application/vnd.in-toto+json",
+      "signatures": [
+        {
+          "keyid": "seal-ed25519-b7a5ba90250d87f2",
+          "sig": "/4T0oKQpAu15gYh9RX/UXH+7LbwdOt8OdxhfnldKq2tQLqkA6yRq97DNOCCovdnUaG8p11qP6d+a3kHzgZ4NAw=="
+        },
+        {
+          "keyid": "seal-ed25519-6bc36497efe27e32",
+          "sig": "B6GPeQk8WBvmAE+Y3NWZJnuIi/iInoHwwOwwP496gZMjZHjYzi9AJB3zRYvJMtDTfDPL4cBm6FlsrI9+O9KKAA=="
+        }
+      ]
+    },
+    "openings": {
+      "flow_version": {
+        "salt": "d0009956fa678f84cebae9e38f33695e1e22ed53bdd31af8da11b37f7425f5d4",
+        "value": "3.5.0"
+      },
+      "program_name": {
+        "salt": "b67beccc7c33b4ef471b7bdcad9e4bb52c0b98099499fa6876c8c22e93858846",
+        "value": "Another program"
+      }
+    },
+    "schema": "openadapt.receipt-card/v1"
+  },
+  "expected": {
+    "ok": false,
+    "reason": "opening_mismatch",
+    "signer_lines": [
+      "Not verified: a disclosed value doesn't match the receipt"
+    ]
+  },
+  "registry": "registry.json"
+}

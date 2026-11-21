@@ -8488,7 +8488,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     if records_path is not None:
         print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
-        "\nEvery byte that would leave this machine is in receipt.json. "
+        "\nEvery byte that would leave this machine is in run-summary.json. "
         "Publishing is a separate, explicit step."
     )
     print(
@@ -11291,23 +11291,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_sections_parser(sub)
 
-    p = sub.add_parser(
-        "seal",
-        help=(
-            "Encrypt every file of a bundle that can hold patient data with "
-            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
-            "index, verify it, and publish it atomically at a new path"
-        ),
-        allow_abbrev=False,
-    )
-    p.add_argument("source", help="Existing workflow bundle directory")
-    p.add_argument(
-        "-o",
-        "--out",
-        required=True,
-        help="New destination directory (must not already exist)",
-    )
-    p.set_defaults(func=_cmd_seal)
+    from openadapt_flow.cli_encrypt import register as _register_encrypt
+
+    _register_encrypt(sub, _cmd_seal)
 
     from openadapt_flow.countersign.cli import add_countersign_parser
 
@@ -12878,7 +12864,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            "LOCAL ONLY: write a shareable run summary (run-summary.png / .json / "
             ".md) into DIR instead of contacting any host. The receipt is "
             "generated from a closed allow-list -- closed enums, counts, "
             "digests, versions -- and can carry no screenshot, OCR text, typed "
@@ -13214,6 +13200,10 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
 
     _add_guard_parser(sub)
+
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+
+    _add_hooks_parser(sub)
 
     from openadapt_flow.cli_fleet import register_fleet_parser
 
@@ -14291,13 +14281,12 @@ def main(
             args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
-            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
-            # never changes the run's exit code.
-            from openadapt_flow.offline_seal import seal_after_run
+            # The run's receipt, and the older offline Seal for one release.
+            # Neither changes the run's exit code.
+            from openadapt_flow.receipt_record import after_run_notes
 
             run_dir = getattr(args, "run_dir", None)
-            note = seal_after_run(Path(run_dir) if run_dir else None)
-            if note:
+            for note in after_run_notes(Path(run_dir) if run_dir else None):
                 print(note, file=sys.stderr)
         return code
     except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:

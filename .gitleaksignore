@@ -216,3 +216,15 @@ e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
 # #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
 5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+# PR #2411: benchmark/hooks_live/runs/*/report.json from one live hooks run. Each match is
+# "hold_key", a SHA-256 digest of a declared write's name and values (or of a call), not a
+# credential. The reports must stay byte-identical because signed receipts cover them; the
+# field is named hold_sha256 from the next commit on.
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-15b7cdba4d534cdf/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-20bd0d5202aebae2/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-4bbe7d211bdab090/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-52984979eabaa0ad/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5d86278519ee576e/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5e9e2f18db8db211/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-93a7facdefde72e6/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-bdb55e83345cda8b/report.json:generic-api-key:8
