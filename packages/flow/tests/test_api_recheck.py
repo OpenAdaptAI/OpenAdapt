@@ -958,6 +958,99 @@ def test_shared_endpoint_with_different_accounts_or_no_account_scope_is_refused(
     assert out_b.outcome == "NOT_CHECKED" and "record source" in out_b.reason
 
 
+def test_smart_client_id_binds_authorization_server_and_allows_key_renewal() -> None:
+    class _SmartTokenSource:
+        def __init__(
+            self, client_id: str, token_url: Optional[str], kid: str = "k1"
+        ) -> None:
+            self.client_id = client_id
+            self._token_url = token_url
+            self.kid = kid
+
+    class _SmartVerifier(_Verifier):
+        substrate = "fhir"
+        base_url = "https://shared-fhir.invalid/R4"
+
+        def __init__(self, token_source: _SmartTokenSource) -> None:
+            super().__init__()
+            self.token_source = token_source
+            self.record = {"id": "7", "meta": {"versionId": "1"}, "note": "A"}
+
+    # Missing authorization server identifier -> declined.
+    no_auth = VerifierReadback(
+        _SmartVerifier(_SmartTokenSource("shared-client", None)),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    assert no_auth.source_scope() is None
+    with pytest.raises(ReadFailed, match="account/tenant"):
+        begin(
+            no_auth,
+            target=TARGET,
+            first_outcome="VERIFIED",
+            first_identity="7",
+            window_s=5,
+            now=T0,
+        )
+
+    # Same client_id at authority A, then token/signing-key renewal at authority A -> VERIFIED.
+    src_a1 = VerifierReadback(
+        _SmartVerifier(
+            _SmartTokenSource(
+                "shared-client", "https://auth-a.invalid/oauth2/token", kid="k1"
+            )
+        ),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    src_a2_renewed = VerifierReadback(
+        _SmartVerifier(
+            _SmartTokenSource(
+                "shared-client", "https://auth-a.invalid/oauth2/token", kid="k2"
+            )
+        ),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    # Same client_id at authority B -> NOT_CHECKED.
+    src_b = VerifierReadback(
+        _SmartVerifier(
+            _SmartTokenSource(
+                "shared-client", "https://auth-b.invalid/oauth2/token", kid="k1"
+            )
+        ),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+
+    state = begin(
+        src_a1,
+        target=TARGET,
+        first_outcome="VERIFIED",
+        first_identity="7",
+        window_s=5,
+        now=T0,
+    )
+    sha = schedule(state)["state_sha256"]
+    later = T0 + timedelta(seconds=10)
+    assert (
+        recheck(
+            state, src_a2_renewed, target=TARGET, expected_state_sha256=sha, now=later
+        ).outcome
+        == "VERIFIED"
+    )
+    out_b = recheck(state, src_b, target=TARGET, expected_state_sha256=sha, now=later)
+    assert out_b.outcome == "NOT_CHECKED" and "record source" in out_b.reason
+
+
 def test_incomplete_log_returns_not_checked_even_when_fields_changed_or_missing() -> (
     None
 ):

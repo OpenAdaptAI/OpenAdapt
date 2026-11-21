@@ -1025,6 +1025,7 @@ class VerifierReadback:
         if not isinstance(base, str) or not base.strip():
             return None
         account: Optional[str] = None
+        auth_server: Optional[str] = None
         for attr in ("account_scope", "tenant_id", "principal_id", "account_id"):
             cand = getattr(cur, attr, None)
             if isinstance(cand, str) and cand.strip():
@@ -1033,16 +1034,27 @@ class VerifierReadback:
         if account is None:
             token_src = getattr(cur, "token_source", None)
             if token_src is not None:
-                for attr in (
-                    "account_scope",
-                    "tenant_id",
-                    "principal_id",
-                    "client_id",
-                ):
+                for attr in ("account_scope", "tenant_id", "principal_id"):
                     cand = getattr(token_src, attr, None)
                     if isinstance(cand, str) and cand.strip():
                         account = cand.strip()
                         break
+                if account is None:
+                    cid = getattr(token_src, "client_id", None)
+                    if isinstance(cid, str) and cid.strip():
+                        for srv_attr in (
+                            "token_url",
+                            "_token_url",
+                            "token_endpoint",
+                            "issuer",
+                        ):
+                            srv = getattr(token_src, srv_attr, None)
+                            if isinstance(srv, str) and srv.strip():
+                                auth_server = srv.strip().rstrip("/")
+                                break
+                        if auth_server is None:
+                            return None
+                        account = cid.strip()
         if account is None:
             return None
         scope: dict[str, Any] = {
@@ -1051,6 +1063,8 @@ class VerifierReadback:
             "account": account,
             "identity_path": self.identity_path,
         }
+        if auth_server is not None:
+            scope["auth_server"] = auth_server
         for attr in (
             "records_path",
             "records_key",
