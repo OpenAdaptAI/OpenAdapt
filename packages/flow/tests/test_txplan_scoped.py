@@ -901,6 +901,34 @@ def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
     assert audit.collateral and audit.own
 
 
+def test_a_marker_search_without_its_results_is_not_empty() -> None:
+    from openadapt_flow.txplan.adapters import AdapterError
+    from openadapt_flow.txplan.scoped import _search
+    from openadapt_flow.txplan.audit import ScopedCollection
+
+    scoped = ScopedCollection.model_validate(
+        {
+            "audit_ref": "item/{id}",
+            "identity": ["title"],
+            "marker": {"ext": "{marker}"},
+            "search": "/s?m={marker}",
+            "search_items": "items",
+        }
+    )
+
+    class Adapter:
+        def __init__(self, body):
+            self.http = httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)),
+                base_url="http://x",
+            )
+
+    with pytest.raises(AdapterError):
+        _search(Adapter({"error": "busy"}), scoped, "m1", "id")
+    assert _search(Adapter({"total": 0}), scoped, "m1", "id") == []
+    assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
+
+
 def test_activity_feed_resource_from_two_parts() -> None:
     item = {
         "id": 5,

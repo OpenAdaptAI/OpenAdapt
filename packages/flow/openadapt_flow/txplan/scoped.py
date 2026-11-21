@@ -34,6 +34,8 @@ doesn't record, or one made by another actor, is outside it.
 
 from __future__ import annotations
 
+import os
+
 import hashlib
 import json
 import time
@@ -274,6 +276,11 @@ def _search(
     # error, never an empty result.
     if scoped.search_items and not isinstance(got, Mapping):
         raise AdapterError("the marker search did not return an object")
+    head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
+    if head and head not in got and got.get("total") != 0:
+        # Missing-evidence class: no results field is not an empty result,
+        # unless the response says it matched nothing (total 0).
+        raise AdapterError(f"the marker search has no {head}")
     if not scoped.search_items and not isinstance(got, list):
         raise AdapterError("the marker search did not return a list")
     items = pick(got, scoped.search_items) if scoped.search_items else got
@@ -381,9 +388,13 @@ def scoped_write(
     )
     # Wrong-target class: a cached result belongs to one endpoint, so the same
     # system name pointed somewhere else is a different key.
+    # Wrong-target class: the account counts too, by a digest of the
+    # credential, so two accounts on one endpoint never share a result.
+    secret = os.environ.get(spec_system.auth.value_env, "") if spec_system.auth else ""
+    account = hashlib.sha256(secret.encode("utf-8")).hexdigest()[:16]
     key = state.key_for(
         task=task,
-        system=f"{system}@{spec_system.url()}",
+        system=f"{system}@{spec_system.url()}#{account}",
         collection=collection,
         op=op,
         slot=the_slot,
@@ -820,6 +831,9 @@ def _recover(
             for e in win.events:
                 if e.kind != "create":
                     continue
+                if not e.resources:
+                    # A create naming no resource may be ours: no proof.
+                    unmatched_create = True
                 for r in e.resources:
                     if prefix and not r.startswith(prefix):
                         continue

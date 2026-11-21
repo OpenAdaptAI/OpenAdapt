@@ -687,8 +687,21 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         k = f"{r['fault']}/{r['kind']}"
         f = faults.setdefault(
-            k, {"n": 0, "landed": 0, "stopped": 0, "exposed": r["exposed"], "codes": {}}
+            k,
+            {
+                "n": 0,
+                "landed": 0,
+                "stopped": 0,
+                "not_landed": 0,
+                "exposed": r["exposed"],
+                "codes": {},
+            },
         )
+        # A stop counts as a detection only for a plant that landed; a trial
+        # whose plant didn't land is not evidence either way.
+        if r["landed"] is False:
+            f["not_landed"] += 1
+            continue
         f["n"] += 1
         f["landed"] += 1 if r["landed"] else 0
         if r["outcome"] != "VERIFIED":
