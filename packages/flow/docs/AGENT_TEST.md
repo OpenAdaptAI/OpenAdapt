@@ -180,7 +180,7 @@ checks the signature and the digest. Without a key it carries digests only.
 
 ## Add an app or a scenario
 
-An app pack (`openadapt_flow/agent_test/data/apps/*.yaml`, or your own path
+An app pack (`openadapt_flow/agent_test/catalog/apps/*.yaml`, or your own path
 with `--app-pack`) gives:
 
 - `stack.services`: the Compose services, with images by reference

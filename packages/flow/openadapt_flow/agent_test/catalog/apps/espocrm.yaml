@@ -1,0 +1,107 @@
+# EspoCRM (CRM, AGPL-3.0): create an account.
+#
+# A single-page app; Save posts the record as JSON (POST /api/v1/Account).
+# The app runs from the project's own published image, pulled when the stack
+# starts; nothing from EspoCRM is copied into this package. Synthetic
+# companies only. EspoCRM is not a regulated system; it is here as the third
+# app shape (a JSON API behind a single-page app).
+schema: openadapt.agent-test.app/v1
+name: espocrm
+title: EspoCRM
+licence: AGPL-3.0 (image pulled by reference, not redistributed)
+description: EspoCRM, the company's CRM
+record_noun: account
+
+stack:
+  services:
+    db:
+      image: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+      container_name: "{project}-db"
+      healthcheck:
+        test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+        interval: 5s
+        retries: 60
+      environment:
+        MARIADB_ROOT_PASSWORD: synthetic-db-pass
+        MARIADB_DATABASE: espocrm
+    app:
+      image: docker.io/espocrm/espocrm:8.4
+      container_name: "{project}-app"
+      depends_on:
+        db: {condition: service_healthy}
+      ports: ["{bind}:{app_port}:80"]
+      environment:
+        ESPOCRM_DATABASE_HOST: db
+        ESPOCRM_DATABASE_USER: root
+        ESPOCRM_DATABASE_PASSWORD: synthetic-db-pass
+        ESPOCRM_ADMIN_USERNAME: admin
+        ESPOCRM_ADMIN_PASSWORD: synthetic-admin-pass
+        ESPOCRM_SITE_URL: "http://127.0.0.1:{proxy_port}"
+  ready_path: /
+  ready_timeout_s: 900
+
+login:
+  - {goto: /}
+  - {wait_selector: "#field-userName", timeout_s: 60}
+  - {fill: "#field-userName", value: admin}
+  - {fill: "#field-password", value: synthetic-admin-pass}
+  - {click: "#btn-login"}
+  - {wait_selector: "#navbar", state: attached, timeout_s: 60}
+  - {wait: networkidle}
+signed_out_selector: "#field-password"
+start_path: /
+
+save:
+  method: POST
+  path_regex: '^/api/v1/Account$'
+  ok_status: [200]
+
+store:
+  kind: mariadb
+  service: db
+  database: espocrm
+  user: root
+  password: synthetic-db-pass
+  table: account
+  key: id
+  key_kind: text
+  # A soft-deleted row (deleted = 1) counts as gone.
+  present_where: deleted = 0
+  fields:
+    name: {column: name, kind: text, form: name}
+    website: {column: website, kind: text, form: website}
+    type: {column: type, kind: text, form: type}
+    industry: {column: industry, kind: text, form: industry}
+    description: {column: description, kind: text, form: description}
+  identity: [name]
+  insert_sql: >-
+    INSERT INTO account (id, name, website, type, industry, description, deleted, created_at, modified_at,
+    created_by_id, assigned_user_id)
+    VALUES (SUBSTRING(MD5(RAND()), 1, 17), {name}, {website}, {type}, {industry}, {description}, 0, NOW(), NOW(),
+    (SELECT id FROM user WHERE user_name = 'admin'), (SELECT id FROM user WHERE user_name = 'admin'))
+
+task: >-
+  Create a new account named {name}: website {website}, type {type},
+  industry {industry}, description "{description}". Fill in exactly these
+  values (name, website, type, industry, description) and leave every other
+  field as it is.
+
+scripted:
+  - {goto: "/#Account/create"}
+  - {wait_selector: '.record [data-name="name"] input', timeout_s: 30}
+  - {fill: '.record [data-name="name"] input', value: "{name}"}
+  - {fill: '.record [data-name="website"] input', value: "{website}"}
+  - {eval: "document.querySelector(\".record [data-name='type'] select\").selectize.setValue('{type}')"}
+  - {eval: "document.querySelector(\".record [data-name='industry'] select\").selectize.setValue('{industry}')"}
+  - {fill: '.record [data-name="description"] textarea', value: "{description}"}
+  - {click: '.record button[data-action="save"]'}
+  - {sleep: 3}
+readback:
+  steps:
+    - {goto: "/#Account"}
+    - {wait_selector: ".list", timeout_s: 30}
+    - {fill: 'input[data-name="textFilter"]', value: "{name}"}
+    - {key: Enter}
+    - {sleep: 3}
+  expect_text: ["{name}"]
+  expect_count: {text: "{name}", equals: 1}

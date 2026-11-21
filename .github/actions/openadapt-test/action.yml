@@ -58,7 +58,10 @@ inputs:
   install:
     description: >-
       "source" installs openadapt-flow from this action's own checkout (the
-      ref you pinned); "pypi" installs openadapt-flow[agent-test] from PyPI.
+      ref you pinned); "pypi" installs openadapt-flow[agent-test] from PyPI;
+      "none" uses the runner's python, with openadapt-flow[agent-test] and
+      Playwright's chromium-headless-shell already installed (a self-hosted
+      runner).
     default: source
   python-version:
     default: "3.12"
@@ -79,9 +82,11 @@ runs:
   using: composite
   steps:
     - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      if: inputs.install != 'none'
       with:
         python-version: ${{ inputs.python-version }}
     - name: Install openadapt-flow with the agent-test extra
+      if: inputs.install != 'none'
       shell: bash
       env:
         INSTALL: ${{ inputs.install }}

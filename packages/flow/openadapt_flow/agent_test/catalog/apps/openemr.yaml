@@ -1,0 +1,117 @@
+# OpenEMR (electronic health record, GPL-3.0): register a new patient.
+#
+# The app runs from the project's own published image, pinned by digest and
+# pulled when the stack starts. Nothing from OpenEMR is copied into this
+# package; the SQL below is ours and only reads and writes patient_data.
+# Synthetic patients only.
+schema: openadapt.agent-test.app/v1
+name: openemr
+title: OpenEMR
+licence: GPL-3.0 (image pulled by reference, not redistributed)
+description: OpenEMR, the clinic's electronic health record
+record_noun: patient
+
+stack:
+  services:
+    db:
+      image: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+      container_name: "{project}-db"
+      healthcheck:
+        test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+        interval: 5s
+        retries: 60
+      command: ["--character-set-server=utf8mb4"]
+      environment:
+        MARIADB_ROOT_PASSWORD: synthetic-db-pass
+    app:
+      image: docker.io/openemr/openemr@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab
+      container_name: "{project}-app"
+      depends_on:
+        db: {condition: service_healthy}
+      ports: ["{bind}:{app_port}:80"]
+      environment:
+        MYSQL_HOST: db
+        MYSQL_ROOT_PASS: synthetic-db-pass
+        MYSQL_USER: openemr
+        MYSQL_PASS: synthetic-db-pass
+        OE_USER: admin
+        OE_PASS: synthetic-admin-pass
+  ready_path: /interface/login/login.php
+  ready_timeout_s: 1800
+
+login:
+  - {goto: "/interface/login/login.php?site=default"}
+  - {fill: "#authUser", value: admin}
+  - {fill: "#clearPass", value: synthetic-admin-pass}
+  - {click: "#login-button"}
+  - {wait_url_not_contains: login.php}
+  - {wait: networkidle}
+signed_out_selector: "#clearPass"
+signed_out_url_contains: login.php
+# OpenEMR's main page needs the token sign-in gives it, so the run starts where sign-in lands.
+start_path: null
+
+save:
+  method: POST
+  path_regex: '^/interface/new/new_comprehensive_save\.php$'
+  # Success and failure both answer 200; only an error status is a refusal.
+  ok_status: [200]
+
+store:
+  kind: mariadb
+  service: db
+  database: openemr
+  user: root
+  password: synthetic-db-pass
+  table: patient_data
+  key: pid
+  fields:
+    fname: {column: fname, kind: text, form: form_fname}
+    lname: {column: lname, kind: text, form: form_lname}
+    DOB: {column: DOB, kind: date, form: form_DOB}
+    sex: {column: sex, kind: text, form: form_sex}
+    street: {column: street, kind: text, form: form_street}
+    city: {column: city, kind: text, form: form_city}
+    state: {column: state, kind: text, form: form_state}
+    postal_code: {column: postal_code, kind: text, form: form_postal_code}
+    phone_home: {column: phone_home, kind: phone, form: form_phone_home}
+    email: {column: email, kind: email, form: form_email}
+  identity: [fname, lname]
+  insert_sql: >-
+    INSERT INTO patient_data (uuid, pid, pubpid, fname, lname, DOB, sex, street, city, state, postal_code,
+    phone_home, email, date, regdate)
+    SELECT UNHEX(REPLACE(UUID(), '-', '')), COALESCE(MAX(pid), 0) + 1, COALESCE(MAX(pid), 0) + 1,
+    {fname}, {lname}, {DOB}, {sex}, {street}, {city}, {state}, {postal_code}, {phone_home}, {email}, NOW(), NOW()
+    FROM patient_data
+
+task: >-
+  Register a new patient: {fname} {lname}, date of birth {DOB}, sex {sex},
+  address {street}, {city}, {state_name} {postal_code}, home phone
+  {phone_home}, email {email}. Fill in exactly these values (first and last
+  name, date of birth, sex, street, city, state, postal code, home phone,
+  email) and leave every other field as it is.
+
+scripted:
+  - {goto: /interface/new/new.php}
+  - {wait: networkidle}
+  - {click_role: button, name: Contact}
+  - {fill: "#form_fname", value: "{fname}"}
+  - {fill: "#form_lname", value: "{lname}"}
+  - {fill: "#form_DOB", value: "{DOB}"}
+  - {fill: "#form_street", value: "{street}"}
+  - {fill: "#form_city", value: "{city}"}
+  - {fill: "#form_postal_code", value: "{postal_code}"}
+  - {fill: "#form_phone_home", value: "{phone_home}"}
+  - {fill: "#form_email", value: "{email}"}
+  - {select: "#form_sex", value: "{sex}"}
+  - {select: "#form_state", value: "{state}"}
+  # The page's own Create button opens a duplicate-check dialog that needs the
+  # app's tab frame; the reference agent posts the same form directly.
+  - {eval: "document.getElementById('DEM').submit()"}
+  - {sleep: 4}
+readback:
+  steps:
+    - {goto: "/interface/main/finder/patient_select.php?patient={lname}&findBy=Last"}
+    - {wait: load}
+  expect_text: ["{fname}", "{DOB}"]
+  expect_count: {text: "{fname}", equals: 1}

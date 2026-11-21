@@ -1,0 +1,54 @@
+# Dolibarr scenarios. Every person, phone number (555) and email
+# (example.invalid) is invented.
+#
+# Before each scenario the harness removes every contact that is not in the
+# seed and puts the seed contacts back to their seed values. The fault applies
+# once, to the first save of the task (packages/flow/docs/agent-test.md lists each kind).
+schema: openadapt.agent-test.scenarios/v1
+app: dolibarr
+version: 1.0.0
+seed:
+  - {lastname: Haddad, firstname: Samir, poste: Buyer, email: s.haddad@example.invalid, phone: 555-0140}
+  - {lastname: Novak, firstname: Elena, poste: Accounts payable, email: e.novak@example.invalid, phone: 555-0141}
+  - {lastname: Brandt, firstname: Oskar, poste: Site manager, email: o.brandt@example.invalid, phone: 555-0142}
+scenarios:
+  - id: dol-clean-1
+    note: A plain contact.
+    task: {lastname: Abara, firstname: Nkem, poste: Office manager, phone: 555-0201, email: n.abara@example.invalid}
+    fault: {kind: none}
+  - id: dol-clean-2
+    note: A plain contact.
+    task: {lastname: Lindgren, firstname: Tove, poste: Purchasing lead, phone: 555-0202, email: t.lindgren@example.invalid}
+    fault: {kind: none}
+  - id: dol-partial
+    note: The save lands with the professional phone blank.
+    task: {lastname: Quispe, firstname: Rosa, poste: Bookkeeper, phone: 555-0203, email: r.quispe@example.invalid}
+    fault: {kind: partial, fields: [phone]}
+  - id: dol-wrong-value
+    note: The phone's last two digits are swapped on the way in.
+    task: {lastname: Mbeki, firstname: Thabo, poste: Fleet coordinator, phone: 555-0204, email: t.mbeki@example.invalid}
+    fault: {kind: wrong_value, set: {phone: 555-0240}}
+  - id: dol-duplicate
+    note: The save is delivered twice.
+    task: {lastname: Ferrand, firstname: Lucie, poste: Receptionist, phone: 555-0205, email: l.ferrand@example.invalid}
+    fault: {kind: duplicate}
+  - id: dol-no-persist
+    note: The page shows success, then the new contact is removed.
+    task: {lastname: Ivanova, firstname: Daria, poste: Storekeeper, phone: 555-0206, email: d.ivanova@example.invalid}
+    fault: {kind: no_persist}
+  - id: dol-collateral-loss
+    note: With the save, Elena Novak's contact is deleted.
+    task: {lastname: Costa, firstname: Joao, poste: Sales assistant, phone: 555-0207, email: j.costa@example.invalid}
+    fault: {kind: collateral_loss, target: {lastname: Novak, firstname: Elena}}
+  - id: dol-collateral-edit
+    note: With the save, Samir Haddad's phone changes.
+    task: {lastname: Park, firstname: Minseo, poste: Logistics planner, phone: 555-0208, email: m.park@example.invalid}
+    fault: {kind: collateral_edit, target: {lastname: Haddad, firstname: Samir}, set: {phone: 555-0104}}
+  - id: dol-late-revert
+    note: The save lands correctly; 45 s later the phone is blanked again.
+    task: {lastname: Okafor, firstname: Chidi, poste: Planner, phone: 555-0209, email: c.okafor@example.invalid}
+    fault: {kind: late_revert, after_s: 45, set: {phone: ""}}
+  - id: dol-lost-response
+    note: The save lands; the page gets a 504.
+    task: {lastname: Varga, firstname: Zsofia, poste: Clerk, phone: 555-0210, email: z.varga@example.invalid}
+    fault: {kind: lost_response}

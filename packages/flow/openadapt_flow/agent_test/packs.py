@@ -1,9 +1,9 @@
 """App packs and scenario packs: the data `openadapt test` runs.
 
-An app pack (``data/apps/<name>.yaml``) says how to start the app from its
+An app pack (``catalog/apps/<name>.yaml``) says how to start the app from its
 published images, sign the harness in, recognise the task's save request,
 and read and change the record table. A scenario pack
-(``data/scenarios/<name>.yaml``) holds the seed records, and for each
+(``catalog/scenarios/<name>.yaml``) holds the seed records, and for each
 scenario the task's values and the one fault planted on its save.
 
 Both are plain YAML, so a new app or a new scenario is a new file, not new
@@ -47,12 +47,12 @@ class PackError(ValueError):
 
 
 def _builtin(kind: str, name: str) -> Path:
-    root = resources.files("openadapt_flow.agent_test") / "data" / kind
+    root = resources.files("openadapt_flow.agent_test") / "catalog" / kind
     return Path(str(root / f"{name}.yaml"))
 
 
 def builtin_apps() -> list[str]:
-    root = Path(str(resources.files("openadapt_flow.agent_test") / "data" / "apps"))
+    root = Path(str(resources.files("openadapt_flow.agent_test") / "catalog" / "apps"))
     return sorted(p.stem for p in root.glob("*.yaml"))
 
 
