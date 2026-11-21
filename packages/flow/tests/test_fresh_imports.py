@@ -133,3 +133,46 @@ def test_package_reexports_and_submodule_access_still_work() -> None:
         "    raise SystemExit('expected AttributeError')\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True, cwd=FLOW)
+
+
+# Submodules a bare ``import openadapt_flow`` made available as attributes
+# while the package imported ``ir`` eagerly; each must still resolve.
+PACKAGE_ATTRIBUTE_SUBMODULES = [
+    "_browser_readiness",
+    "action_evidence",
+    "approval_mode",
+    "assurance",
+    "check_level",
+    "decision_delivery",
+    "execution_profiles",
+    "fhir_read",
+    "identity_signals",
+    "input_evidence",
+    "ir",
+    "job_authoring",
+    "judgment_cases",
+    "locale_invariants",
+    "lookup_capabilities",
+    "network_scope",
+    "private_file",
+    "qualification",
+    "qualification_admission",
+    "qualification_faults",
+    "qualified_business_decisions",
+    "records",
+    "run_invocation",
+    "runtime",
+    "traversal",
+    "verification",
+]
+
+
+def test_bare_package_import_still_reaches_every_submodule_attribute() -> None:
+    code = (
+        "import sys\n"
+        "import openadapt_flow\n"
+        f"for name in {PACKAGE_ATTRIBUTE_SUBMODULES!r}:\n"
+        "    module = getattr(openadapt_flow, name)\n"
+        "    assert module is sys.modules['openadapt_flow.' + name], name\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=FLOW)
