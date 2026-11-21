@@ -126,5 +126,9 @@
   "repeat_per_case": 20,
   "host": "zenbook lab, WSL Docker, project ho-openemr",
   "pytest": "53 passed (test_handoffs.py, test_handoffs_live_openemr.py, test_deferred_report.py) via remote-run.sh slot gate",
-  "branch_head": "13c6e3f68 (code identical to the PR head for these files)"
+  "code_head": "80fae9911fbd439733a5ecbbf81fcfb4b8f2326f",
+  "earlier_runs": [
+    "13c6e3f68: 180 of 180 at 20 per case",
+    "13c6e3f68: 45 of 45 at 5 per case"
+  ]
 }
