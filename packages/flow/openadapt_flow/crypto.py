@@ -294,7 +294,7 @@ class ContainerKeys:
 
     A run's checkpoint store reads its own sealed checkpoints back many times
     per run. Without a handle each read runs scrypt again (131 derivations,
-    about 20 s, on one MockMed run). The handle keeps the keys it derived,
+    about 20 s, on one tutorial run). The handle keeps the keys it derived,
     by salt and work factors, for its owner's lifetime only. It makes no copy
     of the passphrase and keeps no verifier: the owner passes its passphrase
     on every call, and :meth:`rebind` keeps only a reference to the key object
