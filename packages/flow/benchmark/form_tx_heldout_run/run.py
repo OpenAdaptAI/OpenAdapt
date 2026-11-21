@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import traceback
@@ -82,20 +83,56 @@ def _get(url: str) -> Any:
     return json.loads(urllib.request.urlopen(url, timeout=30).read())
 
 
-def sign_in(page: Any, username: str, password: str) -> bool:
-    """What an operator does on a sign-in page or dialog."""
+def _password_frame(page: Any) -> Any:
     for frame in [page.main_frame, *page.frames]:
-        pw = frame.locator("input[type=password]")
-        if pw.count() and pw.first.is_visible():
-            frame.locator(
-                "input[type=text], input[type=email], input:not([type])"
-            ).first.fill(username)
-            pw.first.fill(password)
-            pw.first.press("Enter")
-            page.wait_for_timeout(800)
-            page.wait_for_load_state()
-            return True
-    return False
+        try:
+            pw = frame.locator("input[type=password]")
+            if pw.count() and pw.first.is_visible():
+                return frame
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def sign_in(page: Any, username: str, password: str) -> bool:
+    """What an operator does on a sign-in page or dialog.
+
+    If no password field shows, the operator follows a visible "sign in" or
+    "log in" link or button first. After typing, it presses the sign-in
+    button, or Enter when there is none (a dialog may have no form).
+    """
+    frame = _password_frame(page)
+    if frame is None:
+        for f in [page.main_frame, *page.frames]:
+            try:
+                link = f.get_by_role("link", name=re.compile(r"sign ?in|log ?in", re.I))
+                if not link.count():
+                    link = f.get_by_role(
+                        "button", name=re.compile(r"sign ?in|log ?in", re.I)
+                    )
+                if link.count() and link.first.is_visible():
+                    link.first.click()
+                    page.wait_for_timeout(800)
+                    page.wait_for_load_state()
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        frame = _password_frame(page)
+    if frame is None:
+        return False
+    pw = frame.locator("input[type=password]")
+    frame.locator(
+        "input[type=text]:visible, input[type=email]:visible, input:not([type]):visible"
+    ).first.fill(username)
+    pw.first.fill(password)
+    button = frame.get_by_role("button", name=re.compile(r"sign ?in|log ?in|continue", re.I))
+    if button.count() and button.first.is_visible():
+        button.first.click()
+    else:
+        pw.first.press("Enter")
+    page.wait_for_timeout(800)
+    page.wait_for_load_state()
+    return True
 
 
 _LABEL_JS = r"""
