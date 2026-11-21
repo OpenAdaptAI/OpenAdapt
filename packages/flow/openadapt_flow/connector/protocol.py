@@ -100,6 +100,10 @@ class GroundingModel(BaseModel):
     model: str = ""
     api_key_env: str = ""
     phi_egress_attested: bool = False
+    #: Hosts allowed to receive PHI-bearing grounding requests. Cloud always
+    #: sends it (empty by default). The customer's deployment profile stays
+    #: authoritative: the engine reads its own runtime.phi_grounding_allowlist.
+    phi_grounding_allowlist: list[str] = Field(default_factory=list)
 
 
 class ByocJob(BaseModel):
