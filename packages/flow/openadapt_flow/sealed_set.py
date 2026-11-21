@@ -908,7 +908,7 @@ def _explicit_passphrase(passphrase: Optional[str]) -> bool:
         return False
     from openadapt_flow import at_rest
 
-    return passphrase != at_rest.existing_key()
+    return at_rest.explicit_key() or passphrase != at_rest.existing_key()
 
 
 def _new_v3(

@@ -873,6 +873,7 @@ def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
 
     monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
     monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
     err = io.StringIO()
     monkeypatch.setattr(sys, "stderr", err)
     stream = io.StringIO()
@@ -882,10 +883,10 @@ def test_the_new_key_notice_is_held_for_the_finale(root, monkeypatch, tmp_path):
         assert at_rest.local_key_path().exists()
         run_story(FakeEngine(root), view, next_steps=_steps, clock=_clock())
     assert err.getvalue() == ""
-    assert (
-        f"Created a local encryption key at {at_rest.local_key_path()}"
-        in stream.getvalue()
-    )
+    # The local passphrase and the device key new runs are wrapped to.
+    assert "Created a local encryption key at " in stream.getvalue()
+    assert str(at_rest.local_key_path()) in stream.getvalue()
+    assert str(at_rest.device_key_path()) in stream.getvalue()
 
 
 def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):

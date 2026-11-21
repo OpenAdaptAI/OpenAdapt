@@ -5,22 +5,24 @@ durable checkpoints can hold patient data. Flow encrypts them with
 :mod:`openadapt_flow.sealed_set` and :mod:`openadapt_flow.crypto`, by default
 and with no setup.
 
-* The key is ``OPENADAPT_BUNDLE_KEY`` (or ``OPENADAPT_RECORDING_KEY``) when
-  set. Otherwise it is a per-user key Flow generates on first use and keeps in
-  the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret
-  Service, through ``keyring``). A small marker,
-  ``$OPENADAPT_HOME/keys/at-rest.key.store.json``, records which keychain
-  entry holds it and a check value; it holds no key material. Where no
-  keychain works (a headless Linux box without Secret Service, say), the key
-  goes to ``$OPENADAPT_HOME/keys/at-rest.key`` with mode 0600 in a 0700
-  directory, with a warning. ``OPENADAPT_FLOW_KEY_STORE`` picks the store
-  (``auto``, the default; ``keychain``; ``file``). A key file made by an
-  earlier version keeps being used, so nothing it encrypted is orphaned.
-  ``OPENADAPT_FLOW_AT_REST_HOME`` moves the marker, the file and the ledger
-  (default ``$OPENADAPT_HOME``, else ``~/.openadapt``). Back the key up: what
-  it encrypts can't be read without it.
+* New recordings, bundles and run directories are sealed-set version 3:
+  each has its own data key, wrapped through a per-set bucket key to the
+  device keys, the organization's keys and a recovery key
+  (:mod:`openadapt_flow.key_hierarchy`). Where this computer has no secure
+  hardware key, the device key is a *software* P-256 key that this module
+  keeps in the OS keychain through ``keyring`` (macOS Keychain, Windows
+  Credential Manager, Linux Secret Service), with a non-secret marker
+  (``keys/device-key.store.json``) naming the entry and a check value; or,
+  where no keychain works, in ``keys/device-software.key`` (0600) with a
+  warning. ``OPENADAPT_FLOW_KEY_STORE`` picks ``auto``, ``keychain`` or
+  ``file``. A marker whose entry is gone, locked or different fails closed.
+* ``OPENADAPT_BUNDLE_KEY`` (or ``OPENADAPT_RECORDING_KEY``), when set, still
+  wins outside organization mode (deprecated). The local passphrase
+  ``keys/at-rest.key`` (0600), made by earlier versions and still used for
+  durable checkpoints and attended state, keeps working.
+  ``OPENADAPT_FLOW_AT_REST_HOME`` moves these files and the ledger.
 * Recordings, bundles, run directories and durable checkpoints are encrypted
-  under that key by default (:data:`DEFAULT_SEALS_ARTIFACTS`).
+  by default (:data:`DEFAULT_SEALS_ARTIFACTS`).
 * ``OPENADAPT_FLOW_AT_REST=strict``, the setting for healthcare and regulated
   deployments, also refuses the outputs that aren't encrypted yet
   (:func:`unsealed_write`).
@@ -34,11 +36,8 @@ and with no setup.
   Each prints a one-line warning and adds a ledger line. Strict mode ignores
   both. Files encrypted earlier still read.
 
-A keychain marker whose entry is gone, locked or different fails closed with
-:class:`LocalKeyError`; Flow never mints a second key over it.
-
-Stdlib only (``keyring`` is imported lazily), so :mod:`openadapt_flow.crypto`
-can import it on every load.
+Stdlib only (``keyring`` and ``cryptography`` are imported lazily), so
+:mod:`openadapt_flow.crypto` can import it on every load.
 """
 
 from __future__ import annotations

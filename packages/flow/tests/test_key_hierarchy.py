@@ -198,7 +198,7 @@ def test_a_configured_key_keeps_the_v1_header(home, monkeypatch) -> None:
     assert keychain.values == {}
 
 
-def test_a_legacy_plaintext_folder_and_key_file_still_work(home) -> None:
+def test_a_legacy_plaintext_folder_and_key_file_still_work(home, monkeypatch) -> None:
     root, _keychain = home
     legacy = base64.urlsafe_b64encode(os.urandom(32)).decode()
     keys = root / "keys"
@@ -207,8 +207,10 @@ def test_a_legacy_plaintext_folder_and_key_file_still_work(home) -> None:
     os.chmod(keys / at_rest.KEY_NAME, 0o600)
     assert crypto.resolve_key(None) == legacy
     old = root.parent / "old"
-    with sealed_set.writing(old, "run", legacy) as writer:  # what main wrote
+    monkeypatch.setenv(crypto.ENV_KEY, legacy)  # write the v1 set main wrote
+    with sealed_set.writing(old, "run", legacy) as writer:
         writer.write("report.json", b"old")
+    monkeypatch.delenv(crypto.ENV_KEY)
     assert _header(old)["version"] == 1
     assert sealed_set.read_bytes(old / "report.json") == b"old"
     plain = root.parent / "plain"

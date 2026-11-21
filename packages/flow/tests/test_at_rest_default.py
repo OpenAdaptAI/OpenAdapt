@@ -32,8 +32,10 @@ def default_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in (
         at_rest.OPT_OUT_ENV,
         at_rest.MODE_ENV,
+        at_rest.ENCRYPT_ENV,
         crypto.ENV_KEY,
         sealed_set.RECORDING_ENV_KEY,
+        "OPENADAPT_POLICY",
     ):
         monkeypatch.delenv(name, raising=False)
     home = tmp_path / "at-rest-home"
@@ -138,14 +140,15 @@ def test_unsealed_write_names_the_path_or_refuses(
 # -- recordings and bundles -------------------------------------------------------
 
 
-def test_a_plaintext_bundle_is_named_by_default(
-    default_mode: Path, tmp_path: Path, capsys
+def test_a_plaintext_recording_compiles_to_a_sealed_bundle_by_default(
+    default_mode: Path, tmp_path: Path
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)
+    rec = _recording(tmp_path / "rec", key=None)  # made before the default
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
-    assert (tmp_path / "b" / "workflow.json").is_file()
-    assert str(tmp_path / "b") in capsys.readouterr().err
-    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "b")
+    _assert_ciphertext_only(tmp_path / "b")
+    assert sealed_set.read_header(tmp_path / "b")["version"] == 3
+    assert Workflow.load(tmp_path / "b").name == "x"
+    assert _ledger(default_mode) == []
 
 
 def test_strict_mode_compiles_a_plaintext_recording_to_a_sealed_bundle(
@@ -214,11 +217,13 @@ def _record_args(out: Path, *, no_encrypt: bool = False) -> argparse.Namespace:
     return argparse.Namespace(out=str(out), no_encrypt=no_encrypt)
 
 
-def test_web_recordings_are_named_by_default_and_sealed_in_strict_mode(
+def test_web_recordings_are_sealed_by_default_and_in_strict_mode(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") is None
-    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "r")
+    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") == (
+        crypto.resolve_key(None)
+    )
+    assert _ledger(default_mode) == []
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     assert _recording_encryption_key(_record_args(tmp_path / "r2"), "web") == (
         crypto.resolve_key(None)
@@ -243,13 +248,16 @@ def test_no_encrypt_is_recorded_and_strict_refuses_it(
         _recording_encryption_key(_record_args(tmp_path / "r2", no_encrypt=True), "web")
 
 
-def test_desktop_recorders_work_by_default_and_refuse_in_strict_mode(
-    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+def test_desktop_recordings_are_sealed_by_default_and_refused_in_strict_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
     out = tmp_path / "desk"
-    assert _recording_encryption_key(_record_args(out), "windows") is None
-    assert str(out) in capsys.readouterr().err
-    assert _ledger(default_mode)[0]["path"] == str(out)
+    # The converted recording is sealed; the raw capture is held back in
+    # strict mode, which can't encrypt it while it records.
+    assert _recording_encryption_key(_record_args(out), "windows") == (
+        crypto.resolve_key(None)
+    )
+    assert _ledger(default_mode) == []
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     with pytest.raises(SystemExit, match="strict"):
         _recording_encryption_key(_record_args(tmp_path / "desk2"), "windows")
@@ -287,18 +295,20 @@ def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path, **kw):
         stop()
 
 
-def test_a_run_directory_is_plaintext_by_default_and_named(
-    default_mode: Path, tmp_path: Path, capsys
+def test_a_run_directory_is_sealed_by_default(
+    default_mode: Path, tmp_path: Path
 ) -> None:
     from tests.test_after_stop_mockmed import _workflow
 
     bundle = tmp_path / "bundle"
-    _workflow().save(bundle)
+    _workflow().save(bundle)  # a plaintext bundle from before the default
     run_dir = tmp_path / "run"
     _mockmed_run(tmp_path, bundle, run_dir)
-    assert (run_dir / "report.json").is_file()
-    assert str(run_dir) in capsys.readouterr().err
-    assert any(e.get("path") == str(run_dir) for e in _ledger(default_mode))
+    assert sealed_set.is_sealed(run_dir)
+    assert not (run_dir / "report.json").exists()
+    assert json.loads(sealed_set.read_text(run_dir / "report.json"))
+    _assert_ciphertext_only(run_dir)
+    assert not any(e.get("path") == str(run_dir) for e in _ledger(default_mode))
 
 
 def test_strict_mode_seals_the_run_directory_of_a_plaintext_bundle(

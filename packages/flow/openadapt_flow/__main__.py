@@ -14229,7 +14229,7 @@ def _private_input(args: argparse.Namespace) -> bool:
 def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     """Refuse a sealed path in a command that cannot keep it sealed, and a
     sealed path whose key is not configured, before the command runs."""
-    from openadapt_flow import sealed_set
+    from openadapt_flow import crypto, sealed_set
 
     sealed = _sealed_paths_in(args)
     if not sealed:
@@ -14251,7 +14251,10 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
-        if not sealed_set.passphrase_for(kind):
+        version = sealed_set.read_header(root).get("version")
+        if version != sealed_set.ENVELOPE_VERSION and not (
+            sealed_set.passphrase_for(kind) or crypto.resolve_read_key(None)
+        ):
             return sealed_set.missing_key_message(root, kind)
         try:
             # With no key configured the local key resolves; opening the set

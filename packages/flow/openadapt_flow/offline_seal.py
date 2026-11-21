@@ -91,6 +91,8 @@ LocalSealRefusal = Literal[
     "unsigned",
     "malformed",
     "subject_mismatch",
+    # The run directory is encrypted and no key on this computer opens it.
+    "report_locked",
     "unknown_key",
     "revoked_key",
     "key_mismatch",
@@ -654,6 +656,14 @@ def _report_bytes(path: Path) -> bytes:
         raise OSError(str(exc)) from exc
 
 
+def sealed_set_is_file(path: Path) -> bool:
+    """Whether ``path`` exists, opening an encrypted run directory to tell
+    (raises when no key here opens it)."""
+    from openadapt_flow import sealed_set
+
+    return sealed_set.is_file(path)
+
+
 def _report_is_file(path: Path) -> bool:
     from openadapt_flow import sealed_set
 
@@ -699,9 +709,15 @@ def verify_run(
     strict = strict or require_anchor
     for name in ("report.json",) if strict else ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if not _report_is_file(path):
+        try:
+            present = sealed_set_is_file(path)
+            raw = _report_bytes(path) if present else None
+        except (OSError, ValueError):
+            # Encrypted, and no key here opens it: say so, never "mismatch".
+            return LocalSealVerification(False, reason="report_locked")
+        if raw is None:
             continue
-        digest = hashlib.sha256(_report_bytes(path)).hexdigest()
+        digest = hashlib.sha256(raw).hexdigest()
         result = verify_local_seal(seal, digest, registry)
         if result.reason == "subject_mismatch":
             continue

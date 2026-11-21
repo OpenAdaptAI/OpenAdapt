@@ -42,6 +42,7 @@ class Notices(io.TextIOBase):
         self.target = target
         self.paths: list[str] = []
         self.key_created: Optional[str] = None
+        self.keys_created: list[str] = []
         self._partial = ""
         self._lock = threading.Lock()
 
@@ -58,7 +59,9 @@ class Notices(io.TextIOBase):
                 if match:
                     self.paths.append(match.group(1) + "\0" + match.group(2))
                 elif created:
-                    self.key_created = created.group(1) or created.group(2)
+                    where = created.group(1) or created.group(2)
+                    self.keys_created.append(where)
+                    self.key_created = ", ".join(self.keys_created)
                 else:
                     self.target.write(line + "\n")
         return len(text)
@@ -106,6 +109,10 @@ def _ensure_local_key() -> None:
         if at_rest.explicit_key() or at_rest.opt_out_reason() is not None:
             return
         at_rest.local_key()
+        from openadapt_flow import key_hierarchy
+
+        # The device key that new runs are wrapped to, made once here.
+        key_hierarchy.device_keys(create=True)
     except Exception:  # noqa: BLE001 - Flow reports it where the key is used
         return
 
