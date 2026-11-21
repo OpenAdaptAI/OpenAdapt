@@ -45,6 +45,7 @@ from urllib.parse import urlsplit
 from loguru import logger
 
 from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.macos_permissions import control_permission_guidance
 from openadapt_desktop.private_fs import ensure_private_dir
 
 EmitFn = Callable[[str, dict], None]
@@ -6227,7 +6228,7 @@ class EngineDispatcher:
     def check_permissions(self, **params: Any) -> dict:
         """Return the prompt-free :class:`PermissionStatus`.
 
-        macOS capture needs Screen Recording, Accessibility, and Input
+        macOS capture needs Screen Recording, app-control trust, and Input
         Monitoring. This check never requests access. Input Monitoring fails
         closed if its preflight API is unavailable; non-mac platforms do not
         use these macOS permissions and report all three as granted.
@@ -6245,6 +6246,7 @@ class EngineDispatcher:
             "screen_recording": screen,
             "accessibility": access,
             "input_monitoring": input_monitoring,
+            "control_permission": control_permission_guidance(),
         }
 
     def request_input_monitoring(self, **params: Any) -> dict:
@@ -6482,22 +6484,22 @@ def _toml_value(value: Any) -> str:
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _mac_preflight_screen() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_screen() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from Quartz import CGPreflightScreenCaptureAccess
 
         return bool(CGPreflightScreenCaptureAccess())
     except Exception:
-        return True
+        return None
 
 
-def _mac_preflight_accessibility() -> bool:  # pragma: no cover - platform-specific
+def _mac_preflight_accessibility() -> bool | None:  # pragma: no cover - platform-specific
     try:
         from ApplicationServices import AXIsProcessTrusted
 
         return bool(AXIsProcessTrusted())
     except Exception:
-        return True
+        return None
 
 
 def _mac_preflight_input_monitoring() -> bool:  # pragma: no cover - platform-specific
