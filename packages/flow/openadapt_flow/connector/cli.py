@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from typing import Callable
 
 
@@ -193,13 +194,13 @@ def _cmd_connector(args: argparse.Namespace) -> int:
     from openadapt_flow.connector.config import connector_config_path
 
     def persist_token(new_token: str) -> None:
+        save_enrollment(replace(settings, token=new_token, pending_token=None))
         settings.token = new_token
         settings.pending_token = None
-        save_enrollment(settings)
 
     def persist_pending(new_token: str) -> None:
+        save_enrollment(replace(settings, pending_token=new_token))
         settings.pending_token = new_token
-        save_enrollment(settings)
 
     can_persist = connector_config_path().is_file()
 
@@ -255,10 +256,6 @@ def _cmd_connector(args: argparse.Namespace) -> int:
         egress_audit_log=settings.egress_audit_log,
     )
     try:
-        if settings.pending_token and can_persist:
-            from openadapt_flow.connector.daemon import finish_rotation
-
-            finish_rotation(client, settings.pending_token, persist_token, print)
         return run_loop(
             client,
             settings,

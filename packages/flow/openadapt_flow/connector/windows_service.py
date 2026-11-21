@@ -204,6 +204,7 @@ def serve(
     redactor: Optional[TokenRedactingFilter] = None,
     runner: Optional[Callable[..., Any]] = None,
     client_kwargs: Optional[dict[str, Any]] = None,
+    credential_api: Any = None,
 ) -> int:
     """Run the connector loop until ``stop_event`` is set. Returns an exit code.
 
@@ -215,6 +216,7 @@ def serve(
 
     from openadapt_flow.connector.config import ConnectorConfigError, load_settings
     from openadapt_flow.connector.daemon import run_loop
+    from openadapt_flow.connector.windows_tokens import ServiceTokenRotation
 
     if runner is None:
         from openadapt_flow.connector.executor import _subprocess_runner
@@ -228,6 +230,7 @@ def serve(
         return 2
     if redactor is not None:
         redactor.add(settings.token)
+        redactor.add(settings.pending_token)
     if not settings.token:
         logger.error(
             'no connector token: put token = "..." in %s or set '
@@ -240,6 +243,23 @@ def serve(
     except ConnectorConfigError as exc:
         logger.error("connector run: %s", exc)
         return 2
+    rotation = None
+    # The administrator owns the bootstrap and destination. Explicit
+    # environment credentials or destinations keep their operator-managed
+    # lifecycle. Only the real service host supplies its OS credential API.
+    if credential_api is not None and not any(
+        key in os.environ
+        for key in ("BYOC_CONNECTOR_TOKEN", "CONTROL_PLANE_URL", "BYOC_ORG_ID")
+    ):
+        assert redactor is not None  # installed by the service host
+        rotation = ServiceTokenRotation(
+            credential_api, config_dir, settings, redactor.add
+        )
+        try:
+            rotation.restore()
+        except Exception as exc:
+            logger.error("service rotation state unavailable (%s)", type(exc).__name__)
+            return 2
     logger.info(
         "service starting: config %s, settings %s",
         config_file(config_dir),
@@ -256,7 +276,15 @@ def serve(
             **(client_kwargs or {}),
         )
         try:
-            code = run_loop(client, settings, runner=runner, log=logger.info)
+            code = run_loop(
+                client,
+                settings,
+                runner=runner,
+                log=logger.info,
+                persist_token=rotation.persist_token if rotation else None,
+                persist_pending=rotation.persist_pending if rotation else None,
+                stop_requested=stop_event,
+            )
             if stop_event.is_set():
                 break
             if code != 0:
@@ -488,10 +516,16 @@ if win32serviceutil is not None:  # pragma: no cover - Windows only
             self.stop_event.set()
 
         def SvcDoRun(self) -> None:  # noqa: N802 - pywin32 API
+            import win32cred
+
             logger, redactor = build_logger(self.config_dir)
             try:
                 code = serve(
-                    self.config_dir, self.stop_event, logger, redactor=redactor
+                    self.config_dir,
+                    self.stop_event,
+                    logger,
+                    redactor=redactor,
+                    credential_api=win32cred,
                 )
             except Exception:
                 logger.exception("service crashed")
@@ -662,7 +696,7 @@ def _act(action: str, config_dir: Path, timeout_s: float) -> int:  # pragma: no 
         win32serviceutil.RemoveService(SERVICE_NAME)
         print(
             f"removed {SERVICE_NAME}; {config_dir} (with the token) was kept, "
-            "delete it to remove the enrollment"
+            "revoke the connector in Cloud and remove the directory to decommission"
         )
         return 0
     # status
