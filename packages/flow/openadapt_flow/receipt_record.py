@@ -149,7 +149,10 @@ def _approval(
 
 
 #: Signed per-write receipts a run folder may hold, each one line.
-_EVIDENCE_GLOBS = (("tx_receipt", "tx-receipt.cose"), ("write_receipt", "*.receipt.cbor"))
+_EVIDENCE_GLOBS = (
+    ("tx_receipt", "tx-receipt.cose"),
+    ("write_receipt", "*.receipt.cbor"),
+)
 _EVIDENCE_CHECK = {
     "CONFIRMED": ("confirmed", "read_back", []),
     "REFUTED": ("refuted", "read_back", []),
@@ -167,7 +170,9 @@ def evidence_lines(run_dir: Optional[Path], first_step: int) -> list[dict[str, A
         return []
     found: list[tuple[str, Path]] = []
     for kind, pattern in _EVIDENCE_GLOBS:
-        found += [(kind, p) for p in sorted(Path(run_dir).rglob(pattern)) if p.is_file()]
+        found += [
+            (kind, p) for p in sorted(Path(run_dir).rglob(pattern)) if p.is_file()
+        ]
     lines: list[dict[str, Any]] = []
     for offset, (kind, path) in enumerate(found[:64]):
         data = path.read_bytes()
@@ -177,7 +182,9 @@ def evidence_lines(run_dir: Optional[Path], first_step: int) -> list[dict[str, A
 
             payload = decode_sign1(data)[3]
             body = json.loads(payload) if isinstance(payload, (bytes, str)) else {}
-            verdict = body.get("outcome") if kind == "tx_receipt" else body.get("verdict")
+            verdict = (
+                body.get("outcome") if kind == "tx_receipt" else body.get("verdict")
+            )
         except Exception:  # noqa: BLE001 - unreadable: the line says not checked
             verdict = None
         check, strength, not_checked = _EVIDENCE_CHECK.get(
@@ -624,9 +631,13 @@ def _with_anchor(
         key = next((k for k in registry if k.key_id == check.key_id), None)
         if key is None:
             continue
-        found = verify_receipt_anchor(envelope, anchor, base64.b64decode(key.public_key))
+        found = verify_receipt_anchor(
+            envelope, anchor, base64.b64decode(key.public_key)
+        )
         if found.ok and found.integrated_time is not None:
             when = datetime.fromtimestamp(found.integrated_time, timezone.utc)
             line = f"Logged publicly at {when.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-            return dataclasses.replace(result, signer_lines=(*result.signer_lines, line))
+            return dataclasses.replace(
+                result, signer_lines=(*result.signer_lines, line)
+            )
     return r._refuse("inconsistent", f"{path.name} doesn't verify for this receipt")
