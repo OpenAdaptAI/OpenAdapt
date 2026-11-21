@@ -32,6 +32,7 @@ import importlib  # noqa: E402
 SUITES = {
     "heldout": ("benchmark.form_tx_heldout", "benchmark.form_tx_heldout_run.packs"),
     "heldout2": ("benchmark.form_tx_heldout2", "benchmark.form_tx_heldout_run.packs2"),
+    "heldout3": ("benchmark.form_tx_heldout3", "benchmark.form_tx_heldout_run.packs3"),
 }
 _SUITE = {"name": "heldout"}
 
