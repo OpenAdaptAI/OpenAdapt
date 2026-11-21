@@ -1130,6 +1130,14 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
     )
 
 
+def _print_terminal_receipt(run_dir: Path, report, *, require_opt_in: bool = False) -> None:
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    note = receipt_after_run(run_dir, require_opt_in=require_opt_in, expected_report=report)
+    if note:
+        print(note, file=sys.stderr)
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -1176,6 +1184,9 @@ def _finish_replay(
             print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    if args is not None:
+        _print_terminal_receipt(run_dir, report)
+
     _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
@@ -5176,6 +5187,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
     _maybe_attest_run(run_dir, report, args)
+    _print_terminal_receipt(run_dir, report, require_opt_in=True)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -14302,12 +14314,6 @@ def main(
             # The older offline Seal stays for one release, for readers that
             # have not moved to receipt.json yet.
             note = seal_after_run(Path(run_dir) if run_dir else None)
-            if note:
-                print(note, file=sys.stderr)
-            from openadapt_flow.receipt_record import receipt_after_run
-
-            # The receipt (record/run/v1) for every run, with any outcome.
-            note = receipt_after_run(Path(run_dir) if run_dir else None)
             if note:
                 print(note, file=sys.stderr)
         return code

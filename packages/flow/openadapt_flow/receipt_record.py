@@ -18,17 +18,19 @@ The schema, verifier and vectors live in :mod:`openadapt_types.receipt`.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
 import re
+import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
 if TYPE_CHECKING:
     from openadapt_types.receipt import ReceiptVerification, RoleKey
 
+    from openadapt_flow.ir import RunReport
     from openadapt_flow.seal_keys import SealSigner
 
 RECEIPT_FILE = "receipt.json"
@@ -50,54 +52,112 @@ def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
     return env.get(ENV_MODE, "on").strip().lower() not in ("0", "off", "false", "no")
 
 
-def _count(value: Any) -> int:
-    if isinstance(value, bool):
-        return 0
-    try:
-        return max(0, int(value))
-    except (TypeError, ValueError):
-        return 0
+def _line(
+    index: int, result: Mapping[str, Any], ledger: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    from openadapt_flow.check_level import CheckLevel, from_verification_tier
 
-
-def _is_write(result: Mapping[str, Any]) -> bool:
-    return (
-        result.get("effect_verified") is not None
-        or result.get("effect_approved_unverified") is True
-        or result.get("risk") == "irreversible"
-        or bool(result.get("effect_contract_hashes"))
+    evidence = result.get("effect_evidence") or []
+    declared = Counter(result.get("effect_contract_hashes") or [])
+    ledger_effects = ledger["effects"] if ledger is not None else []
+    # A declared effect can lack a bound hash when the run stopped before the
+    # reader ran. Keep the attempted write and withhold its verification.
+    ledger_matches = (
+        ledger is None
+        or Counter(effect.get("contract_hash") for effect in ledger_effects) == declared
     )
-
-
-def _line(index: int, result: Mapping[str, Any]) -> dict[str, Any]:
-    effect = result.get("effect_verified")
-    if effect is True:
-        check, strength = "confirmed", "read_back"
-    elif effect is False:
-        check, strength = "refuted", "read_back"
-    else:
-        check = "not_checked"
-        strength = "same_screen" if result.get("postconditions_ok") is True else "none"
+    observed = Counter(item["effect_contract_hash"] for item in evidence)
+    check = "not_checked"
+    strength = "same_screen" if result.get("postconditions_ok") is True else "none"
+    # A negative aggregate flag covers both a contradiction and an unavailable
+    # reader. Only complete, contract-bound read evidence distinguishes them.
+    if declared and ledger_matches and declared == observed:
+        verdicts = {item["final_verdict"] for item in evidence}
+        levels = [
+            from_verification_tier(item["verification_tier"])
+            if type(item.get("verification_tier")) is int
+            else CheckLevel.UNCHECKED
+            for item in evidence
+        ]
+        if verdicts <= {"confirmed", "refuted"} and min(levels) > CheckLevel.UNCHECKED:
+            if "refuted" in verdicts:
+                check = "refuted"
+            elif (
+                verdicts == {"confirmed"}
+                and result.get("effect_verified") is True
+                and all(item.get("observed_effect") == "present" for item in evidence)
+                and (ledger is None or ledger.get("status") == "confirmed")
+            ):
+                check = "confirmed"
+            if check != "not_checked":
+                strength = (
+                    "read_back"
+                    if min(levels) >= CheckLevel.SYSTEM_OF_RECORD
+                    else "same_screen"
+                )
     not_checked: list[str] = []
-    if effect is None:
-        not_checked.append(
-            "approved_unverified"
-            if result.get("effect_approved_unverified") is True
-            else "effect_not_declared"
-        )
-    if effect is True and not result.get("effect_field_checks"):
+    if result.get("effect_approved_unverified") is True:
+        not_checked.append("approved_unverified")
+    if not declared and not ledger_effects:
+        not_checked.append("effect_not_declared")
+    if not result.get("effect_field_checks"):
         not_checked.append("field_values")
     if result.get("postconditions_ok") is None:
         not_checked.append("postconditions")
     return {
         "step": index,
         "target_kind": "api" if result.get("actuation") == "api" else "gui",
-        "operation": (
-            "irreversible_write" if result.get("risk") == "irreversible" else "write"
-        ),
+        "operation": "irreversible_write"
+        if result.get("risk") == "irreversible"
+        else "write",
         "check": check,
         "strength": strength,
         "not_checked": not_checked,
     }
+
+
+def _write_lines(report: Mapping[str, Any], results: list[Any]) -> list[dict[str, Any]]:
+    from openadapt_types.receipt import MAX_LINES
+
+    from openadapt_flow.ir import StepResult
+    from openadapt_flow.transaction import _attempt_state, _is_consequential_result
+
+    # ChangeLedgerEntry.position counts executed (non-skipped) results. A
+    # position, unlike the step ID alone, also identifies repeated loop steps.
+    ledger = report.get("change_ledger", [])
+    if not isinstance(ledger, list) or not all(
+        isinstance(row, Mapping)
+        and type(row.get("position")) is int
+        and row["position"] > 0
+        for row in ledger
+    ):
+        raise ReceiptRecordError("invalid_change_ledger", "invalid position")
+    rows = {row["position"]: row for row in ledger}
+    if len(rows) != len(ledger):
+        raise ReceiptRecordError("invalid_change_ledger", "duplicate position")
+    position = 0
+    lines = []
+    for index, result in enumerate(results):
+        if result.get("skipped") is True:
+            continue
+        position += 1
+        row = rows.pop(position, None)
+        if row is not None and row["step_id"] != result.get("step_id"):
+            raise ReceiptRecordError("invalid_change_ledger", "step mismatch")
+        step = StepResult.model_validate(result)
+        if _attempt_state(step) == "not_actuated":
+            if row is not None:
+                raise ReceiptRecordError("invalid_change_ledger", "undelivered step")
+            continue
+        if row is not None or _is_consequential_result(step):
+            lines.append(_line(index, result, row))
+    if rows:
+        raise ReceiptRecordError("invalid_change_ledger", "missing result")
+    if len(lines) > MAX_LINES:
+        raise ReceiptRecordError(
+            "too_many_writes", "the complete write list exceeds the receipt limit"
+        )
+    return lines
 
 
 def build_statement(
@@ -113,23 +173,31 @@ def build_statement(
     from openadapt_flow.public_seal import _checks, _hour, _int
 
     results = report.get("results")
-    results = (
-        [x for x in results if isinstance(x, Mapping)]
-        if isinstance(results, list)
-        else []
-    )
-    lines = [_line(i, x) for i, x in enumerate(results) if _is_write(x)][: r.MAX_LINES]
+    if not isinstance(results, list) or not all(
+        isinstance(x, Mapping) for x in results
+    ):
+        raise ReceiptRecordError("invalid_results", "expected the ordered run results")
+    try:
+        lines = _write_lines(report, results)
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ReceiptRecordError("invalid_write_evidence") from exc
     tally = {
         k: sum(1 for line in lines if line["check"] == k)
         for k in ("confirmed", "refuted", "not_checked")
     }
     outcome, reason = r.receipt_outcome(report.get("execution_outcome"))
-    if outcome == "VERIFIED" and tally["refuted"]:
-        outcome, reason = "UNKNOWN", "refuted_write"
+    if outcome == "VERIFIED" and results and "change_ledger" not in report:
+        outcome, reason = "UNKNOWN", "incomplete_write_coverage"
+    if outcome == "VERIFIED" and (tally["refuted"] or tally["not_checked"]):
+        outcome, reason = "UNKNOWN", "unverified_write"
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
-    subject = [{"name": "report.json", "digest": {"sha256": report_sha256}}]
+    canonical = hashlib.sha256(r.canonical_json(report).encode("utf-8")).hexdigest()
+    subject = [
+        {"name": "report.json", "digest": {"sha256": report_sha256}},
+        {"name": "report.canonical.json", "digest": {"sha256": canonical}},
+    ]
     if bundle:
         subject.append({"name": "bundle", "digest": {"sha256": bundle}})
     name = report.get("workflow_name")
@@ -184,16 +252,18 @@ def build_statement(
 
 
 def _write(path: Path, payload: Mapping[str, Any], *, private: bool = False) -> None:
-    tmp = path.with_name(path.name + ".tmp")
     data = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    fd = os.open(
-        tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if private else 0o644
-    )
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        os.write(fd, data)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if not private:
+            os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
     finally:
-        os.close(fd)
-    os.replace(tmp, path)
+        Path(tmp).unlink(missing_ok=True)
 
 
 def write_receipt_record(
@@ -202,70 +272,151 @@ def write_receipt_record(
     signer: Optional["SealSigner"] = None,
     home: Optional[Path] = None,
     flow_version: Optional[str] = None,
+    env: Optional[Mapping[str, str]] = None,
+    expected_report: Optional["RunReport"] = None,
 ) -> dict[str, Any]:
     """Write ``receipt.json`` and ``receipt.private.json`` for a finished run.
 
     Idempotent: an existing receipt over the same report bytes is kept. A
     receipt over different bytes is never silently replaced.
     """
+    from openadapt_flow.sealed_maintenance import mutation_lock
+
+    with mutation_lock(run_dir):
+        return _write_locked(
+            Path(run_dir), signer, home, flow_version, env, expected_report
+        )
+
+
+def _write_locked(
+    run_dir: Path,
+    signer: Optional["SealSigner"],
+    home: Optional[Path],
+    flow_version: Optional[str],
+    env: Optional[Mapping[str, str]],
+    expected_report: Optional["RunReport"],
+) -> dict[str, Any]:
     from openadapt_types import receipt as r
 
-    from openadapt_flow.offline_seal import loads_strict, signer_for
+    from openadapt_flow import sealed_set
+    from openadapt_flow.offline_seal import signer_for
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
     from openadapt_flow.seal_keys import KeyUnavailable
 
-    run_dir = Path(run_dir)
-    report_path = run_dir / "report.json"
+    # Private openings need encrypted-set support before they can be persisted
+    # beside an encrypted report. A direct caller has the same boundary as CLI.
+    if sealed_set.is_sealed(run_dir):
+        raise ReceiptRecordError(
+            "encrypted_run", "private openings require encrypted storage"
+        )
     try:
-        raw = report_path.read_bytes()
-        report = loads_strict(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        raise ReceiptRecordError("report_unreadable", str(report_path)) from exc
+        pending = CheckpointStore(run_dir).read_pending()
+    except Exception as exc:
+        raise ReceiptRecordError(
+            "settlement_unknown", "cannot read durable run state"
+        ) from exc
+    if pending is not None and pending.status in {"pending", "approved", "continuing"}:
+        raise ReceiptRecordError(
+            "restartable_run", "the durable run can still continue"
+        )
+    path = run_dir / "report.json"
+    try:
+        raw = sealed_set.read_bytes(path)
+        report = r.loads_strict(raw)
+    except (OSError, ValueError) as exc:
+        raise ReceiptRecordError("report_unreadable", str(path)) from exc
+    if expected_report is not None and expected_report.report_bytes() != raw:
+        raise ReceiptRecordError(
+            "report_changed", "the saved report differs from this run"
+        )
     if not isinstance(report, dict):
         raise ReceiptRecordError("report_unreadable", "report.json is not an object")
+    if report.get("transaction_outcome") == "SAVED_AWAITING_CHECK":
+        raise ReceiptRecordError("readback_pending")
     digest = hashlib.sha256(raw).hexdigest()
+    statement, openings = build_statement(report, digest, flow_version=flow_version)
+    chosen = signer or signer_for(home, env=env)
+    kid = r.key_id(chosen.public_raw())
+    entry = chosen.registry_entry()
+    registry = [r.RoleKey(kid, entry["public_key"], "this_computer")]
     out = run_dir / RECEIPT_FILE
+    private = run_dir / PRIVATE_FILE
+    legacy = None
     if out.exists():
         try:
-            existing = loads_strict(out.read_text(encoding="utf-8"))
+            existing = r.loads_strict(out.read_bytes())
+            if r.is_receipt_envelope(existing):
+                checked = r.verify_receipt(
+                    existing, registry, openings=r.loads_strict(private.read_bytes())
+                )
+                if (
+                    not checked.ok
+                    or len(checked.signers) != 1
+                    or checked.statement is None
+                ):
+                    raise ReceiptRecordError("existing_unverified", str(checked.reason))
+                if {s["name"]: s["digest"] for s in checked.statement["subject"]} != {
+                    s["name"]: s["digest"] for s in statement["subject"]
+                }:
+                    raise ReceiptRecordError(
+                        "already_signed",
+                        "receipt subjects differ from the settled report",
+                    )
+                previous = dict(checked.statement["predicate"])
+                expected = dict(statement["predicate"])
+                previous.pop("disclosure")
+                expected.pop("disclosure")
+                expected_values = {
+                    name: value["value"] for name, value in openings.items()
+                }
+                if previous != expected or checked.disclosed != expected_values:
+                    raise ReceiptRecordError(
+                        "already_signed", "receipt facts differ from the settled report"
+                    )
+                return existing
         except (OSError, ValueError) as exc:
             raise ReceiptRecordError("existing_unreadable", str(out)) from exc
-        if r.is_receipt_envelope(existing):
-            payload = loads_strict(base64.b64decode(existing["payload"]))
-            subjects = {
-                s["name"]: s["digest"]["sha256"] for s in payload.get("subject", [])
-            }
-            if subjects.get("report.json") == digest:
-                return existing
-            raise ReceiptRecordError(
-                "already_signed", "receipt.json covers different report bytes"
-            )
-        # An older run-receipt/v2 summary in receipt.json: keep it, renamed.
-        if isinstance(existing, dict) and existing.get("schema_version", "").startswith(
-            "openadapt.run-receipt/"
+        if (
+            not isinstance(existing, dict)
+            or existing.get("schema_version") != "openadapt.run-receipt/v2"
         ):
-            os.replace(out, run_dir / "run-summary.json")
-        else:
+            raise ReceiptRecordError("existing_unreadable", "unrecognized receipt file")
+        legacy = run_dir / "run-summary.json"
+        if legacy.exists() and legacy.read_bytes() != out.read_bytes():
             raise ReceiptRecordError(
-                "existing_unreadable", "receipt.json is not a receipt"
+                "legacy_summary_conflict", "both summary files exist and differ"
             )
-    if flow_version is None:
-        from openadapt_flow import __version__ as flow_version
-    statement, openings = build_statement(report, digest, flow_version=flow_version)
-    chosen = signer or signer_for(home)
     try:
-        kid = r.key_id(chosen.public_raw())
         envelope = r.sign_statement(statement, [(kid, chosen.sign)])
     except KeyUnavailable as exc:
         raise ReceiptRecordError(exc.code, str(exc)) from exc
-    _write(run_dir / PRIVATE_FILE, r.private_openings(envelope, openings), private=True)
+    if sealed_set.read_bytes(path) != raw:
+        raise ReceiptRecordError("report_changed", "report changed while signing")
+    if legacy is not None and not legacy.exists():
+        # Preserve the original bytes; an error before envelope installation
+        # leaves the legacy file and any earlier summary readable.
+        os.link(out, legacy)
+    _write(private, r.private_openings(envelope, openings), private=True)
     _write(out, envelope)
     return envelope
 
 
 def receipt_after_run(
-    run_dir: Optional[Path], env: Optional[Mapping[str, str]] = None
+    run_dir: Optional[Path],
+    env: Optional[Mapping[str, str]] = None,
+    *,
+    require_opt_in: bool = False,
+    expected_report: Optional["RunReport"] = None,
 ) -> Optional[str]:
     """CLI hook: write the run's receipt. Never raises, never changes the exit code."""
+    env = os.environ if env is None else env
+    if require_opt_in and env.get(ENV_MODE, "").strip().lower() not in {
+        "1",
+        "on",
+        "true",
+        "yes",
+    }:
+        return None
     if run_dir is None or not mode_enabled(env):
         return None
     from openadapt_flow import sealed_set
@@ -275,10 +426,11 @@ def receipt_after_run(
     if not (Path(run_dir) / "report.json").is_file():
         return None
     try:
-        from openadapt_flow.offline_seal import seal_home, signer_for
+        from openadapt_flow.offline_seal import seal_home
 
-        home = seal_home(env)
-        write_receipt_record(Path(run_dir), signer=signer_for(home, env=env))
+        write_receipt_record(
+            Path(run_dir), home=seal_home(env), env=env, expected_report=expected_report
+        )
     except ImportError:
         return "receipt not written: openadapt-types is older than 0.25"
     except ReceiptRecordError as exc:
@@ -348,6 +500,7 @@ def verify_run_receipt(
     """Verify ``run_dir/receipt.json`` and check it covers the run's report bytes."""
     from openadapt_types import receipt as r
 
+    from openadapt_flow import sealed_set
     from openadapt_flow.offline_seal import loads_strict
 
     run_dir = Path(run_dir)
@@ -371,10 +524,24 @@ def verify_run_receipt(
     # ``attach-seal`` keeps the signed bytes as report.pre-seal.json.
     for name in ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if path.is_file() and (
-            hashlib.sha256(path.read_bytes()).hexdigest() == subjects.get("report.json")
-        ):
-            return result
-    if not (run_dir / "report.json").is_file():
+        if not sealed_set.is_file(path):
+            continue
+        try:
+            raw = sealed_set.read_bytes(path)
+            if hashlib.sha256(raw).hexdigest() != subjects.get("report.json"):
+                continue
+            canonical = subjects.get("report.canonical.json")
+            if (
+                canonical is not None
+                and hashlib.sha256(
+                    r.canonical_json(r.loads_strict(raw)).encode("utf-8")
+                ).hexdigest()
+                != canonical
+            ):
+                return r._refuse("bad_signature", "the canonical report digest differs")
+        except (OSError, ValueError, sealed_set.SealedSetError):
+            return r._refuse("malformed", "the covered report is unreadable")
+        return result
+    if not sealed_set.is_file(run_dir / "report.json"):
         return result
     return r._refuse("bad_signature", "report.json changed after it was signed")
