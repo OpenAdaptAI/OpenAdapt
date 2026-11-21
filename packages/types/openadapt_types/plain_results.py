@@ -66,8 +66,8 @@ _CODE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _CODE_PATTERN = _CODE.pattern
 _TECHNICAL_CODE_PATTERN = (
     r"^(transaction_outcome|execute_terminal_outcome|execute_state|execution_outcome"
-    r"|agent_status|connector_status|managed_tool_status|program_terminal_state|overlay_phase"
-    r"|fallback)"
+    r"|agent_status|connector_status|managed_tool_status|clinic_tool_status"
+    r"|program_terminal_state|overlay_phase|fallback)"
     r"=[A-Za-z][A-Za-z0-9_]{0,63}$"
 )
 
@@ -132,6 +132,8 @@ class PlainOutcomeInputsV1(_StrictContract):
     agent_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     connector_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     managed_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
+    #: Legacy/compat v1 field; prefer ``managed_tool_status`` for new outcomes.
+    clinic_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     program_terminal_state: StrictStr | None = Field(
         default=None, pattern=_CODE_PATTERN
     )
@@ -139,29 +141,24 @@ class PlainOutcomeInputsV1(_StrictContract):
     dispatched: StrictBool | None = None
     delivery_uncertain: StrictBool | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_legacy_clinic_tool_status(cls, data: object) -> object:
-        # Legacy/compat shim for payloads serialized with clinic_tool_status.
-        if isinstance(data, Mapping) and "clinic_tool_status" in data:
-            normalized = dict(data)
-            legacy_val = normalized.pop("clinic_tool_status")
-            if (
-                "managed_tool_status" in normalized
-                and normalized["managed_tool_status"] != legacy_val
-            ):
-                raise ValueError(
-                    "conflicting managed_tool_status and legacy clinic_tool_status values"
-                )
-            normalized.setdefault("managed_tool_status", legacy_val)
-            return normalized
-        return data
+    @model_validator(mode="after")
+    def _reject_conflicting_tool_status(self) -> "PlainOutcomeInputsV1":
+        if (
+            self.managed_tool_status is not None
+            and self.clinic_tool_status is not None
+            and self.managed_tool_status != self.clinic_tool_status
+        ):
+            raise ValueError(
+                "conflicting managed_tool_status and legacy clinic_tool_status values"
+            )
+        return self
 
-    @property
-    def clinic_tool_status(self) -> StrictStr | None:
-        """Legacy/compat alias for :attr:`managed_tool_status`."""
-
-        return self.managed_tool_status
+    def effective_managed_tool_status(self) -> StrictStr | None:
+        return (
+            self.managed_tool_status
+            if self.managed_tool_status is not None
+            else self.clinic_tool_status
+        )
 
 
 class PlainOutcomeV1(_StrictContract):
@@ -235,17 +232,24 @@ class PlainOutcomeV1(_StrictContract):
             if row is None:
                 raise ValueError(f"{self.technical_code} names no fallback")
         else:
+            canonical_source = (
+                "managed_tool_status" if source == "clinic_tool_status" else source
+            )
+            exact_values = {
+                name.value: getattr(self.exact, name.value)
+                for name in OutcomeSourceV1
+            }
+            exact_values["managed_tool_status"] = (
+                self.exact.effective_managed_tool_status()
+            )
             decision = _decide(
                 table,
-                {
-                    name.value: getattr(self.exact, name.value)
-                    for name in OutcomeSourceV1
-                },
+                exact_values,
                 dispatched=self.exact.dispatched,
                 delivery_uncertain=self.exact.delivery_uncertain,
             )
             if decision.row is None or (decision.source, decision.value) != (
-                source,
+                canonical_source,
                 value,
             ):
                 raise ValueError(
@@ -523,7 +527,23 @@ def plain_outcome(
     for a person, or an overlay phase such as executing or paused.
     """
 
-    # Legacy/compat: accept clinic_tool_status when managed_tool_status is omitted.
+    # Legacy/compat: accept clinic_tool_status when managed_tool_status is omitted,
+    # and refuse conflicting values when both are supplied.
+    if managed_tool_status is not None and clinic_tool_status is not None:
+        m_val = (
+            managed_tool_status.value
+            if isinstance(managed_tool_status, Enum)
+            else managed_tool_status
+        )
+        c_val = (
+            clinic_tool_status.value
+            if isinstance(clinic_tool_status, Enum)
+            else clinic_tool_status
+        )
+        if m_val != c_val:
+            raise ValueError(
+                "conflicting managed_tool_status and legacy clinic_tool_status values"
+            )
     effective_managed_tool_status = (
         managed_tool_status if managed_tool_status is not None else clinic_tool_status
     )

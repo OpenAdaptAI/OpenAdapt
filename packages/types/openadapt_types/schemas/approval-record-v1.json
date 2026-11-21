@@ -116,8 +116,8 @@
         "reversible",
         "consequential",
         "irreversible",
-        "high_risk_write",
-        "high_risk_write"
+        "clinical_write",
+        "clinical_write"
       ],
       "title": "StepClass",
       "type": "string"

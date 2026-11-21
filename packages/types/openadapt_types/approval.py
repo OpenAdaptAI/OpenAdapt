@@ -282,14 +282,14 @@ class StepClass(str, Enum):
     CONSEQUENTIAL = "consequential"
     IRREVERSIBLE = "irreversible"
     #: An irreversible, high-risk write to a system of record.
-    HIGH_RISK_WRITE = "high_risk_write"
-    #: Legacy/compat alias for ``HIGH_RISK_WRITE`` (formerly ``clinical_write``).
-    CLINICAL_WRITE = "high_risk_write"
+    #: Wire value remains ``clinical_write`` in v1 for signed-grant and receipt compatibility.
+    HIGH_RISK_WRITE = "clinical_write"
+    #: Legacy alias for ``HIGH_RISK_WRITE``.
+    CLINICAL_WRITE = "clinical_write"
 
     @classmethod
     def _missing_(cls, value: object) -> Optional["StepClass"]:
-        # Legacy/compat wire alias for receipts/policies serialized before high_risk_write.
-        if value == "clinical_write":
+        if value == "high_risk_write":
             return cls.HIGH_RISK_WRITE
         return None
 
@@ -305,66 +305,75 @@ class ApproverPolicyRefusal(str, Enum):
     """Closed reasons a policy refuses an approver."""
 
     KIND_NOT_ALLOWED = "approver_kind_not_allowed"
-    HIGH_RISK_WRITE_NEEDS_OPT_IN = "high_risk_write_needs_opt_in"
-    #: Legacy/compat alias for ``HIGH_RISK_WRITE_NEEDS_OPT_IN``.
-    CLINICAL_WRITE_NEEDS_OPT_IN = "high_risk_write_needs_opt_in"
+    #: Wire value remains ``clinical_write_needs_opt_in`` in v1 for Flow compatibility.
+    HIGH_RISK_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
+    #: Legacy alias for ``HIGH_RISK_WRITE_NEEDS_OPT_IN``.
+    CLINICAL_WRITE_NEEDS_OPT_IN = "clinical_write_needs_opt_in"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional["ApproverPolicyRefusal"]:
+        if value == "high_risk_write_needs_opt_in":
+            return cls.HIGH_RISK_WRITE_NEEDS_OPT_IN
+        return None
 
 
 class ApproverPolicyV1(_Strict):
     """Which kinds of approver may decide each class of step.
 
     The default allows only a person for every class. A deployment may
-    widen a class to rules, agents or systems. ``high_risk_write`` accepts a
-    non-person approver only when ``high_risk_write_opt_in_sha256`` pins the
-    customer's signed opt-in.
+    widen a class to rules, agents or systems. ``HIGH_RISK_WRITE`` (v1 wire
+    key ``clinical_write``) accepts a non-person approver only when
+    ``high_risk_write_opt_in_sha256`` (v1 wire field
+    ``clinical_write_opt_in_sha256``) pins the customer's signed opt-in.
     """
 
     schema_version: Literal["openadapt.approver-policy/v1"] = APPROVER_POLICY_SCHEMA
     allowed: dict[StepClass, tuple[ApproverKind, ...]] = Field(
         default_factory=_default_allowed
     )
-    high_risk_write_opt_in_sha256: Optional[StrictStr] = Field(
+    clinical_write_opt_in_sha256: Optional[StrictStr] = Field(
         default=None, pattern=_SHA256
     )
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_legacy_fields(cls, data: object) -> object:
-        # Legacy/compat shim for policies serialized with clinical_write / clinical_write_opt_in_sha256.
+    def _normalize_domain_neutral_fields(cls, data: object) -> object:
+        # Accept domain-neutral input keys and normalize onto the v1 wire fields so
+        # signed v1 grants and Flow's v1 reader keep exact canonical bytes.
         if not isinstance(data, Mapping):
             return data
         normalized = dict(data)
-        if "clinical_write_opt_in_sha256" in normalized:
-            legacy_opt_in = normalized.pop("clinical_write_opt_in_sha256")
+        if "high_risk_write_opt_in_sha256" in normalized:
+            new_opt_in = normalized.pop("high_risk_write_opt_in_sha256")
             if (
-                "high_risk_write_opt_in_sha256" in normalized
-                and normalized["high_risk_write_opt_in_sha256"] != legacy_opt_in
+                "clinical_write_opt_in_sha256" in normalized
+                and normalized["clinical_write_opt_in_sha256"] != new_opt_in
             ):
                 raise ValueError(
-                    "conflicting high_risk_write_opt_in_sha256 and legacy "
+                    "conflicting high_risk_write_opt_in_sha256 and "
                     "clinical_write_opt_in_sha256 values"
                 )
-            normalized.setdefault("high_risk_write_opt_in_sha256", legacy_opt_in)
+            normalized.setdefault("clinical_write_opt_in_sha256", new_opt_in)
         allowed = normalized.get("allowed")
-        if isinstance(allowed, Mapping) and "clinical_write" in allowed:
+        if isinstance(allowed, Mapping) and "high_risk_write" in allowed:
             allowed_copy = dict(allowed)
-            legacy_kinds = allowed_copy.pop("clinical_write")
+            high_risk_kinds = allowed_copy.pop("high_risk_write")
             if (
-                "high_risk_write" in allowed_copy
+                "clinical_write" in allowed_copy
                 or StepClass.HIGH_RISK_WRITE in allowed_copy
             ):
                 raise ValueError(
-                    "policy cannot specify both high_risk_write and legacy clinical_write"
+                    "policy cannot specify both high_risk_write and clinical_write"
                 )
-            allowed_copy["high_risk_write"] = legacy_kinds
+            allowed_copy["clinical_write"] = high_risk_kinds
             normalized["allowed"] = allowed_copy
         return normalized
 
     @property
-    def clinical_write_opt_in_sha256(self) -> Optional[StrictStr]:
-        """Legacy/compat alias for :attr:`high_risk_write_opt_in_sha256`."""
+    def high_risk_write_opt_in_sha256(self) -> Optional[StrictStr]:
+        """Domain-neutral alias for the v1 ``clinical_write_opt_in_sha256`` field."""
 
-        return self.high_risk_write_opt_in_sha256
+        return self.clinical_write_opt_in_sha256
 
     @model_validator(mode="after")
     def _complete(self) -> "ApproverPolicyV1":
@@ -375,7 +384,7 @@ class ApproverPolicyV1(_Strict):
             if not kinds or len(set(kinds)) != len(kinds):
                 raise ValueError(f"{step_class.value} needs distinct approver kinds")
         high_risk = self.allowed[StepClass.HIGH_RISK_WRITE]
-        if high_risk != _PERSON_ONLY and self.high_risk_write_opt_in_sha256 is None:
+        if high_risk != _PERSON_ONLY and self.clinical_write_opt_in_sha256 is None:
             raise ValueError("high_risk_write allows a non-person only with an opt-in")
         return self
 
@@ -387,7 +396,7 @@ class ApproverPolicyV1(_Strict):
         if approver.kind not in self.allowed[step_class]:
             if (
                 step_class is StepClass.HIGH_RISK_WRITE
-                and self.high_risk_write_opt_in_sha256 is None
+                and self.clinical_write_opt_in_sha256 is None
             ):
                 return ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN
             return ApproverPolicyRefusal.KIND_NOT_ALLOWED
@@ -648,9 +657,9 @@ class ApprovalRecordV1(_Strict):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_legacy_step_class(cls, data: object) -> object:
-        # Legacy/compat shim for receipts serialized with step_class="clinical_write".
-        if isinstance(data, Mapping) and data.get("step_class") == "clinical_write":
+    def _normalize_domain_neutral_step_class(cls, data: object) -> object:
+        # Normalize domain-neutral input onto the v1 wire value for receipt compatibility.
+        if isinstance(data, Mapping) and data.get("step_class") == "high_risk_write":
             normalized = dict(data)
             normalized["step_class"] = StepClass.HIGH_RISK_WRITE.value
             return normalized

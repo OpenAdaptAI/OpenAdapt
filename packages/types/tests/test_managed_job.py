@@ -212,3 +212,75 @@ def test_exported_schemas_match_models_and_forbid_unconstrained_strings(
     assert shipped == model.model_json_schema()
     assert shipped["properties"]["schema_version"]["const"] == schema_version
     assert _unconstrained_string_paths(shipped) == []
+
+
+def test_catalog_schema_and_model_reject_invalid_tool_combinations() -> None:
+    shipped = json.loads(
+        files("openadapt_types.schemas")
+        .joinpath("managed-mcp-tools-v1.json")
+        .read_text(encoding="utf-8")
+    )
+    prefix_items = shipped["properties"]["tools"]["prefixItems"]
+    assert len(prefix_items) == 3
+    defs = shipped["$defs"]
+    expected = [
+        ("run_collect", "collect", False),
+        ("run_attach_artifact", "attach_artifact", True),
+        ("run_create_task", "create_task", True),
+    ]
+    for item, (name, action, requires_outbox) in zip(
+        prefix_items, expected, strict=True
+    ):
+        ref_name = item["$ref"].rsplit("/", 1)[-1]
+        spec_schema = defs[ref_name]
+        assert spec_schema["properties"]["name"]["const"] == name
+        assert spec_schema["properties"]["action"]["const"] == action
+        assert spec_schema["properties"]["requires_outbox"]["const"] is requires_outbox
+        assert {"name", "action", "requires_outbox"} <= set(spec_schema["required"])
+
+    valid_tools = MANAGED_MCP_TOOL_CATALOG.model_dump(mode="json")["tools"]
+    invalid_catalogs = [
+        # Repeated tool name in slot 1
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [valid_tools[0], valid_tools[0], valid_tools[2]],
+        },
+        # Wrong requires_outbox on run_collect
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [
+                {**valid_tools[0], "requires_outbox": True},
+                valid_tools[1],
+                valid_tools[2],
+            ],
+        },
+        # Mismatched action for run_attach_artifact
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [
+                valid_tools[0],
+                {**valid_tools[1], "action": "create_task"},
+                valid_tools[2],
+            ],
+        },
+        # Missing required fields in slot 0
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [{}, valid_tools[1], valid_tools[2]],
+        },
+    ]
+    for bad in invalid_catalogs:
+        with pytest.raises(ValidationError):
+            ManagedMcpToolCatalogV1.model_validate(bad)
+        # Verify the same fixture violates the published JSON Schema constraints
+        slot_mismatches = 0
+        for tool_obj, (name, action, requires_outbox) in zip(
+            bad["tools"], expected, strict=True
+        ):
+            if (
+                tool_obj.get("name") != name
+                or tool_obj.get("action") != action
+                or tool_obj.get("requires_outbox") is not requires_outbox
+            ):
+                slot_mismatches += 1
+        assert slot_mismatches > 0

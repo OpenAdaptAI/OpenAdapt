@@ -1744,3 +1744,68 @@ def test_review_graph_carries_the_named_sections_and_edits_them(tmp_path: Path) 
                 "other": graph["sections"][1]["section"],
             },
         )
+
+
+def test_default_policy_falls_back_when_bundled_flow_lacks_record_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openadapt_desktop import qualification as desktop_qual
+
+    real_api = desktop_qual._flow_api()
+    real_load = real_api["load_policy"]
+
+    def _legacy_load_policy(name: str):
+        if name == "record-write":
+            raise FileNotFoundError("Policy 'record-write' not found")
+        return real_load(name)
+
+    monkeypatch.setattr(
+        desktop_qual,
+        "_flow_api",
+        lambda: {**real_api, "load_policy": _legacy_load_policy},
+    )
+
+    fallback = desktop_qual._policy(desktop_qual.DEFAULT_QUALIFICATION_POLICY)
+    assert fallback.name == "clinical-write"
+
+    # Explicit unknown policies still fail closed instead of falling back.
+    with pytest.raises(QualificationError):
+        desktop_qual._policy("nonexistent-policy")
+
+
+def test_inspect_bundle_preserves_recorded_policy_for_existing_certified_bundle(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    workflow = Workflow.load(bundle)
+    workflow.stamp_certification("clinical-write", True)
+    workflow.save(bundle)
+
+    # Opening a bundle with recorded clinical-write provenance under the new
+    # domain-neutral default preserves its recorded policy identity.
+    reopened_legacy = inspect_bundle(bundle, workflow_id="wf-1")
+    assert reopened_legacy["policy"] == "clinical-write"
+
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    certified = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source="clinical-write",
+    )
+    assert certified["policy"] == "clinical-write"
+    assert certified["project"]["last_certification"]["policy_name"] == "clinical-write"
+
+    # Re-opening under the new domain-neutral default keeps the recorded policy
+    # identity from last_certification.
+    reopened = inspect_bundle(bundle, workflow_id="wf-1")
+    assert reopened["policy"] == "clinical-write"

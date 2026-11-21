@@ -30,6 +30,7 @@ QualificationEffectKind = Literal["record_written", "field_equals"]
 QualificationIdentityEnforcement = Literal["canonical_ladder", "signal_quorum"]
 QualificationTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 DEFAULT_QUALIFICATION_POLICY = "record-write"
+LEGACY_FALLBACK_QUALIFICATION_POLICY = "clinical-write"
 ENVIRONMENT_IDENTIFIER_DERIVATION = "sha256(trimmed UTF-8 operator identifier)"
 FIRST_REPLAY_DRAFT_APPLICATION_VERSION = (
     "openadapt-desktop-first-replay-draft/v1"
@@ -157,10 +158,41 @@ def _load(bundle_dir: Path, *, key: str | None = None):
         raise QualificationError(f"Cannot open the sealed workflow bundle: {exc}") from exc
 
 
-def _policy(source: str):
+def _recorded_policy_name(workflow: Any) -> str | None:
+    """Return the policy name recorded on an already-certified bundle, if any."""
+
+    project = getattr(workflow, "qualification", None)
+    last_cert = getattr(project, "last_certification", None) if project is not None else None
+    recorded = getattr(last_cert, "policy_name", None) if last_cert is not None else None
+    if isinstance(recorded, str) and recorded.strip():
+        return recorded.strip()
+    manifest = getattr(workflow, "manifest", None)
+    provenance = getattr(manifest, "provenance", None) if manifest is not None else None
+    prov_policy = getattr(provenance, "policy_name", None) if provenance is not None else None
+    if isinstance(prov_policy, str) and prov_policy.strip():
+        return prov_policy.strip()
+    return None
+
+
+def _policy(source: str, *, workflow: Any = None, prefer_recorded: bool = False):
+    load_policy = _flow_api()["load_policy"]
+    if prefer_recorded and source == DEFAULT_QUALIFICATION_POLICY and workflow is not None:
+        recorded = _recorded_policy_name(workflow)
+        if recorded:
+            try:
+                return load_policy(recorded)
+            except (FileNotFoundError, ValueError):
+                pass
     try:
-        return _flow_api()["load_policy"](source)
+        return load_policy(source)
     except (FileNotFoundError, ValueError) as exc:
+        # Older bundled Flow versions (e.g. 2.4.x) ship clinical-write and permissive
+        # without the domain-neutral record-write alias. Fall back only for the default.
+        if source == DEFAULT_QUALIFICATION_POLICY:
+            try:
+                return load_policy(LEGACY_FALLBACK_QUALIFICATION_POLICY)
+            except (FileNotFoundError, ValueError):
+                pass
         raise QualificationError(str(exc)) from exc
 
 
@@ -842,7 +874,7 @@ def inspect_bundle(
 
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
-    policy = _policy(policy_source)
+    policy = _policy(policy_source, workflow=workflow, prefer_recorded=True)
     graph_payload = program_graph(bundle_dir, workflow)
     lint = api["lint_workflow"](workflow)
     runtime_policy = api["evaluate_policy"](workflow, policy)
@@ -2285,7 +2317,7 @@ def certify_bundle(
     result = inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
-        policy_source=policy_source,
+        policy_source=policy.name,
         bundle_key=bundle_key,
     )
     result["certification_attempt"] = report.model_dump(mode="json")

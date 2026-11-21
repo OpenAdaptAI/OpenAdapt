@@ -363,10 +363,46 @@ def test_legacy_clinic_tool_status_compat_alias() -> None:
     assert outcome.result is PlainResultV1.CHECK_THE_RECORD
     assert outcome.technical_code == "managed_tool_status=HALTED"
     assert outcome.exact.managed_tool_status == "HALTED"
-    assert outcome.exact.clinic_tool_status == "HALTED"
-    parsed_inputs = PlainOutcomeInputsV1.model_validate({"clinic_tool_status": "VERIFIED"})
-    assert parsed_inputs.managed_tool_status == "VERIFIED"
-    assert parsed_inputs.clinic_tool_status == "VERIFIED"
+
+    # Saved v1 outcome carrying legacy technical_code and exact.clinic_tool_status
+    saved_v1 = {
+        "schema_version": "openadapt.plain-outcome/v1",
+        "result": "check_the_record",
+        "label": "Check the record",
+        "may_have_changed": True,
+        "safe_to_retry": False,
+        "next_action": outcome.next_action,
+        "proof": "none",
+        "technical_code": "clinic_tool_status=HALTED",
+        "exact": {"clinic_tool_status": "HALTED"},
+    }
+    restored = PlainOutcomeV1.model_validate(saved_v1)
+    assert restored.result is PlainResultV1.CHECK_THE_RECORD
+    assert restored.technical_code == "clinic_tool_status=HALTED"
+    assert restored.exact.clinic_tool_status == "HALTED"
+
+    # Exported JSON schema accepts legacy exact.clinic_tool_status and technical_code
+    shipped = json.loads(
+        files("openadapt_types.schemas")
+        .joinpath("plain-outcome-v1.json")
+        .read_text(encoding="utf-8")
+    )
+    assert "clinic_tool_status" in shipped["$defs"]["PlainOutcomeInputsV1"]["properties"]
+    assert "clinic_tool_status" in shipped["properties"]["technical_code"]["pattern"]
+
+    # Conflicting managed_tool_status and clinic_tool_status must fail closed
+    with pytest.raises(ValueError, match="conflicting"):
+        plain_outcome(
+            managed_tool_status="VERIFIED",
+            clinic_tool_status="RECONCILIATION_REQUIRED",
+        )
+    with pytest.raises(ValidationError, match="conflicting"):
+        PlainOutcomeInputsV1.model_validate(
+            {
+                "managed_tool_status": "VERIFIED",
+                "clinic_tool_status": "RECONCILIATION_REQUIRED",
+            }
+        )
 
 
 def test_coarse_and_overlay_combinations_keep_the_safety_rule() -> None:

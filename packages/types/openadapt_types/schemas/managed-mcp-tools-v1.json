@@ -1,19 +1,12 @@
 {
   "$defs": {
-    "ManagedMcpToolNameV1": {
-      "enum": [
-        "run_collect",
-        "run_attach_artifact",
-        "run_create_task"
-      ],
-      "title": "ManagedMcpToolNameV1",
-      "type": "string"
-    },
-    "ManagedMcpToolSpecV1": {
+    "ManagedAttachArtifactToolSpecV1": {
       "additionalProperties": false,
       "properties": {
         "action": {
-          "$ref": "#/$defs/ManagedOutboxActionV1"
+          "const": "attach_artifact",
+          "title": "Action",
+          "type": "string"
         },
         "destructive": {
           "const": true,
@@ -22,7 +15,9 @@
           "type": "boolean"
         },
         "name": {
-          "$ref": "#/$defs/ManagedMcpToolNameV1"
+          "const": "run_attach_artifact",
+          "title": "Name",
+          "type": "string"
         },
         "read_only": {
           "const": false,
@@ -31,6 +26,7 @@
           "type": "boolean"
         },
         "requires_outbox": {
+          "const": true,
           "title": "Requires Outbox",
           "type": "boolean"
         }
@@ -40,17 +36,86 @@
         "action",
         "requires_outbox"
       ],
-      "title": "ManagedMcpToolSpecV1",
+      "title": "ManagedAttachArtifactToolSpecV1",
       "type": "object"
     },
-    "ManagedOutboxActionV1": {
-      "enum": [
-        "collect",
-        "attach_artifact",
-        "create_task"
+    "ManagedCollectToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "collect",
+          "title": "Action",
+          "type": "string"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "const": "run_collect",
+          "title": "Name",
+          "type": "string"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "const": false,
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
       ],
-      "title": "ManagedOutboxActionV1",
-      "type": "string"
+      "title": "ManagedCollectToolSpecV1",
+      "type": "object"
+    },
+    "ManagedCreateTaskToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "create_task",
+          "title": "Action",
+          "type": "string"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "const": "run_create_task",
+          "title": "Name",
+          "type": "string"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "const": true,
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ManagedCreateTaskToolSpecV1",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -66,13 +131,13 @@
       "minItems": 3,
       "prefixItems": [
         {
-          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+          "$ref": "#/$defs/ManagedCollectToolSpecV1"
         },
         {
-          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+          "$ref": "#/$defs/ManagedAttachArtifactToolSpecV1"
         },
         {
-          "$ref": "#/$defs/ManagedMcpToolSpecV1"
+          "$ref": "#/$defs/ManagedCreateTaskToolSpecV1"
         }
       ],
       "title": "Tools",

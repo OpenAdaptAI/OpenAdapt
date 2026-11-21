@@ -207,9 +207,31 @@ class ManagedMcpToolSpecV1(_StrictContract):
         return self
 
 
+class ManagedCollectToolSpecV1(ManagedMcpToolSpecV1):
+    name: Literal[ManagedMcpToolNameV1.RUN_COLLECT]
+    action: Literal[ManagedOutboxActionV1.COLLECT]
+    requires_outbox: Literal[False]
+
+
+class ManagedAttachArtifactToolSpecV1(ManagedMcpToolSpecV1):
+    name: Literal[ManagedMcpToolNameV1.RUN_ATTACH_ARTIFACT]
+    action: Literal[ManagedOutboxActionV1.ATTACH_ARTIFACT]
+    requires_outbox: Literal[True]
+
+
+class ManagedCreateTaskToolSpecV1(ManagedMcpToolSpecV1):
+    name: Literal[ManagedMcpToolNameV1.RUN_CREATE_TASK]
+    action: Literal[ManagedOutboxActionV1.CREATE_TASK]
+    requires_outbox: Literal[True]
+
+
 class ManagedMcpToolCatalogV1(_StrictContract):
     schema_version: Literal["openadapt.managed-mcp-tools/v1"] = MANAGED_MCP_TOOLS_SCHEMA
-    tools: tuple[ManagedMcpToolSpecV1, ManagedMcpToolSpecV1, ManagedMcpToolSpecV1]
+    tools: tuple[
+        ManagedCollectToolSpecV1,
+        ManagedAttachArtifactToolSpecV1,
+        ManagedCreateTaskToolSpecV1,
+    ]
 
     @model_validator(mode="after")
     def _exactly_the_three_admitted_tools(self) -> "ManagedMcpToolCatalogV1":
@@ -237,17 +259,17 @@ class ManagedBoundToolCallV1(_StrictContract):
 
 MANAGED_MCP_TOOL_CATALOG = ManagedMcpToolCatalogV1(
     tools=(
-        ManagedMcpToolSpecV1(
+        ManagedCollectToolSpecV1(
             name=ManagedMcpToolNameV1.RUN_COLLECT,
             action=ManagedOutboxActionV1.COLLECT,
             requires_outbox=False,
         ),
-        ManagedMcpToolSpecV1(
+        ManagedAttachArtifactToolSpecV1(
             name=ManagedMcpToolNameV1.RUN_ATTACH_ARTIFACT,
             action=ManagedOutboxActionV1.ATTACH_ARTIFACT,
             requires_outbox=True,
         ),
-        ManagedMcpToolSpecV1(
+        ManagedCreateTaskToolSpecV1(
             name=ManagedMcpToolNameV1.RUN_CREATE_TASK,
             action=ManagedOutboxActionV1.CREATE_TASK,
             requires_outbox=True,
