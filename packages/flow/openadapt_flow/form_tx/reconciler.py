@@ -30,8 +30,10 @@ from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
+    collapse_radio_groups,
     compute_field_signature,
     match_anchor_in_snapshot,
+    radio_group_key,
 )
 from openadapt_flow.form_tx.types import (
     ControlKind,
@@ -60,6 +62,7 @@ from openadapt_flow.form_tx.types import (
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
+    UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
 )
@@ -316,6 +319,55 @@ def _deterministic_halt_id(
         }
     )
     return f"halt_{digest[:14]}"
+
+
+def _session_expired_text(
+    snapshot: FormSnapshot, ui_profile: Optional[UIProfileSpec]
+) -> Optional[str]:
+    """Return the banner or dialog text that says the session ended, if any."""
+    patterns = ui_profile.session_expired_text_patterns if ui_profile else ()
+    if not patterns:
+        return None
+    texts = [*snapshot.banner_errors, *(m.message_text for m in snapshot.active_modals)]
+    for text in texts:
+        norm = collapse_whitespace(text)
+        for pattern in patterns:
+            try:
+                if re.search(pattern, norm, flags=re.IGNORECASE):
+                    return norm
+            except re.error:
+                continue
+    return None
+
+
+def _auth_wall_reason(
+    snapshot: FormSnapshot, ui_profile: Optional[UIProfileSpec]
+) -> Optional[str]:
+    """Why ``snapshot`` is a sign-in wall, or ``None`` when it is not.
+
+    A sign-in wall is a configured auth-wall element, a visible editable
+    secret field, a missing signed-in landmark, or an error banner or dialog
+    whose text says the session ended. Each is checked before any error is
+    read as a validation failure, so an expired session is never reported as
+    a field problem.
+    """
+    if snapshot.auth_wall_present:
+        return "sign-in form on screen"
+    if any(
+        control.visible and control.is_secret and not control.readonly
+        for control in snapshot.controls
+    ):
+        return "password or secret field on screen"
+    if (
+        ui_profile is not None
+        and ui_profile.authenticated_landmark_selectors
+        and not snapshot.authenticated_landmark_present
+    ):
+        return "signed-in landmark missing"
+    expired = _session_expired_text(snapshot, ui_profile)
+    if expired:
+        return f"session ended: {expired}"
+    return None
 
 
 def _collect_surface_errors(snapshot: FormSnapshot) -> list[str]:
@@ -722,7 +774,7 @@ class FormReconciler:
                         and c.input_type.casefold() == "radio"
                         and c.name_attr
                         and c.name_attr == ctrl.name_attr
-                        and c.current_value == opt.value
+                        and (c.radio_value or c.current_value) == opt.value
                     ]
                     if len(radio_peers) == 1:
                         surface.set_checkbox_or_radio(
@@ -952,6 +1004,7 @@ class FormReconciler:
         in_popup_subroutine: Optional[str] = None,
     ) -> list[FormHaltItem]:
         matched_by_selector: dict[str, FieldBindingSpec] = {}
+        matched_by_group: dict[str, FieldBindingSpec] = {}
         for candidate_binding in bindings:
             try:
                 matched = match_anchor_in_snapshot(
@@ -961,15 +1014,22 @@ class FormReconciler:
                 continue
             if matched is not None:
                 matched_by_selector[matched.dom_selector] = candidate_binding
+                group = radio_group_key(matched)
+                if group is not None:
+                    matched_by_group[group] = candidate_binding
 
         halts: list[FormHaltItem] = []
-        for ctrl in snapshot.controls:
+        # A radio group is one field: one halt for the group, not per radio.
+        for ctrl in collapse_radio_groups(snapshot.controls):
             if not ctrl.visible or ctrl.disabled or ctrl.readonly:
                 continue
             if _is_action_button(ctrl):
                 continue
 
             binding = matched_by_selector.get(ctrl.dom_selector)
+            group = radio_group_key(ctrl)
+            if binding is None and group is not None:
+                binding = matched_by_group.get(group)
             is_required = ctrl.required or (
                 binding is not None and binding.required_in_pack
             )
@@ -1430,6 +1490,67 @@ class FormReconciler:
         session._halt_metadata[halt_id] = {"field_signature": sig}
         return halt
 
+    def _emit_auth_wall(
+        self,
+        session: ReconcilerSession,
+        snapshot: FormSnapshot,
+        reason: str,
+        *,
+        delivery_uncertain: bool,
+    ) -> FormTxResult:
+        """Stop at a sign-in wall.
+
+        Before any save request went out, the operator may sign in and the
+        run resumes (``FIXED_ON_SCREEN``). After a save request went out, the
+        record may or may not exist, so resuming could submit twice: the
+        outcome is ``delivery_uncertain`` and the only choices are to hand it
+        to the owner or abort.
+        """
+        sig = f"auth_wall|{snapshot.url_origin_and_path}"
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.AUTH_WALL_DETECTED,
+            snapshot.screen_id,
+            snapshot.url_origin_and_path,
+            sig,
+        )
+        message = (
+            f"Sign-in wall at {snapshot.url_origin_and_path!r} ({reason})"
+            if not delivery_uncertain
+            else (
+                f"Sign-in wall at {snapshot.url_origin_and_path!r} ({reason}) "
+                "after a save request was sent; the record may or may not exist"
+            )
+        )
+        allowed: tuple[HumanDecisionAction, ...] = (
+            (HumanDecisionAction.ESCALATE_TO_OWNER, HumanDecisionAction.ABORT_RUN)
+            if delivery_uncertain
+            else (
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            )
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.AUTH_WALL_DETECTED,
+            screen_id=snapshot.screen_id,
+            message=message,
+            allowed_actions=allowed,
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return self._build_result(
+            session,
+            outcome=(
+                FormTxOutcome.DELIVERY_UNCERTAIN
+                if delivery_uncertain
+                else FormTxOutcome.AUTH_REQUIRED
+            ),
+            safe_to_retry=not delivery_uncertain,
+            halts=(halt,),
+            what_happened=message,
+        )
+
     def _emit_validation_blocked(
         self,
         session: ReconcilerSession,
@@ -1438,6 +1559,18 @@ class FormReconciler:
         *,
         safe_to_retry: bool,
     ) -> FormTxResult:
+        bound = session._bound_surface or self._surface
+        auth_reason = _auth_wall_reason(
+            snapshot, bound.ui_profile if bound is not None else None
+        )
+        if auth_reason is not None:
+            # safe_to_retry is False only when a save request went out.
+            return self._emit_auth_wall(
+                session,
+                snapshot,
+                auth_reason,
+                delivery_uncertain=not safe_to_retry,
+            )
         errored_ctrl = next(
             (c for c in snapshot.controls if c.visible and c.error_text.strip()),
             None,
@@ -1656,46 +1789,10 @@ class FormReconciler:
             session._last_observation = snapshot
 
             # 2. Auth Wall Check
-            if (
-                snapshot.auth_wall_present
-                or any(
-                    control.visible and control.is_secret and not control.readonly
-                    for control in snapshot.controls
-                )
-                or (
-                    active_surface.ui_profile.authenticated_landmark_selectors
-                    and not snapshot.authenticated_landmark_present
-                )
-            ):
-                sig = f"auth_wall|{snapshot.url_origin_and_path}"
-                halt_id = _deterministic_halt_id(
-                    session.run_id,
-                    FormHaltKind.AUTH_WALL_DETECTED,
-                    snapshot.screen_id,
-                    snapshot.url_origin_and_path,
-                    sig,
-                )
-                halt = FormHaltItem(
-                    halt_id=halt_id,
-                    kind=FormHaltKind.AUTH_WALL_DETECTED,
-                    screen_id=snapshot.screen_id,
-                    message=(
-                        f"Authentication wall or missing session landmark at "
-                        f"{snapshot.url_origin_and_path!r}"
-                    ),
-                    allowed_actions=(
-                        HumanDecisionAction.FIXED_ON_SCREEN,
-                        HumanDecisionAction.ESCALATE_TO_OWNER,
-                        HumanDecisionAction.ABORT_RUN,
-                    ),
-                )
-                session._halt_metadata[halt_id] = {"field_signature": sig}
-                return self._build_result(
-                    session,
-                    outcome=FormTxOutcome.AUTH_REQUIRED,
-                    safe_to_retry=True,
-                    halts=(halt,),
-                    what_happened=halt.message,
+            auth_reason = _auth_wall_reason(snapshot, active_surface.ui_profile)
+            if auth_reason is not None:
+                return self._emit_auth_wall(
+                    session, snapshot, auth_reason, delivery_uncertain=False
                 )
 
             # 3. Active Modal Check
@@ -2551,9 +2648,8 @@ class FormReconciler:
                 screens=session.pack.screens,
             )
             if active_halt.kind == FormHaltKind.AUTH_WALL_DETECTED:
-                still_blocked = post_snap.auth_wall_present or (
-                    active_surface.ui_profile.authenticated_landmark_selectors
-                    and not post_snap.authenticated_landmark_present
+                still_blocked = (
+                    _auth_wall_reason(post_snap, active_surface.ui_profile) is not None
                 )
                 if still_blocked:
                     res = self._build_result(

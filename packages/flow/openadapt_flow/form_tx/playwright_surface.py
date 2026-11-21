@@ -541,6 +541,7 @@ _SNAPSHOT_WALKER_JS = r"""
         let checked = null;
         let currentValue = '';
         let options = [];
+        let radioValue = '';
 
         if (tag === 'select') {
             options = Array.from(el.options).map((opt) => ({
@@ -576,8 +577,21 @@ _SNAPSHOT_WALKER_JS = r"""
             checked = Boolean(el.checked);
             currentValue = checked ? 'true' : 'false';
         } else if (tag === 'input' && inputType === 'radio') {
+            // An unchecked radio holds no answer: it reads as empty. Its own
+            // value is kept in radio_value, and options list its group.
             checked = Boolean(el.checked);
-            currentValue = String(el.value || '');
+            radioValue = String(el.value || '');
+            currentValue = checked ? radioValue : '';
+            if (nameAttr) {
+                const scope = el.form || el.getRootNode() || document;
+                const peers = safeQueryAll(scope, 'input[type="radio"]').filter(
+                    (r) => r.name === nameAttr && (r.form || null) === (el.form || null)
+                );
+                options = peers.map((r) => ({
+                    value: String(r.value || ''),
+                    label: resolveLabelText(r, 'input', 'radio', ''),
+                }));
+            }
         } else if (role === 'checkbox') {
             checked = el.getAttribute('aria-checked') === 'true';
             currentValue = checked ? 'true' : 'false';
@@ -640,6 +654,7 @@ _SNAPSHOT_WALKER_JS = r"""
             error_text: errorText,
             options,
             is_secret: isSecret,
+            radio_value: radioValue,
         });
     }
 
@@ -1302,6 +1317,7 @@ class PlaywrightFormSurface:
                     error_text=str(item.get("error_text") or ""),
                     options=opts,
                     is_secret=is_secret,
+                    radio_value=str(item.get("radio_value") or ""),
                 )
             )
 

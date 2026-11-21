@@ -78,8 +78,24 @@ Measured on four held-out synthetic portals
 - A type-ahead that fetches suggestions only after typing cannot be filled:
   the surface opens a listbox by clicking, finds none, and the run raises an
   error instead of stopping.
-- An unchecked native radio reads as holding its value attribute, so a pack
-  must set radios from the intake rather than treat them as prefill.
+
+### Sign-in walls and radio groups
+
+- A screen is a sign-in wall when it shows a configured auth-wall element, an
+  editable password or secret field, lacks the configured signed-in landmark,
+  or shows an error banner or dialog whose text matches
+  `UIProfileSpec.session_expired_text_patterns` (English defaults such as
+  "session has expired", "signed out", "please sign in again"). This check
+  runs before any error is read as a validation failure, so an expired
+  session stops as `auth_required`, and the operator can sign in and mark it
+  fixed on screen. If the wall appears after the submit request went out, the
+  outcome is `delivery_uncertain` and the run cannot resume, because the
+  record may already exist.
+- Native radios that share a `name` are one field. An unchecked radio reads
+  as empty, its own value is in `radio_value`, and `options` lists the group.
+  An anchor that matches several radios of one group resolves to the checked
+  radio, or to the first when none is checked. A required group with no
+  intake value stops once, not once per radio.
 
 `SignedFormTxReceipt` signs the local runner's statement. Its signature proves
 integrity under that local key. It is not a server attestation, external witness,
