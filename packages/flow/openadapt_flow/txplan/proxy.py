@@ -59,11 +59,23 @@ PROTOCOL = "2025-06-18"
 PATH = "/mcp"
 MAX_QUERY_ROWS = 200
 #: Environment variables that carry database credentials, removed from the child.
-SCRUB = ("DATABASE_URL", "PGPASSWORD", "PGPASSFILE", "PGSERVICE", "PGSERVICEFILE", "PGHOST",
-         "PGUSER", "PGDATABASE", "PGPORT", "MYSQL_PWD")
+SCRUB = (
+    "DATABASE_URL",
+    "PGPASSWORD",
+    "PGPASSFILE",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGHOST",
+    "PGUSER",
+    "PGDATABASE",
+    "PGPORT",
+    "MYSQL_PWD",
+)
 
 
-def child_environment(environ: Mapping[str, str], secrets_: Sequence[str]) -> dict[str, str]:
+def child_environment(
+    environ: Mapping[str, str], secrets_: Sequence[str]
+) -> dict[str, str]:
     """The command's environment: credentials and their copies removed."""
     out = {}
     for k, v in environ.items():
@@ -73,31 +85,61 @@ def child_environment(environ: Mapping[str, str], secrets_: Sequence[str]) -> di
     return out
 
 
-def sql_spec(*, postgres: Optional[str] = None, sqlite: Optional[str] = None,
-             max_rows: int = 0, flags: Sequence[str] = ()) -> TxSpec:
+def sql_spec(
+    *,
+    postgres: Optional[str] = None,
+    sqlite: Optional[str] = None,
+    max_rows: int = 0,
+    flags: Sequence[str] = (),
+) -> TxSpec:
     """A one-system tx spec for a database URL or a SQLite file."""
     if bool(postgres) == bool(sqlite):
         raise ValueError("give exactly one of --postgres or --sqlite")
     if postgres:
-        system = SqlSystem(name="db", kind="sql", dialect="postgresql", driver="psycopg",
-                           connect_args={"conninfo": postgres})
+        system = SqlSystem(
+            name="db",
+            kind="sql",
+            dialect="postgresql",
+            driver="psycopg",
+            connect_args={"conninfo": postgres},
+        )
     else:
-        system = SqlSystem(name="db", kind="sql", dialect="sqlite", path=str(Path(str(sqlite)).resolve()))
-    anomalies = [Anomaly(label="more rows than the auto-approve limit", max_rows=max_rows)]
+        system = SqlSystem(
+            name="db",
+            kind="sql",
+            dialect="sqlite",
+            path=str(Path(str(sqlite)).resolve()),
+        )
+    anomalies = [
+        Anomaly(label="more rows than the auto-approve limit", max_rows=max_rows)
+    ]
     for flag in flags:
         target, _, value = flag.partition("=")
         table, _, column = target.partition(".")
         if not (table and column and value):
             raise ValueError(f"--flag {flag!r}: use table.column=value")
-        anomalies.append(Anomaly(label=f"rows where {table}.{column} = {value}", table=table,
-                                 column=column, equals=value))
-    return TxSpec(schema_version="openadapt.tx/v1", holdback_s=0, anomalies=anomalies, systems=[system])
+        anomalies.append(
+            Anomaly(
+                label=f"rows where {table}.{column} = {value}",
+                table=table,
+                column=column,
+                equals=value,
+            )
+        )
+    return TxSpec(
+        schema_version="openadapt.tx/v1",
+        holdback_s=0,
+        anomalies=anomalies,
+        systems=[system],
+    )
 
 
 class Proxy:
     """The tools, over one database, for one task (this proxy session)."""
 
-    def __init__(self, ctx: Ctx, *, task: str, system: str = "db", interactive: bool = False) -> None:
+    def __init__(
+        self, ctx: Ctx, *, task: str, system: str = "db", interactive: bool = False
+    ) -> None:
         self.ctx = ctx
         self.task = task
         self.system = system
@@ -136,24 +178,36 @@ class Proxy:
 
     def preview(self, sql: str) -> dict[str, Any]:
         with self.lock:
-            plan = engine.make_plan(self.ctx, self.task, [{"system": self.system, "op": "sql", "fields": {"sql": sql}}])
+            plan = engine.make_plan(
+                self.ctx,
+                self.task,
+                [{"system": self.system, "op": "sql", "fields": {"sql": sql}}],
+            )
             digest = plan["digest"]
             w = plan["writes"][0]
             counts = w.get("staged_diff") or {}
             auto = not plan["anomalies"] and w["ledger"] == "free" and not w.get("ddl")
             if auto:
-                engine.approve_plan(self.ctx.state, digest, approver="policy", decided_by="automation")
+                engine.approve_plan(
+                    self.ctx.state, digest, approver="policy", decided_by="automation"
+                )
             else:
                 self.pending.append(digest)
             text = "\n".join(engine.summary_lines(plan))
             if self.interactive and not auto:
-                print("\n" + text + "\n  press y to approve, n to decline", file=sys.stderr, flush=True)
+                print(
+                    "\n" + text + "\n  press y to approve, n to decline",
+                    file=sys.stderr,
+                    flush=True,
+                )
             return {
                 "plan": digest[:16],
                 "tables": counts,
                 "ledger": w["ledger"],
                 "anomalies": [a["label"] for a in plan["anomaly_details"]],
-                "approval": "approved by policy" if auto else (
+                "approval": "approved by policy"
+                if auto
+                else (
                     "waiting for a person (y in the proxy terminal, or `openadapt plan approve "
                     f"{digest[:16]}`)"
                 ),
@@ -166,13 +220,21 @@ class Proxy:
             out = engine.apply_plan(self.ctx, digest)
             if out["outcome"] in ("VERIFIED", "COMPLETED_UNVERIFIED"):
                 self.applied.append(digest)
-            return {"outcome": out["outcome"], "tx": out["tx"], "receipt": out["run_dir"]}
+            return {
+                "outcome": out["outcome"],
+                "tx": out["tx"],
+                "receipt": out["run_dir"],
+            }
 
     def undo(self, plan: str) -> dict[str, Any]:
         with self.lock:
             digest = self.ctx.state.find_plan(plan)
             out = engine.undo_plan(self.ctx, digest)
-            return {"outcome": out["outcome"], "tx": out["tx"], "receipt": out["run_dir"]}
+            return {
+                "outcome": out["outcome"],
+                "tx": out["tx"],
+                "receipt": out["run_dir"],
+            }
 
     def call(self, name: str, args: Mapping[str, Any]) -> tuple[str, bool]:
         try:
@@ -189,9 +251,13 @@ class Proxy:
         except TxRefused as exc:
             return json.dumps({"refused": exc.code, "detail": exc.detail}), True
         except (AdapterError, StateError, KeyError, ValueError) as exc:
-            return json.dumps({"error": type(exc).__name__, "detail": str(exc)[:300]}), True
+            return json.dumps(
+                {"error": type(exc).__name__, "detail": str(exc)[:300]}
+            ), True
         except Exception as exc:  # noqa: BLE001 - a database error is the tool's answer
-            return json.dumps({"error": type(exc).__name__, "detail": str(exc)[:300]}), True
+            return json.dumps(
+                {"error": type(exc).__name__, "detail": str(exc)[:300]}
+            ), True
         return json.dumps(got, default=str), False
 
     # the person's keys ---------------------------------------------------------
@@ -202,8 +268,12 @@ class Proxy:
         with self.lock:
             if ch == "y" and self.pending:
                 digest = self.pending.pop(0)
-                engine.approve_plan(self.ctx.state, digest, approver=os.environ.get("USER", "person"),
-                                    decided_by="human")
+                engine.approve_plan(
+                    self.ctx.state,
+                    digest,
+                    approver=os.environ.get("USER", "person"),
+                    decided_by="human",
+                )
                 return f"approved {digest[:16]}"
             if ch == "n" and self.pending:
                 return f"declined {self.pending.pop(0)[:16]}"
@@ -215,17 +285,46 @@ class Proxy:
 
 
 TOOLS = [
-    {"name": "sql_query", "description": "Run a read-only SQL query (rolled back; at most 200 rows).",
-     "inputSchema": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]}},
-    {"name": "sql_preview", "description": (
-        "Dry-run one SQL write statement: OpenAdapt runs it in a transaction, returns the exact "
-        "row-level diff and a plan id, and rolls back. Small plans are approved by policy; others "
-        "wait for a person."),
-     "inputSchema": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]}},
-    {"name": "sql_apply", "description": "Apply an approved plan once; it commits only if the diff is the planned diff.",
-     "inputSchema": {"type": "object", "properties": {"plan": {"type": "string"}}, "required": ["plan"]}},
-    {"name": "sql_undo", "description": "Undo an applied plan and verify it by reading every table back.",
-     "inputSchema": {"type": "object", "properties": {"plan": {"type": "string"}}, "required": ["plan"]}},
+    {
+        "name": "sql_query",
+        "description": "Run a read-only SQL query (rolled back; at most 200 rows).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"sql": {"type": "string"}},
+            "required": ["sql"],
+        },
+    },
+    {
+        "name": "sql_preview",
+        "description": (
+            "Dry-run one SQL write statement: OpenAdapt runs it in a transaction, returns the exact "
+            "row-level diff and a plan id, and rolls back. Small plans are approved by policy; others "
+            "wait for a person."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"sql": {"type": "string"}},
+            "required": ["sql"],
+        },
+    },
+    {
+        "name": "sql_apply",
+        "description": "Apply an approved plan once; it commits only if the diff is the planned diff.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"plan": {"type": "string"}},
+            "required": ["plan"],
+        },
+    },
+    {
+        "name": "sql_undo",
+        "description": "Undo an applied plan and verify it by reading every table back.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"plan": {"type": "string"}},
+            "required": ["plan"],
+        },
+    },
 ]
 
 
@@ -238,7 +337,9 @@ class McpServer:
         outer = self
 
         class H(BaseHTTPRequestHandler):
-            def log_message(self, *a: Any) -> None:  # no access log: never log the token
+            def log_message(
+                self, *a: Any
+            ) -> None:  # no access log: never log the token
                 pass
 
             def _send(self, code: int, body: Any = None) -> None:
@@ -268,12 +369,22 @@ class McpServer:
                 if not self._authorized():
                     return self._send(401)
                 try:
-                    msg = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+                    msg = json.loads(
+                        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                    )
                 except ValueError:
-                    return self._send(400, {"jsonrpc": "2.0", "id": None,
-                                            "error": {"code": -32700, "message": "parse error"}})
+                    return self._send(
+                        400,
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {"code": -32700, "message": "parse error"},
+                        },
+                    )
                 if isinstance(msg, list):
-                    replies = [r for r in (outer.handle(m) for m in msg) if r is not None]
+                    replies = [
+                        r for r in (outer.handle(m) for m in msg) if r is not None
+                    ]
                     return self._send(200, replies) if replies else self._send(202)
                 reply = outer.handle(msg)
                 return self._send(202) if reply is None else self._send(200, reply)
@@ -288,18 +399,27 @@ class McpServer:
             return None  # a notification
         if method == "initialize":
             asked = (msg.get("params") or {}).get("protocolVersion") or PROTOCOL
-            result: Any = {"protocolVersion": asked, "capabilities": {"tools": {}},
-                           "serverInfo": {"name": "openadapt-proxy", "version": "1"}}
+            result: Any = {
+                "protocolVersion": asked,
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "openadapt-proxy", "version": "1"},
+            }
         elif method == "ping":
             result = {}
         elif method == "tools/list":
             result = {"tools": TOOLS}
         elif method == "tools/call":
             params = msg.get("params") or {}
-            text, is_error = self.proxy.call(str(params.get("name")), params.get("arguments") or {})
+            text, is_error = self.proxy.call(
+                str(params.get("name")), params.get("arguments") or {}
+            )
             result = {"content": [{"type": "text", "text": text}], "isError": is_error}
         else:
-            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "method not found"}}
+            return {
+                "jsonrpc": "2.0",
+                "id": mid,
+                "error": {"code": -32601, "message": "method not found"},
+            }
         return {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def start(self) -> None:
@@ -314,15 +434,30 @@ def mcp_config(server: McpServer, folder: Path) -> Path:
     path = folder / "openadapt-mcp.json"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
-        json.dump({"mcpServers": {"openadapt": {
-            "type": "http", "url": server.url,
-            "headers": {"Authorization": f"Bearer {server.token}"},
-        }}}, f)
+        json.dump(
+            {
+                "mcpServers": {
+                    "openadapt": {
+                        "type": "http",
+                        "url": server.url,
+                        "headers": {"Authorization": f"Bearer {server.token}"},
+                    }
+                }
+            },
+            f,
+        )
     return path
 
 
-def run(argv_command: Sequence[str], *, spec: TxSpec, state: State, task: str,
-        secrets_: Sequence[str], port: int = 0) -> int:
+def run(
+    argv_command: Sequence[str],
+    *,
+    spec: TxSpec,
+    state: State,
+    task: str,
+    secrets_: Sequence[str],
+    port: int = 0,
+) -> int:
     ctx = Ctx(spec=spec, state=state)
     proxy = Proxy(ctx, task=task, interactive=not argv_command)
     server = McpServer(proxy, port=port)
@@ -330,11 +465,18 @@ def run(argv_command: Sequence[str], *, spec: TxSpec, state: State, task: str,
     tmp = Path(tempfile.mkdtemp(prefix="openadapt-proxy-"))
     try:
         config = mcp_config(server, tmp)
-        print(f"openadapt proxy: MCP endpoint {server.url} (task {task})", file=sys.stderr, flush=True)
+        print(
+            f"openadapt proxy: MCP endpoint {server.url} (task {task})",
+            file=sys.stderr,
+            flush=True,
+        )
         if not argv_command:
-            print(f"MCP config for your agent: {config}\n"
-                  "keys: y approve the waiting plan, n decline it, u undo the last applied plan, q quit",
-                  file=sys.stderr, flush=True)
+            print(
+                f"MCP config for your agent: {config}\n"
+                "keys: y approve the waiting plan, n decline it, u undo the last applied plan, q quit",
+                file=sys.stderr,
+                flush=True,
+            )
             for line in sys.stdin:
                 ch = line.strip()[:1].lower()
                 if ch == "q":
@@ -342,8 +484,14 @@ def run(argv_command: Sequence[str], *, spec: TxSpec, state: State, task: str,
                 print(proxy.key(ch), file=sys.stderr, flush=True)
             return 0
         env = child_environment(os.environ, secrets_)
-        env.update({"OPENADAPT_MCP_URL": server.url, "OPENADAPT_MCP_TOKEN": server.token,
-                    "OPENADAPT_MCP_CONFIG": str(config), "OPENADAPT_TASK": task})
+        env.update(
+            {
+                "OPENADAPT_MCP_URL": server.url,
+                "OPENADAPT_MCP_TOKEN": server.token,
+                "OPENADAPT_MCP_CONFIG": str(config),
+                "OPENADAPT_TASK": task,
+            }
+        )
         cmd = list(argv_command)
         if Path(cmd[0]).name == "claude" and "--mcp-config" not in cmd:
             cmd[1:1] = ["--mcp-config", str(config)]

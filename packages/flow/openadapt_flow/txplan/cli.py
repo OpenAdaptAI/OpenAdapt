@@ -46,13 +46,29 @@ def _fill(p: argparse.ArgumentParser) -> None:
 
     def common(q: argparse.ArgumentParser, tx: bool = True) -> None:
         if tx:
-            q.add_argument("--tx", default="openadapt.tx.yaml", help="the tx file (default: ./openadapt.tx.yaml)")
-        q.add_argument("--state", help="the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)")
+            q.add_argument(
+                "--tx",
+                default="openadapt.tx.yaml",
+                help="the tx file (default: ./openadapt.tx.yaml)",
+            )
+        q.add_argument(
+            "--state",
+            help="the state folder (default: $OPENADAPT_TX_STATE or ~/.openadapt/tx)",
+        )
         q.add_argument("--json", action="store_true", help="print JSON")
 
-    q = verbs.add_parser("create", help="read the baseline and print the predicted diff")
-    q.add_argument("--task", required=True, help="the task this batch belongs to (OpenAdapt's id, not the model's)")
-    q.add_argument("writes", help="a JSON file: a list of writes, or {\"writes\": [...]}; - for stdin")
+    q = verbs.add_parser(
+        "create", help="read the baseline and print the predicted diff"
+    )
+    q.add_argument(
+        "--task",
+        required=True,
+        help="the task this batch belongs to (OpenAdapt's id, not the model's)",
+    )
+    q.add_argument(
+        "writes",
+        help='a JSON file: a list of writes, or {"writes": [...]}; - for stdin',
+    )
     common(q)
     for verb, text in (
         ("show", "print a plan"),
@@ -64,9 +80,13 @@ def _fill(p: argparse.ArgumentParser) -> None:
         q = verbs.add_parser(verb, help=text)
         q.add_argument("plan", help="a plan digest or its prefix")
         common(q, tx=verb not in ("show", "cancel"))
-    q = verbs.add_parser("approve", help="approve one plan digest, once (a person at a terminal)")
+    q = verbs.add_parser(
+        "approve", help="approve one plan digest, once (a person at a terminal)"
+    )
     q.add_argument("plan")
-    q.add_argument("--as", dest="approver", default=None, help="who approves (default: $USER)")
+    q.add_argument(
+        "--as", dest="approver", default=None, help="who approves (default: $USER)"
+    )
     q.add_argument(
         "--automation",
         action="store_true",
@@ -104,12 +124,22 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(json.dumps(out, indent=2, sort_keys=True))
             return 0
         if verb == "create":
-            raw = sys.stdin.read() if args.writes == "-" else Path(args.writes).read_text(encoding="utf-8")
+            raw = (
+                sys.stdin.read()
+                if args.writes == "-"
+                else Path(args.writes).read_text(encoding="utf-8")
+            )
             data = json.loads(raw)
             writes = data.get("writes") if isinstance(data, dict) else data
             plan = engine.make_plan(ctx, args.task, writes or [])
             if args.json:
-                print(json.dumps({k: v for k, v in plan.items() if k != "anomaly_details"}, indent=2, sort_keys=True))
+                print(
+                    json.dumps(
+                        {k: v for k, v in plan.items() if k != "anomaly_details"},
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
             else:
                 print("\n".join(engine.summary_lines(plan)))
                 print(f"approve: openadapt plan approve {plan['digest'][:16]}")
@@ -118,38 +148,66 @@ def cmd_plan(args: argparse.Namespace) -> int:
         if verb == "show":
             plan, priv = engine.load_plan(ctx.state, digest)
             plan["anomaly_details"] = priv.get("anomalies", [])
-            print(json.dumps(plan, indent=2, sort_keys=True) if args.json else "\n".join(engine.summary_lines(plan)))
+            print(
+                json.dumps(plan, indent=2, sort_keys=True)
+                if args.json
+                else "\n".join(engine.summary_lines(plan))
+            )
             return 0
         if verb == "approve":
             if args.automation:
                 decided_by = "automation"
             else:
                 if not (sys.stdin.isatty() and sys.stdout.isatty()):
-                    print("approve needs a person at a terminal (or --automation for a lab run)", file=sys.stderr)
+                    print(
+                        "approve needs a person at a terminal (or --automation for a lab run)",
+                        file=sys.stderr,
+                    )
                     return 2
                 plan, priv = engine.load_plan(ctx.state, digest)
                 plan["anomaly_details"] = priv.get("anomalies", [])
                 print("\n".join(engine.summary_lines(plan)))
-                typed = input(f"Type the first 8 characters of the plan digest ({digest[:4]}...) to approve: ")
+                typed = input(
+                    f"Type the first 8 characters of the plan digest ({digest[:4]}...) to approve: "
+                )
                 if typed.strip() != digest[:8]:
                     print("not approved", file=sys.stderr)
                     return 1
                 decided_by = "human"
             approver = args.approver or os.environ.get("USER") or "unknown"
-            engine.approve_plan(ctx.state, digest, approver=approver, decided_by=decided_by)
+            engine.approve_plan(
+                ctx.state, digest, approver=approver, decided_by=decided_by
+            )
             print(f"approved plan {digest[:12]} once")
             return 0
-        fn = {"apply": engine.apply_plan, "undo": engine.undo_plan, "release": engine.release}.get(verb)
+        fn = {
+            "apply": engine.apply_plan,
+            "undo": engine.undo_plan,
+            "release": engine.release,
+        }.get(verb)
         if verb == "cancel":
             n = engine.cancel(ctx, digest)
             print(f"cancelled {n} held write(s)")
             return 0
         assert fn is not None
         result = fn(ctx, digest)
-        print(json.dumps({k: result[k] for k in ("outcome", "tx", "run_dir")}, indent=2, sort_keys=True))
-        return 0 if result["outcome"] in ("VERIFIED", "ROLLED_BACK", "COMPLETED_UNVERIFIED") else 1
+        print(
+            json.dumps(
+                {k: result[k] for k in ("outcome", "tx", "run_dir")},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return (
+            0
+            if result["outcome"] in ("VERIFIED", "ROLLED_BACK", "COMPLETED_UNVERIFIED")
+            else 1
+        )
     except engine.TxRefused as exc:
-        print(f"refused: {exc.code}" + (f" ({exc.detail})" if exc.detail else ""), file=sys.stderr)
+        print(
+            f"refused: {exc.code}" + (f" ({exc.detail})" if exc.detail else ""),
+            file=sys.stderr,
+        )
         if exc.report:
             print(json.dumps(exc.report, indent=2, sort_keys=True))
         return 3

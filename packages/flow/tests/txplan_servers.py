@@ -29,7 +29,13 @@ class RestStore:
         with self.lock:
             rid = self.next_id
             self.next_id += 1
-            rec = {"id": rid, "done": False, "done_at": None, **fields, "updated": time.time()}
+            rec = {
+                "id": rid,
+                "done": False,
+                "done_at": None,
+                **fields,
+                "updated": time.time(),
+            }
             self.records[rid] = rec
             return dict(rec)
 
@@ -173,7 +179,11 @@ class MailSink:
                 "ID": str(len(self.messages) + 1),
                 "MessageID": str(msg["Message-ID"] or "").strip("<>"),
                 "Subject": str(msg["Subject"] or ""),
-                "To": [{"Address": a.strip()} for a in str(msg["To"] or "").split(",") if a.strip()],
+                "To": [
+                    {"Address": a.strip()}
+                    for a in str(msg["To"] or "").split(",")
+                    if a.strip()
+                ],
             }
         )
 

@@ -36,7 +36,12 @@ def log(msg: str) -> None:
 
 
 def psql(sql: str, db: str = DB) -> str:
-    return subprocess.run(["psql", "-qAt", "-d", db, "-c", sql], check=True, capture_output=True, text=True).stdout
+    return subprocess.run(
+        ["psql", "-qAt", "-d", db, "-c", sql],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
 
 
 def reset() -> None:
@@ -58,9 +63,11 @@ def reset() -> None:
 
 
 def dump() -> str:
-    return psql("SELECT 'u', md5(string_agg(t::text, ',' ORDER BY id)) FROM users t "
-                "UNION ALL SELECT 'o', md5(string_agg(t::text, ',' ORDER BY id)) FROM orders t "
-                "UNION ALL SELECT 'e', md5(string_agg(t::text, ',' ORDER BY user_id, kind)) FROM events t")
+    return psql(
+        "SELECT 'u', md5(string_agg(t::text, ',' ORDER BY id)) FROM users t "
+        "UNION ALL SELECT 'o', md5(string_agg(t::text, ',' ORDER BY id)) FROM orders t "
+        "UNION ALL SELECT 'e', md5(string_agg(t::text, ',' ORDER BY user_id, kind)) FROM events t"
+    )
 
 
 def statements(rng: random.Random, n: int) -> list[tuple[str, str]]:
@@ -69,21 +76,56 @@ def statements(rng: random.Random, n: int) -> list[tuple[str, str]]:
         k = i % 8
         a = rng.randint(1, 550)
         if k == 0:
-            out.append(("bulk_update", f"UPDATE users SET active = false WHERE id BETWEEN {a} AND {a + rng.randint(5, 60)}"))
+            out.append(
+                (
+                    "bulk_update",
+                    f"UPDATE users SET active = false WHERE id BETWEEN {a} AND {a + rng.randint(5, 60)}",
+                )
+            )
         elif k == 1:
-            out.append(("expr_update", f"UPDATE users SET balance = balance * 1.1 WHERE role = 'member' AND id % {rng.randint(7, 40)} = 0"))
+            out.append(
+                (
+                    "expr_update",
+                    f"UPDATE users SET balance = balance * 1.1 WHERE role = 'member' AND id % {rng.randint(7, 40)} = 0",
+                )
+            )
         elif k == 2:
-            out.append(("insert_values", f"INSERT INTO users (name, role) VALUES ('lab {i}a', 'member'), ('lab {i}b', 'member')"))
+            out.append(
+                (
+                    "insert_values",
+                    f"INSERT INTO users (name, role) VALUES ('lab {i}a', 'member'), ('lab {i}b', 'member')",
+                )
+            )
         elif k == 3:
-            out.append(("insert_select", f"INSERT INTO orders (user_id, total) SELECT id, 1.00 FROM users WHERE id BETWEEN {a} AND {a + 4}"))
+            out.append(
+                (
+                    "insert_select",
+                    f"INSERT INTO orders (user_id, total) SELECT id, 1.00 FROM users WHERE id BETWEEN {a} AND {a + 4}",
+                )
+            )
         elif k == 4:
-            out.append(("delete_where", f"DELETE FROM orders WHERE total < {rng.randint(2, 6)} AND user_id BETWEEN {a} AND {a + 40}"))
+            out.append(
+                (
+                    "delete_where",
+                    f"DELETE FROM orders WHERE total < {rng.randint(2, 6)} AND user_id BETWEEN {a} AND {a + 40}",
+                )
+            )
         elif k == 5:
             out.append(("delete_cascade", f"DELETE FROM users WHERE id = {a}"))
         elif k == 6:
-            out.append(("update_join", f"UPDATE orders SET total = 0 WHERE user_id IN (SELECT id FROM users WHERE id BETWEEN {a} AND {a + 3})"))
+            out.append(
+                (
+                    "update_join",
+                    f"UPDATE orders SET total = 0 WHERE user_id IN (SELECT id FROM users WHERE id BETWEEN {a} AND {a + 3})",
+                )
+            )
         else:
-            out.append(("migration_like", f"UPDATE users SET name = upper(name) WHERE id % {rng.randint(50, 90)} = 0"))
+            out.append(
+                (
+                    "migration_like",
+                    f"UPDATE users SET name = upper(name) WHERE id % {rng.randint(50, 90)} = 0",
+                )
+            )
     return out
 
 
@@ -92,8 +134,15 @@ def independent_counts(before: Any, after: Any) -> dict[str, dict[str, int]]:
 
     out = {}
     for table, d in diff_database(before, after).items():
-        n = (lambda v: v if isinstance(v, int) else len(v))
-        out[table] = {"added": n(d.added), "changed": n(d.changed), "removed": n(d.removed)}
+
+        def n(v: Any) -> int:
+            return v if isinstance(v, int) else len(v)
+
+        out[table] = {
+            "added": n(d.added),
+            "changed": n(d.changed),
+            "removed": n(d.removed),
+        }
     return out
 
 
@@ -131,31 +180,49 @@ def main() -> int:
         indep = independent_counts(snap0, snap1)
         predicted = {t: c for t, c in (prev["tables"] or {}).items()}
         agree = {t: c for t, c in indep.items() if any(c.values())} == {
-            t: c for t, c in predicted.items() if any(c.values())}
+            t: c for t, c in predicted.items() if any(c.values())
+        }
         undone = proxy.undo(prev["plan"])
         back = dump() == start
-        rows.append({
-            "kind": kind, "rows_touched": sum(sum(c.values()) for c in predicted.values()),
-            "tables": sorted(predicted), "anomalies": len(prev["anomalies"]),
-            "apply": applied["outcome"], "missed": applied["tx"].get("missed_effects"),
-            "false": applied["tx"].get("false_diffs"), "independent_agrees": agree,
-            "undo": undone["outcome"], "undo_verified": undone["tx"]["undo_verified"],
-            "undo_supported": undone["tx"]["undo_supported"], "db_back_to_start": back,
-            "preview_s": round(t_preview, 3),
-        })
+        rows.append(
+            {
+                "kind": kind,
+                "rows_touched": sum(sum(c.values()) for c in predicted.values()),
+                "tables": sorted(predicted),
+                "anomalies": len(prev["anomalies"]),
+                "apply": applied["outcome"],
+                "missed": applied["tx"].get("missed_effects"),
+                "false": applied["tx"].get("false_diffs"),
+                "independent_agrees": agree,
+                "undo": undone["outcome"],
+                "undo_verified": undone["tx"]["undo_verified"],
+                "undo_supported": undone["tx"]["undo_supported"],
+                "db_back_to_start": back,
+                "preview_s": round(t_preview, 3),
+            }
+        )
         if not (agree and back and undone["outcome"] == "ROLLED_BACK"):
-            log(f"{kind}: apply {applied['outcome']} agree {agree} undo {undone['outcome']} back {back} {undone['tx'].get('codes')} pred {predicted} indep {indep}")
+            log(
+                f"{kind}: apply {applied['outcome']} agree {agree} undo {undone['outcome']} back {back} {undone['tx'].get('codes')} pred {predicted} indep {indep}"
+            )
     log(f"{len(rows)} statements done")
 
     # ACRFence on the proxy: a regenerated statement for the same rows after a restore.
-    acr = {"trials": 0, "held_not_applied": 0, "double_effects_through": 0, "control_duplicates": 0}
+    acr = {
+        "trials": 0,
+        "held_not_applied": 0,
+        "double_effects_through": 0,
+        "control_duplicates": 0,
+    }
     for t in range(20):
         a = 100 + t * 7
         before = psql(f"SELECT balance FROM users WHERE id = {a}").strip()
         p1 = proxy.preview(f"UPDATE users SET balance = balance + 100 WHERE id = {a}")
         proxy.key("y")
         proxy.apply(p1["plan"])
-        p2 = proxy.preview(f"UPDATE users SET balance = balance + 100.00 WHERE id = {a} AND active IS NOT NULL")
+        p2 = proxy.preview(
+            f"UPDATE users SET balance = balance + 100.00 WHERE id = {a} AND active IS NOT NULL"
+        )
         try:
             out = proxy.apply(p2["plan"])
             applied_twice = out["outcome"] == "VERIFIED"
@@ -164,24 +231,35 @@ def main() -> int:
         proxy.pending.clear()
         after = psql(f"SELECT balance - {before} FROM users WHERE id = {a}").strip()
         acr["trials"] += 1
-        acr["held_not_applied"] += int(p2["ledger"] == "possible_replay" and not applied_twice)
+        acr["held_not_applied"] += int(
+            p2["ledger"] == "possible_replay" and not applied_twice
+        )
         acr["double_effects_through"] += int(float(after) > 100.0)
         # Control: the same two statements straight to the database.
         psql(f"UPDATE users SET balance = balance + 100 WHERE id = {a + 1}")
-        psql(f"UPDATE users SET balance = balance + 100.00 WHERE id = {a + 1} AND active IS NOT NULL")
+        psql(
+            f"UPDATE users SET balance = balance + 100.00 WHERE id = {a + 1} AND active IS NOT NULL"
+        )
         acr["control_duplicates"] += 1
     log(f"acrfence {acr}")
 
     # Trigger probe (not in the supported set): the dry run must show the trigger's rows.
-    psql("CREATE TABLE audit (id serial PRIMARY KEY, user_id int);"
-         "CREATE FUNCTION f_audit() RETURNS trigger AS $$ BEGIN INSERT INTO audit (user_id) VALUES (NEW.id); RETURN NEW; END $$ LANGUAGE plpgsql;"
-         "CREATE TRIGGER t_audit AFTER UPDATE ON users FOR EACH ROW EXECUTE FUNCTION f_audit();")
+    psql(
+        "CREATE TABLE audit (id serial PRIMARY KEY, user_id int);"
+        "CREATE FUNCTION f_audit() RETURNS trigger AS $$ BEGIN INSERT INTO audit (user_id) VALUES (NEW.id); RETURN NEW; END $$ LANGUAGE plpgsql;"
+        "CREATE TRIGGER t_audit AFTER UPDATE ON users FOR EACH ROW EXECUTE FUNCTION f_audit();"
+    )
     tp = proxy.preview("UPDATE users SET name = name || '!' WHERE id BETWEEN 10 AND 14")
     proxy.key("y")
     ta = proxy.apply(tp["plan"])
     tu = proxy.undo(tp["plan"])
-    trigger = {"predicted_tables": tp["tables"], "apply": ta["outcome"], "missed": ta["tx"].get("missed_effects"),
-               "undo": tu["outcome"], "collateral": tu["tx"]["collateral_changes"]}
+    trigger = {
+        "predicted_tables": tp["tables"],
+        "apply": ta["outcome"],
+        "missed": ta["tx"].get("missed_effects"),
+        "undo": tu["outcome"],
+        "collateral": tu["tx"]["collateral_changes"],
+    }
     log(f"trigger {trigger}")
     psql("DROP TRIGGER t_audit ON users; DROP TABLE audit; DROP FUNCTION f_audit();")
 
@@ -194,19 +272,32 @@ def main() -> int:
     summary = {
         "statements": len(rows),
         "rows_touched": sum(r["rows_touched"] for r in rows),
-        "by_kind": {k: sum(1 for r in rows if r["kind"] == k) for k in sorted({r["kind"] for r in rows})},
+        "by_kind": {
+            k: sum(1 for r in rows if r["kind"] == k)
+            for k in sorted({r["kind"] for r in rows})
+        },
         "apply_verified": sum(1 for r in rows if r["apply"] == "VERIFIED"),
         "missed_effects": sum(r["missed"] or 0 for r in rows),
         "false_diffs": sum(r["false"] or 0 for r in rows),
-        "independent_disagreements": sum(1 for r in rows if not r["independent_agrees"]),
-        "undo_supported": sup, "undo_verified": ver,
+        "independent_disagreements": sum(
+            1 for r in rows if not r["independent_agrees"]
+        ),
+        "undo_supported": sup,
+        "undo_verified": ver,
         "undo_success_rate": round(ver / sup, 4) if sup else None,
         "db_back_to_start": sum(1 for r in rows if r["db_back_to_start"]),
         "preview_s_median": sorted(r["preview_s"] for r in rows)[len(rows) // 2],
-        "acrfence": acr, "trigger_probe": trigger, "mcp_sdk_session": mcp_ok,
+        "acrfence": acr,
+        "trigger_probe": trigger,
+        "mcp_sdk_session": mcp_ok,
     }
-    result = {"schema": "openadapt.ext-tx-proxy-lab/v1", "app": "PostgreSQL 16 (synthetic schema)",
-              "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "summary": summary, "rows": rows}
+    result = {
+        "schema": "openadapt.ext-tx-proxy-lab/v1",
+        "app": "PostgreSQL 16 (synthetic schema)",
+        "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "summary": summary,
+        "rows": rows,
+    }
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     log(json.dumps(summary, indent=2, sort_keys=True))
@@ -226,12 +317,27 @@ async def mcp_session(server_cls: Any, proxy: Any) -> dict[str, Any]:
             async with ClientSession(r, w) as s:
                 await s.initialize()
                 tools = [t.name for t in (await s.list_tools()).tools]
-                got = await s.call_tool("sql_preview", {"sql": "UPDATE users SET active = true WHERE id = 1"})
+                got = await s.call_tool(
+                    "sql_preview",
+                    {"sql": "UPDATE users SET active = true WHERE id = 1"},
+                )
                 body = json.loads(got.content[0].text)
                 proxy.key("y")
-                applied = json.loads((await s.call_tool("sql_apply", {"plan": body["plan"]})).content[0].text)
-                undone = json.loads((await s.call_tool("sql_undo", {"plan": body["plan"]})).content[0].text)
-                return {"tools": tools, "apply": applied["outcome"], "undo": undone["outcome"]}
+                applied = json.loads(
+                    (await s.call_tool("sql_apply", {"plan": body["plan"]}))
+                    .content[0]
+                    .text
+                )
+                undone = json.loads(
+                    (await s.call_tool("sql_undo", {"plan": body["plan"]}))
+                    .content[0]
+                    .text
+                )
+                return {
+                    "tools": tools,
+                    "apply": applied["outcome"],
+                    "undo": undone["outcome"],
+                }
     finally:
         server.stop()
 

@@ -93,8 +93,11 @@ class Route(_Closed):
 
 class Collection(_Closed):
     name: str = Field(pattern=_NAME)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
     id_field: str = "id"
-    list: Route
+    #: ``list`` in the file: the route that lists the whole collection.
+    list_: Route = Field(alias="list")
     read: Route
     create: Optional[Route] = None
     update: Optional[Route] = None
@@ -229,7 +232,16 @@ class Anomaly(_Closed):
             raise ValueError(f"anomaly {self.label}: above needs field")
         if (self.table is None) != (self.column is None):
             raise ValueError(f"anomaly {self.label}: table and column go together")
-        if not any([self.field, self.op, self.max_writes, self.clears, self.max_rows is not None, self.table]):
+        if not any(
+            [
+                self.field,
+                self.op,
+                self.max_writes,
+                self.clears,
+                self.max_rows is not None,
+                self.table,
+            ]
+        ):
             raise ValueError(f"anomaly {self.label}: says nothing to check")
         return self
 
