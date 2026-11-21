@@ -19,8 +19,17 @@ verified receipt?
 ## What is frozen
 
 - **Engine:** OpenAdapt branch `claude/form-gaps-integration` at the commit in
-  `ENGINE_SHA` next to this file: `claude/form-tx-weekend` (#2429) with the
-  five PRs merged. The freeze covers `packages/flow/openadapt_flow/`.
+  `ENGINE_SHA` next to this file (`335c322ec`): `claude/form-tx-weekend`
+  (#2429) with the five PRs merged at #2449 `4a156209b`, #2448 `9a0cd7977`,
+  #2440 `4add17832`, #2441 `374563a32` and #2447 `950a75dce`. Those heads
+  include fixes found while writing packs for the old (dev-set) portals:
+  checkboxes and radios set by click and re-read, including on pages that
+  redraw them with new ids and names; ARIA radios labelled by their own text;
+  "Select one" read as empty; a redrawn type-ahead found again before its
+  pick is checked; and a popup's displayed result checked against the value
+  it hands back (`result_anchor`). One change exists only on the integration
+  branch, because it needs both #2449 and #2441: a popup's displayed result
+  can be read from page text. The freeze covers `packages/flow/openadapt_flow/`.
 - **Portals and answer key:** branch `claude/form-tx-heldout2-portals` at
   `d2d6883374d9984b0a14d6ce6a603ebfd4cdf8dc`, written by a separate agent
   that was told not to read the form layer, and that reported back only the
