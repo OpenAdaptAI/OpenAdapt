@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Any, Optional
 
+from openadapt_types.check_level import to_oracle_tier
+
 from openadapt_flow.check_level import CheckLevel, from_verification_tier
 
 
@@ -120,12 +122,7 @@ def oracle_tier_from_verification_tier(
     two incompatible number systems to an operator.
     """
 
-    value = VerificationTier(tier)
-    if value is VerificationTier.INDEPENDENT_SYSTEM:
-        return 2
-    if value is VerificationTier.INDEPENDENT_SESSION:
-        return 1
-    return 0
+    return to_oracle_tier(VerificationTier(tier).check_level)
 
 
 #: Production ``VERIFIED`` requires this floor or stronger (lower int).

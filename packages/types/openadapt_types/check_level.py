@@ -34,6 +34,29 @@ Published values keep their wire numbers and map through this module:
 
 When a save or record has several checks, the weakest level wins.
 
+Receipt words and the basis
+---------------------------
+
+A receipt names its outcome with one word, chosen by :func:`outcome_word`
+from the level and the basis (who produced the evidence, not its type):
+
+- ``VERIFIED``: levels 3 and 4 only, always with a basis. Level 3 has basis
+  ``separate_session``. Level 4 has ``system_api`` (a cache-bypassed,
+  version-checked API read), ``activity_log`` (the system's own log),
+  ``db_frame`` (a database read of the record and its frame) or
+  ``owned_connection`` (a connection the verifier owns, such as its own SQL
+  or file read). It means "as of the read-back time, the read-back showed
+  this value", never "persisted".
+- ``SHOWN``: levels 1 and 2, the acting screen re-read.
+- ``CONFIRMED``: level 5, the counterparty acknowledged the item.
+- ``ATTESTED``: an operator confirmed it.
+- ``RECORDED``: the receipt records the run and claims no check. A check that
+  did not confirm, or a level 3 or 4 read below the run's required level, is
+  ``RECORDED``.
+
+``openadapt_types.evidence_scope`` builds the receipt block that states the
+level, basis, word and what the evidence did not cover.
+
 This module imports only the standard library, so the contracts and the Flow
 runtime can both use it. ``openadapt_flow.check_level`` re-exports it.
 """
@@ -44,11 +67,22 @@ from enum import IntEnum
 from typing import Iterable, Literal, Optional
 
 __all__ = [
+    "BASES",
+    "Basis",
     "CheckLevel",
+    "OUTCOME_WORDS",
+    "OutcomeWord",
     "ReadbackLabel",
+    "VERIFIED_LEVELS",
+    "from_effect_strength",
     "from_oracle_tier",
     "from_verification_tier",
+    "level_for_basis",
+    "outcome_word",
+    "to_effect_strength",
+    "to_oracle_tier",
     "to_readback_label",
+    "to_verification_tier",
     "weakest",
 ]
 
@@ -143,3 +177,146 @@ def weakest(levels: Iterable[CheckLevel]) -> CheckLevel:
     """The weakest of ``levels``; ``unchecked`` when there are none."""
 
     return min(levels, default=CheckLevel.UNCHECKED)
+
+
+# -- the inverse maps ----------------------------------------------------------
+
+#: Check level to ``VerificationTier`` (lower is stronger). Levels 0 and 5
+#: have no Flow tier.
+_TO_VERIFICATION_TIER: dict[CheckLevel, int] = {
+    level: tier for tier, level in _FROM_VERIFICATION_TIER.items()
+}
+
+#: Check level to Seal ``OracleTier``. ``reopened`` reads through the acting
+#: session's screens, so it is ``VISUAL`` like ``same_screen``.
+_TO_ORACLE_TIER: dict[CheckLevel, int] = {
+    CheckLevel.UNCHECKED: 0,
+    CheckLevel.SAME_SCREEN: 0,
+    CheckLevel.REOPENED: 0,
+    CheckLevel.SEPARATE_SESSION: 1,
+    CheckLevel.SYSTEM_OF_RECORD: 2,
+    CheckLevel.COUNTERPARTY_CONFIRMED: 3,
+}
+
+#: Execute ``EffectStrengthV1`` names. Each name's rank is its check level.
+_EFFECT_STRENGTH: dict[str, CheckLevel] = {
+    "immediate_screen_confirmation": CheckLevel.SAME_SCREEN,
+    "persisted_state_reacquisition": CheckLevel.REOPENED,
+    "independent_session": CheckLevel.SEPARATE_SESSION,
+    "independent_system_of_record": CheckLevel.SYSTEM_OF_RECORD,
+}
+
+
+def to_verification_tier(level: CheckLevel) -> Optional[int]:
+    """The ``VerificationTier`` for ``level``; None for levels 0 and 5."""
+
+    return _TO_VERIFICATION_TIER.get(CheckLevel(level))
+
+
+def to_oracle_tier(level: CheckLevel) -> int:
+    """The Seal ``OracleTier`` for ``level`` (0 below ``separate_session``)."""
+
+    return _TO_ORACLE_TIER[CheckLevel(level)]
+
+
+def from_effect_strength(name: object) -> CheckLevel:
+    """The check level of an Execute effect strength; ``unchecked`` if unknown."""
+
+    value = getattr(name, "value", name)
+    return _EFFECT_STRENGTH.get(value, CheckLevel.UNCHECKED)  # type: ignore[arg-type]
+
+
+def to_effect_strength(level: CheckLevel) -> Optional[str]:
+    """The Execute effect strength name for ``level``; None for levels 0 and 5."""
+
+    for name, mapped in _EFFECT_STRENGTH.items():
+        if mapped == level:
+            return name
+    return None
+
+
+# -- the basis and the receipt word ---------------------------------------------
+
+#: Who produced the evidence for a ``VERIFIED`` read-back.
+Basis = Literal[
+    "separate_session",
+    "system_api",
+    "activity_log",
+    "db_frame",
+    "owned_connection",
+]
+BASES: tuple[Basis, ...] = (
+    "separate_session",
+    "system_api",
+    "activity_log",
+    "db_frame",
+    "owned_connection",
+)
+_BASIS_LEVEL: dict[str, CheckLevel] = {
+    "separate_session": CheckLevel.SEPARATE_SESSION,
+    "system_api": CheckLevel.SYSTEM_OF_RECORD,
+    "activity_log": CheckLevel.SYSTEM_OF_RECORD,
+    "db_frame": CheckLevel.SYSTEM_OF_RECORD,
+    "owned_connection": CheckLevel.SYSTEM_OF_RECORD,
+}
+
+#: The receipt outcome words.
+OutcomeWord = Literal["VERIFIED", "SHOWN", "CONFIRMED", "ATTESTED", "RECORDED"]
+OUTCOME_WORDS: tuple[OutcomeWord, ...] = (
+    "VERIFIED",
+    "SHOWN",
+    "CONFIRMED",
+    "ATTESTED",
+    "RECORDED",
+)
+#: The only levels a ``VERIFIED`` word may name.
+VERIFIED_LEVELS: tuple[CheckLevel, ...] = (
+    CheckLevel.SEPARATE_SESSION,
+    CheckLevel.SYSTEM_OF_RECORD,
+)
+
+
+def level_for_basis(basis: str) -> CheckLevel:
+    """The check level ``basis`` reaches; raises ``ValueError`` for others."""
+
+    try:
+        return _BASIS_LEVEL[basis]
+    except (KeyError, TypeError):
+        raise ValueError(f"unknown basis {basis!r}") from None
+
+
+def outcome_word(
+    level: CheckLevel,
+    basis: Optional[str] = None,
+    *,
+    confirmed: bool = True,
+    attested: bool = False,
+    minimum: CheckLevel = CheckLevel.SEPARATE_SESSION,
+) -> OutcomeWord:
+    """The receipt word for one check, the same on every path.
+
+    ``level`` is the level the check reached, ``basis`` who produced the
+    evidence, ``confirmed`` whether the read-back matched, ``attested``
+    whether an operator confirmed it, and ``minimum`` the weakest level the
+    run accepts for ``VERIFIED`` (never below ``separate_session``).
+
+    A level 3 or 4 check is ``VERIFIED`` only with a basis that reaches that
+    exact level. A basis that names a different level is a producer bug and
+    raises ``ValueError``; a missing basis fails closed to ``RECORDED``.
+    """
+
+    level = CheckLevel(level)
+    if basis is not None and level_for_basis(basis) != level:
+        raise ValueError(f"basis {basis!r} does not reach level {level.label}")
+    if not confirmed:
+        return "ATTESTED" if attested else "RECORDED"
+    if level is CheckLevel.COUNTERPARTY_CONFIRMED:
+        return "CONFIRMED"
+    if level in VERIFIED_LEVELS:
+        floor = max(CheckLevel(minimum), CheckLevel.SEPARATE_SESSION)
+        if basis is not None and level >= floor:
+            return "VERIFIED"
+        return "ATTESTED" if attested else "RECORDED"
+    if level >= CheckLevel.SAME_SCREEN:
+        return "SHOWN"
+    return "ATTESTED" if attested else "RECORDED"

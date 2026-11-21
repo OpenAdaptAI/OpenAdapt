@@ -38,6 +38,7 @@ CODES = (
     "baseline_window",
     "self_approved",
     "issued_before_read",
+    "evidence_scope",
 )
 CANARY = "synthetic-private-diagnostic-DO-NOT-EMIT"
 

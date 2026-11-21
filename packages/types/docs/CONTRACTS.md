@@ -124,8 +124,10 @@ signal.
 ## Oracle tiers
 
 `verified` and `rolled_back_verified` require an observed effect strength
-that maps to Seal oracle tier 2 or 3. Tier 0 is visual / OCR. Tier 1 is a
-second-session UI read. Neither can mint production `VERIFIED`.
+that maps to Seal oracle tier 2 or 3, or tier 1 (a second-session UI read,
+check level 3) when the contract's `minimum_effect_strength` is exactly
+`independent_session`. Tier 0 is visual / OCR and never verifies. Production
+Seals (`production_seal_allowed`) still require tier 2 or 3.
 
 The partner adapter is `channel` plus `read`. Tiers, the gate, and a
 ten-line file oracle are in [ORACLE.md](ORACLE.md).

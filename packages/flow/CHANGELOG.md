@@ -17,7 +17,30 @@
 
 ## Unreleased
 
+### Features
+
+- One verification ladder on every path. `openadapt_types.check_level` is
+  the only source of check levels; `verify-run`, the runtime's report and
+  the `tx` engine derive their tables from it and name each check with one
+  receipt word: `VERIFIED` (levels 3 and 4 only, always with a basis:
+  `separate_session`, `system_api`, `activity_log`, `db_frame` or
+  `owned_connection`), `SHOWN`, `CONFIRMED`, `ATTESTED` or `RECORDED`.
+  `verify-run` and `tx` receipts carry an additive `evidence_scope` block
+  (`openadapt.evidence-scope/v1`) that states the level, basis, wire scope,
+  read-back time, recheck window and what the check did not cover. Receipts
+  without the block still verify.
+
 ### Fixes
+
+- `verify-run` with `minimum_effect_strength: independent_session` now
+  verifies on a separate-session read (check level 3), as the runtime
+  already did. Before, the two disagreed and verify-run never verified on
+  it. The default minimum is unchanged (`independent_system_of_record`).
+- The `tx` engine no longer caps every verdict at `UNCERTAIN` without a
+  SQLite row authority. A post-commit API read sent with cache-bypass
+  headers, showing no cache in its response, and whose record version is
+  exactly one past the before-image's is `CONFIRMED` with basis
+  `system_api`. Anything else stays `UNCERTAIN`.
 
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same

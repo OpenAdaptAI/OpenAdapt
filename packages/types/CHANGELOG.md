@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## Unreleased
+
+### Features
+
+- `check_level`: the basis (`separate_session` is level 3; `system_api`,
+  `activity_log`, `db_frame` and `owned_connection` are level 4), the receipt
+  words (`VERIFIED`, `SHOWN`, `CONFIRMED`, `ATTESTED`, `RECORDED`) and
+  `outcome_word`, plus the inverse tier maps and the Execute effect-strength
+  map.
+- `evidence_scope`: the `openadapt.evidence-scope/v1` block and the additive
+  `evidence_scope` field for `record/run/v1` predicates. A predicate without
+  it still passes.
+- `ExecuteEvidenceReceiptV1` accepts `verified` at oracle tier 1 (a
+  separate-session read) when the contract's minimum is exactly
+  `independent_session`. Every other contract keeps the tier-2 floor, and
+  every receipt that validated before still validates.
+
 ## v0.24.0 (2026-10-20)
 
 The models live in this package again, and it depends only on `pydantic>=2.5`; the Python 3.13 cap is gone. `openadapt-flow` 2.3.0 and later depend on it, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)). Upgrade `openadapt-flow` to 2.3.0 together with this package: openadapt-flow 2.2.0 carries its own copy of the models, so with 0.24.0 alone, `isinstance` checks between the two copies fail.

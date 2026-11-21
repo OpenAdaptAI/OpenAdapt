@@ -64,9 +64,22 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
+from openadapt_types.check_level import (
+    VERIFIED_LEVELS,
+    CheckLevel,
+    from_effect_strength,
+    from_verification_tier,
+    to_effect_strength,
+)
+from openadapt_types.evidence_scope import (
+    EVIDENCE_SCOPE_FIELD,
+    build_evidence_scope,
+    evidence_scope_problem,
+)
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.complete_read import CompleteReadProvider
+from openadapt_flow.evidence_basis import level_and_basis
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
@@ -144,17 +157,14 @@ _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SALTED = re.compile(r"^hmac-sha256:[0-9a-f]{64}$")
 _ISO_SECONDS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
+# Both derived from the one ladder (openadapt_types.check_level): a strength's
+# rank is its check level.
 _STRENGTH_BY_TIER = {
-    VerificationTier.INDEPENDENT_SYSTEM: "independent_system_of_record",
-    VerificationTier.INDEPENDENT_SESSION: "independent_session",
-    VerificationTier.PERSISTED_STATE_REACQUISITION: "persisted_state_reacquisition",
-    VerificationTier.IMMEDIATE_SCREEN: "immediate_screen_confirmation",
+    tier: to_effect_strength(from_verification_tier(int(tier)))
+    for tier in VerificationTier
 }
 _STRENGTH_RANK = {
-    "immediate_screen_confirmation": 1,
-    "persisted_state_reacquisition": 2,
-    "independent_session": 3,
-    "independent_system_of_record": 4,
+    str(name): int(from_effect_strength(name)) for name in _STRENGTH_BY_TIER.values()
 }
 
 #: Where the baseline keeps the audit log read for frame attribution. Not a
@@ -236,6 +246,7 @@ _RECEIPT_VALIDATION_REASONS = frozenset(
         "baseline_window",
         "self_approved",
         "issued_before_read",
+        "evidence_scope",
     }
 )
 
@@ -3362,11 +3373,19 @@ def verify_run(
         self_approved = approver_ref == executor_ref
 
     delivery_uncertain = False
+    # The one ladder decides: a separate-session read (level 3) or a
+    # system-of-record read (level 4), at or above the contract's minimum.
+    level, basis = level_and_basis(
+        None if unread or weakest is None else int(weakest),
+        confirmed=True,
+        kinds=_verifier_kinds(cfg),
+    )
+    minimum_level = from_effect_strength(cfg.minimum_effect_strength)
     read_proves_delta = (
         delta_verdict == "CONFIRMED"
-        and verification_tier == "independent_readback"
+        and level in VERIFIED_LEVELS
+        and level >= minimum_level
         and strong_enough
-        and oracle_tier in (2, 3)
     )
     attributed = (
         purpose == "owned_attempt"
@@ -3590,6 +3609,16 @@ def verify_run(
         receipt["correlation_id"] = correlation_id
     if recheck_due_at is not None:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
+    receipt[EVIDENCE_SCOPE_FIELD] = build_evidence_scope(
+        level,
+        # Only a verified receipt names a basis, so only it reads VERIFIED.
+        basis=basis if verified else None,
+        confirmed=delta_verdict == "CONFIRMED",
+        minimum=minimum_level,
+        read_back_at=read_at if not unread else None,
+        recheck_window_s=recheck_after_s if recheck_due_at is not None else None,
+        not_covered=("changes_after_read_back",),
+    )
     if request_context is not None:
         receipt["request_context"] = request_context.to_dict()
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
@@ -4059,6 +4088,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             RECHECK_RECEIPT_FIELD,
             "request_context",
             _WRITE_ATTRIBUTION,
+            EVIDENCE_SCOPE_FIELD,
         }
     )
     if set(receipt) - allowed:
@@ -4167,10 +4197,12 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             or (cover is not None and cover.get("policy") != "met")
         ):
             return "verified_without_every_part"
+    scope_problem = _evidence_scope_receipt_problem(receipt)
+    if scope_problem is not None:
+        return scope_problem
     if outcome in ("verified", "rolled_back_verified") and (
         receipt["effect_verdict"] != "CONFIRMED"
-        or receipt["verification_tier"] != "independent_readback"
-        or receipt.get("oracle_tier") not in (2, 3)
+        or not _verified_read(receipt)
     ):
         return "verified_without_independent_readback"
     if (
@@ -4179,6 +4211,52 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     ):
         return "delivery_uncertain"
     return None
+
+
+def _verified_read(receipt: Mapping[str, Any]) -> bool:
+    """Whether the receipt's read may back a verified outcome.
+
+    A system-of-record read (``independent_readback``, oracle tier 2 or 3)
+    always may. A separate-session read (check level 3, oracle tier 1) may
+    only with an evidence-scope block that names basis ``separate_session``
+    and the word ``VERIFIED``; a receipt issued before that block existed
+    keeps the tier-2 floor.
+    """
+
+    if receipt.get("verification_tier") == "independent_readback" and receipt.get(
+        "oracle_tier"
+    ) in (2, 3):
+        return True
+    scope = receipt.get(EVIDENCE_SCOPE_FIELD)
+    return (
+        receipt.get("verification_tier") == "screen_readback"
+        and receipt.get("oracle_tier") == 1
+        and receipt.get("checked_how") == CheckLevel.SEPARATE_SESSION.label
+        and isinstance(scope, Mapping)
+        and scope.get("basis") == "separate_session"
+        and scope.get("word") == "VERIFIED"
+    )
+
+
+def _evidence_scope_receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
+    """The optional evidence-scope block must agree with the receipt."""
+
+    if EVIDENCE_SCOPE_FIELD not in receipt:
+        return None  # Receipts issued before the block existed.
+    scope = receipt[EVIDENCE_SCOPE_FIELD]
+    if evidence_scope_problem(scope) is not None:
+        return "evidence_scope"
+    verified = receipt.get("outcome") in ("verified", "rolled_back_verified")
+    if (scope["word"] == "VERIFIED") is not verified:
+        return "evidence_scope"
+    if "checked_how" in receipt and scope["check_level"] != receipt["checked_how"]:
+        return "evidence_scope"
+    return None
+
+
+def _verifier_kinds(cfg: "VerifyConfig") -> list[str]:
+    surfaces = cfg.verifier.surfaces or {}
+    return [s.kind for s in surfaces.values()] or [cfg.verifier.kind]
 
 
 def evidence_problem(

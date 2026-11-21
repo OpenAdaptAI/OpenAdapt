@@ -272,6 +272,9 @@ class TxCommitResult(_FrozenModel):
     receipt_id: Optional[str] = None
     rows_read: int = 0
     duration_ms: float = 0.0
+    #: The evidence-scope block (``openadapt.evidence-scope/v1``): check
+    #: level, basis, receipt word and what the read did not cover.
+    evidence_scope: Optional[dict[str, Any]] = None
 
 
 class CertificationProbeResult(_FrozenModel):

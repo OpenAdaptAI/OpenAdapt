@@ -26,6 +26,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from openadapt_types.check_level import Basis
+
+from openadapt_flow.tx.api_readback import (
+    CACHE_BYPASS_HEADERS,
+    api_readback_basis,
+    tx_evidence_scope,
+)
 from openadapt_flow.tx.receipt import (
     issue_tx_receipt,
     load_or_create_signing_key,
@@ -634,7 +641,7 @@ class EntityLensClient:
         return dict(body)
 
     def get_one(
-        self, entity_id: str
+        self, entity_id: str, extra_headers: Optional[Mapping[str, str]] = None
     ) -> tuple[LensHttpResponse, Optional[dict[str, Any]], int]:
         """Fetch a single entity by ID in O(1). Returns ``(response, record, rows_read)``."""
         endpoint = self.lens.get_one
@@ -644,7 +651,7 @@ class EntityLensClient:
             self.lens.id_field: entity_id,
             endpoint.id_field: entity_id,
         }
-        resp = self._request(endpoint, context=ctx)
+        resp = self._request(endpoint, context=ctx, extra_headers=extra_headers)
         if not resp.ok:
             return resp, None, 0
         record = self.unwrap_single_record(endpoint, resp.json_body)
@@ -907,7 +914,7 @@ class TransactionalCommitEngine:
         self, entity_id: str
     ) -> tuple[LensHttpResponse, Optional[dict[str, Any]], int]:
         if self.atomic_authority is None:
-            return self.client.get_one(entity_id)
+            return self.client.get_one(entity_id, extra_headers=CACHE_BYPASS_HEADERS)
         try:
             record = self.atomic_authority.read(entity_id)
         except (OSError, ValueError, sqlite3.Error):
@@ -1484,6 +1491,20 @@ class TransactionalCommitEngine:
             if judge_reason not in reasons:
                 reasons.append(judge_reason)
 
+        basis = (
+            "owned_connection"
+            if atomic_postimage is not None
+            else api_readback_basis(
+                operation=task.operation,
+                r0=r0,
+                r1=r1,
+                headers=r1_resp.headers,
+                status=r1_resp.status_code,
+                version_field=v_field,
+                occ_status=occ_status,
+                cache_bypassed=self.atomic_authority is None,
+            )
+        )
         if unblocked_collateral:
             outcome = "REFUTED"
         elif occ_status == "CONCURRENT_MODIFICATION":
@@ -1492,7 +1513,7 @@ class TransactionalCommitEngine:
             outcome = "REFUTED"
         elif action_error is not None or incomplete_wire:
             outcome = "UNCERTAIN"
-        elif atomic_postimage is None:
+        elif basis is None:
             outcome = "UNCERTAIN"
         else:
             outcome = "CONFIRMED"
@@ -1543,6 +1564,7 @@ class TransactionalCommitEngine:
             t0=t0,
             atomic_enforced=atomic_postimage is not None
             and occ_status == "UNCONTESTED",
+            basis=basis,
         )
 
     def _finalize_result(
@@ -1561,7 +1583,14 @@ class TransactionalCommitEngine:
         rows_read: int,
         t0: float,
         atomic_enforced: bool = False,
+        basis: Optional[Basis] = None,
     ) -> TxCommitResult:
+        scope = tx_evidence_scope(
+            outcome=outcome,
+            basis=basis if outcome == "CONFIRMED" else None,
+            read_back=r1 is not None,
+            wire_observed=wire_summary is not None,
+        )
         rec_id, rec_path = issue_tx_receipt(
             self.workdir,
             task_id=task.task_id,
@@ -1579,6 +1608,7 @@ class TransactionalCommitEngine:
             qualification_state="atomic_row_enforced"
             if atomic_enforced
             else "unqualified",
+            evidence_scope=scope,
         )
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         return TxCommitResult(
@@ -1597,6 +1627,7 @@ class TransactionalCommitEngine:
             receipt_id=rec_id,
             rows_read=rows_read,
             duration_ms=elapsed_ms,
+            evidence_scope=scope,
         )
 
     # -- public execution API -------------------------------------------------
