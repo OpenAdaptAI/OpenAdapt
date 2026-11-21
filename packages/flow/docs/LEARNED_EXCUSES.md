@@ -203,9 +203,12 @@ contract, sends only the `GET` and `HEAD` requests you list as the agent,
 and reads again. No write is sent, so whatever the app moved is its own
 bookkeeping. The proposal follows the rules above: only the acting user's
 own rows, the exact columns, and never a column the probe's query strings,
-the parameters or a contract name. A `changed` move seen in any one round
-counts, because no round carried a task. An `added` row (a first-login row)
-is never admitted by the probe: its excuse names columns, not values, so it
+the parameters or a contract name. A `changed` move counts only when every
+round shows it (`--rounds`, at least two): per-request bookkeeping moves on
+every request, while an edit someone makes to the acting user's own row
+during one round does not, so it stays a stop. A round in which nothing
+moved means nothing is learned. An `added` row (a first-login row) is
+never admitted by the probe: its excuse names columns, not values, so it
 would also cover a row the agent adds for itself with other values. It is
 listed under `needs_approval` for `learn approve`. Every other row that
 moved stays a stop and is listed in `learn/probe_proposal.json`.
@@ -219,8 +222,10 @@ learned unless you name it (`--users`).
 `frame.learned.source: read_only_probe`, and leaves out of each contract
 any excuse for a column that contract names. It writes them only into a
 contract whose frame can see a lost update without the bookkeeping move:
-one whose every declared record is new (`count_new_only`), or one that
-reads the target's versions (`frame.versions`). In an update with no
+one whose every declared effect creates a new record (`count_new_only`;
+a create beside a `field_equals` update doesn't count), or one that reads
+the target's versions (`frame.versions`) on the surface of every other
+effect (its `target_surface`, when set). In an update with no
 version source, another user's edit that the agent's stale save reverts
 leaves nothing changed, and only the bookkeeping move stopped it, so such
 contracts keep stopping. No person approves them: the
