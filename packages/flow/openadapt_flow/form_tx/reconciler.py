@@ -98,7 +98,6 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "Choose...",
     "Select one",
     "-- Select one --",
-    "Select",
     "Choose one",
     "Please choose",
     "Choose",
@@ -196,6 +195,10 @@ class ReconcilerSession:
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
         self._commit_clicked: bool = False
+
+        # Set when the commit control is clicked and never cleared: after it,
+        # a sign-in wall means the record may or may not exist.
+        self._commit_attempted: bool = False
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
@@ -2192,7 +2195,7 @@ class FormReconciler:
                 session,
                 snapshot,
                 auth_reason,
-                delivery_uncertain=not safe_to_retry,
+                delivery_uncertain=(not safe_to_retry) or session._commit_attempted,
             )
         errored_ctrl = next(
             (c for c in snapshot.controls if c.visible and c.error_text.strip()),
@@ -2269,6 +2272,19 @@ class FormReconciler:
         pre_commit_mutations: int,
     ) -> FormTxResult:
         pack = session.pack
+        auth_reason = _auth_wall_reason(post_commit_snapshot, surface.ui_profile)
+        if auth_reason is not None:
+            # A sign-in page after the commit (with or without an error
+            # banner) never counts as a finished save.
+            return self._emit_auth_wall(
+                session,
+                post_commit_snapshot,
+                auth_reason,
+                delivery_uncertain=(
+                    session._commit_attempted
+                    or surface.mutation_count > pre_commit_mutations
+                ),
+            )
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
         if delta_mutations > pack.max_commit_mutations:
             sig = f"commit_budget|{pack.pack_id}"
@@ -2489,7 +2505,12 @@ class FormReconciler:
             auth_reason = _auth_wall_reason(snapshot, active_surface.ui_profile)
             if auth_reason is not None:
                 return self._emit_auth_wall(
-                    session, snapshot, auth_reason, delivery_uncertain=False
+                    session,
+                    snapshot,
+                    auth_reason,
+                    delivery_uncertain=(
+                        session._commit_attempted or session._commit_in_progress
+                    ),
                 )
 
             # 3. Active Modal Check
@@ -2789,6 +2810,8 @@ class FormReconciler:
                 session._pre_commit_mutations = pre_commit_mutations
                 session._commit_in_progress = True
                 session._commit_clicked = True
+
+                session._commit_attempted = True
                 active_surface.click(commit_ctrl.dom_selector)
 
                 post_snap = active_surface.snapshot(
