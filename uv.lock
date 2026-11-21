@@ -3234,6 +3234,7 @@ name = "openadapt"
 version = "1.23.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anthropic", marker = "python_full_version < '3.13'" },
     { name = "click" },
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
     { name = "openadapt-flow", extra = ["browser", "hosted"], marker = "python_full_version < '3.13'" },
@@ -3311,6 +3312,7 @@ windows = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "python_full_version < '3.13'", specifier = ">=0.40" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "openadapt", extras = ["browser", "core", "grounding", "retrieval", "privacy", "flow", "windows", "rdp", "agent"], marker = "extra == 'all'" },

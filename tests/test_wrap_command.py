@@ -26,3 +26,27 @@ def test_wrap_delegates_arguments_and_exit_without_stdout(monkeypatch):
     assert result.exit_code == 3
     assert calls == [arguments]
     assert result.stdout == ""
+
+
+def test_wrap_example_reaches_the_engine_unchanged(monkeypatch):
+    calls = []
+    module = types.ModuleType("openadapt_flow.wrap.cli")
+    module.main = lambda argv: calls.append(argv) or 0
+    monkeypatch.setitem(sys.modules, "openadapt_flow.wrap.cli", module)
+    monkeypatch.setattr(cli, "_python_minor", lambda: cli._SUPPORTED_PYTHON[1])
+    result = CliRunner().invoke(cli.main, ["wrap", "--example", "--json"])
+    assert result.exit_code == 0
+    assert calls == [["--example", "--json"]]
+
+
+def test_the_launcher_installs_the_built_in_agent_sdk():
+    # ``uvx openadapt wrap --example`` runs the built-in Claude agent, so the
+    # launcher's own install must bring its SDK.
+    from pathlib import Path
+
+    import tomllib
+
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    )["project"]
+    assert any(d.startswith("anthropic>=") for d in project["dependencies"])

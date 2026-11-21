@@ -13214,6 +13214,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_guard_parser(sub)
 
+    from openadapt_flow.wrap.cli import add_parser as _add_wrap_parser
+
+    _add_wrap_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
@@ -14241,6 +14245,12 @@ def main(
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
+    if argv[:1] == ["wrap"]:
+        # wrap has its own parser (and takes a command after ``--``); the
+        # verb is listed in this parser for help and the command map.
+        from openadapt_flow.wrap.cli import main as wrap_main
+
+        return wrap_main(argv[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")

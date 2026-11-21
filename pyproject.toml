@@ -71,6 +71,9 @@ dependencies = [
     # `--bundles`; the bundle-free tutorial `serve --allow-run` needs a later
     # agent release (see `_AGENT_TUTORIAL_SERVE_MINIMUM` in openadapt/cli.py).
     "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+    # `openadapt wrap` runs OpenAdapt's built-in Claude agent on a cache miss,
+    # and `openadapt wrap --example` must work from one uvx line.
+    "anthropic>=0.40; python_version < '3.13'",
 ]
 
 [project.optional-dependencies]
