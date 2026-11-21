@@ -53,7 +53,9 @@ class FakeScrubber:
         return Image.new("RGB", image.size, (0, 0, 0))
 
 
-def _png(text: str = PHI, size: tuple[int, int] = (320, 120), fmt: str = "PNG") -> bytes:
+def _png(
+    text: str = PHI, size: tuple[int, int] = (320, 120), fmt: str = "PNG"
+) -> bytes:
     image = Image.new("RGB", size, (255, 255, 255))
     ImageDraw.Draw(image).text((10, 40), text, fill=(0, 0, 0))
     out = io.BytesIO()
@@ -85,7 +87,9 @@ def _proxy(tmp_path: Path, provider: FakeProvider, **kw: Any) -> FlightProxy:
     ).start()
 
 
-def _post(url: str, body: Any, headers: dict[str, str] | None = None) -> tuple[int, bytes]:
+def _post(
+    url: str, body: Any, headers: dict[str, str] | None = None
+) -> tuple[int, bytes]:
     data = body if isinstance(body, bytes) else json.dumps(body).encode()
     request = urllib.request.Request(
         url,
@@ -101,7 +105,9 @@ def _post(url: str, body: Any, headers: dict[str, str] | None = None) -> tuple[i
         return exc.code, exc.read()
 
 
-def _anthropic_body(image: bytes, *, stream: bool = False, media: str = "image/png") -> dict:
+def _anthropic_body(
+    image: bytes, *, stream: bool = False, media: str = "image/png"
+) -> dict:
     return {
         "model": "claude-opus-5-5",
         "max_tokens": 256,
@@ -133,7 +139,11 @@ def _anthropic_body(image: bytes, *, stream: bool = False, media: str = "image/p
             {
                 "role": "assistant",
                 "content": [
-                    {"type": "thinking", "thinking": "plan the clicks", "signature": "sig-abc=="},
+                    {
+                        "type": "thinking",
+                        "thinking": "plan the clicks",
+                        "signature": "sig-abc==",
+                    },
                     {
                         "type": "tool_use",
                         "id": "toolu_prev",
@@ -174,7 +184,9 @@ def test_anthropic_sdk_call_is_scrubbed_metered_and_priced(tmp_path, provider):
             api_key=KEY, base_url=proxy.base_url("anthropic"), max_retries=0
         )
         body = _anthropic_body(_png())
-        message = client.messages.create(**{k: v for k, v in body.items() if k != "stream"})
+        message = client.messages.create(
+            **{k: v for k, v in body.items() if k != "stream"}
+        )
     finally:
         proxy.stop()
     assert message.content[0].type == "tool_use"
@@ -201,7 +213,10 @@ def test_anthropic_sdk_call_is_scrubbed_metered_and_priced(tmp_path, provider):
     assert model["output_tokens"] == ANTHROPIC_USAGE["output_tokens"]
     row = PRICES_PER_MTOK["claude-opus-5-5"]
     expected = (
-        1200 * row["input"] + 80 * row["output"] + 300 * row["cache_write"] + 500 * row["cache_read"]
+        1200 * row["input"]
+        + 80 * row["output"]
+        + 300 * row["cache_write"]
+        + 500 * row["cache_read"]
     ) / 1_000_000
     assert model["cost_usd"] == pytest.approx(expected)
     assert model["cost_source"] == "price_table"
@@ -209,7 +224,10 @@ def test_anthropic_sdk_call_is_scrubbed_metered_and_priced(tmp_path, provider):
     for path in (tmp_path / "run").rglob("*"):
         if path.is_file():
             assert KEY.encode() not in path.read_bytes()
-    events = [json.loads(line) for line in (tmp_path / "run/timeline.jsonl").read_text().splitlines()]
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "run/timeline.jsonl").read_text().splitlines()
+    ]
     actions = [e for e in events if e["kind"] == "model_action"]
     assert actions and actions[0]["action"]["coordinate"] == [40, 60]
     assert actions[0]["ops"][0]["kind"] == "click"
@@ -222,7 +240,9 @@ def test_anthropic_stream_passes_through_and_usage_comes_from_the_final_events(
     tmp_path, provider
 ):
     anthropic = pytest.importorskip("anthropic")
-    provider.anthropic_turns.append([{"type": "text", "text": "ok"}, anthropic_click(7, 9, "toolu_s")])
+    provider.anthropic_turns.append(
+        [{"type": "text", "text": "ok"}, anthropic_click(7, 9, "toolu_s")]
+    )
     proxy = _proxy(tmp_path, provider)
     try:
         client = anthropic.Anthropic(
@@ -243,7 +263,9 @@ def test_anthropic_stream_passes_through_and_usage_comes_from_the_final_events(
     assert PHI.encode() not in provider.received_bytes()
 
 
-def test_a_jpeg_screenshot_is_sent_as_a_scrubbed_png_of_the_same_size(tmp_path, provider):
+def test_a_jpeg_screenshot_is_sent_as_a_scrubbed_png_of_the_same_size(
+    tmp_path, provider
+):
     proxy = _proxy(tmp_path, provider)
     try:
         status, _ = _post(
@@ -254,12 +276,16 @@ def test_a_jpeg_screenshot_is_sent_as_a_scrubbed_png_of_the_same_size(tmp_path, 
     finally:
         proxy.stop()
     assert status == 200
-    source = json.loads(provider.requests[0]["body"])["messages"][0]["content"][1]["source"]
+    source = json.loads(provider.requests[0]["body"])["messages"][0]["content"][1][
+        "source"
+    ]
     assert source["media_type"] == "image/png"
     assert Image.open(io.BytesIO(base64.b64decode(source["data"]))).size == (200, 90)
 
 
-@pytest.mark.parametrize("case", ["scrubber_raises", "bad_image", "image_by_url", "not_json"])
+@pytest.mark.parametrize(
+    "case", ["scrubber_raises", "bad_image", "image_by_url", "not_json"]
+)
 def test_a_request_that_cant_be_scrubbed_gets_502_and_nothing_is_sent(
     tmp_path, provider, case
 ):
@@ -300,10 +326,24 @@ def test_openai_responses_computer_call_is_logged_and_unpriced_cost_is_unknown(
     body = {
         "model": "computer-use-preview",
         "instructions": f"Chart of {PHI}",
-        "tools": [{"type": "computer_use_preview", "display_width": 320, "display_height": 120}],
+        "tools": [
+            {
+                "type": "computer_use_preview",
+                "display_width": 320,
+                "display_height": 120,
+            }
+        ],
         "input": [
-            {"role": "user", "content": [{"type": "input_text", "text": f"Find {MRN}"}]},
-            {"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque-blob", "summary": []},
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": f"Find {MRN}"}],
+            },
+            {
+                "type": "reasoning",
+                "id": "rs_1",
+                "encrypted_content": "opaque-blob",
+                "summary": [],
+            },
             {
                 "type": "computer_call_output",
                 "call_id": "call_0",
@@ -313,12 +353,16 @@ def test_openai_responses_computer_call_is_logged_and_unpriced_cost_is_unknown(
     }
     try:
         status, raw = _post(
-            proxy.base_url("openai") + "/responses", body, {"Authorization": "Bearer " + KEY}
+            proxy.base_url("openai") + "/responses",
+            body,
+            {"Authorization": "Bearer " + KEY},
         )
         assert status == 200
         streamed = dict(body, stream=True)
         status, raw = _post(
-            proxy.base_url("openai") + "/responses", streamed, {"Authorization": "Bearer " + KEY}
+            proxy.base_url("openai") + "/responses",
+            streamed,
+            {"Authorization": "Bearer " + KEY},
         )
         assert status == 200 and b"response.completed" in raw
     finally:
@@ -332,7 +376,11 @@ def test_openai_responses_computer_call_is_logged_and_unpriced_cost_is_unknown(
     assert url.startswith("data:image/png;base64,")
     summary = proxy.timeline.finish()
     assert summary["model"]["calls"] == 2
-    assert summary["model"]["input_tokens"] == 2 * OPENAI_USAGE["input_tokens"]
+    # OpenAI's input_tokens include the cached ones; they are counted once.
+    cached = OPENAI_USAGE["input_tokens_details"]["cached_tokens"]
+    assert summary["model"]["input_tokens"] == 2 * (
+        OPENAI_USAGE["input_tokens"] - cached
+    )
     assert summary["model"]["cost_usd"] is None
     assert summary["model"]["cost_source"] == "unknown"
     assert summary["actions_count"] == 2
@@ -343,8 +391,12 @@ def test_the_spend_cap_refuses_with_429_once_reached(tmp_path, provider):
     proxy = _proxy(tmp_path, provider, max_cost_usd=0.000001)
     body = _anthropic_body(_png())
     try:
-        first, _ = _post(proxy.base_url("anthropic") + "/v1/messages", body, {"x-api-key": KEY})
-        second, raw = _post(proxy.base_url("anthropic") + "/v1/messages", body, {"x-api-key": KEY})
+        first, _ = _post(
+            proxy.base_url("anthropic") + "/v1/messages", body, {"x-api-key": KEY}
+        )
+        second, raw = _post(
+            proxy.base_url("anthropic") + "/v1/messages", body, {"x-api-key": KEY}
+        )
     finally:
         proxy.stop()
     assert first == 200 and second == 429
@@ -395,8 +447,13 @@ def test_upstreams_must_be_https_unless_loopback():
 
 def test_prices_come_from_the_table_and_dated_ids_resolve():
     usage = {"input_tokens": 1_000_000, "output_tokens": 0}
-    assert price_usd("claude-opus-5-5", usage) == PRICES_PER_MTOK["claude-opus-5-5"]["input"]
-    assert price_usd("claude-opus-5-5-20261101", usage) == price_usd("claude-opus-5-5", usage)
+    assert (
+        price_usd("claude-opus-5-5", usage)
+        == PRICES_PER_MTOK["claude-opus-5-5"]["input"]
+    )
+    assert price_usd("claude-opus-5-5-20261101", usage) == price_usd(
+        "claude-opus-5-5", usage
+    )
     assert price_usd("gpt-unknown", usage) is None
 
 

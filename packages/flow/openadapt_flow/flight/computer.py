@@ -170,12 +170,16 @@ def classify(
     kind = str(raw.get("action") or raw.get("type") or "")
     if refused is not None:
         return Classification(
-            True, kind, None, None, None, "none",
+            True,
+            kind,
+            None,
+            None,
+            None,
+            "none",
             f"the action can't be classified ({refused})",
         )
     op_dicts = tuple(
-        {k: v for k, v in asdict(op).items() if v is not None and v != ()}
-        for op in ops
+        {k: v for k, v in asdict(op).items() if v is not None and v != ()} for op in ops
     )
     pointer_op = None
     key_reason: Optional[str] = None
@@ -192,8 +196,14 @@ def classify(
             and _SAVE_MODIFIERS & set(op.modifiers)
         ):
             return Classification(
-                True, kind, None, None, None, "none",
-                "a save shortcut", op_dicts,
+                True,
+                kind,
+                None,
+                None,
+                None,
+                "none",
+                "a save shortcut",
+                op_dicts,
             )
         elif op.kind == "type" and op.text and ("\n" in op.text or "\r" in op.text):
             key_reason = "typed text that ends a line can commit the focused control"
@@ -206,7 +216,12 @@ def classify(
             x, y = pointer if pointer is not None else (None, None)
         if x is None or y is None:
             return Classification(
-                True, kind, None, None, None, "none",
+                True,
+                kind,
+                None,
+                None,
+                None,
+                "none",
                 "the pointer position is unknown (unknown counts as commit)",
                 op_dicts,
             )
@@ -226,7 +241,9 @@ def classify(
             source = "ocr" if label else "none"
         verb = label_is_commit(label)
         if label is None:
-            reason = "the target under the pointer can't be read (unknown counts as commit)"
+            reason = (
+                "the target under the pointer can't be read (unknown counts as commit)"
+            )
         elif verb:
             reason = f"the target reads {label!r} ({verb})"
         else:
@@ -301,7 +318,9 @@ class RemoteGate:
                 {
                     "action": action.to_dict(),
                     "screenshot_b64": (
-                        base64.b64encode(screenshot).decode("ascii") if screenshot else None
+                        base64.b64encode(screenshot).decode("ascii")
+                        if screenshot
+                        else None
                     ),
                 },
                 self.timeout_s,
@@ -336,7 +355,10 @@ class RemoteRecorder:
         except Exception as exc:  # noqa: BLE001 - logging never blocks the run
             if not self._warned:
                 self._warned = True
-                print(f"[openadapt flight] could not record an action: {exc}", file=sys.stderr)
+                print(
+                    f"[openadapt flight] could not record an action: {exc}",
+                    file=sys.stderr,
+                )
 
     def gate_event(self, kind: str, reason: str, **fields: Any) -> None:
         return None
@@ -446,8 +468,13 @@ class _Gatekeeper:
             )
         except Exception as exc:  # noqa: BLE001 - fail closed
             result = Classification(
-                True, str(raw.get("action") or raw.get("type") or ""), None, None,
-                None, "none", f"classification failed ({type(exc).__name__})",
+                True,
+                str(raw.get("action") or raw.get("type") or ""),
+                None,
+                None,
+                None,
+                "none",
+                f"classification failed ({type(exc).__name__})",
             )
         if not result.commit:
             if result.kind not in ("screenshot", "cursor_position"):
@@ -479,7 +506,10 @@ class _Gatekeeper:
         if self.recorder is not None:
             try:
                 self.recorder.gate_event(
-                    _GATE_KIND[decision], result.reason, label=result.label, frame_png=png
+                    _GATE_KIND[decision],
+                    result.reason,
+                    label=result.label,
+                    frame_png=png,
                 )
             except Exception:  # noqa: BLE001 - logging never allows an action
                 pass
@@ -522,7 +552,9 @@ def _png_from(result: Any) -> Optional[bytes]:
         except ValueError:
             return None
     for key in ("base64_image", "image", "screenshot", "data"):
-        value = result.get(key) if isinstance(result, dict) else getattr(result, key, None)
+        value = (
+            result.get(key) if isinstance(result, dict) else getattr(result, key, None)
+        )
         if value:
             return _png_from(value)
     return None
@@ -621,7 +653,7 @@ class GatedComputer:
 
         def shot() -> Optional[bytes]:
             if self._screenshot is not None:
-                value = self._screenshot()
+                value: Any = self._screenshot()
                 if inspect.isawaitable(value):
                     value = asyncio.run_coroutine_threadsafe(value, loop).result()
                 return _png_from(value)
@@ -630,7 +662,9 @@ class GatedComputer:
             )
             return _png_from(future.result())
 
-        decision, _, label = await asyncio.to_thread(self._keeper.check, dict(kwargs), shot)
+        decision, _, label = await asyncio.to_thread(
+            self._keeper.check, dict(kwargs), shot
+        )
         if decision != "allow":
             return self._held_result(decision, label)
         self._keeper.note_pointer(kwargs)
@@ -727,19 +761,29 @@ class GatedComputerCall:
         self._keeper.note_pointer(raw)
         return getattr(self._inner, name)(*args, **kwargs)
 
-    def click(self, x: int, y: int, button: str = "left", *args: Any, **kwargs: Any) -> Any:
+    def click(
+        self, x: int, y: int, button: str = "left", *args: Any, **kwargs: Any
+    ) -> Any:
         raw = {"type": "click", "x": x, "y": y, "button": button}
         if button not in ("left",):
             # A right, wheel or back click opens or navigates; it saves nothing.
             self._keeper._record(
-                raw, Classification(False, "click", x, y, None, "none", ""), "performed", None
+                raw,
+                Classification(False, "click", x, y, None, "none", ""),
+                "performed",
+                None,
             )
             return self._inner.click(x, y, button, *args, **kwargs)
         return self._gated("click", raw, x, y, button, *args, **kwargs)
 
     def double_click(self, x: int, y: int, *args: Any, **kwargs: Any) -> Any:
         return self._gated(
-            "double_click", {"type": "double_click", "x": x, "y": y}, x, y, *args, **kwargs
+            "double_click",
+            {"type": "double_click", "x": x, "y": y},
+            x,
+            y,
+            *args,
+            **kwargs,
         )
 
     def keypress(self, keys: Any, *args: Any, **kwargs: Any) -> Any:
@@ -748,7 +792,9 @@ class GatedComputerCall:
         )
 
     def type(self, text: str, *args: Any, **kwargs: Any) -> Any:
-        return self._gated("type", {"type": "type", "text": text}, text, *args, **kwargs)
+        return self._gated(
+            "type", {"type": "type", "text": text}, text, *args, **kwargs
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)

@@ -60,7 +60,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         allow_abbrev=False,
     )
     p.add_argument("--task-id", help="the task this run does (default: generated)")
-    p.add_argument("--out", help="the run directory (default: flight-runs/<time>-<task>)")
+    p.add_argument(
+        "--out", help="the run directory (default: flight-runs/<time>-<task>)"
+    )
     p.add_argument(
         "--label", help="names the agent or worker in flight.json (default: CMD's name)"
     )
@@ -79,7 +81,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument("--cdp", help="the agent's Chromium DevTools URL, to run the guard")
     p.add_argument("--guard-config", help="guard.yaml for the guard")
-    p.add_argument("--guard-task", help="the guard's task file (openadapt.guard-task/v1)")
+    p.add_argument(
+        "--guard-task", help="the guard's task file (openadapt.guard-task/v1)"
+    )
     p.add_argument(
         "--max-cost-usd",
         type=float,
@@ -131,7 +135,10 @@ def _detect_cdp(command: list[str]) -> Optional[str]:
 def _upstreams() -> dict[str, str]:
     """The providers the agent already targets: its own base URLs, if set."""
     out: dict[str, str] = {}
-    for provider, env in (("anthropic", "ANTHROPIC_BASE_URL"), ("openai", "OPENAI_BASE_URL")):
+    for provider, env in (
+        ("anthropic", "ANTHROPIC_BASE_URL"),
+        ("openai", "OPENAI_BASE_URL"),
+    ):
         value = os.environ.get(env)
         if value:
             out[provider] = value
@@ -147,9 +154,13 @@ def cmd_flight(args: argparse.Namespace) -> int:
     if command and command[0] == "--":
         command = command[1:]
     if not command:
-        return _err("give the command to run after --: openadapt-flow flight -- CMD ...")
+        return _err(
+            "give the command to run after --: openadapt-flow flight -- CMD ..."
+        )
     if args.no_scrub and not args.i_accept_unscrubbed:
-        return _err("--no-scrub sends personal data unscrubbed; add --i-accept-unscrubbed")
+        return _err(
+            "--no-scrub sends personal data unscrubbed; add --i-accept-unscrubbed"
+        )
     if args.max_cost_usd is not None and args.max_cost_usd < 0:
         return _err("--max-cost-usd must be zero or more")
 
@@ -157,7 +168,9 @@ def cmd_flight(args: argparse.Namespace) -> int:
     if args.no_scrub:
         from openadapt_flow.privacy import outbound_opt_out
 
-        reason = outbound_opt_out(_UNSCRUBBED_PURPOSE, "--no-scrub --i-accept-unscrubbed")
+        reason = outbound_opt_out(
+            _UNSCRUBBED_PURPOSE, "--no-scrub --i-accept-unscrubbed"
+        )
         scrub_record: dict[str, Any] = {"mode": "off", "reason": reason}
         scrub_image = scrub_text = None
     else:
@@ -207,7 +220,10 @@ def cmd_flight(args: argparse.Namespace) -> int:
 
     if args.gate == "file":
         gate: Any = FileGate(
-            run_dir, run_id=task_id, workflow_name=task_id, timeout_s=args.approval_timeout
+            run_dir,
+            run_id=task_id,
+            workflow_name=task_id,
+            timeout_s=args.approval_timeout,
         )
     elif args.gate == "refuse":
         gate = RefuseGate("hold")
@@ -231,9 +247,18 @@ def cmd_flight(args: argparse.Namespace) -> int:
     guard_info: dict[str, Any] = {"cdp": cdp, "started": False}
     if want_guard:
         guard_cmd = [
-            sys.executable, "-m", "openadapt_flow", "guard",
-            "--cdp", str(cdp), "--config", args.guard_config,
-            "--task", args.guard_task, "--out", str(run_dir / "guard"),
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "guard",
+            "--cdp",
+            str(cdp),
+            "--config",
+            args.guard_config,
+            "--task",
+            args.guard_task,
+            "--out",
+            str(run_dir / "guard"),
         ]
         try:
             guard_proc = subprocess.Popen(guard_cmd)
@@ -241,10 +266,14 @@ def cmd_flight(args: argparse.Namespace) -> int:
         except OSError as exc:
             guard_info["error"] = str(exc)
     elif cdp:
-        guard_info["note"] = "a DevTools port was seen; give --guard-config and --guard-task to guard it"
+        guard_info["note"] = (
+            "a DevTools port was seen; give --guard-config and --guard-task to guard it"
+        )
         print(f"[openadapt flight] {guard_info['note']}", file=sys.stderr)
 
-    timeline.record("run_started", command_name=label, gate=args.gate, guard=bool(guard_proc))
+    timeline.record(
+        "run_started", command_name=label, gate=args.gate, guard=bool(guard_proc)
+    )
     exit_code = 2
     child: Optional[subprocess.Popen[bytes]] = None
     try:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
-import json
 import threading
 import time
 from pathlib import Path
@@ -79,7 +78,9 @@ def test_a_save_click_is_held_and_the_executor_is_never_called():
     assert isinstance(result, HeldResult)
     assert "held for a person: not performed" in result.error
     assert tool.calls == []
-    assert computer.gate_events == [{"decision": "hold", "label": "button Save Encounter"}]
+    assert computer.gate_events == [
+        {"decision": "hold", "label": "button Save Encounter"}
+    ]
 
 
 def test_an_unknown_label_is_held():
@@ -339,12 +340,21 @@ def test_the_terminal_gate_refuses_without_a_terminal(tmp_path):
 
 def _action(index: int = 1) -> GateAction:
     return GateAction(
-        "anthropic", _click(), "left_click", 10, 20, "Save", "accessibility",
-        "the target reads 'Save' (save)", index,
+        "anthropic",
+        _click(),
+        "left_click",
+        10,
+        20,
+        "Save",
+        "accessibility",
+        "the target reads 'Save' (save)",
+        index,
     )
 
 
-def test_the_file_gate_writes_an_item_approval_request_and_holds_without_an_answer(tmp_path):
+def test_the_file_gate_writes_an_item_approval_request_and_holds_without_an_answer(
+    tmp_path,
+):
     from openadapt_flow.approval_mode.item_approval import ItemApprovalRequest
 
     gate = FileGate(tmp_path / "run", run_id="task-7", timeout_s=0.3, poll_s=0.05)
@@ -386,8 +396,12 @@ def _answer_when_asked(run_dir: Path, decision: str) -> threading.Thread:
     return thread
 
 
-@pytest.mark.parametrize("decision,expected", [("approve", "allow"), ("decline", "refuse")])
-def test_the_file_gate_follows_a_persons_signed_answer(tmp_path, approver, decision, expected):
+@pytest.mark.parametrize(
+    "decision,expected", [("approve", "allow"), ("decline", "refuse")]
+)
+def test_the_file_gate_follows_a_persons_signed_answer(
+    tmp_path, approver, decision, expected
+):
     run_dir = tmp_path / "run"
     thread = _answer_when_asked(run_dir, decision)
     gate = FileGate(run_dir, run_id="task-8", timeout_s=10, poll_s=0.05)

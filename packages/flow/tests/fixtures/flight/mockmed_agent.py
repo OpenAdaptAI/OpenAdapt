@@ -48,8 +48,13 @@ class PlaywrightComputer:
     def _shot(self) -> dict[str, str]:
         return {"base64_image": base64.b64encode(self.page.screenshot()).decode()}
 
-    def __call__(self, action: str, coordinate: Optional[list[int]] = None,
-                 text: Optional[str] = None, **_: Any) -> dict[str, str]:
+    def __call__(
+        self,
+        action: str,
+        coordinate: Optional[list[int]] = None,
+        text: Optional[str] = None,
+        **_: Any,
+    ) -> dict[str, str]:
         if action == "left_click" and coordinate:
             self.page.mouse.click(coordinate[0], coordinate[1])
         elif action == "type" and text is not None:
@@ -66,16 +71,25 @@ def call_model(messages: list[dict[str, Any]]) -> dict[str, Any]:
         "model": "claude-opus-5-5",
         "max_tokens": 512,
         "system": f"You are charting for patient {PLANTED}.",
-        "tools": [{"type": "computer_20250124", "name": "computer",
-                   "display_width_px": 1280, "display_height_px": 800}],
+        "tools": [
+            {
+                "type": "computer_20250124",
+                "name": "computer",
+                "display_width_px": 1280,
+                "display_height_px": 800,
+            }
+        ],
         "messages": messages,
     }
     request = urllib.request.Request(
         os.environ["ANTHROPIC_BASE_URL"].rstrip("/") + "/v1/messages",
         data=json.dumps(body).encode(),
         method="POST",
-        headers={"content-type": "application/json", "x-api-key": "sk-fake-e2e",
-                 "anthropic-version": "2023-06-01"},
+        headers={
+            "content-type": "application/json",
+            "x-api-key": "sk-fake-e2e",
+            "anthropic-version": "2023-06-01",
+        },
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=60) as response:
@@ -95,14 +109,25 @@ def main(url: str, out: str) -> int:
         page.wait_for_selector(".open-btn")
         computer = GatedComputer(PlaywrightComputer(page))  # the one-line swap
         first = computer(action="screenshot")
-        messages: list[dict[str, Any]] = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": f"Open the referral for {PLANTED} and chart a triage note."},
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                             "data": first["base64_image"]}},
-            ],
-        }]
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Open the referral for {PLANTED} and chart a triage note.",
+                    },
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": first["base64_image"],
+                        },
+                    },
+                ],
+            }
+        ]
         for _turn in range(12):
             reply = call_model(messages)
             messages.append({"role": "assistant", "content": reply["content"]})
@@ -113,13 +138,27 @@ def main(url: str, out: str) -> int:
                 result = computer(**block["input"])
                 if isinstance(result, HeldResult):
                     held.append(result.error)
-                    content: list[dict[str, Any]] = [{"type": "text", "text": result.error}]
+                    content: list[dict[str, Any]] = [
+                        {"type": "text", "text": result.error}
+                    ]
                 else:
-                    content = [{"type": "image", "source": {
-                        "type": "base64", "media_type": "image/png",
-                        "data": result["base64_image"]}}]
-                results.append({"type": "tool_result", "tool_use_id": block["id"],
-                                "content": content})
+                    content = [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": result["base64_image"],
+                            },
+                        }
+                    ]
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": content,
+                    }
+                )
             if reply.get("stop_reason") != "tool_use":
                 break
             messages.append({"role": "user", "content": results})

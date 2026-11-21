@@ -20,7 +20,11 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow.flight.timeline import validate_flight
-from tests.fixtures.flight.fake_provider import ANTHROPIC_USAGE, FakeProvider, anthropic_click
+from tests.fixtures.flight.fake_provider import (
+    ANTHROPIC_USAGE,
+    FakeProvider,
+    anthropic_click,
+)
 
 FLOW_ROOT = Path(__file__).resolve().parents[2]
 AGENT = FLOW_ROOT / "tests/fixtures/flight/mockmed_agent.py"
@@ -47,12 +51,21 @@ def _centers(url: str) -> dict[str, tuple[int, int]]:
             page.fill("#username", "nurse.demo")
             page.fill("#password", "mockmed-demo-pass")
             page.click("#signin")
-            for selector in (".open-btn", "#new-encounter", "#type-triage", "#note", "#save-encounter"):
+            for selector in (
+                ".open-btn",
+                "#new-encounter",
+                "#type-triage",
+                "#note",
+                "#save-encounter",
+            ):
                 locator = page.locator(selector).first
                 locator.wait_for(state="visible")
                 box = locator.bounding_box()
                 assert box is not None
-                out[selector] = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+                out[selector] = (
+                    int(box["x"] + box["width"] / 2),
+                    int(box["y"] + box["height"] / 2),
+                )
                 if selector != "#save-encounter" and selector != "#note":
                     locator.click()
             browser.close()
@@ -75,15 +88,22 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
             [anthropic_click(*points["#new-encounter"], "toolu_2")],
             [anthropic_click(*points["#type-triage"], "toolu_3")],
             [anthropic_click(*points["#note"], "toolu_4")],
-            [{"type": "tool_use", "id": "toolu_5", "name": "computer",
-              "input": {"action": "type", "text": f"Triage for {PLANTED}"}}],
+            [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_5",
+                    "name": "computer",
+                    "input": {"action": "type", "text": f"Triage for {PLANTED}"},
+                }
+            ],
             [anthropic_click(*points["#save-encounter"], "toolu_6")],
             [{"type": "text", "text": "The save was held for a person; stopping."}],
         ]
         provider.anthropic_turns.extend(script)
         monkeypatch.setenv("ANTHROPIC_BASE_URL", provider.url)
         monkeypatch.setenv(
-            "PYTHONPATH", os.pathsep.join([str(FLOW_ROOT), os.environ.get("PYTHONPATH", "")])
+            "PYTHONPATH",
+            os.pathsep.join([str(FLOW_ROOT), os.environ.get("PYTHONPATH", "")]),
         )
         privacy.set_text_scrubber(_Scrubber())
         result_path = tmp_path / "agent.json"
@@ -112,7 +132,10 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     assert code == 0
     agent = json.loads(result_path.read_text())
     assert agent["saved"] is False
-    assert len(agent["held"]) == 1 and "held for a person: not performed" in agent["held"][0]
+    assert (
+        len(agent["held"]) == 1
+        and "held for a person: not performed" in agent["held"][0]
+    )
 
     summary = json.loads((run_dir / "flight.json").read_text())
     assert validate_flight(summary) == []
@@ -127,7 +150,10 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     assert summary["actions_count"] == 6
     assert PLANTED.encode() not in provider.received_bytes()
     assert all(r["headers"]["x-api-key"] == "sk-fake-e2e" for r in provider.requests)
-    events = [json.loads(line) for line in (run_dir / "timeline.jsonl").read_text().splitlines()]
+    events = [
+        json.loads(line)
+        for line in (run_dir / "timeline.jsonl").read_text().splitlines()
+    ]
     executor = [e for e in events if e["kind"] == "executor_action"]
     assert [e["decision"] for e in executor] == ["performed"] * 5 + ["held"]
     assert "Save Encounter" in executor[-1]["label"]

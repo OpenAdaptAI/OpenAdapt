@@ -147,7 +147,10 @@ class _Handler(BaseHTTPRequestHandler):
             if stream:
                 self._sse(
                     [
-                        {"type": "response.created", "response": {**response, "output": []}},
+                        {
+                            "type": "response.created",
+                            "response": {**response, "output": []},
+                        },
                         {"type": "response.completed", "response": response},
                     ]
                 )
@@ -185,9 +188,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
         for event in events:
-            raw = (
-                f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
-            ).encode("utf-8")
+            raw = (f"event: {event['type']}\ndata: {json.dumps(event)}\n\n").encode(
+                "utf-8"
+            )
             # Split each event across two writes, so the proxy sees partial
             # events on the wire.
             for part in (raw[: len(raw) // 2], raw[len(raw) // 2 :]):
@@ -204,7 +207,9 @@ class _Handler(BaseHTTPRequestHandler):
         usage_start = {
             "input_tokens": ANTHROPIC_USAGE["input_tokens"],
             "output_tokens": 1,
-            "cache_creation_input_tokens": ANTHROPIC_USAGE["cache_creation_input_tokens"],
+            "cache_creation_input_tokens": ANTHROPIC_USAGE[
+                "cache_creation_input_tokens"
+            ],
             "cache_read_input_tokens": ANTHROPIC_USAGE["cache_read_input_tokens"],
         }
         message = self._anthropic_message(request, [])
@@ -229,7 +234,10 @@ class _Handler(BaseHTTPRequestHandler):
                         {
                             "type": "content_block_delta",
                             "index": index,
-                            "delta": {"type": "input_json_delta", "partial_json": fragment},
+                            "delta": {
+                                "type": "input_json_delta",
+                                "partial_json": fragment,
+                            },
                         }
                     )
             else:

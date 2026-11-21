@@ -162,7 +162,11 @@ def _usage(raw: Any) -> dict[str, int]:
     }
     details = raw.get("input_tokens_details") or raw.get("prompt_tokens_details")
     if isinstance(details, Mapping) and not out["cache_read_input_tokens"]:
-        out["cache_read_input_tokens"] = num(details.get("cached_tokens"))
+        # OpenAI counts cached tokens inside input_tokens; Anthropic does
+        # not. Keep Anthropic's meaning so a cached token is priced once.
+        cached = min(num(details.get("cached_tokens")), out["input_tokens"])
+        out["cache_read_input_tokens"] = cached
+        out["input_tokens"] -= cached
     return out
 
 
@@ -263,7 +267,9 @@ def scrub_request(
                     return data_url(node)
                 raise ScrubRefused("a non-image data URL can't be scrubbed")
             if key in ("image_url", "url") and node.startswith(("http://", "https://")):
-                raise ScrubRefused("an image by URL can't be scrubbed before it is sent")
+                raise ScrubRefused(
+                    "an image by URL can't be scrubbed before it is sent"
+                )
             if key in _TEXT_KEYS:
                 return scrub.text(node)
             return node
@@ -287,13 +293,27 @@ def scrub_request(
                     },
                 }
             if kind == "document" and source.get("type") == "text":
-                return {**node, "source": {**source, "data": scrub.text(str(source.get("data", "")))}}
-            raise ScrubRefused(f"a {kind} sent as {source.get('type')!r} can't be scrubbed")
+                return {
+                    **node,
+                    "source": {
+                        **source,
+                        "data": scrub.text(str(source.get("data", ""))),
+                    },
+                }
+            raise ScrubRefused(
+                f"a {kind} sent as {source.get('type')!r} can't be scrubbed"
+            )
         if kind in ("input_file", "file"):
             raise ScrubRefused("a file input can't be scrubbed")
         out: dict[str, Any] = {}
         for k, v in node.items():
-            if k in _SKIP_KEYS or k in ("id", "tool_use_id", "call_id", "name", "signature"):
+            if k in _SKIP_KEYS or k in (
+                "id",
+                "tool_use_id",
+                "call_id",
+                "name",
+                "signature",
+            ):
                 out[k] = v
             elif k == "encrypted_content":
                 out[k] = v
@@ -380,7 +400,8 @@ class _Meter:
 
     def _event(self, raw: bytes) -> None:
         lines = [
-            line[5:].lstrip() for line in raw.decode("utf-8", "replace").split("\n")
+            line[5:].lstrip()
+            for line in raw.decode("utf-8", "replace").split("\n")
             if line.startswith("data:")
         ]
         if not lines:
@@ -548,7 +569,14 @@ class FlightProxy:
     def event(self, payload: Mapping[str, Any]) -> None:
         fields = {
             k: payload.get(k)
-            for k in ("dialect", "action", "commit_class", "label", "label_source", "decision")
+            for k in (
+                "dialect",
+                "action",
+                "commit_class",
+                "label",
+                "label_source",
+                "decision",
+            )
         }
         frame = payload.get("frame_b64")
         try:
@@ -584,7 +612,9 @@ class FlightProxy:
         return None
 
     # -- one model call ---------------------------------------------------
-    def prepare(self, provider: str, raw_body: bytes, headers: Mapping[str, str]) -> bytes:
+    def prepare(
+        self, provider: str, raw_body: bytes, headers: Mapping[str, str]
+    ) -> bytes:
         """The body to forward. Raises ScrubRefused to answer 502."""
         if not raw_body:
             return raw_body
@@ -596,11 +626,15 @@ class FlightProxy:
         try:
             body = json.loads(raw_body)
         except ValueError:
-            raise ScrubRefused("a request body that is not JSON can't be scrubbed") from None
+            raise ScrubRefused(
+                "a request body that is not JSON can't be scrubbed"
+            ) from None
 
         def frame(png: bytes) -> None:
             rel = self.timeline.frame(png, scrubbed=True)
-            self.timeline.record("frame", provider=provider, source="request", frame=rel)
+            self.timeline.record(
+                "frame", provider=provider, source="request", frame=rel
+            )
 
         try:
             clean = scrub_request(body, self._scrub, on_frame=frame)
@@ -608,10 +642,18 @@ class FlightProxy:
             raise
         except Exception as exc:  # noqa: BLE001 - any scrub failure refuses
             raise ScrubRefused(f"scrubbing failed ({type(exc).__name__})") from None
-        return json.dumps(clean, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        return json.dumps(clean, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
 
-    def record_response(self, meter: _Meter, status: int, streamed: bool, seconds: float) -> None:
-        from openadapt_flow.jit.adapters import UnsupportedAction, translate_anthropic, translate_openai
+    def record_response(
+        self, meter: _Meter, status: int, streamed: bool, seconds: float
+    ) -> None:
+        from openadapt_flow.jit.adapters import (
+            UnsupportedAction,
+            translate_anthropic,
+            translate_openai,
+        )
 
         cost = price_usd(meter.model, meter.usage)
         self.timeline.model_call(
@@ -626,14 +668,22 @@ class FlightProxy:
         for dialect, raw in meter.actions:
             note = None
             try:
-                ops = translate_anthropic(raw) if dialect == "anthropic" else translate_openai(raw)
+                ops = (
+                    translate_anthropic(raw)
+                    if dialect == "anthropic"
+                    else translate_openai(raw)
+                )
                 op_dicts = [
                     {k: v for k, v in asdict(op).items() if v is not None and v != ()}
                     for op in ops
                 ]
             except (UnsupportedAction, KeyError, TypeError, ValueError) as exc:
                 op_dicts, note = [], f"not translatable: {exc}"
-            action = raw.get("action") if dialect == "openai" and isinstance(raw.get("action"), dict) else raw
+            action = (
+                raw.get("action")
+                if dialect == "openai" and isinstance(raw.get("action"), dict)
+                else raw
+            )
             if dialect == "openai" and isinstance(raw.get("actions"), list):
                 action = {"actions": len(raw["actions"]), "call_id": raw.get("call_id")}
             self.timeline.model_action(
@@ -655,7 +705,9 @@ class _Handler(BaseHTTPRequestHandler):
         # The path holds the run's token; nothing is logged.
         return None
 
-    def _send(self, status: int, body: bytes, content_type: str = "application/json") -> None:
+    def _send(
+        self, status: int, body: bytes, content_type: str = "application/json"
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -678,7 +730,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _body(self) -> Optional[bytes]:
         if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
-            self._send(411, _error_body("send a Content-Length; chunked bodies are refused"))
+            self._send(
+                411, _error_body("send a Content-Length; chunked bodies are refused")
+            )
             return None
         length = int(self.headers.get("Content-Length") or 0)
         if length > _MAX_BODY:
@@ -728,15 +782,23 @@ class _Handler(BaseHTTPRequestHandler):
                         request_model = parsed.get("model")
                 except ValueError:
                     pass
-            refusal = owner.spend_refusal(request_model) if method == "POST" and body else None
+            refusal = (
+                owner.spend_refusal(request_model)
+                if method == "POST" and body
+                else None
+            )
             if refusal:
-                owner.timeline.refused_request(provider=provider, status=429, reason=refusal)
+                owner.timeline.refused_request(
+                    provider=provider, status=429, reason=refusal
+                )
                 self._send(429, _error_body(refusal))
                 return
             forward = owner.prepare(provider, body, headers)
         except ScrubRefused as exc:
             message = f"not sent: {exc}. Nothing left this machine."
-            owner.timeline.refused_request(provider=provider, status=502, reason=str(exc))
+            owner.timeline.refused_request(
+                provider=provider, status=502, reason=str(exc)
+            )
             self._send(502, _error_body(message))
             return
         self._forward(method, provider, upstream, rest, forward, request_model)
@@ -770,9 +832,7 @@ class _Handler(BaseHTTPRequestHandler):
         owner = self.owner
         target = urlsplit(upstream)
         path = (target.path or "") + rest
-        out_headers = {
-            k: v for k, v in self.headers.items() if k.lower() not in _HOP
-        }
+        out_headers = {k: v for k, v in self.headers.items() if k.lower() not in _HOP}
         out_headers["Host"] = target.netloc
         out_headers["Accept-Encoding"] = "identity"
         if body or method in ("POST", "PUT", "PATCH"):
@@ -780,8 +840,10 @@ class _Handler(BaseHTTPRequestHandler):
         started = time.monotonic()
         if target.scheme == "https":
             conn: http.client.HTTPConnection = http.client.HTTPSConnection(
-                target.hostname or "", target.port or 443,
-                timeout=owner.timeout_s, context=owner._ssl_context(),
+                target.hostname or "",
+                target.port or 443,
+                timeout=owner.timeout_s,
+                context=owner._ssl_context(),
             )
         else:
             conn = http.client.HTTPConnection(
@@ -800,7 +862,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         try:
             content_type = response.getheader("Content-Type") or ""
-            encoded = (response.getheader("Content-Encoding") or "identity").lower() not in (
+            encoded = (
+                response.getheader("Content-Encoding") or "identity"
+            ).lower() not in (
                 "identity",
                 "",
             )
@@ -820,7 +884,9 @@ class _Handler(BaseHTTPRequestHandler):
                         break
                     if not encoded:
                         meter.feed(chunk)
-                    self.wfile.write(f"{len(chunk):x}\r\n".encode("ascii") + chunk + b"\r\n")
+                    self.wfile.write(
+                        f"{len(chunk):x}\r\n".encode("ascii") + chunk + b"\r\n"
+                    )
                     self.wfile.flush()
                 self.wfile.write(b"0\r\n\r\n")
                 meter.close()

@@ -72,8 +72,13 @@ def test_an_unpriced_call_makes_the_whole_cost_unknown(tmp_path):
     timeline = _timeline(tmp_path)
     for model, cost in (("claude-opus-5-5", 0.01), ("other-model", None)):
         timeline.model_call(
-            provider="x", model=model, usage={"input_tokens": 1}, cost_usd=cost,
-            streamed=False, status=200, seconds=0.0,
+            provider="x",
+            model=model,
+            usage={"input_tokens": 1},
+            cost_usd=cost,
+            streamed=False,
+            status=200,
+            seconds=0.0,
         )
     summary = timeline.finish()
     assert summary["model"]["cost_usd"] is None

@@ -61,7 +61,7 @@ def _iso(ts: Optional[float] = None) -> str:
 def _thumbnail(png: bytes) -> bytes:
     from PIL import Image
 
-    image = Image.open(io.BytesIO(png))
+    image: Any = Image.open(io.BytesIO(png))
     image.load()
     if image.width > THUMB_MAX_WIDTH:
         height = max(1, round(image.height * THUMB_MAX_WIDTH / image.width))
@@ -270,7 +270,10 @@ class Timeline:
             self.gate_events.append(entry)
         frame = self.frame(frame_png) if frame_png else None
         self.record(
-            "gate", decision=kind, reason=entry["reason"], label=self.local_text(label),
+            "gate",
+            decision=kind,
+            reason=entry["reason"],
+            label=self.local_text(label),
             frame=frame,
         )
         return entry
@@ -284,7 +287,9 @@ class Timeline:
             elif isinstance(value, (str, int, float, bool)) or value is None:
                 out[key] = value
             elif isinstance(value, (list, tuple)):
-                out[key] = [v if isinstance(v, (int, float, str)) else str(v) for v in value]
+                out[key] = [
+                    v if isinstance(v, (int, float, str)) else str(v) for v in value
+                ]
             else:
                 out[key] = str(value)
         return out
@@ -395,10 +400,14 @@ def validate_flight(data: Any) -> list[str]:
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 problems.append(f"model.{key} is not a count")
         cost = model.get("cost_usd")
-        if cost is not None and (isinstance(cost, bool) or not isinstance(cost, (int, float))):
+        if cost is not None and (
+            isinstance(cost, bool) or not isinstance(cost, (int, float))
+        ):
             problems.append("model.cost_usd is not a number or null")
         if model.get("cost_source") not in _COST_SOURCES:
-            problems.append("model.cost_source is not one of " + ", ".join(_COST_SOURCES))
+            problems.append(
+                "model.cost_source is not one of " + ", ".join(_COST_SOURCES)
+            )
         if model.get("cost_source") == "unknown" and cost is not None:
             problems.append("an unknown cost must be null")
     count = data.get("actions_count")
@@ -466,7 +475,10 @@ def _describe(event: Mapping[str, Any]) -> tuple[str, str]:
             f"{cost_text}, HTTP {event.get('status')}"
         )
     if kind == "gate":
-        return kind, f"{event.get('decision')}: {event.get('reason')} ({event.get('label')})"
+        return (
+            kind,
+            f"{event.get('decision')}: {event.get('reason')} ({event.get('label')})",
+        )
     if kind in ("model_action", "executor_action"):
         detail = json.dumps(event.get("action"), sort_keys=True)
         if kind == "executor_action":

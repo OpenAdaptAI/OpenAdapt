@@ -25,7 +25,9 @@ from openadapt_flow.flight.gate import RefuseGate
 from openadapt_flow.flight.proxy import DEFAULT_UPSTREAMS, FlightProxy
 from openadapt_flow.flight.timeline import Timeline, validate_flight
 
-EVIDENCE = Path(__file__).resolve().parents[2] / "benchmark/flight/real_model_smoke.json"
+EVIDENCE = (
+    Path(__file__).resolve().parents[2] / "benchmark/flight/real_model_smoke.json"
+)
 MODEL = "claude-opus-5-5"
 NAME = "John Smith"
 
@@ -87,16 +89,26 @@ def test_a_real_claude_click_on_save_is_metered_scrubbed_and_held(tmp_path):
 
     computer = GatedComputer(inner, RefuseGate(), timeline, label_at=label_at)
     try:
-        client = anthropic.Anthropic(base_url=proxy.base_url("anthropic"), max_retries=0)
+        client = anthropic.Anthropic(
+            base_url=proxy.base_url("anthropic"), max_retries=0
+        )
         message = client.messages.create(
             model=MODEL,
             max_tokens=400,
-            tools=[{"type": "computer_toolset_20260801", "configs": {"zoom": {"enabled": False}}}],
+            tools=[
+                {
+                    "type": "computer_toolset_20260801",
+                    "configs": {"zoom": {"enabled": False}},
+                }
+            ],
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"The form for {NAME} is filled. Click Save."},
+                        {
+                            "type": "text",
+                            "text": f"The form for {NAME} is filled. Click Save.",
+                        },
                         {
                             "type": "image",
                             "source": {
@@ -133,7 +145,9 @@ def test_a_real_claude_click_on_save_is_metered_scrubbed_and_held(tmp_path):
             json.dumps(
                 {
                     "schema": "openadapt.flight-smoke-evidence/v1",
-                    "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "recorded_at": datetime.now(timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
                     "app": "synthetic intake form (rendered PNG, planted synthetic name)",
                     "model": MODEL,
                     "flight": {k: v for k, v in summary.items() if k != "details"},

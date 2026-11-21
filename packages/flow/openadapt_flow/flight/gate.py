@@ -243,7 +243,11 @@ class FileGate:
             store, request, timeout_s=self.timeout_s, poll_s=self.poll_s
         )
         if answer is None:
-            return "hold" if code in ("approval_wait_timed_out", "request_expired") else "refuse"
+            return (
+                "hold"
+                if code in ("approval_wait_timed_out", "request_expired")
+                else "refuse"
+            )
         if answer.decision != "approve":
             return "refuse"
         if not store.consume(request.request_id):
