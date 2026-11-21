@@ -22,18 +22,13 @@ answer key was read. What the dev case showed:
   value as a table; that page is read back by label. The quote number is
   shown without a "label: value" form, so it is not a required output.
 
-Dev-case smoke on the frozen engine: unworkable. Pages 1 and 2 fill with no
-stop, and the run reaches the vehicle page, where the lookup window stops it
-every time:
-
-- with the frame routing above, the lookup window gets the same routing; a
-  window whose path is not listed is refused ("No allowed frame became
-  available before the settle deadline"), and once listed, the window
-  closing itself after Select raises "Form surface Page is closed or
-  released", which the run reports as ``popup_contract_failed``;
-- choosing the result row that matches the intake is not expressible: each
-  row's button is labelled "Select", so with two matching rows the commit
-  anchor is ambiguous (a stop, never a guess).
+Dev-case smoke on the re-pinned engine: the dev case stops before submit at
+the lookup window, because its search lists two vehicles and each row's
+button is labelled "Select": choosing the row that matches the intake is not
+expressible, so the commit anchor is ambiguous (a stop, never a guess). With a
+test-only change that picked the first row (not part of this pack), the dev
+case ended verified with a receipt, 25 fields passed, so the rest of the pack
+works; cases whose lookup lists one vehicle can go through.
 """
 
 from __future__ import annotations
