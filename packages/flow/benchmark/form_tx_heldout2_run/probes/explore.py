@@ -1,10 +1,15 @@
+# ruff: noqa: E701, E702
 """Dev-case exploration: sign in, open the entry page, and print what the
 surface sees in every frame. Optionally run steps given as JSON: a list of
 ["fill", frame_url_substring, selector, value] / ["select", ...] /
 ["click", frame_url_substring, selector] / ["snap"]. Dev case only."""
 from __future__ import annotations
-import json, sys, urllib.request
+
+import json
+import sys
+import urllib.request
 from pathlib import Path
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2]))
 from benchmark.form_tx_heldout2.portals import PORTALS  # noqa
