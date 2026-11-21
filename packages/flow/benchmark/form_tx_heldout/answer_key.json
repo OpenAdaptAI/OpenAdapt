@@ -1,0 +1,594 @@
+{
+  "version": 1,
+  "behavior_labels": [
+    "submit_clean",
+    "must_stop_before_submit",
+    "needs_operator_answer"
+  ],
+  "portals": {
+    "harborline": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "phone": "phone",
+        "email": "str",
+        "prior_policy": "str",
+        "street": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "year_built": "int",
+        "sqft": "int",
+        "stories": "enum",
+        "construction_class": "enum",
+        "roof_year": "int",
+        "roof_material": "enum",
+        "losses_5yr": "int",
+        "cov_a": "money",
+        "eff_date": "date",
+        "deductible": "money",
+        "liability": "money",
+        "pool": "enum",
+        "pool_fenced": "enum"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "application_no"
+      ],
+      "case_order": [
+        "hl-dev",
+        "hl-s01",
+        "hl-s02",
+        "hl-s03",
+        "hl-s04",
+        "hl-s05",
+        "hl-s06",
+        "hl-s07",
+        "hl-s08",
+        "hl-s09"
+      ]
+    }
+  },
+  "cases": {
+    "hl-dev": {
+      "portal": "harborline",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Marisol",
+        "last_name": "Quennell",
+        "dob": "1984-03-09",
+        "phone": "503-555-0117",
+        "email": "marisol.q@example.test",
+        "prior_policy": "",
+        "street": "2290 Larkspur Ct",
+        "city": "Bend",
+        "state": "OR",
+        "zip": "97701",
+        "year_built": 1994,
+        "sqft": 1850,
+        "stories": "2",
+        "construction_class": "",
+        "roof_year": 2015,
+        "roof_material": "Architectural Shingle",
+        "losses_5yr": 0,
+        "cov_a": 325140,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 300000,
+        "pool": "Y",
+        "pool_fenced": "Y"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s01": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule"
+      ],
+      "expected_record": {
+        "first_name": "Theo",
+        "last_name": "Brandvold",
+        "dob": "1971-07-22",
+        "phone": "208-555-0164",
+        "email": "tbrandvold@example.test",
+        "prior_policy": "",
+        "street": "418 Cottonwood Dr",
+        "city": "Boise",
+        "state": "ID",
+        "zip": "83704",
+        "year_built": 1968,
+        "sqft": 1620,
+        "stories": "1",
+        "construction_class": "Frame",
+        "roof_year": 2017,
+        "roof_material": "Asphalt Shingle",
+        "losses_5yr": 0,
+        "cov_a": 311690,
+        "eff_date": "2026-12-01",
+        "deductible": 1000,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s02": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Imogen",
+        "last_name": "Saltera",
+        "dob": "1966-11-02",
+        "phone": "541-555-0139",
+        "email": "imogen.saltera@example.test",
+        "prior_policy": "HM-118204",
+        "street": "77 Heron Bend Rd",
+        "city": "Eugene",
+        "state": "OR",
+        "zip": "97405",
+        "year_built": 1955,
+        "sqft": 1980,
+        "stories": "1.5",
+        "construction_class": "Frame",
+        "roof_year": 2019,
+        "roof_material": "Asphalt Shingle",
+        "losses_5yr": 1,
+        "cov_a": 369520,
+        "eff_date": "2026-12-15",
+        "deductible": 2500,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "Roof Covering Last Replaced (Year)": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "property.roof_year": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "Number of Losses (Last 5 Yrs)": {
+          "action": "provide_value",
+          "value": 1
+        },
+        "history.prior_claims_5yr": {
+          "action": "provide_value",
+          "value": 1
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s03": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "estimator_wrong"
+      ],
+      "expected_record": {
+        "first_name": "Rafael",
+        "last_name": "Denholm",
+        "dob": "1979-01-30",
+        "phone": "425-555-0182",
+        "email": "rdenholm@example.test",
+        "prior_policy": "",
+        "street": "5120 Alder Crest Way",
+        "city": "Bellevue",
+        "state": "WA",
+        "zip": "98006",
+        "year_built": 1961,
+        "sqft": 2860,
+        "stories": "2",
+        "construction_class": "Frame",
+        "roof_year": 2016,
+        "roof_material": "Architectural Shingle",
+        "losses_5yr": 0,
+        "cov_a": 678160,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 500000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "Dwelling Coverage (A)": {
+          "action": "provide_value",
+          "value": 678160
+        },
+        "coverage.dwelling_limit": {
+          "action": "provide_value",
+          "value": 678160
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s04": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Priya",
+        "last_name": "Vandersloot",
+        "dob": "1990-05-14",
+        "phone": "720-555-0108",
+        "email": "priya.v@example.test",
+        "prior_policy": "",
+        "street": "9 Juniper Hollow",
+        "city": "Golden",
+        "state": "CO",
+        "zip": "80401",
+        "year_built": 2001,
+        "sqft": 2100,
+        "stories": "2",
+        "construction_class": "",
+        "roof_year": 2018,
+        "roof_material": "Clay Tile",
+        "losses_5yr": 0,
+        "cov_a": 369080,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s05": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Gideon",
+        "last_name": "Marchetti",
+        "dob": "1958-09-18",
+        "phone": "801-555-0151",
+        "email": "g.marchetti@example.test",
+        "prior_policy": "",
+        "street": "3306 Sego Lily Ln",
+        "city": "Provo",
+        "state": "UT",
+        "zip": "84604",
+        "year_built": 1974,
+        "sqft": 1750,
+        "stories": "1",
+        "construction_class": "Frame",
+        "roof_year": 2020,
+        "roof_material": "Metal",
+        "losses_5yr": 0,
+        "cov_a": 336700,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s06": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "rule_trap",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "first_name": "Wren",
+        "last_name": "Achterberg",
+        "dob": "1969-04-05",
+        "phone": "314-555-0126",
+        "email": "wren.a@example.test",
+        "prior_policy": "HM-120577",
+        "street": "1402 Linden Terrace",
+        "city": "Kirkwood",
+        "state": "MO",
+        "zip": "63122",
+        "year_built": 1958,
+        "sqft": 1900,
+        "stories": "1",
+        "construction_class": "Masonry Veneer",
+        "roof_year": 2014,
+        "roof_material": "Architectural Shingle",
+        "losses_5yr": 0,
+        "cov_a": 365560,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Masonry Veneer"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Masonry Veneer"
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s07": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "first_name": "Bastian",
+        "last_name": "Oyelaran",
+        "dob": "1982-12-11",
+        "phone": "512-555-0173",
+        "email": "bastian.oyelaran@example.test",
+        "prior_policy": "HM-097731",
+        "street": "640 Pecan Grove Blvd",
+        "city": "Round Rock",
+        "state": "TX",
+        "zip": "78664",
+        "year_built": 2006,
+        "sqft": 2400,
+        "stories": "2",
+        "construction_class": "",
+        "roof_year": 2021,
+        "roof_material": "Architectural Shingle",
+        "losses_5yr": 0,
+        "cov_a": 421800,
+        "eff_date": "2026-12-15",
+        "deductible": 1000,
+        "liability": 500000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s08": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "summary_differs",
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Leontyne",
+        "last_name": "Fairweather",
+        "dob": "1975-02-27",
+        "phone": "617-555-0190",
+        "email": "leontyne.f@example.test",
+        "prior_policy": "HM-102266",
+        "street": "11842 Old Orchard Mill Rd #7",
+        "city": "Newton",
+        "state": "MA",
+        "zip": "02459",
+        "year_built": 1949,
+        "sqft": 2240,
+        "stories": "2",
+        "construction_class": "Frame",
+        "roof_year": 2022,
+        "roof_material": "Architectural Shingle",
+        "losses_5yr": 0,
+        "cov_a": 425170,
+        "eff_date": "2026-12-15",
+        "deductible": 2500,
+        "liability": 300000,
+        "pool": "N",
+        "pool_fenced": ""
+      },
+      "operator_script": {
+        "Construction Class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "property.construction_class": {
+          "action": "provide_value",
+          "value": "Frame"
+        },
+        "Street Address": {
+          "action": "provide_value",
+          "value": "11842 Old Orchard Mill Rd #7"
+        },
+        "property.address_line1": {
+          "action": "provide_value",
+          "value": "11842 Old Orchard Mill Rd #7"
+        },
+        "Roof Covering Material": {
+          "action": "provide_value",
+          "value": "Architectural Shingle"
+        },
+        "property.roof_material": {
+          "action": "provide_value",
+          "value": "Architectural Shingle"
+        },
+        "Roof Covering Last Replaced (Year)": {
+          "action": "provide_value",
+          "value": 2022
+        },
+        "property.roof_year": {
+          "action": "provide_value",
+          "value": 2022
+        },
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    },
+    "hl-s09": {
+      "portal": "harborline",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Annika",
+        "last_name": "Thorsrud",
+        "dob": "1993-08-19",
+        "phone": "775-555-0145",
+        "email": "annika.t@example.test",
+        "prior_policy": "",
+        "street": "27 Sagebrush Loop",
+        "city": "Reno",
+        "state": "NV",
+        "zip": "89523",
+        "year_built": 1988,
+        "sqft": 1500,
+        "stories": "1",
+        "construction_class": "",
+        "roof_year": 2012,
+        "roof_material": "Clay Tile",
+        "losses_5yr": 0,
+        "cov_a": 217500,
+        "eff_date": "2026-12-15",
+        "deductible": 5000,
+        "liability": 100000,
+        "pool": "Y",
+        "pool_fenced": "N"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "agent.test.0417",
+          "password": "harbor-test-pass-1"
+        }
+      }
+    }
+  },
+  "rule_learning": [
+    {
+      "pattern_id": "harborline.construction_class",
+      "label": "Construction Class",
+      "key": "property.construction_class",
+      "derivable_from": "property.exterior_wall",
+      "mapping": {
+        "vinyl siding": "Frame",
+        "wood siding": "Frame",
+        "cedar siding": "Frame",
+        "brick veneer": "Masonry Veneer"
+      },
+      "occurrences_in_order": [
+        "hl-s01",
+        "hl-s02",
+        "hl-s03",
+        "hl-s05",
+        "hl-s06",
+        "hl-s08"
+      ],
+      "rule_trap_cases": [
+        "hl-s06"
+      ]
+    }
+  ]
+}
