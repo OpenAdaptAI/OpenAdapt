@@ -31,7 +31,15 @@ def add_parser(sub: Any) -> None:
 
 
 class NoAdmittedProgram(RuntimeError):
-    """``wrap run``: the task has no admitted program, so nothing ran."""
+    """``wrap run``: the task has no admitted program, so nothing ran.
+
+    ``draft`` is the task folder when run 1 left a draft that was not
+    admitted, else None.
+    """
+
+    def __init__(self, draft: Any = None) -> None:
+        super().__init__("no admitted program")
+        self.draft = draft
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -232,7 +240,9 @@ def _task(
         halted = False
     agent = None
     if cached is None and not halted and replay_only:
-        raise NoAdmittedProgram()
+        compiler, _key = setup.cache._compiler(setup.instruction, names)
+        draft = compiler._jit().candidate() is not None
+        raise NoAdmittedProgram(compiler.dir if draft else None)
     if cached is None and not halted and command_agent is not None:
         # The wrapped command brings its own model; OpenAdapt sends none.
         agent = command_agent
@@ -476,13 +486,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = task.call(args.request_id, _with_secret_env(values, task.parameters))
     except TaskArgumentsError as exc:
         parser.error(str(exc))
-    except NoAdmittedProgram:
-        print(
-            "openadapt wrap run: this task has no admitted program; nothing ran. "
-            "Do the first run with openadapt wrap --task TASK -- COMMAND "
-            "[NO_ADMITTED_PROGRAM]",
-            file=sys.stderr,
-        )
+    except NoAdmittedProgram as exc:
+        if exc.draft is not None:
+            print(
+                "openadapt wrap run: run 1 left a draft that was not admitted, "
+                f"in {exc.draft}; nothing ran. A draft is admitted when a person "
+                "confirms it during run 1 (--person) [DRAFT_NOT_ADMITTED]",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "openadapt wrap run: this task has no admitted program; nothing "
+                "ran. Do the first run with openadapt wrap --task TASK -- COMMAND "
+                "[NO_ADMITTED_PROGRAM]",
+                file=sys.stderr,
+            )
         return 2
     except MissingModelKey:
         # Raised before the agent runs, so no run record exists yet. Name the

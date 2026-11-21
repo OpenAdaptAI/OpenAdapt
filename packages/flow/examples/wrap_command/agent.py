@@ -35,6 +35,12 @@ async def main() -> int:
     url = os.environ["OPENADAPT_MCP_URL"]
     headers = {"Authorization": "Bearer " + os.environ["OPENADAPT_MCP_TOKEN"]}
     task = os.environ["OPENADAPT_TASK"]
+    # The task names the record and the note either as values or, when the
+    # listings are scrubbed, as placeholders; the listings use the same form.
+    found = re.search(r"referral for (.+?), start", task)
+    if found is None:
+        raise SystemExit("the task names no referral")
+    record = found.group(1)
     note = task.rsplit(": ", 1)[1].strip()
     async with streamablehttp_client(url, headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
@@ -54,7 +60,7 @@ async def main() -> int:
                     await call("finish", summary="saved the note")
                     return 0
                 if "# Referral Tasks" in listing:
-                    listing = await call("click", ref=_ref(listing, "Open", "Jane"))
+                    listing = await call("click", ref=_ref(listing, "Open", record))
                 elif "# New Encounter" in listing:
                     if not triage_done:
                         triage_done = True

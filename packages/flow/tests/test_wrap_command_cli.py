@@ -124,3 +124,46 @@ def test_the_command_gets_the_endpoint_and_the_server_closes_after(tmp_path):
     assert tools.summary is not None
     with pytest.raises((urllib.error.URLError, ConnectionError, OSError)):
         urllib.request.urlopen(url, timeout=2)
+
+
+def test_the_command_gets_no_openadapt_settings_or_keys():
+    from openadapt_flow.wrap.process import child_environment
+
+    env = child_environment(
+        {
+            "PATH": "/bin",
+            "ANTHROPIC_API_KEY": "the agent's own key",
+            "OPENADAPT_JIT_KEY_PASSPHRASE": "admission key passphrase",
+            "OPENADAPT_FLOW_SECRET_PASSWORD": "a sign-in value",
+            "openadapt_api_key": "a cloud key",
+        }
+    )
+    assert env == {"PATH": "/bin", "ANTHROPIC_API_KEY": "the agent's own key"}
+
+
+def test_a_real_child_never_sees_the_admission_passphrase(tmp_path, monkeypatch):
+    import sys
+
+    from openadapt_flow.integrations.agents.skills import BrowserTools
+
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "admission key passphrase")
+    out = tmp_path / "seen.txt"
+    script = (
+        "import os, pathlib\n"
+        f"pathlib.Path({str(out)!r}).write_text("
+        "repr(sorted(k for k in os.environ if k.startswith('OPENADAPT_'))))\n"
+    )
+    ProcessAgent([sys.executable, "-c", script], timeout_s=60)._run_command(
+        "Task: x", BrowserTools(SimpleNamespace())
+    )
+    assert out.read_text() == repr(sorted([ENV_URL, ENV_TOKEN, "OPENADAPT_TASK"]))
+
+
+def test_run_names_a_draft_that_was_not_admitted(monkeypatch, capsys, tmp_path):
+    def task(args, parser, *, command_agent=None, replay_only=False):
+        raise cli.NoAdmittedProgram(tmp_path / "task-dir")
+
+    monkeypatch.setattr(cli, "_task", task)
+    assert cli.main(["run", "--task", "t.json", "--param", "note=x"]) == 2
+    err = capsys.readouterr().err
+    assert "DRAFT_NOT_ADMITTED" in err and str(tmp_path / "task-dir") in err

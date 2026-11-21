@@ -11,6 +11,13 @@ OpenAdapt opens the task's app in its own headless browser and starts
 ``OPENADAPT_TASK``
     The task, with its inputs, as the agent should read it.
 
+The command gets the caller's environment without any ``OPENADAPT_*``
+variable, so OpenAdapt's own keys and settings never reach the agent being
+admitted. When the privacy extra scrubs listings, the task's own values
+(its record's identity and its inputs) appear as placeholders such as
+``⟦task.identity_1⟧`` in ``OPENADAPT_TASK`` and in every listing; typing a
+placeholder types its value.
+
 The endpoint's tools are the skill cache's browser tools (``observe``,
 ``click``, ``type_text``, ``press_key``, ``scroll``, ``finish``). Each one goes
 through compile-agent's harness, exactly as OpenAdapt's built-in agent does:
@@ -43,7 +50,15 @@ from typing import Any, Optional
 
 from openadapt_flow.integrations.agents.skills import BrowserTools, FrameworkAgent
 
-__all__ = ["ProcessAgent", "ToolEndpoint", "ENV_URL", "ENV_TOKEN", "ENV_TASK"]
+__all__ = [
+    "ENV_TASK",
+    "ENV_TOKEN",
+    "ENV_URL",
+    "CommandFailed",
+    "ProcessAgent",
+    "ToolEndpoint",
+    "child_environment",
+]
 
 ENV_URL = "OPENADAPT_MCP_URL"
 ENV_TOKEN = "OPENADAPT_MCP_TOKEN"
@@ -59,6 +74,18 @@ class CommandFailed(RuntimeError):
     def __init__(self, exit_code: int) -> None:
         super().__init__(f"the wrapped command exited with status {exit_code}")
         self.exit_code = exit_code
+
+
+def child_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """The command's environment: the caller's, without OpenAdapt's own settings.
+
+    The command is the agent whose run is being admitted, so it gets none of
+    OpenAdapt's configuration or credentials (``OPENADAPT_*``: the admission
+    key passphrase, ``OPENADAPT_FLOW_SECRET_<NAME>`` sign-in values, Cloud
+    keys). Its own variables, such as its model key, pass through.
+    """
+
+    return {k: v for k, v in environ.items() if not k.upper().startswith("OPENADAPT_")}
 
 
 def _tool_specs() -> list[dict[str, Any]]:
@@ -126,7 +153,11 @@ def _call(tools: BrowserTools, name: str, args: Mapping[str, Any]) -> str:
 
 
 def _mcp_server(tools: BrowserTools) -> Any:
-    """A low-level MCP server over ``tools`` (MCP 1 and MCP 2 SDKs)."""
+    """A low-level MCP server over ``tools``.
+
+    It follows ``openadapt_flow.wrap.mcp``'s adapter for both SDK generations;
+    the streamable-HTTP endpoint is tested with the locked MCP 1 SDK.
+    """
 
     from importlib import import_module
 
@@ -174,12 +205,14 @@ def _mcp_server(tools: BrowserTools) -> Any:
             )
         return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
 
+    from openadapt_flow.privacy import PLACEHOLDER_HELP
+
     instructions = (
         "You operate a web application for the user. observe returns the page as "
         "a listing; controls carry refs such as e3. Act with click, type_text, "
         "press_key and scroll; each returns the new listing. Before a save the "
         "right record must be on screen; every save is read back. Do exactly "
-        "the task in OPENADAPT_TASK and call finish once."
+        "the task in OPENADAPT_TASK and call finish once. " + PLACEHOLDER_HELP
     )
     if hasattr(Server, "list_tools"):
         server = Server(
@@ -316,7 +349,7 @@ class ProcessAgent(FrameworkAgent):
         endpoint = ToolEndpoint(tools)
         endpoint.start()
         try:
-            env = dict(os.environ)
+            env = child_environment(os.environ)
             env.update(
                 {ENV_URL: endpoint.url, ENV_TOKEN: endpoint.token, ENV_TASK: task}
             )

@@ -158,7 +158,8 @@ def test_a_failing_command_makes_no_program_and_keeps_its_exit_status(
     reset()
     result = task.call("first", {"note": note})
     assert command.exit_code == 7
-    assert result["verified"] is False and result.get("path") != "skill"
+    # The command may have saved before it failed: never retried, a person checks.
+    assert result["status"] == "RECONCILIATION_REQUIRED" and result["verified"] is False
     assert setup.cache.server(setup.instruction, {"note": note}) is None
     assert _http_json(f"{clinic}/api/db")["records"] == []
 
@@ -198,3 +199,72 @@ def test_the_endpoint_refuses_a_request_without_the_token(
 
 def test_command_failed_carries_the_status() -> None:
     assert CommandFailed(5).exit_code == 5
+
+
+def test_the_cli_runs_the_command_and_run_never_starts_an_agent(
+    clinic: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    """The real ``openadapt wrap ... -- COMMAND`` path, with no person attending.
+
+    Run 1 is guarded, read back and compiled, and stays a draft (only a
+    person at the terminal confirms checks). ``wrap run`` then refuses the
+    draft without starting anything.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+    from openadapt_flow.teach_scope import origin_of
+    from openadapt_flow.wrap import cli
+
+    setup, reset = _setup(tmp_path, clinic, monkeypatch)
+    note = "Synthetic follow-up in two weeks"
+    key_dir = tmp_path / "keys"
+    signer = LocalAuthorizer(key_dir, "ci:wrap-command-approver")
+    monkeypatch.setenv(ROOT_ENV, signer.root)
+    statement = signer.issue(
+        tmp_path / "teach-authorization",
+        {
+            "task": {
+                "task_id": setup.cache.task_id(setup.instruction, {"note": note}),
+                "summary": "Save a note",
+            },
+            "purposes": ["teach", "repair"],
+            "origins": [str(origin_of(setup.cache.common["url"]))],
+            "inputs": {"note": {"value": note}},
+            "constants": [{"value": "Jane Sample"}, {"value": "MRN P1"}],
+            "writes": {
+                "record_kind": "encounter",
+                "identity": {
+                    "patient_id": {"value": "p1"},
+                    "type": {"value": "Triage"},
+                },
+                "fields": {},
+            },
+        },
+    )
+    reset()
+    common = ["--task", str(tmp_path / "task.json"), "--param", "note=" + note]
+    code = cli.main(
+        [
+            *common,
+            "--key-dir",
+            str(key_dir),
+            "--teach-authorization",
+            str(statement),
+            "--approver-root",
+            signer.root,
+            "--",
+            sys.executable,
+            str(AGENT),
+        ]
+    )
+    out = capsys.readouterr().out
+    first = json.loads(out.strip().splitlines()[-1])
+    # Run 1 was read back (verified), but it is a draft, not a program.
+    assert code == 0 and first["path"] == "agent", first
+    assert first["status"] == "draft", first
+    rows = _http_json(f"{clinic}/api/db")["records"]
+    assert [r["note"] for r in rows] == [note]
+
+    assert cli.main(["run", *common]) == 2
+    assert "DRAFT_NOT_ADMITTED" in capsys.readouterr().err

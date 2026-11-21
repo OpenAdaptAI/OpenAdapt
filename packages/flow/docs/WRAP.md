@@ -94,12 +94,30 @@ checks:
 - Every action is recorded for the compiled program.
 
 The command gets no handle to the browser itself, so it can't act around
-these checks. When the command exits, the endpoint closes. Then the run goes
-through the same record check, proposed checks, canary and admission as any
-`openadapt wrap --task` run (`--person`, `--admit-key`, `--teach-authorization`;
-see [JIT_ADMISSION.md](JIT_ADMISSION.md)). A nonzero exit makes no program,
-and `openadapt wrap` exits with the command's status. The command is stopped
-after `--command-timeout` seconds (default 600).
+these checks. It also gets your environment without any `OPENADAPT_*`
+variable, so OpenAdapt's own keys and settings never reach it; its own
+variables, such as its model key, pass through.
+
+When the command exits, the endpoint closes. Then the run goes through the
+same record check, proposed checks, canary and admission as any
+`openadapt wrap --task` run (see [JIT_ADMISSION.md](JIT_ADMISSION.md)). Run it
+in a terminal with `--person "Your Name"`: you confirm the proposed read-back
+checks, review the steps and attend the canary there. Without `--person`, run 1
+stays a draft, and `wrap run` reports `[DRAFT_NOT_ADMITTED]`.
+
+```bash
+openadapt wrap --task task.json --param note="Synthetic follow-up" \
+  --person "Your Name" -- python my_agent.py
+```
+
+A nonzero exit makes no program, and `openadapt wrap` exits with the
+command's status. The command is stopped after `--command-timeout` seconds
+(default 600).
+
+When the privacy extra scrubs what the agent sees, the task's own values (its
+record's identity and its inputs) appear as placeholders such as
+`⟦task.identity_1⟧` in `OPENADAPT_TASK` and in every listing. Typing a
+placeholder types its value. The endpoint's instructions say so too.
 
 [`examples/wrap_command/agent.py`](../examples/wrap_command/agent.py) is a
 small agent with no model that does the sample clinic task through the
