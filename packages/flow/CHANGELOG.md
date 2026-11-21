@@ -96,6 +96,10 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
+  A durable checkpoint store counts as such a handle: it keeps the keys it
+  derived from its explicit key for its own lifetime. Without that, each
+  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
+  instead of 3.5 s (131 derivations, now 1).
 - The wire tap relays a redirect that stays on an allowed origin instead of
   answering 502, so it can front a form app that answers a save with
   Post/Redirect/Get. A redirect to another origin is still refused, and the tap
@@ -105,12 +109,18 @@
   be read back completely from two independent sources. Anything uncertain
   releases held keys and produces no keyboard receipt (#2313).
 - A repair candidate id that would leave the repair store is refused (#2369).
+- `import openadapt_flow` loads its `ir` re-exports on first use, and the
+  qualification models and several replayer helpers moved into their own
+  modules. Every public name is re-exported unchanged (#2439, #2451, #2454,
+  #2455, #2456, #2459).
 
 ### Requirements
 
 - The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
   release with `sanitization_config()`, which sanitized reuse and approval bind
   to.
+- Locked dependencies move to the first fixed release of each package with an
+  open security advisory, including Pillow, aiohttp and filelock (#2383).
 
 ## v3.3.0 (2026-11-19)
 
