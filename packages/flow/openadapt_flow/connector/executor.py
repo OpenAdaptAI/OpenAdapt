@@ -329,6 +329,16 @@ def status_from_report(returncode: int, report: dict[str, Any]) -> str:
     return "failed"
 
 
+def _reported_terminal_outcome(report: dict[str, Any]) -> bool:
+    """True when the child's report records how its run ended."""
+    return bool(report) and (
+        report.get("execution_outcome") is not None
+        or report.get("terminal_outcome") is not None
+        or report.get("halt") is not None
+        or isinstance(report.get("success"), bool)
+    )
+
+
 def precise_outcome_from_report(report: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Project a valid local report onto its closed PHI-free outcome envelope."""
 
@@ -872,10 +882,18 @@ def _execute_job(
         status = status_from_report(outcome.returncode, report)
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
-        if job_cancelled(job.lease_job_id):
-            status = "failed"
-            error_code = "cancelled_by_control_plane"
-            outcome_error = "cancelled by the control plane while running"
+        cancelled = job_cancelled(job.lease_job_id)
+        if cancelled and not _reported_terminal_outcome(report):
+            # The cancel terminated a child that had already started, and it
+            # left no terminal report: a write may have landed. That is not a
+            # failure (a re-run could repeat the write); it stops for
+            # reconciliation, like a child whose outcome never came back.
+            status = "halt"
+            error_code = "child_outcome_unknown"
+            outcome_error = (
+                "cancelled by the control plane while running; the governed "
+                "child left no terminal report, so a write may have landed"
+            )
         elif report_target_kind != job.target_kind:
             status = "failed"
             error_code = "target_kind_mismatch"
@@ -884,6 +902,8 @@ def _execute_job(
                 "the signed dispatch target_kind (fail closed)"
             )
         else:
+            # A cancel that arrived after the child reported does not change
+            # what the child did: its own outcome stands.
             outcome_error = None
             if status == "failed":
                 error_code = "governed_run_failed"
@@ -924,6 +944,8 @@ def _execute_job(
         # 4. The PHI-bearing report body goes to the CUSTOMER'S store, never ours.
         report_ref: Optional[str] = job.report_ref()
         halt = halt_object(report)
+        if error_code == "child_outcome_unknown" and halt is None:
+            halt = {"present": True}
         outcome_envelope = precise_outcome_from_report(report)
         if error_code is not None and outcome_envelope is not None:
             # A cancelled or mismatched run never reports a success envelope.

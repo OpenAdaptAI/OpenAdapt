@@ -481,6 +481,47 @@ def test_cancelled_job_reports_failed_with_closed_code(tmp_path):
     )
 
 
+def test_cancel_that_kills_a_started_child_is_uncertain_not_failed(tmp_path):
+    """A cancel after the child started may follow a landed write."""
+    job = parse_job(_payload(), lease_job_id="bjob_mid")
+
+    def runner(argv, run_dir, env):
+        cancel_job("bjob_mid")  # arrives while the child runs; it is killed
+        return RunOutcome(returncode=-15, report={})
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "halt"
+    assert result.error_code == "child_outcome_unknown"
+    assert result.halt == {"present": True} and result.outcome is None
+
+
+def test_cancel_after_the_child_reported_keeps_its_real_outcome(tmp_path):
+    job = parse_job(_payload(), lease_job_id="bjob_late")
+
+    def runner(argv, run_dir, env):
+        cancel_job("bjob_late")  # too late: the child already finished
+        report = {
+            "execution_target_kind": "web",
+            "success": True,
+            "execution_outcome": "VERIFIED",
+            "results": [{"ok": True}],
+        }
+        return RunOutcome(returncode=0, report=report)
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "success" and result.error_code is None
+
+
 def test_concurrency_runs_up_to_the_server_cap(tmp_path):
     plane = RecordingPlane(
         control={
