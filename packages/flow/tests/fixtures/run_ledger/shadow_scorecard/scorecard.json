@@ -1,0 +1,13 @@
+{
+  "schema": "openadapt.readiness-scorecard/v1",
+  "tasks": [
+    {
+      "matched": false,
+      "task_id": "shadow-task-0003"
+    },
+    {
+      "matched": true,
+      "task_id": "other-task"
+    }
+  ]
+}

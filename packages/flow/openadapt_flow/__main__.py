@@ -13164,6 +13164,9 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_deferred import register_deferred_parser
 
     register_deferred_parser(sub)
+    from openadapt_flow.run_ledger.cli import register as _register_ledger
+
+    _register_ledger(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
