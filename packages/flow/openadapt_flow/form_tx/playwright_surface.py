@@ -113,6 +113,28 @@ _DOCUMENT_CONTEXT_JS = r"""
 
 
 _DOM_HELPERS_JS = r"""
+    // A page may replace or remove the global CSS object; never rely on it.
+    const cssEscape = (value) => {
+        const str = String(value);
+        let out = '';
+        for (let i = 0; i < str.length; i += 1) {
+            const ch = str.charAt(i);
+            const code = str.charCodeAt(i);
+            if (code === 0) {
+                out += '\uFFFD';
+            } else if ((code >= 0x30 && code <= 0x39) &&
+                    (i === 0 || (i === 1 && str.charAt(0) === '-'))) {
+                out += '\\' + code.toString(16) + ' ';
+            } else if (code >= 0x80 || ch === '-' || ch === '_' ||
+                    (code >= 0x30 && code <= 0x39) ||
+                    (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) {
+                out += (i === 0 && ch === '-' && str.length === 1) ? '\\-' : ch;
+            } else {
+                out += '\\' + ch;
+            }
+        }
+        return out;
+    };
     // Composed-tree helpers shared by every in-page script. Open shadow roots
     // are walked like ordinary subtrees; closed shadow roots stay invisible.
     // A control inside a shadow root gets a selector of the form
@@ -222,7 +244,7 @@ _DOM_HELPERS_JS = r"""
         let cur = target;
         while (cur && cur !== document.documentElement) {
             if (cur !== target && cur.id && !DYNAMIC_ID_RE.test(cur.id)) {
-                const anchorSel = '#' + CSS.escape(cur.id);
+                const anchorSel = '#' + cssEscape(cur.id);
                 if (isUniqueMatch(anchorSel, cur)) {
                     parts.unshift(anchorSel);
                     break;
@@ -257,7 +279,7 @@ _DOM_HELPERS_JS = r"""
     };
     const localSelector = (el) => {
         if (el.id && !DYNAMIC_ID_RE.test(el.id)) {
-            const idSel = '#' + CSS.escape(el.id);
+            const idSel = '#' + cssEscape(el.id);
             if (isUniqueMatch(idSel, el)) return idSel;
         }
         const testId = el.getAttribute('data-testid');
