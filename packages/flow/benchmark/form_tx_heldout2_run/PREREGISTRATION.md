@@ -153,7 +153,7 @@ quality is part of what is measured.
 
 **D1, 2026-11-21. Engine re-pinned and packs written; no scored case had run.**
 
-- **Re-pin.** `ENGINE_SHA` moves from `335c322ec` to `e8f12740f`. Every change
+- **Re-pin.** `ENGINE_SHA` moves from `335c322ec` to `72a6ad428`. Every change
   is a general fix with a test and no portal names, found while writing packs
   from dev cases:
   - selectors no longer use the page's `CSS` global, which one new portal's
@@ -167,10 +167,17 @@ quality is part of what is measured.
   - a type-ahead pick that leaves only the leading part of its label in the
     input is accepted when the binding types a prefix and the input shows
     more than was typed (typed text alone still stops).
-  The fixes are also on the PR branches (#2448 `c9cbaa155`, #2440
-  `368ba4e03`, #2447 `8c9722791`). Integration-only glue: the popup
-  result read from page text, `SurfaceContextError` in the popup catch,
-  `SurfaceStateError` in the surface-error list.
+  The re-pin also takes the fixes for Grok's first review round, all
+  fail-closed: a hidden `dd` ends its definition-list group (#2449); a
+  `host >> inner` selector must be unique across the host's whole subtree,
+  or acting on it is refused (#2440); a sign-in wall after the submit click
+  is `delivery_uncertain` with no resume, and radio groups keep their form
+  (#2447); every popup surface failure is a stop, and an in-page dialog is
+  scoped by its container (#2441). The PR heads in the run are #2449
+  `4a3bf0eb9`, #2448 `c9cbaa155`, #2440 `5baf94a09`, #2441 `cdf3fdc7e` and
+  #2447 `8f4070f73`. Integration-only glue: the popup
+  result read from page text (it needs #2449 and #2441), `SurfaceStateError`
+  in the surface-error list, and keeping both commit flags.
 - **Left as findings, not fixed** (new capability, not operability): choosing
   one result row among several identical "Select" buttons (okelund stops at
   its lookup window on the dev case); a date typed in three boxes but shown
@@ -187,7 +194,7 @@ quality is part of what is measured.
   descriptions in `portals.py`; the glasswing author tried an engine edit for
   a smoke run, which the permission system refused, so it never ran. None
   read portal source, scored intakes or the answer key.
-- **Dev-case smoke at the final SHA** (all eight dev cases, old and new):
+- **Dev-case smoke at `72a6ad428`** (all eight dev cases, old and new; the same at `e8f12740f`):
   harborline, cobalt and tidewater `verified_done`; pinecrest, ferncastle,
   glasswing and velloway correct but `readback_incomplete`; okelund
   escalated at its lookup window, nothing submitted.
