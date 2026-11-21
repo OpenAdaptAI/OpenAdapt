@@ -31,6 +31,7 @@ import os
 import re
 import time
 from typing import Any, Callable, Mapping, Optional, Sequence
+from urllib.parse import quote
 
 from openadapt_flow.txplan.spec import (
     Collection,
@@ -46,6 +47,10 @@ Frame = dict[str, str]  # "<collection>/<id>" -> digest of the normalized record
 
 class AdapterError(RuntimeError):
     """A read or a write failed. For a write, delivery is unknown."""
+
+
+class ChangedSinceApply(AdapterError):
+    """Undo found a row no longer as the apply left it."""
 
 
 class Diverged(AdapterError):
@@ -278,7 +283,12 @@ class RestAdapter:
             name = m.group(1)
             if name not in values or values[name] in (None, ""):
                 raise AdapterError(f"the path needs {name}")
-            return str(values[name])
+            # Path-injection class: a value is one path segment, never a
+            # separator, dot segment or query.
+            text = str(values[name])
+            if text in (".", ".."):
+                raise AdapterError(f"{name} can't be a dot segment")
+            return quote(text, safe="")
 
         return re.sub(r"\{([a-z_][a-z0-9_]*)\}", one, path)
 
@@ -338,8 +348,13 @@ class RestAdapter:
                 if route.per_page_param:
                     params[route.per_page_param] = route.per_page
             got = self._call(route.method, route.path, params=params)
-            items = got if isinstance(got, list) else (got or {}).get("items", [])
-            if not isinstance(items, list):
+            # Missing-evidence class: a missing or malformed list is an error,
+            # never an empty collection.
+            if isinstance(got, list):
+                items = got
+            elif isinstance(got, Mapping) and isinstance(got.get("items"), list):
+                items = got["items"]
+            else:
                 raise AdapterError("a list did not return a list")
             fresh = 0
             for item in items:
@@ -347,7 +362,11 @@ class RestAdapter:
                 if rid not in out:
                     fresh += 1
                 out[rid] = column_digests(self.normalize(coll, item))
-            if not route.page_param or len(items) < route.per_page or not fresh:
+            if items and not fresh:
+                # A page that repeats rows already read means the pager isn't
+                # advancing: the scan can't prove it saw the whole collection.
+                raise AdapterError("the list repeated a page")
+            if not route.page_param or len(items) < route.per_page:
                 return out
             page += 1
             if page > 10_000:
@@ -502,6 +521,9 @@ class SqlAdapter:
                 uri = path.resolve().as_uri() + "?mode=ro"
                 return sqlite3.connect(uri, uri=True, isolation_level=None)
             con = sqlite3.connect(str(path), isolation_level=None)
+            # Unenforced-constraint class: a parent delete must not leave
+            # orphans that the frame read still calls clean.
+            con.execute("PRAGMA foreign_keys = ON")
             return con
         module = importlib.import_module(str(s.driver))
         args = dict(s.connect_args)
@@ -542,6 +564,33 @@ class SqlAdapter:
         return f"{self.q}{name}{self.q}"
 
     # reading ----------------------------------------------------------------
+
+    def _refuse_unobserved_writes(self, cur: Any, sql: str) -> None:
+        """Unobserved-scope class: the frame reads one schema (or database), so
+        a statement may not change rows anywhere else."""
+        d = self.system.dialect
+        if d == "postgresql":
+            # This transaction's own row counts, for every table it touched.
+            cur.execute(
+                "SELECT count(*) FROM pg_stat_xact_user_tables "
+                "WHERE schemaname <> current_schema() "
+                "AND n_tup_ins + n_tup_upd + n_tup_del > 0"
+            )
+            if int(cur.fetchone()[0]):
+                raise Diverged("the statement changed rows outside the current schema")
+        elif d == "mysql":
+            cur.execute("SELECT DATABASE()")
+            current = str(cur.fetchone()[0] or "")
+            cur.execute("SHOW DATABASES")
+            others = {str(r[0]).lower() for r in cur.fetchall()} - {current.lower()}
+            named = {
+                m.lower()
+                for m in re.findall(
+                    r"`?([A-Za-z0-9_$]+)`?\s*\.\s*`?[A-Za-z0-9_$]+", sql
+                )
+            }
+            if named & others:
+                raise Diverged("the statement names another database")
 
     def _tables(self, cur: Any) -> list[str]:
         d = self.system.dialect
@@ -681,7 +730,9 @@ class SqlAdapter:
         op = write["op"]
         if op == "sql":
             cur.execute(str((write.get("fields") or {})["sql"]))
-            return {"rows": max(0, int(cur.rowcount or 0))}
+            rows = max(0, int(cur.rowcount or 0))
+            self._refuse_unobserved_writes(cur, str(write["fields"]["sql"]))
+            return {"rows": rows}
         fields = {k: untag(v) for k, v in (write.get("fields") or {}).items()}
         assert key is not None
         t = self._ident(table)
@@ -825,9 +876,30 @@ class SqlAdapter:
                 con.rollback()
                 raise
             con.commit()
-            return {**result, "_images": images}
         finally:
             con.close()
+        # Unverified-success class: what committed is read again, outside the
+        # transaction, so a deferred trigger that stored other values in the
+        # planned rows is a refuted write, not a confirmed one.
+        post_rows: dict[str, Any] = {}
+        con = self.connect()
+        try:
+            cur = con.cursor()
+            self._begin(cur)
+            try:
+                post = self.frame_cur(cur, post_rows)
+            finally:
+                con.rollback()
+        finally:
+            con.close()
+        post_diff = diff_frames(before, post)
+        post_after = after_image(
+            after_raw(post_diff, post, post_rows), write.get("volatile") or []
+        )
+        matches = (
+            _shape(post_diff) == _shape(want) and post_after == write["staged_after"]
+        )
+        return {**result, "post_commit_matches": matches, "_images": images}
 
     def compensate_sql(self, images: Mapping[str, Any]) -> None:
         """Undo one statement from its images, in one transaction: delete what
@@ -844,6 +916,17 @@ class SqlAdapter:
             cur = con.cursor()
             self._begin(cur)
             try:
+                # Stale-baseline class: the check and the restore share one
+                # transaction, so an edit landing between them can't be
+                # overwritten.
+                now_rows = self.frame_cur(cur)
+                after = images.get("after", {})
+                for rid, want in after.items():
+                    if now_rows.get(rid) != want:
+                        raise ChangedSinceApply(rid)
+                for rid in images.get("before", {}):
+                    if rid not in after and now_rows.get(rid) is not None:
+                        raise ChangedSinceApply(rid)
                 left = steps
                 n = 0
                 while left:

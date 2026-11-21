@@ -26,6 +26,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from openadapt_flow.txplan.adapters import (
     AdapterError,
+    ChangedSinceApply,
     Diverged,
     MailAdapter,
     SqlAdapter,
@@ -64,6 +65,12 @@ _DDL = re.compile(
 _READ = re.compile(r"^\s*(select|with|show|explain|pragma|values)\b", re.I)
 #: Test hook: exit right after the Nth send, before its outcome is recorded.
 CRASH_ENV = "OPENADAPT_TX_CRASH_AFTER_SEND"
+_TX_CONTROL = re.compile(
+    r"^\s*(BEGIN|COMMIT|END|ROLLBACK|ABORT|SAVEPOINT|RELEASE|START\s+TRANSACTION|"
+    r"SET\s+(SESSION\s+)?TRANSACTION|PREPARE\s+TRANSACTION|ATTACH|DETACH|PRAGMA|"
+    r"VACUUM|LOCK|UNLOCK|XA)\b",
+    re.IGNORECASE,
+)
 
 
 class TxRefused(RuntimeError):
@@ -412,6 +419,8 @@ def _undo_sql(
     state.record(w["key"], "undo_begun", plan=digest, payload=entry.payload)
     try:
         adapter.compensate_sql(images)
+    except ChangedSinceApply:
+        return "changed_since_apply"
     except AdapterError as exc:
         state.record(
             w["key"],
@@ -458,6 +467,12 @@ def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
         if _READ.match(sql):
             raise TxRefused(
                 "bad_write", f"write {n}: a read is not a write (use a query)"
+            )
+        if _TX_CONTROL.match(sql):
+            # Unstaged-commit class: a transaction-control statement would end
+            # the staging transaction and commit earlier writes before approval.
+            raise TxRefused(
+                "bad_write", f"write {n}: transaction control is not a write"
             )
         ddl = bool(_DDL.match(sql))
         if ddl and system.dialect == "mysql":
@@ -804,18 +819,19 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
         "summary": summary,
         "anomalies": [{k: a[k] for k in ("label", "write")} for a in anomalies],
     }
+    private = {
+        "writes": writes,
+        "baselines": baselines,
+        "frames": frames,
+        "anomalies": anomalies,
+    }
+    # Unbound-evidence class: the approved digest covers the private plan
+    # too, so editing private.json can't change what an approval authorizes.
+    core["private_sha256"] = sha256(private)
     digest = sha256(core)
     pdir = state.plan_dir(digest)
     write_private(pdir / "plan.json", {**core, "digest": digest})
-    write_private(
-        pdir / "private.json",
-        {
-            "writes": writes,
-            "baselines": baselines,
-            "frames": frames,
-            "anomalies": anomalies,
-        },
-    )
+    write_private(pdir / "private.json", private)
     tx = {
         "phase": "plan",
         "writes": len(writes),
@@ -850,7 +866,15 @@ def load_plan(state: State, digest: str) -> tuple[dict[str, Any], dict[str, Any]
     pdir = state.plan_dir(digest)
     if not (pdir / "plan.json").exists():
         raise TxRefused("plan_not_found", digest[:12])
-    return read_json(pdir / "plan.json"), read_json(pdir / "private.json")
+    plan, private = read_json(pdir / "plan.json"), read_json(pdir / "private.json")
+    core = {k: v for k, v in plan.items() if k != "digest"}
+    if (
+        plan.get("digest") != digest
+        or sha256(core) != digest
+        or plan.get("private_sha256") != sha256(private)
+    ):
+        raise TxRefused("plan_tampered", "the stored plan doesn't match its digest")
+    return plan, private
 
 
 def approve_plan(
@@ -870,7 +894,9 @@ def _readback(
     if isinstance(adapter, MailAdapter):
         return None, None
     if w["op"] == "sql":
-        return True, None  # committed only when its own diff matched the plan
+        # Committed only when its own diff matched the plan, and confirmed
+        # only when the committed rows, read again, still match it.
+        return result.get("post_commit_matches") is True, None
     rid = str(result.get("id") or w.get("id"))
     got = adapter.read(w["collection"], rid)
     if w["op"] == "delete":
@@ -968,10 +994,22 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if entry is not None and entry.status not in FREE:
                 if entry.status in ("applied", "held", "released"):
                     tx["replays"] = tx.get("replays", 0) + 1
+                    # Unverified-success class: a replay sends nothing, so it
+                    # is VERIFIED only if its effect reads back now. A held
+                    # write is still waiting.
+                    replay_verified: Optional[bool] = None
+                    if entry.status == "held":
+                        tx["held"] = tx.get("held", 0) + 1
+                    else:
+                        replay_verified, _ = _readback(ctx, w, base, entry.result)
+                        if replay_verified is not True:
+                            tx["unverified_replays"] = (
+                                tx.get("unverified_replays", 0) + 1
+                            )
                     results.append(
                         _line(
                             ok=True,
-                            verified=None,
+                            verified=replay_verified,
                             irreversible=w["irreversible"],
                             payload=payload,
                             code="replay_not_sent",
@@ -1146,7 +1184,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         ok = not stop and not missed and not false and not tx["refuted"]
         outcome = (
             "VERIFIED"
-            if ok and not tx.get("held")
+            if ok and not tx.get("held") and not tx.get("unverified_replays")
             else ("COMPLETED_UNVERIFIED" if ok else "RECONCILIATION_REQUIRED")
         )
         run = _write_run(
@@ -1177,6 +1215,9 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
     state, spec = ctx.state, ctx.spec
     with state.lock():
         plan, priv = load_plan(state, digest)
+        if plan["spec_sha256"] != _spec_sha(spec):
+            # Wrong-target class: undo goes only to the systems the plan named.
+            raise TxRefused("spec_changed", "the tx file changed since the plan")
         applied_path = state.plan_dir(digest) / "applied.json"
         if not applied_path.exists():
             raise TxRefused("not_applied", digest[:12])
@@ -1251,9 +1292,20 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 ok = back is not None and _norm(system, w, back) == _norm(
                     system, w, base
                 )
-            state.record(
-                key, "undone", plan=digest, payload=entry.payload, read_back=ok
-            )
+            if ok:
+                state.record(
+                    key, "undone", plan=digest, payload=entry.payload, read_back=ok
+                )
+            else:
+                # Unverified-success class: a compensation the read-back
+                # refutes is not undone, and keeps its replay key.
+                state.record(
+                    key,
+                    "uncertain",
+                    plan=digest,
+                    payload=entry.payload,
+                    reason="undo: the read-back does not show the baseline",
+                )
             per_write[key] = "undone" if ok else "undo_refuted"
         # The whole frame back to the baseline: the records and the collateral.
         after = ctx.frames(list(priv["frames"]))
@@ -1330,7 +1382,9 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         )
         # An applied write with no undo (DDL, or no undo images) is still in
         # place: the plan is not rolled back, whatever the rows show.
-        not_undone = [k for k, v in per_write.items() if v == "no_undo"]
+        not_undone = [
+            k for k, v in per_write.items() if v in ("no_undo", "irreversible_released")
+        ]
         ok = len(verified) == len(counted) and not collateral and not not_undone
         outcome = "ROLLED_BACK" if ok else "RECONCILIATION_REQUIRED"
         approval = state.approval_record(digest)
@@ -1382,6 +1436,9 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
     at = now() if at is None else at
     with state.lock():
         plan, priv = load_plan(state, digest)
+        if plan["spec_sha256"] != _spec_sha(ctx.spec):
+            # Wrong-target class: a release goes only where the plan said.
+            raise TxRefused("spec_changed", "the tx file changed since the plan")
         writes = {w["key"]: (w, b) for w, b in zip(priv["writes"], priv["baselines"])}
         results = []
         tx: dict[str, Any] = {
@@ -1400,10 +1457,36 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
             key = item["key"]
             w, base = writes[key]
             adapter = ctx.adapter(w["system"])
+            prior = state.entry(key)
+            # Double-send class: a release that began before may have landed
+            # even if the target doesn't show it yet. Never send it again.
+            retried = prior is not None and any(
+                e.get("event") == "release_begun" for e in prior.events
+            )
             state.record(key, "release_begun", plan=digest, payload=w["payload_sha256"])
             verified: Optional[bool]
             if isinstance(adapter, MailAdapter):
                 before = adapter.count(key)
+                if before == 0 and retried:
+                    before = adapter.wait_count(key, 1)
+                if before == 0 and retried:
+                    state.record(
+                        key,
+                        "uncertain",
+                        plan=digest,
+                        payload=w["payload_sha256"],
+                        reason="an earlier release may have sent it",
+                    )
+                    results.append(
+                        _line(
+                            ok=False,
+                            verified=None,
+                            irreversible=True,
+                            payload=w["payload_sha256"],
+                            code="release_uncertain",
+                        )
+                    )
+                    continue
                 if before == 0:
                     try:
                         adapter.send(w, key)
@@ -1431,6 +1514,31 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
                 tx["double"] += int(n > 1)
                 verified = n == 1
             else:
+                # Stale-baseline class: the record must still be what the
+                # plan read, or the held write would clobber a newer edit.
+                if w.get("id") is not None and w["op"] in ("update", "delete"):
+                    current = adapter.read(w["collection"], str(w["id"]))
+                    system = ctx.spec.system(w["system"])
+                    if current is None or _norm(system, w, current) != _norm(
+                        system, w, base
+                    ):
+                        state.record(
+                            key,
+                            "uncertain",
+                            plan=digest,
+                            payload=w["payload_sha256"],
+                            reason="changed during holdback",
+                        )
+                        results.append(
+                            _line(
+                                ok=False,
+                                verified=None,
+                                irreversible=True,
+                                payload=w["payload_sha256"],
+                                code="changed_during_holdback",
+                            )
+                        )
+                        continue
                 adapter.apply(w, base, key)
                 verified, _ = _readback(ctx, w, base, {"id": w.get("id")})
             state.unhold(key)

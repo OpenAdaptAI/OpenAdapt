@@ -288,9 +288,16 @@ class Proxy:
     # the person's keys ---------------------------------------------------------
 
     def key(self, ch: str) -> str:
-        """``y`` approves the oldest waiting plan, ``n`` declines it, ``u`` undoes
+        """``y`` approves the one waiting plan, ``n`` declines it, ``u`` undoes
         the last applied one."""
         with self.lock:
+            if ch in ("y", "n") and len(self.pending) > 1:
+                # Wrong-subject class: with several plans waiting, a key press
+                # can't say which one the person read, so it decides none.
+                return (
+                    f"{len(self.pending)} plans are waiting: approve one by id with "
+                    "`openadapt plan approve <id>`"
+                )
             if ch == "y" and self.pending:
                 digest = self.pending.pop(0)
                 engine.approve_plan(
