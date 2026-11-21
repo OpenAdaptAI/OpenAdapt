@@ -29,6 +29,9 @@
       "spouse_name": {
         "type": "str"
       },
+      "co_applicant_name": {
+        "type": "str"
+      },
       "property_street": {
         "type": "str"
       },

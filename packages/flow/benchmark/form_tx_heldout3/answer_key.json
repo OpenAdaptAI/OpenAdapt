@@ -226,6 +226,14 @@
         "effective_date": "2027-01-20"
       },
       "operator_script": {
+        "Co-applicant full name": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "co_applicant_name": {
+          "action": "provide_value",
+          "value": ""
+        },
         "session_login": {
           "username": "CVA-40518",
           "password": "corvane-test-pass-9"
@@ -415,6 +423,14 @@
         "effective_date": "2027-05-10"
       },
       "operator_script": {
+        "Dwelling (Coverage A) limit": {
+          "action": "provide_value",
+          "value": 567000
+        },
+        "dwelling_limit": {
+          "action": "provide_value",
+          "value": 567000
+        },
         "session_login": {
           "username": "CVA-40518",
           "password": "corvane-test-pass-9"
@@ -457,6 +473,30 @@
         "effective_date": "2027-06-01"
       },
       "operator_script": {
+        "Finished living area (sq ft)": {
+          "action": "provide_value",
+          "value": 2120
+        },
+        "square_feet": {
+          "action": "provide_value",
+          "value": 2120
+        },
+        "Year roof was installed or last replaced": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "roof_year": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "Occupancy": {
+          "action": "provide_value",
+          "value": "Owner-occupied secondary or seasonal home"
+        },
+        "occupancy": {
+          "action": "provide_value",
+          "value": "Owner-occupied secondary or seasonal home"
+        },
         "session_login": {
           "username": "CVA-40518",
           "password": "corvane-test-pass-9"
@@ -706,6 +746,14 @@
         "effective_date": "2027-03-20"
       },
       "operator_script": {
+        "Total horsepower (all engines combined)": {
+          "action": "provide_value",
+          "value": 400
+        },
+        "total_horsepower": {
+          "action": "provide_value",
+          "value": 400
+        },
         "session_login": {
           "username": "dock.tester@example.test",
           "password": "pellbrook-test-pass-10"
@@ -835,6 +883,14 @@
         "effective_date": "2027-05-05"
       },
       "operator_script": {
+        "Lienholder (lender with a loan on this boat)": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "lienholder": {
+          "action": "provide_value",
+          "value": ""
+        },
         "session_login": {
           "username": "dock.tester@example.test",
           "password": "pellbrook-test-pass-10"
@@ -896,7 +952,9 @@
       "key": "layup_period",
       "label": "Lay-up period (boat out of commission)",
       "applies_when": "the boat is kept in a wet slip or on a mooring",
-      "derivable_from": "not in the intake; the operator answers each time",
+      "derivable_from": [
+        "operator answer"
+      ],
       "mapping": {
         "upper Midwest and Great Lakes boats (pb-s02, pb-s05)": "Nov 1 to Apr 1",
         "South Florida boat (pb-s08)": "No lay-up (in commission year-round)"

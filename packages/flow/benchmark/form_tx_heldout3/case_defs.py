@@ -297,6 +297,19 @@ CV_CASES = [
     ),
 ]
 
+# Answers the operator gives when a layer stops on a must-stop case.
+def _op(label: str, key: str, value: Any) -> dict[str, Any]:
+    return {"label": label, "key": key, "action": "provide_value", "value": value}
+
+
+CV_CASES[2]["operator"] = [_op("Co-applicant full name", "co_applicant_name", "")]
+CV_CASES[6]["operator"] = [_op("Dwelling (Coverage A) limit", "dwelling_limit", CV_CASES[6]["expected"]["dwelling_limit"])]
+CV_CASES[7]["operator"] = [
+    _op("Finished living area (sq ft)", "square_feet", 2120),
+    _op("Year roof was installed or last replaced", "roof_year", 2019),
+    _op("Occupancy", "occupancy", "Owner-occupied secondary or seasonal home"),
+]
+
 # cv-s07: public records predate an addition and a re-roof.
 CV_CASES[7]["config"]["public_record"] = _public_record(
     CV_CASES[7]["intake"]["facts"], square_feet=1640, roof_year=2003
@@ -543,6 +556,9 @@ PB_CASES = [
     ),
 ]
 
+PB_CASES[4]["operator"] = [_op("Total horsepower (all engines combined)", "total_horsepower", 400)]
+PB_CASES[7]["operator"] = [_op("Lienholder (lender with a loan on this boat)", "lienholder", "")]
+
 CASES: dict[str, list[dict[str, Any]]] = {"corvane": CV_CASES, "pellbrook": PB_CASES}
 
 PORTAL_META: dict[str, dict[str, Any]] = {
@@ -564,7 +580,7 @@ RULES = [
         "key": "layup_period",
         "label": PB_LAYUP_LABEL,
         "applies_when": "the boat is kept in a wet slip or on a mooring",
-        "derivable_from": "not in the intake; the operator answers each time",
+        "derivable_from": ["operator answer"],
         "mapping": {
             "upper Midwest and Great Lakes boats (pb-s02, pb-s05)": "Nov 1 to Apr 1",
             "South Florida boat (pb-s08)": "No lay-up (in commission year-round)",
@@ -583,6 +599,7 @@ _VOCAB_TYPES: dict[str, dict[str, dict[str, Any]]] = {
         "phone": {"type": "phone"},
         "marital_status": {"type": "enum", "values": CV_MARITAL},
         "spouse_name": {"type": "str"},
+        "co_applicant_name": {"type": "str"},
         "property_street": {"type": "str"},
         "property_city": {"type": "str"},
         "property_state": {"type": "enum", "values": CV_STATES},
