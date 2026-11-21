@@ -106,6 +106,13 @@ browser = [
     # its separately downloaded Chromium runtime.
     "playwright>=1.44",
 ]
+# `openadapt test` (openadapt_flow.agent_test): the headless browser the
+# scenarios run in, and the two computer-use agents' SDKs. No vision stack.
+agent-test = [
+    "playwright>=1.44",
+    "anthropic>=0.40",
+    "openai>=1.60",
+]
 dev = [
     # The test suite exercises record, compile and replay.
     "numpy>=1.26",
