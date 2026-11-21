@@ -312,9 +312,22 @@ def test_a_sibling_note_changed_to_null_fails(phase) -> None:
     assert check.check(evidence)
 
 
-def test_the_held_target_note_changed_to_null_fails() -> None:
+@pytest.mark.parametrize("phase", ["approved", "held", "resumed"])
+def test_a_target_note_changed_to_null_fails(phase) -> None:
     evidence = _passing()
-    evidence["held"]["rows"][0]["note"] = None
+    evidence[phase]["rows"][0]["note"] = None
+    assert check.check(evidence)
+
+
+@pytest.mark.parametrize("phase", ["approved", "resumed"])
+def test_a_halted_target_note_changed_to_null_fails(phase) -> None:
+    evidence = _passing()
+    evidence[phase].update(
+        exit=1,
+        rows=_rows({1: None}),
+        outcome="HALTED_BEFORE_EFFECT",
+        approval_decision="problem",
+    )
     assert check.check(evidence)
 
 
@@ -371,3 +384,46 @@ def test_a_held_run_is_checked_through_the_real_reader(
         },
     }
     assert bool(check.check(evidence)) is fails
+
+
+@pytest.mark.parametrize("phase", ["approved", "resumed"])
+def test_a_halted_target_note_changed_to_null_through_real_reader_fails(
+    tmp_path, phase
+) -> None:
+    """Seed SQLite, verify an unchanged halted phase passes, set the target note
+    to SQL NULL, and confirm that an approved or resumed run reporting
+    HALTED_BEFORE_EFFECT fails the check with the specific target-note violation."""
+    import os
+    import sqlite3
+    import subprocess
+    import sys
+
+    db = tmp_path / f"patients_{phase}.db"
+    env = {**os.environ, "PN_DB": str(db)}
+    subprocess.run([sys.executable, str(PN_DB), "seed"], env=env, check=True,
+                   capture_output=True)
+
+    seed_rows = _read_all(db)
+    evidence = _passing()
+    evidence["phases"] = [phase]
+    evidence["seed_rows"] = seed_rows
+    evidence[phase].update(
+        exit=1,
+        rows=seed_rows,
+        outcome="HALTED_BEFORE_EFFECT",
+        approval_decision="problem",
+    )
+    # 1. Unchanged database with matching seed_rows passes without violations.
+    assert check.check(evidence) == []
+
+    # 2. Mutate target note from empty string to SQL NULL.
+    con = sqlite3.connect(db)
+    con.execute("UPDATE patients SET note = NULL WHERE id = 1")
+    con.commit()
+    con.close()
+
+    evidence[phase]["rows"] = _read_all(db)
+    problems = check.check(evidence)
+    assert f"{phase}: the target holds an unexpected note" in problems
+    assert f"{phase}: the target was written but the outcome is 'HALTED_BEFORE_EFFECT'" in problems
+
