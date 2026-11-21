@@ -14085,9 +14085,7 @@ class Replayer:
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            if step.secret and step.one_time == "code":
-                # A sign-in's one-time code: asked for now, typed once, kept
-                # nowhere (openadapt_flow.second_factor).
+            if step.secret and step.one_time == "code":  # asked of a person now
                 text, refusal = _second_factor.runtime_value(step, result)
                 if refusal is not None:
                     return refusal
@@ -14539,8 +14537,7 @@ class Replayer:
             return None
 
         if step.action is ActionKind.WAIT:
-            if step.one_time == "approval":
-                # A push approval: a person approves on their own device.
+            if step.one_time == "approval":  # a person approves on their device
                 return _second_factor.runtime_value(step, result)[1]
             # WAIT means wait_settled only; the post-action settle handles it.
             return None

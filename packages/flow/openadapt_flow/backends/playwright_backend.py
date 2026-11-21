@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 
 from openadapt_flow.backends._field_metadata_js import (
     _CREDENTIAL_AT_JS,
+    _CREDENTIAL_KINDS,
     _DISPLAYED_TEXT_AT_JS,
     _EDITABLE_VALUE_JS,
     _FIELD_CREDENTIAL_JS,
@@ -3280,8 +3281,7 @@ class PlaywrightBackend:
           password candidates in the composed form (the document when it has
           no form). Ambiguous controls return ``unknown``; CSS visibility is
           not used as evidence that a password candidate is irrelevant;
-        * ``one-time-code``: an input whose ``autocomplete`` names
-          ``one-time-code`` (a sign-in's second factor).
+          ``one-time-code``: ``autocomplete`` names it (a second factor).
 
         ``box`` is in top-document viewport pixels, or None when the
         element's box could not be read. Read-only and never raises. None
@@ -3295,7 +3295,7 @@ class PlaywrightBackend:
         kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
         if kind == "none":
             return None
-        if kind not in ("password", "new-password", "username", "one-time-code"):
+        if kind not in _CREDENTIAL_KINDS:
             # The focused control could not be read (a frame chain that does
             # not verify, a failed call). The recorder refuses to type a
             # declared input into it.
@@ -3323,19 +3323,7 @@ class PlaywrightBackend:
             found = self.page.evaluate(_CREDENTIAL_AT_JS, [int(x), int(y)])
         except Exception:
             return "unknown"
-        return (
-            found
-            if found
-            in (
-                "password",
-                "new-password",
-                "username",
-                "one-time-code",
-                "frame",
-                "unknown",
-            )
-            else None
-        )
+        return found if found in (*_CREDENTIAL_KINDS, "frame", "unknown") else None
 
     def _focused_element_eval(self, js: str) -> Optional[str]:
         """Evaluate ``js`` on the focused element, descending nested frames.

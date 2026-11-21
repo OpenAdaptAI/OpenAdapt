@@ -13,6 +13,8 @@ _EDITABLE_VALUE_JS = r"""(el) => {
 # placeholder, name attribute, title. Whitespace-collapsed; null when the
 # element is not an editable field or carries no label evidence. PASSIVE
 # record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
+#: The kinds ``_FIELD_CREDENTIAL_JS`` reports for a credential field.
+_CREDENTIAL_KINDS = ("password", "new-password", "username", "one-time-code")
 #: Whether the focused element takes a sign-in credential. See
 #: :meth:`PlaywrightBackend.focused_field_credential` for the rules.
 _FIELD_CREDENTIAL_JS = r"""(el) => {
