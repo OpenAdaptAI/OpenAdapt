@@ -1,0 +1,1937 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "QualificationAdmissionEnvelope": {
+   "validation": {
+    "$defs": {
+     "QualificationAdmissionPayload": {
+      "additionalProperties": false,
+      "description": "Closed production admission for one exact workflow version.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-admission/v1",
+        "default": "openadapt.qualification-admission/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "admission_id": {
+        "title": "Admission Id",
+        "type": "string"
+       },
+       "tenant_id": {
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "runtime_validation_id": {
+        "title": "Runtime Validation Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "governed_authorization_template_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Governed Authorization Template Sha256",
+        "type": "string"
+       },
+       "application_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Application Contract Sha256",
+        "type": "string"
+       },
+       "substrate_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Substrate Contract Sha256",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Contract Sha256",
+        "type": "string"
+       },
+       "input_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Input Policy Sha256",
+        "type": "string"
+       },
+       "action_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Action Policy Sha256",
+        "type": "string"
+       },
+       "network_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Network Policy Sha256",
+        "type": "string"
+       },
+       "identity_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Identity Contract Sha256",
+        "type": "string"
+       },
+       "effect_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Effect Contract Sha256",
+        "type": "string"
+       },
+       "operator_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operator Contract Sha256",
+        "type": "string"
+       },
+       "campaign": {
+        "$ref": "#/$defs/QualificationCampaignBinding"
+       },
+       "issuer": {
+        "$ref": "#/$defs/QualificationIssuer"
+       },
+       "issued_at": {
+        "title": "Issued At",
+        "type": "string"
+       },
+       "not_before": {
+        "title": "Not Before",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       }
+      },
+      "required": [
+       "admission_id",
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "runtime_validation_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "governed_authorization_template_sha256",
+       "application_contract_sha256",
+       "substrate_contract_sha256",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_contract_sha256",
+       "input_policy_sha256",
+       "action_policy_sha256",
+       "network_policy_sha256",
+       "identity_contract_sha256",
+       "effect_contract_sha256",
+       "operator_contract_sha256",
+       "campaign",
+       "issuer",
+       "issued_at",
+       "not_before",
+       "expires_at"
+      ],
+      "title": "QualificationAdmissionPayload",
+      "type": "object"
+     },
+     "QualificationCampaignBinding": {
+      "additionalProperties": false,
+      "description": "The exact counted campaign accepted by the qualification authority.",
+      "properties": {
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Contract Sha256",
+        "type": "string"
+       },
+       "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+       },
+       "oracle_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Oracle Id",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "tasks": {
+        "items": {
+         "$ref": "#/$defs/QualificationCondition"
+        },
+        "maxItems": 1000,
+        "minItems": 1,
+        "title": "Tasks",
+        "type": "array"
+       },
+       "failure_taxonomy": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 2,
+        "title": "Failure Taxonomy",
+        "type": "array"
+       },
+       "decision": {
+        "const": "admitted",
+        "default": "admitted",
+        "title": "Decision",
+        "type": "string"
+       }
+      },
+      "required": [
+       "artifact_sha256",
+       "contract_sha256",
+       "outcomes_sha256",
+       "oracle_id",
+       "oracle_contract_sha256",
+       "tasks",
+       "failure_taxonomy"
+      ],
+      "title": "QualificationCampaignBinding",
+      "type": "object"
+     },
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "description": "Review workflow identity recorded by the qualification signer.",
+      "properties": {
+       "key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Signed admission artifact retained by Cloud and verified by Flow.",
+    "properties": {
+     "payload": {
+      "$ref": "#/$defs/QualificationAdmissionPayload"
+     },
+     "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+     },
+     "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "payload",
+     "signature"
+    ],
+    "title": "QualificationAdmissionEnvelope",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "QualificationAdmissionPayload": {
+      "additionalProperties": false,
+      "description": "Closed production admission for one exact workflow version.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-admission/v1",
+        "default": "openadapt.qualification-admission/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "admission_id": {
+        "title": "Admission Id",
+        "type": "string"
+       },
+       "tenant_id": {
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "runtime_validation_id": {
+        "title": "Runtime Validation Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "governed_authorization_template_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Governed Authorization Template Sha256",
+        "type": "string"
+       },
+       "application_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Application Contract Sha256",
+        "type": "string"
+       },
+       "substrate_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Substrate Contract Sha256",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Contract Sha256",
+        "type": "string"
+       },
+       "input_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Input Policy Sha256",
+        "type": "string"
+       },
+       "action_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Action Policy Sha256",
+        "type": "string"
+       },
+       "network_policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Network Policy Sha256",
+        "type": "string"
+       },
+       "identity_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Identity Contract Sha256",
+        "type": "string"
+       },
+       "effect_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Effect Contract Sha256",
+        "type": "string"
+       },
+       "operator_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operator Contract Sha256",
+        "type": "string"
+       },
+       "campaign": {
+        "$ref": "#/$defs/QualificationCampaignBinding"
+       },
+       "issuer": {
+        "$ref": "#/$defs/QualificationIssuer"
+       },
+       "issued_at": {
+        "title": "Issued At",
+        "type": "string"
+       },
+       "not_before": {
+        "title": "Not Before",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       }
+      },
+      "required": [
+       "admission_id",
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "runtime_validation_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "governed_authorization_template_sha256",
+       "application_contract_sha256",
+       "substrate_contract_sha256",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_contract_sha256",
+       "input_policy_sha256",
+       "action_policy_sha256",
+       "network_policy_sha256",
+       "identity_contract_sha256",
+       "effect_contract_sha256",
+       "operator_contract_sha256",
+       "campaign",
+       "issuer",
+       "issued_at",
+       "not_before",
+       "expires_at"
+      ],
+      "title": "QualificationAdmissionPayload",
+      "type": "object"
+     },
+     "QualificationCampaignBinding": {
+      "additionalProperties": false,
+      "description": "The exact counted campaign accepted by the qualification authority.",
+      "properties": {
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Contract Sha256",
+        "type": "string"
+       },
+       "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+       },
+       "oracle_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Oracle Id",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "tasks": {
+        "items": {
+         "$ref": "#/$defs/QualificationCondition"
+        },
+        "maxItems": 1000,
+        "minItems": 1,
+        "title": "Tasks",
+        "type": "array"
+       },
+       "failure_taxonomy": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 2,
+        "title": "Failure Taxonomy",
+        "type": "array"
+       },
+       "decision": {
+        "const": "admitted",
+        "default": "admitted",
+        "title": "Decision",
+        "type": "string"
+       }
+      },
+      "required": [
+       "artifact_sha256",
+       "contract_sha256",
+       "outcomes_sha256",
+       "oracle_id",
+       "oracle_contract_sha256",
+       "tasks",
+       "failure_taxonomy"
+      ],
+      "title": "QualificationCampaignBinding",
+      "type": "object"
+     },
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "description": "Review workflow identity recorded by the qualification signer.",
+      "properties": {
+       "key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Signed admission artifact retained by Cloud and verified by Flow.",
+    "properties": {
+     "payload": {
+      "$ref": "#/$defs/QualificationAdmissionPayload"
+     },
+     "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+     },
+     "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "payload",
+     "signature"
+    ],
+    "title": "QualificationAdmissionEnvelope",
+    "type": "object"
+   }
+  },
+  "QualificationAdmissionExpected": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Exact live bindings the signed admission must match.",
+    "properties": {
+     "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+     },
+     "workflow_id": {
+      "title": "Workflow Id",
+      "type": "string"
+     },
+     "workflow_version_id": {
+      "title": "Workflow Version Id",
+      "type": "string"
+     },
+     "bundle_version_id": {
+      "title": "Bundle Version Id",
+      "type": "string"
+     },
+     "runtime_validation_id": {
+      "title": "Runtime Validation Id",
+      "type": "string"
+     },
+     "bundle_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Artifact Sha256",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "governed_authorization_template_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Governed Authorization Template Sha256",
+      "type": "string"
+     },
+     "application_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Application Contract Sha256",
+      "type": "string"
+     },
+     "substrate_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Substrate Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "runtime_environment_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Environment Sha256",
+      "type": "string"
+     },
+     "runtime_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Contract Sha256",
+      "type": "string"
+     },
+     "input_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Policy Sha256",
+      "type": "string"
+     },
+     "action_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Action Policy Sha256",
+      "type": "string"
+     },
+     "network_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Network Policy Sha256",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "operator_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Operator Contract Sha256",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tenant_id",
+     "workflow_id",
+     "workflow_version_id",
+     "bundle_version_id",
+     "runtime_validation_id",
+     "bundle_artifact_sha256",
+     "bundle_content_digest",
+     "governed_authorization_template_sha256",
+     "application_contract_sha256",
+     "substrate_contract_sha256",
+     "environment_contract_sha256",
+     "runtime_environment_sha256",
+     "runtime_contract_sha256",
+     "input_policy_sha256",
+     "action_policy_sha256",
+     "network_policy_sha256",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "operator_contract_sha256"
+    ],
+    "title": "QualificationAdmissionExpected",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Exact live bindings the signed admission must match.",
+    "properties": {
+     "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+     },
+     "workflow_id": {
+      "title": "Workflow Id",
+      "type": "string"
+     },
+     "workflow_version_id": {
+      "title": "Workflow Version Id",
+      "type": "string"
+     },
+     "bundle_version_id": {
+      "title": "Bundle Version Id",
+      "type": "string"
+     },
+     "runtime_validation_id": {
+      "title": "Runtime Validation Id",
+      "type": "string"
+     },
+     "bundle_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Artifact Sha256",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "governed_authorization_template_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Governed Authorization Template Sha256",
+      "type": "string"
+     },
+     "application_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Application Contract Sha256",
+      "type": "string"
+     },
+     "substrate_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Substrate Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "runtime_environment_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Environment Sha256",
+      "type": "string"
+     },
+     "runtime_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Contract Sha256",
+      "type": "string"
+     },
+     "input_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Policy Sha256",
+      "type": "string"
+     },
+     "action_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Action Policy Sha256",
+      "type": "string"
+     },
+     "network_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Network Policy Sha256",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "operator_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Operator Contract Sha256",
+      "type": "string"
+     }
+    },
+    "required": [
+     "tenant_id",
+     "workflow_id",
+     "workflow_version_id",
+     "bundle_version_id",
+     "runtime_validation_id",
+     "bundle_artifact_sha256",
+     "bundle_content_digest",
+     "governed_authorization_template_sha256",
+     "application_contract_sha256",
+     "substrate_contract_sha256",
+     "environment_contract_sha256",
+     "runtime_environment_sha256",
+     "runtime_contract_sha256",
+     "input_policy_sha256",
+     "action_policy_sha256",
+     "network_policy_sha256",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "operator_contract_sha256"
+    ],
+    "title": "QualificationAdmissionExpected",
+    "type": "object"
+   }
+  },
+  "QualificationAdmissionPayload": {
+   "validation": {
+    "$defs": {
+     "QualificationCampaignBinding": {
+      "additionalProperties": false,
+      "description": "The exact counted campaign accepted by the qualification authority.",
+      "properties": {
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Contract Sha256",
+        "type": "string"
+       },
+       "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+       },
+       "oracle_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Oracle Id",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "tasks": {
+        "items": {
+         "$ref": "#/$defs/QualificationCondition"
+        },
+        "maxItems": 1000,
+        "minItems": 1,
+        "title": "Tasks",
+        "type": "array"
+       },
+       "failure_taxonomy": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 2,
+        "title": "Failure Taxonomy",
+        "type": "array"
+       },
+       "decision": {
+        "const": "admitted",
+        "default": "admitted",
+        "title": "Decision",
+        "type": "string"
+       }
+      },
+      "required": [
+       "artifact_sha256",
+       "contract_sha256",
+       "outcomes_sha256",
+       "oracle_id",
+       "oracle_contract_sha256",
+       "tasks",
+       "failure_taxonomy"
+      ],
+      "title": "QualificationCampaignBinding",
+      "type": "object"
+     },
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "description": "Review workflow identity recorded by the qualification signer.",
+      "properties": {
+       "key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Closed production admission for one exact workflow version.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-admission/v1",
+      "default": "openadapt.qualification-admission/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "admission_id": {
+      "title": "Admission Id",
+      "type": "string"
+     },
+     "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+     },
+     "workflow_id": {
+      "title": "Workflow Id",
+      "type": "string"
+     },
+     "workflow_version_id": {
+      "title": "Workflow Version Id",
+      "type": "string"
+     },
+     "bundle_version_id": {
+      "title": "Bundle Version Id",
+      "type": "string"
+     },
+     "runtime_validation_id": {
+      "title": "Runtime Validation Id",
+      "type": "string"
+     },
+     "bundle_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Artifact Sha256",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "governed_authorization_template_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Governed Authorization Template Sha256",
+      "type": "string"
+     },
+     "application_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Application Contract Sha256",
+      "type": "string"
+     },
+     "substrate_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Substrate Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "runtime_environment_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Environment Sha256",
+      "type": "string"
+     },
+     "runtime_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Contract Sha256",
+      "type": "string"
+     },
+     "input_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Policy Sha256",
+      "type": "string"
+     },
+     "action_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Action Policy Sha256",
+      "type": "string"
+     },
+     "network_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Network Policy Sha256",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "operator_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Operator Contract Sha256",
+      "type": "string"
+     },
+     "campaign": {
+      "$ref": "#/$defs/QualificationCampaignBinding"
+     },
+     "issuer": {
+      "$ref": "#/$defs/QualificationIssuer"
+     },
+     "issued_at": {
+      "title": "Issued At",
+      "type": "string"
+     },
+     "not_before": {
+      "title": "Not Before",
+      "type": "string"
+     },
+     "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_id",
+     "tenant_id",
+     "workflow_id",
+     "workflow_version_id",
+     "bundle_version_id",
+     "runtime_validation_id",
+     "bundle_artifact_sha256",
+     "bundle_content_digest",
+     "governed_authorization_template_sha256",
+     "application_contract_sha256",
+     "substrate_contract_sha256",
+     "environment_contract_sha256",
+     "runtime_environment_sha256",
+     "runtime_contract_sha256",
+     "input_policy_sha256",
+     "action_policy_sha256",
+     "network_policy_sha256",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "operator_contract_sha256",
+     "campaign",
+     "issuer",
+     "issued_at",
+     "not_before",
+     "expires_at"
+    ],
+    "title": "QualificationAdmissionPayload",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "QualificationCampaignBinding": {
+      "additionalProperties": false,
+      "description": "The exact counted campaign accepted by the qualification authority.",
+      "properties": {
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Contract Sha256",
+        "type": "string"
+       },
+       "outcomes_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Outcomes Sha256",
+        "type": "string"
+       },
+       "oracle_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Oracle Id",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "tasks": {
+        "items": {
+         "$ref": "#/$defs/QualificationCondition"
+        },
+        "maxItems": 1000,
+        "minItems": 1,
+        "title": "Tasks",
+        "type": "array"
+       },
+       "failure_taxonomy": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 2,
+        "title": "Failure Taxonomy",
+        "type": "array"
+       },
+       "decision": {
+        "const": "admitted",
+        "default": "admitted",
+        "title": "Decision",
+        "type": "string"
+       }
+      },
+      "required": [
+       "artifact_sha256",
+       "contract_sha256",
+       "outcomes_sha256",
+       "oracle_id",
+       "oracle_contract_sha256",
+       "tasks",
+       "failure_taxonomy"
+      ],
+      "title": "QualificationCampaignBinding",
+      "type": "object"
+     },
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "description": "Review workflow identity recorded by the qualification signer.",
+      "properties": {
+       "key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Closed production admission for one exact workflow version.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-admission/v1",
+      "default": "openadapt.qualification-admission/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "admission_id": {
+      "title": "Admission Id",
+      "type": "string"
+     },
+     "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+     },
+     "workflow_id": {
+      "title": "Workflow Id",
+      "type": "string"
+     },
+     "workflow_version_id": {
+      "title": "Workflow Version Id",
+      "type": "string"
+     },
+     "bundle_version_id": {
+      "title": "Bundle Version Id",
+      "type": "string"
+     },
+     "runtime_validation_id": {
+      "title": "Runtime Validation Id",
+      "type": "string"
+     },
+     "bundle_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Artifact Sha256",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "governed_authorization_template_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Governed Authorization Template Sha256",
+      "type": "string"
+     },
+     "application_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Application Contract Sha256",
+      "type": "string"
+     },
+     "substrate_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Substrate Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "runtime_environment_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Environment Sha256",
+      "type": "string"
+     },
+     "runtime_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Runtime Contract Sha256",
+      "type": "string"
+     },
+     "input_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Input Policy Sha256",
+      "type": "string"
+     },
+     "action_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Action Policy Sha256",
+      "type": "string"
+     },
+     "network_policy_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Network Policy Sha256",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "operator_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Operator Contract Sha256",
+      "type": "string"
+     },
+     "campaign": {
+      "$ref": "#/$defs/QualificationCampaignBinding"
+     },
+     "issuer": {
+      "$ref": "#/$defs/QualificationIssuer"
+     },
+     "issued_at": {
+      "title": "Issued At",
+      "type": "string"
+     },
+     "not_before": {
+      "title": "Not Before",
+      "type": "string"
+     },
+     "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_id",
+     "tenant_id",
+     "workflow_id",
+     "workflow_version_id",
+     "bundle_version_id",
+     "runtime_validation_id",
+     "bundle_artifact_sha256",
+     "bundle_content_digest",
+     "governed_authorization_template_sha256",
+     "application_contract_sha256",
+     "substrate_contract_sha256",
+     "environment_contract_sha256",
+     "runtime_environment_sha256",
+     "runtime_contract_sha256",
+     "input_policy_sha256",
+     "action_policy_sha256",
+     "network_policy_sha256",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "operator_contract_sha256",
+     "campaign",
+     "issuer",
+     "issued_at",
+     "not_before",
+     "expires_at"
+    ],
+    "title": "QualificationAdmissionPayload",
+    "type": "object"
+   }
+  },
+  "QualificationCampaignBinding": {
+   "validation": {
+    "$defs": {
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The exact counted campaign accepted by the qualification authority.",
+    "properties": {
+     "artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Artifact Sha256",
+      "type": "string"
+     },
+     "contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Contract Sha256",
+      "type": "string"
+     },
+     "outcomes_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Outcomes Sha256",
+      "type": "string"
+     },
+     "oracle_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Oracle Id",
+      "type": "string"
+     },
+     "oracle_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Oracle Contract Sha256",
+      "type": "string"
+     },
+     "tasks": {
+      "items": {
+       "$ref": "#/$defs/QualificationCondition"
+      },
+      "maxItems": 1000,
+      "minItems": 1,
+      "title": "Tasks",
+      "type": "array"
+     },
+     "failure_taxonomy": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 2,
+      "title": "Failure Taxonomy",
+      "type": "array"
+     },
+     "decision": {
+      "const": "admitted",
+      "default": "admitted",
+      "title": "Decision",
+      "type": "string"
+     }
+    },
+    "required": [
+     "artifact_sha256",
+     "contract_sha256",
+     "outcomes_sha256",
+     "oracle_id",
+     "oracle_contract_sha256",
+     "tasks",
+     "failure_taxonomy"
+    ],
+    "title": "QualificationCampaignBinding",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "QualificationCondition": {
+      "additionalProperties": false,
+      "description": "One task and condition with the required counted trial result.",
+      "properties": {
+       "task": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "observed_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Observed Trials",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "task",
+       "condition",
+       "required_trials",
+       "observed_trials"
+      ],
+      "title": "QualificationCondition",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "The exact counted campaign accepted by the qualification authority.",
+    "properties": {
+     "artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Artifact Sha256",
+      "type": "string"
+     },
+     "contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Contract Sha256",
+      "type": "string"
+     },
+     "outcomes_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Outcomes Sha256",
+      "type": "string"
+     },
+     "oracle_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Oracle Id",
+      "type": "string"
+     },
+     "oracle_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Oracle Contract Sha256",
+      "type": "string"
+     },
+     "tasks": {
+      "items": {
+       "$ref": "#/$defs/QualificationCondition"
+      },
+      "maxItems": 1000,
+      "minItems": 1,
+      "title": "Tasks",
+      "type": "array"
+     },
+     "failure_taxonomy": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 2,
+      "title": "Failure Taxonomy",
+      "type": "array"
+     },
+     "decision": {
+      "const": "admitted",
+      "default": "admitted",
+      "title": "Decision",
+      "type": "string"
+     }
+    },
+    "required": [
+     "artifact_sha256",
+     "contract_sha256",
+     "outcomes_sha256",
+     "oracle_id",
+     "oracle_contract_sha256",
+     "tasks",
+     "failure_taxonomy"
+    ],
+    "title": "QualificationCampaignBinding",
+    "type": "object"
+   }
+  },
+  "QualificationCondition": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "One task and condition with the required counted trial result.",
+    "properties": {
+     "task": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Task",
+      "type": "string"
+     },
+     "condition": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Condition",
+      "type": "string"
+     },
+     "required_trials": {
+      "maximum": 10000,
+      "minimum": 3,
+      "title": "Required Trials",
+      "type": "integer"
+     },
+     "observed_trials": {
+      "maximum": 10000,
+      "minimum": 3,
+      "title": "Observed Trials",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "task",
+     "condition",
+     "required_trials",
+     "observed_trials"
+    ],
+    "title": "QualificationCondition",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "One task and condition with the required counted trial result.",
+    "properties": {
+     "task": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Task",
+      "type": "string"
+     },
+     "condition": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Condition",
+      "type": "string"
+     },
+     "required_trials": {
+      "maximum": 10000,
+      "minimum": 3,
+      "title": "Required Trials",
+      "type": "integer"
+     },
+     "observed_trials": {
+      "maximum": 10000,
+      "minimum": 3,
+      "title": "Observed Trials",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "task",
+     "condition",
+     "required_trials",
+     "observed_trials"
+    ],
+    "title": "QualificationCondition",
+    "type": "object"
+   }
+  },
+  "QualificationIssuer": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Review workflow identity recorded by the qualification signer.",
+    "properties": {
+     "key_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Key Id",
+      "type": "string"
+     },
+     "workflow": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Workflow",
+      "type": "string"
+     },
+     "ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Ref",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key_id",
+     "workflow",
+     "ref"
+    ],
+    "title": "QualificationIssuer",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Review workflow identity recorded by the qualification signer.",
+    "properties": {
+     "key_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Key Id",
+      "type": "string"
+     },
+     "workflow": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Workflow",
+      "type": "string"
+     },
+     "ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
+      "title": "Ref",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key_id",
+     "workflow",
+     "ref"
+    ],
+    "title": "QualificationIssuer",
+    "type": "object"
+   }
+  },
+  "QualificationSignerTrust": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Locally configured authority rule for one qualification signer.",
+    "properties": {
+     "public_key": {
+      "title": "Public Key",
+      "type": "string"
+     },
+     "allowed_workflows": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Allowed Workflows",
+      "type": "array"
+     },
+     "allowed_ref_prefixes": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Allowed Ref Prefixes",
+      "type": "array"
+     }
+    },
+    "required": [
+     "public_key",
+     "allowed_workflows",
+     "allowed_ref_prefixes"
+    ],
+    "title": "QualificationSignerTrust",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Locally configured authority rule for one qualification signer.",
+    "properties": {
+     "public_key": {
+      "title": "Public Key",
+      "type": "string"
+     },
+     "allowed_workflows": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Allowed Workflows",
+      "type": "array"
+     },
+     "allowed_ref_prefixes": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Allowed Ref Prefixes",
+      "type": "array"
+     }
+    },
+    "required": [
+     "public_key",
+     "allowed_workflows",
+     "allowed_ref_prefixes"
+    ],
+    "title": "QualificationSignerTrust",
+    "type": "object"
+   }
+  }
+ }
+}
