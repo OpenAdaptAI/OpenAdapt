@@ -437,7 +437,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
+        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # every one of its 88 pull-request runs and used 240 runner-minutes.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     services:
       postgres:
         image: postgres:16-alpine
