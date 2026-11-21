@@ -3605,6 +3605,16 @@ def _compile_recording(
             if event.get("closes_surface") is True:
                 stamped.closes_surface = True
 
+    from openadapt_flow.compiler.native_focus import anchor_native_keyboard
+
+    pending = anchor_native_keyboard(
+        pending,
+        bundle=bundle,
+        meta_identifier_region=meta_identifier_region,
+        reference_date=reference_date,
+        cached_lines=cached_lines,
+    )
+
     # Native HTML evidence binds the whole focus-only CLICK + TYPE + Enter
     # gesture. Replaying the popup-opening click separately would leave it open.
     absorbed_step_aliases: dict[str, str] = {}

@@ -41,8 +41,8 @@ def next_steps(
     check (run once, at the finale) for an older ``openadapt`` on PATH.
     ``offer_publish`` is given only in a terminal outside CI, with an engine
     that can build public Seals. At the finale it asks once whether to put
-    the checked and the stopped run's Seals online, and only when Cloud says hosted Seals are live. Otherwise
-    the finale says nothing about publishing.
+    the checked and stopped runs' Seals online. The offer appears only
+    when Cloud accepts hosted Seals.
     """
 
     def build(outcome: Outcome) -> NextSteps:

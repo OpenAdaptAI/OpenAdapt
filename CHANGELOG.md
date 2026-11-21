@@ -32,6 +32,12 @@
   Under `uvx` on Python 3.13 or newer, the launcher reruns the same command
   with Python 3.12 (`uvx --python 3.12 openadapt@<this version> ...`) instead of
   stopping. Elsewhere on those Pythons it prints that one-line command first.
+- Before publishing a Seal, the quickstart and `openadapt seal publish` list
+  each public field and explain how readers can link Seals signed by the same
+  key. The quickstart shows the checked and stopped Seals, with both file
+  paths, before asking once. Type `show` at the prompt to inspect the exact upload, or run
+  `openadapt seal publish --show` to write its bytes to standard output without
+  publishing.
 
 ## v1.23.0 (2026-11-19)
 

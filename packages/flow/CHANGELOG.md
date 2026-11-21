@@ -27,7 +27,7 @@
   page has drawn no frame for a second, or the page is hidden, the settle now
   falls back to two identical screenshots.
 
-## v3.4.0 (2026-11-20)
+## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
 ### Features
 
