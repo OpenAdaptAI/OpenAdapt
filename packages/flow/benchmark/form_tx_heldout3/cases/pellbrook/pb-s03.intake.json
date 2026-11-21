@@ -1,0 +1,27 @@
+{
+  "case_id": "pb-s03",
+  "facts": {
+    "first_name": "Wynne",
+    "last_name": "Carrowmore",
+    "date_of_birth": "1970-11-23",
+    "email": "wynne.carrowmore@example.test",
+    "garaging_zip": "04609",
+    "boat_year": 2014,
+    "boat_make": "Brannock Marine",
+    "boat_model": "Ledgewatch 22",
+    "length_ft": 22,
+    "engine_type": "Inboard",
+    "engine_count": "Single",
+    "total_horsepower": 220,
+    "agreed_hull_value": 34000,
+    "storage": "On a trailer at my home",
+    "navigation_area": "Coastal waters within 25 miles of shore",
+    "safety_course": true,
+    "losses_3yr": 1,
+    "financing": "Financed",
+    "lienholder": "Downeast Harbor Credit Union",
+    "liability_limit": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-06-01"
+  }
+}

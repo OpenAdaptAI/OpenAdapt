@@ -1,0 +1,30 @@
+{
+  "case_id": "cv-dev",
+  "facts": {
+    "first_name": "Marisol",
+    "last_name": "Tennant",
+    "date_of_birth": "1981-04-17",
+    "email": "marisol.tennant@example.test",
+    "phone": "503-555-0142",
+    "marital_status": "Married",
+    "spouse_name": "Gideon Tennant",
+    "property_street": "2214 Larchmere Way",
+    "property_city": "Bend",
+    "property_state": "OR",
+    "property_zip": "97702",
+    "year_built": 1998,
+    "square_feet": 1860,
+    "construction": "Frame",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2016,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Penhallow Bank of Oregon",
+    "lender_clause_address": "PO Box 1180, Bend OR 97701",
+    "loan_number": "PB-88120457",
+    "dwelling_limit": 372000,
+    "personal_liability": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-02-01"
+  }
+}

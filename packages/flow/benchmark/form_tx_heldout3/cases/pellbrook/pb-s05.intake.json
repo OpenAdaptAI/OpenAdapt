@@ -1,0 +1,26 @@
+{
+  "case_id": "pb-s05",
+  "facts": {
+    "first_name": "Ansgar",
+    "last_name": "Velthuis",
+    "date_of_birth": "1973-07-02",
+    "email": "ansgar.velthuis@example.test",
+    "garaging_zip": "56468",
+    "boat_year": 2018,
+    "boat_make": "Tidelark Boats",
+    "boat_model": "Pontoon Lounger 22",
+    "length_ft": 22,
+    "engine_type": "Outboard",
+    "engine_count": "Single",
+    "total_horsepower": 150,
+    "agreed_hull_value": 29500,
+    "storage": "Wet slip at a marina",
+    "navigation_area": "Inland lakes and rivers",
+    "safety_course": true,
+    "losses_3yr": 0,
+    "financing": "Paid in full",
+    "liability_limit": 300000,
+    "deductible": 500,
+    "effective_date": "2027-05-20"
+  }
+}

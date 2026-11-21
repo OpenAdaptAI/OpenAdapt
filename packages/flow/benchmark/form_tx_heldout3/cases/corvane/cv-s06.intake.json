@@ -1,0 +1,29 @@
+{
+  "case_id": "cv-s06",
+  "facts": {
+    "first_name": "Augustin",
+    "last_name": "Pelletreau",
+    "date_of_birth": "1966-07-19",
+    "email": "a.pelletreau@example.test",
+    "phone": "208-555-0131",
+    "marital_status": "Widowed",
+    "property_street": "1250 W Cottonwood Bend",
+    "property_city": "Meridian",
+    "property_state": "ID",
+    "property_zip": "83646",
+    "year_built": 2011,
+    "square_feet": 2680,
+    "construction": "Masonry veneer",
+    "roof_material": "Tile",
+    "roof_year": 2011,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Tenbury Mortgage Services",
+    "lender_clause_address": "PO Box 60917, Boise ID 83701",
+    "loan_number": "TMS-8801-2275",
+    "dwelling_limit_basis": "Estimated replacement cost",
+    "personal_liability": 500000,
+    "deductible": 5000,
+    "effective_date": "2027-05-10"
+  }
+}

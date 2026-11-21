@@ -1,0 +1,26 @@
+{
+  "case_id": "pb-s06",
+  "facts": {
+    "first_name": "Chiamaka",
+    "last_name": "Rautio",
+    "date_of_birth": "1991-09-18",
+    "email": "chiamaka.rautio@example.test",
+    "garaging_zip": "97365",
+    "boat_year": 2020,
+    "boat_make": "Marlowe Skiffs",
+    "boat_model": "Yaquina 17 Tiller",
+    "length_ft": 17,
+    "engine_type": "Outboard",
+    "engine_count": "Single",
+    "total_horsepower": 90,
+    "hull_value_basis": "Book value (average retail)",
+    "storage": "On a trailer at my home",
+    "navigation_area": "Coastal waters within 25 miles of shore",
+    "safety_course": false,
+    "losses_3yr": 0,
+    "financing": "Paid in full",
+    "liability_limit": 100000,
+    "deductible": 500,
+    "effective_date": "2027-04-01"
+  }
+}
