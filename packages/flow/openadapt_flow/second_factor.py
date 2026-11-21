@@ -22,7 +22,12 @@ Sources, from the environment, first match wins:
   ``<command> code|approval <step id>`` with no shell. Exit 0 prints the code
   (or confirms the approval), exit 3 means the person declined.
 
-With no source, or when the source fails, times out or declines, the step
+- The terminal, when the run has one (stdin and stderr are both a TTY and
+  ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``): the person types the
+  code, which is not echoed, or presses Enter after approving.
+
+A run with no terminal (a service, a hosted sandbox, an MCP server) never
+prompts. With no source, or when the source fails, times out or declines, the step
 stops before anything is typed, with one closed code from
 :data:`REFUSAL_CODES`.
 """
@@ -53,6 +58,7 @@ __all__ = [
     "CommandSource",
     "HttpSource",
     "SecondFactorRefused",
+    "TerminalSource",
     "check_step_shape",
     "has_one_time_steps",
     "normalize_code",
@@ -70,9 +76,11 @@ URL_ENV = "OPENADAPT_SECOND_FACTOR_URL"
 TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
 COMMAND_ENV = "OPENADAPT_SECOND_FACTOR_COMMAND"
 TIMEOUT_ENV = "OPENADAPT_SECOND_FACTOR_TIMEOUT_S"
+#: ``off`` stops an interactive run from asking at its terminal.
+PROMPT_ENV = "OPENADAPT_SECOND_FACTOR_PROMPT"
 #: What a run's child processes need for a source: its configuration and,
 #: for the control plane, the run token that authorizes the request.
-SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV)
+SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV, PROMPT_ENV)
 
 
 def source_env(environ: Optional[Mapping[str, str]] = None) -> dict[str, str]:
@@ -196,6 +204,10 @@ def source_from_env(env: Optional[Mapping[str, str]] = None) -> Optional[Source]
     command = (env.get(COMMAND_ENV) or "").strip()
     if command:
         return CommandSource(command)
+    if (env.get(PROMPT_ENV) or "").strip().lower() not in ("off", "0", "false"):
+        terminal = TerminalSource.open()
+        if terminal is not None:
+            return terminal
     return None
 
 
@@ -275,6 +287,84 @@ def _stderr_heartbeat() -> Callable[[], None]:
             )
 
     return beat
+
+
+# -- terminal source ---------------------------------------------------------
+
+
+class TerminalSource:
+    """Ask the person at the run's own terminal (no echo for a code)."""
+
+    def __init__(self, tty_in: Any, tty_out: Any) -> None:
+        self._in = tty_in
+        self._out = tty_out
+
+    @classmethod
+    def open(cls) -> Optional["TerminalSource"]:
+        try:
+            if not (sys.stdin.isatty() and sys.stderr.isatty()):
+                return None
+        except (AttributeError, ValueError):
+            return None
+        return cls(sys.stdin, sys.stderr)
+
+    def _ask(self, prompt: str, *, hidden: bool, timeout_s: float) -> Optional[str]:
+        import getpass
+        import threading
+
+        answer: list[Optional[str]] = [None]
+
+        def read() -> None:
+            try:
+                if hidden:
+                    answer[0] = getpass.getpass(prompt, stream=self._out)
+                else:
+                    self._out.write(prompt)
+                    self._out.flush()
+                    answer[0] = self._in.readline()
+            except (EOFError, OSError, KeyboardInterrupt):
+                answer[0] = None
+
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
+        reader.join(timeout_s)
+        if reader.is_alive():
+            self._out.write("\n")
+            raise SecondFactorRefused(
+                "second_factor_timeout",
+                f"no second factor within {timeout_s:g} s; nothing was typed",
+            )
+        if answer[0] is None:
+            raise SecondFactorRefused(
+                "second_factor_unavailable", "the terminal closed; nothing was typed"
+            )
+        return answer[0]
+
+    def obtain(
+        self, request: Request, *, heartbeat: Callable[[], None]
+    ) -> Optional[str]:
+        if request.kind == "approval":
+            reply = self._ask(
+                "Approve the sign-in on your device, then press Enter "
+                "(type n and Enter to decline): ",
+                hidden=False,
+                timeout_s=request.timeout_s,
+            )
+            if (reply or "").strip().lower() in ("n", "no"):
+                raise SecondFactorRefused(
+                    "second_factor_declined", "the person declined; nothing was typed"
+                )
+            return None
+        reply = self._ask(
+            "Sign-in code (not shown; leave empty to decline): ",
+            hidden=True,
+            timeout_s=request.timeout_s,
+        )
+        if not (reply or "").strip():
+            raise SecondFactorRefused(
+                "second_factor_declined", "the person declined; nothing was typed"
+            )
+        return reply
 
 
 # -- command source ----------------------------------------------------------

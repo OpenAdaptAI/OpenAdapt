@@ -31,6 +31,11 @@
   person's browser to a one-step P-256 key. The wrap recorder turns a field
   marked `autocomplete="one-time-code"` into such a step, and a code-only
   form's submit counts as a sign-in, not a save. See docs/SECOND_FACTOR.md.
+- An interactive run (a terminal on stdin and stderr) asks for a sign-in's
+  second factor at that terminal when no other source is set: the code is not
+  echoed, and the wait has the same timeout. A run without a terminal never
+  prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
+  turns the prompt off.
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a
   `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the

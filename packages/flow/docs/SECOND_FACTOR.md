@@ -61,6 +61,8 @@ first match wins.
 | `OPENADAPT_SECOND_FACTOR_URL` with `OPENADAPT_RUNNER_TOKEN` | The control plane of a hosted or customer-run runner. A named person answers on the dashboard |
 | `OPENADAPT_SECOND_FACTOR_COMMAND` | A local command, run with no shell as `<command> code <step id>` or `<command> approval <step id>`. Exit 0 prints the code (or confirms the approval), and exit 3 means the person declined. A password manager's one-time-code command works here |
 
+| The run's terminal | Used when no variable above is set and the run's stdin and stderr are both a terminal. The person types the code (not echoed; empty declines), or presses Enter after approving (`n` declines). `OPENADAPT_SECOND_FACTOR_PROMPT=off` turns it off. A service, hosted sandbox or MCP server has no terminal and never prompts |
+
 `OPENADAPT_SECOND_FACTOR_TIMEOUT_S` sets how long a step waits, from 10 to
 600 seconds. The default is 120. While it waits, the runtime prints a line to
 stderr every 20 seconds, so a supervisor that ends silent runs doesn't end
