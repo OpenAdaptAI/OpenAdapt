@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -47,14 +48,29 @@ def test_pin_is_limited_to_public_fields_and_private_openings_stay_local():
             )
 
 
+def test_callback_refuses_a_valid_record_when_the_verifier_is_unavailable(monkeypatch):
+    vector = _load("report-canonical")
+    monkeypatch.setitem(sys.modules, "cryptography.exceptions", None)
+    with pytest.raises(ValueError, match="verifier_unavailable"):
+        verified_receipt_metrics(
+            json.dumps(vector["document"]).encode(),
+            pinned_signer=_pin(),
+            report_jcs_sha256=r.report_canonical_sha256(vector["report"]),
+            outcome=vector["expected"]["outcome"],
+        )
+
+
 def test_callback_binds_only_the_jcs_digest_of_the_shared_report_vector():
     vector = _load("report-canonical")
     wire = json.dumps(vector["document"]).encode()
     digest = r.report_canonical_sha256(vector["report"])
     outcome = vector["expected"]["outcome"]
-    assert verified_receipt_metrics(
-        wire, pinned_signer=_pin(), report_jcs_sha256=digest, outcome=outcome
-    )["receipt_record"] == vector["document"]
+    assert (
+        verified_receipt_metrics(
+            wire, pinned_signer=_pin(), report_jcs_sha256=digest, outcome=outcome
+        )["receipt_record"]
+        == vector["document"]
+    )
     # This digest vector signs STOPPED but its sample report says VERIFIED.
     report_outcome = r.receipt_outcome(vector["report"]["execution_outcome"])[0]
     assert report_outcome != outcome
