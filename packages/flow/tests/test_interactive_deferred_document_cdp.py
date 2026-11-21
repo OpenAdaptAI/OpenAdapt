@@ -164,8 +164,9 @@ def test_cross_document_deferred_action_refuses_complete_publication(
         # Keep another old-document action and the later document's action in
         # one undrained native batch. No intermediate screenshot can separate
         # them; the original already-retained pending action must survive.
+        before_queued = len(session._pyq)
         _perform(session, kind, "queued-alpha", pump=False)
-        session.page.wait_for_timeout(0)
+        _wait_for_queued_action(session, kind, after=before_queued)
         assert len(session._pyq) == 1
         assert session._pyq[0]["_oaflow_producer_doc"] == first_owner
         observed = []
