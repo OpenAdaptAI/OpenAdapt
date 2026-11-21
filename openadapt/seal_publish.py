@@ -794,6 +794,7 @@ def _read_run_summary(folder: Path) -> Optional[dict]:
             data = json.loads((folder / name).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict) and "schema_version" in data:
+        # Any summary, never the signed receipt (a DSSE envelope).
+        if isinstance(data, dict) and "payloadType" not in data:
             return data
     return None
