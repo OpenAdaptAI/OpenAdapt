@@ -140,6 +140,11 @@ def match_anchor_in_snapshot(
             continue
         label_ok = (
             _matches_any_pattern(ctrl.label_text, anchor.label_patterns)
+            or (
+                is_radio(ctrl)
+                and bool(ctrl.group_label)
+                and _matches_any_pattern(ctrl.group_label, anchor.label_patterns)
+            )
             if anchor.label_patterns
             else True
         )
@@ -220,6 +225,11 @@ def is_native_radio(ctrl: ObservedControl) -> bool:
     return ctrl.tag.casefold() == "input" and ctrl.input_type.casefold() == "radio"
 
 
+def is_radio(ctrl: ObservedControl) -> bool:
+    """True for a native radio or an ARIA ``role="radio"`` control."""
+    return is_native_radio(ctrl) or ctrl.role.casefold() == "radio"
+
+
 def radio_group_key(ctrl: ObservedControl) -> Optional[str]:
     """The group a native radio belongs to, or ``None`` for any other control.
 
@@ -227,9 +237,11 @@ def radio_group_key(ctrl: ObservedControl) -> Optional[str]:
     sorted values of the group, so two same-named groups in different forms
     with different choices stay apart.
     """
+    values = ",".join(sorted(o.value for o in ctrl.options))
+    if is_radio(ctrl) and ctrl.radio_group:
+        return f"radio:{ctrl.radio_group}|{values}"
     if not is_native_radio(ctrl) or not ctrl.name_attr:
         return None
-    values = ",".join(sorted(o.value for o in ctrl.options))
     return f"radio:{ctrl.name_attr}|{values}"
 
 
@@ -269,10 +281,10 @@ def compute_field_signature(ctrl: ObservedControl) -> str:
     label = collapse_whitespace(ctrl.label_text).casefold()
     kind = (ctrl.role or ctrl.input_type or ctrl.tag).casefold()
     name = (ctrl.name_attr or ctrl.id_attr).casefold()
-    if is_native_radio(ctrl) and ctrl.name_attr:
+    if is_radio(ctrl) and (ctrl.radio_group or ctrl.name_attr):
         # Every radio of a group, checked or not, is the same field.
-        label = ""
-        name = ctrl.name_attr.casefold()
+        label = collapse_whitespace(ctrl.group_label).casefold()
+        name = (ctrl.radio_group or ctrl.name_attr).casefold()
     # Strip volatile numeric render suffixes from dynamic server IDs while keeping field tokens
     stable_name = re.sub(r"\b\d+\b|_[0-9a-f]{6,}", "#", name)
     return f"{section}|{label}|{kind}|{stable_name}"

@@ -41,6 +41,7 @@ from openadapt_flow.form_tx.surface import (
     collapse_radio_groups,
     compute_field_signature,
     match_anchor_in_snapshot,
+    match_text_pair_in_snapshot,
     radio_group_key,
 )
 from openadapt_flow.form_tx.types import (
@@ -96,6 +97,11 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "-- Select --",
     "Select...",
     "Choose...",
+    "Select one",
+    "-- Select one --",
+    "Select",
+    "Choose one",
+    "Please choose",
 )
 
 
@@ -346,6 +352,7 @@ _SURFACE_ACTION_ERROR_NAMES = frozenset(
         "PopupContractError",
         "SurfaceSettleTimeoutError",
         "SurfaceContextError",
+        "SurfaceStateError",
     }
 )
 
@@ -935,13 +942,13 @@ class FormReconciler:
                     opt = resolve_unique_option(
                         intended_value, ctrl.options, codec, placeholder_values
                     )
+                    group = radio_group_key(ctrl)
                     radio_peers = [
                         c
                         for c in snapshot.controls
                         if c.visible
-                        and c.input_type.casefold() == "radio"
-                        and c.name_attr
-                        and c.name_attr == ctrl.name_attr
+                        and group is not None
+                        and radio_group_key(c) == group
                         and (c.radio_value or c.current_value) == opt.value
                     ]
                     if len(radio_peers) == 1:
@@ -962,7 +969,13 @@ class FormReconciler:
             raise CodecValueError(
                 f"Control kind {control_kind.value!r} cannot be directly actuated as an input"
             )
-        except CodecValueError as exc:
+        except Exception as exc:
+            # A codec mismatch, or a control that did not take the state the
+            # surface set (``SurfaceStateError``), stops for a person.
+            if not isinstance(exc, CodecValueError) and (
+                type(exc).__name__ != "SurfaceStateError"
+            ):
+                raise
             sig = compute_field_signature(ctrl)
             halt_id = _deterministic_halt_id(
                 run_id,
@@ -1218,8 +1231,21 @@ class FormReconciler:
                     edited_any = True
                     if binding.triggers_re_render:
                         return True, True, None
+                    if self._controls_were_replaced(surface, snapshot):
+                        # The page rebuilt its controls on change; every
+                        # selector from this snapshot may now be stale.
+                        return True, True, None
 
         return edited_any, False, None
+
+    @staticmethod
+    def _controls_were_replaced(
+        surface: FormSurfaceBackend, snapshot: FormSnapshot
+    ) -> bool:
+        """True when a control seen in ``snapshot`` is no longer on the page."""
+        fresh = surface.snapshot()
+        now = {c.dom_selector for c in fresh.controls}
+        return any(c.visible and c.dom_selector not in now for c in snapshot.controls)
 
     def _collect_ungrounded_required_halts(
         self,
@@ -1909,12 +1935,23 @@ class FormReconciler:
             return None, (
                 f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"
             )
-        if ctrl is None or not ctrl.current_value.strip():
+        raw = ctrl.current_value.strip() if ctrl is not None else ""
+        if ctrl is None:
+            # A result shown as page text ("Estimated cost: $512,340").
+            try:
+                pair = match_text_pair_in_snapshot(
+                    subroutine.result_anchor, popup_snap
+                )
+            except AmbiguousAnchorError as exc:
+                return None, (
+                    f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"
+                )
+            raw = pair.value.strip() if pair is not None else ""
+        if not raw:
             return None, (
                 f"Popup {subroutine.subroutine_id!r} shows no result to check "
                 f"the returned value against"
             )
-        raw = ctrl.current_value.strip()
         try:
             normalize_with_codec(raw, subroutine.return_codec)
         except CodecValueError:
