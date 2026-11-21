@@ -68,6 +68,7 @@ from openadapt_flow.form_tx.surface import (
     MissingAnchorError,
     compute_field_signature,
     match_anchor_in_snapshot,
+    match_text_pair_in_snapshot,
 )
 from openadapt_flow.form_tx.types import (
     FORM_DOSSIER_SCHEMA,
@@ -100,6 +101,7 @@ from openadapt_flow.form_tx.types import (
     ObservedEntityRow,
     ObservedModal,
     ObservedOption,
+    ObservedTextPair,
     OutputExtractionSpec,
     PackPatchCandidate,
     PopupSubroutineSpec,
@@ -156,6 +158,7 @@ __all__ = [
     "MissingAnchorError",
     "ModalRuleSpec",
     "ObservedControl",
+    "ObservedTextPair",
     "ObservedEntityRow",
     "ObservedModal",
     "ObservedOption",
@@ -202,6 +205,7 @@ __all__ = [
     "load_or_create_ed25519_key",
     "load_ui_profile",
     "match_anchor_in_snapshot",
+    "match_text_pair_in_snapshot",
     "normalize_boolean_yes_no",
     "normalize_currency_cents",
     "normalize_phone_digits",

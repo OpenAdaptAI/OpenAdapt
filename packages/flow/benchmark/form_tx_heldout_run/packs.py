@@ -1,10 +1,11 @@
-"""Form packs for the held-out quote portals, written from each dev case.
+"""Form packs for the first four quote portals (now a public dev set), v2.
 
-Every pack here is data. Each was written by hand by the form-layer author
-from the portal's dev case and its source; ``induce_form_pack`` could not be
-used because it needs labelled controls, and the harborline table layout has
-no label elements. See RESULTS.md for what each pack could and could not
-express.
+Every pack here is data, written by hand by the form-layer author from each
+portal's dev case and source, for the engine with the gap fixes merged
+(text-only read-back, typed type-aheads, frames and shadow roots, two-step
+and in-page popups, radio groups). The v1 packs used in the frozen first run
+are in git history at 124db5c98. ``dossier_for`` adds a few facts restated
+from the intake in the form a portal shows them (``_derived_facts``).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from openadapt_flow.form_tx.types import (
     FormCodecKind,
     FormPack,
     InputDossier,
+    OutputExtractionSpec,
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
@@ -66,23 +68,33 @@ def _bind(
 
 
 BOOL = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO)
+MONEY = FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS, currency_symbol="$")
 NEGATED_SUFFIX = ".is_no"
 
 
-def _yes_no_radios(key: str, name: str) -> tuple[FieldBindingSpec, FieldBindingSpec]:
-    return tuple(  # type: ignore[return-value]
-        FieldBindingSpec(
-            binding_id=f"b_{name}_{value}",
-            dossier_key=dossier_key,
-            anchor=FieldAnchorSpec(css_selector=f'input[name="{name}"][value="{value}"]'),
-            control_kind=ControlKind.CHECKBOX,
-            codec=BOOL,
-            # The frozen surface reads an unchecked native radio as holding its
-            # value attribute, so every radio looks prefilled and would stop.
-            # Seen on the dev case; these radios are set from the intake.
-            prefill_policy=PrefillPolicy.OVERWRITE_WITH_DOSSIER,
-        )
-        for value, dossier_key in (("Y", key), ("N", key + NEGATED_SUFFIX))
+def _radio(key: str, name: str) -> FieldBindingSpec:
+    """A native Yes/No radio group as one field (an unchecked group reads empty)."""
+    return FieldBindingSpec(
+        binding_id=f"b_{name}",
+        dossier_key=key,
+        anchor=_name(name),
+        control_kind=ControlKind.RADIO_GROUP,
+        codec=BOOL,
+    )
+
+
+def _shown(
+    key: str, label: str, codec: FieldCodecSpec = TEXT, *, section: str = ""
+) -> FieldBindingSpec:
+    """A read-back of a value shown as page text next to ``label``."""
+    return FieldBindingSpec(
+        binding_id=f"rb_{key}",
+        dossier_key=key,
+        anchor=FieldAnchorSpec(
+            label_patterns=(f"^{label}$",),
+            section_patterns=(section,) if section else (),
+        ),
+        codec=codec,
     )
 
 
@@ -103,8 +115,13 @@ def _hl_step(n: int) -> WizardScreenSpec:
     )
 
 
+LOSSES = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP,
+    enum_aliases={"0": (), "1": (), "2": (), "3": ("3 or more",)},
+)
+
 HARBORLINE_PACK = FormPack(
-    pack_id="heldout.harborline.home",
+    pack_id="heldout.harborline.home.v2",
     domain_schema="personal_lines.homeowners",
     ui_profile_id=HARBORLINE_PROFILE.profile_id,
     bindings=(
@@ -120,7 +137,13 @@ HARBORLINE_PACK = FormPack(
         _bind("property.zip", "zip"),
         _bind("property.year_built", "year_built", codec=INT),
         _bind("property.square_feet", "sqft", codec=INT),
-        _bind("property.stories", "stories", ControlKind.SELECT, EXACT, portal_default=True),
+        _bind(
+            "property.stories",
+            "stories",
+            ControlKind.SELECT,
+            EXACT,
+            portal_default=True,
+        ),
         # Asked only for older homes; not in any intake, so it stops for a person.
         _bind(
             "property.construction_class",
@@ -133,12 +156,22 @@ HARBORLINE_PACK = FormPack(
         _bind("property.roof_material", "roof_material", ControlKind.SELECT, EXACT),
         _bind("history.prior_claims_5yr", "losses_5yr", ControlKind.SELECT, INT),
         _bind("coverage.effective_date", "eff_date", ControlKind.DATE, DATE_MDY),
-        _bind("coverage.deductible", "deductible", ControlKind.SELECT, INT, portal_default=True),
-        _bind("coverage.liability_limit", "liability", ControlKind.SELECT, INT, portal_default=True),
-        # Yes/No radio pairs: one checkbox-style binding per radio, the "No"
-        # radio bound to the negation of the intake fact (see dossier_for).
-        *_yes_no_radios("property.has_pool", "pool"),
-        *_yes_no_radios("property.pool_fenced", "pool_fenced"),
+        _bind(
+            "coverage.deductible",
+            "deductible",
+            ControlKind.SELECT,
+            INT,
+            portal_default=True,
+        ),
+        _bind(
+            "coverage.liability_limit",
+            "liability",
+            ControlKind.SELECT,
+            INT,
+            portal_default=True,
+        ),
+        _radio("property.has_pool", "pool"),
+        _radio("property.pool_fenced", "pool_fenced"),
         FieldBindingSpec(
             binding_id="b_cov_a_launcher",
             dossier_key="coverage.dwelling_a",
@@ -151,13 +184,25 @@ HARBORLINE_PACK = FormPack(
             subroutine_id="hl_rce",
             trigger_anchor=FieldAnchorSpec(label_patterns=(r"^Estimate RC",)),
             popup_url_pattern="/tools/rce",
+            # The estimator pre-sets its grade; it is overwritten from the intake.
             bindings=(
-                _bind("property.construction_quality", "quality", ControlKind.SELECT, EXACT),
+                _bind(
+                    "property.construction_quality",
+                    "quality",
+                    ControlKind.SELECT,
+                    EXACT,
+                    portal_default=True,
+                ),
             ),
-            commit_anchor=FieldAnchorSpec(label_patterns=(r"^Calculate",)),
+            compute_anchors=(FieldAnchorSpec(label_patterns=(r"^Calculate$",)),),
+            # The figure the estimator shows; the value it puts back must match.
+            result_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Estimated Replacement Cost$",)
+            ),
+            commit_anchor=FieldAnchorSpec(label_patterns=(r"^Use This Value$",)),
             parent_return_anchor=_name("cov_a"),
             return_output_key="coverage.dwelling_a",
-            return_codec=INT,
+            return_codec=MONEY,
         ),
     ),
     # The review page also holds a Back form that posts to step 4, so it is
@@ -176,10 +221,57 @@ HARBORLINE_PACK = FormPack(
         _hl_step(3),
         _hl_step(4),
     ),
-    # The confirmation page shows the stored values as plain table text, not
-    # as form controls, so the frozen surface cannot read any of them back.
-    # The contract names the page; every field ends not_checked.
-    summary_check=SummaryCheckSpec(summary_landmark_selector="#appno"),
+    # The confirmation page shows the stored values as table text.
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#appno",
+        field_readbacks=(
+            _shown("applicant.first_name", "First Name"),
+            _shown("applicant.last_name", "Last Name"),
+            _shown(
+                "applicant.date_of_birth", r"Date of Birth \(MM/DD/YYYY\)", DATE_MDY
+            ),
+            _shown("applicant.phone", "Phone"),
+            _shown("applicant.email", "E-mail"),
+            _shown(
+                "history.prior_policy_number",
+                r"Prior Harborline Policy No\. \(if any\)",
+            ),
+            _shown("property.address_line1", "Street Address"),
+            _shown("property.city", "City"),
+            _shown("property.state", "State", EXACT),
+            _shown("property.zip", "ZIP Code"),
+            _shown("property.year_built", "Year Built", INT),
+            _shown("property.square_feet", r"Total Living Area \(sq ft\)", INT),
+            _shown("property.stories", "Number of Stories", EXACT),
+            _shown("property.construction_class", "Construction Class", EXACT),
+            _shown("property.roof_year", r"Roof Covering Last Replaced \(Year\)", INT),
+            _shown("property.roof_material", "Roof Covering Material", EXACT),
+            _shown(
+                "history.prior_claims_5yr", r"Number of Losses \(Last 5 Yrs\)", LOSSES
+            ),
+            _shown("coverage.dwelling_a", r"Dwelling Coverage \(A\)", MONEY),
+            _shown(
+                "coverage.effective_date",
+                r"Policy Effective Date \(MM/DD/YYYY\)",
+                DATE_MDY,
+            ),
+            _shown("coverage.deductible", "All Peril Deductible", MONEY),
+            _shown("coverage.liability_limit", r"Personal Liability \(E\)", MONEY),
+            _shown("property.has_pool", r"Swimming Pool on Premises\?", BOOL),
+            _shown(
+                "property.pool_fenced",
+                r"Is the pool enclosed by a locking fence\?",
+                BOOL,
+            ),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.application_no",
+                anchor=FieldAnchorSpec(css_selector="#appno"),
+                required=False,
+            ),
+        ),
+    ),
     max_commit_mutations=1,
 )
 
@@ -187,14 +279,23 @@ HARBORLINE_PACK = FormPack(
 # ---------------------------------------------------------------- cobalt
 # A single-page app: the step is named by the progress bar, fields by their
 # aria-labelledby text. Type-ahead comboboxes fetch suggestions only after
-# text is typed; the frozen surface opens a listbox by clicking, so the pack
-# can bind them but the layer may not be able to choose an option.
+# text is typed. Its radio groups are ARIA radios (div role=radio) in a
+# labelled radiogroup, bound by the group's label.
 COBALT_PROFILE = UIProfileSpec(
     profile_id="heldout_spa_aria",
     error_banner_selectors=(".cr-error[role='alert']",),
+    field_error_selectors=(".cr-error",),
     auth_wall_selectors=('input[type="password"]',),
     modal_dialog_selectors=('[role="dialog"][aria-modal="true"]',),
 )
+
+COBALT_RADIOS: dict[str, str] = {
+    # dossier key: the group's visible label
+    "applicant.marital_status": "Marital status",
+    "vehicle.primary_use": "Primary use",
+    "vehicle.ownership": "Ownership",
+    "coverage.bi_limits": "Bodily injury liability",
+}
 
 
 def _cr_step(n: int, next_label: str) -> WizardScreenSpec:
@@ -205,51 +306,156 @@ def _cr_step(n: int, next_label: str) -> WizardScreenSpec:
     )
 
 
-def _label(key: str, label: str, kind: ControlKind = ControlKind.TEXT,
-           codec: FieldCodecSpec = TEXT) -> FieldBindingSpec:
+def _label(
+    key: str,
+    label: str,
+    kind: ControlKind = ControlKind.TEXT,
+    codec: FieldCodecSpec = TEXT,
+    *,
+    portal_default: bool = False,
+) -> FieldBindingSpec:
     return FieldBindingSpec(
         binding_id=f"b_{key}",
         dossier_key=key,
         anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
         control_kind=kind,
         codec=codec,
+        prefill_policy=(
+            PrefillPolicy.OVERWRITE_WITH_DOSSIER
+            if portal_default
+            else PrefillPolicy.HALT_ON_CONFLICT
+        ),
     )
 
 
+CR_STATES = {
+    "AZ": "Arizona",
+    "CA": "California",
+    "CO": "Colorado",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "MA": "Massachusetts",
+    "MO": "Missouri",
+    "NC": "North Carolina",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "WA": "Washington",
+}
+CR_STATE = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP,
+    enum_aliases={code: (f"{name} ({code})",) for code, name in CR_STATES.items()},
+)
+CR_DED = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP,
+    enum_aliases={
+        "0": ("No coverage",),
+        "250": ("$250",),
+        "500": ("$500",),
+        "1000": ("$1,000",),
+    },
+)
+
 COBALT_PACK = FormPack(
-    pack_id="heldout.cobalt.auto",
+    pack_id="heldout.cobalt.auto.v2",
     domain_schema="personal_lines.auto",
     ui_profile_id=COBALT_PROFILE.profile_id,
     bindings=(
         _label("applicant.first_name", "First name"),
         _label("applicant.last_name", "Last name"),
-        _label("applicant.date_of_birth", "Date of birth", ControlKind.DATE,
-               FieldCodecSpec(kind=FormCodecKind.ISO_DATE)),
+        _label(
+            "applicant.date_of_birth",
+            "Date of birth",
+            ControlKind.DATE,
+            FieldCodecSpec(kind=FormCodecKind.ISO_DATE),
+        ),
         _label("applicant.email", "Email address"),
-        _label("applicant.license_state", "State where licensed",
-               ControlKind.PORTAL_COMBOBOX, EXACT),
+        _label(
+            "applicant.license_state",
+            "State where licensed",
+            ControlKind.PORTAL_COMBOBOX,
+            CR_STATE,
+        ),
         _label("vehicle.year", "Model year", ControlKind.SELECT, INT),
         _label("vehicle.make", "Make", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.model", "Model", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.annual_miles", "Estimated annual mileage", codec=INT),
-        _label("vehicle.commute_miles_one_way", "One-way commute \\(miles\\)", codec=INT),
+        _label(
+            "vehicle.commute_miles_one_way", r"One-way commute \(miles\)", codec=INT
+        ),
         _label("garaging.zip", "Garaging ZIP code"),
-        _label("garaging.city", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT),
+        _label(
+            "garaging.city_state", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT
+        ),
         _label("vehicle.lienholder", "Lienholder or lessor name"),
+        _label(
+            "coverage.collision_deductible",
+            "Collision deductible",
+            ControlKind.SELECT,
+            INT,
+            portal_default=True,
+        ),
+        _label(
+            "coverage.comprehensive_deductible",
+            "Comprehensive deductible",
+            ControlKind.SELECT,
+            INT,
+            portal_default=True,
+        ),
+        *(
+            _label(key, label, ControlKind.RADIO_GROUP, EXACT)
+            for key, label in COBALT_RADIOS.items()
+        ),
     ),
     screens=(
         WizardScreenSpec(
             screen_id="cr_review",
             landmark_selector=".progress > div:nth-child(5).on",
             is_commit_screen=True,
-            commit_button_anchor=FieldAnchorSpec(label_patterns=(r"^(Submit|Buy|Get)",)),
+            commit_button_anchor=FieldAnchorSpec(label_patterns=(r"^Get my quote$",)),
         ),
         _cr_step(1, "Continue"),
         _cr_step(2, "Continue"),
         _cr_step(3, "Continue"),
         _cr_step(4, "Review quote"),
     ),
-    summary_check=SummaryCheckSpec(),
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#quote-id",
+        field_readbacks=(
+            _shown("applicant.first_name", "First name"),
+            _shown("applicant.last_name", "Last name"),
+            _shown("applicant.date_of_birth", "Date of birth", DATE_MDY),
+            _shown("applicant.email", "Email address"),
+            _shown("applicant.license_state", "State where licensed", CR_STATE),
+            _shown("vehicle.year", "Model year", INT),
+            _shown("vehicle.make", "Make", EXACT),
+            _shown("vehicle.model", "Model", EXACT),
+            _shown("vehicle.annual_miles", "Estimated annual mileage", INT),
+            _shown("vehicle.commute_miles_one_way", r"One-way commute \(miles\)", INT),
+            _shown("garaging.zip", "Garaging ZIP code"),
+            _shown("garaging.city_state", "Garaging city", EXACT),
+            _shown("vehicle.lienholder", "Lienholder or lessor name"),
+            _shown("coverage.collision_deductible", "Collision deductible", CR_DED),
+            _shown(
+                "coverage.comprehensive_deductible", "Comprehensive deductible", CR_DED
+            ),
+            *(_shown(key, label, EXACT) for key, label in COBALT_RADIOS.items()),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.id",
+                anchor=FieldAnchorSpec(css_selector="#quote-id"),
+                required=False,
+            ),
+        ),
+    ),
     max_commit_mutations=1,
 )
 
@@ -259,20 +465,347 @@ PACKS: dict[str, tuple[FormPack, UIProfileSpec]] = {
     "cobalt": (COBALT_PACK, COBALT_PROFILE),
 }
 
-# Portals whose forms the frozen surface cannot see at all (probe.py):
-# pinecrest renders the form in an iframe (0 controls on the page), tidewater
-# in shadow-DOM custom elements (only a bare Next button). They run with an
-# empty pack so the layer's own outcome is what gets recorded.
-for _pid, _landmark in (("pinecrest", None), ("tidewater", None)):
-    PACKS[_pid] = (
-        FormPack(
-            pack_id=f"heldout.{_pid}.unreadable",
-            domain_schema="personal_lines.homeowners",
-            ui_profile_id="heldout_default",
-            summary_check=SummaryCheckSpec(),
+
+def _lab(
+    key: str,
+    label: str,
+    kind: ControlKind = ControlKind.TEXT,
+    codec: FieldCodecSpec = TEXT,
+    *,
+    rerender: bool = False,
+    portal_default: bool = False,
+    **extra: Any,
+) -> FieldBindingSpec:
+    """A binding anchored on the control's visible label."""
+    return FieldBindingSpec(
+        binding_id=f"b_{key}",
+        dossier_key=key,
+        anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
+        control_kind=kind,
+        codec=codec,
+        triggers_re_render=rerender,
+        prefill_policy=(
+            PrefillPolicy.OVERWRITE_WITH_DOSSIER
+            if portal_default
+            else PrefillPolicy.HALT_ON_CONFLICT
         ),
-        UIProfileSpec(profile_id="heldout_default"),
+        **extra,
     )
+
+
+def _group(
+    key: str,
+    name_prefix: str,
+    codec: FieldCodecSpec = EXACT,
+    *,
+    rerender: bool = False,
+    portal_default: bool = False,
+) -> FieldBindingSpec:
+    """A native radio group whose name starts with ``name_prefix``."""
+    return FieldBindingSpec(
+        binding_id=f"b_{key}",
+        dossier_key=key,
+        anchor=FieldAnchorSpec(name_or_id_patterns=(f"^{name_prefix}",)),
+        control_kind=ControlKind.RADIO_GROUP,
+        codec=codec,
+        triggers_re_render=rerender,
+        prefill_policy=(
+            PrefillPolicy.OVERWRITE_WITH_DOSSIER
+            if portal_default
+            else PrefillPolicy.HALT_ON_CONFLICT
+        ),
+    )
+
+
+# ---------------------------------------------------------------- pinecrest
+# The quote app is a same-origin iframe at /app/ inside the /portal shell. It
+# re-renders the whole step on every change (ids and names regenerate), so
+# every binding re-snapshots after it writes. The rebuild-cost calculator is
+# an in-page dialog: Calculate, then Apply.
+PINECREST_PROFILE = UIProfileSpec(
+    profile_id="heldout_iframe_rerender",
+    error_banner_selectors=(".pc-err[role='alert']", "[role='alert']"),
+    field_error_selectors=(".pc-err",),
+    auth_wall_selectors=('input[type="password"]', "#pc-relogin"),
+    frame_path_patterns=(r"/app/?",),
+)
+
+
+def _pc_step(n: int) -> WizardScreenSpec:
+    return WizardScreenSpec(
+        screen_id=f"pc_step_{n}",
+        landmark_selector=f".tabs span:nth-child({n}).on",
+        next_button_anchor=FieldAnchorSpec(label_patterns=(r"^Save and continue$",)),
+    )
+
+
+PC_INT = INT
+PINECREST_PACK = FormPack(
+    pack_id="heldout.pinecrest.home.v2",
+    domain_schema="personal_lines.homeowners",
+    ui_profile_id=PINECREST_PROFILE.profile_id,
+    bindings=(
+        _lab("property.address_line1", "Street address", rerender=True),
+        _lab(
+            "property.city_state",
+            "City",
+            ControlKind.PORTAL_COMBOBOX,
+            EXACT,
+            rerender=True,
+        ),
+        _lab("property.zip", "ZIP code", rerender=True),
+        _lab("property.year_built", "Year built", codec=PC_INT, rerender=True),
+        _lab("property.square_feet", "Living area", codec=PC_INT, rerender=True),
+        _lab(
+            "property.area_unit", "Area unit", ControlKind.SELECT, EXACT, rerender=True
+        ),
+        _lab(
+            "property.construction_type",
+            "Construction type",
+            ControlKind.SELECT,
+            EXACT,
+            rerender=True,
+        ),
+        _group("property.stories", "stories", rerender=True),
+        _lab(
+            "property.roof_year", "Year roof was installed", codec=PC_INT, rerender=True
+        ),
+        _lab(
+            "property.roof_material",
+            "Roof material",
+            ControlKind.SELECT,
+            EXACT,
+            rerender=True,
+        ),
+        _lab(
+            "property.heating_type",
+            "Primary heating",
+            ControlKind.SELECT,
+            EXACT,
+            rerender=True,
+        ),
+        _group(
+            "property.wood_stove_professionally_installed",
+            "stove_installed",
+            rerender=True,
+        ),
+        _lab(
+            "history.prior_claims_5yr",
+            "Claims in the last 5 years",
+            codec=PC_INT,
+            rerender=True,
+        ),
+        _lab(
+            "property.burglar_alarm",
+            "Monitored burglar alarm",
+            ControlKind.CHECKBOX,
+            BOOL,
+            rerender=True,
+            portal_default=True,
+        ),
+        _group(
+            "coverage.deductible", "deductible", INT, rerender=True, portal_default=True
+        ),
+        _lab(
+            "coverage.effective_date",
+            "Policy start date",
+            ControlKind.DATE,
+            FieldCodecSpec(kind=FormCodecKind.ISO_DATE),
+            rerender=True,
+        ),
+        FieldBindingSpec(
+            binding_id="b_dwelling_launcher",
+            dossier_key="coverage.dwelling_limit",
+            anchor=FieldAnchorSpec(label_patterns=(r"^Calculate rebuild cost$",)),
+            control_kind=ControlKind.POPUP_LAUNCHER,
+        ),
+    ),
+    popup_subroutines=(
+        PopupSubroutineSpec(
+            subroutine_id="pc_rebuild",
+            popup_mode="in_page",
+            trigger_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Calculate rebuild cost$",)
+            ),
+            bindings=(
+                _lab("property.square_feet", r"Living area \(sq ft\)", codec=PC_INT),
+                _lab("property.year_built", "Year built", codec=PC_INT),
+                _lab(
+                    "property.construction_type",
+                    "Construction type",
+                    ControlKind.SELECT,
+                    EXACT,
+                ),
+                _lab(
+                    "property.finish_level", "Finish level", ControlKind.SELECT, EXACT
+                ),
+            ),
+            compute_anchors=(FieldAnchorSpec(label_patterns=(r"^Calculate$",)),),
+            commit_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Apply to dwelling limit$",)
+            ),
+            parent_return_anchor=FieldAnchorSpec(label_patterns=(r"^Dwelling limit$",)),
+            return_output_key="coverage.dwelling_limit",
+            return_codec=INT,
+        ),
+    ),
+    screens=(
+        WizardScreenSpec(
+            screen_id="pc_review",
+            landmark_selector="#pc-submit",
+            is_commit_screen=True,
+            commit_button_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Submit for quote$",)
+            ),
+        ),
+        _pc_step(1),
+        _pc_step(2),
+        _pc_step(3),
+    ),
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#pc-ref",
+        field_readbacks=(
+            _shown("property.address_line1", "Street address"),
+            _shown("property.city_state", "City", EXACT),
+            _shown("property.zip", "ZIP code"),
+            _shown("property.year_built", "Year built", INT),
+            _shown("property.construction_type", "Construction type", EXACT),
+            _shown("property.stories", "Stories", EXACT),
+            _shown("property.roof_year", "Year roof was installed", INT),
+            _shown("property.roof_material", "Roof material", EXACT),
+            _shown("property.heating_type", "Primary heating", EXACT),
+            _shown(
+                "property.wood_stove_professionally_installed",
+                r"Was the wood stove installed by a licensed professional\?",
+                EXACT,
+            ),
+            _shown("history.prior_claims_5yr", "Claims in the last 5 years", INT),
+            _shown("property.burglar_alarm", "Monitored burglar alarm", BOOL),
+            _shown("coverage.dwelling_limit", "Dwelling limit", MONEY),
+            _shown("coverage.deductible", "Deductible", MONEY),
+            _shown("coverage.effective_date", "Policy start date", DATE_MDY),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.reference",
+                anchor=FieldAnchorSpec(css_selector="#pc-ref"),
+                required=False,
+            ),
+        ),
+    ),
+    max_commit_mutations=1,
+)
+
+
+# ---------------------------------------------------------------- tidewater
+# Server-rendered pages whose fields are custom elements with open shadow
+# roots. Next posts a hidden form; a session expiry redirects to /signin.
+TIDEWATER_PROFILE = UIProfileSpec(
+    profile_id="heldout_shadow_postback",
+    error_banner_selectors=("p.bad[role='alert']",),
+    field_error_selectors=(".err",),
+    auth_wall_selectors=('input[type="password"]',),
+)
+
+
+def _tw_step(n: int) -> WizardScreenSpec:
+    return WizardScreenSpec(
+        screen_id=f"tw_step_{n}",
+        landmark_selector=f"form#tg-post[action='/qq/{n}']",
+        next_button_anchor=FieldAnchorSpec(label_patterns=(r"^Next$",)),
+    )
+
+
+TW_LOSSES = FieldCodecSpec(
+    kind=FormCodecKind.ENUM_MAP,
+    enum_aliases={"0": ("None",), "1": (), "2": (), "3": ("3 or more",)},
+)
+
+TIDEWATER_PACK = FormPack(
+    pack_id="heldout.tidewater.bundle.v2",
+    domain_schema="personal_lines.bundle",
+    ui_profile_id=TIDEWATER_PROFILE.profile_id,
+    bindings=(
+        _lab("applicant.first_name", "First name"),
+        _lab("applicant.last_name", "Last name"),
+        _lab(
+            "applicant.date_of_birth",
+            r"Date of birth \(MM/DD/YYYY\)",
+            ControlKind.DATE,
+            DATE_MDY,
+        ),
+        _lab("applicant.email", "Email"),
+        _lab("property.address_line1", "Street address"),
+        _lab("property.address_line2", "Apt / unit"),
+        _lab("property.city", "City"),
+        _lab("property.state", "State", ControlKind.SELECT, EXACT),
+        _lab("property.zip", "ZIP"),
+        _lab("property.year_built", "Year built", codec=INT),
+        _lab("property.square_feet", "Square footage", codec=INT),
+        _lab("property.roof_year", r"Roof updated \(year\)", codec=INT),
+        _lab("property.occupancy", "Occupancy", ControlKind.SELECT, EXACT),
+        _lab(
+            "history.prior_claims_3yr",
+            "Losses in the last 3 years",
+            ControlKind.SELECT,
+            INT,
+        ),
+        _lab("vehicle.year", "Vehicle year", ControlKind.SELECT, INT),
+        _lab("vehicle.make", "Make", ControlKind.PORTAL_COMBOBOX, EXACT),
+        _lab("vehicle.model", "Model", ControlKind.PORTAL_COMBOBOX, EXACT),
+        _lab("household.driver_count", "Drivers in household", ControlKind.SELECT, INT),
+    ),
+    screens=(
+        WizardScreenSpec(
+            screen_id="tw_review",
+            landmark_selector="form[action='/qq/review']",
+            is_commit_screen=True,
+            commit_button_anchor=FieldAnchorSpec(
+                label_patterns=(r"^Submit quote request$",)
+            ),
+        ),
+        _tw_step(1),
+        _tw_step(2),
+        _tw_step(3),
+    ),
+    summary_check=SummaryCheckSpec(
+        summary_landmark_selector="#quote-no",
+        field_readbacks=(
+            _shown("applicant.first_name", "First name"),
+            _shown("applicant.last_name", "Last name"),
+            _shown(
+                "applicant.date_of_birth", r"Date of birth \(MM/DD/YYYY\)", DATE_MDY
+            ),
+            _shown("applicant.email", "Email"),
+            _shown("property.address_line1", "Street address", EXACT),
+            _shown("property.address_line2", "Apt / unit", EXACT),
+            _shown("property.city", "City", EXACT),
+            _shown("property.state", "State", EXACT),
+            _shown("property.zip", "ZIP"),
+            _shown("property.year_built", "Year built", INT),
+            _shown("property.square_feet", "Square footage", INT),
+            _shown("property.roof_year", r"Roof updated \(year\)", INT),
+            _shown("property.occupancy", "Occupancy", EXACT),
+            _shown("history.prior_claims_3yr", "Losses in the last 3 years", TW_LOSSES),
+            _shown("vehicle.year", "Vehicle year", INT),
+            _shown("vehicle.make", "Make", EXACT),
+            _shown("vehicle.model", "Model", EXACT),
+            _shown("household.driver_count", "Drivers in household", INT),
+        ),
+        outputs=(
+            OutputExtractionSpec(
+                output_key="quote.number",
+                anchor=FieldAnchorSpec(css_selector="#quote-no"),
+                required=False,
+            ),
+        ),
+    ),
+    max_commit_mutations=1,
+)
+
+
+PACKS["pinecrest"] = (PINECREST_PACK, PINECREST_PROFILE)
+PACKS["tidewater"] = (TIDEWATER_PACK, TIDEWATER_PROFILE)
 
 
 def dossier_for(intake: dict[str, Any], request_id: str) -> InputDossier:
@@ -287,38 +820,41 @@ def dossier_for(intake: dict[str, Any], request_id: str) -> InputDossier:
         for key, value in intake["facts"].items()
         if value is not None and value != ""
     }
-    for key, fact in list(facts.items()):
-        if isinstance(fact.value, bool):
-            neg = key + NEGATED_SUFFIX
-            facts[neg] = fact.model_copy(update={"key": neg, "value": not fact.value})
-    return InputDossier(dossier_id=f"intake:{intake['case_id']}", request_id=request_id, facts=facts)
+    derived = _derived_facts(intake["facts"])
+    for key, value in derived.items():
+        if key not in facts:
+            facts[key] = DossierFact(
+                key=key,
+                value=value,
+                provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                source_id=f"intake:{intake['case_id']}",
+                confidence=1.0,
+            )
+    return InputDossier(
+        dossier_id=f"intake:{intake['case_id']}", request_id=request_id, facts=facts
+    )
+
+
+def _derived_facts(raw: dict[str, Any]) -> dict[str, Any]:
+    """Facts restated from the intake in the form a portal shows them.
+
+    A city type-ahead lists "City, ST"; a living area typed as square feet
+    is in the "sq ft" unit. Nothing here adds information the intake lacks.
+    """
+    out: dict[str, Any] = {}
+    if raw.get("property.city") and raw.get("property.state"):
+        out["property.city_state"] = f"{raw['property.city']}, {raw['property.state']}"
+    if raw.get("garaging.city") and raw.get("garaging.state"):
+        out["garaging.city_state"] = f"{raw['garaging.city']}, {raw['garaging.state']}"
+    if raw.get("property.square_feet") not in (None, ""):
+        out["property.area_unit"] = "sq ft"
+    return out
 
 
 def _intake_value(value: Any) -> Any:
     return value
 
 
-# ------------------------------------------------------- post-hoc (labelled)
-# Written after the scored run, from what it showed; never replaces the
-# frozen row. P1: the estimator's Quality Grade select is pre-set to
-# "Standard", so it is overwritten from the intake like the other defaults.
-HARBORLINE_PACK_POSTHOC_P1 = HARBORLINE_PACK.model_copy(
-    update={
-        "pack_id": "heldout.harborline.home.posthoc_p1",
-        "popup_subroutines": (
-            HARBORLINE_PACK.popup_subroutines[0].model_copy(
-                update={
-                    "bindings": (
-                        _bind(
-                            "property.construction_quality",
-                            "quality",
-                            ControlKind.SELECT,
-                            EXACT,
-                            portal_default=True,
-                        ),
-                    )
-                }
-            ),
-        ),
-    }
-)
+# The first run's post-hoc pack P1 (estimator grade overwritten from the
+# intake) is part of the v2 pack; the name is kept for run.py --posthoc.
+HARBORLINE_PACK_POSTHOC_P1 = HARBORLINE_PACK

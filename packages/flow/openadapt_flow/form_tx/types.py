@@ -11,10 +11,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
@@ -241,10 +242,38 @@ class UIProfileSpec(BaseModel):
         '[data-auth-wall="true"]',
     )
     authenticated_landmark_selectors: tuple[str, ...] = ()
+    # Case-insensitive regular expressions searched in error banners and open
+    # dialogs. A match means the session ended: the run stops at a sign-in
+    # wall instead of reporting a validation error.
+    session_expired_text_patterns: tuple[str, ...] = (
+        r"\bsession\b[^.]{0,40}\b(?:has\s+)?(?:expired|timed\s*out|ended)\b",
+        r"\b(?:you\s+(?:have\s+been|were)\s+)?(?:signed|logged)\s+out\b",
+        r"\b(?:please\s+)?(?:sign|log)\s*(?:in|on)\s+again\b",
+        r"\bre-?(?:authenticate|login|log\s+in|sign\s+in)\b",
+        r"\b(?:login|sign[- ]?in)\s+(?:has\s+)?expired\b",
+    )
     keepalive_path: Optional[str] = None
     debounce_grace_ms: int = Field(default=120, ge=0, le=5000)
     settle_window_ms: int = Field(default=150, ge=20, le=5000)
     max_settle_ms: int = Field(default=12000, ge=200, le=60000)
+    frame_path_patterns: tuple[str, ...] = ()
+    """Ordered regular expressions, full-matched against frame URL paths, that
+    route the surface into one same-origin iframe holding the form. Empty
+    means the top-level document. See ``PlaywrightFormSurface``."""
+
+    @field_validator("frame_path_patterns")
+    @classmethod
+    def _frame_patterns_compile(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for pattern in value:
+            if not pattern:
+                raise ValueError("frame_path_patterns entries must be non-empty")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"Invalid frame path pattern {pattern!r}: {exc}"
+                ) from exc
+        return value
 
 
 class FieldCodecSpec(BaseModel):
@@ -293,7 +322,21 @@ class FieldBindingSpec(BaseModel):
     prefill_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT
     triggers_re_render: bool = False
     required_in_pack: bool = False
-    placeholder_values: tuple[str, ...] = ("", "-- Select --", "Select...", "Choose...")
+    placeholder_values: tuple[str, ...] = (
+        "",
+        "-- Select --",
+        "Select...",
+        "Choose...",
+        "Select one",
+        "-- Select one --",
+        "Choose one",
+        "Please choose",
+        "Choose",
+        "-- Choose one --",
+    )
+    # Type-ahead comboboxes: type only this many leading characters of the
+    # formatted value before reading suggestions. None types the whole value.
+    typeahead_query_chars: Optional[int] = Field(default=None, ge=1, le=200)
 
 
 class EntityTableSpec(BaseModel):
@@ -320,6 +363,20 @@ class PopupSubroutineSpec(BaseModel):
     popup_url_pattern: Optional[str] = None
     popup_title_pattern: Optional[str] = None
     bindings: tuple[FieldBindingSpec, ...] = ()
+    # Buttons clicked in order after the bindings are filled and before
+    # ``commit_anchor``, for estimators that need, say, Calculate before the
+    # result can be applied. Each one must match exactly one control.
+    compute_anchors: tuple[FieldAnchorSpec, ...] = ()
+    # "window": the trigger opens a child window. "in_page": the trigger opens
+    # a dialog in the same page; only controls that were not on the page
+    # before the trigger count as the dialog's, and the commit button must be
+    # gone afterwards.
+    popup_mode: Literal["window", "in_page"] = "window"
+    # The popup's own displayed result, read just before apply. When set, the
+    # value the popup puts back in the parent must equal it under
+    # ``return_codec``, or the run stops before submit. A declared result that
+    # cannot be read is also a stop.
+    result_anchor: Optional[FieldAnchorSpec] = None
     commit_anchor: FieldAnchorSpec
     parent_return_anchor: FieldAnchorSpec
     return_output_key: str = Field(min_length=1)
@@ -434,6 +491,16 @@ class ObservedControl(BaseModel):
     error_text: str = ""
     options: tuple[ObservedOption, ...] = ()
     is_secret: bool = False
+    # A native radio's own value attribute. ``current_value`` holds it only
+    # while the radio is checked; an unchecked radio reads as empty.
+    radio_value: str = ""
+    # The radio group this radio belongs to (native: its name; ARIA: its
+    # radiogroup container), and the group's visible label, if any.
+    radio_group: str = ""
+    group_label: str = ""
+
+    # Selector of the open dialog that holds this control, if any.
+    modal_container: str = ""
 
     @model_validator(mode="after")
     def _scrub_secret_fields(self) -> "ObservedControl":
@@ -468,12 +535,31 @@ class ObservedModal(BaseModel):
     message_text: str = ""
 
 
+class ObservedTextPair(BaseModel):
+    """A label and value shown as page text, not in a form control.
+
+    Read-only summary pages often show stored values as a definition list, a
+    table or "Label: value" text. These pairs are kept apart from ``controls``
+    so nothing ever treats them as fillable; only the read-back judge and
+    output extraction look at them.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str
+    value: str = ""
+    section_text: str = ""
+    source: Literal["dl", "table_row", "table_columns", "inline"] = "inline"
+
+
 class FormSnapshot(BaseModel):
     """Complete structural snapshot of the current form surface."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     url_origin_and_path: str
+    # Optional for non-browser backends; opaque document/record identity, not a URL.
+    context_id: Optional[str] = None
     title: str = ""
     screen_id: Optional[str] = None
     auth_wall_present: bool = False
@@ -483,6 +569,7 @@ class FormSnapshot(BaseModel):
     active_modals: tuple[ObservedModal, ...] = ()
     banner_errors: tuple[str, ...] = ()
     inflight_mutations: int = 0
+    text_pairs: tuple[ObservedTextPair, ...] = ()
 
 
 class FormHaltItem(BaseModel):
@@ -571,6 +658,10 @@ class FieldWriteRecord(BaseModel):
     # read-back of the application's record, so the field stays not_checked
     # unless the summary shows it.
     checked_before_apply: bool = False
+    # For a popup return: the popup that produced it, and whether the value
+    # put back in the parent matched the popup's own displayed result.
+    from_popup_subroutine: Optional[str] = None
+    matched_popup_result: bool = False
 
 
 class ReadbackStatus(str, Enum):

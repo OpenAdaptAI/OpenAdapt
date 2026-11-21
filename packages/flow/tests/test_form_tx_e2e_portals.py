@@ -179,8 +179,10 @@ def test_copilot_bridge_roundtrip_and_readback_corruption_refusal(tmp_path):
             assert final_res.receipt is None
             assert final_res.summary_verdict is not None
             assert final_res.summary_verdict.failed_keys == ()
+            # The estimator inputs, and the figure that came only from them.
             assert all(
                 key.startswith("estimator.")
+                or key == "estimated_replacement_cost_cents"
                 for key in final_res.summary_verdict.not_checked_keys
             )
             ctx.close()
@@ -284,11 +286,14 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
             assert result.summary_verdict is not None
             assert result.summary_verdict.passed is False
             assert result.summary_verdict.failed_keys == ()
-            assert result.summary_verdict.not_checked_keys == (
+            # The estimate came only from the popup, whose inputs are not
+            # checked, and no displayed result was declared: not checked too.
+            assert set(result.summary_verdict.not_checked_keys) == {
                 "estimator.finish_grade",
                 "estimator.living_area_sqft",
                 "estimator.stories",
-            )
+                "estimated_replacement_cost_cents",
+            }
             # Explicit fixture specification: conditional roof/pool follow-ups
             # are absent in this case. Every other intended field and the
             # estimator return must appear in successful saved-state read-back.
@@ -305,7 +310,6 @@ def test_six_second_server_rerender_preserves_declared_readback() -> None:
                 "dwelling.has_pool",
                 "coverage.deductible",
                 "coverage.liability_limit",
-                "estimated_replacement_cost_cents",
             }
             checked_keys = {
                 verdict.dossier_key

@@ -20,12 +20,15 @@ from openadapt_flow.form_tx.codecs import (
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
+    is_radio,
     match_anchor_in_snapshot,
+    match_text_pair_in_snapshot,
 )
 from openadapt_flow.form_tx.types import (
     ControlKind,
     DossierFact,
     FieldBindingSpec,
+    FieldCodecSpec,
     FieldWriteRecord,
     FormCodecKind,
     FormHaltKind,
@@ -35,6 +38,7 @@ from openadapt_flow.form_tx.types import (
     HumanResolutionRecord,
     InputDossier,
     ObservedControl,
+    ObservedTextPair,
     OutputExtractionSpec,
     ProvenanceKind,
     ReadbackFieldVerdict,
@@ -127,8 +131,8 @@ def _observed_control_matches(
 ) -> bool:
     if (
         binding.control_kind == ControlKind.CHECKBOX
-        and not ctrl.current_value.strip()
         and ctrl.checked is not None
+        and (not ctrl.current_value.strip() or is_radio(ctrl))
     ):
         return values_equivalent(expected_val, ctrl.checked, binding.codec)
 
@@ -142,6 +146,25 @@ def _observed_control_matches(
         ):
             return True
 
+    return False
+
+
+def _text_pair_matches(
+    expected_val: Any,
+    pair: ObservedTextPair,
+    binding: FieldBindingSpec,
+) -> bool:
+    """Compare an expected value with a value shown as page text."""
+    if _is_placeholder_or_empty(pair.value, binding.placeholder_values):
+        return False
+    if values_equivalent(expected_val, pair.value, binding.codec):
+        return True
+    if binding.control_kind in (ControlKind.CHECKBOX, ControlKind.RADIO_GROUP):
+        return values_equivalent(
+            expected_val,
+            pair.value,
+            FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO),
+        )
     return False
 
 
@@ -161,6 +184,21 @@ def _extract_present_outputs(
             invalid_keys.add(spec.output_key)
             continue
         if ctrl is None:
+            # A read-only summary may show the output (a quote number, a
+            # premium) as page text rather than in a control.
+            try:
+                pair = match_text_pair_in_snapshot(spec.anchor, snapshot)
+            except AmbiguousAnchorError:
+                invalid_keys.add(spec.output_key)
+                continue
+            if pair is None or not pair.value.strip():
+                continue
+            try:
+                extracted[spec.output_key] = normalize_with_codec(
+                    pair.value.strip(), spec.codec
+                )
+            except CodecValueError:
+                invalid_keys.add(spec.output_key)
             continue
         raw_val = ctrl.current_value.strip()
         if not raw_val:
@@ -434,12 +472,34 @@ class SummaryJudge:
                 )
                 continue
 
-            if fact is None:
-                has_ungrounded_screen_val = (
-                    observed_ctrl is not None
-                    and not _is_placeholder_or_empty(
-                        observed_ctrl.current_value, binding.placeholder_values
+            # With no control, the summary may show the value as page text.
+            observed_text: Optional[ObservedTextPair] = None
+            if observed_ctrl is None:
+                try:
+                    observed_text = match_text_pair_in_snapshot(
+                        binding.anchor, snapshot
                     )
+                except AmbiguousAnchorError as exc:
+                    verdicts.append(
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"Page text shows {binding.dossier_key!r} more than "
+                            f"once, so it cannot be read back: {exc}",
+                        )
+                    )
+                    continue
+
+            if fact is None:
+                shown_value = (
+                    observed_ctrl.current_value
+                    if observed_ctrl is not None
+                    else observed_text.value
+                    if observed_text is not None
+                    else ""
+                )
+                has_ungrounded_screen_val = not _is_placeholder_or_empty(
+                    shown_value, binding.placeholder_values
                 )
                 if has_ungrounded_screen_val:
                     verdicts.append(
@@ -470,6 +530,41 @@ class SummaryJudge:
                             f"{binding.dossier_key!r} was written with no expected "
                             "value, and the summary shows it empty"
                             + _where(written_by_key[binding.dossier_key]),
+                        )
+                    )
+                continue
+
+            if observed_ctrl is None and observed_text is not None:
+                if _text_pair_matches(fact.value, observed_text, binding):
+                    verdicts.append(
+                        ReadbackFieldVerdict(
+                            dossier_key=binding.dossier_key,
+                            codec_kind=binding.codec.kind,
+                            passed=True,
+                            status=ReadbackStatus.PASSED,
+                            provenance=prov,
+                            reason=(
+                                "Read from page text "
+                                f"({observed_text.source}: {observed_text.label!r})"
+                            ),
+                        )
+                    )
+                else:
+                    shown = (
+                        "an empty value"
+                        if _is_placeholder_or_empty(
+                            observed_text.value, binding.placeholder_values
+                        )
+                        else "a different value"
+                    )
+                    verdicts.append(
+                        _failed(
+                            binding.dossier_key,
+                            binding.codec.kind,
+                            prov,
+                            f"Page text shows {shown} for {binding.dossier_key!r} "
+                            f"({observed_text.source}: {observed_text.label!r}) "
+                            f"under codec {binding.codec.kind.value!r}",
                         )
                     )
                 continue
@@ -505,6 +600,48 @@ class SummaryJudge:
                         f"under codec {binding.codec.kind.value!r}",
                     )
                 )
+
+        # A value that came only from a popup is no better checked than the
+        # popup inputs that produced it. If one of those inputs is not
+        # checked, the returned value is not checked either, unless the value
+        # put back matched the popup's own displayed result and the summary
+        # shows it.
+        status_by_key: dict[str, ReadbackStatus] = {}
+        for v in verdicts:
+            status_by_key.setdefault(v.dossier_key, v.status)
+            if v.status != ReadbackStatus.PASSED:
+                status_by_key[v.dossier_key] = v.status
+        for write in writes:
+            sub_id = write.from_popup_subroutine
+            if write.source != "popup_return" or not sub_id or not write.dossier_key:
+                continue
+            fact = expected_facts.get(write.dossier_key)
+            if fact is None or fact.source_id != f"subroutine:{sub_id}":
+                continue
+            if write.matched_popup_result:
+                continue
+            unchecked_inputs = sorted(
+                {
+                    w.field_key
+                    for w in writes
+                    if w.in_popup_subroutine == sub_id
+                    and status_by_key.get(w.field_key) != ReadbackStatus.PASSED
+                }
+            )
+            if not unchecked_inputs:
+                continue
+            for i, v in enumerate(verdicts):
+                if (
+                    v.dossier_key == write.dossier_key
+                    and v.status == ReadbackStatus.PASSED
+                ):
+                    verdicts[i] = _not_checked(
+                        v.dossier_key,
+                        v.provenance,
+                        f"Value came from popup {sub_id!r}, whose inputs "
+                        f"{unchecked_inputs} are not checked, and was not "
+                        "compared with the popup's displayed result",
+                    )
 
         screen_problems: list[str] = []
         if snapshot.auth_wall_present:

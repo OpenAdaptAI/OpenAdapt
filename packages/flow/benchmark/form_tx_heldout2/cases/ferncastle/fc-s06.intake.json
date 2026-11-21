@@ -1,0 +1,27 @@
+{
+  "case_id": "fc-s06",
+  "facts": {
+    "applicant.email": "lquartermaine@example.test",
+    "applicant.first_name": "Lysander",
+    "applicant.last_name": "Quartermaine",
+    "applicant.phone": "540-555-0136",
+    "coverage.deductible": 500,
+    "coverage.dwelling_limit": 288000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 300000,
+    "coverage.loss_of_rents": "none",
+    "property.address_line1": "806 Bellflower Way",
+    "property.city": "Shenwick",
+    "property.construction": "frame",
+    "property.has_mortgage": true,
+    "property.mortgagee_name": "Fallowmere Home Lending",
+    "property.roof_year": 2017,
+    "property.square_feet": 1750,
+    "property.state": "VA",
+    "property.units": 1,
+    "property.year_built": 1999,
+    "property.zip": "22601",
+    "rental.monthly_rent": 1690,
+    "rental.units_rented": 1
+  }
+}

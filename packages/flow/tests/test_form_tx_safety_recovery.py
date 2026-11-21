@@ -140,3 +140,35 @@ def test_authentication_needs_positive_evidence_and_heartbeat_rechecks_it() -> N
     # HTTP 200 alone cannot keep an expired authenticated lease alive.
     assert lease.heartbeat() is False
     assert lease.state == LeaseState.AUTH_REQUIRED
+
+
+def test_replacement_document_cannot_inherit_human_prefill_decision() -> None:
+    class ContextSurface(FakeStatefulFormSurface):
+        context_id = "first-document"
+
+        def snapshot(self, **kwargs):
+            return (
+                super()
+                .snapshot(**kwargs)
+                .model_copy(update={"context_id": self.context_id})
+            )
+
+    surface = ContextSurface(prefill_values={"prior_claims_count": "2"})
+    reconciler = FormReconciler(surface)
+    session = ReconcilerSession(_build_pack(), _build_dossier(has_pool="No"))
+    result = reconciler.run_until_halt_or_done(session)
+    halt = result.halts[0]
+    assert halt.kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+    surface.context_id = "replacement-at-same-origin-path-and-controls"
+    with pytest.raises(ValueError, match="context changed"):
+        reconciler.apply_human_resolution(
+            session,
+            HumanResolutionInput(
+                halt_id=halt.halt_id,
+                action=HumanDecisionAction.ACCEPT_PORTAL_PREFILL,
+                actor_id="operator",
+                idempotency_key="old-document",
+            ),
+        )
+    assert session.human_resolutions == []
+    assert surface.committed_record is None

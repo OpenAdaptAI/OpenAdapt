@@ -1,0 +1,24 @@
+{
+  "case_id": "vw-s07",
+  "facts": {
+    "applicant.date_of_birth": "1966-04-16",
+    "applicant.email": "tiberius.mh@example.test",
+    "applicant.first_name": "Tiberius",
+    "applicant.last_name": "Mwangi-Hale",
+    "applicant.occupation": "Attorney",
+    "applicant.phone": "404-555-0158",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 5000000,
+    "home.address_line1": "520 Chastain Ridge",
+    "home.city": "Buckhead Mill",
+    "home.state": "GA",
+    "home.zip": "30327",
+    "household.drivers": 2,
+    "household.rental_properties": 2,
+    "household.vehicles": 2,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "500 CSL",
+    "underlying.home_liability": 500000
+  }
+}

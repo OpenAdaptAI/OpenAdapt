@@ -1,0 +1,25 @@
+{
+  "case_id": "vw-s04",
+  "facts": {
+    "applicant.date_of_birth": "1970-06-25",
+    "applicant.email": "imelda.c@example.test",
+    "applicant.first_name": "Imelda",
+    "applicant.last_name": "Castellanos",
+    "applicant.occupation": "Physician",
+    "applicant.phone": "513-555-0177",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 2000000,
+    "home.address_line1": "7720 Ridgeview Pass",
+    "home.city": "Maple Fork",
+    "home.state": "OH",
+    "home.zip": "45243",
+    "household.drivers": 3,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 3,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 1,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 500000
+  }
+}

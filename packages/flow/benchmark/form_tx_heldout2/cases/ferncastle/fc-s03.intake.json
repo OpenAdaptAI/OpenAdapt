@@ -1,0 +1,27 @@
+{
+  "case_id": "fc-s03",
+  "facts": {
+    "applicant.email": "i.hollowell@example.test",
+    "applicant.first_name": "Ignatius",
+    "applicant.last_name": "Hollowell",
+    "applicant.phone": "302-555-0147",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 540000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 500000,
+    "coverage.loss_of_rents": "12 months",
+    "history.client_number": "FC-C-19077",
+    "property.address_line1": "1204 Tanager Ave",
+    "property.city": "Westerby",
+    "property.construction": "joisted masonry",
+    "property.has_mortgage": false,
+    "property.roof_year": 2019,
+    "property.square_feet": 3150,
+    "property.state": "DE",
+    "property.units": 3,
+    "property.year_built": 1938,
+    "property.zip": "19809",
+    "rental.monthly_rent": 1325,
+    "rental.units_rented": 3
+  }
+}

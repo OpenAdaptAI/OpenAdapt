@@ -1,0 +1,32 @@
+{
+  "case_id": "vw-s02",
+  "facts": {
+    "applicant.date_of_birth": "1968-05-21",
+    "applicant.email": "g.harrowgate@example.test",
+    "applicant.first_name": "Gwendolyn",
+    "applicant.last_name": "Harrowgate",
+    "applicant.occupation": "Architect",
+    "applicant.phone": "864-555-0139",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 2000000,
+    "history.household_account": "VH-418820",
+    "home.address_line1": "2207 Magnolia Bluff Rd",
+    "home.city": "Pinewick",
+    "home.state": "SC",
+    "home.zip": "29601",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 3,
+    "household.watercraft": [
+      {
+        "type": "Powerboat",
+        "length_ft": 21
+      }
+    ],
+    "household.watercraft_count": 1,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 500000
+  }
+}

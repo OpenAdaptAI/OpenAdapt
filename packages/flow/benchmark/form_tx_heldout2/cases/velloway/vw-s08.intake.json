@@ -1,0 +1,26 @@
+{
+  "case_id": "vw-s08",
+  "facts": {
+    "applicant.date_of_birth": "1973-07-19",
+    "applicant.email": "ottoline.b@example.test",
+    "applicant.first_name": "Ottoline",
+    "applicant.last_name": "Barrowclough",
+    "applicant.occupation": "Registered nurse",
+    "applicant.phone": "704-555-0116",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 1000000,
+    "home.address_line1": "88 Catawba Glen",
+    "home.city": "Mill Ferry",
+    "home.state": "NC",
+    "home.zip": "28205",
+    "household.drivers": 3,
+    "household.nonprofit_board": true,
+    "household.rental_properties": 0,
+    "household.vehicles": 3,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 1,
+    "household.youthful_violations": false,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 300000
+  }
+}

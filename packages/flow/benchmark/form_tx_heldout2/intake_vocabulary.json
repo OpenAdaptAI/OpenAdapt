@@ -1,0 +1,417 @@
+{
+  "ferncastle": {
+    "portal": "ferncastle",
+    "keys": {
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "applicant.phone": {
+        "type": "str"
+      },
+      "coverage.deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.dwelling_limit": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.effective_date": {
+        "type": "date"
+      },
+      "coverage.liability_limit": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.loss_of_rents": {
+        "type": "enum",
+        "values": [
+          "none",
+          "6 months",
+          "12 months"
+        ]
+      },
+      "history.client_number": {
+        "type": "str"
+      },
+      "property.address_line1": {
+        "type": "str"
+      },
+      "property.city": {
+        "type": "str"
+      },
+      "property.construction": {
+        "type": "enum",
+        "values": [
+          "frame",
+          "joisted masonry",
+          "masonry noncombustible",
+          "fire resistive"
+        ]
+      },
+      "property.has_mortgage": {
+        "type": "bool"
+      },
+      "property.mortgagee_name": {
+        "type": "str"
+      },
+      "property.roof_year": {
+        "type": "int"
+      },
+      "property.square_feet": {
+        "type": "int"
+      },
+      "property.state": {
+        "type": "enum",
+        "values": [
+          "CT",
+          "DE",
+          "MD",
+          "NJ",
+          "NY",
+          "PA",
+          "VA"
+        ]
+      },
+      "property.units": {
+        "type": "int"
+      },
+      "property.year_built": {
+        "type": "int"
+      },
+      "property.zip": {
+        "type": "str"
+      },
+      "rental.monthly_rent": {
+        "type": "int",
+        "note": "whole dollars per unit"
+      },
+      "rental.units_rented": {
+        "type": "int",
+        "note": "units with a tenant on a current lease"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "glasswing": {
+    "portal": "glasswing",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "building.sprinklered": {
+        "type": "bool"
+      },
+      "contents.furnished": {
+        "type": "enum",
+        "values": [
+          "lightly",
+          "typically",
+          "fully"
+        ]
+      },
+      "contents.rooms": {
+        "type": "int",
+        "note": "bedrooms, living areas and the kitchen"
+      },
+      "contents.valuables": {
+        "type": "int",
+        "note": "whole dollars of electronics, jewelry and instruments"
+      },
+      "coverage.deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.liability_limit": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.start_date": {
+        "type": "date"
+      },
+      "household.adults": {
+        "type": "int",
+        "note": "adults living in the unit, including the applicant"
+      },
+      "household.roommate_name": {
+        "type": "str"
+      },
+      "residence.address_line1": {
+        "type": "str"
+      },
+      "residence.address_line2": {
+        "type": "str"
+      },
+      "residence.city": {
+        "type": "str"
+      },
+      "residence.state": {
+        "type": "enum",
+        "values": [
+          "CO",
+          "IL",
+          "MN",
+          "OR",
+          "WA",
+          "WI"
+        ]
+      },
+      "residence.zip": {
+        "type": "str"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "okelund": {
+    "portal": "okelund",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "applicant.marital_status": {
+        "type": "enum",
+        "values": [
+          "Single",
+          "Married",
+          "Divorced",
+          "Widowed"
+        ]
+      },
+      "coverage.bi_limits": {
+        "type": "enum",
+        "values": [
+          "25/50",
+          "50/100",
+          "100/300",
+          "250/500"
+        ]
+      },
+      "coverage.collision_deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.comprehensive_deductible": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "coverage.effective_date": {
+        "type": "date"
+      },
+      "coverage.rental_reimbursement": {
+        "type": "enum",
+        "values": [
+          "none",
+          "30",
+          "50"
+        ],
+        "note": "dollars per day, or none"
+      },
+      "driver.accidents_3yr": {
+        "type": "int"
+      },
+      "driver.license_state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "ID",
+          "MT",
+          "NM",
+          "NV",
+          "UT",
+          "WY"
+        ]
+      },
+      "driver.training_course": {
+        "type": "bool"
+      },
+      "driver.violations_3yr": {
+        "type": "int"
+      },
+      "driver.years_licensed": {
+        "type": "int",
+        "note": "whole years"
+      },
+      "garaging.address_line1": {
+        "type": "str"
+      },
+      "garaging.city": {
+        "type": "str"
+      },
+      "garaging.state": {
+        "type": "enum",
+        "values": [
+          "AZ",
+          "ID",
+          "MT",
+          "NM",
+          "NV",
+          "UT",
+          "WY"
+        ]
+      },
+      "garaging.zip": {
+        "type": "str"
+      },
+      "vehicle.aftermarket_equipment": {
+        "type": "bool"
+      },
+      "vehicle.annual_miles": {
+        "type": "int"
+      },
+      "vehicle.make": {
+        "type": "enum",
+        "values": [
+          "Arvonne",
+          "Quellen",
+          "Sarrow",
+          "Torvane"
+        ]
+      },
+      "vehicle.model": {
+        "type": "str"
+      },
+      "vehicle.ownership": {
+        "type": "enum",
+        "values": [
+          "owned",
+          "financed",
+          "leased"
+        ]
+      },
+      "vehicle.primary_use": {
+        "type": "enum",
+        "values": [
+          "commute",
+          "pleasure",
+          "business"
+        ]
+      },
+      "vehicle.year": {
+        "type": "int"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "velloway": {
+    "portal": "velloway",
+    "keys": {
+      "applicant.date_of_birth": {
+        "type": "date"
+      },
+      "applicant.email": {
+        "type": "str"
+      },
+      "applicant.first_name": {
+        "type": "str"
+      },
+      "applicant.last_name": {
+        "type": "str"
+      },
+      "applicant.occupation": {
+        "type": "str",
+        "note": "free text as the applicant gave it"
+      },
+      "applicant.phone": {
+        "type": "str"
+      },
+      "coverage.start_date": {
+        "type": "date"
+      },
+      "coverage.umbrella_limit": {
+        "type": "int",
+        "note": "whole dollars"
+      },
+      "history.household_account": {
+        "type": "str"
+      },
+      "home.address_line1": {
+        "type": "str"
+      },
+      "home.city": {
+        "type": "str"
+      },
+      "home.state": {
+        "type": "enum",
+        "values": [
+          "GA",
+          "KY",
+          "NC",
+          "OH",
+          "SC",
+          "TN"
+        ]
+      },
+      "home.zip": {
+        "type": "str"
+      },
+      "household.drivers": {
+        "type": "int"
+      },
+      "household.nonprofit_board": {
+        "type": "bool"
+      },
+      "household.rental_properties": {
+        "type": "int"
+      },
+      "household.vehicles": {
+        "type": "int"
+      },
+      "household.watercraft": {
+        "type": "list",
+        "note": "list of {type: Personal watercraft | Sailboat | Powerboat, length_ft: int}"
+      },
+      "household.watercraft_count": {
+        "type": "int",
+        "note": "boats and personal watercraft the household owns"
+      },
+      "household.youthful_drivers": {
+        "type": "int",
+        "note": "licensed drivers in the household under 25"
+      },
+      "household.youthful_violations": {
+        "type": "bool"
+      },
+      "underlying.auto_liability": {
+        "type": "enum",
+        "values": [
+          "250/500",
+          "500/500",
+          "500 CSL"
+        ]
+      },
+      "underlying.home_liability": {
+        "type": "int",
+        "note": "whole dollars"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  }
+}

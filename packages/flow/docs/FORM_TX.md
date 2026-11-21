@@ -57,6 +57,46 @@ re-read from their controls just before the popup's apply button. A mismatch
 stops the run before apply. A match does not count as a read-back of the
 record: unless the summary shows the field, it stays `not_checked`.
 
+#### Summaries shown as page text
+
+Many confirmation pages show the stored quote as text, not in form controls.
+When a read-back anchor finds no control, the judge looks for the field in
+label and value pairs read from the page text:
+
+- definition lists (`dt` then `dd`);
+- two-cell table rows (`th` or `td`, then `td`);
+- tables with one header row and exactly one data row (each header names the
+  cell below it);
+- "Label: value" text in a block element, and a block with two leaf
+  children whose first ends in a colon or is a `dt`, `th`, `label`,
+  `strong` or `b`.
+
+Open shadow roots are read too; closed ones are not. Only an anchor's
+`label_patterns`, narrowed by `section_patterns`, can match page text, because
+text has no name, id or selector. The rules:
+
+- a label shown more than once (even with the same value) makes the field
+  `not_checked`;
+- an empty or placeholder value is `failed` when a value was expected;
+- a different value under the field's codec is `failed`;
+- the same value is `passed`, with a reason that says it was read from page
+  text.
+
+A control always wins over page text. Outputs such as a quote number are read
+from page text the same way. The pairs are kept apart from the form controls,
+so the layer never fills or halts on them.
+
+A popup routine can list `compute_anchors`, buttons clicked in order after
+its inputs are filled and before its apply button (for example Calculate,
+then Use This Value). Inputs are re-read before the first step and again
+before apply. A missing or ambiguous step button, or an error shown after a
+step, stops the run. `popup_mode: in_page` runs an estimator that opens as a
+dialog in the same page: only controls that were not on the page before the
+trigger count as the dialog's, and the apply button must be gone afterwards.
+If the intake already gives the value the popup returns and the two differ,
+the run stops before submit. A popup that will not open or never settles is
+a stop, not an error.
+
 The summary must match its declared landmark when one is configured. This is
 the configured browser read-back only. It does not prove server-side
 isolation, the absence of changes in other records, or atomic rollback of a
@@ -69,17 +109,52 @@ Measured on four held-out synthetic portals
 
 - It reads only the top document: a form inside an iframe shows no controls,
   and controls inside shadow DOM are invisible.
+- A popup routine has one apply button; an estimator that needs Calculate and
+  then Use This Value stops for a person.
+
 - It reads values back only from form controls (`input`, `select`,
   `textarea`, `output`, `[data-readonly-output]`). A summary or confirmation
   page that shows values as plain text cannot be read, so every field ends
   `not_checked`.
-- A popup routine has one apply button; an estimator that needs Calculate and
-  then Use This Value stops for a person.
 - A type-ahead that fetches suggestions only after typing cannot be filled:
   the surface opens a listbox by clicking, finds none, and the run raises an
   error instead of stopping.
-- An unchecked native radio reads as holding its value attribute, so a pack
-  must set radios from the intake rather than treat them as prefill.
+
+### Sign-in walls and radio groups
+
+- A screen is a sign-in wall when it shows a configured auth-wall element, an
+  editable password or secret field, lacks the configured signed-in landmark,
+  or shows an error banner or dialog whose text matches
+  `UIProfileSpec.session_expired_text_patterns` (English defaults such as
+  "session has expired", "signed out", "please sign in again"). This check
+  runs before any error is read as a validation failure, so an expired
+  session stops as `auth_required`, and the operator can sign in and mark it
+  fixed on screen. If the wall appears after the submit request went out, the
+  outcome is `delivery_uncertain` and the run cannot resume, because the
+  record may already exist.
+- Native radios that share a `name` are one field. An unchecked radio reads
+  as empty, its own value is in `radio_value`, and `options` lists the group.
+  An anchor that matches several radios of one group resolves to the checked
+  radio, or to the first when none is checked. A required group with no
+  intake value stops once, not once per radio.
+
+### Type-aheads and surface errors
+
+A `portal_combobox` binding on a combobox that is itself a text input is
+filled by typing: the surface clears it, types the formatted value (or only
+its first `typeahead_query_chars` characters) one key at a time, waits for the
+page to settle and reads the one visible listbox. It chooses a suggestion
+only when exactly one matches under the binding's codec. None or several
+stop for an operator, with the suggestions shown; it never takes the first.
+After choosing, the control must show the chosen suggestion or the intended
+value, or the run stops. A combobox that is not a text input is still opened
+by clicking.
+
+When the surface cannot act on a control (it vanished, matched twice, its
+listbox or popup never appeared, or the page never settled), the run stops
+for an operator (`ambiguous_option_or_target`) instead of raising. Nothing is
+submitted after such a stop. An error on or after the submit click ends
+`delivery_uncertain` with `safe_to_retry` false.
 
 `SignedFormTxReceipt` signs the local runner's statement. Its signature proves
 integrity under that local key. It is not a server attestation, external witness,

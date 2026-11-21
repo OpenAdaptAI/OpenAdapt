@@ -295,16 +295,35 @@ def resolve_unique_option(
     intended_value: Any,
     options: Sequence[ObservedOption],
     spec: FieldCodecSpec,
-    placeholder_values: Sequence[str] = ("", "-- Select --", "Select...", "Choose..."),
+    placeholder_values: Sequence[str] = (
+        "",
+        "-- Select --",
+        "Select...",
+        "Choose...",
+        "Select one",
+        "-- Select one --",
+        "Choose one",
+        "Please choose",
+        "Choose",
+        "-- Choose one --",
+    ),
 ) -> ObservedOption:
-    """Resolve exactly one ``ObservedOption`` matching ``intended_value`` or fail closed."""
+    """Resolve exactly one ``ObservedOption`` matching ``intended_value`` or fail closed.
+
+    An option is a placeholder when its value is empty or a placeholder, or
+    its label is placeholder text. An empty label alone is not a placeholder:
+    a radio whose label is a bare text node still has a real value.
+    """
     placeholders_cf = {collapse_whitespace(p).casefold() for p in placeholder_values}
-    real_options = [
-        opt
-        for opt in options
-        if collapse_whitespace(opt.label).casefold() not in placeholders_cf
-        and collapse_whitespace(opt.value).casefold() not in placeholders_cf
-    ]
+
+    def _is_placeholder(opt: ObservedOption) -> bool:
+        label_cf = collapse_whitespace(opt.label).casefold()
+        value_cf = collapse_whitespace(opt.value).casefold()
+        if value_cf in placeholders_cf:
+            return True
+        return bool(label_cf) and label_cf in placeholders_cf
+
+    real_options = [opt for opt in options if not _is_placeholder(opt)]
     matched: list[ObservedOption] = []
     for opt in real_options:
         if values_equivalent(intended_value, opt.value, spec) or values_equivalent(

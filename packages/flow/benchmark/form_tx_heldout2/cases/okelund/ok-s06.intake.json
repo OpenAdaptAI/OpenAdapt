@@ -1,0 +1,31 @@
+{
+  "case_id": "ok-s06",
+  "facts": {
+    "applicant.date_of_birth": "2008-06-04",
+    "applicant.email": "ezekiel.b@example.test",
+    "applicant.first_name": "Ezekiel",
+    "applicant.last_name": "Branscombe",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "50/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "none",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "NM",
+    "driver.training_course": true,
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 1,
+    "garaging.address_line1": "12 Ironwood Pl",
+    "garaging.city": "Redmesa",
+    "garaging.state": "NM",
+    "garaging.zip": "87112",
+    "vehicle.aftermarket_equipment": true,
+    "vehicle.annual_miles": 6000,
+    "vehicle.make": "Sarrow",
+    "vehicle.model": "Harrier",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2016
+  }
+}

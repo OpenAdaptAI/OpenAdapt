@@ -1,0 +1,26 @@
+{
+  "case_id": "fc-s08",
+  "facts": {
+    "applicant.email": "percival.dn@example.test",
+    "applicant.first_name": "Percival",
+    "applicant.last_name": "Danforth-Ng",
+    "applicant.phone": "609-555-0171",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 405000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 100000,
+    "coverage.loss_of_rents": "6 months",
+    "property.address_line1": "25 Larkmoor Dr",
+    "property.city": "Pellham Ford",
+    "property.construction": "frame",
+    "property.has_mortgage": false,
+    "property.roof_year": 2011,
+    "property.square_feet": 2020,
+    "property.state": "NJ",
+    "property.units": 1,
+    "property.year_built": 2011,
+    "property.zip": "08061",
+    "rental.monthly_rent": 2650,
+    "rental.units_rented": 1
+  }
+}

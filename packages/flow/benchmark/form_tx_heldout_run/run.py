@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import traceback
@@ -24,9 +25,33 @@ from typing import Any, Optional
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))  # packages/flow
 
-from benchmark.form_tx_heldout.portals import PORTALS  # noqa: E402
-from benchmark.form_tx_heldout.scoring import load_answer_key, score_case  # noqa: E402
-from benchmark.form_tx_heldout_run.packs import PACKS, dossier_for  # noqa: E402
+import importlib  # noqa: E402
+
+# --suite picks the portal set: "heldout" (the first four, now a dev set) or
+# "heldout2" (the second held-out set). Each has its own packs module.
+SUITES = {
+    "heldout": ("benchmark.form_tx_heldout", "benchmark.form_tx_heldout_run.packs"),
+    "heldout2": ("benchmark.form_tx_heldout2", "benchmark.form_tx_heldout_run.packs2"),
+}
+_SUITE = {"name": "heldout"}
+
+
+def _use_suite(name: str) -> None:
+    global PORTALS, load_answer_key, score_case, PACKS, dossier_for
+    portals_pkg, packs_mod = SUITES[name]
+    PORTALS = importlib.import_module(portals_pkg + ".portals").PORTALS
+    scoring = importlib.import_module(portals_pkg + ".scoring")
+    load_answer_key, score_case = scoring.load_answer_key, scoring.score_case
+    packs = importlib.import_module(packs_mod)
+    PACKS, dossier_for = packs.PACKS, packs.dossier_for
+    _SUITE["name"] = name
+
+
+PORTALS: Any = None
+load_answer_key: Any = None
+score_case: Any = None
+PACKS: Any = None
+dossier_for: Any = None
 from openadapt_flow.form_tx.learning import RuleAccumulator  # noqa: E402
 from openadapt_flow.form_tx.playwright_surface import PlaywrightFormSurface  # noqa: E402
 from openadapt_flow.form_tx.reconciler import FormReconciler  # noqa: E402
@@ -44,12 +69,20 @@ MARK = "FORM_TX_HELDOUT_LAYER"
 MAX_HALTS = 12
 CASE_WALL_S = 180
 APPROVER = "scripted-approver"
-IGNORED_MUTATIONS = ("/quote/step/*", "/agent/login*", "/login*", "/signin*", "/tools/*")
+IGNORED_MUTATIONS = (
+    "/quote/step/*",
+    "/agent/login*",
+    "/login*",
+    "/signin*",
+    "/tools/*",
+)
 
 
 def _post(url: str, body: dict[str, Any]) -> None:
     req = urllib.request.Request(
-        url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
     )
     urllib.request.urlopen(req, timeout=30).read()
 
@@ -58,20 +91,58 @@ def _get(url: str) -> Any:
     return json.loads(urllib.request.urlopen(url, timeout=30).read())
 
 
-def sign_in(page: Any, username: str, password: str) -> bool:
-    """What an operator does on a sign-in page or dialog."""
+def _password_frame(page: Any) -> Any:
     for frame in [page.main_frame, *page.frames]:
-        pw = frame.locator("input[type=password]")
-        if pw.count() and pw.first.is_visible():
-            frame.locator(
-                "input[type=text], input[type=email], input:not([type])"
-            ).first.fill(username)
-            pw.first.fill(password)
-            pw.first.press("Enter")
-            page.wait_for_timeout(800)
-            page.wait_for_load_state()
-            return True
-    return False
+        try:
+            pw = frame.locator("input[type=password]")
+            if pw.count() and pw.first.is_visible():
+                return frame
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def sign_in(page: Any, username: str, password: str) -> bool:
+    """What an operator does on a sign-in page or dialog.
+
+    If no password field shows, the operator follows a visible "sign in" or
+    "log in" link or button first. After typing, it presses the sign-in
+    button, or Enter when there is none (a dialog may have no form).
+    """
+    frame = _password_frame(page)
+    if frame is None:
+        for f in [page.main_frame, *page.frames]:
+            try:
+                link = f.get_by_role("link", name=re.compile(r"sign ?in|log ?in", re.I))
+                if not link.count():
+                    link = f.get_by_role(
+                        "button", name=re.compile(r"sign ?in|log ?in", re.I)
+                    )
+                if link.count() and link.first.is_visible():
+                    link.first.click()
+                    page.wait_for_timeout(800)
+                    page.wait_for_load_state()
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        frame = _password_frame(page)
+    if frame is None:
+        return False
+    pw = frame.locator("input[type=password]")
+    frame.locator(
+        "input[type=text]:visible, input[type=email]:visible, input:not([type]):visible"
+    ).first.fill(username)
+    pw.first.fill(password)
+    button = frame.get_by_role(
+        "button", name=re.compile(r"sign ?in|log ?in|continue", re.I)
+    )
+    if button.count() and button.first.is_visible():
+        button.first.click()
+    else:
+        pw.first.press("Enter")
+    page.wait_for_timeout(800)
+    page.wait_for_load_state()
+    return True
 
 
 _LABEL_JS = r"""
@@ -90,6 +161,18 @@ _LABEL_JS = r"""
 """
 
 
+def _locate_any_frame(page: Any, selector: str) -> Any:
+    """The halted control, in whichever frame holds it (locators pierce open shadow roots)."""
+    for frame in [page.main_frame, *page.frames]:
+        try:
+            loc = frame.locator(selector)
+            if loc.count():
+                return loc.first
+        except Exception:  # noqa: BLE001
+            continue
+    return page.locator(selector).first
+
+
 def visible_label(page: Any, halt: Any) -> str:
     """The label a person reads next to the halted control."""
     if halt.field_label:
@@ -106,7 +189,9 @@ def _norm(text: str) -> str:
     return " ".join(str(text).replace("*", "").rstrip(":").split()).casefold()
 
 
-def lookup_script(script: dict[str, Any], label: str, key: Optional[str]) -> Optional[dict]:
+def lookup_script(
+    script: dict[str, Any], label: str, key: Optional[str]
+) -> Optional[dict]:
     by_norm = {_norm(k): v for k, v in script.items() if isinstance(v, dict)}
     if label and _norm(label) in by_norm:
         return by_norm[_norm(label)]
@@ -137,6 +222,7 @@ def _harborline_estimator(page: Any, intake: dict[str, Any]) -> bool:
 
 
 OPERATOR_TOOLS = {"harborline": _harborline_estimator}
+OPERATOR_TOOLS_ON = {"on": False}
 POSTHOC = {"on": False}
 
 
@@ -160,7 +246,9 @@ def operator_decision(
     }
     allowed = set(halt.allowed_actions)
 
-    def res(action: HumanDecisionAction, value: Any = None, mapped: Optional[str] = None):
+    def res(
+        action: HumanDecisionAction, value: Any = None, mapped: Optional[str] = None
+    ):
         note["action"] = action.value
         return (
             HumanResolutionInput(
@@ -184,6 +272,7 @@ def operator_decision(
 
     if (
         halt.kind == FormHaltKind.POPUP_CONTRACT_FAILED
+        and OPERATOR_TOOLS_ON["on"]
         and portal in OPERATOR_TOOLS
         and intake is not None
         and HumanDecisionAction.FIXED_ON_SCREEN in allowed
@@ -214,7 +303,7 @@ def operator_decision(
         and HumanDecisionAction.FIXED_ON_SCREEN in allowed
     ):
         try:
-            loc = page.locator(halt.dom_selector).first
+            loc = _locate_any_frame(page, halt.dom_selector)
             if loc.evaluate("e => e.tagName") == "SELECT":
                 loc.select_option(label=str(entry["value"]))
             else:
@@ -239,7 +328,13 @@ def run_case(
     spec = PORTALS[pid]
     _post(f"{base}/__oracle/load_case", {"case_id": case_id})
     intake = json.loads(
-        (HERE.parent / "form_tx_heldout" / "cases" / pid / f"{case_id}.intake.json").read_text()
+        (
+            HERE.parent
+            / SUITES[_SUITE["name"]][0].split(".")[-1]
+            / "cases"
+            / pid
+            / f"{case_id}.intake.json"
+        ).read_text()
     )
     script = answer_key["cases"][case_id].get("operator_script", {})
     out: dict[str, Any] = {"portal": pid, "case_id": case_id, "halts": []}
@@ -259,7 +354,9 @@ def run_case(
         )
         reconciler = FormReconciler(surface)
         session = reconciler.create_session(
-            pack, dossier_for(intake, request_id=f"{case_id}-req"), run_id=f"run-{case_id}"
+            pack,
+            dossier_for(intake, request_id=f"{case_id}-req"),
+            run_id=f"run-{case_id}",
         )
         result = reconciler.run_until_halt_or_done(session)
         n = 0
@@ -294,7 +391,11 @@ def run_case(
         verdict = result.summary_verdict
         if verdict is not None:
             out["readback"] = {
-                "passed": sum(1 for v in verdict.field_verdicts if v.status == ReadbackStatus.PASSED),
+                "passed": sum(
+                    1
+                    for v in verdict.field_verdicts
+                    if v.status == ReadbackStatus.PASSED
+                ),
                 "failed": list(verdict.failed_keys),
                 "not_checked": list(verdict.not_checked_keys),
             }
@@ -359,8 +460,17 @@ def main(argv: list[str]) -> int:
         help="labelled post-hoc row: harborline pack P1 and operator sign-in on a "
         "session-expired stop (see RESULTS.md)",
     )
+    ap.add_argument("--suite", choices=tuple(SUITES), default="heldout")
+    ap.add_argument(
+        "--operator-estimator",
+        action="store_true",
+        help="frozen first run only: the operator runs harborline's estimator by "
+        "hand (deviation D2). Off for every later run.",
+    )
     ap.add_argument("portals", nargs="*")
     args = ap.parse_args(argv)
+    _use_suite(args.suite)
+    OPERATOR_TOOLS_ON["on"] = args.operator_estimator
     answer_key = load_answer_key()
     portals = args.portals or list(PORTALS)
     with sync_playwright() as pw:
@@ -383,18 +493,31 @@ def main(argv: list[str]) -> int:
 
                     def qualify(candidate_pack: FormPack, _pid: str = pid) -> bool:
                         dev = run_case(
-                            browser, base, _pid, spec.dev_case, candidate_pack,
-                            profile, answer_key, remember=False,
+                            browser,
+                            base,
+                            _pid,
+                            spec.dev_case,
+                            candidate_pack,
+                            profile,
+                            answer_key,
+                            remember=False,
                         )
                         dev.pop("_session", None)
-                        return (
-                            dev.get("outcome") == FormTxOutcome.VERIFIED_DONE.value
-                            and bool(dev["score"].get("correct"))
+                        return dev.get(
+                            "outcome"
+                        ) == FormTxOutcome.VERIFIED_DONE.value and bool(
+                            dev["score"].get("correct")
                         )
 
                     for case_id in cases:
                         case = run_case(
-                            browser, base, pid, case_id, pack, profile, answer_key,
+                            browser,
+                            base,
+                            pid,
+                            case_id,
+                            pack,
+                            profile,
+                            answer_key,
                             remember=args.arm == "C",
                         )
                         case["arm"] = args.arm

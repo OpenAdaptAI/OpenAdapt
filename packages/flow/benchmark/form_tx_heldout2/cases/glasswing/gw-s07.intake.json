@@ -1,0 +1,22 @@
+{
+  "case_id": "gw-s07",
+  "facts": {
+    "applicant.date_of_birth": "1985-11-27",
+    "applicant.email": "ravindra.h@example.test",
+    "applicant.first_name": "Ravindra",
+    "applicant.last_name": "Holmqvist",
+    "building.sprinklered": false,
+    "contents.furnished": "typically",
+    "contents.rooms": 6,
+    "contents.valuables": 0,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2027-01-10",
+    "household.adults": 1,
+    "residence.address_line1": "19 Sedgewick Row",
+    "residence.address_line2": "Unit B",
+    "residence.city": "Harrow Bend",
+    "residence.state": "WA",
+    "residence.zip": "98103"
+  }
+}

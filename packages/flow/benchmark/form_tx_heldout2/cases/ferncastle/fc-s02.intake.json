@@ -1,0 +1,27 @@
+{
+  "case_id": "fc-s02",
+  "facts": {
+    "applicant.email": "cpennwright@example.test",
+    "applicant.first_name": "Cordelia",
+    "applicant.last_name": "Pennwright",
+    "applicant.phone": "610-555-0182",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 265000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 300000,
+    "coverage.loss_of_rents": "6 months",
+    "history.client_number": "FC-C-20418",
+    "property.address_line1": "58 Quillan Row",
+    "property.city": "Marrow Falls",
+    "property.construction": "frame",
+    "property.has_mortgage": false,
+    "property.roof_year": 2016,
+    "property.square_feet": 1480,
+    "property.state": "PA",
+    "property.units": 1,
+    "property.year_built": 1962,
+    "property.zip": "19352",
+    "rental.monthly_rent": 1850,
+    "rental.units_rented": 1
+  }
+}

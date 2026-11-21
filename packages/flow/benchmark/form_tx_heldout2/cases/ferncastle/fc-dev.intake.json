@@ -1,0 +1,26 @@
+{
+  "case_id": "fc-dev",
+  "facts": {
+    "applicant.email": "odessa.b@example.test",
+    "applicant.first_name": "Odessa",
+    "applicant.last_name": "Brightwater",
+    "applicant.phone": "203-555-0119",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 310000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 300000,
+    "coverage.loss_of_rents": "6 months",
+    "property.address_line1": "17 Kettle Pond Rd",
+    "property.city": "Ashby Glen",
+    "property.construction": "frame",
+    "property.has_mortgage": false,
+    "property.roof_year": 2014,
+    "property.square_feet": 1620,
+    "property.state": "CT",
+    "property.units": 1,
+    "property.year_built": 1987,
+    "property.zip": "06489",
+    "rental.monthly_rent": 2100,
+    "rental.units_rented": 1
+  }
+}

@@ -9,6 +9,7 @@ ungrounded required fields (including newly materialized conditional fields).
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -26,12 +27,20 @@ from openadapt_flow.form_tx.codecs import (
     values_equivalent,
 )
 from openadapt_flow.form_tx.judge import SummaryJudge
+from openadapt_flow.form_tx.playwright_surface import (
+    PopupContractError,
+    SurfaceSettleTimeoutError,
+)
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
+    MissingAnchorError,
+    collapse_radio_groups,
     compute_field_signature,
     match_anchor_in_snapshot,
+    match_text_pair_in_snapshot,
+    radio_group_key,
 )
 from openadapt_flow.form_tx.types import (
     ControlKind,
@@ -57,9 +66,11 @@ from openadapt_flow.form_tx.types import (
     ObservedControl,
     ObservedEntityRow,
     ObservedModal,
+    ObservedOption,
     PopupSubroutineSpec,
     PrefillPolicy,
     ProvenanceKind,
+    UIProfileSpec,
     WizardScreenSpec,
     canonical_sha256,
 )
@@ -84,6 +95,12 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "-- Select --",
     "Select...",
     "Choose...",
+    "Select one",
+    "-- Select one --",
+    "Choose one",
+    "Please choose",
+    "Choose",
+    "-- Choose one --",
 )
 
 
@@ -173,9 +190,14 @@ class ReconcilerSession:
         self._idempotent_results: dict[str, FormTxResult] = {}
         self._idempotent_decisions: dict[str, str] = {}
         self._last_observation: Optional[FormSnapshot] = None
-        self._halt_contexts: dict[str, tuple[str, Optional[str]]] = {}
+        self._halt_contexts: dict[str, tuple[str, Optional[str], Optional[str]]] = {}
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
+        self._commit_clicked: bool = False
+
+        # Set when the commit control is clicked and never cleared: after it,
+        # a sign-in wall means the record may or may not exist.
+        self._commit_attempted: bool = False
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
@@ -193,6 +215,8 @@ class ReconcilerSession:
         label: Optional[str] = None,
         selector: Optional[str] = None,
         in_popup_subroutine: Optional[str] = None,
+        from_popup_subroutine: Optional[str] = None,
+        matched_popup_result: bool = False,
     ) -> None:
         """Note that a field was written so the read-back must cover it."""
         if dossier_key and dossier_key != "human-current-field":
@@ -208,6 +232,8 @@ class ReconcilerSession:
                 selector=selector,
                 source=source,  # type: ignore[arg-type]
                 in_popup_subroutine=in_popup_subroutine,
+                from_popup_subroutine=from_popup_subroutine,
+                matched_popup_result=matched_popup_result,
             )
         )
 
@@ -277,6 +303,23 @@ def _control_matches_fact(
             return False
         return (yn == "yes") == bool(ctrl.checked)
 
+    if (
+        binding.control_kind == ControlKind.PORTAL_COMBOBOX
+        and binding.typeahead_query_chars is not None
+    ):
+        # A type-ahead that keeps only the leading part of its pick (see
+        # _is_leading_part_of_choice); typed text alone never matches.
+        try:
+            formatted = format_for_text_entry(intended_value, binding.codec)
+        except CodecValueError:
+            formatted = ""
+        if formatted and _is_leading_part_of_choice(
+            ctrl.current_value,
+            formatted,
+            formatted[: binding.typeahead_query_chars],
+        ):
+            return True
+
     if values_equivalent(intended_value, ctrl.current_value, binding.codec):
         return True
 
@@ -299,6 +342,107 @@ def _is_truthy_flag(value: Any) -> bool:
         return False
 
 
+# Surface failures inside a popup routine that must become a stop for a
+# person: a popup or dialog that will not open, closes or detaches while
+# settling, a missing or doubled button, a keepalive that would write, a
+# control that did not take its state, or a browser timeout. Matched by class
+# name where the class lives in a backend this module does not import.
+_POPUP_SURFACE_ERROR_NAMES = frozenset(
+    {
+        "PopupContractError",
+        "SurfaceSettleTimeoutError",
+        "SurfaceContextError",
+        "SurfaceStateError",
+        "KeepaliveMutationError",
+        "MissingAnchorError",
+        "AmbiguousAnchorError",
+    }
+)
+
+
+def _is_popup_surface_error(exc: BaseException) -> bool:
+    if isinstance(
+        exc,
+        (
+            PopupContractError,
+            MissingAnchorError,
+            AmbiguousAnchorError,
+            SurfaceSettleTimeoutError,
+            TimeoutError,
+        ),
+    ):
+        return True
+    for cls in type(exc).__mro__:
+        if cls.__name__ in _POPUP_SURFACE_ERROR_NAMES:
+            return True
+        if cls.__module__.startswith("playwright") and cls.__name__ in (
+            "TimeoutError",
+            "Error",
+            "TargetClosedError",
+        ):
+            return True
+    return False
+
+
+def _mutation_count_or_none(surface: Any) -> Optional[int]:
+    try:
+        return int(surface.mutation_count)
+    except Exception:  # noqa: BLE001 - an unreadable count is treated as a send
+        return None
+
+
+class _InPageScope:
+    """Which controls belong to an in-page popup (a dialog in the same page).
+
+    Controls inside an open dialog that was not open before the trigger are
+    the popup's, whatever their selectors (``ObservedControl.modal_container``).
+    That survives a parent form that re-renders with new ids when the dialog
+    opens, and keeps a dialog control whose selector a parent control once
+    had. With no such dialog, the popup's controls are the ones whose
+    selectors were not on the page before; that is only safe while every
+    parent control is still there under its old selector, so a parent
+    re-render, or two new dialogs, stops the run (``PopupContractError``)
+    rather than letting a subroutine fill a parent control.
+    """
+
+    def __init__(self, parent_snapshot: FormSnapshot) -> None:
+        self._parent_selectors = frozenset(
+            c.dom_selector for c in parent_snapshot.controls
+        )
+        self._parent_dialogs = frozenset(
+            c.modal_container for c in parent_snapshot.controls if c.modal_container
+        )
+
+    def apply(self, snapshot: FormSnapshot) -> FormSnapshot:
+        dialogs = {
+            c.modal_container
+            for c in snapshot.controls
+            if c.modal_container and c.modal_container not in self._parent_dialogs
+        }
+        if len(dialogs) > 1:
+            raise PopupContractError(
+                "More than one new dialog is open; the popup's controls cannot "
+                "be told apart"
+            )
+        if dialogs:
+            (dialog,) = dialogs
+            kept = tuple(c for c in snapshot.controls if c.modal_container == dialog)
+        else:
+            present = {c.dom_selector for c in snapshot.controls}
+            if not self._parent_selectors <= present:
+                raise PopupContractError(
+                    "The page re-rendered when the popup opened and the popup is "
+                    "not a dialog, so its controls cannot be told apart from the "
+                    "form's"
+                )
+            kept = tuple(
+                c
+                for c in snapshot.controls
+                if c.dom_selector not in self._parent_selectors
+            )
+        return snapshot.model_copy(update={"controls": kept})
+
+
 def _deterministic_halt_id(
     run_id: str,
     kind: FormHaltKind,
@@ -316,6 +460,163 @@ def _deterministic_halt_id(
         }
     )
     return f"halt_{digest[:14]}"
+
+
+# Backend errors that mean "the surface could not do what was asked": the
+# control vanished or matched twice, a listbox or popup never appeared, the
+# page never settled, or the browser timed out. Matched by class name so the
+# reconciler does not import a browser backend.
+_SURFACE_ACTION_ERROR_NAMES = frozenset(
+    {
+        "MissingAnchorError",
+        "AmbiguousAnchorError",
+        "PopupContractError",
+        "SurfaceSettleTimeoutError",
+        "SurfaceContextError",
+        "SurfaceStateError",
+    }
+)
+
+
+def _is_surface_action_error(exc: BaseException) -> bool:
+    if isinstance(exc, (MissingAnchorError, AmbiguousAnchorError, TimeoutError)):
+        return True
+    for cls in type(exc).__mro__:
+        if cls.__name__ in _SURFACE_ACTION_ERROR_NAMES:
+            return True
+        if cls.__module__.startswith("playwright") and cls.__name__ in (
+            "TimeoutError",
+            "Error",
+        ):
+            return True
+    return False
+
+
+def _is_editable_combobox(ctrl: ObservedControl) -> bool:
+    """A combobox that is itself a text input takes typed text."""
+    return (
+        ctrl.tag.casefold() in ("input", "textarea")
+        and not ctrl.readonly
+        and not ctrl.disabled
+    )
+
+
+def _is_leading_part_of_choice(shown: str, label: str, typed: str) -> bool:
+    """True when a pick left the leading part of its label in the input.
+
+    Some type-aheads put only the first part of the chosen suggestion in the
+    input ("2210 Juniper Loop" from "2210 Juniper Loop Apt 4, Brackenfield,
+    OR") and fill the rest into other fields. That counts only when the input
+    shows more than was typed, so text left over from typing never passes.
+    """
+    shown_n = collapse_whitespace(shown).casefold()
+    label_n = collapse_whitespace(label).casefold()
+    typed_n = collapse_whitespace(typed).casefold()
+    if not shown_n or shown_n == typed_n or len(shown_n) <= len(typed_n):
+        return False
+    if not label_n.startswith(shown_n) or len(label_n) == len(shown_n):
+        return False
+    return label_n[len(shown_n)] in " ,;-/("
+
+
+def _surface_action_halt(
+    run_id: str,
+    snapshot: FormSnapshot,
+    exc: BaseException,
+    *,
+    ctrl: Optional[ObservedControl] = None,
+    dossier_key: Optional[str] = None,
+    dossier_value: Any = None,
+    locator: str = "",
+) -> FormHaltItem:
+    """A stop for a person when the surface could not act on a control."""
+    target = ctrl.dom_selector if ctrl is not None else locator
+    label = ctrl.label_text if ctrl is not None else ""
+    sig = (
+        compute_field_signature(ctrl)
+        if ctrl is not None
+        else f"surface_action|{locator}"
+    )
+    halt_id = _deterministic_halt_id(
+        run_id,
+        FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+        snapshot.screen_id,
+        target,
+        sig,
+    )
+    where = label or target or "the form"
+    allowed: tuple[HumanDecisionAction, ...] = (
+        HumanDecisionAction.FIXED_ON_SCREEN,
+        HumanDecisionAction.ESCALATE_TO_OWNER,
+        HumanDecisionAction.ABORT_RUN,
+    )
+    if ctrl is not None:
+        allowed = (HumanDecisionAction.PROVIDE_VALUE, *allowed)
+    return FormHaltItem(
+        halt_id=halt_id,
+        kind=FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET,
+        screen_id=snapshot.screen_id,
+        control_id=ctrl.control_id if ctrl is not None else None,
+        dom_selector=target or None,
+        field_label=label,
+        section_text=ctrl.section_text if ctrl is not None else "",
+        dossier_key=dossier_key,
+        dossier_value=dossier_value,
+        message=(
+            f"Could not act on {where!r}: {type(exc).__name__}: "
+            f"{collapse_whitespace(str(exc))[:400]}"
+        ),
+        allowed_actions=allowed,
+    )
+
+
+def _session_expired_text(
+    snapshot: FormSnapshot, ui_profile: Optional[UIProfileSpec]
+) -> Optional[str]:
+    """Return the banner or dialog text that says the session ended, if any."""
+    patterns = ui_profile.session_expired_text_patterns if ui_profile else ()
+    if not patterns:
+        return None
+    texts = [*snapshot.banner_errors, *(m.message_text for m in snapshot.active_modals)]
+    for text in texts:
+        norm = collapse_whitespace(text)
+        for pattern in patterns:
+            try:
+                if re.search(pattern, norm, flags=re.IGNORECASE):
+                    return norm
+            except re.error:
+                continue
+    return None
+
+
+def _auth_wall_reason(
+    snapshot: FormSnapshot, ui_profile: Optional[UIProfileSpec]
+) -> Optional[str]:
+    """Why ``snapshot`` is a sign-in wall, or ``None`` when it is not.
+
+    A sign-in wall is a configured auth-wall element, a visible editable
+    secret field, a missing signed-in landmark, or an error banner or dialog
+    whose text says the session ended. Each is checked before any error is
+    read as a validation failure, so an expired session is never reported as
+    a field problem.
+    """
+    if snapshot.auth_wall_present:
+        return "sign-in form on screen"
+    if any(
+        control.visible and control.is_secret and not control.readonly
+        for control in snapshot.controls
+    ):
+        return "password or secret field on screen"
+    if (
+        ui_profile is not None
+        and ui_profile.authenticated_landmark_selectors
+        and not snapshot.authenticated_landmark_present
+    ):
+        return "signed-in landmark missing"
+    expired = _session_expired_text(snapshot, ui_profile)
+    if expired:
+        return f"session ended: {expired}"
+    return None
 
 
 def _collect_surface_errors(snapshot: FormSnapshot) -> list[str]:
@@ -529,6 +830,7 @@ class FormReconciler:
                 session._halt_contexts[halt.halt_id] = (
                     session._last_observation.url_origin_and_path,
                     session._last_observation.screen_id,
+                    session._last_observation.context_id,
                 )
         result = FormTxResult(
             run_id=session.run_id,
@@ -653,8 +955,54 @@ class FormReconciler:
         placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
         dossier_key: Optional[str] = None,
         run_id: str = "",
+        typeahead_query_chars: Optional[int] = None,
     ) -> Optional[FormHaltItem]:
-        """Actuate ``ctrl`` on ``surface``, returning a ``FormHaltItem`` on ambiguity/codec failure."""
+        """Actuate ``ctrl`` on ``surface``, returning a ``FormHaltItem`` instead of raising.
+
+        A control the surface cannot act on (it vanished, matched twice, never
+        opened its suggestions, or the page never settled) is a stop for a
+        person, not an exception out of the run.
+        """
+        try:
+            return self._actuate_control_unguarded(
+                surface,
+                snapshot,
+                ctrl,
+                intended_value,
+                control_kind=control_kind,
+                codec=codec,
+                placeholder_values=placeholder_values,
+                dossier_key=dossier_key,
+                run_id=run_id,
+                typeahead_query_chars=typeahead_query_chars,
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return _surface_action_halt(
+                run_id,
+                snapshot,
+                exc,
+                ctrl=ctrl,
+                dossier_key=dossier_key,
+                dossier_value=intended_value,
+            )
+
+    def _actuate_control_unguarded(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        *,
+        control_kind: ControlKind,
+        codec: FieldCodecSpec,
+        placeholder_values: Sequence[str] = _DEFAULT_PLACEHOLDERS,
+        dossier_key: Optional[str] = None,
+        run_id: str = "",
+        typeahead_query_chars: Optional[int] = None,
+    ) -> Optional[FormHaltItem]:
+        typed_query: Optional[str] = None
         try:
             if control_kind in (ControlKind.TEXT, ControlKind.DATE):
                 formatted = format_for_text_entry(intended_value, codec)
@@ -669,7 +1017,15 @@ class FormReconciler:
                 return None
 
             if control_kind == ControlKind.PORTAL_COMBOBOX:
-                opts = surface.open_portal_combobox_options(ctrl.dom_selector)
+                typer = getattr(surface, "type_portal_combobox_query", None)
+                if typer is not None and _is_editable_combobox(ctrl):
+                    # Type-ahead: suggestions exist only after typed text.
+                    typed_query = format_for_text_entry(intended_value, codec)
+                    if typeahead_query_chars is not None:
+                        typed_query = typed_query[:typeahead_query_chars]
+                    opts = typer(ctrl.dom_selector, typed_query)
+                else:
+                    opts = surface.open_portal_combobox_options(ctrl.dom_selector)
                 try:
                     opt = resolve_unique_option(
                         intended_value, opts, codec, placeholder_values
@@ -703,6 +1059,18 @@ class FormReconciler:
                         available_options=opts,
                     )
                 surface.choose_portal_combobox_option(ctrl.dom_selector, opt)
+                if typed_query is not None:
+                    return self._verify_typeahead_choice(
+                        surface,
+                        snapshot,
+                        ctrl,
+                        intended_value,
+                        opt,
+                        codec=codec,
+                        dossier_key=dossier_key,
+                        run_id=run_id,
+                        typed_query=typed_query,
+                    )
                 return None
 
             if control_kind == ControlKind.CHECKBOX:
@@ -715,14 +1083,14 @@ class FormReconciler:
                     opt = resolve_unique_option(
                         intended_value, ctrl.options, codec, placeholder_values
                     )
+                    group = radio_group_key(ctrl)
                     radio_peers = [
                         c
                         for c in snapshot.controls
                         if c.visible
-                        and c.input_type.casefold() == "radio"
-                        and c.name_attr
-                        and c.name_attr == ctrl.name_attr
-                        and c.current_value == opt.value
+                        and group is not None
+                        and radio_group_key(c) == group
+                        and (c.radio_value or c.current_value) == opt.value
                     ]
                     if len(radio_peers) == 1:
                         surface.set_checkbox_or_radio(
@@ -742,7 +1110,13 @@ class FormReconciler:
             raise CodecValueError(
                 f"Control kind {control_kind.value!r} cannot be directly actuated as an input"
             )
-        except CodecValueError as exc:
+        except Exception as exc:
+            # A codec mismatch, or a control that did not take the state the
+            # surface set (``SurfaceStateError``), stops for a person.
+            if not isinstance(exc, CodecValueError) and (
+                type(exc).__name__ != "SurfaceStateError"
+            ):
+                raise
             sig = compute_field_signature(ctrl)
             halt_id = _deterministic_halt_id(
                 run_id,
@@ -770,6 +1144,82 @@ class FormReconciler:
                 ),
                 available_options=ctrl.options,
             )
+
+    def _verify_typeahead_choice(
+        self,
+        surface: FormSurfaceBackend,
+        snapshot: FormSnapshot,
+        ctrl: ObservedControl,
+        intended_value: Any,
+        option: ObservedOption,
+        *,
+        codec: FieldCodecSpec,
+        dossier_key: Optional[str],
+        run_id: str,
+        typed_query: str = "",
+    ) -> Optional[FormHaltItem]:
+        """Stop unless the type-ahead now holds the chosen suggestion.
+
+        Typed text left in the input looks like a value but is not a choice,
+        so the control must show the chosen option (or the intended value).
+        """
+        after = surface.snapshot()
+        live = next(
+            (
+                c
+                for c in after.controls
+                if c.visible and c.dom_selector == ctrl.dom_selector
+            ),
+            None,
+        )
+        if live is None:
+            # Pages that redraw a step after a pick give the input a new id
+            # (and often a new random name). Find it again by section, label
+            # and kind; only a unique, labelled match counts.
+            def _key(c: ObservedControl) -> tuple[str, str, str]:
+                return (
+                    collapse_whitespace(c.section_text).casefold(),
+                    collapse_whitespace(c.label_text).casefold(),
+                    (c.role or c.input_type or c.tag).casefold(),
+                )
+
+            if collapse_whitespace(ctrl.label_text):
+                same = [
+                    c for c in after.controls if c.visible and _key(c) == _key(ctrl)
+                ]
+                if len(same) == 1:
+                    live = same[0]
+        shown = collapse_whitespace(live.current_value) if live is not None else ""
+        accepted = {
+            collapse_whitespace(option.label).casefold(),
+            collapse_whitespace(option.value).casefold(),
+        } - {""}
+        if (
+            live is not None
+            and shown
+            and (
+                shown.casefold() in accepted
+                or values_equivalent(intended_value, live.current_value, codec)
+                or _is_leading_part_of_choice(shown, option.label, typed_query)
+            )
+        ):
+            return None
+        reason = (
+            "the control is gone after choosing"
+            if live is None
+            else f"it shows {shown!r} instead"
+        )
+        return _surface_action_halt(
+            run_id,
+            snapshot,
+            MissingAnchorError(
+                f"Chose suggestion {option.label!r} in "
+                f"{ctrl.label_text or ctrl.dom_selector!r}, but {reason}"
+            ),
+            ctrl=ctrl,
+            dossier_key=dossier_key,
+            dossier_value=intended_value,
+        )
 
     def _infer_unmapped_control_kind(self, ctrl: ObservedControl) -> ControlKind:
         tag = ctrl.tag.casefold()
@@ -918,6 +1368,7 @@ class FormReconciler:
                         placeholder_values=binding.placeholder_values,
                         dossier_key=binding.dossier_key,
                         run_id=session.run_id,
+                        typeahead_query_chars=binding.typeahead_query_chars,
                     )
                     if act_halt is not None:
                         session._halt_metadata[act_halt.halt_id] = {
@@ -940,8 +1391,21 @@ class FormReconciler:
                     edited_any = True
                     if binding.triggers_re_render:
                         return True, True, None
+                    if self._controls_were_replaced(surface, snapshot):
+                        # The page rebuilt its controls on change; every
+                        # selector from this snapshot may now be stale.
+                        return True, True, None
 
         return edited_any, False, None
+
+    @staticmethod
+    def _controls_were_replaced(
+        surface: FormSurfaceBackend, snapshot: FormSnapshot
+    ) -> bool:
+        """True when a control seen in ``snapshot`` is no longer on the page."""
+        fresh = surface.snapshot()
+        now = {c.dom_selector for c in fresh.controls}
+        return any(c.visible and c.dom_selector not in now for c in snapshot.controls)
 
     def _collect_ungrounded_required_halts(
         self,
@@ -952,6 +1416,7 @@ class FormReconciler:
         in_popup_subroutine: Optional[str] = None,
     ) -> list[FormHaltItem]:
         matched_by_selector: dict[str, FieldBindingSpec] = {}
+        matched_by_group: dict[str, FieldBindingSpec] = {}
         for candidate_binding in bindings:
             try:
                 matched = match_anchor_in_snapshot(
@@ -961,15 +1426,22 @@ class FormReconciler:
                 continue
             if matched is not None:
                 matched_by_selector[matched.dom_selector] = candidate_binding
+                group = radio_group_key(matched)
+                if group is not None:
+                    matched_by_group[group] = candidate_binding
 
         halts: list[FormHaltItem] = []
-        for ctrl in snapshot.controls:
+        # A radio group is one field: one halt for the group, not per radio.
+        for ctrl in collapse_radio_groups(snapshot.controls):
             if not ctrl.visible or ctrl.disabled or ctrl.readonly:
                 continue
             if _is_action_button(ctrl):
                 continue
 
             binding = matched_by_selector.get(ctrl.dom_selector)
+            group = radio_group_key(ctrl)
+            if binding is None and group is not None:
+                binding = matched_by_group.get(group)
             is_required = ctrl.required or (
                 binding is not None and binding.required_in_pack
             )
@@ -1038,7 +1510,84 @@ class FormReconciler:
 
         return halts
 
+    def _popup_contract_halt(
+        self,
+        session: ReconcilerSession,
+        parent_snapshot: FormSnapshot,
+        subroutine: PopupSubroutineSpec,
+        sig: str,
+        message: str,
+    ) -> FormHaltItem:
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.POPUP_CONTRACT_FAILED,
+            parent_snapshot.screen_id,
+            subroutine.subroutine_id,
+            sig,
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.POPUP_CONTRACT_FAILED,
+            screen_id=parent_snapshot.screen_id,
+            dossier_key=subroutine.return_output_key,
+            message=message,
+            allowed_actions=(
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            ),
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return halt
+
     def _run_popup_subroutine(
+        self,
+        parent_surface: FormSurfaceBackend,
+        session: ReconcilerSession,
+        parent_snapshot: FormSnapshot,
+        subroutine: PopupSubroutineSpec,
+    ) -> Optional[list[FormHaltItem]]:
+        """Execute ``subroutine``; a surface failure inside it becomes a stop.
+
+        A popup that will not open, a button that is missing or matches twice,
+        or a popup that never settles ends in a ``POPUP_CONTRACT_FAILED`` halt
+        for a person, never in an exception out of the run.
+        """
+        try:
+            return self._run_popup_subroutine_steps(
+                parent_surface, session, parent_snapshot, subroutine
+            )
+        except Exception as exc:  # noqa: BLE001 - narrowed just below
+            if not _is_popup_surface_error(exc):
+                raise
+            sig = f"popup_error|{subroutine.subroutine_id}|{type(exc).__name__}"
+            return [
+                self._popup_contract_halt(
+                    session,
+                    parent_snapshot,
+                    subroutine,
+                    sig,
+                    f"Popup {subroutine.subroutine_id!r} could not be run: {exc}",
+                )
+            ]
+
+    @contextlib.contextmanager
+    def _open_in_page_popup(
+        self, parent_surface: FormSurfaceBackend, trigger_selector: str
+    ) -> Any:
+        parent_surface.click(trigger_selector)
+        yield parent_surface
+
+    @staticmethod
+    def _scope_to_new_controls(
+        snapshot: FormSnapshot, scope: Optional["_InPageScope"]
+    ) -> FormSnapshot:
+        """Keep only an in-page popup's own controls (see ``_InPageScope``)."""
+        if scope is None:
+            return snapshot
+        return scope.apply(snapshot)
+
+    def _run_popup_subroutine_steps(
         self,
         parent_surface: FormSurfaceBackend,
         session: ReconcilerSession,
@@ -1155,12 +1704,30 @@ class FormReconciler:
             }
             return [halt]
 
-        with parent_surface.open_popup_surface(
-            trigger_ctrl.dom_selector,
-            url_pattern=subroutine.popup_url_pattern,
-            title_pattern=subroutine.popup_title_pattern,
-        ) as popup_surface:
-            popup_snap = popup_surface.snapshot()
+        in_page = subroutine.popup_mode == "in_page"
+        parent_selectors: Optional[_InPageScope] = (
+            _InPageScope(parent_snapshot) if in_page else None
+        )
+        parent_errors = (
+            set(_collect_surface_errors(parent_snapshot)) if in_page else set()
+        )
+
+        def _popup_snapshot(surface: FormSurfaceBackend) -> FormSnapshot:
+            return self._scope_to_new_controls(surface.snapshot(), parent_selectors)
+
+        popup_cm = (
+            self._open_in_page_popup(parent_surface, trigger_ctrl.dom_selector)
+            if in_page
+            else parent_surface.open_popup_surface(
+                trigger_ctrl.dom_selector,
+                url_pattern=subroutine.popup_url_pattern,
+                title_pattern=subroutine.popup_title_pattern,
+            )
+        )
+        commit_selector: Optional[str] = None
+        displayed_result: Optional[str] = None
+        with popup_cm as popup_surface:
+            popup_snap = _popup_snapshot(popup_surface)
 
             # Replay any prior manual human fills for unmapped popup controls.
             for (sub_id, sel), val in list(session._popup_manual_fills.items()):
@@ -1190,7 +1757,7 @@ class FormReconciler:
                         selector=sel,
                         in_popup_subroutine=sub_id,
                     )
-                    popup_snap = popup_surface.snapshot()
+                    popup_snap = _popup_snapshot(popup_surface)
 
             for _ in range(self.max_passes_per_screen):
                 edited, _, bind_halt = self._reconcile_bindings_pass(
@@ -1204,7 +1771,7 @@ class FormReconciler:
                     return [bind_halt]
                 if not edited:
                     break
-                popup_snap = popup_surface.snapshot()
+                popup_snap = _popup_snapshot(popup_surface)
 
             popup_ungrounded = self._collect_ungrounded_required_halts(
                 session,
@@ -1215,12 +1782,72 @@ class FormReconciler:
             if popup_ungrounded:
                 return popup_ungrounded
 
+            # Intermediate steps (for example Calculate) before apply. Inputs
+            # are re-read before the first step and again before apply,
+            # because a step may re-render the popup.
+            if subroutine.compute_anchors:
+                entry_halt = self._check_popup_entries_before_apply(
+                    session,
+                    popup_surface,
+                    parent_snapshot,
+                    subroutine,
+                    scope=parent_selectors,
+                )
+                if entry_halt is not None:
+                    return [entry_halt]
+            for step_index, step_anchor in enumerate(subroutine.compute_anchors):
+                popup_snap = _popup_snapshot(popup_surface)
+                try:
+                    step_ctrl = match_anchor_in_snapshot(
+                        step_anchor, popup_snap, include_readonly=False
+                    )
+                except AmbiguousAnchorError as exc:
+                    step_ctrl = None
+                    step_err = str(exc)
+                else:
+                    step_err = (
+                        f"Popup step {step_index + 1} button not found for "
+                        f"{subroutine.subroutine_id!r}"
+                    )
+                if step_ctrl is None:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_step|{subroutine.subroutine_id}|{step_index}",
+                            step_err,
+                        )
+                    ]
+                popup_surface.click(step_ctrl.dom_selector)
+                popup_snap = _popup_snapshot(popup_surface)
+                step_errors = [
+                    e
+                    for e in _collect_surface_errors(popup_snap)
+                    if e not in parent_errors
+                ]
+                if step_errors:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_step_error|{subroutine.subroutine_id}|{step_index}",
+                            f"Popup {subroutine.subroutine_id!r} showed an error "
+                            f"after step {step_index + 1}: {step_errors}",
+                        )
+                    ]
+
             entry_halt = self._check_popup_entries_before_apply(
-                session, popup_surface, parent_snapshot, subroutine
+                session,
+                popup_surface,
+                parent_snapshot,
+                subroutine,
+                scope=parent_selectors,
             )
             if entry_halt is not None:
                 return [entry_halt]
-            popup_snap = popup_surface.snapshot()
+            popup_snap = _popup_snapshot(popup_surface)
 
             try:
                 popup_commit = match_anchor_in_snapshot(
@@ -1235,30 +1862,33 @@ class FormReconciler:
                 )
 
             if popup_commit is None:
-                sig = f"popup_commit|{subroutine.subroutine_id}"
-                halt_id = _deterministic_halt_id(
-                    session.run_id,
-                    FormHaltKind.POPUP_CONTRACT_FAILED,
-                    parent_snapshot.screen_id,
-                    subroutine.subroutine_id,
-                    sig,
-                )
-                halt = FormHaltItem(
-                    halt_id=halt_id,
-                    kind=FormHaltKind.POPUP_CONTRACT_FAILED,
-                    screen_id=parent_snapshot.screen_id,
-                    dossier_key=subroutine.return_output_key,
-                    message=commit_err,
-                    allowed_actions=(
-                        HumanDecisionAction.FIXED_ON_SCREEN,
-                        HumanDecisionAction.ESCALATE_TO_OWNER,
-                        HumanDecisionAction.ABORT_RUN,
-                    ),
-                )
-                session._halt_metadata[halt_id] = {"field_signature": sig}
-                return [halt]
+                return [
+                    self._popup_contract_halt(
+                        session,
+                        parent_snapshot,
+                        subroutine,
+                        f"popup_commit|{subroutine.subroutine_id}",
+                        commit_err,
+                    )
+                ]
 
-            popup_surface.click(popup_commit.dom_selector)
+            if subroutine.result_anchor is not None:
+                displayed_result, result_err = self._read_popup_result(
+                    popup_snap, subroutine
+                )
+                if result_err is not None:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_result|{subroutine.subroutine_id}",
+                            result_err,
+                        )
+                    ]
+
+            commit_selector = popup_commit.dom_selector
+            popup_surface.click(commit_selector)
 
         # Verify parent return anchor after popup closes.
         after_parent_snap = parent_surface.snapshot(
@@ -1266,6 +1896,20 @@ class FormReconciler:
             modal_rules=session.pack.modal_rules,
             screens=session.pack.screens,
         )
+        if in_page and any(
+            c.visible and c.dom_selector == commit_selector
+            for c in after_parent_snap.controls
+        ):
+            return [
+                self._popup_contract_halt(
+                    session,
+                    parent_snapshot,
+                    subroutine,
+                    f"popup_open|{subroutine.subroutine_id}",
+                    f"In-page popup {subroutine.subroutine_id!r} is still open "
+                    f"after its apply button was clicked",
+                )
+            ]
         return_after = match_anchor_in_snapshot(
             subroutine.parent_return_anchor,
             after_parent_snap,
@@ -1314,6 +1958,92 @@ class FormReconciler:
             }
             return [halt]
 
+        # The value put back in the parent must be the figure the popup showed.
+        # An estimator that shows one figure and hands back another (rounded,
+        # capped, stale) stops here rather than going through unseen.
+        if displayed_result is not None and not values_equivalent(
+            displayed_result, return_after.current_value, subroutine.return_codec
+        ):
+            ctrl_sig = compute_field_signature(return_after)
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.PREFILL_VALUE_CONFLICT,
+                after_parent_snap.screen_id,
+                return_after.dom_selector,
+                f"popup_result_mismatch|{ctrl_sig}",
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                screen_id=after_parent_snap.screen_id,
+                control_id=return_after.control_id,
+                dom_selector=return_after.dom_selector,
+                field_label=return_after.label_text,
+                section_text=return_after.section_text,
+                dossier_key=subroutine.return_output_key,
+                portal_value=return_after.current_value,
+                dossier_value=displayed_result,
+                message=(
+                    f"Popup {subroutine.subroutine_id!r} showed {displayed_result!r} "
+                    f"but put {return_after.current_value!r} in "
+                    f"{subroutine.return_output_key!r}"
+                ),
+                allowed_actions=(
+                    HumanDecisionAction.PROVIDE_VALUE,
+                    HumanDecisionAction.FIXED_ON_SCREEN,
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {
+                "field_signature": ctrl_sig,
+                "control": return_after,
+            }
+            return [halt]
+
+        # A value the intake already states must match what the popup put
+        # back; otherwise stop before submit rather than keep the popup's.
+        existing_fact = session.effective_facts.get(subroutine.return_output_key)
+        if existing_fact is not None and not values_equivalent(
+            existing_fact.value, return_after.current_value, subroutine.return_codec
+        ):
+            ctrl_sig = compute_field_signature(return_after)
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.PREFILL_VALUE_CONFLICT,
+                after_parent_snap.screen_id,
+                return_after.dom_selector,
+                ctrl_sig,
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                screen_id=after_parent_snap.screen_id,
+                control_id=return_after.control_id,
+                dom_selector=return_after.dom_selector,
+                field_label=return_after.label_text,
+                section_text=return_after.section_text,
+                dossier_key=subroutine.return_output_key,
+                portal_value=return_after.current_value,
+                dossier_value=existing_fact.value,
+                message=(
+                    f"Popup {subroutine.subroutine_id!r} returned a value that "
+                    f"differs from the intake's {subroutine.return_output_key!r}"
+                ),
+                allowed_actions=(
+                    HumanDecisionAction.ACCEPT_PORTAL_PREFILL,
+                    HumanDecisionAction.PROVIDE_VALUE,
+                    HumanDecisionAction.FIXED_ON_SCREEN,
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {
+                "field_signature": ctrl_sig,
+                "control": return_after,
+            }
+            return [halt]
+
         session.subroutines_completed.append(subroutine.subroutine_id)
         session._filled_selectors.add(return_after.dom_selector)
         session.record_write(
@@ -1321,6 +2051,8 @@ class FormReconciler:
             dossier_key=subroutine.return_output_key,
             label=return_after.label_text,
             selector=return_after.dom_selector,
+            from_popup_subroutine=subroutine.subroutine_id,
+            matched_popup_result=displayed_result is not None,
         )
         session._human_accepted_control_signatures.add(
             compute_field_signature(return_after)
@@ -1335,12 +2067,52 @@ class FormReconciler:
             )
         return None
 
+    @staticmethod
+    def _read_popup_result(
+        popup_snap: FormSnapshot, subroutine: PopupSubroutineSpec
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Read the popup's displayed result: ``(value, None)`` or ``(None, why)``."""
+        assert subroutine.result_anchor is not None
+        try:
+            ctrl = match_anchor_in_snapshot(
+                subroutine.result_anchor, popup_snap, include_readonly=True
+            )
+        except AmbiguousAnchorError as exc:
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"
+            )
+        raw = ctrl.current_value.strip() if ctrl is not None else ""
+        if ctrl is None:
+            # A result shown as page text ("Estimated cost: $512,340").
+            try:
+                pair = match_text_pair_in_snapshot(subroutine.result_anchor, popup_snap)
+            except AmbiguousAnchorError as exc:
+                return None, (
+                    f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"
+                )
+            raw = pair.value.strip() if pair is not None else ""
+        if not raw:
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} shows no result to check "
+                f"the returned value against"
+            )
+        try:
+            normalize_with_codec(raw, subroutine.return_codec)
+        except CodecValueError:
+            return None, (
+                f"Popup {subroutine.subroutine_id!r} result {raw!r} is not a "
+                f"{subroutine.return_codec.kind.value} value"
+            )
+        return raw, None
+
     def _check_popup_entries_before_apply(
         self,
         session: ReconcilerSession,
         popup_surface: FormSurfaceBackend,
         parent_snapshot: FormSnapshot,
         subroutine: PopupSubroutineSpec,
+        *,
+        scope: Optional["_InPageScope"] = None,
     ) -> Optional[FormHaltItem]:
         """Re-read every field typed in the popup before its apply button.
 
@@ -1351,7 +2123,7 @@ class FormReconciler:
         field is still reported as not_checked: a re-read of the popup is not a
         read-back of what the application recorded.
         """
-        snap = popup_surface.snapshot()
+        snap = self._scope_to_new_controls(popup_surface.snapshot(), scope)
         problems: list[str] = []
         for ledger_key, write in list(session._writes.items()):
             if write.in_popup_subroutine != subroutine.subroutine_id:
@@ -1430,6 +2202,67 @@ class FormReconciler:
         session._halt_metadata[halt_id] = {"field_signature": sig}
         return halt
 
+    def _emit_auth_wall(
+        self,
+        session: ReconcilerSession,
+        snapshot: FormSnapshot,
+        reason: str,
+        *,
+        delivery_uncertain: bool,
+    ) -> FormTxResult:
+        """Stop at a sign-in wall.
+
+        Before any save request went out, the operator may sign in and the
+        run resumes (``FIXED_ON_SCREEN``). After a save request went out, the
+        record may or may not exist, so resuming could submit twice: the
+        outcome is ``delivery_uncertain`` and the only choices are to hand it
+        to the owner or abort.
+        """
+        sig = f"auth_wall|{snapshot.url_origin_and_path}"
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.AUTH_WALL_DETECTED,
+            snapshot.screen_id,
+            snapshot.url_origin_and_path,
+            sig,
+        )
+        message = (
+            f"Sign-in wall at {snapshot.url_origin_and_path!r} ({reason})"
+            if not delivery_uncertain
+            else (
+                f"Sign-in wall at {snapshot.url_origin_and_path!r} ({reason}) "
+                "after a save request was sent; the record may or may not exist"
+            )
+        )
+        allowed: tuple[HumanDecisionAction, ...] = (
+            (HumanDecisionAction.ESCALATE_TO_OWNER, HumanDecisionAction.ABORT_RUN)
+            if delivery_uncertain
+            else (
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            )
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.AUTH_WALL_DETECTED,
+            screen_id=snapshot.screen_id,
+            message=message,
+            allowed_actions=allowed,
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return self._build_result(
+            session,
+            outcome=(
+                FormTxOutcome.DELIVERY_UNCERTAIN
+                if delivery_uncertain
+                else FormTxOutcome.AUTH_REQUIRED
+            ),
+            safe_to_retry=not delivery_uncertain,
+            halts=(halt,),
+            what_happened=message,
+        )
+
     def _emit_validation_blocked(
         self,
         session: ReconcilerSession,
@@ -1438,6 +2271,18 @@ class FormReconciler:
         *,
         safe_to_retry: bool,
     ) -> FormTxResult:
+        bound = session._bound_surface or self._surface
+        auth_reason = _auth_wall_reason(
+            snapshot, bound.ui_profile if bound is not None else None
+        )
+        if auth_reason is not None:
+            # safe_to_retry is False only when a save request went out.
+            return self._emit_auth_wall(
+                session,
+                snapshot,
+                auth_reason,
+                delivery_uncertain=(not safe_to_retry) or session._commit_attempted,
+            )
         errored_ctrl = next(
             (c for c in snapshot.controls if c.visible and c.error_text.strip()),
             None,
@@ -1513,6 +2358,19 @@ class FormReconciler:
         pre_commit_mutations: int,
     ) -> FormTxResult:
         pack = session.pack
+        auth_reason = _auth_wall_reason(post_commit_snapshot, surface.ui_profile)
+        if auth_reason is not None:
+            # A sign-in page after the commit (with or without an error
+            # banner) never counts as a finished save.
+            return self._emit_auth_wall(
+                session,
+                post_commit_snapshot,
+                auth_reason,
+                delivery_uncertain=(
+                    session._commit_attempted
+                    or surface.mutation_count > pre_commit_mutations
+                ),
+            )
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
         if delta_mutations > pack.max_commit_mutations:
             sig = f"commit_budget|{pack.pack_id}"
@@ -1635,14 +2493,88 @@ class FormReconciler:
         except AmbiguousAnchorError:
             return True
 
+    def _surface_error_result(
+        self,
+        session: ReconcilerSession,
+        active_surface: FormSurfaceBackend,
+        exc: BaseException,
+        mutations_at_entry: int,
+    ) -> FormTxResult:
+        """Turn a surface error into a stop; after a submit click, delivery is uncertain."""
+        snapshot = session._last_observation or FormSnapshot(url_origin_and_path="")
+        halt = _surface_action_halt(
+            session.run_id,
+            snapshot,
+            exc,
+            locator=snapshot.url_origin_and_path or session.pack.pack_id,
+        )
+        after_commit = session._commit_in_progress or session._commit_clicked
+        if after_commit:
+            halt = halt.model_copy(
+                update={
+                    "allowed_actions": (
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
+                        HumanDecisionAction.ABORT_RUN,
+                    ),
+                    "message": "After the submit click: " + halt.message,
+                }
+            )
+        session._halt_metadata[halt.halt_id] = {
+            "field_signature": f"surface_action|{halt.dom_selector or ''}"
+        }
+        session._commit_in_progress = False
+        try:
+            mutated = active_surface.mutation_count != mutations_at_entry
+        except Exception:
+            mutated = True
+        return self._build_result(
+            session,
+            outcome=(
+                FormTxOutcome.DELIVERY_UNCERTAIN
+                if after_commit
+                else FormTxOutcome.HALTED_NEEDS_HUMAN
+            ),
+            safe_to_retry=not after_commit and not mutated,
+            halts=(halt,),
+            what_happened=halt.message,
+        )
+
     def run_until_halt_or_done(
         self,
         session: ReconcilerSession,
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Advance ``session`` deterministically until verified completion or a governed halt."""
+        """Advance ``session`` deterministically until verified completion or a governed halt.
+
+        A surface error (a control that vanished or matched twice, a listbox or
+        popup that never opened, a page that never settled) ends the run as a
+        stop for a person. It is never raised past this point and never
+        followed by a submit; after the submit click it is reported as
+        ``delivery_uncertain``.
+        """
         active_surface = self._resolve_surface(surface, session)
+        try:
+            mutations_at_entry = active_surface.mutation_count
+        except Exception:
+            mutations_at_entry = 0
+        try:
+            return self._run_until_halt_or_done_unguarded(
+                session, active_surface=active_surface
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return self._surface_error_result(
+                session, active_surface, exc, mutations_at_entry
+            )
+
+    def _run_until_halt_or_done_unguarded(
+        self,
+        session: ReconcilerSession,
+        *,
+        active_surface: FormSurfaceBackend,
+    ) -> FormTxResult:
         pack = session.pack
         session.active_halts.clear()
 
@@ -1656,46 +2588,15 @@ class FormReconciler:
             session._last_observation = snapshot
 
             # 2. Auth Wall Check
-            if (
-                snapshot.auth_wall_present
-                or any(
-                    control.visible and control.is_secret and not control.readonly
-                    for control in snapshot.controls
-                )
-                or (
-                    active_surface.ui_profile.authenticated_landmark_selectors
-                    and not snapshot.authenticated_landmark_present
-                )
-            ):
-                sig = f"auth_wall|{snapshot.url_origin_and_path}"
-                halt_id = _deterministic_halt_id(
-                    session.run_id,
-                    FormHaltKind.AUTH_WALL_DETECTED,
-                    snapshot.screen_id,
-                    snapshot.url_origin_and_path,
-                    sig,
-                )
-                halt = FormHaltItem(
-                    halt_id=halt_id,
-                    kind=FormHaltKind.AUTH_WALL_DETECTED,
-                    screen_id=snapshot.screen_id,
-                    message=(
-                        f"Authentication wall or missing session landmark at "
-                        f"{snapshot.url_origin_and_path!r}"
-                    ),
-                    allowed_actions=(
-                        HumanDecisionAction.FIXED_ON_SCREEN,
-                        HumanDecisionAction.ESCALATE_TO_OWNER,
-                        HumanDecisionAction.ABORT_RUN,
-                    ),
-                )
-                session._halt_metadata[halt_id] = {"field_signature": sig}
-                return self._build_result(
+            auth_reason = _auth_wall_reason(snapshot, active_surface.ui_profile)
+            if auth_reason is not None:
+                return self._emit_auth_wall(
                     session,
-                    outcome=FormTxOutcome.AUTH_REQUIRED,
-                    safe_to_retry=True,
-                    halts=(halt,),
-                    what_happened=halt.message,
+                    snapshot,
+                    auth_reason,
+                    delivery_uncertain=(
+                        session._commit_attempted or session._commit_in_progress
+                    ),
                 )
 
             # 3. Active Modal Check
@@ -1857,14 +2758,19 @@ class FormReconciler:
                     if trig is None:
                         continue
 
+                    muts_before = _mutation_count_or_none(active_surface)
                     sub_halts = self._run_popup_subroutine(
                         active_surface, session, snapshot, sub
                     )
                     if sub_halts:
+                        muts_after = _mutation_count_or_none(active_surface)
                         return self._build_result(
                             session,
                             outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
-                            safe_to_retry=True,
+                            # Safe to retry only if the popup sent nothing.
+                            safe_to_retry=(
+                                muts_before is not None and muts_before == muts_after
+                            ),
                             halts=sub_halts,
                             what_happened=sub_halts[0].message,
                         )
@@ -1994,6 +2900,9 @@ class FormReconciler:
                 pre_commit_mutations = active_surface.mutation_count
                 session._pre_commit_mutations = pre_commit_mutations
                 session._commit_in_progress = True
+                session._commit_clicked = True
+
+                session._commit_attempted = True
                 active_surface.click(commit_ctrl.dom_selector)
 
                 post_snap = active_surface.snapshot(
@@ -2161,6 +3070,7 @@ class FormReconciler:
         if expected_context is None or expected_context != (
             snapshot.url_origin_and_path,
             snapshot.screen_id,
+            snapshot.context_id,
         ):
             raise ValueError("Human decision context changed; observe and review again")
         if snapshot.auth_wall_present or snapshot.inflight_mutations:
@@ -2222,7 +3132,34 @@ class FormReconciler:
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
-        """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable."""
+        """Apply a governed ``HumanResolutionInput`` to an active halt and resume if applicable.
+
+        Surface errors while applying the decision become a stop, as in
+        ``run_until_halt_or_done``.
+        """
+        active_surface = self._resolve_surface(surface, session)
+        try:
+            mutations_at_entry = active_surface.mutation_count
+        except Exception:
+            mutations_at_entry = 0
+        try:
+            return self._apply_human_resolution_unguarded(
+                session, resolution, surface=surface
+            )
+        except Exception as exc:
+            if not _is_surface_action_error(exc):
+                raise
+            return self._surface_error_result(
+                session, active_surface, exc, mutations_at_entry
+            )
+
+    def _apply_human_resolution_unguarded(
+        self,
+        session: ReconcilerSession,
+        resolution: HumanResolutionInput,
+        *,
+        surface: Optional[FormSurfaceBackend] = None,
+    ) -> FormTxResult:
         decision_digest = canonical_sha256(resolution)
         if resolution.idempotency_key in session.seen_idempotency_keys:
             if (
@@ -2386,6 +3323,11 @@ class FormReconciler:
                         placeholder_values=placeholders,
                         dossier_key=effective_dossier_key,
                         run_id=session.run_id,
+                        typeahead_query_chars=(
+                            binding.typeahead_query_chars
+                            if binding is not None
+                            else None
+                        ),
                     )
                     if act_halt is not None:
                         session._halt_metadata[act_halt.halt_id] = {
@@ -2551,9 +3493,8 @@ class FormReconciler:
                 screens=session.pack.screens,
             )
             if active_halt.kind == FormHaltKind.AUTH_WALL_DETECTED:
-                still_blocked = post_snap.auth_wall_present or (
-                    active_surface.ui_profile.authenticated_landmark_selectors
-                    and not post_snap.authenticated_landmark_present
+                still_blocked = (
+                    _auth_wall_reason(post_snap, active_surface.ui_profile) is not None
                 )
                 if still_blocked:
                     res = self._build_result(
