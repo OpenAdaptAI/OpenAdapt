@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -38,6 +39,7 @@ def test_the_vector_set_is_complete():
         "confirmation-public-redaction",
         "confirmation-reason-no-answer",
         "payload-bound",
+        "report-subjects",
         "payload-mismatch",
         "payload-missing",
         "approval-public-card",
@@ -73,6 +75,30 @@ def test_vector(name):
         assert result.payload_bound == expected.get("payload_bound")
     else:
         assert result.outcome is None
+
+
+def test_report_subjects_bind_the_two_byte_representations():
+    vector = json.loads((VECTORS / "report-subjects.json").read_text())
+    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
+    digests = {s["name"]: s["digest"]["sha256"] for s in statement["subject"]}
+    exact = vector["report_utf8"].encode("utf-8")
+    canonical = b'{"a":1,"z":2}'
+    assert json.loads(exact) == json.loads(canonical)
+    assert digests["report.json"] == hashlib.sha256(exact).hexdigest()
+    assert digests["report.canonical.json"] == hashlib.sha256(canonical).hexdigest()
+    assert digests["report.json"] != digests["report.canonical.json"]
+
+
+@pytest.mark.parametrize("replaced", ["report.json", "bundle"])
+def test_canonical_report_cannot_replace_exact_or_repeat(replaced):
+    vector = json.loads((VECTORS / "report-subjects.json").read_text())
+    statement = json.loads(base64.b64decode(vector["document"]["payload"]))
+    if replaced == "report.json":
+        statement["subject"] = [s for s in statement["subject"] if s["name"] != replaced]
+    else:
+        next(s for s in statement["subject"] if s["name"] == replaced)["name"] = "report.canonical.json"
+    with pytest.raises(ValueError, match="subject names repeat, or the report is missing"):
+        r.statement_payload(statement)
 
 
 def test_vectors_are_byte_stable(tmp_path, monkeypatch):

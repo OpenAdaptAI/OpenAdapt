@@ -95,7 +95,7 @@ NotChecked = Literal[
     "field_values",
     "postconditions",
 ]
-SubjectName = Literal["report.json", "bundle", "evidence", "payload"]
+SubjectName = Literal["report.json", "report.canonical.json", "bundle", "evidence", "payload"]
 #: The media type of a handed-off payload (the ``payload`` subject only).
 PayloadMediaType = Literal[
     "application/json",
@@ -297,7 +297,7 @@ class RunPredicateV1(_Closed):
 
 class RunStatementV1(_Closed):
     type_: Literal["https://in-toto.io/Statement/v1"] = Field(alias="_type")
-    subject: list[Subject] = Field(min_length=1, max_length=4)
+    subject: list[Subject] = Field(min_length=1, max_length=5)
     predicateType: Literal["https://openadapt.ai/record/run/v1"]
     predicate: RunPredicateV1
 

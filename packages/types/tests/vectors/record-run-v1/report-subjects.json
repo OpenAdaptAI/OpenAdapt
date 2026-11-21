@@ -1,0 +1,28 @@
+{
+  "description": "A signed receipt binds the exact report file and its compact callback encoding.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXBwcm92YWwiOnsiYXBwcm92ZXJfa2luZCI6InBlcnNvbiIsImNvbW1pdG1lbnRzIjp7ImFwcHJvdmVkX2F0IjoiMDIyZjJhZmUyZGJmYmNlZGM1ODE0NTBjOWI5ZTRlOWUwYzdlZmI5MDVjYjg4OTY2ZjdiMjhhYTZlM2NiNWIzOSIsInByaW5jaXBhbCI6IjBmNDlmZjIxNzAxNWUxNWYwYzkwOWQwYTlmMzJlZDIzZjQ2ZmM4ZTUwYzllMWFmYzEzODBlZGY0ZjcyMDFlNmQiLCJzY29wZSI6Ijk1MzEwYjhkMTc1Nzk2NDNkNjkzNmZkMjBkMjZjMjBmODQ3MjZhMjYwNTIzMDA2NzNkNzg0YzM2OGVhZGEyY2UifSwibW9kZSI6ImVhY2hfaXRlbSJ9LCJjaGVja3MiOnsiYXV0aG9yaXphdGlvbiI6eyJjb25maXJtZWQiOjAsInJlcXVpcmVkIjowfSwiZWZmZWN0cyI6eyJjb25maXJtZWQiOjIsInJlcXVpcmVkIjoyfSwiaWRlbnRpdHkiOnsiY29uZmlybWVkIjo1LCJyZXF1aXJlZCI6NX0sImxpbmVzX2NvbmZpcm1lZCI6MiwibGluZXNfbm90X2NoZWNrZWQiOjAsImxpbmVzX3JlZnV0ZWQiOjAsInBvc3Rjb25kaXRpb25zIjp7ImNvbmZpcm1lZCI6MywicmVxdWlyZWQiOjN9fSwiZGlzY2xvc3VyZSI6eyJjb21taXRtZW50cyI6e30sInZlcnNpb24iOiJvcGVuYWRhcHQucHVibGljLWRpc2Nsb3N1cmUvdjEifSwibGluZXMiOlt7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOltdLCJvcGVyYXRpb24iOiJ3cml0ZSIsInN0ZXAiOjIsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifSx7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOlsiZmllbGRfdmFsdWVzIl0sIm9wZXJhdGlvbiI6ImlycmV2ZXJzaWJsZV93cml0ZSIsInN0ZXAiOjQsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifV0sIm1vZGVsX2NhbGxzIjowLCJvdXRjb21lIjoiVkVSSUZJRUQiLCJwcm9ncmFtIjp7ImlkIjoicHJvZy01YmIyMWFhMGYyZTZhYzMyIiwidmVyc2lvbl9zaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sInJlYXNvbl9jb2RlIjoidmVyaWZpZWQiLCJzdGFydGVkX2hvdXIiOiIyMDI2LTExLTIwVDIzOjAwOjAwWiIsInN0ZXBzIjp7Im9rIjo1LCJ0b3RhbCI6NX19LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9vcGVuYWRhcHQuYWkvcmVjb3JkL3J1bi92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiJjMDg0ZmYwYjFmZjJmNjg1YjdhMTdkNDIwOTY4OTEwMzMxODk1ODZhN2MzZTRmMzViY2QxZTZiYzgxOTU3MGI0In0sIm5hbWUiOiJyZXBvcnQuanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIifSwibmFtZSI6ImJ1bmRsZSJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6Ijk3NjgzYjU3NjZlYTAwOGM0NGFhZDcxMzhlNDVlMzE3MDFiODQ0ZjcxZDg5ZmFhZjY0MzA4YmU2YTFmZjk5NDQifSwibWVkaWFfdHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJuYW1lIjoicGF5bG9hZCJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6Ijk5MTY4MjE2MTQ0YzdmZWQ1ZDRjNTQ5MTZjZjk4ZDljNjYwOTYyODBjMDRhNDk5ODIyYTk5YjY2NThiZDE3N2EifSwibmFtZSI6InJlcG9ydC5jYW5vbmljYWwuanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjQ4NzM2ZTU4YjQwOWVkMDI0MWM4ZDdiZWQ5ZGMxODhhNTllMTMwMDJmNDhlNzQ5Mjg1MGJlYzE1YjU5MTQ3YjYifSwibmFtZSI6ImV2aWRlbmNlIn1dfQ==",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "4JXSekT9Cn+BzFp9OWMqL25awoJuPtf51bn+Pcv8a6/KxXzK8nYjU2VdzmfQkUMNkL2vY9atfh7IDDowPgzJDg=="
+      }
+    ]
+  },
+  "expected": {
+    "approval_line": "Approved by a person: each item",
+    "demo": false,
+    "disclosed": {},
+    "ok": true,
+    "outcome": "VERIFIED",
+    "payload_bound": true,
+    "reason": null,
+    "signer_lines": [
+      "Signed by this computer"
+    ]
+  },
+  "received": "eyJyZWZlcnJhbCI6InN5bnRoZXRpYyIsInN0YXR1cyI6InNlbnQifQ==",
+  "registry": "registry.json",
+  "report_utf8": "{\n  \"z\": 2,\n  \"a\": 1\n}\n"
+}

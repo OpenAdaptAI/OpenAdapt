@@ -283,6 +283,21 @@ def _handoff_vectors(vectors) -> None:
     put("payload-bound", "A handoff receipt bound to the bytes the receiver got, with a person's approval.",
         env, {**ok, "payload_bound": True, "disclosed": {k: v["value"] for k, v in openings.items()}},
         r.private_openings(env, openings), HANDOFF)
+    # The producer hashes both the original report file and the callback encoding.
+    report = '{\n  "z": 2,\n  "a": 1\n}\n'
+    canonical = r.canonical_json(json.loads(report)).encode("utf-8")
+    paired = copy.deepcopy(st)
+    next(s for s in paired["subject"] if s["name"] == "report.json")["digest"] = {
+        "sha256": hashlib.sha256(report.encode("utf-8")).hexdigest()
+    }
+    paired["subject"].extend([
+        {"name": "report.canonical.json", "digest": {"sha256": hashlib.sha256(canonical).hexdigest()}},
+        {"name": "evidence", "digest": {"sha256": hashlib.sha256(b"synthetic evidence").hexdigest()}},
+    ])
+    put("report-subjects", "A signed receipt binds the exact report file and its compact callback encoding.",
+        r.sign_statement(paired, [signer("this_computer")]),
+        {**ok, "payload_bound": True, "disclosed": {}}, received=HANDOFF)
+    vectors["report-subjects"]["report_utf8"] = report
     put("payload-mismatch", "The receiver got different bytes from the payload the receipt signed.",
         env, {"ok": False, "reason": "payload_mismatch", "signer_lines": [r.refusal_line("payload_mismatch")]},
         None, HANDOFF.replace(b"sent", b"done"))
