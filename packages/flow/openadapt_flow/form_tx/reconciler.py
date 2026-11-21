@@ -343,6 +343,107 @@ def _is_truthy_flag(value: Any) -> bool:
         return False
 
 
+# Surface failures inside a popup routine that must become a stop for a
+# person: a popup or dialog that will not open, closes or detaches while
+# settling, a missing or doubled button, a keepalive that would write, a
+# control that did not take its state, or a browser timeout. Matched by class
+# name where the class lives in a backend this module does not import.
+_POPUP_SURFACE_ERROR_NAMES = frozenset(
+    {
+        "PopupContractError",
+        "SurfaceSettleTimeoutError",
+        "SurfaceContextError",
+        "SurfaceStateError",
+        "KeepaliveMutationError",
+        "MissingAnchorError",
+        "AmbiguousAnchorError",
+    }
+)
+
+
+def _is_popup_surface_error(exc: BaseException) -> bool:
+    if isinstance(
+        exc,
+        (
+            PopupContractError,
+            MissingAnchorError,
+            AmbiguousAnchorError,
+            SurfaceSettleTimeoutError,
+            TimeoutError,
+        ),
+    ):
+        return True
+    for cls in type(exc).__mro__:
+        if cls.__name__ in _POPUP_SURFACE_ERROR_NAMES:
+            return True
+        if cls.__module__.startswith("playwright") and cls.__name__ in (
+            "TimeoutError",
+            "Error",
+            "TargetClosedError",
+        ):
+            return True
+    return False
+
+
+def _mutation_count_or_none(surface: Any) -> Optional[int]:
+    try:
+        return int(surface.mutation_count)
+    except Exception:  # noqa: BLE001 - an unreadable count is treated as a send
+        return None
+
+
+class _InPageScope:
+    """Which controls belong to an in-page popup (a dialog in the same page).
+
+    Controls inside an open dialog that was not open before the trigger are
+    the popup's, whatever their selectors (``ObservedControl.modal_container``).
+    That survives a parent form that re-renders with new ids when the dialog
+    opens, and keeps a dialog control whose selector a parent control once
+    had. With no such dialog, the popup's controls are the ones whose
+    selectors were not on the page before; that is only safe while every
+    parent control is still there under its old selector, so a parent
+    re-render, or two new dialogs, stops the run (``PopupContractError``)
+    rather than letting a subroutine fill a parent control.
+    """
+
+    def __init__(self, parent_snapshot: FormSnapshot) -> None:
+        self._parent_selectors = frozenset(
+            c.dom_selector for c in parent_snapshot.controls
+        )
+        self._parent_dialogs = frozenset(
+            c.modal_container for c in parent_snapshot.controls if c.modal_container
+        )
+
+    def apply(self, snapshot: FormSnapshot) -> FormSnapshot:
+        dialogs = {
+            c.modal_container
+            for c in snapshot.controls
+            if c.modal_container and c.modal_container not in self._parent_dialogs
+        }
+        if len(dialogs) > 1:
+            raise PopupContractError(
+                "More than one new dialog is open; the popup's controls cannot "
+                "be told apart"
+            )
+        if dialogs:
+            (dialog,) = dialogs
+            kept = tuple(c for c in snapshot.controls if c.modal_container == dialog)
+        else:
+            present = {c.dom_selector for c in snapshot.controls}
+            if not self._parent_selectors <= present:
+                raise PopupContractError(
+                    "The page re-rendered when the popup opened and the popup is "
+                    "not a dialog, so its controls cannot be told apart from the "
+                    "form's"
+                )
+            kept = tuple(
+                c
+                for c in snapshot.controls
+                if c.dom_selector not in self._parent_selectors
+            )
+        return snapshot.model_copy(update={"controls": kept})
+
+
 def _deterministic_halt_id(
     run_id: str,
     kind: FormHaltKind,
@@ -1457,13 +1558,9 @@ class FormReconciler:
             return self._run_popup_subroutine_steps(
                 parent_surface, session, parent_snapshot, subroutine
             )
-        except (
-            PopupContractError,
-            MissingAnchorError,
-            AmbiguousAnchorError,
-            SurfaceContextError,
-            SurfaceSettleTimeoutError,
-        ) as exc:
+        except Exception as exc:  # noqa: BLE001 - narrowed just below
+            if not _is_popup_surface_error(exc):
+                raise
             sig = f"popup_error|{subroutine.subroutine_id}|{type(exc).__name__}"
             return [
                 self._popup_contract_halt(
@@ -1484,20 +1581,12 @@ class FormReconciler:
 
     @staticmethod
     def _scope_to_new_controls(
-        snapshot: FormSnapshot, parent_selectors: Optional[frozenset[str]]
+        snapshot: FormSnapshot, scope: Optional["_InPageScope"]
     ) -> FormSnapshot:
-        """Keep only controls that were not on the page before an in-page popup opened."""
-        if parent_selectors is None:
+        """Keep only an in-page popup's own controls (see ``_InPageScope``)."""
+        if scope is None:
             return snapshot
-        return snapshot.model_copy(
-            update={
-                "controls": tuple(
-                    c
-                    for c in snapshot.controls
-                    if c.dom_selector not in parent_selectors
-                ),
-            }
-        )
+        return scope.apply(snapshot)
 
     def _run_popup_subroutine_steps(
         self,
@@ -1617,10 +1706,8 @@ class FormReconciler:
             return [halt]
 
         in_page = subroutine.popup_mode == "in_page"
-        parent_selectors: Optional[frozenset[str]] = (
-            frozenset(c.dom_selector for c in parent_snapshot.controls)
-            if in_page
-            else None
+        parent_selectors: Optional[_InPageScope] = (
+            _InPageScope(parent_snapshot) if in_page else None
         )
         parent_errors = (
             set(_collect_surface_errors(parent_snapshot)) if in_page else set()
@@ -2026,7 +2113,7 @@ class FormReconciler:
         parent_snapshot: FormSnapshot,
         subroutine: PopupSubroutineSpec,
         *,
-        scope: Optional[frozenset[str]] = None,
+        scope: Optional["_InPageScope"] = None,
     ) -> Optional[FormHaltItem]:
         """Re-read every field typed in the popup before its apply button.
 
@@ -2672,14 +2759,19 @@ class FormReconciler:
                     if trig is None:
                         continue
 
+                    muts_before = _mutation_count_or_none(active_surface)
                     sub_halts = self._run_popup_subroutine(
                         active_surface, session, snapshot, sub
                     )
                     if sub_halts:
+                        muts_after = _mutation_count_or_none(active_surface)
                         return self._build_result(
                             session,
                             outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
-                            safe_to_retry=True,
+                            # Safe to retry only if the popup sent nothing.
+                            safe_to_retry=(
+                                muts_before is not None and muts_before == muts_after
+                            ),
                             halts=sub_halts,
                             what_happened=sub_halts[0].message,
                         )

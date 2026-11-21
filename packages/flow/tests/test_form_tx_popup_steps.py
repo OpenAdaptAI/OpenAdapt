@@ -161,6 +161,12 @@ class _Portal:
         self.factor = factor
         self.submissions: list[dict[str, Any]] = []
         self.open_window = True
+        # Window that closes itself when Calculate is pressed.
+        self.close_on_calculate = False
+        # Parent form re-rendered with new ids when the in-page popup opens.
+        self.rerender_parent = False
+        # In-page popup that is a plain <div>, not a dialog.
+        self.plain_div = False
 
     def handle(self, route: Route) -> None:
         req = route.request
@@ -178,22 +184,52 @@ class _Portal:
                         round_back=self.round_back,
                     ),
                 )
+            if self.mode == "in_page" and self.rerender_parent:
+                for name in ("first", "dwelling"):
+                    html = html.replace(
+                        f"document.getElementById('{name}')",
+                        f"document.querySelector('#q [name={name}]')",
+                    )
+                html = html.replace(
+                    "document.getElementById('est').showModal();",
+                    "for (const el of document.querySelectorAll('#q input')) {"
+                    " const fresh = el.cloneNode(); fresh.value = el.value;"
+                    " fresh.id = el.name + '-' + Math.random().toString(36).slice(2, 8);"
+                    " const lab = document.querySelector('label[for=' + el.id + ']');"
+                    " if (lab) lab.htmlFor = fresh.id; el.replaceWith(fresh); }"
+                    " document.getElementById('est').showModal();",
+                )
+            if self.mode == "in_page" and self.plain_div:
+                html = (
+                    html.replace('<dialog id="est">', '<div id="est" hidden>')
+                    .replace("</dialog>", "</div>")
+                    .replace(
+                        "document.getElementById('est').showModal();",
+                        "document.getElementById('est').hidden = false;",
+                    )
+                    .replace(
+                        "document.getElementById('est').close();",
+                        "document.getElementById('est').hidden = true;",
+                    )
+                )
             if not self.open_window:
                 html = html.replace(
                     "window.open('/estimator', 'est', 'width=500,height=400');", ""
                 )
             route.fulfill(status=200, content_type="text/html", body=html)
         elif path == "/estimator":
-            route.fulfill(
-                status=200,
-                content_type="text/html",
-                body=_estimator_page(
-                    calculate=self.calculate,
-                    factor=self.factor,
-                    offset=self.offset,
-                    round_back=self.round_back,
-                ),
+            body = _estimator_page(
+                calculate=self.calculate,
+                factor=self.factor,
+                offset=self.offset,
+                round_back=self.round_back,
             )
+            if self.close_on_calculate:
+                body = body.replace(
+                    "calc.addEventListener('click', () => {",
+                    "calc.addEventListener('click', () => { window.close();",
+                )
+            route.fulfill(status=200, content_type="text/html", body=body)
         elif path == "/submit" and req.method == "POST":
             self.submissions.append(json.loads(req.post_data or "{}"))
             route.fulfill(status=200, content_type="application/json", body="{}")
@@ -468,3 +504,52 @@ def test_declared_result_that_cannot_be_read_stops_before_submit(
     assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
     assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
     assert "shows no result" in result.halts[0].message
+
+
+def test_window_that_closes_during_a_step_is_a_stop_not_a_crash(
+    chromium_browser: Browser,
+) -> None:
+    portal = _Portal(mode="window")
+    portal.close_on_calculate = True
+    result, _ = _run(chromium_browser, portal, _dossier())
+    assert portal.submissions == []
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
+    assert result.safe_to_retry is True  # nothing was sent
+
+
+def test_parent_rerendered_when_a_dialog_opens_is_left_alone(
+    chromium_browser: Browser,
+) -> None:
+    portal = _Portal(mode="in_page")
+    portal.rerender_parent = True
+    result, _ = _run(chromium_browser, portal, _dossier())
+    assert portal.submissions == [{"first": "Mirela", "dwelling": str(2000 * RATE)}], (
+        result.outcome,
+        result.halts,
+    )
+
+
+def test_plain_div_popup_with_a_rerendered_parent_stops(
+    chromium_browser: Browser,
+) -> None:
+    portal = _Portal(mode="in_page")
+    portal.rerender_parent = True
+    portal.plain_div = True
+    result, _ = _run(chromium_browser, portal, _dossier())
+    assert portal.submissions == []
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
+    assert "told apart" in result.halts[0].message
+
+
+def test_plain_div_popup_without_a_rerender_still_runs(
+    chromium_browser: Browser,
+) -> None:
+    portal = _Portal(mode="in_page")
+    portal.plain_div = True
+    result, _ = _run(chromium_browser, portal, _dossier())
+    assert portal.submissions == [{"first": "Mirela", "dwelling": str(2000 * RATE)}], (
+        result.outcome,
+        result.halts,
+    )
