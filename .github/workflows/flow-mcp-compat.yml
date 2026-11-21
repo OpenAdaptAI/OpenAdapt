@@ -68,7 +68,7 @@ jobs:
           .venv/bin/python scripts/ci/locked_install.py \
             --lock 'packages/flow[dev,agent,browser,langgraph]' \
             --editable packages/types --editable packages/flow
-          uv pip install --python .venv/bin/python --index-url https://pypi.org/simple \
+          uv pip install --python .venv/bin/python --no-config --index-url https://pypi.org/simple \
             --require-hashes --only-binary :all: \
             --requirement scripts/ci/mcp-${{ matrix.mcp }}-py312-linux.requirements
           uv pip check --python .venv/bin/python
