@@ -104,3 +104,12 @@ files are referenced only by SHA-256 digest.
    approval was required for these writes", and for a gated run in which no
    item was approved, "Approval required for each item; no item was
    approved" (or "items that fail a check").
+11. **Report digests.** `report.json` is the SHA-256 of the report file's exact
+   bytes. `report.canonical` is the SHA-256 of the report's RFC 8785 (JCS)
+   canonical JSON: keys sorted by UTF-16 code units, no whitespace,
+   ECMAScript number form (`0.0` is `0`, `1e-7` is `1e-7`, `1e21` is
+   `1e+21`), strings as `JSON.stringify` writes them. Flow writes both. A
+   receipt names at least one. A verifier compares file bytes only with
+   `report.json` and a canonical digest only with `report.canonical`, never
+   one with the other. `jcs.json` holds canonicalization cases;
+   `report-canonical.json` holds a report, its file bytes and both digests.

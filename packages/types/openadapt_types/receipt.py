@@ -95,7 +95,13 @@ NotChecked = Literal[
     "field_values",
     "postconditions",
 ]
-SubjectName = Literal["report.json", "bundle", "evidence", "payload"]
+#: ``report.json``: SHA-256 of the report file's exact bytes on disk.
+#: ``report.canonical``: SHA-256 of the report's RFC 8785 (JCS) canonical
+#: JSON, the digest OpenAdapt Cloud's managed callback sends. They are
+#: different digests of the same report and never stand in for each other.
+SubjectName = Literal[
+    "report.json", "report.canonical", "bundle", "evidence", "payload"
+]
 #: The media type of a handed-off payload (the ``payload`` subject only).
 PayloadMediaType = Literal[
     "application/json",
@@ -357,7 +363,9 @@ def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     """A closed statement that contradicts itself is refused, never repaired."""
     p = statement.predicate
     names = [s.name for s in statement.subject]
-    if len(set(names)) != len(names) or "report.json" not in names:
+    if len(set(names)) != len(names) or not {"report.json", "report.canonical"} & set(
+        names
+    ):
         return "subject names repeat, or the report is missing"
     for subject in statement.subject:
         if (subject.name == "payload") != (subject.media_type is not None):
@@ -566,6 +574,94 @@ def _statement_embedded(statement: Mapping[str, Any]) -> Optional[str]:
     """Scan everything but the two fixed type URIs, which are checked exactly."""
     rest = {k: v for k, v in statement.items() if k not in ("_type", "predicateType")}
     return find_embedded_content(rest)
+
+
+# -- RFC 8785 (JCS) canonical JSON -----------------------------------------------
+
+
+def _jcs_number(value: Any) -> str:
+    if isinstance(value, bool):
+        raise ValueError("not a number")
+    if isinstance(value, int):
+        if abs(value) > 2**53 - 1:
+            raise ValueError("an integer outside the IEEE 754 safe range")
+        return str(value)
+    if value != value or value in (float("inf"), float("-inf")):
+        raise ValueError("NaN and infinity have no JSON form")
+    if value == 0:
+        return "0"
+    sign = "-" if value < 0 else ""
+    digits, _, exp = repr(abs(value)).replace("e+", "e").partition("e")
+    whole, _, frac = digits.partition(".")
+    mantissa = (whole + frac).lstrip("0")
+    shift = int(exp) if exp else 0
+    if whole == "0":
+        point = shift - (len(frac) - len(frac.lstrip("0")))
+    else:
+        point = len(whole) + shift
+    mantissa = mantissa.rstrip("0") or "0"
+    k, n = len(mantissa), point
+    if k <= n <= 21:
+        out = mantissa + "0" * (n - k)
+    elif 0 < n <= 21:
+        out = mantissa[:n] + "." + mantissa[n:]
+    elif -6 < n <= 0:
+        out = "0." + "0" * (-n) + mantissa
+    else:
+        e = n - 1
+        head = mantissa[0] + ("." + mantissa[1:] if k > 1 else "")
+        out = f"{head}e{'+' if e >= 0 else '-'}{abs(e)}"
+    return sign + out
+
+
+def jcs(value: Any) -> str:
+    """RFC 8785 canonical JSON: sorted keys (UTF-16 order), ES number form."""
+    if value is None or isinstance(value, bool):
+        return json.dumps(value)
+    if isinstance(value, (int, float)):
+        return _jcs_number(value)
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(jcs(item) for item in value) + "]"
+    if isinstance(value, Mapping):
+        keys = sorted(value, key=lambda k: str(k).encode("utf-16-be"))
+        return (
+            "{"
+            + ",".join(f"{json.dumps(str(k), ensure_ascii=False)}:{jcs(value[k])}" for k in keys)
+            + "}"
+        )
+    raise ValueError(f"{type(value).__name__} has no JSON form")
+
+
+def report_canonical_sha256(report: Any) -> str:
+    """The ``report.canonical`` digest of a parsed report."""
+    return hashlib.sha256(jcs(report).encode("utf-8")).hexdigest()
+
+
+def report_subject_match(
+    statement: Mapping[str, Any],
+    *,
+    file_bytes: Optional[bytes] = None,
+    canonical_sha256: Optional[str] = None,
+) -> Optional[str]:
+    """Which report subject matches: ``report.json`` (file bytes) or ``report.canonical``.
+
+    Each digest is compared only with its own subject; ``None`` when neither
+    matches.
+    """
+    subjects = {
+        s.get("name"): s.get("digest", {}).get("sha256")
+        for s in statement.get("subject", [])
+        if isinstance(s, Mapping)
+    }
+    if file_bytes is not None and subjects.get("report.json") == hashlib.sha256(
+        file_bytes
+    ).hexdigest():
+        return "report.json"
+    if canonical_sha256 is not None and subjects.get("report.canonical") == canonical_sha256:
+        return "report.canonical"
+    return None
 
 
 # -- envelope ------------------------------------------------------------------
@@ -1111,6 +1207,9 @@ __all__ = [
     "canonical_json",
     "commitment",
     "Approval",
+    "jcs",
+    "report_canonical_sha256",
+    "report_subject_match",
     "approval_line",
     "Confirmation",
     "confirmation_line",

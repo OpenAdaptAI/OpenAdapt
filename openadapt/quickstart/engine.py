@@ -771,8 +771,11 @@ def write_run_receipts(run_dirs: list[Path]) -> int:
     for run_dir in run_dirs:
         if not (Path(run_dir) / "report.json").is_file():
             continue
-        home = seal_home()
-        write_receipt_record(Path(run_dir), signer=signer_for(home), home=home)
+        try:
+            home = seal_home()
+            write_receipt_record(Path(run_dir), signer=signer_for(home), home=home)
+        except Exception:  # noqa: BLE001 - a receipt failure never ends the finale
+            continue
         written += 1
     return written
 
