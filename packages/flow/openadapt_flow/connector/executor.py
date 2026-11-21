@@ -261,16 +261,23 @@ def build_run_argv(
     return argv
 
 
+class _ChildNotStarted(RuntimeError):
+    """The operating system refused to start the governed process."""
+
+
 def _subprocess_runner(
     argv: list[str], run_dir: Path, child_env: Mapping[str, str]
 ) -> RunOutcome:
     job_id = getattr(_CURRENT, "job_id", None)
-    proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
-        argv,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=dict(child_env),
-    )
+    try:
+        proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
+            argv,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=dict(child_env),
+        )
+    except OSError as exc:
+        raise _ChildNotStarted(type(exc).__name__) from exc
     if job_id:
         with _CHILDREN.lock:
             _CHILDREN.procs[job_id] = proc
@@ -561,6 +568,7 @@ def execute_job(
     runner: Runner = _subprocess_runner,
     require_run_token: bool = True,
     on_secrets: Optional[Callable[[list[str]], None]] = None,
+    on_child_start: Optional[Callable[[str], None]] = None,
 ) -> ExecutionResult:
     """Run one governed BYOC job end to end, inside the customer perimeter.
 
@@ -578,6 +586,7 @@ def execute_job(
             runner=runner,
             require_run_token=require_run_token,
             on_secrets=on_secrets,
+            on_child_start=on_child_start,
         )
     finally:
         _CURRENT.job_id = None
@@ -597,6 +606,7 @@ def _execute_job(
     runner: Runner,
     require_run_token: bool,
     on_secrets: Optional[Callable[[list[str]], None]],
+    on_child_start: Optional[Callable[[str], None]],
 ) -> ExecutionResult:
     # 1. Governance gates (fail closed BEFORE any bundle is fetched or run).
     try:
@@ -824,7 +834,6 @@ def _execute_job(
                     "cancelled before the governed child started",
                     verified_bundle_sha256=observed_sha256,
                 )
-            outcome = runner(argv, run_dir, child_env)
         except Exception as exc:
             return _refused(
                 job,
@@ -833,6 +842,32 @@ def _execute_job(
                 verified_bundle_sha256=observed_sha256,
             )
 
+        try:
+            outcome = runner(argv, run_dir, child_env)
+        except _ChildNotStarted as exc:
+            return _refused(
+                job,
+                "child_invocation_failed",
+                f"governed child did not start: {exc}",
+                verified_bundle_sha256=observed_sha256,
+            )
+        except Exception as exc:
+            # A missing return from the run boundary cannot establish that the
+            # child did nothing. Preserve its verified binding for reconciliation.
+            if on_child_start is not None:
+                on_child_start(observed_sha256)
+            return ExecutionResult(
+                "halt",
+                {},
+                {"present": True},
+                None,
+                f"governed child outcome unavailable: {type(exc).__name__}",
+                verified_bundle_sha256=observed_sha256,
+                error_code="child_outcome_unknown",
+            )
+
+        if on_child_start is not None:
+            on_child_start(observed_sha256)
         report = outcome.report or {}
         status = status_from_report(outcome.returncode, report)
         error_code: Optional[str] = None

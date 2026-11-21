@@ -512,6 +512,64 @@ def test_report_write_failure_keeps_child_failure_as_failed():
     assert body["report_path"] is None
 
 
+@pytest.mark.parametrize("phase", ["before_child", "verified", "failed_after_write"])
+def test_egress_refusal_reports_whether_the_child_could_have_written(tmp_path, phase):
+    cp = StubControlPlane()
+    payload = _payload()
+    # An unsafe report reference makes the guard refuse both failure cases.
+    # For the verified case the refused value occurs only in the outcome.
+    if phase != "verified":
+        payload["storage"]["report_ref"] = "synthetic private report"
+    if phase == "before_child":
+        payload["safety"] = {}
+    cp.enqueue("org_demo", payload)
+    client = ConnectorClient(
+        "https://app.test", transport=httpx.MockTransport(cp.handler)
+    )
+    client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
+    client.add_secret_values(["effect_tier_1"])
+    record = tmp_path / "synthetic-record.txt"
+
+    def runner(argv, run_dir, env):
+        with record.open("a") as stream:
+            stream.write("saved\n")
+        report = (
+            VERIFIED_REPORT
+            if phase == "verified"
+            else {**SUCCESS_REPORT, "success": False}
+        )
+        return RunOutcome(0 if phase == "verified" else 1, report)
+
+    result = run_once(
+        client,
+        _settings(),
+        runner=runner,
+        storage_factory=lambda job: InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES),
+    )
+
+    assert result["error_code"] == "egress_refused"
+    assert result["callback_accepted"]
+    assert len(cp.callbacks) == len(cp.acks) == 1
+    callback = cp.callbacks[0]["body"]
+    assert callback["report_path"] is None and callback["metrics"] == {}
+    assert "outcome" not in callback and "failure_signal" not in callback
+    assert cp.acks[0]["error_code"] == "egress_refused"
+    if phase == "before_child":
+        assert not record.exists()
+        assert (
+            result["status"] == callback["status"] == cp.acks[0]["status"] == "failed"
+        )
+        assert callback["error_code"] == "runner_failure"
+        assert "bundle_sha256" not in callback and "halt" not in callback
+    else:
+        assert record.read_text().splitlines() == ["saved"]
+        assert result["status"] == callback["status"] == "halt"
+        assert callback["halt"] == {"present": True}
+        assert callback["bundle_sha256"] == _BUNDLE_SHA256
+        assert callback["error_code"] == "egress_refused"
+        assert cp.acks[0]["status"] == "done"
+
+
 def test_report_write_failure_lease_is_not_acked_failed():
     cp = StubControlPlane()
     cp.enqueue("org_demo", _payload())
@@ -726,15 +784,26 @@ def test_execute_refuses_archive_digest_mismatch_before_runner():
     assert "bundle_sha256" not in phi_free_callback_body(job, result)
 
 
-def test_child_failure_after_archive_verification_carries_verified_digest():
+@pytest.mark.parametrize("spawned", [False, True])
+def test_child_exception_keeps_verified_binding_and_stage(tmp_path, spawned):
+    from openadapt_flow.connector.executor import _subprocess_runner
+
     job = parse_job(_payload(), lease_job_id="bjob_1")
     storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
+    record = tmp_path / "synthetic-record"
 
-    def runner(argv, run_dir: Path, _env) -> RunOutcome:
-        raise RuntimeError("child unavailable")
+    def runner(argv, run_dir: Path, env) -> RunOutcome:
+        if not spawned:
+            return _subprocess_runner([str(tmp_path / "missing-program")], run_dir, env)
+        record.write_text("saved")
+        raise RuntimeError("synthetic result unavailable")
 
     result = execute_job(job, _settings(), storage, runner=runner)
-    assert result.status == "failed"
+    assert result.status == ("halt" if spawned else "failed")
+    assert result.error_code == (
+        "child_outcome_unknown" if spawned else "child_invocation_failed"
+    )
+    assert record.exists() == spawned
     assert result.verified_bundle_sha256 == _BUNDLE_SHA256
     callback = phi_free_callback_body(job, result)
     assert callback["bundle_sha256"] == _BUNDLE_SHA256
