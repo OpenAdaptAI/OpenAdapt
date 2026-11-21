@@ -94,13 +94,14 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt demo quickstart --break-it
+uvx --python 3.12 openadapt@latest quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
-fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
-does the same.
+fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
+Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+then `openadapt quickstart --break-it` does the same. The browser runs hidden
+and progress shows in the terminal; add `--watch` to see the browser window.
 
 ### What it shows
 

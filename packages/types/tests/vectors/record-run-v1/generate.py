@@ -1,0 +1,251 @@
+"""Regenerate the record/run/v1 test vectors: ``python generate.py``.
+
+The keys are derived from public labels (``sha256("openadapt receipt test
+vector: <role>")``), so they are test keys anyone can recompute, never
+secrets. Salts are derived the same way, so the output is byte-stable.
+Run it from any directory; it writes next to itself.
+"""
+
+from __future__ import annotations
+
+import base64
+import copy
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[2]))
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
+    Ed25519PrivateKey,
+)
+from cryptography.hazmat.primitives.serialization import (  # noqa: E402
+    Encoding,
+    PublicFormat,
+)
+
+from openadapt_types import receipt as r  # noqa: E402
+
+
+def _key(label: str) -> Ed25519PrivateKey:
+    seed = hashlib.sha256(f"openadapt receipt test vector: {label}".encode()).digest()
+    return Ed25519PrivateKey.from_private_bytes(seed)
+
+
+def _raw(key: Ed25519PrivateKey) -> bytes:
+    return key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+
+def _salts():
+    counter = [0]
+
+    def make() -> str:
+        counter[0] += 1
+        return hashlib.sha256(f"vector salt {counter[0]}".encode()).hexdigest()
+
+    return make
+
+
+KEYS = {
+    label: _key(label)
+    for label in ("this_computer", "customer_key", "openadapt_cloud", "demo", "stranger")
+}
+IDS = {label: r.key_id(_raw(key)) for label, key in KEYS.items()}
+
+
+def signer(label: str):
+    return IDS[label], KEYS[label].sign
+
+
+REGISTRY = {
+    "schema": r.REGISTRY_SCHEMA,
+    "keys": [
+        {
+            "key_id": IDS[label],
+            "public_key": base64.b64encode(_raw(KEYS[label])).decode(),
+            "role": label,
+            "status": "active",
+            **({"org": "Example Clinic"} if label == "customer_key" else {}),
+        }
+        for label in ("this_computer", "customer_key", "openadapt_cloud", "demo")
+    ],
+}
+
+
+def statement(outcome: str = "VERIFIED", commitments=None) -> dict:
+    lines = [
+        {
+            "step": 2,
+            "target_kind": "gui",
+            "operation": "write",
+            "check": "confirmed",
+            "strength": "read_back",
+            "not_checked": [],
+        },
+        {
+            "step": 4,
+            "target_kind": "gui",
+            "operation": "irreversible_write",
+            "check": "confirmed" if outcome == "VERIFIED" else "refuted",
+            "strength": "read_back",
+            "not_checked": ["field_values"],
+        },
+    ]
+    tally = {k: sum(1 for x in lines if x["check"] == k) for k in ("confirmed", "refuted", "not_checked")}
+    return {
+        "_type": r.STATEMENT_TYPE,
+        "subject": [
+            {"name": "report.json", "digest": {"sha256": "1" * 64}},
+            {"name": "bundle", "digest": {"sha256": "2" * 64}},
+        ],
+        "predicateType": r.PREDICATE_TYPE,
+        "predicate": {
+            "program": {"id": r.program_id("MockMed referral", "2" * 64), "version_sha256": "2" * 64},
+            "started_hour": "2026-11-20T23:00:00Z",
+            "outcome": outcome,
+            "reason_code": "verified" if outcome == "VERIFIED" else "halted",
+            "steps": {"total": 5, "ok": 5 if outcome == "VERIFIED" else 4},
+            "lines": lines,
+            "checks": {
+                "identity": {"required": 5, "confirmed": 5},
+                "postconditions": {"required": 3, "confirmed": 3},
+                "effects": {"required": 2, "confirmed": tally["confirmed"]},
+                "authorization": {"required": 0, "confirmed": 0},
+                "lines_confirmed": tally["confirmed"],
+                "lines_refuted": tally["refuted"],
+                "lines_not_checked": tally["not_checked"],
+            },
+            "model_calls": 0,
+            "disclosure": {
+                "version": r.PUBLIC_DISCLOSURE_VERSION,
+                "commitments": commitments or {},
+            },
+        },
+    }
+
+
+def _tamper(envelope: dict) -> dict:
+    payload = base64.b64decode(envelope["payload"])
+    changed = payload.replace(b'"outcome":"STOPPED"', b'"outcome":"VERIFIED"', 1)
+    if changed == payload:
+        changed = payload.replace(b'"model_calls":0', b'"model_calls":1', 1)
+    out = copy.deepcopy(envelope)
+    out["payload"] = base64.b64encode(changed).decode()
+    return out
+
+
+def build() -> dict[str, dict]:
+    values = {
+        "program_name": "MockMed referral",
+        "flow_version": "3.5.0",
+        "github_login": "example-user",
+        "run_id": "run-20261120-2300",
+    }
+    commitments, openings = r.make_openings(values, salt=_salts())
+    full = statement("VERIFIED", commitments)
+    env = r.sign_statement(full, [signer("this_computer")])
+    private = r.private_openings(env, openings)
+    stopped = r.sign_statement(statement("STOPPED"), [signer("this_computer")])
+    vectors: dict[str, dict] = {}
+
+    def add(name, description, document, expected, openings=None):
+        vectors[name] = {
+            "description": description,
+            "registry": "registry.json",
+            "document": document,
+            **({"openings": openings} if openings is not None else {}),
+            "expected": expected,
+        }
+
+    ok_local = {
+        "ok": True,
+        "reason": None,
+        "signer_lines": ["Signed by this computer"],
+        "demo": False,
+    }
+    add("valid", "A run signed by this computer, with its private openings.", env,
+        {**ok_local, "outcome": "VERIFIED", "disclosed": values}, private)
+    add("valid-stopped", "A stopped run gets a receipt too; its outcome stays STOPPED.",
+        stopped, {**ok_local, "outcome": "STOPPED", "disclosed": {}})
+    add("tampered", "The stopped run's payload edited to say VERIFIED after signing.",
+        _tamper(stopped), {"ok": False, "reason": "bad_signature",
+                           "signer_lines": [r.refusal_line("bad_signature")]})
+    add("unknown-signer", "Signed by a key the registry doesn't pin.",
+        r.sign_statement(statement("VERIFIED"), [signer("stranger")]),
+        {"ok": False, "reason": "unknown_signer", "signer_lines": [r.UNKNOWN_SIGNER_LINE]})
+    add("unknown-signer-beside-valid", "A pinned signature plus an unpinned one: refused.",
+        r.sign_statement(statement("VERIFIED"), [signer("this_computer"), signer("stranger")]),
+        {"ok": False, "reason": "unknown_signer", "signer_lines": [r.UNKNOWN_SIGNER_LINE]})
+    add("demo-key", "Signed only by the demo key: verifies, always marked demo.",
+        r.sign_statement(statement("VERIFIED"), [signer("demo")]),
+        {"ok": True, "reason": None, "outcome": "VERIFIED", "demo": True,
+         "signer_lines": ["Demo key: checks only in this demo"], "disclosed": {}})
+    add("demo-beside-real", "A demo key next to a real key: refused.",
+        r.sign_statement(statement("VERIFIED"), [signer("this_computer"), signer("demo")]),
+        {"ok": False, "reason": "mixed_demo", "signer_lines": [r.refusal_line("mixed_demo")]})
+    add("customer-key", "Signed by the organization's own key.",
+        r.sign_statement(statement("VERIFIED"), [signer("customer_key")]),
+        {"ok": True, "reason": None, "outcome": "VERIFIED", "demo": False,
+         "signer_lines": ["Signed by Example Clinic's key"], "disclosed": {}})
+    counter = r.add_signature(env, *signer("openadapt_cloud"))
+    add("cloud-countersign", "This computer's receipt, countersigned by Cloud in the same envelope.",
+        counter, {"ok": True, "reason": None, "outcome": "VERIFIED", "demo": False,
+                  "signer_lines": ["Signed by this computer", "Countersigned by OpenAdapt Cloud"],
+                  "disclosed": {}})
+    card = r.public_card(counter, openings, reveal=["program_name", "flow_version"])
+    add("public-redaction", "The public card: the same signed envelope, two allow-listed openings.",
+        card, {"ok": True, "reason": None, "outcome": "VERIFIED", "demo": False,
+               "signer_lines": ["Signed by this computer", "Countersigned by OpenAdapt Cloud"],
+               "disclosed": {"program_name": "MockMed referral", "flow_version": "3.5.0"}})
+    leaky = copy.deepcopy(card)
+    leaky["openings"]["run_id"] = openings["run_id"]
+    add("public-redaction-not-allowed", "A card that also opens run_id, which isn't allow-listed.",
+        leaky, {"ok": False, "reason": "disclosure_not_allowed",
+                "signer_lines": [r.refusal_line("disclosure_not_allowed")]})
+    wrong = copy.deepcopy(card)
+    wrong["openings"]["program_name"]["value"] = "Another program"
+    add("public-redaction-mismatch", "A card whose opened value doesn't match its commitment.",
+        wrong, {"ok": False, "reason": "opening_mismatch",
+                "signer_lines": [r.refusal_line("opening_mismatch")]})
+    blob = copy.deepcopy(card)
+    blob["openings"]["program_name"]["value"] = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    add("embedded-image-in-card", "A card that tries to carry a screenshot: refused.",
+        blob, {"ok": False, "reason": "embedded_content",
+               "signer_lines": [r.refusal_line("embedded_content")]})
+    # A statement carrying a screenshot, signed anyway (bypassing the builder).
+    bad = statement("VERIFIED")
+    bad["predicate"]["reason_code"] = "iVBORw0KGgo" + "A" * 120
+    payload = r.canonical_json(bad).encode()
+    raw_env = {"payloadType": r.PAYLOAD_TYPE, "payload": base64.b64encode(payload).decode(),
+               "signatures": [{"keyid": IDS["this_computer"],
+                               "sig": base64.b64encode(KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, payload))).decode()}]}
+    add("embedded-image-in-record", "A signed record whose payload carries base64 image bytes: refused.",
+        raw_env, {"ok": False, "reason": "embedded_content",
+                  "signer_lines": [r.refusal_line("embedded_content")]})
+    other = statement("VERIFIED")
+    other["predicateType"] = "https://openadapt.ai/record/run/v9"
+    payload = r.canonical_json(other).encode()
+    unknown_schema = {"payloadType": r.PAYLOAD_TYPE, "payload": base64.b64encode(payload).decode(),
+                      "signatures": [{"keyid": IDS["this_computer"],
+                                      "sig": base64.b64encode(KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, payload))).decode()}]}
+    add("unknown-schema", "A correctly signed statement of a predicate type this verifier doesn't know.",
+        unknown_schema, {"ok": False, "reason": "unknown_schema",
+                         "signer_lines": [r.refusal_line("unknown_schema")]})
+    return vectors
+
+
+def main() -> None:
+    (HERE / "registry.json").write_text(json.dumps(REGISTRY, indent=2, sort_keys=True) + "\n")
+    unknown_role = copy.deepcopy(REGISTRY)
+    unknown_role["keys"][0]["role"] = "notary"
+    (HERE / "registry-unknown-role.json").write_text(
+        json.dumps(unknown_role, indent=2, sort_keys=True) + "\n"
+    )
+    for name, vector in build().items():
+        (HERE / f"{name}.json").write_text(json.dumps(vector, indent=2, sort_keys=True) + "\n")
+
+
+if __name__ == "__main__":
+    main()
