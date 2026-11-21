@@ -13185,6 +13185,7 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_shadow import register as _register_shadow
 
     _register_shadow(sub)
+    __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
 
     from openadapt_flow.cli_receipt import register as _register_receipt
 
