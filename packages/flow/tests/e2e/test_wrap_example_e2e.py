@@ -107,6 +107,8 @@ def test_example_runs_the_agent_once_then_the_program(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     # Keep the opt-out ledger and default folders out of the real home.
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "home"))
+    # The user's own admission key folder, which the example must not touch.
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_DIR", str(tmp_path / "user-admission-keys"))
     client = ScriptedClaude()
     original = agents.ClaudeAgent.drive
 
@@ -140,7 +142,7 @@ def test_example_runs_the_agent_once_then_the_program(
     )
     # The throwaway keys stay in the example's folder, not the user's.
     assert (out / "keys").is_dir()
-    assert not (tmp_path / "home" / "keys").exists()
+    assert not (tmp_path / "user-admission-keys").exists()
     ledger = (tmp_path / "home" / "unscrubbed-sends.jsonl").read_text()
     assert "synthetic sample app" in ledger
 
