@@ -1744,7 +1744,20 @@ class FormReconciler:
         unconsumed: Optional[list[str]] = None
         fold = FieldCodecSpec(kind=FormCodecKind.CASEFOLD)
 
-        for ctrl in _editable_fields(snapshot):
+        # Read-only text boxes (filled by a lookup) count only for the
+        # intake-key check below: an empty one the intake has a value for.
+        readonly_text = [
+            c
+            for c in snapshot.controls
+            if c.visible
+            and c.readonly
+            and not c.disabled
+            and not c.is_secret
+            and c.tag.casefold() == "input"
+            and c.input_type.casefold() in _FREE_TEXT_INPUT_TYPES
+            and _is_control_empty(c)
+        ]
+        for ctrl in [*_editable_fields(snapshot), *readonly_text]:
             if ctrl.modal_container:
                 continue
             group = radio_group_key(ctrl)
