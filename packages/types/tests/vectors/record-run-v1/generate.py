@@ -245,11 +245,11 @@ def _chain_vectors(vectors) -> None:
     sent, sent_openings = _confirmed("sent")
     original = r.sign_statement(sent, [signer("this_computer")])
 
-    def update(state, sequence, of=original):
+    def update(state, sequence, of=original, by="this_computer"):
         st, _ = _confirmed(state, salt=_salts())
         confirmations = st["predicate"]["confirmations"]
         return r.sign_statement(
-            r.follow_up_statement(of, sequence, confirmations), [signer("this_computer")]
+            r.follow_up_statement(of, sequence, confirmations), [signer(by)]
         )
 
     ack, recorded = update("acknowledged", 1), update("recorded_as_intended", 2)
@@ -276,6 +276,8 @@ def _chain_vectors(vectors) -> None:
         [update("acknowledged", 1, of=other)], {"ok": False, "reason": "wrong_original", "lines": []})
     put("chain-out-of-sequence", "Two follow-ups whose sequence numbers skip.",
         [ack, update("recorded_as_intended", 3)], {"ok": False, "reason": "out_of_sequence", "lines": []})
+    put("chain-different-signer", "A follow-up signed by another registered key, not the original's.",
+        [update("acknowledged", 1, by="customer_key")], {"ok": False, "reason": "different_signer", "lines": []})
     payload = base64.b64decode(recorded["payload"]).replace(
         b'"state":"recorded_as_intended"', b'"state":"recorded_differently"', 1
     )

@@ -119,7 +119,9 @@ def _approval(
         for a in block.get("approvals") or []
         if isinstance(a, Mapping) and a.get("decision") == "approved"
     ]
-    if mode == "not_gated" or not approved:
+    # The item's final decision decides: earlier "approved" answers never
+    # make a declined, waiting or unanswered item read as approved.
+    if mode == "not_gated" or block.get("decision") != "approved" or not approved:
         return {"mode": mode, "approver_kind": "none", "commitments": {}}, {}
     # The weakest approver counts: one delegate's answer among people's makes
     # the whole run "approved by an agent delegate", never "by a person".
