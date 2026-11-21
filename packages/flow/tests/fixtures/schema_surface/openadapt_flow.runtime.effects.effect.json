@@ -1,0 +1,2188 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "Effect": {
+   "validation": {
+    "$defs": {
+     "EffectKind": {
+      "description": "System-of-record effect kinds (RFC section 2.2).\n\nThese are the NEW kinds the RFC adds beyond the vision-checkable\npostcondition kinds (``text_present`` / ``region_stable`` / ...): their\nprobe is a read against the system of record, not the frame.",
+      "enum": [
+       "record_written",
+       "field_equals",
+       "exact_new_set"
+      ],
+      "title": "EffectKind",
+      "type": "string"
+     },
+     "ReadbackAdmission": {
+      "additionalProperties": false,
+      "description": "A person's acceptance of a read-back taught by demonstration.\n\nThe demonstration that taught the check cannot approve it. Until a person\nadmits it, the check can't confirm a save (the verifier rules\n``INDETERMINATE``). The admission is bound to the exact check by\n:attr:`spec_digest`; a changed check needs a new admission.",
+      "properties": {
+       "admitted_by": {
+        "minLength": 1,
+        "title": "Admitted By",
+        "type": "string"
+       },
+       "admitted_at": {
+        "minLength": 1,
+        "title": "Admitted At",
+        "type": "string"
+       },
+       "spec_digest": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Spec Digest",
+        "type": "string"
+       },
+       "role": {
+        "const": "person",
+        "default": "person",
+        "title": "Role",
+        "type": "string"
+       }
+      },
+      "required": [
+       "admitted_by",
+       "admitted_at",
+       "spec_digest"
+      ],
+      "title": "ReadbackAdmission",
+      "type": "object"
+     },
+     "ReadbackField": {
+      "additionalProperties": false,
+      "description": "One field a person marked on the saved record's screen.\n\nThe verifier reads :attr:`region` and requires :attr:`value` there.",
+      "properties": {
+       "name": {
+        "title": "Name",
+        "type": "string"
+       },
+       "region": {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Region",
+        "type": "array"
+       },
+       "value": {
+        "$ref": "#/$defs/ValueExpr"
+       },
+       "locator": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Locator"
+       },
+       "source": {
+        "default": "ocr",
+        "enum": [
+         "ocr",
+         "structure"
+        ],
+        "title": "Source",
+        "type": "string"
+       },
+       "value_kind": {
+        "default": "text",
+        "enum": [
+         "text",
+         "code",
+         "date",
+         "currency",
+         "number"
+        ],
+        "title": "Value Kind",
+        "type": "string"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "mdy",
+           "dmy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Date Order"
+       }
+      },
+      "required": [
+       "name",
+       "region",
+       "value"
+      ],
+      "title": "ReadbackField",
+      "type": "object"
+     },
+     "ReadbackGuard": {
+      "additionalProperties": false,
+      "description": "What a read-back's replayed navigation must never do.\n\nThe navigation runs in the acting session, on any surface (a browser, a\ndesktop app, an RDP or Citrix window), where no network guard can stop a\nstray write. Before each click the verifier reads the text under the\npointer and refuses a control whose label is a commit word or one of the\nsave's own control labels; it refuses save and delete key chords. A\nrefusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.",
+      "properties": {
+       "commit_labels": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Commit Labels",
+        "type": "array"
+       }
+      },
+      "title": "ReadbackGuard",
+      "type": "object"
+     },
+     "ReadbackNav": {
+      "description": "One deterministic navigation action to RE-OPEN the written record by a\npath DIFFERENT from the write flow, before an on-screen read-back.\n\nAuto-derived from the demonstration (the steps the person took to view the\nsaved record again \u2014 e.g. clear the form, search the patient, open the\nencounter). Deliberately tiny and model-free: a re-navigation is replayed\nby coordinate/keyboard exactly as recorded; anything a backend cannot\nperform makes the read-back INDETERMINATE (HALT), never a guessed CONFIRM.",
+      "properties": {
+       "action": {
+        "title": "Action",
+        "type": "string"
+       },
+       "point": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Point"
+       },
+       "text": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Text"
+       },
+       "key": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Key"
+       },
+       "param": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Param"
+       },
+       "reference": {
+        "default": false,
+        "title": "Reference",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "action"
+      ],
+      "title": "ReadbackNav",
+      "type": "object"
+     },
+     "ReadbackReference": {
+      "additionalProperties": false,
+      "description": "A reference number the application shows right after the save.\n\nLearned from the demonstration: text that appeared on the screen the save\nleft, was not typed, and looks like an identifier (a claim, order or\nencounter number). Read at run time from :attr:`region` with\n:attr:`pattern` (one capture group), it is evidence that the application\nissued a record (check level ``same_screen``) and, when a navigation\nstep types it (:attr:`ReadbackNav.reference`), the way to find the record\nagain. The captured value itself is never stored in a report.",
+      "properties": {
+       "region": {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Region",
+        "type": "array"
+       },
+       "pattern": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Pattern",
+        "type": "string"
+       }
+      },
+      "required": [
+       "region",
+       "pattern"
+      ],
+      "title": "ReadbackReference",
+      "type": "object"
+     },
+     "ReadbackReset": {
+      "additionalProperties": false,
+      "description": "The step of a demonstrated check that throws away client-side state.\n\nWithout one, the check could read a form buffer or a client-side page the\nsave left behind, and a save that never reached the record would pass.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "reload",
+         "new_search",
+         "reopen_window",
+         "fresh_session"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "at": {
+        "minimum": 0,
+        "title": "At",
+        "type": "integer"
+       },
+       "evidence": {
+        "default": "detected",
+        "enum": [
+         "detected",
+         "declared"
+        ],
+        "title": "Evidence",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "at"
+      ],
+      "title": "ReadbackReset",
+      "type": "object"
+     },
+     "ReadbackSpec": {
+      "description": "The on-screen read-back oracle mined from the demonstration.\n\nCarries WHERE to re-read the saved value (:attr:`region`) and, for the\nstronger DIFFERENT-PATH variant, the re-navigation that re-opens the record\n(:attr:`renavigation`) so the read is forced through a real fetch rather\nthan the form the write left on screen. Consumed by\n:class:`~openadapt_flow.runtime.effects.onscreen.OnScreenReadbackVerifier`;\nevery non-onscreen substrate ignores it.\n\nSAFETY \u2014 the ``different_path`` flag is the gate. A ``different_path=True``\nread-back re-opens the record by an independent path (defeating the\n\"the form still shows what I typed but nothing persisted\" phantom-save\nclass) and is safe enough to be the DEFAULT out-of-the-box oracle. A\n``different_path=False`` (SAME-SURFACE) read-back re-reads the very region\nthe write drove; it CANNOT see a phantom/optimistic save (the measured\nfalse-CONFIRM rate is > 0), so it is wired but NON-default \u2014 a\nhalt-inducing consistency signal an operator opts into with eyes open, not\na pass. See ``docs/LIMITS.md`` and ``benchmark/effect_readback/``.",
+      "properties": {
+       "region": {
+        "anyOf": [
+         {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Region"
+       },
+       "different_path": {
+        "default": false,
+        "title": "Different Path",
+        "type": "boolean"
+       },
+       "renavigation": {
+        "items": {
+         "$ref": "#/$defs/ReadbackNav"
+        },
+        "title": "Renavigation",
+        "type": "array"
+       },
+       "fields": {
+        "items": {
+         "$ref": "#/$defs/ReadbackField"
+        },
+        "title": "Fields",
+        "type": "array"
+       },
+       "demonstrated": {
+        "default": false,
+        "title": "Demonstrated",
+        "type": "boolean"
+       },
+       "demonstrated_by": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Demonstrated By"
+       },
+       "reset": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadbackReset"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "admission": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadbackAdmission"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "guard": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadbackGuard"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "reference": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ReadbackReference"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       }
+      },
+      "title": "ReadbackSpec",
+      "type": "object"
+     },
+     "ValueExpr": {
+      "additionalProperties": false,
+      "description": "A single effect-contract value: either a static ``literal`` or a\nreference to a run ``param`` (P0-3 fix).\n\nBefore this type an :class:`Effect` carried plain static strings, so a\nPARAMETERIZED workflow verified its effects against the values baked in at\nDEMONSTRATION time (write patient \"Susan\" via the GUI, then verify the\nrecorded demo patient \"Phil\"). ``ValueExpr`` lets a compiled effect declare\n``{\"param\": \"patient_id\"}`` and have the runtime resolve it against the\nRUN's params before verification, so the record actually written is the\nrecord checked.\n\nExactly one of :attr:`literal` / :attr:`param` is meaningful. Old bundles\n(and hand-authored effects) that pass a bare string are coerced to\n``ValueExpr(literal=...)`` by :class:`Effect`'s validators, and this type's\n``__eq__`` / ``__str__`` compare/render as that bare string so every\nexisting reader (learning gate signatures, codegen review comments) and the\nsubstrate matchers behave BYTE-FOR-BYTE identically for a literal.",
+      "properties": {
+       "literal": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Literal"
+       },
+       "param": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Param"
+       },
+       "map": {
+        "anyOf": [
+         {
+          "additionalProperties": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Map"
+       },
+       "stored": {
+        "anyOf": [
+         {
+          "enum": [
+           "upper",
+           "lower",
+           "capitalize_words"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Stored"
+       },
+       "kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "phone",
+           "date",
+           "email"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Kind"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "mdy",
+           "dmy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Date Order"
+       },
+       "null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Null"
+       },
+       "absent_is_null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Absent Is Null"
+       },
+       "number": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Number"
+       }
+      },
+      "title": "ValueExpr",
+      "type": "object"
+     }
+    },
+    "description": "A typed system-of-record effect (RFC ``Effect``, concrete runtime form).\n\nAn ``Effect`` is a *contract*: what must be true of the system of record\nfor a step to have actually succeeded. It is deliberately substrate-neutral\n-- the SAME ``Effect`` is checked by the REST verifier, the FHIR verifier,\nor the filesystem verifier (see :class:`EffectVerifier`). The verifier maps\n:attr:`match` / :attr:`field` onto its substrate's query language.\n\nBinds to the RFC (``docs/design/WORKFLOW_PROGRAM_IR.md`` section 2.2): the\nRFC's ``Effect(kind=\"record_written\", probe=\"encounter exists for\npatient\")`` is realized here with a machine-checkable :attr:`match`\nselector and an :attr:`expected_count`; the RFC's\n``Effect(kind=\"field_equals\", field=\"note\", value=params.note)`` maps to\n:attr:`field` / :attr:`value`.",
+    "properties": {
+     "kind": {
+      "$ref": "#/$defs/EffectKind"
+     },
+     "match": {
+      "additionalProperties": {
+       "$ref": "#/$defs/ValueExpr"
+      },
+      "title": "Match",
+      "type": "object"
+     },
+     "field": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Field"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ValueExpr"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "expected_count": {
+      "default": 1,
+      "title": "Expected Count",
+      "type": "integer"
+     },
+     "new_records": {
+      "items": {
+       "additionalProperties": {
+        "$ref": "#/$defs/ValueExpr"
+       },
+       "type": "object"
+      },
+      "title": "New Records",
+      "type": "array"
+     },
+     "identity_field": {
+      "default": "id",
+      "title": "Identity Field",
+      "type": "string"
+     },
+     "idempotency_key": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ValueExpr"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "key_field": {
+      "default": "key",
+      "title": "Key Field",
+      "type": "string"
+     },
+     "composite_key": {
+      "additionalProperties": {
+       "$ref": "#/$defs/ValueExpr"
+      },
+      "title": "Composite Key",
+      "type": "object"
+     },
+     "count_new_only": {
+      "default": false,
+      "title": "Count New Only",
+      "type": "boolean"
+     },
+     "forbid_collateral_loss": {
+      "default": true,
+      "title": "Forbid Collateral Loss",
+      "type": "boolean"
+     },
+     "forbid_collateral_change": {
+      "default": false,
+      "title": "Forbid Collateral Change",
+      "type": "boolean"
+     },
+     "risk": {
+      "default": "reversible",
+      "title": "Risk",
+      "type": "string"
+     },
+     "probe": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Probe"
+     },
+     "timeout_s": {
+      "default": 5.0,
+      "title": "Timeout S",
+      "type": "number"
+     },
+     "needs_operator_confirmation": {
+      "default": false,
+      "title": "Needs Operator Confirmation",
+      "type": "boolean"
+     },
+     "readback": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadbackSpec"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "title": "Effect",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "EffectState": {
+   "validation": {
+    "description": "A snapshot of the system of record captured BEFORE the action.\n\nTwo jobs: (1) establish a baseline so ``record_written`` can count only\nrecords that appeared *because of this action* (delta / at-most-once),\nand (2) let :attr:`Effect.forbid_collateral_loss` detect a pre-existing\nrecord that the action destroyed (lost update). :attr:`reachable` is\nFalse when the system of record could not be read at capture time -- the\nverifier factors that into an INDETERMINATE verdict rather than assuming\nan empty baseline.",
+    "properties": {
+     "substrate": {
+      "title": "Substrate",
+      "type": "string"
+     },
+     "reachable": {
+      "title": "Reachable",
+      "type": "boolean"
+     },
+     "records": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Records",
+      "type": "array"
+     },
+     "readback_complete": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Readback Complete"
+     },
+     "captured_at": {
+      "title": "Captured At",
+      "type": "string"
+     },
+     "detail": {
+      "additionalProperties": true,
+      "title": "Detail",
+      "type": "object"
+     }
+    },
+    "required": [
+     "substrate",
+     "reachable"
+    ],
+    "title": "EffectState",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "EffectVerdict": {
+   "validation": {
+    "$defs": {
+     "EffectKind": {
+      "description": "System-of-record effect kinds (RFC section 2.2).\n\nThese are the NEW kinds the RFC adds beyond the vision-checkable\npostcondition kinds (``text_present`` / ``region_stable`` / ...): their\nprobe is a read against the system of record, not the frame.",
+      "enum": [
+       "record_written",
+       "field_equals",
+       "exact_new_set"
+      ],
+      "title": "EffectKind",
+      "type": "string"
+     },
+     "Verdict": {
+      "description": "The three-valued effect verdict (fail-safe to HALT).",
+      "enum": [
+       "confirmed",
+       "refuted",
+       "indeterminate"
+      ],
+      "title": "Verdict",
+      "type": "string"
+     }
+    },
+    "description": "Outcome of verifying one :class:`Effect` against a system of record.",
+    "properties": {
+     "verdict": {
+      "$ref": "#/$defs/Verdict"
+     },
+     "kind": {
+      "$ref": "#/$defs/EffectKind"
+     },
+     "substrate": {
+      "default": "",
+      "title": "Substrate",
+      "type": "string"
+     },
+     "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+     },
+     "observed_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Observed Count"
+     },
+     "expected_count": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Expected Count"
+     },
+     "observed_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Observed Value"
+     },
+     "expected_value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Expected Value"
+     },
+     "matched_records": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Matched Records",
+      "type": "array"
+     },
+     "unavailable": {
+      "default": false,
+      "title": "Unavailable",
+      "type": "boolean"
+     },
+     "stale": {
+      "default": false,
+      "title": "Stale",
+      "type": "boolean"
+     },
+     "readback_complete": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Readback Complete"
+     },
+     "deferred_check": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Deferred Check"
+     },
+     "read_evidence": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Read Evidence"
+     },
+     "assurance": {
+      "anyOf": [
+       {
+        "enum": [
+         "independent_readback",
+         "screen_readback",
+         "unchecked"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Assurance"
+     }
+    },
+    "required": [
+     "verdict",
+     "kind"
+    ],
+    "title": "EffectVerdict",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "ReadbackAdmission": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "A person's acceptance of a read-back taught by demonstration.\n\nThe demonstration that taught the check cannot approve it. Until a person\nadmits it, the check can't confirm a save (the verifier rules\n``INDETERMINATE``). The admission is bound to the exact check by\n:attr:`spec_digest`; a changed check needs a new admission.",
+    "properties": {
+     "admitted_by": {
+      "minLength": 1,
+      "title": "Admitted By",
+      "type": "string"
+     },
+     "admitted_at": {
+      "minLength": 1,
+      "title": "Admitted At",
+      "type": "string"
+     },
+     "spec_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Spec Digest",
+      "type": "string"
+     },
+     "role": {
+      "const": "person",
+      "default": "person",
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admitted_by",
+     "admitted_at",
+     "spec_digest"
+    ],
+    "title": "ReadbackAdmission",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "A person's acceptance of a read-back taught by demonstration.\n\nThe demonstration that taught the check cannot approve it. Until a person\nadmits it, the check can't confirm a save (the verifier rules\n``INDETERMINATE``). The admission is bound to the exact check by\n:attr:`spec_digest`; a changed check needs a new admission.",
+    "properties": {
+     "admitted_by": {
+      "minLength": 1,
+      "title": "Admitted By",
+      "type": "string"
+     },
+     "admitted_at": {
+      "minLength": 1,
+      "title": "Admitted At",
+      "type": "string"
+     },
+     "spec_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Spec Digest",
+      "type": "string"
+     },
+     "role": {
+      "const": "person",
+      "default": "person",
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admitted_by",
+     "admitted_at",
+     "spec_digest"
+    ],
+    "title": "ReadbackAdmission",
+    "type": "object"
+   }
+  },
+  "ReadbackField": {
+   "validation": {
+    "$defs": {
+     "ValueExpr": {
+      "additionalProperties": false,
+      "description": "A single effect-contract value: either a static ``literal`` or a\nreference to a run ``param`` (P0-3 fix).\n\nBefore this type an :class:`Effect` carried plain static strings, so a\nPARAMETERIZED workflow verified its effects against the values baked in at\nDEMONSTRATION time (write patient \"Susan\" via the GUI, then verify the\nrecorded demo patient \"Phil\"). ``ValueExpr`` lets a compiled effect declare\n``{\"param\": \"patient_id\"}`` and have the runtime resolve it against the\nRUN's params before verification, so the record actually written is the\nrecord checked.\n\nExactly one of :attr:`literal` / :attr:`param` is meaningful. Old bundles\n(and hand-authored effects) that pass a bare string are coerced to\n``ValueExpr(literal=...)`` by :class:`Effect`'s validators, and this type's\n``__eq__`` / ``__str__`` compare/render as that bare string so every\nexisting reader (learning gate signatures, codegen review comments) and the\nsubstrate matchers behave BYTE-FOR-BYTE identically for a literal.",
+      "properties": {
+       "literal": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Literal"
+       },
+       "param": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Param"
+       },
+       "map": {
+        "anyOf": [
+         {
+          "additionalProperties": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Map"
+       },
+       "stored": {
+        "anyOf": [
+         {
+          "enum": [
+           "upper",
+           "lower",
+           "capitalize_words"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Stored"
+       },
+       "kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "phone",
+           "date",
+           "email"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Kind"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "mdy",
+           "dmy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Date Order"
+       },
+       "null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Null"
+       },
+       "absent_is_null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Absent Is Null"
+       },
+       "number": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Number"
+       }
+      },
+      "title": "ValueExpr",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One field a person marked on the saved record's screen.\n\nThe verifier reads :attr:`region` and requires :attr:`value` there.",
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "region": {
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Region",
+      "type": "array"
+     },
+     "value": {
+      "$ref": "#/$defs/ValueExpr"
+     },
+     "locator": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Locator"
+     },
+     "source": {
+      "default": "ocr",
+      "enum": [
+       "ocr",
+       "structure"
+      ],
+      "title": "Source",
+      "type": "string"
+     },
+     "value_kind": {
+      "default": "text",
+      "enum": [
+       "text",
+       "code",
+       "date",
+       "currency",
+       "number"
+      ],
+      "title": "Value Kind",
+      "type": "string"
+     },
+     "date_order": {
+      "anyOf": [
+       {
+        "enum": [
+         "mdy",
+         "dmy"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Date Order"
+     }
+    },
+    "required": [
+     "name",
+     "region",
+     "value"
+    ],
+    "title": "ReadbackField",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "ReadbackGuard": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "What a read-back's replayed navigation must never do.\n\nThe navigation runs in the acting session, on any surface (a browser, a\ndesktop app, an RDP or Citrix window), where no network guard can stop a\nstray write. Before each click the verifier reads the text under the\npointer and refuses a control whose label is a commit word or one of the\nsave's own control labels; it refuses save and delete key chords. A\nrefusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.",
+    "properties": {
+     "commit_labels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Commit Labels",
+      "type": "array"
+     }
+    },
+    "title": "ReadbackGuard",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "What a read-back's replayed navigation must never do.\n\nThe navigation runs in the acting session, on any surface (a browser, a\ndesktop app, an RDP or Citrix window), where no network guard can stop a\nstray write. Before each click the verifier reads the text under the\npointer and refuses a control whose label is a commit word or one of the\nsave's own control labels; it refuses save and delete key chords. A\nrefusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.",
+    "properties": {
+     "commit_labels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Commit Labels",
+      "type": "array"
+     }
+    },
+    "title": "ReadbackGuard",
+    "type": "object"
+   }
+  },
+  "ReadbackNav": {
+   "validation": {
+    "description": "One deterministic navigation action to RE-OPEN the written record by a\npath DIFFERENT from the write flow, before an on-screen read-back.\n\nAuto-derived from the demonstration (the steps the person took to view the\nsaved record again \u2014 e.g. clear the form, search the patient, open the\nencounter). Deliberately tiny and model-free: a re-navigation is replayed\nby coordinate/keyboard exactly as recorded; anything a backend cannot\nperform makes the read-back INDETERMINATE (HALT), never a guessed CONFIRM.",
+    "properties": {
+     "action": {
+      "title": "Action",
+      "type": "string"
+     },
+     "point": {
+      "anyOf": [
+       {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Point"
+     },
+     "text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Text"
+     },
+     "key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Key"
+     },
+     "param": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Param"
+     },
+     "reference": {
+      "default": false,
+      "title": "Reference",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "title": "ReadbackNav",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "ReadbackReference": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "A reference number the application shows right after the save.\n\nLearned from the demonstration: text that appeared on the screen the save\nleft, was not typed, and looks like an identifier (a claim, order or\nencounter number). Read at run time from :attr:`region` with\n:attr:`pattern` (one capture group), it is evidence that the application\nissued a record (check level ``same_screen``) and, when a navigation\nstep types it (:attr:`ReadbackNav.reference`), the way to find the record\nagain. The captured value itself is never stored in a report.",
+    "properties": {
+     "region": {
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Region",
+      "type": "array"
+     },
+     "pattern": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Pattern",
+      "type": "string"
+     }
+    },
+    "required": [
+     "region",
+     "pattern"
+    ],
+    "title": "ReadbackReference",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "A reference number the application shows right after the save.\n\nLearned from the demonstration: text that appeared on the screen the save\nleft, was not typed, and looks like an identifier (a claim, order or\nencounter number). Read at run time from :attr:`region` with\n:attr:`pattern` (one capture group), it is evidence that the application\nissued a record (check level ``same_screen``) and, when a navigation\nstep types it (:attr:`ReadbackNav.reference`), the way to find the record\nagain. The captured value itself is never stored in a report.",
+    "properties": {
+     "region": {
+      "maxItems": 4,
+      "minItems": 4,
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "integer"
+       }
+      ],
+      "title": "Region",
+      "type": "array"
+     },
+     "pattern": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Pattern",
+      "type": "string"
+     }
+    },
+    "required": [
+     "region",
+     "pattern"
+    ],
+    "title": "ReadbackReference",
+    "type": "object"
+   }
+  },
+  "ReadbackReset": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "The step of a demonstrated check that throws away client-side state.\n\nWithout one, the check could read a form buffer or a client-side page the\nsave left behind, and a save that never reached the record would pass.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "reload",
+       "new_search",
+       "reopen_window",
+       "fresh_session"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "at": {
+      "minimum": 0,
+      "title": "At",
+      "type": "integer"
+     },
+     "evidence": {
+      "default": "detected",
+      "enum": [
+       "detected",
+       "declared"
+      ],
+      "title": "Evidence",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "at"
+    ],
+    "title": "ReadbackReset",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "The step of a demonstrated check that throws away client-side state.\n\nWithout one, the check could read a form buffer or a client-side page the\nsave left behind, and a save that never reached the record would pass.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "reload",
+       "new_search",
+       "reopen_window",
+       "fresh_session"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "at": {
+      "minimum": 0,
+      "title": "At",
+      "type": "integer"
+     },
+     "evidence": {
+      "default": "detected",
+      "enum": [
+       "detected",
+       "declared"
+      ],
+      "title": "Evidence",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "at"
+    ],
+    "title": "ReadbackReset",
+    "type": "object"
+   }
+  },
+  "ReadbackSpec": {
+   "validation": {
+    "$defs": {
+     "ReadbackAdmission": {
+      "additionalProperties": false,
+      "description": "A person's acceptance of a read-back taught by demonstration.\n\nThe demonstration that taught the check cannot approve it. Until a person\nadmits it, the check can't confirm a save (the verifier rules\n``INDETERMINATE``). The admission is bound to the exact check by\n:attr:`spec_digest`; a changed check needs a new admission.",
+      "properties": {
+       "admitted_by": {
+        "minLength": 1,
+        "title": "Admitted By",
+        "type": "string"
+       },
+       "admitted_at": {
+        "minLength": 1,
+        "title": "Admitted At",
+        "type": "string"
+       },
+       "spec_digest": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Spec Digest",
+        "type": "string"
+       },
+       "role": {
+        "const": "person",
+        "default": "person",
+        "title": "Role",
+        "type": "string"
+       }
+      },
+      "required": [
+       "admitted_by",
+       "admitted_at",
+       "spec_digest"
+      ],
+      "title": "ReadbackAdmission",
+      "type": "object"
+     },
+     "ReadbackField": {
+      "additionalProperties": false,
+      "description": "One field a person marked on the saved record's screen.\n\nThe verifier reads :attr:`region` and requires :attr:`value` there.",
+      "properties": {
+       "name": {
+        "title": "Name",
+        "type": "string"
+       },
+       "region": {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Region",
+        "type": "array"
+       },
+       "value": {
+        "$ref": "#/$defs/ValueExpr"
+       },
+       "locator": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Locator"
+       },
+       "source": {
+        "default": "ocr",
+        "enum": [
+         "ocr",
+         "structure"
+        ],
+        "title": "Source",
+        "type": "string"
+       },
+       "value_kind": {
+        "default": "text",
+        "enum": [
+         "text",
+         "code",
+         "date",
+         "currency",
+         "number"
+        ],
+        "title": "Value Kind",
+        "type": "string"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "mdy",
+           "dmy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Date Order"
+       }
+      },
+      "required": [
+       "name",
+       "region",
+       "value"
+      ],
+      "title": "ReadbackField",
+      "type": "object"
+     },
+     "ReadbackGuard": {
+      "additionalProperties": false,
+      "description": "What a read-back's replayed navigation must never do.\n\nThe navigation runs in the acting session, on any surface (a browser, a\ndesktop app, an RDP or Citrix window), where no network guard can stop a\nstray write. Before each click the verifier reads the text under the\npointer and refuses a control whose label is a commit word or one of the\nsave's own control labels; it refuses save and delete key chords. A\nrefusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.",
+      "properties": {
+       "commit_labels": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Commit Labels",
+        "type": "array"
+       }
+      },
+      "title": "ReadbackGuard",
+      "type": "object"
+     },
+     "ReadbackNav": {
+      "description": "One deterministic navigation action to RE-OPEN the written record by a\npath DIFFERENT from the write flow, before an on-screen read-back.\n\nAuto-derived from the demonstration (the steps the person took to view the\nsaved record again \u2014 e.g. clear the form, search the patient, open the\nencounter). Deliberately tiny and model-free: a re-navigation is replayed\nby coordinate/keyboard exactly as recorded; anything a backend cannot\nperform makes the read-back INDETERMINATE (HALT), never a guessed CONFIRM.",
+      "properties": {
+       "action": {
+        "title": "Action",
+        "type": "string"
+       },
+       "point": {
+        "anyOf": [
+         {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Point"
+       },
+       "text": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Text"
+       },
+       "key": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Key"
+       },
+       "param": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Param"
+       },
+       "reference": {
+        "default": false,
+        "title": "Reference",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "action"
+      ],
+      "title": "ReadbackNav",
+      "type": "object"
+     },
+     "ReadbackReference": {
+      "additionalProperties": false,
+      "description": "A reference number the application shows right after the save.\n\nLearned from the demonstration: text that appeared on the screen the save\nleft, was not typed, and looks like an identifier (a claim, order or\nencounter number). Read at run time from :attr:`region` with\n:attr:`pattern` (one capture group), it is evidence that the application\nissued a record (check level ``same_screen``) and, when a navigation\nstep types it (:attr:`ReadbackNav.reference`), the way to find the record\nagain. The captured value itself is never stored in a report.",
+      "properties": {
+       "region": {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "title": "Region",
+        "type": "array"
+       },
+       "pattern": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Pattern",
+        "type": "string"
+       }
+      },
+      "required": [
+       "region",
+       "pattern"
+      ],
+      "title": "ReadbackReference",
+      "type": "object"
+     },
+     "ReadbackReset": {
+      "additionalProperties": false,
+      "description": "The step of a demonstrated check that throws away client-side state.\n\nWithout one, the check could read a form buffer or a client-side page the\nsave left behind, and a save that never reached the record would pass.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "reload",
+         "new_search",
+         "reopen_window",
+         "fresh_session"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "at": {
+        "minimum": 0,
+        "title": "At",
+        "type": "integer"
+       },
+       "evidence": {
+        "default": "detected",
+        "enum": [
+         "detected",
+         "declared"
+        ],
+        "title": "Evidence",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "at"
+      ],
+      "title": "ReadbackReset",
+      "type": "object"
+     },
+     "ValueExpr": {
+      "additionalProperties": false,
+      "description": "A single effect-contract value: either a static ``literal`` or a\nreference to a run ``param`` (P0-3 fix).\n\nBefore this type an :class:`Effect` carried plain static strings, so a\nPARAMETERIZED workflow verified its effects against the values baked in at\nDEMONSTRATION time (write patient \"Susan\" via the GUI, then verify the\nrecorded demo patient \"Phil\"). ``ValueExpr`` lets a compiled effect declare\n``{\"param\": \"patient_id\"}`` and have the runtime resolve it against the\nRUN's params before verification, so the record actually written is the\nrecord checked.\n\nExactly one of :attr:`literal` / :attr:`param` is meaningful. Old bundles\n(and hand-authored effects) that pass a bare string are coerced to\n``ValueExpr(literal=...)`` by :class:`Effect`'s validators, and this type's\n``__eq__`` / ``__str__`` compare/render as that bare string so every\nexisting reader (learning gate signatures, codegen review comments) and the\nsubstrate matchers behave BYTE-FOR-BYTE identically for a literal.",
+      "properties": {
+       "literal": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Literal"
+       },
+       "param": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Param"
+       },
+       "map": {
+        "anyOf": [
+         {
+          "additionalProperties": {
+           "type": "string"
+          },
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Map"
+       },
+       "stored": {
+        "anyOf": [
+         {
+          "enum": [
+           "upper",
+           "lower",
+           "capitalize_words"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Stored"
+       },
+       "kind": {
+        "anyOf": [
+         {
+          "enum": [
+           "phone",
+           "date",
+           "email"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Kind"
+       },
+       "date_order": {
+        "anyOf": [
+         {
+          "enum": [
+           "mdy",
+           "dmy"
+          ],
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Date Order"
+       },
+       "null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Null"
+       },
+       "absent_is_null": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Absent Is Null"
+       },
+       "number": {
+        "anyOf": [
+         {
+          "const": true,
+          "type": "boolean"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Number"
+       }
+      },
+      "title": "ValueExpr",
+      "type": "object"
+     }
+    },
+    "description": "The on-screen read-back oracle mined from the demonstration.\n\nCarries WHERE to re-read the saved value (:attr:`region`) and, for the\nstronger DIFFERENT-PATH variant, the re-navigation that re-opens the record\n(:attr:`renavigation`) so the read is forced through a real fetch rather\nthan the form the write left on screen. Consumed by\n:class:`~openadapt_flow.runtime.effects.onscreen.OnScreenReadbackVerifier`;\nevery non-onscreen substrate ignores it.\n\nSAFETY \u2014 the ``different_path`` flag is the gate. A ``different_path=True``\nread-back re-opens the record by an independent path (defeating the\n\"the form still shows what I typed but nothing persisted\" phantom-save\nclass) and is safe enough to be the DEFAULT out-of-the-box oracle. A\n``different_path=False`` (SAME-SURFACE) read-back re-reads the very region\nthe write drove; it CANNOT see a phantom/optimistic save (the measured\nfalse-CONFIRM rate is > 0), so it is wired but NON-default \u2014 a\nhalt-inducing consistency signal an operator opts into with eyes open, not\na pass. See ``docs/LIMITS.md`` and ``benchmark/effect_readback/``.",
+    "properties": {
+     "region": {
+      "anyOf": [
+       {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Region"
+     },
+     "different_path": {
+      "default": false,
+      "title": "Different Path",
+      "type": "boolean"
+     },
+     "renavigation": {
+      "items": {
+       "$ref": "#/$defs/ReadbackNav"
+      },
+      "title": "Renavigation",
+      "type": "array"
+     },
+     "fields": {
+      "items": {
+       "$ref": "#/$defs/ReadbackField"
+      },
+      "title": "Fields",
+      "type": "array"
+     },
+     "demonstrated": {
+      "default": false,
+      "title": "Demonstrated",
+      "type": "boolean"
+     },
+     "demonstrated_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Demonstrated By"
+     },
+     "reset": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadbackReset"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "admission": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadbackAdmission"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "guard": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadbackGuard"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "reference": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/ReadbackReference"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "title": "ReadbackSpec",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "ValueExpr": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "A single effect-contract value: either a static ``literal`` or a\nreference to a run ``param`` (P0-3 fix).\n\nBefore this type an :class:`Effect` carried plain static strings, so a\nPARAMETERIZED workflow verified its effects against the values baked in at\nDEMONSTRATION time (write patient \"Susan\" via the GUI, then verify the\nrecorded demo patient \"Phil\"). ``ValueExpr`` lets a compiled effect declare\n``{\"param\": \"patient_id\"}`` and have the runtime resolve it against the\nRUN's params before verification, so the record actually written is the\nrecord checked.\n\nExactly one of :attr:`literal` / :attr:`param` is meaningful. Old bundles\n(and hand-authored effects) that pass a bare string are coerced to\n``ValueExpr(literal=...)`` by :class:`Effect`'s validators, and this type's\n``__eq__`` / ``__str__`` compare/render as that bare string so every\nexisting reader (learning gate signatures, codegen review comments) and the\nsubstrate matchers behave BYTE-FOR-BYTE identically for a literal.",
+    "properties": {
+     "literal": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Literal"
+     },
+     "param": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Param"
+     },
+     "map": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "string"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Map"
+     },
+     "stored": {
+      "anyOf": [
+       {
+        "enum": [
+         "upper",
+         "lower",
+         "capitalize_words"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Stored"
+     },
+     "kind": {
+      "anyOf": [
+       {
+        "enum": [
+         "phone",
+         "date",
+         "email"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Kind"
+     },
+     "date_order": {
+      "anyOf": [
+       {
+        "enum": [
+         "mdy",
+         "dmy"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Date Order"
+     },
+     "null": {
+      "anyOf": [
+       {
+        "const": true,
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Null"
+     },
+     "absent_is_null": {
+      "anyOf": [
+       {
+        "const": true,
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Absent Is Null"
+     },
+     "number": {
+      "anyOf": [
+       {
+        "const": true,
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Number"
+     }
+    },
+    "title": "ValueExpr",
+    "type": "object"
+   },
+   "serialization": {}
+  }
+ }
+}
