@@ -97,11 +97,15 @@ def sql_spec(*, postgres: Optional[str] = None, sqlite: Optional[str] = None,
 class Proxy:
     """The tools, over one database, for one task (this proxy session)."""
 
-    def __init__(self, ctx: Ctx, *, task: str, system: str = "db", interactive: bool = False) -> None:
+    def __init__(self, ctx: Ctx, *, task: str, system: str = "db", interactive: bool = False,
+                 extra: Any = None) -> None:
         self.ctx = ctx
         self.task = task
         self.system = system
         self.interactive = interactive
+        #: More tools on the same endpoint, with ``tools()`` and ``call()``:
+        #: the API tools (:class:`openadapt_flow.txplan.scoped.ApiTools`).
+        self.extra = extra
         self.lock = threading.Lock()
         self.pending: list[str] = []
         self.applied: list[str] = []
@@ -174,7 +178,15 @@ class Proxy:
             out = engine.undo_plan(self.ctx, digest)
             return {"outcome": out["outcome"], "tx": out["tx"], "receipt": out["run_dir"]}
 
+    def tools(self) -> list[dict[str, Any]]:
+        """The SQL tools when this proxy holds a database, then the extra tools."""
+        out = list(TOOLS) if any(s.name == self.system for s in self.ctx.spec.systems) else []
+        return out + (list(self.extra.tools()) if self.extra is not None else [])
+
     def call(self, name: str, args: Mapping[str, Any]) -> tuple[str, bool]:
+        if self.extra is not None and name in {t["name"] for t in self.extra.tools()}:
+            result: tuple[str, bool] = self.extra.call(name, args)
+            return result
         try:
             if name == "sql_query":
                 got: Any = self.query(str(args["sql"]))
@@ -293,7 +305,7 @@ class McpServer:
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            result = {"tools": TOOLS}
+            result = {"tools": self.proxy.tools()}
         elif method == "tools/call":
             params = msg.get("params") or {}
             text, is_error = self.proxy.call(str(params.get("name")), params.get("arguments") or {})
@@ -322,9 +334,14 @@ def mcp_config(server: McpServer, folder: Path) -> Path:
 
 
 def run(argv_command: Sequence[str], *, spec: TxSpec, state: State, task: str,
-        secrets_: Sequence[str], port: int = 0) -> int:
+        secrets_: Sequence[str], port: int = 0, api_spec: Optional[TxSpec] = None) -> int:
     ctx = Ctx(spec=spec, state=state)
-    proxy = Proxy(ctx, task=task, interactive=not argv_command)
+    extra = None
+    if api_spec is not None:
+        from openadapt_flow.txplan.scoped import ApiTools
+
+        extra = ApiTools(Ctx(spec=api_spec, state=state), task=task)
+    proxy = Proxy(ctx, task=task, interactive=not argv_command, extra=extra)
     server = McpServer(proxy, port=port)
     server.start()
     tmp = Path(tempfile.mkdtemp(prefix="openadapt-proxy-"))

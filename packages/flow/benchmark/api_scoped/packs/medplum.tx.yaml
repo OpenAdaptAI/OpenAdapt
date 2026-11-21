@@ -1,0 +1,52 @@
+# Medplum (FHIR R4) through its REST API, checked against its AuditEvent log
+# (the server must keep AuditEvents as resources: MEDPLUM_SAVE_AUDIT_EVENTS).
+# Measured (RESULTS.md): every create, update, read and history read is an
+# AuditEvent naming the client application and the resource. A repeated
+# identical PUT is logged again even when the version doesn't change.
+# Medplum 5.2.8 serves no system-level _history (400), so collateral
+# changes are found in AuditEvent, not _history.
+schema_version: openadapt.tx/v1
+systems:
+  - name: medplum
+    kind: rest
+    base_url_env: MEDPLUM_URL
+    auth: {header: Authorization, prefix: "Bearer ", value_env: MEDPLUM_TOKEN}
+    audit:
+      pattern: fhir_audit_event
+      path: /fhir/R4/AuditEvent
+      params: {_sort: "-_lastUpdated", _count: "100"}
+      items: entry.*.resource
+      paging: {kind: link, path: "link[relation=next].url"}
+      fields:
+        id: id
+        # The list is sorted by _lastUpdated, so the window is cut on it.
+        at: meta.lastUpdated
+        actor: agent.*.who.reference
+        resource: entity.*.what.reference
+        action: subtype.*.code
+      actions:
+        create: [create]
+        update: [update, patch]
+        delete: [delete]
+        read: [read, vread, history-instance, history, search-type, search, search-system, operation, capabilities]
+      logs: [create, update, delete]
+      actor: {value_env: MEDPLUM_ACTOR}
+      lag: {attempts: 12, wait_s: 0.25}
+    collections:
+      - name: patient
+        list: {path: /fhir/R4/Patient}
+        read: {path: "/fhir/R4/Patient/{id}"}
+        create: {method: POST, path: /fhir/R4/Patient}
+        update: {method: PUT, path: "/fhir/R4/Patient/{id}", replace: true}
+        delete: {method: DELETE, path: "/fhir/R4/Patient/{id}"}
+        scoped:
+          audit_ref: "Patient/{id}"
+          identity: [name]
+          create_body: {resourceType: Patient}
+          # The create carries a marker identifier; the server refuses a
+          # second create holding it (FHIR conditional create).
+          marker: {identifier: [{system: "urn:openadapt:idempotency", value: "{marker}"}]}
+          condition_header: {If-None-Exist: "identifier=urn:openadapt:idempotency|{marker}"}
+          search: "/fhir/R4/Patient?identifier=urn:openadapt:idempotency|{marker}"
+          search_items: entry.*.resource
+          volatile: ["meta", "meta.*"]
