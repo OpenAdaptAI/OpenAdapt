@@ -2890,7 +2890,11 @@ def _recheck_attempt(
 
     if isinstance(write, WriteResult):
         write_id, key = write.write_id, write.write_key
-        if ledger is _NO_LEDGER and write.ledger is not None:
+        if ledger is _NO_LEDGER:
+            # The ledger the write was begun under. A write begun with no
+            # ledger (``begin_write(ledger=None)``) has no attempt to bind,
+            # so its recheck uses none either: resolving the default ledger
+            # here would find no attempt and hold a correct write UNCERTAIN.
             ledger = write.ledger
     else:
         receipt = write.payload.get("receipt") or {}
@@ -3479,7 +3483,13 @@ def _judge_recheck(
     if wait_s > 0:
         if not wait:
             raise RecheckNotDue(state.due_at, wait_s)
-        time.sleep(wait_s)
+        # Sleep until the wall clock, not only the sleep timer, has reached
+        # the due time: the read time is the wall clock truncated to the
+        # second, and a wake a few milliseconds early would make a correct
+        # recheck read "not yet due" (held UNCERTAIN).
+        while wait_s > 0:
+            time.sleep(wait_s + 0.05)
+            wait_s = seconds_until(state.due_at)
     excused: list[tuple[Mapping[str, Any], Mapping[str, object]]] = []
     for i, other in enumerate(excused_by):
         later = other.recheck if isinstance(other, WriteResult) else other
