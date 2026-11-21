@@ -115,6 +115,12 @@ handled by `unknown_write`.
   and so is a `curl` GET or HEAD, also when piped into a filter such as `jq`.
   Any other command that names the system is an unknown write: a script, a
   redirect, `;` or `&&`, `$(...)`, a body read from a file, a form upload.
+  The parsers read an allow-list of flags (`curl -X -d -H -s ...`, `psql -c
+  -h -U ...`), and any other flag makes the call an unknown write. SQL that
+  holds a comment, an escape or dollar quoting (`--`, `/*`, `#`, `\`, `$$`)
+  is never a read and never matches a declared write, because it can hide a
+  second statement. A note value with `#` in it is therefore blocked or asked
+  about.
 - **File tools** (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, Codex
   `apply_patch`) on a declared SQLite file or its journal: an unknown write.
 - **WebFetch** on a declared HTTP base: a read, because it sends GET only.
@@ -139,8 +145,11 @@ agent's shell.
 | `BLOCKED` | The pre-check refused the call. Nothing was sent. | `STOPPED` |
 
 `UNCERTAIN` is never a pass. After `REFUTED` or `UNCERTAIN`, the agent is
-told not to retry, and the identical call is refused until a person checks
-the record and runs `openadapt hooks approve <write id>`. When the store
+told not to retry, and the same write is refused until a person checks the
+record and runs `openadapt hooks approve <write id>`. "The same write" is the
+declared write with the same values, however the call is worded. For an
+undeclared write it is the same command or tool input, ignoring Claude Code's
+free-text `description`. When the store
 can't be read before a write, the write is blocked, because nothing could
 check it afterward.
 
@@ -165,8 +174,14 @@ Each checked call gets a folder `.openadapt/hooks/runs/<id>/`:
 - `effect-receipt.json`: the verifier's own `openadapt.effect-receipt/v1`,
   when a read-back ran.
 
-The receipt's `model_calls` counts OpenAdapt's check, which makes none. The
-agent's own model calls are not counted.
+Two fields of the receipt need reading with care, because `record/run/v1`
+was made for OpenAdapt's own runs:
+
+- `model_calls` is 0: it counts OpenAdapt's check, which makes none. The
+  agent's own model calls are not counted, and the receipt doesn't say so.
+- A declared write whose read-back didn't settle (`UNCERTAIN`) has a line
+  with `not_checked: approved_unverified`, the closest code the schema has.
+  An undeclared write that a person allowed has `effect_not_declared`.
 
 The signing key is this computer's receipt key, the same one `openadapt run`
 uses (`OPENADAPT_SEAL_HOME`, default `~/.openadapt/seal`). It is created on
@@ -236,6 +251,18 @@ the launcher turns every failure before a tool call into exit 2: a missing
 Python, a crash, or an unreadable systems file. It also blocks every hooked
 call while the hooks are broken. Run `openadapt hooks status` to see why.
 After a tool call, a hook failure is reported to the agent and doesn't block.
+
+The launcher can't catch a timeout: the agent kills the hook at its
+`timeout` (120 seconds here). For Claude Code 2.1.295 and later, the
+`PreToolUse` entry sets `onFailure: "block"`, so a timeout, or a launcher
+that can't start, blocks the call. Older Claude Code versions and Codex let
+the call run after a timeout. Keep each contract's own read timeouts
+(`timeout_s`) well under 120 seconds, because the pre-check reads the store
+before the write.
+
+The launcher runs Python from `.openadapt/hooks`, which holds no Python
+files, so a project file named like a module Python imports can't shadow
+it.
 
 ## Strict mode
 

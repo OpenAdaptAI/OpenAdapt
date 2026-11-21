@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from openadapt_flow.hooks.agents import HookInput, HookOutput, render
-from openadapt_flow.hooks.classify import call_digest, classify
+from openadapt_flow.hooks.classify import call_digest, classify, write_key
 from openadapt_flow.hooks.engine import Engine
 from openadapt_flow.hooks.install import (
     InstallError,
@@ -203,6 +203,59 @@ def test_the_systems_file_is_closed_and_checked(tmp_path: Path) -> None:
             {},
         ),
         ("curl -s https://example.com", "none", None, {}),
+        # Fail-open shapes a simple reading would miss: each is a write.
+        (
+            "sqlite3 data/clinic.sqlite \"SELECT 1 /* ' */; DELETE FROM notes /* ' */\"",
+            "unknown_write",
+            None,
+            {},
+        ),
+        (
+            'sqlite3 data/clinic.sqlite "SELECT 1 -- ; DELETE"',
+            "unknown_write",
+            None,
+            {},
+        ),
+        (
+            "sqlite3 -cmd 'DELETE FROM notes' data/clinic.sqlite 'SELECT 1'",
+            "unknown_write",
+            None,
+            {},
+        ),
+        (
+            "psql sqlite:///data/clinic.sqlite -c 'SELECT 1' --file=evil.sql",
+            "unknown_write",
+            None,
+            {},
+        ),
+        (
+            "mysql --init-command='DELETE FROM notes' -e 'SELECT 1' data/clinic.sqlite",
+            "unknown_write",
+            None,
+            {},
+        ),
+        (
+            'curl -d\'{"note":"x"}\' http://127.0.0.1:8080/api/notes',
+            "unknown_write",
+            None,
+            {},
+        ),
+        ("curl -dnote=x http://127.0.0.1:8080/api/notes", "unknown_write", None, {}),
+        ("curl -XPOST http://127.0.0.1:8080/api/notes", "unknown_write", None, {}),
+        (
+            "curl --config=evil.txt http://127.0.0.1:8080/api/notes",
+            "unknown_write",
+            None,
+            {},
+        ),
+        ("curl -K evil.txt http://127.0.0.1:8080/api/notes", "unknown_write", None, {}),
+        ("curl -sSL http://127.0.0.1:8080/api/notes", "read", None, {}),
+        (
+            'curl -XPOST http://127.0.0.1:8080/api/patients/p9/notes -d \'{"note": "x"}\'',
+            "write",
+            "add-note",
+            {"patient_id": "p9", "note": "x"},
+        ),
         ("cat openadapt.systems.yaml", "read", None, {}),
         ("sed -i s/block/allow/ openadapt.systems.yaml", "protected", None, {}),
         ("openadapt hooks approve ap-1", "protected", None, {}),
@@ -475,6 +528,9 @@ def test_install_merges_and_uninstall_removes_only_ours(tmp_path: Path) -> None:
     launcher = launcher_path(tmp_path).read_text()
     assert "/usr/bin/python3 -m openadapt_flow.hooks run" in launcher
     assert "exit 2" in launcher
+    assert 'cd "$(dirname "$0")"' in launcher  # no project module shadows Python's
+    assert pre[1]["hooks"][0]["onFailure"] == "block"
+    assert "onFailure" not in data["hooks"]["PostToolUse"][0]["hooks"][0]
     assert (
         (tmp_path / ".openadapt" / "hooks" / ".gitignore").read_text().endswith("*\n")
     )
@@ -532,3 +588,25 @@ def test_install_refuses_a_broken_settings_file(tmp_path: Path) -> None:
     with pytest.raises(InstallError, match="not valid JSON"):
         install(tmp_path, "claude-code")
     assert settings.read_text() == "{not json"
+
+
+def test_a_hold_is_for_the_write_not_the_wording(tmp_path: Path) -> None:
+    systems = _systems(tmp_path)
+    command = (
+        'sqlite3 data/clinic.sqlite "INSERT INTO notes (patient_id, note) '
+        "VALUES ('p1', 'hi')\""
+    )
+    first = {"command": command, "description": "add the note"}
+    reworded = {"command": "  " + command, "description": "try once more", "timeout": 5}
+    a = classify("Bash", first, systems, tmp_path)
+    b = classify("Bash", reworded, systems, tmp_path)
+    assert write_key(a, "Bash", first) == write_key(b, "Bash", reworded)
+    other = classify(
+        "Bash", {"command": command.replace("'hi'", "'bye'")}, systems, tmp_path
+    )
+    assert write_key(other, "Bash", {}) != write_key(a, "Bash", first)
+    unknown = {"command": 'sqlite3 data/clinic.sqlite "DELETE FROM notes"'}
+    u = classify("Bash", unknown, systems, tmp_path)
+    assert write_key(u, "Bash", unknown) == write_key(
+        u, "Bash", {**unknown, "description": "x"}
+    )

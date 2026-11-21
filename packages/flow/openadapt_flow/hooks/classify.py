@@ -52,57 +52,126 @@ _WRITE_WORDS = re.compile(
 _READ_DOT = re.compile(r"^\s*\.(tables|schema|indexes|indices|headers|mode)\b[^;]*$")
 _READ_SHELL = ("cat", "ls", "head", "tail", "grep", "rg", "wc", "less", "stat", "file")
 _PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.M)
-_CURL_VALUE = {
-    "-X",
-    "--request",
-    "-d",
-    "--data",
-    "--data-raw",
-    "--data-binary",
-    "--data-ascii",
-    "--data-urlencode",
-    "--json",
-    "-H",
-    "--header",
-    "-o",
-    "--output",
-    "-u",
-    "--user",
-    "-A",
-    "--user-agent",
-    "-e",
-    "--referer",
-    "-b",
-    "--cookie",
-    "-c",
-    "--cookie-jar",
-    "-w",
-    "--write-out",
-    "-m",
-    "--max-time",
-    "--connect-timeout",
-    "--retry",
-    "--url",
-    "-F",
-    "--form",
-    "-T",
-    "--upload-file",
-    "--cacert",
-    "--cert",
-    "--key",
-    "-x",
-    "--proxy",
+#: curl flags OpenAdapt understands. Any other flag makes the call an
+#: unknown write: it may change the method, the body or where it goes.
+_CURL_SWITCHES = {
+    "-s",
+    "--silent",
+    "-S",
+    "--show-error",
+    "-f",
+    "--fail",
+    "--fail-with-body",
+    "-i",
+    "--include",
+    "-v",
+    "--verbose",
+    "-k",
+    "--insecure",
+    "-L",
+    "--location",
+    "-G",
+    "--get",
+    "-I",
+    "--head",
+    "--compressed",
+    "-N",
+    "--no-buffer",
 }
-_CURL_BODY = {
-    "-d",
-    "--data",
-    "--data-raw",
-    "--data-binary",
-    "--data-ascii",
-    "--json",
-    "--data-urlencode",
+_CURL_SHORT_SWITCHES = set("sSfivkLGIN")
+_CURL_VALUES = {
+    "-X": "method",
+    "--request": "method",
+    "-d": "body",
+    "--data": "body",
+    "--data-raw": "body",
+    "--data-binary": "body",
+    "--data-ascii": "body",
+    "--json": "body",
+    "-H": "skip",
+    "--header": "skip",
+    "-o": "skip",
+    "--output": "skip",
+    "-m": "skip",
+    "--max-time": "skip",
+    "--connect-timeout": "skip",
+    "-w": "skip",
+    "--write-out": "skip",
+    "-u": "skip",
+    "--user": "skip",
+    "-A": "skip",
+    "--user-agent": "skip",
+    "--url": "url",
 }
-_CURL_UPLOAD = {"-F", "--form", "-T", "--upload-file"}
+#: Database CLI flags OpenAdapt understands, and whether each takes a value.
+#: Any other flag (a script file, an init command, a config file) makes the
+#: call an unknown write.
+_DB_FLAGS: dict[str, dict[str, bool]] = {
+    "sqlite3": {
+        "-header": False,
+        "-noheader": False,
+        "-column": False,
+        "-csv": False,
+        "-json": False,
+        "-line": False,
+        "-list": False,
+        "-box": False,
+        "-markdown": False,
+        "-table": False,
+        "-batch": False,
+        "-bail": False,
+        "-readonly": False,
+        "-separator": True,
+        "-nullvalue": True,
+    },
+    "psql": {
+        "-c": True,
+        "--command": True,
+        "-h": True,
+        "--host": True,
+        "-p": True,
+        "--port": True,
+        "-U": True,
+        "--username": True,
+        "-d": True,
+        "--dbname": True,
+        "-X": False,
+        "--no-psqlrc": False,
+        "-q": False,
+        "--quiet": False,
+        "-t": False,
+        "--tuples-only": False,
+        "-A": False,
+        "--no-align": False,
+        "-w": False,
+        "--no-password": False,
+        "--csv": False,
+    },
+    "mysql": {
+        "-e": True,
+        "--execute": True,
+        "-h": True,
+        "--host": True,
+        "-P": True,
+        "--port": True,
+        "-u": True,
+        "--user": True,
+        "-D": True,
+        "--database": True,
+        "-B": False,
+        "--batch": False,
+        "-N": False,
+        "--skip-column-names": False,
+        "-s": False,
+        "--silent": False,
+        "-t": False,
+        "--table": False,
+    },
+}
+_SQL_FLAGS = {"-c", "--command", "-e", "--execute"}
+#: Comments, escapes and dollar quoting can hide a second statement or a
+#: write from a simple reading, so SQL that holds one is never a read.
+_SQL_OPAQUE = ("--", "/*", "*/", "#", "\\", "$$")
 
 
 @dataclass
@@ -128,6 +197,27 @@ def call_digest(tool_name: str, tool_input: Any) -> str:
         default=str,
     )
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+#: Tool-input fields that don't change what a call does (Claude Code's
+#: free-text ``description``, its timeout and background flags).
+_INERT_INPUT = ("description", "timeout", "run_in_background")
+
+
+def write_key(intent: "Intent", tool_name: str, tool_input: Any) -> str:
+    """What a hold or an approval is for: the declared write and its values,
+    or, for any other write, the call without its inert fields. A reworded
+    description or a new tool-use id is the same write."""
+    if intent.write is not None and intent.system is not None:
+        basis: Any = ["write", intent.system.name, intent.write.name, intent.params]
+    else:
+        given = tool_input if isinstance(tool_input, Mapping) else {}
+        basis = [
+            "call",
+            tool_name,
+            {k: v for k, v in given.items() if k not in _INERT_INPUT},
+        ]
+    return call_digest("", basis)
 
 
 def _command_text(tool_input: Mapping[str, Any]) -> str:
@@ -204,40 +294,44 @@ def _relative(path: Path, root: Path) -> str:
 def _sql_of(command: list[str]) -> Optional[str]:
     """The one SQL text a database CLI command runs, or None if unclear."""
     name = os.path.basename(command[0])
-    args = command[1:]
-    if name == "sqlite3":
-        positional = []
-        skip = False
-        for arg in args:
-            if skip:
-                skip = False
-                continue
-            if arg in ("-cmd", "-init"):
-                return None
-            if arg in ("-separator", "-nullvalue", "-newline"):
-                skip = True
-                continue
-            if arg.startswith("-"):
-                continue
-            positional.append(arg)
-        return positional[1] if len(positional) == 2 else None
-    flag = {"psql": ("-c", "--command"), "mysql": ("-e", "--execute")}.get(
-        "mysql" if name == "mariadb" else name
-    )
-    if flag is None:
+    name = "mysql" if name == "mariadb" else name
+    flags = _DB_FLAGS.get(name)
+    if flags is None:
         return None
+    positional: list[str] = []
     found: list[str] = []
-    for i, arg in enumerate(args):
-        if arg in flag and i + 1 < len(args):
-            found.append(args[i + 1])
-        elif any(arg.startswith(f + "=") for f in flag if f.startswith("--")):
-            found.append(arg.split("=", 1)[1])
-        elif arg in ("-f", "--file", "--source"):
-            return None
+    args = command[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("-") and arg != "-":
+            flag, eq, attached = arg.partition("=")
+            if flag not in flags or (eq and not flags[flag]):
+                return None
+            if flags[flag]:
+                if eq:
+                    value = attached
+                else:
+                    if i + 1 >= len(args):
+                        return None
+                    value = args[i + 1]
+                    i += 1
+                if flag in _SQL_FLAGS:
+                    found.append(value)
+        else:
+            positional.append(arg)
+        i += 1
+    if name == "sqlite3":
+        return positional[1] if len(positional) == 2 and not found else None
+    if len(positional) > 1:
+        return None
     return found[0] if len(found) == 1 else None
 
 
 def _one_statement(sql: str) -> Optional[str]:
+    """The statement, or None for several, or for SQL too opaque to read."""
+    if any(marker in sql for marker in _SQL_OPAQUE):
+        return None
     text = sql.strip().rstrip(";").strip()
     # A ``;`` left inside, outside quotes, is a second statement.
     quote = ""
@@ -245,10 +339,12 @@ def _one_statement(sql: str) -> Optional[str]:
         if quote:
             if ch == quote:
                 quote = ""
-        elif ch in "'\"":
+        elif ch in "'\"`":
             quote = ch
         elif ch == ";":
             return None
+    if quote:
+        return None
     return text or None
 
 
@@ -302,6 +398,10 @@ def _curl(system: System, segments: list[list[str]]) -> Intent:
             system,
             detail=f"a command that reaches {system.name} and isn't a single curl call",
         )
+
+    def unclear(why: str) -> Intent:
+        return Intent("unknown_write", system, detail=f"a curl call with {why}")
+
     method: Optional[str] = None
     body: Optional[str] = None
     urls: list[str] = []
@@ -310,56 +410,52 @@ def _curl(system: System, segments: list[list[str]]) -> Intent:
     i = 0
     while i < len(args):
         arg = args[i]
-        value = args[i + 1] if i + 1 < len(args) else None
-        long_value = (
-            arg.split("=", 1)[1] if arg.startswith("--") and "=" in arg else None
-        )
-        flag = arg.split("=", 1)[0] if long_value is not None else arg
-        if flag in _CURL_UPLOAD:
-            return Intent("unknown_write", system, detail="a curl upload")
-        if flag in ("-G", "--get"):
-            get = True
-        elif flag in ("-I", "--head"):
-            method = "HEAD"
-        if flag in _CURL_VALUE:
-            got = long_value if long_value is not None else value
-            if got is None:
-                return Intent(
-                    "unknown_write", system, detail="a curl flag without a value"
-                )
-            if flag in ("-X", "--request"):
-                method = got.upper()
-            elif flag in _CURL_BODY:
-                if body is not None or got.startswith("@"):
-                    return Intent(
-                        "unknown_write",
-                        system,
-                        detail="a curl body from a file or in parts",
-                    )
-                body = got
-            elif flag == "--url":
-                urls.append(got)
-            i += 1 if long_value is not None else 2
-            continue
-        if not arg.startswith("-"):
+        if not arg.startswith("-") or arg == "-":
             urls.append(arg)
-        elif re.fullmatch(r"-[a-zA-Z]{2,}", arg) and set(arg[1:]) & set(
-            "XdHouAebcwmFTx"
-        ):
-            return Intent("unknown_write", system, detail="combined curl flags")
-        i += 1
-    base = urlsplit(system.base_url or "")
-    mine = [
-        u
-        for u in urls
-        if urlsplit(u if "://" in u else "http://" + u).netloc in _netlocs(base)
-    ]
-    if len(urls) != 1 or len(mine) != 1:
-        return Intent(
-            "unknown_write",
-            system,
-            detail=f"a curl call that reaches {system.name} unclearly",
+            i += 1
+            continue
+        flag, eq, attached = (
+            arg.partition("=") if arg.startswith("--") else (arg, "", "")
         )
+        value: Optional[str] = attached if eq else None
+        if not arg.startswith("--") and len(arg) > 2:
+            if set(arg[1:]) <= _CURL_SHORT_SWITCHES:
+                get = get or "G" in arg
+                method = "HEAD" if "I" in arg else method
+                i += 1
+                continue
+            # A short flag with its value attached: -XPOST, -d'{...}'.
+            flag, value = arg[:2], arg[2:]
+        if flag in _CURL_SWITCHES and value is None:
+            get = get or flag in ("-G", "--get")
+            method = "HEAD" if flag in ("-I", "--head") else method
+            i += 1
+            continue
+        role = _CURL_VALUES.get(flag)
+        if role is None:
+            return unclear(f"a flag OpenAdapt doesn't read ({flag})")
+        if value is None:
+            if i + 1 >= len(args):
+                return unclear("a flag without a value")
+            value = args[i + 1]
+            i += 1
+        i += 1
+        if role == "method":
+            method = value.upper()
+        elif role == "body":
+            if body is not None or value.startswith("@"):
+                return unclear("a body from a file or in parts")
+            body = value
+        elif role == "url":
+            urls.append(value)
+    base = urlsplit(system.base_url or "")
+
+    def netloc(url: str) -> str:
+        return urlsplit(url if "://" in url else "http://" + url).netloc
+
+    mine = [u for u in urls if netloc(u) in _netlocs(base)]
+    if len(urls) != 1 or len(mine) != 1:
+        return unclear(f"an unclear target for {system.name}")
     if method is None:
         method = "GET" if (body is None or get) else "POST"
     if method in ("GET", "HEAD", "OPTIONS") and (body is None or get):

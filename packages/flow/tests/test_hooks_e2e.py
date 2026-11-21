@@ -240,12 +240,17 @@ class Harness:
         return proc.returncode, doc, proc.stderr
 
     def call(
-        self, command: str, *, person_says: str = "yes", post: bool = True
+        self,
+        command: str,
+        *,
+        person_says: str = "yes",
+        post: bool = True,
+        description: str = "test",
     ) -> dict:
         self.n += 1
         tool = {
             "tool_name": "Bash",
-            "tool_input": {"command": command, "description": "test"},
+            "tool_input": {"command": command, "description": description},
             "tool_use_id": f"toolu_{self.n:04d}",
         }
         code, doc, err = self.hook("PreToolUse", tool)
@@ -308,6 +313,20 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
     run_dir, verified = _receipt(project, ok["context"])
     assert verified.ok, verified
     assert verified.outcome == "VERIFIED"
+    lines = verified.statement["predicate"]["lines"]
+    assert lines == [
+        {
+            "step": 0,
+            "target_kind": "api",
+            "operation": "write",
+            "check": "confirmed",
+            "strength": "read_back",
+            "not_checked": ["postconditions"],
+        }
+    ]
+    checks = verified.statement["predicate"]["checks"]
+    assert checks["effects"] == {"required": 1, "confirmed": 1}
+    assert checks["lines_confirmed"] == 1 and checks["lines_refuted"] == 0
     assert list(verified.signer_lines) == ["Signed by this computer"]
     report = json.loads((run_dir / "report.json").read_text())
     assert report["outcome"] == "VERIFIED" and report["checked"]["delta"] == "held"
@@ -349,7 +368,15 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
     assert len(_Api.records) == 2  # the write did land; the read-back failed
     run_dir, verified = _receipt(project, uncertain["context"])
     assert verified.ok and verified.outcome == "UNKNOWN"
-    retry = agent.call(command, post=False)
+    line = verified.statement["predicate"]["lines"][0]
+    assert line["check"] == "not_checked" and line["strength"] == "none"
+    assert line["not_checked"] == ["approved_unverified", "postconditions"]
+    assert verified.statement["predicate"]["checks"]["effects"] == {
+        "required": 1,
+        "confirmed": 0,
+    }
+    # A retry is the same write however it's worded: refused.
+    retry = agent.call(command, post=False, description="retry the save")
     assert retry["decision"] == "deny" and "UNCERTAIN" in retry["reason"]
 
     stop = agent.stop()

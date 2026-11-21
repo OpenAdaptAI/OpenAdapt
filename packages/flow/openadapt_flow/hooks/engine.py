@@ -39,7 +39,7 @@ from typing import Any, Mapping, Optional
 
 from openadapt_flow.hooks import HOOKS_DIR, SYSTEMS_FILE
 from openadapt_flow.hooks.agents import HookInput, HookOutput
-from openadapt_flow.hooks.classify import Intent, call_digest, classify
+from openadapt_flow.hooks.classify import Intent, classify, write_key
 from openadapt_flow.hooks.systems import SystemsError, SystemsFile, load_systems
 
 REPORT_SCHEMA = "openadapt.hook-report/v1"
@@ -127,7 +127,7 @@ class Engine:
             return None
         for path in sorted(folder.glob("*.json")):
             entry = _read_json(path)
-            if entry and entry.get("call_sha256") == digest:
+            if entry and entry.get("hold_key") == digest:
                 return entry
         return None
 
@@ -139,7 +139,7 @@ class Engine:
             entry = _read_json(path)
             if (
                 entry
-                and entry.get("call_sha256") == digest
+                and entry.get("hold_key") == digest
                 and entry.get("status") == "granted"
             ):
                 return path
@@ -149,7 +149,7 @@ class Engine:
         folder = self._sub("approvals")
         for path in sorted(folder.glob("*.json")):
             entry = _read_json(path)
-            if entry and entry.get("call_sha256") == digest:
+            if entry and entry.get("hold_key") == digest:
                 return path.stem
         request = "ap-" + secrets.token_hex(6)
         _write_json(
@@ -157,7 +157,7 @@ class Engine:
             {
                 "id": request,
                 "status": "requested",
-                "call_sha256": digest,
+                "hold_key": digest,
                 "agent": inp.agent,
                 "system": intent.system.name if intent.system else None,
                 "write": intent.write.name if intent.write else None,
@@ -191,7 +191,7 @@ class Engine:
                 f"calls write to a system of record: {exc}",
             )
         intent = classify(inp.tool_name, inp.tool_input, systems, self.root)
-        digest = call_digest(inp.tool_name, inp.tool_input)
+        digest = write_key(intent, inp.tool_name, inp.tool_input)
         base = {
             "agent": inp.agent,
             "session_sha256": _sha(inp.session_id),
@@ -200,7 +200,7 @@ class Engine:
             "kind": intent.kind,
             "system": intent.system.name if intent.system else None,
             "write": intent.write.name if intent.write else None,
-            "call_sha256": digest,
+            "hold_key": digest,
         }
         if intent.kind in ("none", "read"):
             if intent.kind == "read":
@@ -283,7 +283,7 @@ class Engine:
             "agent": inp.agent,
             "session_sha256": _sha(inp.session_id),
             "tool_use_id": inp.tool_use_id,
-            "call_sha256": digest,
+            "hold_key": digest,
             "system": intent.system.name if intent.system else None,
             "write": intent.write.name if intent.write else None,
             "detail": intent.detail,
@@ -302,7 +302,7 @@ class Engine:
             try:
                 contract = Contract.load(path)
             except (VerifierError, OSError) as exc:
-                return f"the contract for write {intent.write.name} can't be loaded ({exc})"
+                return f"the contract for write {intent.write.name} can't be loaded ({type(exc).__name__})"
             missing = [p for p in contract.params if p not in intent.params]
             if missing:
                 return (
@@ -320,7 +320,7 @@ class Engine:
                     f"nothing could check it afterwards ({exc.reason})"
                 )
             except VerifierError as exc:
-                return f"the read before the write failed ({exc})"
+                return f"the read before the write failed ({type(exc).__name__})"
             snap = self._sub("snapshots") / f"{write_id}.json"
             snapshot.save(snap)
             pending.update(
@@ -347,15 +347,19 @@ class Engine:
         return entry
 
     def post(self, inp: HookInput) -> HookOutput:
-        digest = call_digest(inp.tool_name, inp.tool_input)
+        try:
+            intent = classify(inp.tool_name, inp.tool_input, self._systems(), self.root)
+        except SystemsError:
+            intent = None
+        digest = (
+            write_key(intent, inp.tool_name, inp.tool_input)
+            if intent is not None
+            else ""
+        )
         path = self.state / "pending" / f"{self._pending_key(inp, digest)}.json"
         pending = self._claim(path) if path.is_file() else None
         if pending is None:
-            try:
-                intent = classify(
-                    inp.tool_name, inp.tool_input, self._systems(), self.root
-                )
-            except SystemsError:
+            if intent is None:
                 return HookOutput()
             if not intent.touches_system:
                 return HookOutput()
@@ -403,7 +407,7 @@ class Engine:
         except Exception as exc:  # noqa: BLE001 - any failure is UNCERTAIN, never a pass
             return (
                 "UNCERTAIN",
-                [f"the read-back failed ({type(exc).__name__}: {exc})"],
+                [f"the read-back failed ({type(exc).__name__})"],
                 None,
             )
         finally:
@@ -424,7 +428,7 @@ class Engine:
             write=pending.get("write"),
             label=label,
             reasons=reasons,
-            digest=pending["call_sha256"],
+            digest=pending["hold_key"],
             started=pending.get("started_at") or _now(),
             result=result,
             contract=pending.get("contract"),
@@ -435,7 +439,7 @@ class Engine:
                 {
                     "write_id": pending["write_id"],
                     "label": label,
-                    "call_sha256": pending["call_sha256"],
+                    "hold_key": pending["hold_key"],
                     "system": pending.get("system"),
                     "write": pending.get("write"),
                     "held_at": _now(),
@@ -450,7 +454,7 @@ class Engine:
                 "write": pending.get("write"),
                 "label": label,
                 "write_id": pending["write_id"],
-                "call_sha256": pending["call_sha256"],
+                "hold_key": pending["hold_key"],
             }
         )
         return run
@@ -512,7 +516,7 @@ class Engine:
             "executor": {"kind": "agent", "agent": agent},
             "system": system,
             "write": write,
-            "call_sha256": digest,
+            "hold_key": digest,
             "results": [
                 {
                     "ok": label == "VERIFIED",
@@ -521,8 +525,12 @@ class Engine:
                         {
                             "effect_verified": effect,
                             # An undeclared write has no contract: its line
-                            # says effect_not_declared.
+                            # says effect_not_declared. A declared write whose
+                            # read-back didn't settle says approved_unverified
+                            # (record/run/v1 has no read-back-failed code).
                             "effect_contract_hashes": [_sha(contract or "undeclared")],
+                            "effect_approved_unverified": bool(contract)
+                            and effect is None,
                         }
                         if sent
                         else {}

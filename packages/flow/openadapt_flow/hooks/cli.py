@@ -86,7 +86,7 @@ def _run_hook(project: Path, agent: str, event: str) -> int:
         doc, code = render(agent, event, out)  # type: ignore[arg-type]
     except Exception as exc:  # noqa: BLE001 - fail closed before a tool call
         print(
-            f"OpenAdapt's hook failed ({type(exc).__name__}: {exc}); "
+            f"OpenAdapt's hook failed ({type(exc).__name__}); "
             + (
                 "the call is blocked."
                 if event == "PreToolUse"

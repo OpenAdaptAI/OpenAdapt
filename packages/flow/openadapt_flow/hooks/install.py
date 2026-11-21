@@ -78,6 +78,9 @@ def _launcher_text(project: Path, python: str) -> str:
 # Runs one OpenAdapt hook event: $1 is the agent, $2 the event, stdin the
 # agent's hook input. If the hook can't run before a tool call, the call is
 # blocked (exit 2), never let through.
+# Run from this folder (no Python files), so a project file named like a
+# module Python imports can't shadow it.
+cd "$(dirname "$0")" || exit 2
 {py} -m openadapt_flow.hooks run --project {root} --agent "$1" --event "$2"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
@@ -91,12 +94,16 @@ exit "$rc"
 
 def _entry(agent: str, event: str, launcher: Path) -> dict[str, Any]:
     command = f"{shlex.quote(str(launcher))} {agent} {event}"
-    handler = {
+    handler: dict[str, Any] = {
         "type": "command",
         "command": command,
         "timeout": TIMEOUT_S,
         "statusMessage": "OpenAdapt: checking writes to declared systems",
     }
+    if agent == "claude-code" and event == "PreToolUse":
+        # Claude Code 2.1.295+: a timeout or a hook that can't start blocks
+        # the call instead of letting it run.
+        handler["onFailure"] = "block"
     group: dict[str, Any] = {"hooks": [handler]}
     if event != "Stop":
         group = {"matcher": MATCHERS[agent], **group}
