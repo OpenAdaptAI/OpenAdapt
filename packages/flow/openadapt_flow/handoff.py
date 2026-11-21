@@ -7,7 +7,7 @@ gets a verdict that says exactly what the signature does and does not prove.
 
 The same document works over any channel:
 
-* **Inline**: one JSON document (``openadapt.handoff/v1``) holding the payload
+* **Inline**: one JSON document (``openadapt.handoff-document/v1``) holding the payload
   and the receipt. It is the body of an HTTP request or webhook, an MCP tool
   result, or an A2A artifact part.
 * **Detached**: the payload stays a file (an email attachment, a shared
@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-SCHEMA = "openadapt.handoff/v1"
+SCHEMA = "openadapt.handoff-document/v1"
 VERDICT_SCHEMA = "openadapt.handoff-verdict/v1"
 MEDIA_TYPE = "application/vnd.openadapt.handoff+json"
 #: The draft extension URI (docs/HANDOFF_RECEIPTS.md). An identifier only.
@@ -112,7 +112,7 @@ def make_handoff(
     detached: bool = False,
     signer: Optional[Any] = None,
 ) -> dict[str, Any]:
-    """Attach ``receipt`` to ``payload`` as an ``openadapt.handoff/v1`` document.
+    """Attach ``receipt`` to ``payload`` as an ``openadapt.handoff-document/v1`` document.
 
     ``detached`` leaves the payload out and keeps only its digest, for a file
     sent beside the document. With ``signer`` (the key that signed the run's
@@ -418,7 +418,7 @@ def verify_handoff(
     if not isinstance(document, Mapping) or document.get("schema") != SCHEMA:
         return _refused(
             "unknown_schema",
-            "not an openadapt.handoff/v1 document",
+            "not an openadapt.handoff-document/v1 document",
             "Not verified: not a handoff document",
         )
     if set(document) - {"schema", "payload", "receipt"}:

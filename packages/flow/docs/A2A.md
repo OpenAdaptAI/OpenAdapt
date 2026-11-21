@@ -24,7 +24,7 @@ openadapt agent serve --bundles ./bundles --mode production --a2a
 | One skill per workflow | Send a data part `{"skill": NAME, "inputs": {...}, "request_id": ID}`. |
 | Skill `verify_handoff` | Send another agent's handoff and get the verdict ([HANDOFFS.md](HANDOFFS.md)). |
 | `capabilities.extensions` | `https://openadapt.ai/extensions/handoff-receipt/v1`, not required ([HANDOFF_RECEIPTS.md](HANDOFF_RECEIPTS.md)). |
-| Task artifact `run_result` | The run result (`outcome`, `safe_to_retry` unchanged), plus the `openadapt.handoff/v1` document with the run's signed receipt (`record/run/v1`) when Flow wrote one. Otherwise a text part says why no receipt is attached. |
+| Task artifact `run_result` | The run result (`outcome`, `safe_to_retry` unchanged), plus the `openadapt.handoff-document/v1` document with the run's signed receipt (`record/run/v1`) when Flow wrote one. Otherwise a text part says why no receipt is attached. |
 
 Only outcome `done` is `TASK_STATE_COMPLETED`. `needs_review` is
 `TASK_STATE_INPUT_REQUIRED`: a person at this computer decides. A message on

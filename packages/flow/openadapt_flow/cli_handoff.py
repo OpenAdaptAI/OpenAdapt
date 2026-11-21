@@ -85,6 +85,31 @@ def register(sub: argparse._SubParsersAction) -> None:
             "or http only to this computer"
         ),
     )
+    s.add_argument(
+        "--ledger",
+        metavar="DIR",
+        help=(
+            "also record the handoff in this handoff ledger, so `handoff list` "
+            "shows it until the other party's system confirms it"
+        ),
+    )
+    s.add_argument(
+        "--counterparty",
+        help="with --ledger: who receives it, for people ('receiving clinic')",
+    )
+    s.add_argument(
+        "--key-field",
+        help=(
+            "with --ledger: the payload's JSON field that identifies the item "
+            "in the other party's system (default: the payload digest)"
+        ),
+    )
+    s.add_argument(
+        "--follow-up-hours",
+        type=float,
+        default=72.0,
+        help="with --ledger: when to follow up if nothing is confirmed (default 72)",
+    )
     s.set_defaults(func=cmd_send)
 
     v = hsub.add_parser(
@@ -170,6 +195,58 @@ def post_handoff(url: str, document: dict[str, Any], *, timeout: float = 30.0) -
         return int(response.status)
 
 
+def record_in_ledger(
+    directory: Path,
+    data: bytes,
+    *,
+    counterparty: str,
+    key_field: Optional[str],
+    follow_up_hours: float,
+    run_id: Optional[str],
+) -> Any:
+    """Record a sent handoff in the counterparty-confirmation ledger.
+
+    The same record ``handoff list`` reads (:class:`HandoffLedger`): the
+    item's key and each top-level text field of a JSON payload, as salted
+    digests only. A payload that isn't a JSON object is recorded by its
+    digest, with no fields.
+    """
+    import hashlib
+
+    try:
+        from openadapt_flow.handoffs.ledger import HandoffLedger
+    except ImportError:
+        raise ImportError(
+            "this openadapt-flow has no handoff ledger (openadapt_flow.handoffs)"
+        ) from None
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        value = None
+    fields: dict[str, tuple[str, str]] = {}
+    key = None
+    if isinstance(value, dict):
+        if key_field is not None:
+            key = value.get(key_field)
+            if not isinstance(key, str) or not key:
+                raise ValueError(f"the payload has no text field {key_field!r}")
+        for name, field_value in sorted(value.items()):
+            if name != key_field and isinstance(field_value, str) and field_value:
+                fields[name] = (field_value, "text")
+    elif key_field is not None:
+        raise ValueError("--key-field needs a JSON object payload")
+    if key is None:
+        key = "sha256:" + hashlib.sha256(data).hexdigest()
+    return HandoffLedger(directory).send(
+        key,
+        fields,
+        counterparty=counterparty,
+        follow_up_hours=follow_up_hours,
+        source="agent_handoff",
+        run_id=run_id,
+    )
+
+
 def cmd_send(args: argparse.Namespace) -> int:
     from openadapt_flow import handoff as h
 
@@ -178,6 +255,12 @@ def cmd_send(args: argparse.Namespace) -> int:
         return 2
     if args.public and not args.run:
         print("handoff send: --public goes with --run", file=sys.stderr)
+        return 2
+    if args.ledger and not args.counterparty:
+        print("handoff send: --ledger needs --counterparty", file=sys.stderr)
+        return 2
+    if (args.counterparty or args.key_field) and not args.ledger:
+        print("handoff send: --counterparty and --key-field go with --ledger", file=sys.stderr)
         return 2
     try:
         data = _read(args.payload)
@@ -207,6 +290,20 @@ def cmd_send(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"handoff send: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
+    if args.ledger:
+        try:
+            entry = record_in_ledger(
+                Path(args.ledger),
+                data,
+                counterparty=args.counterparty,
+                key_field=args.key_field,
+                follow_up_hours=args.follow_up_hours,
+                run_id=Path(args.run).name if args.run else None,
+            )
+        except (ImportError, ValueError) as exc:
+            print(f"handoff send: not recorded in the ledger: {exc}", file=sys.stderr)
+            return 2
+        print(f"handoff: recorded {entry.id} in {args.ledger}", file=sys.stderr)
     text = json.dumps(document, indent=2, sort_keys=True) + "\n"
     out: Optional[Path] = Path(args.out) if args.out else None
     if out is None and args.detached:

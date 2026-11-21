@@ -4,7 +4,7 @@
 |---|---|
 | **Identifier** | `https://openadapt.ai/extensions/handoff-receipt/v1` |
 | **Status** | Draft, version 1. Implemented in OpenAdapt, not submitted to any standards body. |
-| **Document schema** | `openadapt.handoff/v1` |
+| **Document schema** | `openadapt.handoff-document/v1` |
 | **Verdict schema** | `openadapt.handoff-verdict/v1` |
 | **Media type** | `application/vnd.openadapt.handoff+json` |
 | **Receipt format** | `https://openadapt.ai/record/run/v1`: an in-toto Statement v1 in a DSSE v1.0.2 envelope |
@@ -57,7 +57,7 @@ Every verifier MUST tell its user the following, in its own words:
 
 ```json
 {
-  "schema": "openadapt.handoff/v1",
+  "schema": "openadapt.handoff-document/v1",
   "payload": {
     "media_type": "application/json",
     "sha256": "<64 hex>",
@@ -69,7 +69,7 @@ Every verifier MUST tell its user the following, in its own words:
 }
 ```
 
-- `schema` is required and is exactly `openadapt.handoff/v1`. Other top-level
+- `schema` is required and is exactly `openadapt.handoff-document/v1`. Other top-level
   fields are refused.
 - `payload.sha256` is required. It covers the exact payload bytes: for
   `content_base64`, the decoded bytes; for `content` (a JSON value), its
@@ -187,7 +187,7 @@ checked.
   "description": "Task results carry the run's record/run/v1 receipt ...",
   "required": false,
   "params": {
-    "handoff_schema": "openadapt.handoff/v1",
+    "handoff_schema": "openadapt.handoff-document/v1",
     "verdict_schema": "openadapt.handoff-verdict/v1",
     "media_type": "application/vnd.openadapt.handoff+json",
     "receipt_predicate": "https://openadapt.ai/record/run/v1",

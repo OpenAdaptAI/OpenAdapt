@@ -1,7 +1,7 @@
 """Handoff tools for ``openadapt agent serve --handoffs`` (MCP and A2A alike).
 
 * ``get_handoff``: a finished run's public result with its receipt attached
-  (``openadapt.handoff/v1``), ready to pass to another agent.
+  (``openadapt.handoff-document/v1``), ready to pass to another agent.
 * ``verify_handoff``: check a handoff another agent sent, against the keys
   this server pins, and return the verdict (:mod:`openadapt_flow.handoff`).
 
@@ -93,7 +93,7 @@ class HandoffTools:
             ToolSpec(
                 name="verify_handoff",
                 description=(
-                    "Check a handoff another agent sent (an openadapt.handoff/v1 "
+                    "Check a handoff another agent sent (an openadapt.handoff-document/v1 "
                     "document) against the keys this computer pins. Returns who "
                     "signed it, whether it is intact, which checks passed and "
                     "which were not checked, and any confirmation read from the "
@@ -105,7 +105,7 @@ class HandoffTools:
                     "properties": {
                         "handoff": {
                             "type": "object",
-                            "description": "The openadapt.handoff/v1 document.",
+                            "description": "The openadapt.handoff-document/v1 document.",
                         }
                     },
                     "required": ["handoff"],

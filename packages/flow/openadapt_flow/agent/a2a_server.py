@@ -16,7 +16,7 @@ Agent2Agent (A2A) protocol, using the official ``a2a-sdk`` (Apache-2.0,
   (``TASK_STATE_INPUT_REQUIRED``); a message on that task only re-checks the
   run. Everything else is ``TASK_STATE_FAILED``. The run's own result, with
   ``outcome`` and ``safe_to_retry`` unchanged, is always an artifact.
-* A finished run's receipt travels as an ``openadapt.handoff/v1`` artifact
+* A finished run's receipt travels as an ``openadapt.handoff-document/v1`` artifact
   part (exact bytes, so its digests hold), marked with the handoff-receipt
   extension URI.
 * It listens on 127.0.0.1 by default. Any other address needs a bearer token.

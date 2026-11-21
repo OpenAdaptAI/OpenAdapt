@@ -15,11 +15,12 @@ import pytest
 pytest.importorskip("cryptography")
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+from openadapt_types import receipt as r  # noqa: E402
+
 from openadapt_flow import handoff as h  # noqa: E402
 from openadapt_flow.__main__ import main as flow_main  # noqa: E402
 from openadapt_flow.receipt_record import PRIVATE_FILE, write_receipt_record  # noqa: E402
 from openadapt_flow.seal_keys import SoftwareSigner  # noqa: E402
-from openadapt_types import receipt as r  # noqa: E402
 
 VECTORS = (
     Path(__file__).resolve().parents[2] / "types" / "tests" / "vectors" / "record-run-v1"
@@ -405,3 +406,23 @@ def test_the_shared_payload_vectors_give_the_same_answer_through_a_handoff(name,
     assert verdict.signer_lines == case["expected"]["signer_lines"]
     if reason is None:
         assert verdict.ok and verdict.payload["bound"] is True
+
+
+def test_send_records_the_handoff_in_the_ledger_handoff_list_reads(run_dir, signer, tmp_path):
+    ledger_mod = pytest.importorskip("openadapt_flow.handoffs.ledger")
+    payload = tmp_path / "referral.json"
+    payload.write_text(json.dumps({"ref": "ref-77", "note": "Follow-up in 2 weeks", "n": 3}))
+    ledger = tmp_path / "ledger"
+    args = ["handoff", "send", str(payload), "--run", str(run_dir), "--out", str(tmp_path / "o.json")]
+    assert flow_main([*args, "--ledger", str(ledger), "--counterparty", "receiving clinic",
+                      "--key-field", "ref"]) == 0
+    (entry,) = ledger_mod.HandoffLedger(ledger).entries()
+    assert entry.counterparty == "receiving clinic"
+    assert entry.source == "agent_handoff" and entry.run_id == run_dir.name
+    assert sorted(entry.fields) == ["note"]  # text fields only, as digests
+    stored = "".join(p.read_text() for p in ledger.rglob("*.json"))
+    assert "Follow-up" not in stored and "ref-77" not in stored
+    assert entry.key_digest == ledger_mod.HandoffLedger(ledger).digest("ref-77")
+    # A key that another open handoff uses is refused, and nothing is sent.
+    assert flow_main([*args, "--ledger", str(ledger), "--counterparty", "x", "--key-field", "ref"]) == 2
+    assert flow_main([*args, "--counterparty", "x"]) == 2
