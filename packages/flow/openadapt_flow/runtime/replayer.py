@@ -70,6 +70,7 @@ from typing import (
 from urllib.parse import urlsplit
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow import second_factor as _second_factor
 from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
@@ -14047,7 +14048,13 @@ class Replayer:
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            if step.secret:
+            if step.secret and step.one_time == "code":
+                # A sign-in's one-time code: asked for now, typed once, kept
+                # nowhere (openadapt_flow.second_factor).
+                text, refusal = _second_factor.runtime_value(step, result)
+                if refusal is not None:
+                    return refusal
+            elif step.secret:
                 # Secret value is never in the bundle/params: inject it from
                 # the environment, failing fast with an actionable message.
                 env_var = getattr(self, "secret_env_overrides", {}).get(
@@ -14495,6 +14502,9 @@ class Replayer:
             return None
 
         if step.action is ActionKind.WAIT:
+            if step.one_time == "approval":
+                # A push approval: a person approves on their own device.
+                return _second_factor.runtime_value(step, result)[1]
             # WAIT means wait_settled only; the post-action settle handles it.
             return None
 

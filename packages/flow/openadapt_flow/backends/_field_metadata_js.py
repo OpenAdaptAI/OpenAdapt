@@ -34,6 +34,9 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
         (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
     const secret = (i) => kind(i) === 'password' ||
         tokens(i).some((t) => t === 'current-password' || t === 'new-password');
+    // A sign-in's second factor (SMS, email or authenticator code), named
+    // the standard way. Its value comes from a person at run time.
+    if (tokens(el).includes('one-time-code')) return 'one-time-code';
     if (secret(el)) {
         return tokens(el).includes('new-password') ? 'new-password' : 'password';
     }

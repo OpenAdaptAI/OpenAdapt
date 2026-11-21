@@ -3442,7 +3442,15 @@ def _compile_recording(
                             int(raw_rect[3]),
                         ),
                     )
-            if secret:
+            one_time: Optional[Literal["code"]] = (
+                "code" if secret and event.get("one_time") == "code" else None
+            )
+            if one_time:
+                # A sign-in's one-time code: a person supplies it when the
+                # step runs (openadapt_flow.second_factor).
+                text = None
+                intent = "type the one-time sign-in code"
+            elif secret:
                 # A secret's literal value is never in the recording, so it
                 # is never in the bundle either: the step carries only the
                 # param name, and the value is injected from the environment
@@ -3462,6 +3470,7 @@ def _compile_recording(
                         text=text,
                         param=param,
                         secret=secret,
+                        one_time=one_time,
                         field_label=field_label,
                     ),
                     before_png,
@@ -4676,7 +4685,8 @@ def _form_submit_steps(
     A sign-in is not a save: when the fields typed since the previous such
     click are exactly a username and a current password the recorder withheld
     (``credential_kinds``, from each secret TYPE event's ``credential``), its
-    submit button signs in and writes no record. A lone password (a PIN or a
+    submit button signs in and writes no record. So does a form holding only
+    a one-time sign-in code, or the three together. A lone password (a PIN or a
     re-authentication), a ``new-password`` field (a password change or sign-up)
     or any other typed field keeps the escalation, and the keyword risk
     inference still classifies the button on its own label.
@@ -4698,11 +4708,20 @@ def _form_submit_steps(
             and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
             and _is_form_save(raw)
         ):
-            if sorted(map(str, typed_kinds)) != ["password", "username"]:
+            if sorted(map(str, typed_kinds)) not in _SIGN_IN_FIELD_SETS:
                 found.append(step)
             typed = False
             typed_kinds = []
     return found
+
+
+#: Typed fields whose form submit signs in and saves nothing: a username and
+#: current password, a one-time code (a second sign-in page), or all three.
+_SIGN_IN_FIELD_SETS = (
+    ["password", "username"],
+    ["one-time-code"],
+    ["one-time-code", "password", "username"],
+)
 
 
 def _is_form_save(raw: object) -> bool:
