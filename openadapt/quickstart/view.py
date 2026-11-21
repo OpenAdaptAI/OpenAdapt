@@ -360,13 +360,19 @@ def seal_page_note(outcome: Outcome) -> str:
     return note
 
 
-def publish_run(outcome: Outcome) -> Optional[Path]:
-    """The run whose Seal the finale offers to publish: the first checked run."""
+def publish_runs(outcome: Outcome) -> list[Path]:
+    """The runs whose Seals the finale offers: the first checked run, then the
+    stopped run when Act 3 signed one. The stopped run is the point of the
+    quickstart, so it goes online with the checked run or not at all."""
 
     page = outcome.seal_pages.verified
     if outcome.seal is None or page is None:
-        return None
-    return page.parent
+        return []
+    runs = [page.parent]
+    broken = outcome.seal_pages.broken
+    if broken is not None and (broken.parent / "seal.json").is_file():
+        runs.append(broken.parent)
+    return runs
 
 
 def next_step(steps: NextSteps) -> tuple[str, str, str]:
@@ -622,11 +628,9 @@ class PlainView(_Base):
         return input()
 
     def _publish(self, outcome: Outcome, steps: NextSteps) -> None:
-        run = publish_run(outcome)
-        if run is None:
-            return
-        if steps.offer_publish is not None:
-            steps.offer_publish(run, lambda line: self._say(f"  {line}"), self._ask)
+        runs = publish_runs(outcome)
+        if runs and steps.offer_publish is not None:
+            steps.offer_publish(runs, lambda line: self._say(f"  {line}"), self._ask)
 
     def confirm(self, prompt: str) -> None:
         self.stream.write(f"      {prompt} ")
@@ -1296,8 +1300,8 @@ class RichView(_Base):
         self.console.print()
         if outcome.seal is not None:
             self._seal(outcome, seal_card(outcome))
-            run = publish_run(outcome)
-            if run is not None and steps.offer_publish is not None:
+            runs = publish_runs(outcome)
+            if runs and steps.offer_publish is not None:
                 spoken: list[bool] = []
 
                 def say(line: str) -> None:
@@ -1307,7 +1311,7 @@ class RichView(_Base):
                         self.console.print()
                     self.console.print(_escape(line), soft_wrap=True)
 
-                steps.offer_publish(run, say, self._ask)
+                steps.offer_publish(runs, say, self._ask)
             self.console.print()
         self.console.print(Rule(style="cyan"))
         if all_clear(outcome):
