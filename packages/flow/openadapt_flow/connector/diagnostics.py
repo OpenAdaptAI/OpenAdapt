@@ -127,7 +127,8 @@ def read_diagnostics(path: Path) -> dict[str, Any]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Read a private local connector diagnostic."
+        description="Read a private local connector diagnostic.",
+        allow_abbrev=False,
     )
     parser.add_argument("path", type=Path)
     try:
