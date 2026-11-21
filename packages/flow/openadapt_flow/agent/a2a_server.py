@@ -135,9 +135,9 @@ def _skills(bridge: AgentBridge, *, include_workflows: bool) -> list[Any]:
                         description.strip()
                         or "A compiled OpenAdapt workflow on this computer."
                     )
-                    + " Send a data part {\"skill\": \""
+                    + ' Send a data part {"skill": "'
                     + name
-                    + "\", \"inputs\": {...}, \"request_id\": \"...\"}. A "
+                    + '", "inputs": {...}, "request_id": "..."}. A '
                     "finished run's result includes its signed receipt when Flow "
                     "wrote one.",
                     tags=["openadapt", "workflow", "receipt"],
@@ -285,7 +285,9 @@ def parse_request(message: Any) -> tuple[str, dict[str, Any]]:
                 raise BridgeError("the handoff file part is not JSON") from None
             return VERIFY_SKILL, {"handoff": document}
     data = [
-        _integral(MessageToDict(part.data)) for part in message.parts if part.HasField("data")
+        _integral(MessageToDict(part.data))
+        for part in message.parts
+        if part.HasField("data")
     ]
     if len(data) != 1 or not isinstance(data[0], dict):
         raise BridgeError(
@@ -408,7 +410,9 @@ class OpenAdaptExecutor:
                 )
                 waited += _POLL_SECONDS
             parts = [new_data_part(result, media_type="application/json")]
-            if result.get("outcome") not in (None, "running") and isinstance(run_id, str):
+            if result.get("outcome") not in (None, "running") and isinstance(
+                run_id, str
+            ):
                 try:
                     handoff = await self._call("get_handoff", {"run_id": run_id})
                 except BridgeError as exc:
@@ -476,7 +480,10 @@ class GuardMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+        headers = {
+            k.decode("latin-1").lower(): v.decode("latin-1")
+            for k, v in scope["headers"]
+        }
         problem = None
         if headers.get("host") not in self.hosts:
             problem = (421, "this server does not answer for that host")
@@ -547,7 +554,9 @@ def build_app(bridge: AgentBridge, config: A2AConfig) -> Any:
     )
     routes = [
         # The card changes only when the server restarts with other bundles.
-        *create_agent_card_routes(agent_card=card, cache_control="private, max-age=300"),
+        *create_agent_card_routes(
+            agent_card=card, cache_control="private, max-age=300"
+        ),
         *create_jsonrpc_routes(request_handler=handler, rpc_url=JSONRPC_PATH),
         # Clients that join "/" to the interface URL post here.
         *create_jsonrpc_routes(request_handler=handler, rpc_url=JSONRPC_PATH + "/"),

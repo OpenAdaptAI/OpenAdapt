@@ -803,7 +803,9 @@ class AgentBridge:
         return self.handoffs.get(
             arguments.get("run_id", ""),
             public=bool(arguments.get("public", False)),
-            result_for=lambda run_id: self.dispatch("get_run", {"run_id": run_id, "wait_seconds": 0}),
+            result_for=lambda run_id: self.dispatch(
+                "get_run", {"run_id": run_id, "wait_seconds": 0}
+            ),
             run_dir_for=self._safe_run_dir,
         )
 

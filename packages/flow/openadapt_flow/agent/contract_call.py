@@ -43,7 +43,8 @@ def validate_arguments(spec: Any, arguments: Optional[Mapping[str, Any]]) -> Non
     except ValidationError:
         # ValidationError text contains input values, so never return it.
         raise BridgeError(
-            getattr(spec, "usage", None) or "tool arguments do not match the input schema"
+            getattr(spec, "usage", None)
+            or "tool arguments do not match the input schema"
         ) from None
 
 
