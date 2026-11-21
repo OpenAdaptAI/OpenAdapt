@@ -29,7 +29,7 @@
   `param_hygiene.json`. This applies to mined checks and to the
   focused-field pass.
 
-## v3.4.0 (2026-11-20)
+## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
 ### Features
 

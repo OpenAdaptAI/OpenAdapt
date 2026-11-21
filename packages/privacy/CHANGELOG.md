@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v1.1.4 (2026-11-21)
+
+### Features
+
+- **presidio**: `PresidioScrubbingProvider.sanitization_config()` reports the
+  non-secret effective policy digest and the local Presidio, spaCy, Pillow and
+  spaCy model versions, and `sanitization_operation()` holds one immutable
+  policy for a whole outbound scan. openadapt-flow 3.4.0 binds sanitized reuse
+  and approval to this identity and needs this release.
+
+### Bug Fixes
+
+- **presidio**: Keep sign-in field labels readable. A PERSON, ORGANIZATION or
+  LOCATION finding whose whole span is a sign-in field name (username, user
+  name, user id, password, passcode, passphrase) is dropped; a name beside such
+  a label is still redacted.
+
+### Documentation
+
+- Point the README and package metadata links at the OpenAdapt monorepo.
+
+
 ## v1.1.3 (2026-10-18)
 
 ### Bug Fixes
