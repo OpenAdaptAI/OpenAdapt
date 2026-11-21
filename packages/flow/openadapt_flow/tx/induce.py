@@ -882,6 +882,43 @@ def _looks_like_metadata_or_volatile(key: str, value: Any) -> bool:
     return False
 
 
+def _null_or_empty(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value == "")
+
+
+def learn_null_empty_codecs(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    written_paths: Optional[set[str]] = None,
+) -> dict[str, FieldCodec]:
+    """Fields whose value moved between ``None`` and ``""`` and nothing else.
+
+    Many apps store an untouched optional field as ``NULL`` until a form save
+    sends ``""`` back for it, or the reverse. Without a declaration the judge
+    reads that as a clobber (OpenAdapt #2391). Each field this returns gets a
+    ``null_empty`` codec, so only that field treats the two as one value; any
+    non-empty change on it is still judged exactly. Fields in
+    ``written_paths`` are skipped: a value the write asked for is not a server
+    rewrite.
+    """
+    flat_before = _flatten_record(before)
+    flat_after = _flatten_record(after)
+    skip = written_paths or set()
+    learned: dict[str, FieldCodec] = {}
+    for path, old in flat_before.items():
+        if path in skip or path not in flat_after:
+            continue
+        new = flat_after[path]
+        if (
+            old is not new
+            and old != new
+            and _null_or_empty(old)
+            and _null_or_empty(new)
+        ):
+            learned[path] = FieldCodec(kind="null_empty")
+    return learned
+
+
 def induce_lens_from_har(
     har: Mapping[str, Any],
     *,
@@ -1313,6 +1350,7 @@ def induce_lens_from_har(
             for req_path, req_val in _flatten_record(ex.req_data).items():
                 requested_values.add((req_path, _canonical_value(req_val)))
 
+    null_empty_paths: list[str] = []
     for _eid, history in entity_snapshots.items():
         for idx in range(1, len(history)):
             prev_rec = _flatten_record(history[idx - 1][1])
@@ -1324,6 +1362,12 @@ def induce_lens_from_har(
                     continue
                 old_val = prev_rec[path]
                 if new_val == old_val:
+                    continue
+                # NULL became "" (or the reverse): one empty value, spelled two
+                # ways. Learn it for this field; never a clobber or a replace.
+                if _null_or_empty(old_val) and _null_or_empty(new_val):
+                    if path not in null_empty_paths:
+                        null_empty_paths.append(path)
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
                 # changed it, or server metadata key not in user-supplied fields. A
@@ -1407,6 +1451,9 @@ def induce_lens_from_har(
                     if codec is not None:
                         field_codecs[path] = codec
                     break
+
+    for path in null_empty_paths:
+        field_codecs.setdefault(path, FieldCodec(kind="null_empty"))
 
     # Step 7: Induce stable identity_fields.
     volatile_set = set(volatile_list)
@@ -1983,6 +2030,13 @@ def probe_put_semantics(
                             and _looks_like_metadata_or_volatile(path, m_val)
                         ):
                             volatile_list.append(path)
+                    # The merged write sent every untouched field back as read;
+                    # one the server stored as the other empty spelling gets
+                    # a null_empty codec.
+                    for path, codec in learn_null_empty_codecs(
+                        r0, r_merged, set(flat_upd)
+                    ).items():
+                        codecs.setdefault(path, codec)
 
         for path in pending_volatile:
             if path not in volatile_list and path not in create_defaults_list:
@@ -2700,4 +2754,5 @@ __all__ = [
     "induce_lens_from_har",
     "infer_field_codec",
     "probe_put_semantics",
+    "learn_null_empty_codecs",
 ]
