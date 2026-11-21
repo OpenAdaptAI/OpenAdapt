@@ -1,0 +1,11 @@
+{
+  "fields": [
+    {
+      "name": "note",
+      "proposed": "Synthetic triage",
+      "saved": "Synthetic triage"
+    }
+  ],
+  "schema": "openadapt.proposed-write/v1",
+  "task_id": "shadow-task-0003"
+}

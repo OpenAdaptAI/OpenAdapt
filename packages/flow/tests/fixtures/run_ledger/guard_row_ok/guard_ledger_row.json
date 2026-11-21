@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": "2026-11-20T12:10:45Z",
+  "approval_opened_at": "2026-11-20T12:10:00Z",
+  "approver_kind": "person",
+  "diff_path": null,
+  "fields_checked": [
+    "note"
+  ],
+  "fields_differing": 0,
+  "hold_ms": 900.0,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "gate-task-0002",
+  "verdict": "VERIFIED"
+}
