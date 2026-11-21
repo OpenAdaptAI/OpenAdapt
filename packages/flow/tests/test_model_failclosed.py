@@ -41,12 +41,40 @@ from openadapt_flow.runtime.remote_vlm import (
     RemoteStateVerifier,
 )
 from openadapt_flow.runtime.replayer import EgressNotPermitted, Replayer
-from tests.test_drift_oracle import _check, _step, _Verifier, _Vision
+from tests.test_drift_oracle import _Backend, _png, _step, _Vision
 from tests.test_replayer import FakeBackend
 
 # --------------------------------------------------------------------------
 # 1. Drift rescue: a model "yes" is a hint, never a pass.
 # --------------------------------------------------------------------------
+
+
+class _Verifier:
+    """An appliance state-verifier (marked egress) with a scripted answer."""
+
+    MAY_EGRESS = True
+
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.calls = 0
+
+    def holds(self, screenshot, expected_state) -> bool:
+        self.calls += 1
+        return self.answer == "yes"
+
+
+def _check(vision, verifier, pc, tmp_path, step=None):
+    rp = Replayer(
+        _Backend(),
+        vision=vision,
+        state_verifier=verifier,
+        allow_model_grounding=True,
+        poll_interval_s=0.0,
+    )
+    step = step if step is not None else _step(pc)
+    result = StepResult(step_id=step.id, intent=step.intent, ok=False)
+    ok, _frame, failed = rp._check_postconditions(step, _png(), tmp_path, {}, result)
+    return ok, failed, result
 
 
 def test_drift_yes_does_not_clear_failed_text_postcondition_on_navigation(
