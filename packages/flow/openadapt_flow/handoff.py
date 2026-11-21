@@ -91,7 +91,39 @@ def _check_receipt_document(receipt: Any) -> dict[str, Any]:
         raise HandoffError("the receipt is a record/run/v1 envelope or card")
     if r.is_receipt_card(receipt):
         _check_card(receipt)
+    else:
+        _check_envelope(receipt)
     return dict(receipt)
+
+
+def _check_envelope(envelope: Any) -> None:
+    """Unbound-evidence class: only an exactly shaped, signed DSSE envelope
+    leaves the sender; the receiver authenticates the signer itself."""
+    from openadapt_types import receipt as r
+
+    if not isinstance(envelope, Mapping) or set(envelope) != {
+        "payloadType",
+        "payload",
+        "signatures",
+    }:
+        raise HandoffError(
+            "the receipt envelope has exactly payloadType, payload, signatures"
+        )
+    if envelope.get("payloadType") != r.PAYLOAD_TYPE:
+        raise HandoffError("the receipt envelope is not a record/run/v1 statement")
+    signatures = envelope.get("signatures")
+    if (
+        not isinstance(signatures, list)
+        or not signatures
+        or not all(
+            isinstance(sig, Mapping)
+            and set(sig) == {"keyid", "sig"}
+            and isinstance(sig.get("keyid"), str)
+            and isinstance(sig.get("sig"), str)
+            for sig in signatures
+        )
+    ):
+        raise HandoffError("the receipt envelope carries no well-formed signature")
 
 
 def _check_card(card: Mapping[str, Any]) -> None:
@@ -108,6 +140,7 @@ def _check_card(card: Mapping[str, Any]) -> None:
         raise HandoffError("the receipt card's disclosure is not a known version")
     if not (isinstance(envelope, Mapping) and r.is_receipt_envelope(envelope)):
         raise HandoffError("the receipt card holds no record/run/v1 envelope")
+    _check_envelope(envelope)
     try:
         statement = r.loads_strict(
             base64.b64decode(str(envelope["payload"]), validate=True)

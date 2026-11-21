@@ -143,10 +143,23 @@ def test_a_card_that_does_not_match_its_receipt_never_leaves(run_dir, signer):
     bad_value["openings"]["flow_version"]["value"] = "9.9.9"
     extra_field = {**good, "note": "x"}
     unknown_version = {**good, "disclosure_version": "openadapt.public-disclosure/v0"}
-    for card in (bad_value, extra_field, unknown_version):
+    extra_envelope = json.loads(json.dumps(good))
+    extra_envelope["envelope"]["note"] = "unsigned"
+    no_signatures = json.loads(json.dumps(good))
+    no_signatures["envelope"]["signatures"] = []
+    for card in (
+        bad_value,
+        extra_field,
+        unknown_version,
+        extra_envelope,
+        no_signatures,
+    ):
         for kwargs in ({}, {"signer": signer}):  # unbound and bound senders
             with pytest.raises(h.HandoffError):
                 h.make_handoff({"x": 1}, card, **kwargs)
+    # A bare envelope is held to the same shape before it leaves.
+    with pytest.raises(h.HandoffError):
+        h.make_handoff({"x": 1}, {**receipt, "note": "unsigned"})
 
 
 def test_a_post_is_never_redirected(monkeypatch):
