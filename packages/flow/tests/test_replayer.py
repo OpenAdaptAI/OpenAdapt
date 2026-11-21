@@ -2342,6 +2342,12 @@ def test_closed_loop_scroll_ocr_ambiguity_continues_but_click_halts(
         "openadapt_flow.runtime.replayer.resolve",
         scripted_resolve,
     )
+    # Interstitial handling moved to runtime/replay/settling.py and reads its
+    # own ``resolve``; patch it too so every resolver call stays scripted.
+    monkeypatch.setattr(
+        "openadapt_flow.runtime.replay.settling.resolve",
+        scripted_resolve,
+    )
     backend = FakeBackend()
     workflow = Workflow(name="wf", steps=[scroll_step(), click_step()])
 
