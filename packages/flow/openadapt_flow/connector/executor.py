@@ -265,25 +265,30 @@ class _ChildNotStarted(RuntimeError):
     """The operating system refused to start the governed process."""
 
 
+class _CancelledBeforeStart(RuntimeError):
+    """The control plane stopped the job before its process was created."""
+
+
 def _subprocess_runner(
     argv: list[str], run_dir: Path, child_env: Mapping[str, str]
 ) -> RunOutcome:
     job_id = getattr(_CURRENT, "job_id", None)
-    try:
-        proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
-            argv,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=dict(child_env),
-        )
-    except OSError as exc:
-        raise _ChildNotStarted(type(exc).__name__) from exc
-    if job_id:
-        with _CHILDREN.lock:
+    # Order cancellation and registration at one boundary. A control that
+    # wins the lock prevents launch; a control that follows can stop the PID.
+    with _CHILDREN.lock:
+        if job_id and job_id in _CHILDREN.cancelled:
+            raise _CancelledBeforeStart()
+        try:
+            proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
+                argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=dict(child_env),
+            )
+        except OSError as exc:
+            raise _ChildNotStarted(type(exc).__name__) from exc
+        if job_id:
             _CHILDREN.procs[job_id] = proc
-            cancelled = job_id in _CHILDREN.cancelled
-        if cancelled:
-            proc.terminate()
     try:
         proc.wait()
     finally:
@@ -844,6 +849,13 @@ def _execute_job(
 
         try:
             outcome = runner(argv, run_dir, child_env)
+        except _CancelledBeforeStart:
+            return _refused(
+                job,
+                "cancelled_by_control_plane",
+                "cancelled before the governed child started",
+                verified_bundle_sha256=observed_sha256,
+            )
         except _ChildNotStarted as exc:
             return _refused(
                 job,
@@ -872,10 +884,20 @@ def _execute_job(
         status = status_from_report(outcome.returncode, report)
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
-        if job_cancelled(job.lease_job_id):
-            status = "failed"
-            error_code = "cancelled_by_control_plane"
-            outcome_error = "cancelled by the control plane while running"
+        outcome_envelope = precise_outcome_from_report(report)
+        # Cancellation can race with both the write and the child's final report.
+        # Retain a validated terminal success or halt for this substrate. Otherwise
+        # the stop cannot establish what happened to the system of record.
+        if job_cancelled(job.lease_job_id) and (
+            report_target_kind != job.target_kind
+            or outcome_envelope is None
+            or status == "failed"
+        ):
+            status = "halt"
+            error_code = "cancelled_after_child_start"
+            outcome_error = (
+                "cancelled after child start; reconcile the system of record"
+            )
         elif report_target_kind != job.target_kind:
             status = "failed"
             error_code = "target_kind_mismatch"
@@ -923,13 +945,17 @@ def _execute_job(
 
         # 4. The PHI-bearing report body goes to the CUSTOMER'S store, never ours.
         report_ref: Optional[str] = job.report_ref()
+        if error_code == "cancelled_after_child_start" and not report:
+            report_ref = None
         halt = halt_object(report)
-        outcome_envelope = precise_outcome_from_report(report)
+        if error_code == "cancelled_after_child_start":
+            halt = {"present": True}
         if error_code is not None and outcome_envelope is not None:
-            # A cancelled or mismatched run never reports a success envelope.
+            # An uncertain or mismatched run never reports a success envelope.
             outcome_envelope = None
         try:
-            storage.write_report(report_ref, report)
+            if report_ref is not None:
+                storage.write_report(report_ref, report)
         except Exception as exc:
             # A storage fault says nothing about what the child did, so it
             # never becomes a runner failure: a run that actuated would show
