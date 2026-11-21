@@ -1,3 +1,10 @@
+> **2026-11-21:** with the complete read-back (every typed or selected field
+> gets a verdict; unreadable fields are `not_checked`), the form layer arm
+> verifies 2 of 9 cases. The 7 underwriting cases end `readback_incomplete`
+> because the estimator inputs are typed in a popup and never shown on the
+> summary. See `tests/test_form_tx_e2e_portals.py` and the held-out benchmark
+> in `../form_tx_heldout_run/`.
+
 > Historical result with incomplete read-back coverage. This measurement was
 > invalidated during review: several entered fields were absent from the
 > verification contract. The synthetic scenarios and scripted comparison arms

@@ -594,6 +594,7 @@ improvising or retrying when something is off.
 | Read the saved record back from the system of record (API, database, FHIR, separate session) | Released | Real app (OpenEMR 12 of 12 fields) | [VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md), `runtime/effects/` |
 | Read values out of an app as a workflow step (READ), with a records format, a signed review queue and export to CSV or a database | Released ([#1229](https://github.com/OpenAdaptAI/OpenAdapt/pull/1229), [#1215](https://github.com/OpenAdaptAI/OpenAdapt/pull/1215), [#1218](https://github.com/OpenAdaptAI/OpenAdapt/pull/1218)–[#1224](https://github.com/OpenAdaptAI/OpenAdapt/pull/1224)) | Synthetic (mock desktop apps) | `openadapt_flow/interchange/` |
 | Stop before the effect instead of improvising (`HALTED_BEFORE_EFFECT`) | Released | Real app and synthetic | `runtime/replayer.py` |
+| Fill a multi-step browser form or quote wizard from an intake record, stop for an operator on a prefill that disagrees with the intake or a question the intake does not answer (decided in a Chrome side panel), submit once, and give every typed, selected or kept field a read-back verdict: `passed`, `failed` or `not_checked`. A field it cannot read back is `not_checked`, never passed; such a submit ends `readback_incomplete` with no receipt | On main, prototype; not on PyPI until Flow 3.4.0 ([#2308](https://github.com/OpenAdaptAI/OpenAdapt/pull/2308)) | Synthetic only. Four quote portals built separately from the layer, 32 scored cases, pre-registered: 6 correct submissions, 0 wrong values submitted, 0 verified (every field on the one workable portal is `not_checked`, because its summary is plain text). The surface cannot see iframe or shadow-DOM forms or fill type-aheads, so 3 of 4 portals submitted nothing. Estimator, session-timeout and type-ahead traps were never reached. Rule proposals from repeated operator answers (`form_tx/learning.py`) had no measured effect: none qualified ([RESULTS](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/form_tx_heldout_run/RESULTS.md)) | `openadapt_flow/form_tx/`, [FORM_TX.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FORM_TX.md) |
 | Never retry an uncertain save (`RECONCILIATION_REQUIRED`) | Released | Synthetic (fault server) | [VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md) |
 | One check-level scale, 0 to 5, from "unchecked" to "counterparty confirmed" | Released | Unit tests | `openadapt_flow/check_level.py` |
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md) |
@@ -2429,6 +2430,18 @@ automation into an independently certified transaction system.
 
 ### Fixes
 
+- The form transaction layer (`form_tx`, an unreleased prototype until this
+  release) reads back every field it typed, selected or kept. Each one gets
+  a `passed`, `failed` or `not_checked` verdict; a field it cannot read back
+  (no read-back declared, the summary control missing or ambiguous, a failed
+  lookup, a value entered only in a popup) is `not_checked` and never
+  passed. A submit with any `not_checked` field ends `readback_incomplete`,
+  never `verified_done`, and gets no receipt. Before, fields typed in a popup
+  estimator had no verdict at all and such a run could end verified.
+  Popup inputs are also re-read just before the popup's apply button, and a
+  mismatch stops the run before apply. The side panel shows refuted and
+  incomplete runs as needing action. Measured on four held-out synthetic
+  quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
   secret boundary stops recording before that text reaches its artifacts.

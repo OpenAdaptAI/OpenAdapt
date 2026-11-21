@@ -940,6 +940,9 @@ class PlaywrightFormSurface:
         self._scoped_to_page_only = _scoped_to_page_only
 
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs: dict[int, int] = {}
+        self._confirmed_mutation_seqs: set[int] = set()
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -957,6 +960,7 @@ class PlaywrightFormSurface:
             self._event_target.on("request", self._on_request)
             self._event_target.on("requestfinished", self._on_request_done)
             self._event_target.on("requestfailed", self._on_request_done)
+            self._event_target.on("response", self._on_response)
         except Exception:
             pass
 
@@ -968,6 +972,15 @@ class PlaywrightFormSurface:
     def mutation_count(self) -> int:
         """Count of non-ignored state-changing HTTP requests since construction/reset."""
         return self._mutation_count
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        """Non-ignored state-changing requests the server answered with 2xx/3xx."""
+        return self._confirmed_mutation_count
+
+    def has_confirmed_mutation_since(self, since_mutation_count: int) -> bool:
+        """Return True iff a non-ignored mutation started after ``since_mutation_count`` got 2xx/3xx."""
+        return any(seq > since_mutation_count for seq in self._confirmed_mutation_seqs)
 
     @property
     def total_mutation_count(self) -> int:
@@ -984,6 +997,9 @@ class PlaywrightFormSurface:
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs.clear()
+        self._confirmed_mutation_seqs.clear()
         self._total_mutation_count = 0
 
     def _detach(self) -> None:
@@ -994,6 +1010,7 @@ class PlaywrightFormSurface:
             ("request", self._on_request),
             ("requestfinished", self._on_request_done),
             ("requestfailed", self._on_request_done),
+            ("response", self._on_response),
         ):
             try:
                 self._event_target.remove_listener(ev_name, cb)
@@ -1033,9 +1050,27 @@ class PlaywrightFormSurface:
         req_path = urlsplit(raw_url).path or "/"
         if not self._is_ignored_mutation_path(req_path):
             self._mutation_count += 1
+            self._pending_mutation_seqs[id(request)] = self._mutation_count
 
     def _on_request_done(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+        self._pending_mutation_seqs.pop(id(request), None)
+
+    def _on_response(self, response: Any) -> None:
+        """Count state-changing requests started on this surface that succeeded."""
+        try:
+            request = response.request
+            if self._detached or not self._request_belongs_to_surface(request):
+                return
+            status = int(response.status)
+        except Exception:
+            return
+        seq = self._pending_mutation_seqs.get(id(request))
+        if seq is None:
+            return
+        if 200 <= status < 400:
+            self._confirmed_mutation_count += 1
+            self._confirmed_mutation_seqs.add(seq)
 
     def _is_page_closed(self) -> bool:
         try:
