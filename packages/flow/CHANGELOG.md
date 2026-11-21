@@ -100,11 +100,11 @@
   derived from its explicit key for its own lifetime. Without that, each
   checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
   instead of 3.5 s (131 derivations, now 1).
-- The wire tap relays a redirect to an allowed origin instead of answering
-  502, so it can front a form app that answers a save with Post/Redirect/Get.
-  In reverse-proxy mode only the upstream origin is allowed; in browser route
-  mode, any origin on the tap's allowlist. Other targets are still refused, and
-  the tap never follows a redirect itself (#2392).
+- In reverse-proxy mode the wire tap relays a redirect to a path on the
+  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
+  so it can front a form app that answers a save with Post/Redirect/Get. The
+  client's next request comes back through the tap. Browser route mode still
+  refuses every redirect, and the tap never follows one itself (#2392).
 - Guarded native keyboard delivery on a Windows agent that advertises
   `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
   control and frame. #2313 describes when it applies and what it checks.

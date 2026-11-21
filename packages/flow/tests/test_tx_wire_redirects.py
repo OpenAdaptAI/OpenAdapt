@@ -182,23 +182,18 @@ def test_relay_helper_refuses_malformed_or_non_http_targets(location):
 
 @pytest.mark.parametrize(
     "location",
-    ["http:/evil.test/x", "https:/evil.test/x", "http:evil.test", "http:///evil.test"],
+    [
+        "http:/evil.test/x",
+        "https:/evil.test/x",
+        "http:evil.test",
+        "///evil.test/x",
+        "////evil.test",
+        "http://127.0.0.1:8000/ok",
+    ],
 )
-def test_relay_helper_never_relays_text_a_browser_reads_as_another_host(location):
-    # A browser resolves "http:/evil.test" to the host evil.test, while urljoin
-    # puts it on the request's origin. The relayed value must be the URL that
-    # was checked, so the client cannot land anywhere else.
-    origin = "http://127.0.0.1:8000"
-    relayed = relay_redirect_location(
-        location,
-        request_url=f"{origin}/form",
-        allowed_origins=frozenset({origin}),
-    )
-    assert relayed is None or relayed.startswith(origin + "/")
-
-
-@pytest.mark.parametrize("location", ["/\t/evil.test", "/ok\tx", " /ok x"])
-def test_relay_helper_refuses_control_characters_and_spaces(location):
+def test_without_a_rewrite_only_plain_paths_relay(location):
+    # Without the reverse-proxy rewrite, nothing with a scheme or authority
+    # relays: a browser may read it as a different host than urljoin did.
     origin = "http://127.0.0.1:8000"
     assert (
         relay_redirect_location(
@@ -210,7 +205,50 @@ def test_relay_helper_refuses_control_characters_and_spaces(location):
     )
 
 
-def test_browser_route_relays_same_origin_redirect_and_aborts_foreign():
+@pytest.mark.parametrize(
+    "location", ["http:/evil.test/x", "///evil.test/x", "http://up.test/next?a=1"]
+)
+def test_reverse_proxy_rewrite_never_relays_raw_absolute_text(location):
+    up, tap = "http://up.test", "http://127.0.0.1:9000"
+    relayed = relay_redirect_location(
+        location,
+        request_url=f"{up}/form",
+        allowed_origins=frozenset({up}),
+        rewrite_from_origin=up,
+        rewrite_to_origin=tap,
+    )
+    # Either refused, or rebuilt on the tap's origin from the checked URL.
+    assert relayed is None or relayed.startswith(tap + "/")
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["/\t/evil.test", "/ok\tx", " /ok", "/ok ", "/ok x", "/ok\x7f", "http://[::1"],
+)
+def test_relay_helper_refuses_unclean_or_unparseable_headers(location):
+    origin = "http://127.0.0.1:8000"
+    assert (
+        relay_redirect_location(
+            location,
+            request_url=f"{origin}/form",
+            allowed_origins=frozenset({origin}),
+        )
+        is None
+    )
+
+
+def test_ipv6_origins_keep_their_brackets():
+    from openadapt_flow.tx.wire_tap import _normalize_origin
+
+    assert _normalize_origin("http://[::1]:8080/x") == "http://[::1]:8080"
+    assert _normalize_origin("http://[::1:8080]/x") == "http://[::1:8080]"
+    assert _normalize_origin("http://[::1]:8080") != _normalize_origin(
+        "http://[::1:8080]"
+    )
+    assert _normalize_origin("http://h:notaport/") == ""
+
+
+def test_browser_route_refuses_every_redirect():
     origin = "http://127.0.0.1:8000"
 
     class Response:
@@ -257,7 +295,9 @@ def test_browser_route_relays_same_origin_redirect_and_aborts_foreign():
     foreign = Route(f"{origin}/save", "http://127.0.0.1:1/steal")
     page.handler(same)
     page.handler(foreign)
-    assert same.fulfilled is not None and not same.aborted
+    # Playwright calls the handler only for a chain's first URL, so even a
+    # same-origin redirect would leave later hops unchecked: both abort.
+    assert same.aborted and same.fulfilled is None
     assert foreign.aborted and foreign.fulfilled is None
     statuses = [m.response_status for m in tap.summary().mutations]
     assert statuses == [302, 302]
