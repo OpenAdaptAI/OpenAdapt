@@ -359,9 +359,7 @@ class IdentityTemplate(BaseModel):
         description="Workflow params replaced by sentinels in captured-context signal hashes.",
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
-    sibling_generic_hashes: list[str] = Field(
-        default_factory=list, exclude_if=lambda value: not value
-    )
+    sibling_generic_hashes: list[str] = Field(default_factory=list)
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
         default=None,
@@ -417,6 +415,8 @@ class IdentityTemplate(BaseModel):
             data.pop("signal_hashes", None)
         if not self.context_params:
             data.pop("context_params", None)
+        if not self.sibling_generic_hashes:
+            data.pop("sibling_generic_hashes", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:

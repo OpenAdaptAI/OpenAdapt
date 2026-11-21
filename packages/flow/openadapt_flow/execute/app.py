@@ -155,6 +155,43 @@ def serve(
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
+def run_serve_execute(
+    *,
+    data_dir: Path | None,
+    host: str,
+    port: int,
+    token: str | None,
+    seed_admissions: Iterable[AdmittedBundle] = (),
+    deployment: Path | str | None = None,
+) -> int:
+    """Create the reference Execute store, print its startup banner, and serve."""
+
+    from openadapt_flow.execute import SELF_SIGNED_NOTICE
+    from openadapt_flow.execute.service import default_data_dir
+
+    resolved_dir = data_dir if data_dir is not None else default_data_dir()
+    seeded = tuple(seed_admissions)
+    store = ExecuteService(
+        resolved_dir,
+        token=token,
+        seed_admissions=seeded,
+        deployment=deployment,
+    )
+    print(
+        f"openadapt-flow reference Execute\n"
+        f"  http://{host}:{port}\n"
+        f"  data dir     {resolved_dir}\n"
+        f"  token        {store.token}\n"
+        f"  issuer       self_signed\n"
+        f"  fingerprint  {store.fingerprint}\n"
+        f"  {SELF_SIGNED_NOTICE}"
+    )
+    if seeded:
+        print("  seeded demo admissions (ok + banner-lie)")
+    serve(resolved_dir, host=host, port=port, token=store.token, service=store)
+    return 0
+
+
 def _require_bearer(store: ExecuteService, authorization: Optional[str]) -> None:
     scheme, separator, token = (authorization or "").partition(" ")
     if separator != " " or scheme.lower() != "bearer":

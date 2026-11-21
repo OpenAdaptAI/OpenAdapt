@@ -1,6 +1,6 @@
 {
   "__main__.py": {
-    "mockmed": 42,
+    "mockmed": 41,
     "textedit": 1
   },
   "backend.py": {
@@ -40,18 +40,6 @@
     "mockmed-records": 1,
     "openemr": 1,
     "textedit": 1
-  },
-  "eligibility/__init__.py": {
-    "stedi": 6
-  },
-  "eligibility/client.py": {
-    "stedi": 28
-  },
-  "eligibility/payer_routes.yaml": {
-    "stedi": 5
-  },
-  "eligibility/waterfall.py": {
-    "stedi": 9
   },
   "execution_profiles.py": {
     "mockmed": 1

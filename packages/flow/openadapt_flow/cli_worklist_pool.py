@@ -280,7 +280,7 @@ class WebPoolWorker:
             prepare_ws_guard(self._page)
             self._page.goto(self.entry_url)
         report = self.run_item_on_page(self._page, idx, row, item_dir, self._pipeline)
-        return _item_run(report, self._pipeline)
+        return _item_run(report, self._pipeline, item_dir)
 
     def clean_after_halt(self, cleanup_dir: Path) -> Any:
         if self.clean is None:
@@ -346,18 +346,23 @@ class BackendPoolWorker:
         report = self.run_item_on_backend(
             self.backend, idx, row, item_dir, self._pipeline
         )
-        return _item_run(report, self._pipeline)
+        return _item_run(report, self._pipeline, item_dir)
 
     def close(self) -> None:
         if self._pipeline is not None:
             self._pipeline.close()
 
 
-def _item_run(report: Any, pipeline: Optional[ReadbackPipeline]) -> ItemRun:
+def _item_run(
+    report: Any, pipeline: Optional[ReadbackPipeline], item_dir: Path
+) -> ItemRun:
     state = item_state_from_report(report)
     detail = item_detail_from_report(report)
     handoff = pipeline.take() if pipeline is not None else None
     if handoff is None:
+        from openadapt_flow.receipt_record import receipt_after_run
+
+        receipt_after_run(item_dir, require_opt_in=True, expected_report=report)
         if pipeline is not None and pipeline.inline_reason:
             detail["readback"] = f"inline ({pipeline.inline_reason})"
         return ItemRun(state=state, detail=detail)
