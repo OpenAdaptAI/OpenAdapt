@@ -141,11 +141,16 @@ def run_one(
         "rep": rep,
         "fault": scenario.kind,
         "note": scenario.note,
+        "task": dict(scenario.task),
     }
     store.reset(cfg.pack.seed)
     time.sleep(1.0)
     before = store.rows()
     (ev / "table_before.json").write_text(json.dumps(before, indent=1))
+    try:
+        (ev / "table_before_raw.tsv").write_text(store.dump_raw())
+    except Exception as exc:  # noqa: BLE001 - evidence only
+        (ev / "table_before_raw.tsv").write_text(f"(dump failed: {exc})")
     armed = compile_fault(cfg.app, scenario, store, before)
     save = Save(
         cfg.app.save["path_regex"],
