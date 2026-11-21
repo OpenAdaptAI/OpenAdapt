@@ -630,6 +630,7 @@ def test_cancellation_reports_effect_evidence_and_releases_the_lease(tmp_path, p
         if phase == "at_spawn":
             cancel_job(job_id)
         if phase == "after_write":
+
             def stop_after_write():
                 deadline = time.monotonic() + 8
                 while time.monotonic() < deadline:

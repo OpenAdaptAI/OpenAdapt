@@ -895,7 +895,9 @@ def _execute_job(
         ):
             status = "halt"
             error_code = "cancelled_after_child_start"
-            outcome_error = "cancelled after child start; reconcile the system of record"
+            outcome_error = (
+                "cancelled after child start; reconcile the system of record"
+            )
         elif report_target_kind != job.target_kind:
             status = "failed"
             error_code = "target_kind_mismatch"
