@@ -1,0 +1,38 @@
+# OpenAdapt connector (customer-run runner). Outbound HTTPS only; listens on
+# no port. Install the pinned Flow release into /opt/openadapt first, put
+# connector.toml (mode 0600) in /etc/openadapt, then:
+#   useradd --system --home /var/lib/openadapt openadapt
+#   systemctl enable --now openadapt-connector
+[Unit]
+Description=OpenAdapt connector (customer-run runner)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openadapt
+Group=openadapt
+Environment=OPENADAPT_HOME=/etc/openadapt
+# Uncomment to route the only outbound connection through your proxy.
+# Environment=HTTPS_PROXY=http://proxy.internal:3128
+ExecStart=/opt/openadapt/bin/openadapt-flow connector run
+Restart=on-failure
+RestartSec=10
+# Stopping the service ends the loop; a job mid-run is reaped as uncertain
+# by the control plane and never re-run automatically.
+KillSignal=SIGINT
+TimeoutStopSec=60
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/openadapt /etc/openadapt
+StateDirectory=openadapt
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

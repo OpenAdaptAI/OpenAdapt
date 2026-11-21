@@ -895,7 +895,7 @@ A test fails when a command has no file or this list is out of date.
 
 - `approve-sanitized`
 - `connect`
-- `connector`
+- `connector`: Run an outbound connector with local secrets, pinned admission keys, signed requests, token rotation, heartbeats and cancellation.
 - `login`
 - `materialize-approved`
 - `push`
