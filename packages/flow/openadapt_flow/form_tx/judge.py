@@ -1,4 +1,8 @@
-"""Independent post-commit summary/search read-back judge for ``form_tx``.
+"""Post-commit summary/search read-back judge for ``form_tx``.
+
+The judge reads through the surface of the session that did the work
+(``acting_session_reread``). It is not an independent check: only a read by a
+fresh, separate session would be.
 
 Verifies committed portal state against the authoritative expected fact map
 (grounded ``InputDossier`` facts overlaid with verified human co-pilot
@@ -9,8 +13,10 @@ missing controls, mismatched values, or missing required outputs.
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict
 
 from openadapt_flow.form_tx.codecs import (
     _MONTH_MAP,
@@ -48,6 +54,7 @@ from openadapt_flow.form_tx.types import (
     ReadbackStatus,
     SummaryVerdict,
     WizardScreenSpec,
+    canonical_sha256,
 )
 
 __all__ = [
@@ -132,6 +139,11 @@ def _observed_control_matches(
     ctrl: ObservedControl,
     binding: FieldBindingSpec,
 ) -> bool:
+    # partial-match-as-match: a radio option matches only when it is selected.
+    if (
+        ctrl.input_type.casefold() == "radio" or ctrl.role.casefold() == "radio"
+    ) and ctrl.checked is not True:
+        return False
     if (
         binding.control_kind == ControlKind.CHECKBOX
         and ctrl.checked is not None
@@ -205,6 +217,104 @@ def _split_date_expected(day: Any, month: Any, year: Any) -> Optional[str]:
         return None
 
 
+class Subject(BaseModel):
+    """One control the run wrote, kept or accepted, and the key it holds.
+
+    ``subject_id`` names where it is (popup, selector or entity row), so two
+    controls that hold the same dossier key are two subjects.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    subject_id: str
+    key: str
+    label: str = ""
+
+
+def read_subjects(
+    writes: Sequence[FieldWriteRecord],
+    resolutions: Sequence[HumanResolutionRecord],
+) -> list[Subject]:
+    """Every written, kept or operator-accepted control, by subject."""
+    subjects: dict[str, Subject] = {}
+    for w in writes:
+        key = w.dossier_key or w.field_key
+        sid = (
+            f"{w.in_popup_subroutine or 'main'}|{w.screen_id or ''}|"
+            f"{w.selector or ''}|{w.field_key}"
+        )
+        subjects.setdefault(sid, Subject(subject_id=sid, key=key, label=w.label or ""))
+    for rec in resolutions:
+        if (
+            rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
+            and rec.action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL
+        ):
+            # One subject per accepted row, not per table.
+            row = canonical_sha256(rec.resolved_value)[:16]
+            sid = f"entity|{rec.field_signature}|{row}"
+            subjects.setdefault(
+                sid,
+                Subject(subject_id=sid, key=f"entity:{rec.field_signature}|{row}"),
+            )
+    return list(subjects.values())
+
+
+def uncovered_subject_verdicts(
+    subjects: Sequence[Subject],
+    verdicts: Sequence[ReadbackFieldVerdict],
+    codec_for: Callable[[str], FormCodecKind],
+    observations_per_key: Optional[Mapping[str, int]] = None,
+) -> list[ReadbackFieldVerdict]:
+    """absent-evidence-as-success: a subject with no verdict is not_checked.
+
+    One verdict for a key accounts for one subject holding that key. When more
+    subjects hold the key than there are verdicts for it, the summary cannot
+    say which control it shows, so the rest are not_checked. Never passed.
+    """
+    # A passed or failed verdict is an observation of the summary; two
+    # read-backs that resolve to the same shown value are one observation,
+    # so they account for one subject only.
+    observed: dict[str, int] = {}
+    other: dict[str, int] = {}
+    for v in verdicts:
+        bucket = (
+            observed
+            if v.status in (ReadbackStatus.PASSED, ReadbackStatus.FAILED)
+            else other
+        )
+        bucket[v.dossier_key] = bucket.get(v.dossier_key, 0) + 1
+    verdicts_per_key: dict[str, int] = dict(other)
+    for key, n in observed.items():
+        distinct = (observations_per_key or {}).get(key, n)
+        verdicts_per_key[key] = verdicts_per_key.get(key, 0) + min(n, distinct)
+    by_key: dict[str, list[Subject]] = {}
+    for subject in subjects:
+        by_key.setdefault(subject.key, []).append(subject)
+    out: list[ReadbackFieldVerdict] = []
+    for key, group in sorted(by_key.items()):
+        have = verdicts_per_key.get(key, 0)
+        for subject in sorted(group, key=lambda s: s.subject_id)[have:]:
+            out.append(
+                ReadbackFieldVerdict(
+                    dossier_key=key,
+                    codec_kind=codec_for(key),
+                    passed=False,
+                    status=ReadbackStatus.NOT_CHECKED,
+                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                    reason=(
+                        f"No read-back covers {subject.label or subject.subject_id!r}"
+                        + (
+                            f": {len(group)} controls hold {key!r} and only "
+                            f"{have} read-back verdict(s) exist"
+                            if have
+                            else ""
+                        )
+                    ),
+                )
+            )
+    return out
+
+
 def _extract_present_outputs(
     snapshot: FormSnapshot,
     output_specs: Sequence[OutputExtractionSpec],
@@ -259,7 +369,7 @@ def _extract_present_outputs(
 
 
 class SummaryJudge:
-    """Independent read-back verifier for committed form transactions."""
+    """Read-back verifier for committed form transactions (acting session)."""
 
     def __init__(
         self,
@@ -285,6 +395,7 @@ class SummaryJudge:
         writes: Sequence[FieldWriteRecord] = (),
         uncovered: Optional[Mapping[str, str]] = None,
         unentered_intake_keys: Sequence[str] = (),
+        review_skipped: Optional[Mapping[str, str]] = None,
     ) -> SummaryVerdict:
         """Navigate/search if configured, verify all read-backs, and extract outputs."""
         active_surface = surface if surface is not None else self._surface
@@ -327,16 +438,21 @@ class SummaryJudge:
                 ),
                 *observation_screens,
             )
+        # How the read was produced (reporting only): the page the run
+        # landed on after commit, or a new navigation or search that fetched
+        # it from the server again.
+        read_route = "same_screen"
         snapshot = active_surface.snapshot(screens=observation_screens)
         seeded_outputs: dict[str, Any] = dict(known_outputs or {})
         pre_outputs, _ = _extract_present_outputs(snapshot, summary_check.outputs)
         seeded_outputs.update(pre_outputs)
 
-        # Navigate to independent summary/search route if configured and not already there.
+        # Navigate to the summary/search route if configured and not already there.
         if summary_check.summary_url_path and not _url_matches(
             snapshot.url_origin_and_path, summary_check.summary_url_path
         ):
             active_surface.goto(summary_check.summary_url_path)
+            read_route = "fresh_navigation"
             snapshot = active_surface.snapshot(screens=observation_screens)
 
         # Execute search-by-key lookup when configured.
@@ -377,6 +493,7 @@ class SummaryJudge:
                             input_ctrl.dom_selector, str(lookup_val)
                         )
                         active_surface.click(submit_ctrl.dom_selector)
+                        read_route = "fresh_navigation"
                         snapshot = active_surface.snapshot(screens=observation_screens)
 
         verdicts: list[ReadbackFieldVerdict] = []
@@ -572,6 +689,18 @@ class SummaryJudge:
                             f"has no expected value to compare",
                         )
                     )
+                elif binding.dossier_key in written_by_key:
+                    # The run wrote this field but there is no value to
+                    # compare: it gets a verdict, never silence.
+                    verdicts.append(
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"{binding.dossier_key!r} was written with no expected "
+                            "value, and the summary shows it empty"
+                            + _where(written_by_key[binding.dossier_key]),
+                        )
+                    )
                 continue
 
             if observed_ctrl is None and observed_text is not None:
@@ -641,7 +770,7 @@ class SummaryJudge:
                     )
                 )
 
-        # A date typed in day, month and year boxes, shown_date as one value.
+        # A date typed in day, month and year boxes, shown as one value.
         for sd in summary_check.split_date_readbacks:
             keys = (sd.day_key, sd.month_key, sd.year_key)
             facts3 = [expected_facts.get(k) for k in keys]
@@ -668,7 +797,7 @@ class SummaryJudge:
                     pair = match_text_pair_in_snapshot(sd.anchor, snapshot)
                     shown_date = pair.value if pair is not None else None
             except AmbiguousAnchorError as exc:
-                reason = f"Date is shown_date more than once: {exc}"
+                reason = f"Date is shown more than once: {exc}"
             if expected_iso is None:
                 for k, prov in zip(keys, provs):
                     verdicts.append(
@@ -728,6 +857,16 @@ class SummaryJudge:
                 )
             )
 
+        # Review read-backs that were skipped before submit.
+        for key, why in sorted((review_skipped or {}).items()):
+            verdicts.append(
+                _not_checked(
+                    f"review:{key}",
+                    ProvenanceKind.INTAKE_DOCUMENT,
+                    f"The review page check for {key!r} was skipped: {why}",
+                )
+            )
+
         # Intake values no binding entered: the record may lack them.
         for key in sorted(set(unentered_intake_keys)):
             verdicts.append(
@@ -779,6 +918,24 @@ class SummaryJudge:
                         f"{unchecked_inputs} are not checked, and was not "
                         "compared with the popup's displayed result",
                     )
+        observations: dict[str, set[str]] = {}
+        for rb in summary_check.field_readbacks:
+            try:
+                oc = match_anchor_in_snapshot(
+                    rb.anchor, snapshot, include_readonly=True
+                )
+            except AmbiguousAnchorError:
+                continue
+            if oc is not None:
+                observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
+        verdicts.extend(
+            uncovered_subject_verdicts(
+                read_subjects(writes, active_resolutions),
+                verdicts,
+                _codec_for,
+                {k: len(v) for k, v in observations.items()},
+            )
+        )
 
         screen_problems: list[str] = []
         if snapshot.auth_wall_present:
@@ -852,6 +1009,7 @@ class SummaryJudge:
         )
 
         return SummaryVerdict(
+            read_route=read_route,  # type: ignore[arg-type]
             passed=passed,
             checked_count=sum(
                 1 for v in verdicts if v.status != ReadbackStatus.NOT_CHECKED

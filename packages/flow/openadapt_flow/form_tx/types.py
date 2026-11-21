@@ -351,6 +351,10 @@ class FieldBindingSpec(BaseModel):
     # over it. With no dossier value it still stops. Never applies to a
     # control the run already wrote.
     portal_default_values: tuple[str, ...] = ()
+    # A field the form may leave blank. Without this, a bound field the page
+    # shows with no intake value stops before submit; with it, a blank one is
+    # named on the receipt as not covered, never as covered.
+    optional: bool = False
 
 
 class EntityTableSpec(BaseModel):
@@ -462,7 +466,7 @@ class SplitDateReadbackSpec(BaseModel):
 
 
 class SummaryCheckSpec(BaseModel):
-    """Independent summary/search read-back verification contract."""
+    """Summary/search read-back verification contract (read by the acting session)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -472,6 +476,11 @@ class SummaryCheckSpec(BaseModel):
     search_submit_anchor: Optional[FieldAnchorSpec] = None
     search_by_output_key: Optional[str] = None
     field_readbacks: tuple[FieldBindingSpec, ...] = ()
+    # Read-backs on the pre-submit review screen. Checked just before the
+    # commit click: a value shown there that differs from the intake stops
+    # before submit (a value the portal derived or changed). A value the
+    # review does not show is left to the post-submit read-back.
+    review_readbacks: tuple[FieldBindingSpec, ...] = ()
     split_date_readbacks: tuple[SplitDateReadbackSpec, ...] = ()
     outputs: tuple[OutputExtractionSpec, ...] = ()
 
@@ -709,12 +718,16 @@ class FieldWriteRecord(BaseModel):
     dossier_key: Optional[str] = None
     label: Optional[str] = None
     selector: Optional[str] = None
+    # The wizard screen the control was on, when known.
+    screen_id: Optional[str] = None
     source: Literal[
         "auto_fill",
         "operator_value",
         "operator_fixed_on_screen",
         "operator_kept_prefill",
         "popup_return",
+        # Already held the intended value; the run left it as it was.
+        "kept_matching",
     ]
     in_popup_subroutine: Optional[str] = None
     # Set when a popup input was re-read from its control and matched just
@@ -764,6 +777,11 @@ class ReadbackFieldVerdict(BaseModel):
         return self
 
 
+ReadbackEvidence = Literal[
+    "acting_session_reread", "separate_session_read", "operator_attested"
+]
+
+
 class SummaryVerdict(BaseModel):
     """Aggregate read-back verification result over summary/search screen."""
 
@@ -776,6 +794,16 @@ class SummaryVerdict(BaseModel):
     field_verdicts: tuple[ReadbackFieldVerdict, ...] = ()
     extracted_outputs: dict[str, Any] = Field(default_factory=dict)
     missing_required_outputs: tuple[str, ...] = ()
+    # Who produced the read-back. The judge reads through the session that
+    # did the work, so it is "acting_session_reread"; only a read by a fresh,
+    # separate session may be called independent.
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
+    # Reporting only: whether the read was the page the run landed on after
+    # commit ("same_screen"), a new navigation or search that fetched the
+    # record again ("fresh_navigation"), or a separate session.
+    read_route: Literal["same_screen", "fresh_navigation", "separate_session"] = (
+        "same_screen"
+    )
 
     @model_validator(mode="after")
     def _passed_needs_every_field_checked(self) -> "SummaryVerdict":
@@ -833,6 +861,7 @@ class FormTxReceiptPayload(BaseModel):
     # shown at their blank value) and intake keys no binding entered.
     covered_keys: tuple[str, ...] = ()
     not_covered: tuple[str, ...] = ()
+    readback_evidence: ReadbackEvidence = "acting_session_reread"
 
     @model_validator(mode="after")
     def _verified_means_fully_checked(self) -> "FormTxReceiptPayload":

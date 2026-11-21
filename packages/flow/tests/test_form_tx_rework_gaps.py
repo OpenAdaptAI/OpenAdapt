@@ -900,3 +900,150 @@ def test_one_question_at_a_time_in_the_same_control_advances(
     done = reconciler.run_until_halt_or_done(session)
     assert s.records == [{"First name": "Avery", "Last name": "Quist"}]
     assert done.outcome != FormTxOutcome.VALIDATION_BLOCKED, done.what_happened
+
+
+# ---------------------------------------------------------------------------
+# 6. A bound field shown with no intake value (cv-s04 class).
+
+_SHOWN_BLANK = """
+<main id="form"><h2>Household</h2>
+<div class="row"><label for="fn">First name</label><input id="fn" name="first_name"></div>
+<div class="row"><label for="br">Breed of each dog</label><input id="br" name="breeds"></div>
+<button type="button" id="submit">Get quote</button></main>
+<script>
+document.getElementById('submit').onclick = () => {
+  const rec = {};
+  for (const el of document.querySelectorAll('input')) rec[el.name] = el.value;
+  fetch('/api/submit', {method: 'POST', body: JSON.stringify(rec)}).then(() => {
+    document.getElementById('form').outerHTML = '<section id="done"><h2>Quote issued</h2><dl><dt>First name</dt><dd>' +
+      rec.first_name + '</dd></dl></section>';
+  });
+};
+</script>
+"""
+
+
+@pytest.mark.parametrize("optional", [False, True])
+def test_bound_field_shown_with_no_intake_value(
+    site: tuple[_Site, str], browser: Any, optional: bool
+) -> None:
+    s, base = site
+    s.pages["/"] = _SHOWN_BLANK
+    pack = FormPack(
+        pack_id="test-shown-blank",
+        domain_schema="test.quote/v1",
+        ui_profile_id=_PROFILE.profile_id,
+        bindings=(
+            _bind("applicant.first_name", "First name"),
+            _bind("household.dog_breeds", "Breed of each dog", optional=optional),
+        ),
+        screens=(
+            WizardScreenSpec(
+                screen_id="form",
+                landmark_selector="#form",
+                is_commit_screen=True,
+                commit_button_anchor=FieldAnchorSpec(label_patterns=("^Get quote$",)),
+            ),
+        ),
+        summary_check=SummaryCheckSpec(
+            field_readbacks=(_shown("applicant.first_name", "First name"),)
+        ),
+    )
+    _, _, reconciler, session = _start(
+        browser, base, "/", pack, _dossier(**{"applicant.first_name": "Avery"})
+    )
+    done = reconciler.run_until_halt_or_done(session)
+    if not optional:
+        assert s.records == []
+        (halt,) = done.halts
+        assert halt.kind == FormHaltKind.UNGROUNDED_REQUIRED_FIELD
+        assert halt.field_label == "Breed of each dog"
+    else:
+        assert len(s.records) == 1
+        assert done.outcome == FormTxOutcome.VERIFIED_DONE, done.what_happened
+        payload = done.receipt.payload
+        assert "household.dog_breeds" not in payload.covered_keys
+        assert "optional-blank:household.dog_breeds" in payload.not_covered
+
+
+# ---------------------------------------------------------------------------
+# 7. The review page shows a value the portal changed: stop before submit.
+
+_REVIEW = """
+<main id="panel"></main>
+<script>
+const D = {hp: ''};
+const P = () => document.getElementById('panel');
+function step1() {
+  P().innerHTML = '<section id="s1"><label for="hp">Total horsepower</label><input id="hp" name="hp">' +
+    '<button type="button" id="next">Continue</button></section>';
+  document.getElementById('next').onclick = () => {
+    D.hp = String(2 * parseInt(document.getElementById('hp').value, 10));
+    review();
+  };
+}
+function review() {
+  P().innerHTML = '<section id="rev"><h2>Review</h2><dl><dt>Total horsepower</dt><dd>' + D.hp + '</dd></dl>' +
+    '<button type="button" id="submit">Get my quote</button></section>';
+  document.getElementById('submit').onclick = () =>
+    fetch('/api/submit', {method: 'POST', body: JSON.stringify(D)});
+}
+step1();
+</script>
+"""
+
+
+def test_review_page_value_that_differs_stops_before_submit(
+    site: tuple[_Site, str], browser: Any
+) -> None:
+    s, base = site
+    s.pages["/"] = _REVIEW
+    pack = FormPack(
+        pack_id="test-review",
+        domain_schema="test.quote/v1",
+        ui_profile_id=_PROFILE.profile_id,
+        bindings=(
+            _bind(
+                "boat.hp",
+                "Total horsepower",
+                codec=FieldCodecSpec(kind=FormCodecKind.INTEGER),
+            ),
+        ),
+        screens=(
+            WizardScreenSpec(
+                screen_id="s1",
+                landmark_selector="#s1",
+                next_button_anchor=FieldAnchorSpec(label_patterns=("^Continue$",)),
+            ),
+            WizardScreenSpec(
+                screen_id="rev",
+                landmark_selector="#rev",
+                is_commit_screen=True,
+                commit_button_anchor=FieldAnchorSpec(
+                    label_patterns=("^Get my quote$",)
+                ),
+            ),
+        ),
+        summary_check=SummaryCheckSpec(
+            review_readbacks=(
+                FieldBindingSpec(
+                    binding_id="rv_hp",
+                    dossier_key="boat.hp",
+                    anchor=FieldAnchorSpec(
+                        label_patterns=("^Total horsepower$",),
+                        section_patterns=("^Review$",),
+                    ),
+                    codec=FieldCodecSpec(kind=FormCodecKind.INTEGER),
+                ),
+            )
+        ),
+    )
+    _, _, reconciler, session = _start(
+        browser, base, "/", pack, _dossier(**{"boat.hp": "400"})
+    )
+    stop = reconciler.run_until_halt_or_done(session)
+    assert s.records == []
+    (halt,) = stop.halts
+    assert halt.kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+    assert halt.field_label == "Total horsepower"
+    assert halt.portal_value == "800"
