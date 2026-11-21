@@ -125,4 +125,22 @@ dev case per portal, so pack quality is part of what is measured.
 
 ## Deviations
 
-None yet.
+**D1, 2026-11-21. No form-layer run on these portals existed.** The pack
+author had read `harborline.py` and the harborline dev intake, nothing else
+from the portal branch.
+
+- **Engine re-pinned** from `e816c3d0b` to `6392bac91`. The first pin counted
+  a popup input as `passed` when it matched on a re-read just before the
+  popup's apply button. That re-read is not a read-back of what the
+  application recorded, so such fields are now `not_checked`, and the write
+  ledger is keyed by field, selector and popup so a popup input cannot hide
+  a main-form write of the same key. The re-read still stops the run before
+  apply on a mismatch.
+- **Denominators.** The 20 trap / 12 clean split above was inferred from the
+  per-portal clean counts. The runner computes the denominators from
+  `expected_behavior` and prints only the counts; if they differ, they are
+  used and noted here.
+- **The pack author read the portal source**, which shows how the traps
+  work. The results say so.
+- **Order of record:** this file was pushed at `8ea2e5602`, before the portals
+  were merged into this branch at `eeb53cadb`.
