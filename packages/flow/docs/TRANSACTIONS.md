@@ -24,6 +24,72 @@ API, a SQL database, email) four properties:
 
 Healthy runs make no model calls.
 
+## The proxy: SQL first
+
+The quickest way in is a database you already have:
+
+```
+openadapt proxy --postgres "$DATABASE_URL" -- claude
+openadapt proxy --sqlite app.db --flag users.role=admin -- claude
+openadapt proxy --sqlite app.db        # serve here; keys: y approve, n decline, u undo
+```
+
+OpenAdapt holds the credentials. The agent gets a Model Context Protocol
+endpoint on `127.0.0.1` with a per-run token and four tools: `sql_query`,
+`sql_preview`, `sql_apply` and `sql_undo`. The command starts with
+`DATABASE_URL`, the `PG*` variables and any copy of the URL removed from its
+environment. For `claude`, the proxy passes `--mcp-config`; any other agent
+reads `OPENADAPT_MCP_URL`, `OPENADAPT_MCP_TOKEN` and `OPENADAPT_MCP_CONFIG`.
+Each write statement goes through five stages:
+
+1. **Pre-read.** Open a transaction and read every table.
+2. **Dry-run diff.** Run the statement, read every table again, and roll
+   back. The diff is exact and row-level, for example "users: 412 rows
+   changed" and "rows where users.role = admin: 3".
+3. **Gate.** A plan that touches at most `--auto-approve-max-rows` rows (0 by
+   default) and has no anomaly is approved by policy, and its receipt says
+   `agent`. Any other plan waits for a person, who presses `y` in the proxy's
+   terminal or runs `openadapt plan approve` in another one. The approval
+   binds to the plan digest and is used once.
+4. **Execute once.** The statement runs again in a transaction. It commits
+   only when the diff read inside that transaction is exactly the planned
+   diff. Otherwise it rolls back (`diverged`). A plan whose database moved
+   since the dry run is refused before anything runs (`plan_stale`).
+5. **Read back and undo.** Every table is read again and compared with the
+   prediction. The undo images (each changed or removed row's before-image,
+   and each added row's key) give a generated undo. The undo runs in one
+   transaction, with each row under a savepoint, so a row that a foreign key
+   cascade removed is restored after its parent. It is verified when every
+   table reads back as it was. Each stage writes a signed receipt.
+
+**Idempotency for raw statements.** A statement's record is the set of rows
+it changes or removes, read from the dry run. A regenerated statement after
+a restore, such as `balance + 100.00 ... AND active IS NOT NULL` in place of
+`balance + 100`, touches the same rows and gets the same key. Because new
+work can also touch the same rows, the proxy doesn't refuse it outright. It
+marks the plan `possible_replay`, never approves it by policy, and waits for
+a person. A statement that only inserts is keyed by its table, with the same
+rule. An identical statement after the first apply changes nothing, and its
+dry run is empty.
+
+**What the dry run covers.** It covers SQL effects inside the transaction:
+rows, triggers that write rows, and cascades. It does not cover effects
+outside the database: a trigger that calls out, `NOTIFY` listeners, email
+sent by the application, sequences (a rolled-back `nextval` is not returned),
+or MySQL DDL (MySQL commits DDL at once, so it is refused). An app that other
+clients also write to needs the read-back: the apply-time diff check refuses
+a statement whose effect changed, and `plan_stale` refuses a plan whose
+database moved, but a write that lands after the commit is not covered. A
+schema change (DDL) on SQLite or PostgreSQL is staged and shown, but has no
+generated undo.
+
+**The credential boundary.** The agent never receives the credentials in its
+environment. An agent running as the same OS user with a shell can still read
+credentials the user keeps elsewhere, such as a `.env` file or `~/.pgpass`.
+For a hard boundary, keep them where the agent's user can't read them. This
+is what the hook pack's `--strict` mode needs ([HOOKS.md](HOOKS.md)): with the
+proxy, the agent has no write path to the database except the proxy.
+
 ```
 openadapt plan create --tx openadapt.tx.yaml --task T-42 writes.json
 openadapt plan approve 3f2a9c1e        # a person, at a terminal; types the digest
@@ -128,12 +194,54 @@ direct write is refused and batch writes go through a plan. `openadapt wrap`
 systems. Like the hooks, this layer is advisory against an agent that holds
 its own credentials to the system.
 
-## Lab results
+## Measured
 
-`benchmark/ext_tx/run.py` runs every flow against real apps on the lab
-machine: Vikunja 2.7.1 (REST), Mailpit v1.27.10 (email), and Dolibarr 21.0.4
-on MariaDB 11.4.13 (a database-backed app, written through SQL). The results
-are in `benchmark/ext_tx/results/`. See [the summary below](#measured).
+All runs took place on 21 November 2026, on the lab laptop's WSL with
+synthetic data. The rules (server-set and derived fields, ignored tables) were
+fixed after a pilot and before the measured run. The pilot found one engine
+bug: an undo of an SQL update didn't restore a column the database sets
+itself (`ON UPDATE CURRENT_TIMESTAMP`). It was fixed by restoring the whole
+before-image. Results, counts and record ids only, are in
+[`benchmark/ext_tx/results/`](../benchmark/ext_tx/results/).
+
+| Surface | Writes | Missed effects | False diffs | Verified undo | Double effects through |
+|---|---|---|---|---|---|
+| `openadapt proxy` on PostgreSQL 16: 8 statement kinds, including bulk updates, `INSERT ... SELECT` and cascading deletes | 120 statements, 1,490 rows | 0 | 0 | 120 of 120 (every table back to its start, checked by `psql` checksums) | 0 of 20 regenerated statements (all 20 held for a person); the control arm doubled 20 of 20 |
+| Vikunja 2.7.1 (REST, computed dry run) | 100 (60 updates, 40 creates) | 0 | 0 | 100 of 100 | 0 of 20 (20 refused); the control arm doubled 20 of 20 |
+| Dolibarr 21.0.4 on MariaDB 11.4.13 (SQL, staged dry run, about 400 tables) | 100 (50 updates, 20 deletes, 30 creates) | 0 | 0 | 100 of 100 | 0 of 20 (20 refused); the control arm doubled 20 of 20 |
+| Mailpit v1.27.10 (email, holdback) | 100 sends | 0 | 0 | 50 cancelled in holdback and never sent; 50 released exactly once. A released email has no undo. | 0 of 20 (20 refused); the control arm doubled 20 of 20 |
+
+- **Crash after the send, before the outcome was recorded** (5 per app, REST
+  and SQL): the regenerated retry was refused, and the identical retry was
+  read back and held. The run had no second effect in any of the 10 cases.
+- **Identical replays** sent nothing in 60 of 60 cases.
+- **The independent read-back** (the verifier's `capture_database` and
+  `diff_database`) agreed with the proxy's dry run on every table's counts for
+  all 120 statements.
+- **Seeded faults, to show the checks can fail:**
+  - A change the plan didn't predict, injected during apply, was counted as a
+    missed effect in 10 of 10 cases.
+  - A change injected before undo was caught in 10 of 10 cases: as collateral
+    in 9, and in 1 as `changed_since_apply`, because the injected change hit
+    the planned record. The undo refused to overwrite it.
+- **A trigger probe** (PostgreSQL, outside the measured set): the dry run
+  showed the trigger's 5 audit rows, and apply found no missed effect. The undo
+  fires the trigger again, so it reported `RECONCILIATION_REQUIRED` with 5
+  collateral rows, never `ROLLED_BACK`.
+- **One session over the real MCP client SDK** (`mcp` 1.x, streamable HTTP)
+  listed the four tools, applied and undid a statement.
+- **Setup time.** From an empty virtual environment to the first diff took 8
+  to 10 seconds over three runs: install `openadapt-flow`, `openadapt-types`
+  and `psycopg` with no package cache, then `openadapt-flow proxy --postgres
+  ... -- <stand-in agent>` and its first `sql_preview`. The target was under
+  2 minutes. Not included: installing Python and uv, and building the wheels
+  from source, which stood in for PyPI. The machine was the lab laptop, not
+  a fresh one.
+- **Median dry-run time:** 0.78 s for the 600-user, 1,500-order database.
+
+The kill criteria were: a verified undo failing on more than 5% of supported
+writes, a dry-run diff missing an effect that the read-back found, or a double
+effect getting through. None was tripped.
 
 ## References
 
