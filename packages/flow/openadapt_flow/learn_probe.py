@@ -38,7 +38,6 @@ learned. Nothing here reads or stores a record value.
 from __future__ import annotations
 
 import json
-import re
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -322,17 +321,6 @@ def _sees_its_own_harm(contract: Any) -> bool:
     return bool(records) and all(r.get("count_new_only") is True for r in records)
 
 
-_IDENT = r'(?:"[A-Za-z_][A-Za-z0-9_$]*"|[A-Za-z_][A-Za-z0-9_$]*)'
-#: The main relation of a generated read: ``... FROM "table" t`` at the end.
-_MAIN_FROM = re.compile(
-    rf"\bFROM\s+({_IDENT}(?:\.{_IDENT})?)\s+(?:AS\s+)?t\s*;?\s*$", re.IGNORECASE
-)
-
-
-def _unquote(name: str) -> str:
-    return ".".join(p.strip('"') for p in name.split("."))
-
-
 def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     """A version source for an update or found check, from the contract
     alone: on PostgreSQL, the target's own row versions
@@ -375,25 +363,22 @@ def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     read = database.get("read") or {}
     if any(source.get(k) != read.get(k) for k in ("sql_driver", "sql_connect_args")):
         return None  # another database: its rows aren't the frame's
-    query = " ".join(str(source.get("sql_query") or "").split())
-    main = _MAIN_FROM.search(query)
-    # One FROM: the declared record is one row, so the row's versions are
-    # the record's. A read that also looks into other tables (a list of
-    # tags, a child row) declares rows this source doesn't count.
-    if main is None or len(re.findall(r"\bFROM\b", query, re.IGNORECASE)) != 1:
-        return None
-    field = str(frame.get("identity_field") or "id")
-    column = re.search(
-        rf'(?:CAST\(\s*)?t\.({_IDENT})(?:\s+AS\s+TEXT\s*\))?\s+AS\s+"?{re.escape(field)}"?\s*,',
-        query,
-        re.IGNORECASE,
+    from openadapt_flow.runtime.effects.row_versions import single_table_read
+
+    # One SELECT over one table: the declared record is one row, so the
+    # row's versions are the record's. A read that also looks into other
+    # tables (a list of tags, a child row, a UNION) declares rows this
+    # source doesn't count.
+    found = single_table_read(
+        str(source.get("sql_query") or ""), str(frame.get("identity_field") or "id")
     )
-    if column is None:
+    if found is None:
         return None
+    table, key_column = found
     return {
         "source": "postgresql_xmin",
-        "table": _unquote(main.group(1)),
-        "key_column": _unquote(column.group(1)),
+        "table": table,
+        "key_column": key_column,
         "target_surface": surface,
     }
 

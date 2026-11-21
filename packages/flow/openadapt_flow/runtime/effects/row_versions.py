@@ -106,6 +106,91 @@ class FrameRowVersions(BaseModel):
         return schema, parts[-1], self.key_column
 
 
+_IDENT = r'(?:"[A-Za-z_][A-Za-z0-9_$]*"|[A-Za-z_][A-Za-z0-9_$]*)'
+#: The main relation of a generated read: ``... FROM "table" t`` at the end.
+_MAIN_FROM = re.compile(
+    rf"\bFROM\s+({_IDENT}(?:\.{_IDENT})?)\s+(?:AS\s+)?t\s*;?\s*$", re.IGNORECASE
+)
+#: Anything that lets one read return rows that aren't the main table's.
+_NOT_ONE_TABLE = re.compile(
+    r"\b(?:UNION|INTERSECT|EXCEPT|JOIN|LATERAL|WITH)\b|;(?!\s*$)", re.IGNORECASE
+)
+
+
+def _unquote(name: str) -> str:
+    return ".".join(p.strip('"') for p in name.split("."))
+
+
+def single_table_read(query: str, field: str) -> Optional[tuple[str, str]]:
+    """``(table, key column)`` when ``query`` is one ``SELECT`` over one
+    table aliased ``t`` that selects ``field`` straight from one of its
+    columns; None for anything else (a ``UNION``, a join, a subquery, a CTE,
+    a second statement, a second ``FROM``)."""
+
+    text = " ".join(str(query or "").split())
+    if (
+        len(re.findall(r"\bSELECT\b", text, re.IGNORECASE)) != 1
+        or len(re.findall(r"\bFROM\b", text, re.IGNORECASE)) != 1
+        or _NOT_ONE_TABLE.search(text)
+        or not re.match(r"^\s*SELECT\b", text, re.IGNORECASE)
+    ):
+        return None
+    main = _MAIN_FROM.search(text)
+    if main is None:
+        return None
+    column = re.search(
+        rf'(?:CAST\(\s*)?t\.({_IDENT})(?:\s+AS\s+TEXT\s*\))?\s+AS\s+"?{re.escape(field)}"?\s*,',
+        text,
+        re.IGNORECASE,
+    )
+    if column is None:
+        return None
+    return _unquote(main.group(1)), _unquote(column.group(1))
+
+
+def binding_problem(
+    spec: FrameRowVersions,
+    surfaces: Mapping[str, Any],
+    database_read: Mapping[str, Any],
+    identity_field: Optional[str],
+) -> Optional[str]:
+    """Why ``spec`` isn't bound to the record the contract reads, or None.
+
+    The held rows count saves only when they are the target's own rows: the
+    table and key column must be the ones the ``target_surface`` read takes
+    the target's ``target_field`` from, over the frame's own connection. A
+    hand-written ``table`` with the same key (a decoy that nobody else
+    edits) would otherwise vouch for a target it never held."""
+
+    if not spec.target_surface:
+        return "frame.row_versions names no target_surface"
+    source = surfaces.get(spec.target_surface)
+    get = (
+        source.get
+        if isinstance(source, Mapping)
+        else (lambda k, d=None: getattr(source, k, d))
+    )
+    if source is None or get("kind") != "sql":
+        return "frame.row_versions.target_surface is not a SQL read"
+    for key in ("sql_driver", "sql_connect_args"):
+        if (get(key) or None) != (database_read.get(key) or None):
+            return "the target surface reads another database than the frame"
+    field = spec.target_field or identity_field or "id"
+    found = single_table_read(str(get("sql_query") or ""), field)
+    if found is None:
+        return (
+            "the target surface's read is not one SELECT over one table that "
+            "selects the target field from one column"
+        )
+    table, key = found
+    if (table, key) != (_unquote(spec.table), spec.key_column):
+        return (
+            "frame.row_versions.table and key_column are not the table and "
+            "column the target surface reads the target from"
+        )
+    return None
+
+
 def _quote(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
@@ -216,6 +301,11 @@ def take(token: str) -> Optional[HeldRead]:
         return _HELD.pop(token, None)
 
 
+#: PostgreSQL's errors for a number that names no multixact (multixact.c):
+#: only these mean the old ``xmax`` is a plain transaction id.
+_NO_SUCH_MULTIXACT = re.compile(
+    r"MultiXactId \d+ (?:has not been created yet|does no longer exist)"
+)
 #: ``pg_get_multixact_members`` modes that update a row (not just lock it).
 _UPDATE_MODES = frozenset({"nokeyupd", "upd"})
 
@@ -224,7 +314,8 @@ def _multixact_updater_other_than(cur: Any, value: str, writer: str) -> bool:
     """Could ``value``, read as the old version's ``xmax``, be a multixact id
     (a shared lock) whose updater is a transaction other than ``writer``?
     Then two writers could read as one. A value that is no multixact (the
-    function errors) can't."""
+    function's "has not been created yet" or "does no longer exist" error)
+    can't. Any other error is raised, so the target is not checked."""
 
     try:
         cur.execute(
@@ -232,7 +323,9 @@ def _multixact_updater_other_than(cur: Any, value: str, writer: str) -> bool:
             (value,),
         )
         members = cur.fetchall()
-    except Exception:  # noqa: BLE001 - not a multixact id: a plain xid
+    except Exception as exc:  # noqa: BLE001 - only "no such multixact" is a plain xid
+        if not _NO_SUCH_MULTIXACT.search(str(exc)):
+            raise  # any other failure: the judge leaves the target not checked
         return False
     return any(str(m) in _UPDATE_MODES and str(x) != writer for x, m in members)
 

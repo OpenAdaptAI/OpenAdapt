@@ -62,6 +62,11 @@ def pg(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
 
 
 SPEC = {"table": "asset", "key_column": "id"}
+BOUND_READ = (
+    'SELECT CAST(t."id" AS TEXT) AS "id", t."tag" AS "tag", t."name" AS "name", '
+    't."assigned_to" AS "assigned_to", t."modified_at" AS "modified_at" '
+    'FROM "asset" t'
+)
 _n = [0]
 
 
@@ -82,7 +87,15 @@ def rename_contract(e: Engine, *, versions: bool = True, found: bool = False) ->
 
     doc = _le.asset_contract(e, learned_block(LOGIN, SEEN))
     if versions:
-        doc["frame"]["row_versions"] = dict(SPEC)
+        # The held rows must be the ones the target surface reads the
+        # record from (rv.binding_problem): one SELECT over "asset" t.
+        doc["verifier"] = {
+            "kind": "surfaces",
+            "surfaces": {"record": _le._verifier(e, BOUND_READ)},
+        }
+        for effect in doc["effects"]:
+            effect["probe"] = "surface=record"
+        doc["frame"]["row_versions"] = {**SPEC, "target_surface": "record"}
     if found:
         doc["frame"]["target_fields"] = []
     return doc
@@ -118,7 +131,9 @@ class _Cur:
     def execute(self, sql: str, *a: Any) -> None:
         self._sql = sql
         if "multixact" in sql and self._members is None:
-            raise RuntimeError("MultiXactId has not been created yet")
+            raise RuntimeError(
+                "MultiXactId 105 has not been created yet -- apparent wraparound"
+            )
 
     def fetchall(self) -> list[tuple]:
         return list(self._members or []) if "multixact" in self._sql else self._rows
@@ -481,3 +496,76 @@ def test_held_read_is_a_read_only_snapshot(pg: Engine) -> None:
         held.close()
     with pytest.raises(Exception):
         rv.open_held(rv.FrameRowVersions(table="no_such_table"), _db_connect(pg.read))
+
+
+# -- review blockers: binding, multixact errors, one-table reads --------------
+
+
+class _FailingCur(_Cur):
+    def execute(self, sql: str, *a: Any) -> None:
+        self._sql = sql
+        if "multixact" in sql:
+            raise RuntimeError(
+                "permission denied for function pg_get_multixact_members"
+            )
+
+
+def test_any_other_multixact_error_is_not_checked() -> None:
+    """Only "no such multixact" means a plain xid; any other failure (a
+    permission error, a dropped connection) can't rule out two writers."""
+
+    class Conn(_Conn):
+        def cursor(self) -> _Cur:
+            return _FailingCur(self._rows, self._members)
+
+    spec = rv.FrameRowVersions(**SPEC)
+    v = rv.judge_row_versions(
+        spec,
+        _Held({"1": ("100", "105")}),
+        lambda: Conn([("1", "105", "0")]),
+        [("1", True, True)],
+    )
+    assert v.status == "not_checked"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        'SELECT 1 AS "x" UNION SELECT CAST(t."id" AS TEXT) AS "id", t."n" AS "n" '
+        'FROM "part_part" t',
+        'WITH d AS (SELECT 1) SELECT CAST(t."id" AS TEXT) AS "id", t."n" AS "n" '
+        'FROM "part_part" t',
+        'SELECT CAST(t."id" AS TEXT) AS "id", t."n" AS "n" FROM "part_part" t; '
+        'SELECT 1 FROM "part_part" t',
+        'SELECT CAST(t."id" AS TEXT) AS "id", (SELECT 1) AS "n" FROM "part_part" t',
+    ],
+)
+def test_a_read_that_is_not_one_select_over_one_table_has_no_source(
+    query: str,
+) -> None:
+    assert rv.single_table_read(query, "id") is None
+    assert learn_probe.detect_row_versions(_generated("postgresql", query)) is None
+
+
+def _bound(spec: dict, query: str = GENERATED) -> Optional[str]:
+    doc = _generated("postgresql", query)
+    return rv.binding_problem(
+        rv.FrameRowVersions(**spec),
+        doc["verifier"]["surfaces"],
+        doc["frame"]["database"]["read"],
+        "id",
+    )
+
+
+def test_row_versions_must_be_the_target_surfaces_own_table() -> None:
+    """A decoy table with the same key (one nobody edits) would vouch for a
+    target it never held: an edit and a revert would pass."""
+
+    good = {"table": "part_part", "key_column": "id", "target_surface": "record"}
+    assert _bound(good) is None
+    assert _bound({**good, "table": "decoy"}) is not None
+    assert _bound({**good, "key_column": "other_id"}) is not None
+    assert _bound({**good, "target_surface": "elsewhere"}) is not None
+    assert _bound({"table": "part_part", "key_column": "id"}) is not None
+    joined = GENERATED.replace('FROM "part_part" t', 'FROM "part_part" t JOIN x ON 1=1')
+    assert _bound(good, query=joined) is not None

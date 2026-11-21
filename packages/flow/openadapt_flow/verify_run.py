@@ -829,6 +829,17 @@ def _judge_row_versions(
             reason="frame.row_versions.target_surface names a surface no "
             "write target is read from",
         )
+    elif (
+        unbound := rv.binding_problem(
+            spec,
+            cfg.verifier.surfaces,
+            cfg.frame.database.read,  # type: ignore[union-attr]
+            cfg.frame.identity_field,  # type: ignore[union-attr]
+        )
+    ) is not None:
+        if held is not None:
+            held.close()
+        result = VersionVerdict("not_checked", "unbound_source", reason=unbound)
     else:
         targets = _version_targets(
             cfg, before, effects, verdicts, spec.target_field, spec.target_surface

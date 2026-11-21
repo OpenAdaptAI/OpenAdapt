@@ -61,6 +61,7 @@ PROBLEMS = (
     "unknown_surface",
     "ambiguous_xmax",
     "created_target",
+    "unbound_source",
 )
 
 _WHOLE = re.compile(r"^(0|[1-9][0-9]*)$")
