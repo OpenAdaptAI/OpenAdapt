@@ -39,11 +39,14 @@ So an example declares its expected change with the shared effect kinds::
         field: text
         value: {param: note}
 
-A missing file, key or value is a real, readable state (``present: False``):
-an expected state of "this setting is off" can be the key's absence. A read
-that fails for any other reason (wrong operating system, permission denied,
-``defaults`` exiting non-zero, output that does not parse) makes the whole
-read unreadable, so the verdict is INDETERMINATE and the run halts. The
+A missing file, preference key or registry value is a real, readable state
+(``present: False``): an expected state of "this setting is off" can be the
+key's absence. Absence counts only inside a container that exists: a file's
+folder, a non-empty preferences domain (``defaults export`` prints an empty
+dictionary for a domain that doesn't exist), a registry key. Otherwise, and
+for any other failure (wrong operating system, permission denied,
+``defaults`` exiting non-zero, output that does not parse), the whole read is
+unreadable, so the verdict is INDETERMINATE and the run halts. The
 verifier never guesses a value it could not read.
 
 The tier is ``INDEPENDENT_SYSTEM``: the read goes to the store the state
@@ -311,6 +314,11 @@ class LocalStateVerifier(VerifierAdapterBase):
                 ) from exc
             if not isinstance(parsed, dict):
                 raise _Unreadable(f"{source.id}: defaults output is not a dictionary")
+            if not parsed:
+                # `defaults export` prints an empty dictionary, exit 0, for a
+                # domain that doesn't exist, so a mistyped domain would
+                # confirm "absent". An empty domain is unreadable instead.
+                raise _Unreadable(f"{source.id}: preferences domain is empty")
             domain = parsed
             cache[source.domain] = domain
         record: dict[str, Any] = {"id": source.id, "type": source.type}
@@ -344,7 +352,16 @@ class LocalStateVerifier(VerifierAdapterBase):
         )
         record: dict[str, Any] = {"id": source.id, "type": source.type}
         try:
-            with reg.OpenKey(hive, source.path, 0, reg.KEY_READ) as key:
+            key = reg.OpenKey(hive, source.path, 0, reg.KEY_READ)
+        except FileNotFoundError as exc:
+            # A missing key is a mistyped path as often as a real state, so
+            # it can't confirm "absent". Only a missing value under a key
+            # that exists is a readable absence.
+            raise _Unreadable(f"{source.id}: registry key does not exist") from exc
+        except OSError as exc:
+            raise _Unreadable(f"{source.id}: {type(exc).__name__}") from exc
+        try:
+            with key:
                 value, kind = reg.QueryValueEx(key, source.name)
         except FileNotFoundError:
             record.update(present=False, value=None, value_type=None)

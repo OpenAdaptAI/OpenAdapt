@@ -56,6 +56,11 @@ GUEST_PY = rf"{LSC}\venv\Scripts\python.exe"
 GUEST_PATH = rf"{LSC}\src\packages\flow;{LSC}\src\packages\types"
 #: Where the examples' files live in the guest (``~`` in their verify.yaml).
 EXAMPLE_DIR = r"$env:USERPROFILE\openadapt-examples"
+#: Notepad's restored-tab store (Windows 11 Notepad, Store package).
+NOTEPAD_TABS = (
+    r"$env:LOCALAPPDATA\Packages\Microsoft.WindowsNotepad_8wekyb3d8bbwe"
+    r"\LocalState\TabState"
+)
 
 
 # -- the examples' lab steps (fixtures, not engine code) -----------------------
@@ -93,11 +98,14 @@ class NotepadSave(Example):
             # Close what would cover the app: a vendor screensaver blocks capture.
             "Get-Process | Where-Object { $_.ProcessName -like '*Screensaver*' } | "
             "Stop-Process -Force -ErrorAction SilentlyContinue; "
-            # Notepad restores unsaved tabs after it is closed; start clean
-            # (the lab backed the original tab state up to C:\\oa\\lsc first).
-            "Start-Sleep 1; Remove-Item -Recurse -Force "
-            "$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsNotepad_8wekyb3d8bbwe\\LocalState\\TabState\\* "
-            "-ErrorAction SilentlyContinue; "
+            # Notepad restores unsaved tabs after it is closed; start clean.
+            # The first reset keeps a copy of the original tab state in
+            # C:\\oa\\lsc\\tabstate-backup, so the lab can put it back.
+            "Start-Sleep 1; "
+            f'$ts = "{NOTEPAD_TABS}"; '
+            f"if ((Test-Path $ts) -and -not (Test-Path '{LSC}\\tabstate-backup')) "
+            f"{{ Copy-Item -Recurse $ts '{LSC}\\tabstate-backup' }}; "
+            'Remove-Item -Recurse -Force "$ts\\*" -ErrorAction SilentlyContinue; '
             f"New-Item -ItemType Directory -Force {EXAMPLE_DIR} | Out-Null; "
             f"Set-Content -NoNewline -Encoding ascii -Path {EXAMPLE_DIR}\\note.txt -Value ''",
             check=False,

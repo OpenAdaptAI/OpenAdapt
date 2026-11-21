@@ -151,7 +151,7 @@ environment-assigned surrogate key is the right choice for it.
 | `email` | `MaildirDeliveryVerifier` | maildir / SMTP-capture directory → one record per message (`to`, `subject`, `message_id`, body probe, freshness); verifies delivery TO THE CAPTURE POINT, not end-to-end receipt | **contract-proven in CI against maildir/tmp-dir fixtures** (wrong recipient, duplicate send, leak-to-other-recipient collateral hook) -- not live-proven against a production MTA |
 | `document` | `DocumentArrivalVerifier` | report arrival + **parseable-content assertion**: each candidate parses (JSON dotted paths or named-regex groups) into judgeable fields; a corrupt report REFUTEs a `parseable: True` contract | **contract-proven in CI against temp-dir fixtures** (corrupt report, wrong entity, duplicates, stale mtime) |
 | `document-hash` | `DocumentHashVerifier` | SHA-256 of each document in a store | live in CI (no external service) |
-| `local-state` | `LocalStateVerifier` | typed, read-only sources on this computer: a file (contents, SHA-256), a macOS preference key, a Windows registry value; one record per source ([LOCAL_STATE_CHECKS.md](LOCAL_STATE_CHECKS.md)) | unit tests with stand-ins in CI; lab-proven on Windows 11 (Notepad file save, registry read) |
+| `local-state` | `LocalStateVerifier` | typed, read-only sources on this computer: a file (contents, SHA-256), a macOS preference key, a Windows registry value; one record per source ([LOCAL_STATE_CHECKS.md](LOCAL_STATE_CHECKS.md)) | unit tests with stand-ins in CI; lab-proven on Windows 11 (Notepad file save, registry reads); macOS source unit-tested only |
 
 All substrates share one judge (`runtime/effects/_common.py`), so
 at-most-once counting, idempotency-key de-duplication, field read-back,

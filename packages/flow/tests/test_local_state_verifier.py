@@ -140,7 +140,7 @@ def test_defaults_value_and_absent_key() -> None:
     # The read is the fixed, read-only argv; -g is normalized.
     assert dark.calls[0] == [DEFAULTS_BINARY, "export", "NSGlobalDomain", "-"]
 
-    light = _mac(_Defaults({"NSGlobalDomain": {}}), APPEARANCE)
+    light = _mac(_Defaults({"NSGlobalDomain": {"AppleLocale": "en_US"}}), APPEARANCE)
     (record,) = light.read() or []
     assert record["present"] is False and record["value"] is None
     assert _judge(light, _field("appearance", "present", "False")) is Verdict.CONFIRMED
@@ -174,6 +174,17 @@ def test_defaults_failure_is_unreadable_not_absent(runner: _Defaults) -> None:
     assert v.read() is None
     verdict = v.verify(_field("appearance", "present", "False"), v.capture_pre_state())
     assert verdict.verdict is Verdict.INDETERMINATE
+
+
+def test_an_empty_or_unknown_domain_is_unreadable() -> None:
+    # `defaults export` prints an empty dictionary, exit 0, for a domain that
+    # doesn't exist; a mistyped domain must not confirm "absent".
+    v = _mac(
+        _Defaults({}),
+        MacosDefaultsSource(id="x", domain="com.example.misspelled", key="k"),
+    )
+    assert v.read() is None
+    assert "empty" in (v.last_error or "")
 
 
 def test_defaults_on_another_os_is_unreadable() -> None:
@@ -261,9 +272,9 @@ def test_registry_value_absent_and_read_only_access() -> None:
     missing_value = _Winreg({("HKCU", PERSONALIZE): {}})
     (rec,) = LocalStateVerifier([THEME], registry=missing_value).read() or []
     assert rec["present"] is False
+    # A missing key could be a mistyped path, so it never confirms absence.
     missing_key = _Winreg({})
-    (rec,) = LocalStateVerifier([THEME], registry=missing_key).read() or []
-    assert rec["present"] is False
+    assert LocalStateVerifier([THEME], registry=missing_key).read() is None
 
 
 def test_registry_permission_error_is_unreadable() -> None:
