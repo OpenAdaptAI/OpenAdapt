@@ -329,7 +329,6 @@ class FieldBindingSpec(BaseModel):
         "Choose...",
         "Select one",
         "-- Select one --",
-        "Select",
         "Choose one",
         "Please choose",
         "Choose",
@@ -499,6 +498,9 @@ class ObservedControl(BaseModel):
     # radiogroup container), and the group's visible label, if any.
     radio_group: str = ""
     group_label: str = ""
+
+    # Selector of the open dialog that holds this control, if any.
+    modal_container: str = ""
 
     @model_validator(mode="after")
     def _scrub_secret_fields(self) -> "ObservedControl":

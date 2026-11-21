@@ -302,7 +302,6 @@ def resolve_unique_option(
         "Choose...",
         "Select one",
         "-- Select one --",
-        "Select",
         "Choose one",
         "Please choose",
         "Choose",

@@ -231,9 +231,16 @@ _DOM_HELPERS_JS = r"""
     const DYNAMIC_ID_RE = /(?:[_:-]\d+|\d{2,}|_[0-9a-f]{6,}|^:)/i;
     // Unique inside the element's own root, counting what a Playwright
     // locator would also see through nested open shadow roots.
+    // For an element in a shadow root the scope is its host's whole composed
+    // subtree: a ``host >> inner`` locator also matches the host's light-DOM
+    // descendants (slotted nodes included), so ``inner`` must be unique there.
+    const uniquenessScope = (target) => {
+        const r = rootOf(target);
+        return (r && r !== document && r.host) ? r.host : r;
+    };
     const isUniqueMatch = (sel, target) => {
         if (!sel) return false;
-        const nodes = safeQueryAll(rootOf(target), sel);
+        const nodes = safeQueryAll(uniquenessScope(target), sel);
         return nodes.length === 1 && nodes[0] === target;
     };
     const quoteAttrVal = (val) => {
@@ -365,7 +372,6 @@ _SNAPSHOT_WALKER_JS = r"""
         'none selected',
         'select one',
         '-- select one --',
-        'select',
         'choose one',
         'please choose',
         'choose',
@@ -710,6 +716,28 @@ _SNAPSHOT_WALKER_JS = r"""
         return '';
     };
 
+    // The open dialog that holds ``el`` (crossing shadow roots), or null.
+    const MODAL_SELECTORS = [
+        ...(cfg.modalDialogSelectors || []),
+        ...((cfg.modalRules || []).map((r) => r.container_selector).filter(Boolean)),
+    ];
+    const closestOpenModal = (el) => {
+        let cur = el.parentElement || (el.getRootNode && el.getRootNode().host) || null;
+        while (cur && cur !== document.documentElement) {
+            for (const sel of MODAL_SELECTORS) {
+                let hit = false;
+                try {
+                    hit = cur.matches(sel);
+                } catch (e) {
+                    hit = false;
+                }
+                if (hit && isOpenModal(cur)) return cur;
+            }
+            cur = cur.parentElement || (cur.getRootNode && cur.getRootNode().host) || null;
+        }
+        return null;
+    };
+
     // 1. Controls
     const rawControlNodes = safeQueryAll(
         document,
@@ -782,7 +810,16 @@ _SNAPSHOT_WALKER_JS = r"""
             currentValue = checked ? radioValue : '';
             groupLabel = groupLabelFor(el);
             if (nameAttr) {
-                radioGroup = 'name:' + nameAttr;
+                // A radio group is its name within one form (or one root
+                // when it has no form): same-named groups in two forms stay
+                // two fields.
+                const rootNode = el.getRootNode();
+                const owner = el.form
+                    ? 'form:' + computeDomSelector(el.form)
+                    : (rootNode && rootNode.host
+                        ? 'root:' + computeDomSelector(rootNode.host)
+                        : 'doc');
+                radioGroup = 'name:' + nameAttr + '@' + owner;
                 const scope = el.form || el.getRootNode() || document;
                 const peers = safeQueryAll(scope, 'input[type="radio"]').filter(
                     (r) => r.name === nameAttr && (r.form || null) === (el.form || null)
@@ -869,6 +906,11 @@ _SNAPSHOT_WALKER_JS = r"""
             radio_value: radioValue,
             radio_group: radioGroup,
             group_label: groupLabel,
+
+            modal_container: (() => {
+                const m = closestOpenModal(el);
+                return m ? computeDomSelector(m) : '';
+            })(),
         });
     }
 
@@ -1236,15 +1278,23 @@ _TEXT_PAIRS_JS = r"""
             values = [];
             anchor = null;
         };
+        // A hidden dd still ends its group: it counts as an empty value, so
+        // a later dd is never joined onto earlier labels. A hidden dt starts a
+        // group nobody can see, and its dd values are dropped.
+        let hiddenGroup = false;
         for (const it of items) {
-            if (!isShown(it)) continue;
             consumed.add(it);
+            const shown = isShown(it);
             if (it.tagName === 'DT') {
-                if (values.length) flush();
+                if (values.length || !shown) flush();
+                hiddenGroup = !shown;
+                if (!shown) continue;
                 labels.push(textOf(it));
                 if (!anchor) anchor = it;
+            } else if (hiddenGroup) {
+                continue;
             } else if (labels.length) {
-                values.push(textOf(it));
+                values.push(shown ? textOf(it) : '');
             }
         }
         flush();
@@ -1879,6 +1929,7 @@ class PlaywrightFormSurface:
                     radio_value=str(item.get("radio_value") or ""),
                     radio_group=str(item.get("radio_group") or ""),
                     group_label=str(item.get("group_label") or ""),
+                    modal_container=str(item.get("modal_container") or ""),
                 )
             )
 
@@ -1970,6 +2021,15 @@ class PlaywrightFormSurface:
         if total == 0:
             raise MissingAnchorError(
                 f"Selector {dom_selector!r} matched 0 elements in live DOM"
+            )
+        if total > 1 and " >> " in dom_selector:
+            # A shadow-root selector is emitted unique across its host's whole
+            # subtree. More than one match means a light-DOM or slotted node
+            # (visible or not) shares it, so the observed element is not
+            # certain: refuse rather than act on the one that happens to show.
+            raise AmbiguousAnchorError(
+                f"Shadow-root selector {dom_selector!r} matched {total} elements "
+                f"in live DOM"
             )
         if total == 1:
             if not loc.is_visible():

@@ -29,7 +29,6 @@ from openadapt_flow.form_tx.codecs import (
 from openadapt_flow.form_tx.judge import SummaryJudge
 from openadapt_flow.form_tx.playwright_surface import (
     PopupContractError,
-    SurfaceContextError,
     SurfaceSettleTimeoutError,
 )
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
@@ -98,7 +97,6 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "Choose...",
     "Select one",
     "-- Select one --",
-    "Select",
     "Choose one",
     "Please choose",
     "Choose",
@@ -196,6 +194,10 @@ class ReconcilerSession:
         self._popup_manual_fills: dict[tuple[str, str], Any] = {}
         self._commit_in_progress: bool = False
         self._commit_clicked: bool = False
+
+        # Set when the commit control is clicked and never cleared: after it,
+        # a sign-in wall means the record may or may not exist.
+        self._commit_attempted: bool = False
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
@@ -338,6 +340,107 @@ def _is_truthy_flag(value: Any) -> bool:
         return normalize_boolean_yes_no(value) == "yes"
     except CodecValueError:
         return False
+
+
+# Surface failures inside a popup routine that must become a stop for a
+# person: a popup or dialog that will not open, closes or detaches while
+# settling, a missing or doubled button, a keepalive that would write, a
+# control that did not take its state, or a browser timeout. Matched by class
+# name where the class lives in a backend this module does not import.
+_POPUP_SURFACE_ERROR_NAMES = frozenset(
+    {
+        "PopupContractError",
+        "SurfaceSettleTimeoutError",
+        "SurfaceContextError",
+        "SurfaceStateError",
+        "KeepaliveMutationError",
+        "MissingAnchorError",
+        "AmbiguousAnchorError",
+    }
+)
+
+
+def _is_popup_surface_error(exc: BaseException) -> bool:
+    if isinstance(
+        exc,
+        (
+            PopupContractError,
+            MissingAnchorError,
+            AmbiguousAnchorError,
+            SurfaceSettleTimeoutError,
+            TimeoutError,
+        ),
+    ):
+        return True
+    for cls in type(exc).__mro__:
+        if cls.__name__ in _POPUP_SURFACE_ERROR_NAMES:
+            return True
+        if cls.__module__.startswith("playwright") and cls.__name__ in (
+            "TimeoutError",
+            "Error",
+            "TargetClosedError",
+        ):
+            return True
+    return False
+
+
+def _mutation_count_or_none(surface: Any) -> Optional[int]:
+    try:
+        return int(surface.mutation_count)
+    except Exception:  # noqa: BLE001 - an unreadable count is treated as a send
+        return None
+
+
+class _InPageScope:
+    """Which controls belong to an in-page popup (a dialog in the same page).
+
+    Controls inside an open dialog that was not open before the trigger are
+    the popup's, whatever their selectors (``ObservedControl.modal_container``).
+    That survives a parent form that re-renders with new ids when the dialog
+    opens, and keeps a dialog control whose selector a parent control once
+    had. With no such dialog, the popup's controls are the ones whose
+    selectors were not on the page before; that is only safe while every
+    parent control is still there under its old selector, so a parent
+    re-render, or two new dialogs, stops the run (``PopupContractError``)
+    rather than letting a subroutine fill a parent control.
+    """
+
+    def __init__(self, parent_snapshot: FormSnapshot) -> None:
+        self._parent_selectors = frozenset(
+            c.dom_selector for c in parent_snapshot.controls
+        )
+        self._parent_dialogs = frozenset(
+            c.modal_container for c in parent_snapshot.controls if c.modal_container
+        )
+
+    def apply(self, snapshot: FormSnapshot) -> FormSnapshot:
+        dialogs = {
+            c.modal_container
+            for c in snapshot.controls
+            if c.modal_container and c.modal_container not in self._parent_dialogs
+        }
+        if len(dialogs) > 1:
+            raise PopupContractError(
+                "More than one new dialog is open; the popup's controls cannot "
+                "be told apart"
+            )
+        if dialogs:
+            (dialog,) = dialogs
+            kept = tuple(c for c in snapshot.controls if c.modal_container == dialog)
+        else:
+            present = {c.dom_selector for c in snapshot.controls}
+            if not self._parent_selectors <= present:
+                raise PopupContractError(
+                    "The page re-rendered when the popup opened and the popup is "
+                    "not a dialog, so its controls cannot be told apart from the "
+                    "form's"
+                )
+            kept = tuple(
+                c
+                for c in snapshot.controls
+                if c.dom_selector not in self._parent_selectors
+            )
+        return snapshot.model_copy(update={"controls": kept})
 
 
 def _deterministic_halt_id(
@@ -1454,13 +1557,9 @@ class FormReconciler:
             return self._run_popup_subroutine_steps(
                 parent_surface, session, parent_snapshot, subroutine
             )
-        except (
-            PopupContractError,
-            MissingAnchorError,
-            AmbiguousAnchorError,
-            SurfaceContextError,
-            SurfaceSettleTimeoutError,
-        ) as exc:
+        except Exception as exc:  # noqa: BLE001 - narrowed just below
+            if not _is_popup_surface_error(exc):
+                raise
             sig = f"popup_error|{subroutine.subroutine_id}|{type(exc).__name__}"
             return [
                 self._popup_contract_halt(
@@ -1481,20 +1580,12 @@ class FormReconciler:
 
     @staticmethod
     def _scope_to_new_controls(
-        snapshot: FormSnapshot, parent_selectors: Optional[frozenset[str]]
+        snapshot: FormSnapshot, scope: Optional["_InPageScope"]
     ) -> FormSnapshot:
-        """Keep only controls that were not on the page before an in-page popup opened."""
-        if parent_selectors is None:
+        """Keep only an in-page popup's own controls (see ``_InPageScope``)."""
+        if scope is None:
             return snapshot
-        return snapshot.model_copy(
-            update={
-                "controls": tuple(
-                    c
-                    for c in snapshot.controls
-                    if c.dom_selector not in parent_selectors
-                ),
-            }
-        )
+        return scope.apply(snapshot)
 
     def _run_popup_subroutine_steps(
         self,
@@ -1614,10 +1705,8 @@ class FormReconciler:
             return [halt]
 
         in_page = subroutine.popup_mode == "in_page"
-        parent_selectors: Optional[frozenset[str]] = (
-            frozenset(c.dom_selector for c in parent_snapshot.controls)
-            if in_page
-            else None
+        parent_selectors: Optional[_InPageScope] = (
+            _InPageScope(parent_snapshot) if in_page else None
         )
         parent_errors = (
             set(_collect_surface_errors(parent_snapshot)) if in_page else set()
@@ -2023,7 +2112,7 @@ class FormReconciler:
         parent_snapshot: FormSnapshot,
         subroutine: PopupSubroutineSpec,
         *,
-        scope: Optional[frozenset[str]] = None,
+        scope: Optional["_InPageScope"] = None,
     ) -> Optional[FormHaltItem]:
         """Re-read every field typed in the popup before its apply button.
 
@@ -2192,7 +2281,7 @@ class FormReconciler:
                 session,
                 snapshot,
                 auth_reason,
-                delivery_uncertain=not safe_to_retry,
+                delivery_uncertain=(not safe_to_retry) or session._commit_attempted,
             )
         errored_ctrl = next(
             (c for c in snapshot.controls if c.visible and c.error_text.strip()),
@@ -2269,6 +2358,19 @@ class FormReconciler:
         pre_commit_mutations: int,
     ) -> FormTxResult:
         pack = session.pack
+        auth_reason = _auth_wall_reason(post_commit_snapshot, surface.ui_profile)
+        if auth_reason is not None:
+            # A sign-in page after the commit (with or without an error
+            # banner) never counts as a finished save.
+            return self._emit_auth_wall(
+                session,
+                post_commit_snapshot,
+                auth_reason,
+                delivery_uncertain=(
+                    session._commit_attempted
+                    or surface.mutation_count > pre_commit_mutations
+                ),
+            )
         delta_mutations = max(0, surface.mutation_count - pre_commit_mutations)
         if delta_mutations > pack.max_commit_mutations:
             sig = f"commit_budget|{pack.pack_id}"
@@ -2489,7 +2591,12 @@ class FormReconciler:
             auth_reason = _auth_wall_reason(snapshot, active_surface.ui_profile)
             if auth_reason is not None:
                 return self._emit_auth_wall(
-                    session, snapshot, auth_reason, delivery_uncertain=False
+                    session,
+                    snapshot,
+                    auth_reason,
+                    delivery_uncertain=(
+                        session._commit_attempted or session._commit_in_progress
+                    ),
                 )
 
             # 3. Active Modal Check
@@ -2651,14 +2758,19 @@ class FormReconciler:
                     if trig is None:
                         continue
 
+                    muts_before = _mutation_count_or_none(active_surface)
                     sub_halts = self._run_popup_subroutine(
                         active_surface, session, snapshot, sub
                     )
                     if sub_halts:
+                        muts_after = _mutation_count_or_none(active_surface)
                         return self._build_result(
                             session,
                             outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
-                            safe_to_retry=True,
+                            # Safe to retry only if the popup sent nothing.
+                            safe_to_retry=(
+                                muts_before is not None and muts_before == muts_after
+                            ),
                             halts=sub_halts,
                             what_happened=sub_halts[0].message,
                         )
@@ -2789,6 +2901,8 @@ class FormReconciler:
                 session._pre_commit_mutations = pre_commit_mutations
                 session._commit_in_progress = True
                 session._commit_clicked = True
+
+                session._commit_attempted = True
                 active_surface.click(commit_ctrl.dom_selector)
 
                 post_snap = active_surface.snapshot(
