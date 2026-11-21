@@ -460,11 +460,12 @@ def test_the_public_api_is_stable() -> None:
         "reasons",
         "retry_safe",
     ]
-    assert list(WriteResult.__dataclass_fields__)[-4:] == [
+    assert list(WriteResult.__dataclass_fields__)[-5:] == [
         "recheck",
         "recheck_due_at",
         "write_receipt",
         "write_receipt_path",
+        "enforcement",
     ]
     assert params(recheck) == [
         ("contract", "POSITIONAL_OR_KEYWORD"),
