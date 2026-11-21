@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.7 (2026-11-21)
+
+### Bug Fixes
+
+- **desktop**: launch authoring Chromium keychain-safe and close what it owns
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes
