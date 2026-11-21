@@ -422,7 +422,9 @@ def _write_locked(
                     facts["disclosure"].pop("commitments")
                     if facts.get("approval") is not None:
                         facts["approval"].pop("commitments")
-                expected_values = {name: value["value"] for name, value in openings.items()}
+                expected_values = {
+                    name: value["value"] for name, value in openings.items()
+                }
                 if previous != expected or checked.disclosed != expected_values:
                     raise ReceiptRecordError(
                         "already_signed", "receipt facts differ from the settled report"

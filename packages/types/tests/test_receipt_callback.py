@@ -15,15 +15,21 @@ def _load(name):
 
 
 def _pin():
-    key = next(item for item in _load("registry")["keys"] if item["role"] == "this_computer")
+    key = next(
+        item for item in _load("registry")["keys"] if item["role"] == "this_computer"
+    )
     return {field: key[field] for field in ("key_id", "public_key")}
 
 
-@pytest.mark.parametrize("name", ["public-redaction", "tampered", "unknown-signer", "cloud-countersign"])
+@pytest.mark.parametrize(
+    "name", ["public-redaction", "tampered", "unknown-signer", "cloud-countersign"]
+)
 def test_private_managed_callback_refuses_an_unusable_public_document(name):
     wire = json.dumps(_load(name)["document"]).encode()
     with pytest.raises(ValueError):
-        verified_receipt_metrics(wire, pinned_signer=_pin(), report_sha256="a" * 64, outcome="VERIFIED")
+        verified_receipt_metrics(
+            wire, pinned_signer=_pin(), report_sha256="a" * 64, outcome="VERIFIED"
+        )
 
 
 def test_pin_is_limited_to_public_fields_and_private_openings_stay_local():
@@ -35,4 +41,6 @@ def test_pin_is_limited_to_public_fields_and_private_openings_stay_local():
         (b'{"payload":0,"payload":1}', _pin()),
     ):
         with pytest.raises(ValueError):
-            verified_receipt_metrics(data, pinned_signer=pin, report_sha256="a" * 64, outcome="VERIFIED")
+            verified_receipt_metrics(
+                data, pinned_signer=pin, report_sha256="a" * 64, outcome="VERIFIED"
+            )

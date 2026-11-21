@@ -357,7 +357,10 @@ def test_new_finalizer_requires_explicit_opt_in_and_waits_for_settlement(tmp_pat
     assert not (run / r.RECEIPT_FILE).exists()
 
 
-def test_completed_unverified_no_write_uses_actual_report_serialization(tmp_path):
+@pytest.mark.parametrize("finalizer", ["cli", "pool"])
+def test_completed_unverified_no_write_uses_actual_report_serialization(
+    tmp_path, monkeypatch, finalizer
+):
     from argparse import Namespace
 
     from openadapt_flow.__main__ import _finish_replay
@@ -376,7 +379,13 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(tmp_path
     stamp_transaction_outcome(report, Workflow(name="read", steps=[]))
     assert report.transaction_outcome == "COMPLETED_UNVERIFIED"
     path = report.save(tmp_path)
-    _finish_replay(tmp_path, report, Namespace())
+    if finalizer == "cli":
+        _finish_replay(tmp_path, report, Namespace())
+    else:
+        from openadapt_flow.cli_worklist_pool import _item_run
+
+        monkeypatch.setenv("OPENADAPT_RECEIPT", "on")
+        _item_run(report, None, tmp_path)
     envelope = json.loads((tmp_path / r.RECEIPT_FILE).read_bytes())
     entry = public_key_entry()
     digest = hashlib.sha256(
@@ -420,8 +429,12 @@ def test_legacy_summary_recognized_by_schema_under_any_filename(tmp_path):
     from openadapt_flow.ir import RunReport
     from openadapt_flow.receipt import build_receipt, read_run_summary
 
-    run = _run(tmp_path)
-    report = RunReport.model_validate_json((run / "report.json").read_bytes())
+    run = tmp_path / "run"
+    run.mkdir()
+    fixture = Path(__file__).parent / "fixtures" / "seal_view" / "run-1" / "report.json"
+    raw = fixture.read_bytes()
+    (run / "report.json").write_bytes(raw)
+    report = RunReport.model_validate_json(raw)
     legacy = build_receipt(report).model_dump_json().encode()
     old = run / "receipt.json"
     old.write_bytes(legacy)
@@ -494,7 +507,8 @@ PERSON_APPROVAL = {
 
 def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
     run = _approved_run(tmp_path, [PERSON_APPROVAL])
-    write_receipt_record(run)
+    envelope = write_receipt_record(run)
+    assert write_receipt_record(run) == envelope
     payload = base64.b64decode(
         json.loads((run / "receipt.json").read_text())["payload"]
     )
@@ -527,3 +541,27 @@ def test_a_not_gated_run_says_so(tmp_path):
     assert (
         result.approval_line == "Not gated: no approval was required for these writes"
     )
+
+
+@pytest.mark.parametrize("status", ["pending", "approved", "continuing"])
+def test_durable_pause_cannot_be_signed(tmp_path, status):
+    from openadapt_flow.runtime.durable.checkpoint import (
+        CheckpointStore,
+        PendingEscalation,
+    )
+
+    run = _run(tmp_path)
+    store = CheckpointStore(run)
+    store.write_pending(
+        PendingEscalation(
+            workflow_name="read",
+            step_index=0,
+            step_id="save",
+            category="effect_escalated",
+            status=status,
+        )
+    )
+    with pytest.raises(ReceiptRecordError, match="restartable_run"):
+        write_receipt_record(run)
+    assert not (run / r.RECEIPT_FILE).exists()
+    assert not (run / r.PRIVATE_FILE).exists()
