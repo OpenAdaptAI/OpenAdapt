@@ -274,7 +274,7 @@ def build_statement(
             path.split(".", 1)[1]: commitments.pop(path) for path in approval_values
         }
     checks = _checks(report)
-    statement = {
+    statement: dict[str, Any] = {
         "_type": r.STATEMENT_TYPE,
         "subject": subject,
         "predicateType": r.PREDICATE_TYPE,
