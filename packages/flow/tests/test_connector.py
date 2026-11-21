@@ -49,7 +49,10 @@ from openadapt_flow.connector.protocol import (
     ByocGovernanceError,
 )
 from openadapt_flow.connector.storage import LocalCustomerStorage
-from openadapt_flow.failure_signals import automation_failure_signal
+from openadapt_flow.failure_signals import (
+    AUTOMATION_FAILURE_SIGNAL_SCHEMA,
+    automation_failure_signal,
+)
 from openadapt_flow.runner.dispatch_envelope import ManagedDispatchEnvelope
 from openadapt_flow.runner.protocol import dispatch_binding_sha256
 from openadapt_flow.runtime.authorization import GovernedRunAuthorization
@@ -513,15 +516,19 @@ def test_report_write_failure_keeps_child_failure_as_failed():
     assert body["report_path"] is None
 
 
-@pytest.mark.parametrize("phase", ["before_child", "verified", "failed_after_write"])
-def test_egress_refusal_reports_whether_the_child_could_have_written(tmp_path, phase):
+@pytest.mark.parametrize(
+    "phase", ["before_child", "before_child_egress", "verified", "failed_after_write"]
+)
+def test_egress_refusal_reports_whether_the_child_could_have_written(
+    tmp_path, monkeypatch, phase
+):
     cp = StubControlPlane()
     payload = _payload()
-    # An unsafe report reference makes the guard refuse both failure cases.
-    # For the verified case the refused value occurs only in the outcome.
+    # An unsafe planned report key reaches the guard only if the child wrote a report.
+    before_child = phase in {"before_child", "before_child_egress"}
     if phase != "verified":
         payload["storage"]["report_ref"] = "synthetic private report"
-    if phase == "before_child":
+    if before_child:
         payload["safety"] = {}
     cp.enqueue("org_demo", payload)
     client = ConnectorClient(
@@ -529,6 +536,11 @@ def test_egress_refusal_reports_whether_the_child_could_have_written(tmp_path, p
     )
     client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
     client.add_secret_values(["effect_tier_1"])
+    if phase == "before_child_egress":
+        # Exercise a real pre-child egress refusal in the optional failure signal.
+        monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+        monkeypatch.setenv("OPENADAPT_TELEMETRY", "1")
+        client.add_secret_values([AUTOMATION_FAILURE_SIGNAL_SCHEMA])
     record = tmp_path / "synthetic-record.txt"
 
     def runner(argv, run_dir, env):
@@ -548,14 +560,16 @@ def test_egress_refusal_reports_whether_the_child_could_have_written(tmp_path, p
         storage_factory=lambda job: InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES),
     )
 
-    assert result["error_code"] == "egress_refused"
+    expected_code = "governance_refused" if phase == "before_child" else "egress_refused"
     assert result["callback_accepted"]
     assert len(cp.callbacks) == len(cp.acks) == 1
+    assert result["error_code"] == cp.acks[0]["error_code"] == expected_code
     callback = cp.callbacks[0]["body"]
     assert callback["report_path"] is None and callback["metrics"] == {}
-    assert "outcome" not in callback and "failure_signal" not in callback
-    assert cp.acks[0]["error_code"] == "egress_refused"
-    if phase == "before_child":
+    assert "outcome" not in callback
+    if expected_code == "egress_refused":
+        assert "failure_signal" not in callback
+    if before_child:
         assert not record.exists()
         assert (
             result["status"] == callback["status"] == cp.acks[0]["status"] == "failed"
