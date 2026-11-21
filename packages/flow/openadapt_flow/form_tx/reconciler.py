@@ -954,6 +954,18 @@ class FormReconciler:
             ),
             None,
         )
+        if live is None:
+            # Pages that redraw a step after a pick give the input a new id.
+            # Find it again by its value-free signature (section, label, kind,
+            # name); only a unique match counts.
+            sig = compute_field_signature(ctrl)
+            same = [
+                c
+                for c in after.controls
+                if c.visible and compute_field_signature(c) == sig
+            ]
+            if len(same) == 1:
+                live = same[0]
         shown = collapse_whitespace(live.current_value) if live is not None else ""
         accepted = {
             collapse_whitespace(option.label).casefold(),
