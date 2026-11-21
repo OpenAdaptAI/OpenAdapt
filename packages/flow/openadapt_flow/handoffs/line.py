@@ -112,13 +112,15 @@ def to_line(handoff: Handoff) -> ConfirmationLine:
     differing = 0
     if last is not None and last.strength == "field_readback" and state != "sent":
         for index, field_id in enumerate(sorted(handoff.fields)[:_MAX_FIELDS]):
-            seen = last.observed_digests.get(field_id) or handoff.fields[field_id].digest
+            seen = (
+                last.observed_digests.get(field_id) or handoff.fields[field_id].digest
+            )
             if seen == "missing":
                 seen = hashlib.sha256(b"missing").hexdigest()
             differs = field_id in last.differing_fields
             differing += differs
-            values[f"field.{index}"] = (
-                f"{field_id}:{seen}" + (":differs" if differs else "")
+            values[f"field.{index}"] = f"{field_id}:{seen}" + (
+                ":differs" if differs else ""
             )
             field_ids.append(field_id)
     line = {
@@ -184,10 +186,14 @@ def handoffs_for_run(
         if not isinstance(result, Mapping):
             continue
         for evidence in result.get("effect_evidence") or []:
-            entry_id = evidence.get("deferred_check") if isinstance(evidence, Mapping) else None
-            handoff = by_source.get(entry_id) if entry_id else None
-            if handoff is not None:
-                found[handoff.id] = handoff.model_copy(update={"step": index})
+            entry_id = (
+                evidence.get("deferred_check")
+                if isinstance(evidence, Mapping)
+                else None
+            )
+            match = by_source.get(entry_id) if entry_id else None
+            if match is not None:
+                found[match.id] = match.model_copy(update={"step": index})
     return sorted(found.values(), key=lambda h: (h.step or 0, h.sent_at, h.id))
 
 
@@ -204,8 +210,7 @@ def attach_confirmations(
 
     steps = {line["step"] for line in statement["predicate"].get("lines", [])}
     placed = [
-        h if h.step in steps else h.model_copy(update={"step": None})
-        for h in handoffs
+        h if h.step in steps else h.model_copy(update={"step": None}) for h in handoffs
     ]
     lines, opened = build_confirmations(placed, salt=salt)
     out = {**statement, "predicate": {**statement["predicate"], "confirmations": lines}}

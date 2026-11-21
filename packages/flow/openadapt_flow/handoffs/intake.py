@@ -41,7 +41,6 @@ from openadapt_flow.handoffs.ledger import (
 )
 from openadapt_flow.handoffs.readers import Reader, ReadResult
 
-
 _REASONS: dict[str, Reason] = {
     "not_found": "not_found",
     "ambiguous": "ambiguous_key",
@@ -112,7 +111,9 @@ def check(
     if not handoff.fields:
         raise LedgerError("this handoff sent no fields to compare")
     result = reader.read(key)
-    return ledger.observe(handoff_id, judge(ledger, handoff, result, reader.read_method))
+    return ledger.observe(
+        handoff_id, judge(ledger, handoff, result, reader.read_method)
+    )
 
 
 def needs_follow_up(

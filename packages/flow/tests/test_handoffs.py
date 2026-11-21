@@ -25,8 +25,8 @@ from openadapt_flow.handoffs.readers import (
 from openadapt_flow.reports.parse import ReportFormat
 from openadapt_flow.runtime.effects.deferred_report import PendingLedger
 from tests.test_deferred_report import (
-    ACK_999,
     ACK_277CA,
+    ACK_999,
     FMT_277,
     HASH,
     SETTLE_AT,
@@ -90,9 +90,15 @@ def test_277ca_received_accepted_and_rejected(tmp_path):
     accepted = _h(handoffs, e["CLM-1001"])
     rejected = _h(handoffs, e["CLM-1002"])
     received = _h(handoffs, e["CLM-1003"])
-    assert (accepted.state, accepted.last.counterparty_accepted) == ("acknowledged", True)
+    assert (accepted.state, accepted.last.counterparty_accepted) == (
+        "acknowledged",
+        True,
+    )
     assert accepted.status(LATER) == "done"
-    assert (rejected.state, rejected.last.reason) == ("sent", "rejected_by_counterparty")
+    assert (rejected.state, rejected.last.reason) == (
+        "sent",
+        "rejected_by_counterparty",
+    )
     assert rejected.status(SETTLE_AT) == "needs_follow_up"
     assert (received.state, received.last.reason) == ("acknowledged", None)
     assert received.status(SETTLE_AT) == "waiting"
@@ -288,10 +294,14 @@ def test_unreachable_never_undoes_a_confirmation_but_not_found_does(tmp_path):
 def test_the_ledger_refuses_what_it_could_never_compare(tmp_path):
     ledger = HandoffLedger(tmp_path / "handoffs")
     with pytest.raises(LedgerError):
-        ledger.send("K", {"d": ("03/04/2020", "date")}, counterparty="x", follow_up_hours=1)
+        ledger.send(
+            "K", {"d": ("03/04/2020", "date")}, counterparty="x", follow_up_hours=1
+        )
     ledger.send("K", {"d": ("2020-03-04", "date")}, counterparty="x", follow_up_hours=1)
     with pytest.raises(LedgerError):  # a second open handoff on the same key
-        ledger.send("K", {"d": ("2020-03-04", "date")}, counterparty="x", follow_up_hours=1)
+        ledger.send(
+            "K", {"d": ("2020-03-04", "date")}, counterparty="x", follow_up_hours=1
+        )
     ledger2, h = _referral(tmp_path / "b")
     with pytest.raises(LedgerError):
         intake.check(ledger2, h.id, "REF-OTHER", Fake(_found()))
@@ -329,7 +339,9 @@ class Client:
     def get(self, url, params=None, headers=None):
         self.calls.append((url, params, headers))
         body = self.pages.pop(0) if self.pages else {}
-        return SimpleNamespace(status_code=self.status, content=json.dumps(body).encode())
+        return SimpleNamespace(
+            status_code=self.status, content=json.dumps(body).encode()
+        )
 
 
 def _bundle(*resources, next_url=None):
@@ -340,7 +352,9 @@ def _bundle(*resources, next_url=None):
 
 
 def _reader(client):
-    return FhirSearchReader(PROFILE, "https://receiver.test/fhir", token="t", client=client)
+    return FhirSearchReader(
+        PROFILE, "https://receiver.test/fhir", token="t", client=client
+    )
 
 
 def test_fhir_reader_found_not_found_and_key_check():
@@ -390,7 +404,11 @@ def test_lines_follow_the_schema_rules(tmp_path):
         "differing_count": 1,
     }
     assert item.values["counterparty"].startswith("ehr:cp-")
-    assert [v.endswith(":differs") for k, v in sorted(item.values.items()) if k.startswith("field.")] == [
+    assert [
+        v.endswith(":differs")
+        for k, v in sorted(item.values.items())
+        if k.startswith("field.")
+    ] == [
         True,
         False,
         False,
@@ -417,9 +435,10 @@ def test_lines_validate_against_the_receipt_schema_and_sign(tmp_path):
     assert {k: set(v) for k, v in line.REASONS_FOR_STATE.items()} == {
         k: set(v) for k, v in r.REASONS_FOR_STATE.items()
     }
+    import base64
+
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-    import base64
 
     from openadapt_flow.receipt_record import build_statement
 
@@ -427,9 +446,7 @@ def test_lines_validate_against_the_receipt_schema_and_sign(tmp_path):
     states = [h]
     states.append(intake.check(ledger, h.id, "REF-0001", Fake(_found())))
     ledger2, h2 = _referral(tmp_path / "2")
-    states.append(
-        intake.check(ledger2, h2.id, "REF-0001", Fake(_found(sex="male")))
-    )
+    states.append(intake.check(ledger2, h2.id, "REF-0001", Fake(_found(sex="male"))))
     pending, e = _claims(tmp_path, FMT_277, ["CLM-1001", "CLM-1002", "CLM-1003"])
     _, handoffs = _settle(pending, ACK_277CA, FMT_277)
     states += [_h(handoffs, x) for x in e.values()]
@@ -465,7 +482,9 @@ def test_lines_validate_against_the_receipt_schema_and_sign(tmp_path):
     )
     assert result.ok, (result.reason, result.detail)
     assert len(result.confirmation_lines) == 6
-    assert result.confirmation_lines[1].startswith("Confirmed in the other party's system")
+    assert result.confirmation_lines[1].startswith(
+        "Confirmed in the other party's system"
+    )
     assert "1 field differs" in result.confirmation_lines[2]
     assert result.confirmation_lines[3].startswith("Acknowledged by the other party")
     assert result.confirmation_lines[4].startswith("Sent to the other party")
@@ -482,7 +501,14 @@ def test_handoff_list_groups_by_who_must_follow_up(tmp_path, capsys):
     pending, _ = _claims(tmp_path, FMT_277, ["CLM-1001", "CLM-1002", "CLM-1003"])
     _settle(pending, ACK_277CA, FMT_277)
     code = main(
-        ["handoff", "list", "--ledger", str(ledger.directory), "--ledger", str(pending.directory)]
+        [
+            "handoff",
+            "list",
+            "--ledger",
+            str(ledger.directory),
+            "--ledger",
+            str(pending.directory),
+        ]
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -512,7 +538,20 @@ def test_handoff_list_for_one_run_sets_the_claims_step(tmp_path, capsys):
         ],
     }
     (run / "report.json").write_text(json.dumps(report))
-    assert main(["handoff", "list", "--ledger", str(pending.directory), "--run", str(run), "--json"]) == 0
+    assert (
+        main(
+            [
+                "handoff",
+                "list",
+                "--ledger",
+                str(pending.directory),
+                "--run",
+                str(run),
+                "--json",
+            ]
+        )
+        == 0
+    )
     data = json.loads(capsys.readouterr().out)
     assert [d["receipt_line"]["for_step"] for d in data] == [1]
     assert data[0]["state"] == "sent"

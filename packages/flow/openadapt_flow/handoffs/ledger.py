@@ -304,10 +304,16 @@ class HandoffLedger:
                 )
             value, kind = spec[0], spec[1]
             order = spec[2] if len(spec) > 2 else None  # type: ignore[misc]
+            if order not in (None, "dmy", "mdy"):
+                raise LedgerError(f"field {field_id!r}: date order is dmy or mdy")
             digest = self.field_digest(value, kind, order)
             if digest is None:
                 raise LedgerError(f"field {field_id!r} doesn't read as a {kind}")
-            specs[field_id] = FieldSpec(kind=kind, digest=digest, date_order=order)
+            specs[field_id] = FieldSpec(
+                kind=kind,
+                digest=digest,
+                date_order=order,  # type: ignore[arg-type]
+            )
         moment = now or now_utc()
         with self._locked():
             key_digest = self.digest(key)

@@ -23,7 +23,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.handoffs.ledger import Handoff, HandoffLedger

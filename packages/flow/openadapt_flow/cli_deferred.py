@@ -217,7 +217,9 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
         word = "VERIFIED" if item.state == "verified" else "RECONCILIATION_REQUIRED"
         print(f"{item.id}: {word} ({item.reason}; code {item.code})")
     print(f"Settled {len(settled)}; {len(waiting)} still waiting.")
-    print("Open handoffs: openadapt-flow handoff list --ledger " + str(ledger.directory))
+    print(
+        "Open handoffs: openadapt-flow handoff list --ledger " + str(ledger.directory)
+    )
     return 0
 
 

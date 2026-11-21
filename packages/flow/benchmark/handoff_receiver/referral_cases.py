@@ -112,7 +112,9 @@ def _post_patient(base: str, token: str, row: dict[str, str]) -> None:
         "fname": row["given"],
         "lname": row["family"],
         "DOB": row["birth_date"],
-        "sex": row["sex"].capitalize() if row["sex"] in ("female", "male") else row["sex"],
+        "sex": row["sex"].capitalize()
+        if row["sex"] in ("female", "male")
+        else row["sex"],
         "pubpid": row["id"],
         "street": "",
         "postal_code": "",
@@ -171,7 +173,11 @@ class CaseResult:
 
 
 def run_cases(
-    work: Path, *, repeat: int = 5, seed: int = 20261121, cases: Optional[list[str]] = None
+    work: Path,
+    *,
+    repeat: int = 5,
+    seed: int = 20261121,
+    cases: Optional[list[str]] = None,
 ) -> list[CaseResult]:
     api = os.environ["HANDOFF_RECEIVER_API_BASE"]
     write_token = os.environ["HANDOFF_RECEIVER_WRITE_TOKEN"]
@@ -180,8 +186,11 @@ def run_cases(
     profile = FhirSearchProfile.load(PROFILE)
     reader = FhirSearchReader(profile, fhir, token=read_token, verify_tls=_verify())
     closed = FhirSearchReader(
-        profile, "https://127.0.0.1:9789/apis/default/fhir", token=read_token,
-        verify_tls=False, timeout=5,
+        profile,
+        "https://127.0.0.1:9789/apis/default/fhir",
+        token=read_token,
+        verify_tls=False,
+        timeout=5,
     )
     sender = Sender(work / "sender.sqlite", seed)
     ledger = HandoffLedger(work / "handoffs")
@@ -231,7 +240,12 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
     for item in results:
         entry = by_case.setdefault(
             item.case,
-            {"expected": list(EXPECTED[item.case]), "runs": 0, "as_expected": 0, "got": {}},
+            {
+                "expected": list(EXPECTED[item.case]),
+                "runs": 0,
+                "as_expected": 0,
+                "got": {},
+            },
         )
         entry["runs"] += 1
         entry["as_expected"] += item.ok

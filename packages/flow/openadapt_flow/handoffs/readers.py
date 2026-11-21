@@ -123,8 +123,10 @@ class FhirSearchReader:
     ) -> None:
         self.profile = profile
         self.base_url = base_url.rstrip("/")
-        self._token = token if token is not None else (
-            os.environ.get(token_env) if token_env else None
+        self._token = (
+            token
+            if token is not None
+            else (os.environ.get(token_env) if token_env else None)
         )
         self._verify = verify_tls
         self._timeout = timeout
