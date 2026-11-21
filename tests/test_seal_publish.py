@@ -685,7 +685,7 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     def ask(_question):
         raise AssertionError("asked while hosted Seals are not live")
 
-    assert offer(run, said.append, ask) is False
+    assert offer([run], said.append, ask) is False
     assert said == []
     assert not (run / "public-seal.json").exists()
     # One status check, to production's status route, and nothing else.
@@ -694,31 +694,34 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     ]
 
 
-def test_the_quickstart_offer_shows_the_card_then_asks_once(
+def test_the_quickstart_offer_shows_each_card_then_asks_once(
     make_run, tmp_path, monkeypatch
 ):
-    run = make_run()
+    checked = make_run()
+    stopped = make_run("run-broken", execution_outcome="HALTED", success=False)
     _terminal(monkeypatch)
     transport = Recorder(_status(True))
     monkeypatch.setattr(seal_publish, "urllib_transport", transport)
     offer = cli._quickstart_publish_offer()
     events: list[tuple[str, str]] = []
     offer(
-        run,
+        [checked, stopped],
         lambda line: events.append(("say", line)),
         lambda q: events.append(("ask", q)) or "",
     )
     asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
     assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
-    # The exact card that would be uploaded is printed before the question.
-    card = json.loads((run / "public-seal.json").read_text())["card"]
-    shown = [
-        json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
-    ]
-    assert shown and shown[0]["card"] == card
-    assert card["provenance"] == "synthetic-tutorial"
+    assert "2 summaries" in events[asks[0]][1] and "synthetic" in events[asks[0]][1]
+    # Before the question: one line per card, naming the exact file uploaded.
+    before = [line for kind, line in events[: asks[0]] if kind == "say"]
+    for run in (checked, stopped):
+        card = json.loads((run / "public-seal.json").read_text())["card"]
+        assert card["provenance"] == "synthetic-tutorial"
+        (line,) = [x for x in before if str(run / "public-seal.json") in x]
+        assert line.strip().startswith(f"{card['outcome']}: ")
     assert events[-1] == ("say", "Not published.")
-    assert not (run / "seal.publish.json").exists()
+    assert not (checked / "seal.publish.json").exists()
+    assert not (stopped / "seal.publish.json").exists()
     # Only the status check was sent; a No uploads nothing.
     assert [r[0] for r in transport.requests] == ["GET"]
 
@@ -728,7 +731,7 @@ def test_the_tutorial_card_carries_the_program_name(make_run, tmp_path, monkeypa
     run = make_run()
     _terminal(monkeypatch)
     monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_status(True)))
-    cli._quickstart_publish_offer()(run, lambda _line: None, lambda _q: "")
+    cli._quickstart_publish_offer()([run], lambda _line: None, lambda _q: "")
     card = json.loads((run / "public-seal.json").read_text())["card"]
     assert card["program_name"] == "local-quickstart"
 
@@ -743,8 +746,8 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls: list[Path] = []
 
-    def offer(run_dir, say, ask):
-        calls.append(run_dir)
+    def offer(run_dirs, say, ask):
+        calls.append(run_dirs)
         say("offer shown")
         return True
 
@@ -756,7 +759,7 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
         next_steps=next_steps(cli._hint, cli._shell_quote, True, offer_publish=offer),
         clock=_clock(),
     )
-    assert calls == [root / "run-1"]
+    assert calls == [[root / "run-1"]]
     text = stream.getvalue()
     assert text.index("Your Seal:") < text.index("offer shown") < text.index("Next:")
     assert "seal publish" not in text
@@ -806,13 +809,13 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
     monkeypatch.chdir(tmp_path)
     calls: list[Path] = []
 
-    def offer(run_dir, say, ask):
-        calls.append(run_dir)
+    def offer(run_dirs, say, ask):
+        calls.append(run_dirs)
         say("offer shown")
         return True
 
     text = _rich_finale(tmp_path, offer)
-    assert calls == [tmp_path / "openadapt-quickstart" / "run-1"]
+    assert calls == [[tmp_path / "openadapt-quickstart" / "run-1"]]
     assert text.index("Your Seal") < text.index("offer shown") < text.index("Next  ")
     assert "Put it online" not in text
 
@@ -858,3 +861,123 @@ def test_read_card_needs_both_files(tmp_path):
     assert card is not None
     assert (card.steps_ok, card.effects_confirmed, card.model_calls) == (6, 2, 0)
     assert card.short_digest == "6dd4a7f2d1ea"
+
+
+# -- the quickstart's two Seals -------------------------------------------------
+
+OTHER_ID = "C" * 43
+
+
+def _created(seal_id: str) -> Response:
+    body = {"id": seal_id, "url": f"{ORIGIN}/seal#{seal_id}", "delete_token": TOKEN}
+    return Response(201, {}, json.dumps(body).encode())
+
+
+def _quickstart_pair(make_run):
+    return [
+        make_run(),
+        make_run("run-broken", execution_outcome="HALTED", success=False),
+    ]
+
+
+def test_a_yes_uploads_both_and_gives_one_page_when_cloud_has_pairs(make_run):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder(_created(SEAL_ID), _created(OTHER_ID), _status(True))
+    said: list[str] = []
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "y",
+        say=said.append,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{SEAL_ID},{OTHER_ID}"
+    posts = [r for r in transport.requests if r[0] == "POST"]
+    assert [r[2] for r in posts] == [
+        (run / "public-seal.json").read_bytes() for run in runs
+    ]
+    assert transport.requests[-1][:2] == (
+        "GET",
+        f"{ORIGIN}{seal_publish.PAIRS_STATUS_PATH}",
+    )
+    assert any(link in line for line in said)
+    for run in runs:
+        assert json.loads((run / "seal.publish.json").read_text())["delete_token"]
+        assert any(f"seal unpublish {run}" in line for line in said)
+
+
+@pytest.mark.parametrize(
+    "pairs", [Response(404, {}, b'{"error":"not_found"}'), _status(False)]
+)
+def test_an_older_cloud_gets_one_link_per_seal(make_run, pairs):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder(_created(SEAL_ID), _created(OTHER_ID), pairs)
+    said: list[str] = []
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "yes",
+        say=said.append,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{OTHER_ID}"
+    assert any(f"/seal#{SEAL_ID}" in line for line in said)
+    assert any(f"/seal#{OTHER_ID}" in line for line in said)
+    assert not any("," in line and "/seal#" in line for line in said)
+
+
+def test_a_quickstart_run_already_online_is_not_uploaded_twice(make_run):
+    runs = _quickstart_pair(make_run)
+    (runs[0] / "seal.publish.json").write_text(
+        json.dumps(
+            {"id": SEAL_ID, "url": f"{ORIGIN}/seal#{SEAL_ID}", "delete_token": TOKEN}
+        )
+    )
+    transport = Recorder(_created(OTHER_ID), _status(True))
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "y",
+        say=lambda _l: None,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{SEAL_ID},{OTHER_ID}"
+    assert [r[0] for r in transport.requests] == ["POST", "GET"]
+
+
+@pytest.mark.parametrize("answer", ["", "n", "no", "anything"])
+def test_anything_but_yes_uploads_nothing(make_run, answer):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder()
+    said: list[str] = []
+    assert (
+        seal_publish.publish_quickstart(
+            runs,
+            ask=lambda _q: answer,
+            say=said.append,
+            endpoint_value=ORIGIN,
+            transport=transport,
+        )
+        is None
+    )
+    assert transport.requests == [] and said[-1] == "Not published."
+
+
+def test_the_finale_offers_the_stopped_run_with_the_checked_one(tmp_path):
+    from openadapt.quickstart.engine import SealFacts, SealPages
+    from openadapt.quickstart.story import Outcome
+    from openadapt.quickstart.view import publish_runs
+
+    root = tmp_path / "openadapt-quickstart"
+    for name in ("run-1", "run-broken"):
+        (root / name).mkdir(parents=True)
+        (root / name / "seal.html").write_text("")
+    pages = SealPages(
+        verified=root / "run-1" / "seal.html", broken=root / "run-broken" / "seal.html"
+    )
+    outcome = Outcome(root=root, seal=SealFacts("", 1), seal_pages=pages)
+    # The stopped run is offered only once it has its own Seal.
+    assert publish_runs(outcome) == [root / "run-1"]
+    (root / "run-broken" / "seal.json").write_text("{}")
+    assert publish_runs(outcome) == [root / "run-1", root / "run-broken"]
+    assert publish_runs(Outcome(root=root, seal=None, seal_pages=pages)) == []
