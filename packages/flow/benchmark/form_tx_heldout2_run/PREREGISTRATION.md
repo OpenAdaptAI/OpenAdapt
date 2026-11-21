@@ -127,6 +127,11 @@ Every number is reported per portal and pooled. No case is dropped.
 - **Rework:** otherwise. Each failed line is named, with the cases behind it.
 - If the reached-only false-stop rate is above 10% while K2 passes, the
   results say so next to K2.
+- **Companion to K1** (added under D1, before any scored case): trap cases
+  stopped before submit **and then submitted correctly**, and, per portal,
+  whether every case on it stopped. A portal where every case stops at the
+  same point passes K1 by blanket stops; if K1 and the companion diverge,
+  the results say so next to K1.
 
 ## Known limit stated in advance
 
@@ -146,4 +151,47 @@ quality is part of what is measured.
 
 ## Deviations
 
-None yet.
+**D1, 2026-11-21. Engine re-pinned and packs written; no scored case had run.**
+
+- **Re-pin.** `ENGINE_SHA` moves from `335c322ec` to `e8f12740f`. Every change
+  is a general fix with a test and no portal names, found while writing packs
+  from dev cases:
+  - selectors no longer use the page's `CSS` global, which one new portal's
+    frame replaces (`4bba3596d`, found by the dev-case demonstration
+    recorder, which saw 0 controls in that frame);
+  - a child-window popup no longer inherits the parent's frame routing, and
+    may close itself after apply;
+  - a label in the table cell before a control is read when the control is
+    alone in its cell;
+  - "Choose" reads as an empty select;
+  - a type-ahead pick that leaves only the leading part of its label in the
+    input is accepted when the binding types a prefix and the input shows
+    more than was typed (typed text alone still stops).
+  The fixes are also on the PR branches (#2448 `c9cbaa155`, #2440
+  `368ba4e03`, #2447 `8c9722791`). Integration-only glue: the popup
+  result read from page text, `SurfaceContextError` in the popup catch,
+  `SurfaceStateError` in the surface-error list.
+- **Left as findings, not fixed** (new capability, not operability): choosing
+  one result row among several identical "Select" buttons (okelund stops at
+  its lookup window on the dev case); a date typed in three boxes but shown
+  as one value; a quote number with no colon or inside a sentence; a popup
+  result shown as an unlabelled "Label: value" output (glasswing's pack
+  drops `result_anchor`, so that figure stays `not_checked`); a confirmation
+  tick box that is never stored (stays `not_checked`).
+- **What the pack authors saw.** Each pack was written by a separate agent
+  given only its portal's dev intake, its dev-case demonstration
+  (`demos/<portal>.jsonl`) and its dev-case run output. Departures: the
+  okelund author also walked the dev case with its own probe
+  (`probes/explore.py`), because the demonstration did not capture the main
+  form pages; the ferncastle author read the other portals' one-line
+  descriptions in `portals.py`; the glasswing author tried an engine edit for
+  a smoke run, which the permission system refused, so it never ran. None
+  read portal source, scored intakes or the answer key.
+- **Dev-case smoke at the final SHA** (all eight dev cases, old and new):
+  harborline, cobalt and tidewater `verified_done`; pinecrest, ferncastle,
+  glasswing and velloway correct but `readback_incomplete`; okelund
+  escalated at its lookup window, nothing submitted.
+- **Old-portal reference check.** `test_reference_human_solves_every_scored_case`
+  (the old portals' own careful-human driver, which does not use the engine)
+  failed in two of three full-suite runs on the lab with a popup
+  `TargetClosedError`; it passed once. Not an engine test.
