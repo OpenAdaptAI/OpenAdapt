@@ -158,8 +158,8 @@ def test_a_failing_command_makes_no_program_and_keeps_its_exit_status(
     reset()
     result = task.call("first", {"note": note})
     assert command.exit_code == 7
-    # The command may have saved before it failed: never retried, a person checks.
-    assert result["status"] == "RECONCILIATION_REQUIRED" and result["verified"] is False
+    # The run ends as a failed capture: no draft, no program.
+    assert result["status"] == "capture_failed" and result["verified"] is False
     assert setup.cache.server(setup.instruction, {"note": note}) is None
     assert _http_json(f"{clinic}/api/db")["records"] == []
 
@@ -243,12 +243,17 @@ def test_the_cli_runs_the_command_and_run_never_starts_an_agent(
         },
     )
     reset()
-    common = ["--task", str(tmp_path / "task.json"), "--param", "note=" + note]
+    common = [
+        "--task",
+        str(tmp_path / "task.json"),
+        "--param",
+        "note=" + note,
+        "--key-dir",
+        str(key_dir),
+    ]
     code = cli.main(
         [
             *common,
-            "--key-dir",
-            str(key_dir),
             "--teach-authorization",
             str(statement),
             "--approver-root",
