@@ -45,7 +45,8 @@ has every run.
 On a test copy of openIMIS, the open-source insurance and claims system that
 runs Nepal's national health insurance scheme, the compiled program entered
 149 synthetic claims with no model calls: 148 read back correct and none were
-saved wrong
+saved wrong. Each claim was read back by SQL through a read-only database role
+on the test copy
 ([SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis)).
 
 A screen can't show a save that went wrong behind it. On a test copy of
@@ -77,6 +78,14 @@ Each check below was asked whether those 72 bad saves had succeeded:
 | The app's "Saved" message on screen | 54 of 72 |
 | A read of the record over the app's REST API | 9 of 72 (all writes to a table it didn't read) |
 | A read of every table in the database | 0 of 72 |
+
+The test app's database is SQLite with two record tables, so "every table"
+there is two tables; a real system has many more. Every check, the database
+read included, also stopped 9 of the 18 correct saves, where the server
+committed the save but its answer timed out. Most deployments give no database
+access at all. There the check covers at most the target record, read in a
+separate signed-in session, and the same user's changes in the app's activity
+log within a stated window, where the app shows one.
 
 [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the fault set, the method and the raw results.
@@ -312,7 +321,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
 - **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
 - **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
-- **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
+- **Confirms the right record before every write and reads the saved record back** outside the acting session: from the system of record where one can be read, or in a separate signed-in session. The run report names the check level.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).

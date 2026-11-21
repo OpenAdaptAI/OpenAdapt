@@ -2,7 +2,8 @@
 
 OpenAdapt lets an agent do a task once and compiles that run into a program
 that makes no model calls. Before each save the program checks that the right
-record is open; after the save it reads the system of record back. This page
+record is open; after the save it reads the record back through the strongest
+path the deployment provides, and the run's report names how it was checked. This page
 covers what can go wrong when the content an agent reads is hostile, which
 controls stop it, and what is still not protected.
 
@@ -12,7 +13,8 @@ something else? Published work on computer-use agents (OS-Harm, RedTeamCUA,
 VPI-Bench) shows that instructions rendered on screen steer current agents
 often. OpenAdapt does not try to make the agent resist those instructions. It
 limits what the agent's actions can do, using values declared before the
-agent reads any page, and it checks the result in the system of record. This
+agent reads any page, and it checks the result through a read the agent
+cannot write. This
 follows the design in "Defeating Prompt Injections by Design" (CaMeL): the
 declared task is the control flow, and page text is data that can never widen
 it.
@@ -26,24 +28,52 @@ checks only reduce how often that owner has to act.
 
 | Layer | Guarantees | Where it applies |
 | --- | --- | --- |
-| **1. The record check** | A write is reported as saved only if the system of record shows exactly the declared effect and nothing else the run caused. Anything else is a stop. | Every surface: browser, desktop, Citrix and RDP |
+| **1. The record check** | A write is reported as `VERIFIED` only if a read independent of the acting session showed the declared effect at the time of the read, within what that read covers (below). Anything else is a stop or a weaker outcome. | Every surface: browser, desktop, Citrix and RDP. What it covers depends on the read path |
 | **2. The wire check** | Only declared writes leave: the method, the path and the body must match before the request is sent. Anything else is refused. | Wherever requests can be intercepted, the browser today |
 | **3. Undo or a person** | A wrong write the record check catches is undone and the undo verified, or it goes to a person with the exact difference. A write that cannot be undone needs a person's approval first. | Every surface |
+
+### What layer 1 covers
+
+Layer 1 can only report what its read path shows. The run's report names
+the check level ([`check_level.py`](../../types/openadapt_types/check_level.py),
+[READBACK_LADDER.md](READBACK_LADDER.md)) for every save.
+
+- **With a system-of-record read** (API, FHIR, SQL, a log or an export, level
+  4), the check covers the target record and whatever else that read path
+  reads. A collateral write outside the read path is not seen.
+- **With no database or API access** (the common case: most deployments give
+  none), the check covers the target record and, where the application shows
+  an activity or audit log, the same actor's logged changes within a stated
+  window. A separately signed-in session (level 3) is the
+  strongest read available there. Changes to other records that the log does
+  not show, server-side jobs that run later, and outbound messages (HL7,
+  queues, email) are outside it.
+- **Reads in the acting session** (`same_screen`, `reopened`) are reported at
+  their own levels and never make a run `VERIFIED`.
+
+`VERIFIED` means "as of the read-back time, the read showed this value". It
+does not mean the value persisted after that, and it does not mean the run
+caused nothing else. Server-side asynchronous effects and outbound effects
+are not observed.
+
+The wire check (layer 2) is evidence about what was sent. It is not a check
+level and does not by itself make a run `VERIFIED`.
 
 Everything else, including the identity checks before a click, look-alike
 row counting, focus and form checks and pixel grounding, is a **pre-check**.
 A pre-check avoids bad writes and wasted runs. It must fail closed when
 unsure, but it is never the thing that makes a run safe: if a pre-check is
-fooled, layer 1 catches the result and layer 3 handles it.
+fooled, layer 1 catches a result that its read path covers and layer 3
+handles it.
 
 What each attacker can do, and which layer stops it:
 
 | Threat | Owner |
 | --- | --- |
 | The app changed: a new layout, a renamed button, look-alike rows | Pre-checks stop most cases; layer 1 catches the rest |
-| The agent is wrong, hijacked or tries to cheat | Layer 2 refuses undeclared writes; layer 1 checks the outcome through a channel the agent cannot write |
+| The agent is wrong, hijacked or tries to cheat | Layer 2 refuses undeclared writes where requests can be intercepted; layer 1 checks the outcome through a read the agent cannot write, within that read's coverage |
 | The app's own page scripts change what is sent | Layer 2 compares what is actually sent; layer 1 checks what was stored |
-| The app's server says "saved" and writes nothing, or writes elsewhere | Layer 1 reads the store directly |
+| The app's server says "saved" and writes nothing, or writes elsewhere | Layer 1 reads the target record from outside the acting session. A write elsewhere is caught only if the read path covers it (a database or API read of that table, or the app's activity log) |
 | A bug in OpenAdapt | Layer 1, and blind fault suites that measure it |
 
 **Rule for reviews.** A finding that a pre-check can be fooled is a
