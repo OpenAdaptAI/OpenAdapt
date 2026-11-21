@@ -91,6 +91,8 @@ from openadapt_flow.runtime.effects.effect import (
     Verdict,
 )
 from openadapt_flow.runtime.effects.frame import FrameSpec, FrameVerdict, judge_frame
+from openadapt_flow.verdict import Obligations, Result, Status, Subject, settle
+from openadapt_flow.verdict_sites import verdict_site
 from openadapt_flow.verification import (
     EffectContractMutationError,
     VerificationTier,
@@ -2955,15 +2957,40 @@ def _label(verdict: Verdict) -> EffectVerdictLabel:
     return labels[verdict]
 
 
+_AGGREGATE_LABELS: dict[Status, EffectVerdictLabel] = {
+    Status.HELD: "CONFIRMED",
+    Status.REFUTED: "REFUTED",
+    Status.NOT_CHECKED: "INDETERMINATE",
+}
+
+
+@verdict_site("verify_run.aggregate", classes="C2 C3")
 def _aggregate(verdicts: Sequence[EffectVerdict]) -> EffectVerdictLabel:
-    if any(v.verdict is Verdict.INDETERMINATE for v in verdicts):
-        return "INDETERMINATE"
-    if any(v.verdict is Verdict.REFUTED for v in verdicts):
-        return "REFUTED"
-    return "CONFIRMED"
+    """CONFIRMED only when every effect is; any INDETERMINATE outranks a
+    REFUTED; no effects at all is INDETERMINATE (docs/FAIL_CLOSED.md)."""
+
+    subjects = [Subject(key=str(i)) for i in range(len(verdicts))]
+    settled = settle(
+        Obligations.fix(subjects, source="effects"),
+        [
+            Result.from_code(
+                s,
+                v.verdict,
+                held=frozenset({Verdict.CONFIRMED.value}),
+                refuted=frozenset({Verdict.REFUTED.value}),
+            )
+            for s, v in zip(subjects, verdicts)
+        ],
+    )
+    return _AGGREGATE_LABELS[
+        settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
+    ]
 
 
+@verdict_site("verify_run.observed", classes="C2")
 def _observed(verdicts: Sequence[EffectVerdict]) -> str:
+    if not verdicts:
+        return "unknown"  # nothing was read, so nothing is present
     seen = {v.observed_effect for v in verdicts}
     if "unknown" in seen:
         return "unknown"
@@ -2973,19 +3000,23 @@ def _observed(verdicts: Sequence[EffectVerdict]) -> str:
     return "absent" if "absent" in seen else "present"
 
 
+@verdict_site("verify_run.readback_class", classes="C1 C2")
 def readback_class(
     verdicts: Sequence[EffectVerdict], tiers: Sequence[Optional[VerificationTier]]
 ) -> ReadbackClass:
     """RFC-0002 tier rule, weakest effect wins.
 
     ``unchecked`` when any effect was not read (no tier, store unreachable,
-    stale). ``independent_readback`` only when every effect was read from the
+    stale), when there are no effects, or when the tiers don't pair one to
+    one with the effects. ``independent_readback`` only when every effect was read from the
     system of record without the UI (Flow tier 1). Anything else, including a
     separate signed-in UI session (tier 2), is ``screen_readback``.
     """
 
     if (
-        any(t is None for t in tiers)
+        not verdicts
+        or len(tiers) != len(verdicts)
+        or any(t is None for t in tiers)
         or any(v.unavailable for v in verdicts)
         or any(v.stale for v in verdicts)
     ):

@@ -17,7 +17,25 @@
 
 ## Unreleased
 
+### Features
+
+- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
+  evidence into held, refuted or not checked. It fixes the obligations from
+  the plan first, settles results against them, and never passes an empty
+  set, a truncated or short read, a probe that raised, a result bound to
+  another run, two results that disagree, or a code nobody listed. Functions
+  marked `@verdict_site` are run by a fail-open harness
+  (`tests/failopen`) with 13 generic mutations; it flags 14 historical bugs
+  rebuilt from this repository's code and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when a file gains a hand-written
+  fold. See `docs/FAIL_CLOSED.md`.
+
 ### Fixes
+
+- `verify-run`: an effect list that is empty, or tiers that don't pair one to
+  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
+  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
+  refuses an empty list, so no run changes outcome today.
 
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same

@@ -1,0 +1,33 @@
+# Config for scripts/check_verdict_folds.py. It names no application: the
+# outcome literals come from openadapt_types/vocabulary/outcomes.json, plus
+# the few below.
+
+[scope]
+# Relative to the repository root.
+include = [
+  "packages/flow/openadapt_flow/**/*.py",
+  "openadapt/**/*.py",
+  "scripts/ci/**/*.py",
+]
+# The kernel and its registry are where folds belong.
+exempt = [
+  "packages/flow/openadapt_flow/verdict.py",
+  "packages/flow/openadapt_flow/verdict_sites.py",
+]
+
+[literals]
+# A check that says one of these, outside the kernel or a registered site,
+# is saying it held.
+success = [
+  "VERIFIED",
+  "CONFIRMED",
+  "held",
+  "verified_done",
+  "independent_readback",
+]
+# Compared against, beside every outcome in the vocabulary.
+outcome_extra = ["held", "confirmed", "pass", "verified_done", "refuted", "not_checked"]
+
+[bool_fold]
+# all(...)/any(...) over one of these names folds verdicts by hand.
+names = '(verdict|result|check|effect|line|tier)'

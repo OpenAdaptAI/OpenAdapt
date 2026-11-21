@@ -40,6 +40,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.runtime.effects.effect import ValueExpr
+from openadapt_flow.verdict_sites import verdict_site
 
 VersionStatus = Literal["held", "refuted", "not_checked"]
 
@@ -219,6 +220,7 @@ def _resolve_self(
     return out
 
 
+@verdict_site("versions.judge", classes="C1 C5")
 def judge_versions(
     spec: FrameVersions,
     stored: Mapping[str, Any],
