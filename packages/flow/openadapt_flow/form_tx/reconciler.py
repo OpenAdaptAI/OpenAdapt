@@ -1031,17 +1031,22 @@ class FormReconciler:
             None,
         )
         if live is None:
-            # Pages that redraw a step after a pick give the input a new id.
-            # Find it again by its value-free signature (section, label, kind,
-            # name); only a unique match counts.
-            sig = compute_field_signature(ctrl)
-            same = [
-                c
-                for c in after.controls
-                if c.visible and compute_field_signature(c) == sig
-            ]
-            if len(same) == 1:
-                live = same[0]
+            # Pages that redraw a step after a pick give the input a new id
+            # (and often a new random name). Find it again by section, label
+            # and kind; only a unique, labelled match counts.
+            def _key(c: ObservedControl) -> tuple[str, str, str]:
+                return (
+                    collapse_whitespace(c.section_text).casefold(),
+                    collapse_whitespace(c.label_text).casefold(),
+                    (c.role or c.input_type or c.tag).casefold(),
+                )
+
+            if collapse_whitespace(ctrl.label_text):
+                same = [
+                    c for c in after.controls if c.visible and _key(c) == _key(ctrl)
+                ]
+                if len(same) == 1:
+                    live = same[0]
         shown = collapse_whitespace(live.current_value) if live is not None else ""
         accepted = {
             collapse_whitespace(option.label).casefold(),
