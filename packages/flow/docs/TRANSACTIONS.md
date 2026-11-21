@@ -199,7 +199,7 @@ count, never `ROLLED_BACK`. Counters aren't rows and aren't compared.
 coding agent that also has direct access, declare the same system in
 `openadapt.systems.yaml` with `approval: block` ([HOOKS.md](HOOKS.md)), so a
 direct write is refused and batch writes go through a plan. `openadapt wrap`
-([WRAP.md](WRAP.md)) is a browser MCP harness, not a broker for these
+(#2407) is a browser MCP harness, not a broker for these
 systems. Like the hooks, this layer is advisory against an agent that holds
 its own credentials to the system.
 
