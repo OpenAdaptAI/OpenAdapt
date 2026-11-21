@@ -1,0 +1,245 @@
+[37m⠋[0m [2mResolving dependencies...                                                                                                                                                                                                                               [0m[2K[37m⠙[0m [2mResolving dependencies...                                                                                                                                                                                                                               [0m[2K[37m⠋[0m [2mResolving dependencies...                                                                                                                                                                                                                               [0m[2K[37m⠙[0m [2mResolving dependencies...                                                                                                                                                                                                                               [0m[2K[37m⠙[0m [2mopenadapt==1.23.0                                                                                                                                                                                                                                       [0m[2K[37m⠙[0m [2mclick==8.5.1                                                                                                                                                                                                                                            [0m[2K[37m⠙[0m [2mopenadapt-agent==2.2.2                                                                                                                                                                                                                                  [0m[2K[37m⠙[0m [2mopenadapt-agent==2.2.2                                                                                                                                                                                                                                  [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mopenadapt-flow==3.3.0                                                                                                                                                                                                                                   [0m[2K[37m⠙[0m [2mrich==15.0.0                                                                                                                                                                                                                                            [0m[2K[37m⠙[0m [2mrich==15.0.0                                                                                                                                                                                                                                            [0m[2K[37m⠙[0m [2manyio==4.16.0                                                                                                                                                                                                                                           [0m[2K[37m⠙[0m [2mcryptography==50.0.2                                                                                                                                                                                                                                    [0m[2K[37m⠙[0m [2mjsonschema==4.26.0                                                                                                                                                                                                                                      [0m[2K[37m⠙[0m [2mmcp==2.3.0                                                                                                                                                                                                                                              [0m[2K[37m⠙[0m [2mmcp-types==2.3.0                                                                                                                                                                                                                                        [0m[2Kopenadapt quickstart is also available as openadapt demo quickstart
+
+[1;36m◆[0m [1mOpenAdapt[0m [2mquickstart[0m
+Show a task once, run it, then watch it catch a save that didn't happen.
+[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m [2msynthetic data · files in openadapt-quickstart[0m
+[?25l[36m⠋ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠹ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠸ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠴ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠧ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠇ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠏ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠦ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠦ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠙ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠦ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠏ [0m [1mStarting the synthetic clinic app[0m[2K[36m⠏ [0m [1mStarting the synthetic clinic app[0m
+[?25h[1A[2K[32m✓[0m  [1mClinic app ready[0m  [2msynthetic data, on this computer[0m 
+[?25l[36m⠋ [0m [1mShow it once[0m  [2ma demonstration in a synthetic clinic app, in a hidden browser[0m[2K[36m⠙ [0m [1mShow it once[0m  [2ma demonstration in a synthetic clinic app, in a hidden browser[0m[2K[36m⠹ [0m [1mShow it once[0m  [2ma demonstration in a synthetic clinic app, in a hidden browser[0m[2K[36m⠸ [0m [1mShow it once[0m  [2ma demonstration in a synthetic clinic app, in a hidden browser[0m[2K[36m⠼ [0m [1mShow it once[0m  [2ma demonstration in a synthetic clinic app, in a hidden browser[0m[2K[36m⠴ [0m [1mShow it once[0m  [2m1. Click Open[0m[2K[36m⠦ [0m [1mShow it once[0m  [2m1. Click Open[0m[2K[36m⠧ [0m [1mShow it once[0m  [2m1. Click Open[0m[2K[36m⠇ [0m [1mShow it once[0m  [2m2. Click New Encounter[0m[2K[36m⠏ [0m [1mShow it once[0m  [2m2. Click New Encounter[0m[2K[36m⠋ [0m [1mShow it once[0m  [2m3. Click Triage[0m[2K[36m⠙ [0m [1mShow it once[0m  [2m3. Click Triage[0m[2K[36m⠹ [0m [1mShow it once[0m  [2m3. Click Triage[0m[2K[36m⠸ [0m [1mShow it once[0m  [2m4. Click Note[0m[2K[36m⠼ [0m [1mShow it once[0m  [2m4. Click Note[0m[2K[36m⠴ [0m [1mShow it once[0m  [2m4. Click Note[0m[2K[36m⠦ [0m [1mShow it once[0m  [2m5. Type "Synthetic follow-up in two weeks"[0m[2K[36m⠧ [0m [1mShow it once[0m  [2m5. Type "Synthetic follow-up in two weeks"[0m[2K[36m⠇ [0m [1mShow it once[0m  [2m5. Type "Synthetic follow-up in two weeks"[0m[2K[36m⠏ [0m [1mShow it once[0m  [2m6. Click Save Encounter[0m[2K[36m⠋ [0m [1mShow it once[0m  [2m6. Click Save Encounter[0m[2K[36m⠹ [0m [1mShow it once[0m  [2m6. Click Save Encounter[0m[2K[36m⠹ [0m [1mShow it once[0m  [2m6. Click Save Encounter[0m
+[?25h[1A[2K[32m✓[0m  [1mShow it once[0m  [2m6 actions, in a hidden browser[0m                                                                                                                                                                                                       [2m1.5s[0m
+   [2mOpen › New Encounter › Triage › Note › Type "Synthetic follow-up in two weeks" › Save Encounter[0m                                                                                                                                                        
+[?25l[36m⠋ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠙ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠹ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠸ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠼ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠴ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠦ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠧ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠇ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠏ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠋ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠙ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠹ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠸ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠼ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠴ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠦ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠧ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠏ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠋ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠙ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠹ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠸ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠼ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠴ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠦ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠧ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠇ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠏ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠋ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠙ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠹ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠸ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠼ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠴ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠦ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠧ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠇ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠋ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠙ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠹ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠸ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠼ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠴ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m[2K[36m⠦ [0m [1mTurn it into a program[0m  [2mcompiling the demonstration[0m
+[?25h[1A[2K[32m✓[0m  [1mTurn it into a program[0m  [2m6 steps, local-quickstart[0m                                                                                                                                                                                                  [2m4.2s[0m
+[?25l[36m⠋ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠙ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠹ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠸ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠼ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠴ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠦ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠧ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠇ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠏ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠋ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠙ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠹ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠸ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠼ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠴ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠦ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠧ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠏ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠋ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠙ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠹ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠸ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠼ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠴ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠦ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠧ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠇ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠏ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠋ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠙ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠹ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠸ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠼ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠦ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠧ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠇ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠏ [0m [1mRun it on a new note[0m  [2m · 0 of 1 done · 0 checked[0m
+     [2m· Follow-up in two weeks[0m                      [2K[1A[2K[36m⠏ [0m [1mRun it on a new note[0m  [2m · 1 of 1 done · 1 checked[0m   
+     [32m✓[0m Follow-up in two weeks             [2mchecked 3.3s[0m
+[?25h[1A[2K[1A[2K[32m✓[0m  [1mRun it on a new note[0m  [2m1 of 1 checked in the database[0m                                                                                                                                                                                               [2m3.3s[0m
+   [32m✓[0m Follow-up in two weeks             [2mchecked 3.3s[0m
+
+[?25l[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [2m·[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [2m·[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [2m·[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [2m·[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [2m·[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [32m✓[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [2m·[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [32m✓[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [2m·[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [2m·[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [32m✓[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [2m·[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [32m✓[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [32m✓[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[32m╭─[0m[32m [0m[1;32m Saved and checked [0m[32m [0m[32m──────────────────────[0m[32m─╮[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [2mThe record, read back from the database[0m    [32m│[0m
+[32m│[0m    [32m✓[0m [2mpatient_id[0m  [1mp1[0m                         [32m│[0m
+[32m│[0m    [32m✓[0m [2mtype[0m        [1mTriage[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2msource[0m      [1mreplay[0m                     [32m│[0m
+[32m│[0m    [32m✓[0m [2mkey[0m         [1mmockmed-triage-p1-v1[0m       [32m│[0m
+[32m│[0m    [32m✓[0m [2mnote[0m        [1m"Follow-up in two weeks"[0m   [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m│[0m  [1;32m1 of 1 run · 0 model calls · $0.00 · 3.3s[0m  [32m│[0m
+[32m│[0m                                             [32m│[0m
+[32m╰─────────────────────────────────────────────╯[0m
+[?25h
+[1;33m›[0m  [1mBreak the next save[0m  [2mThe app will show its saved message. The database will reject the save.[0m 
+   [1mPress Enter to make the next save fail silently[0m [2m(Enter)[0m 
+[?25l[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠋ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠦ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠧ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠇ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠏ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠙ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠹ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠸ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠼ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m[2K[36m⠴ [0m [1mBreak the next save[0m  [2mRunning the program once more, checking the database[0m
+[?25h[1A[2K
+[32m╭─[0m[32m [0m[1;32mThe screen[0m[32m [0m[32m───────────────────────────────────────────────────────────────────────────────────────────────────────────[0m[32m─╮[0m  [31m╭─[0m[31m [0m[1;31mThe database[0m[31m [0m[31m───────────────────────────────────────────────────────────────────────────────────────────────────────────[0m[31m─╮[0m
+[32m│[0m                                                                                                                         [32m│[0m  [31m│[0m                                                                                                                           [31m│[0m
+[32m│[0m  [32m✓[0m Encounter saved — Synthetic follow-up in two weeks                                                                   [32m│[0m  [31m│[0m  [1;31m✗ 0 new records[0m                                                                                                          [31m│[0m
+[32m│[0m                                                                                                                         [32m│[0m  [31m│[0m                                                                                                                           [31m│[0m
+[32m╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m  [31m╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+[2mA screen-trusting bot[0m  [31m✓ Done[0m                           
+[1mOpenAdapt[0m              [1;33m■ Stopped. Not marked done.[0m  [2m8.5s[0m
+[2mOpenAdapt reads the record back from the database after each save. It found nothing, so it stopped.[0m
+[2mA save may still have gone through, so a person checks the record before anything is retried.[0m
+
+[36m╭─[0m[36m [0m[1;36m ◆ Your Seal [0m[36m [0m[36m─────────────────────────────────────────[0m[36m─╮[0m
+[36m│[0m                                                          [36m│[0m
+[36m│[0m   [1;32m✓ Saved and checked[0m                                    [36m│[0m
+[36m│[0m   [32m●[0m[2m─[0m[32m●[0m[2m─[0m[32m●[0m[2m─[0m[32m●[0m[2m─[0m[32m●[0m[2m─[0m[1;32m◆[0m                                            [36m│[0m
+[36m│[0m                                                          [36m│[0m
+[36m│[0m   [2m6 of 6 steps · 2 of 2 record checks · 0 model calls[0m    [36m│[0m
+[36m│[0m   [2med25519 over report sha256 8aae85628577[0m                [36m│[0m
+[36m│[0m   [2mkey seal-ed25519-accd03a9246d29bb · 2 reports signed[0m   [36m│[0m
+[36m│[0m                                                          [36m│[0m
+[36m╰──────────────────────────────────────────────────────────╯[0m
+[1mOpen it[0m     ]8;id=13253113;file://<cwd>/Apple_Terminal-250/openadapt-quickstart/run-1/seal.html\[1;36mopenadapt-quickstart/run-1/seal.html[0m]8;;\                              
+            [2mchecks the signature in your browser, offline; nothing is uploaded[0m
+[2mReal Seals[0m  ]8;id=13253116;https://openadapt.ai/seals\[36mhttps://openadapt.ai/seals[0m]8;;\                                        
+
+Put this Seal online? This is the exact summary that would be uploaded (<cwd>/Apple_Terminal-250/openadapt-quickstart/run-1/public-seal.json):
+{
+  "card": {
+    "bundle_digest": "d518bf0cc2aacc09047b77337139f5783e89582c031077ef04a7c35b0f9cf0d8",
+    "checks": {
+      "authorization": {
+        "confirmed": 1,
+        "required": 1
+      },
+      "effects": {
+        "confirmed": 2,
+        "required": 2
+      },
+      "identity": {
+        "confirmed": 5,
+        "required": 5
+      },
+      "postconditions": {
+        "confirmed": 9,
+        "required": 9
+      }
+    },
+    "duration_ms": 2879,
+    "external_network_calls": "none",
+    "flow_version": "3.3.0",
+    "generated_at": "2026-11-21T00:00:00Z",
+    "heals": 0,
+    "model_calls": 0,
+    "outcome": "VERIFIED",
+    "program_name": "local-quickstart",
+    "provenance": "synthetic-tutorial",
+    "report_sha256": "8aae856285770f538902d0a9ce7ee5d513dd1ed441b73a7c633e063850aa619b",
+    "schema": "openadapt.public-card/v1",
+    "steps": [
+      {
+        "evidence_class": "postcondition",
+        "ok": true,
+        "rung": "structural"
+      },
+      {
+        "evidence_class": "postcondition",
+        "ok": true,
+        "rung": "structural"
+      },
+      {
+        "evidence_class": "postcondition",
+        "ok": true,
+        "rung": "structural"
+      },
+      {
+        "evidence_class": "postcondition",
+        "ok": true,
+        "rung": "structural"
+      },
+      {
+        "evidence_class": "none",
+        "ok": true,
+        "rung": "none"
+      },
+      {
+        "evidence_class": "effect",
+        "ok": true,
+        "rung": "structural"
+      }
+    ],
+    "steps_ok": 6,
+    "steps_total": 6
+  },
+  "signed_by": "seal-ed25519-accd03a9246d29bb"
+}
+[1mThis uploads the summary above to 127.0.0.1:<stub> and gives you a link. Anyone with the link can see it. It does not upload your inputs, screenshots or records. Publish? [y/N] [0mn
+Not published.
+
+[36m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[1;36mNext[0m  [1mGive your agent this task as a tool[0m
+[36m╭───────────────────────────────────────────────────────────────────────────────────╮[0m
+[36m│[0m  [1mclaude mcp add openadapt -- uvx --python 3.12 openadapt agent serve --allow-run[0m  [36m│[0m
+[36m╰───────────────────────────────────────────────────────────────────────────────────╯[0m
+[2mAny other MCP client: uvx --python 3.12 openadapt agent serve --allow-run[0m
+[2mMore next steps:[0m [36muvx --python 3.12 openadapt quickstart --more[0m
+
+[2mDone in 37.9s. Reports: openadapt-quickstart, one REPORT.md per run; side by side: openadapt-quickstart/index.html[0m
+[2mThe recording, program and run reports in openadapt-quickstart are unencrypted (synthetic data only); OPENADAPT_FLOW_AT_REST=strict refuses that[0m

@@ -365,7 +365,7 @@ def test_launcher_native_alias_labels_and_help_already_come_from_registered_rout
     from openadapt import cli_tasks as launcher_tasks
 
     for canonical, legacy in launcher_tasks.NATIVE_ROUTES.items():
-        if canonical == legacy or legacy == ("setup",):
+        if canonical == legacy or legacy in launcher_tasks._UNANNOUNCED:
             continue
         argv = [_UntrustedNoticeSpelling(token) for token in legacy]
         assert launcher_tasks.legacy_names([*argv, "SYNTHETIC-TAIL-VALUE"]) == (

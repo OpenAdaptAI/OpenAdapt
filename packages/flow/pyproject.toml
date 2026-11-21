@@ -7,6 +7,29 @@ name = "openadapt-flow"
 version = "3.4.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
+keywords = [
+    "computer-use-agents",
+    "gui-automation",
+    "workflow-compiler",
+    "agent-verification",
+    "read-back",
+    "receipts",
+    "mcp",
+    "rpa",
+    "desktop",
+    "citrix",
+    "rdp",
+    "gui",
+    "automation",
+    "workflow",
+    "verification",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "in-toto",
+    "dsse",
+]
 license = { text = "MIT" }
 # rapidocr-onnxruntime is part of the validated identity/OCR path and does not
 # publish Python 3.13-compatible releases. Keep the package boundary aligned
@@ -14,20 +37,6 @@ license = { text = "MIT" }
 # the identity and dense-surface safety evidence first.
 requires-python = ">=3.10,<3.13"
 authors = [{ name = "OpenAdapt.AI" }]
-keywords = [
-    "gui",
-    "automation",
-    "workflow",
-    "verification",
-    "mcp",
-    "a2a",
-    "agent2agent",
-    "agent-card",
-    "agent-handoff",
-    "receipts",
-    "in-toto",
-    "dsse",
-]
 # The Python classifiers feed the PyPI "python versions" badge; keep them in
 # step with requires-python above.
 classifiers = [

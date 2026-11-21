@@ -1,7 +1,7 @@
 [project]
 name = "openadapt"
 version = "1.23.0"
-description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
+description = "Give your agent a program, not a mouse: the open-source, verified execution layer for computer-use agents. Compile one run into a program that makes no model calls, reads each save back from the system of record, and stops instead of guessing."
 # The package description is README.md with its lifecycle block swapped for a
 # link to the live record; see hatch_build.py.
 dynamic = ["readme"]
@@ -11,6 +11,14 @@ authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}
 ]
 keywords = [
+    "computer-use",
+    "computer-use-agents",
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "agent-verification",
+    "audit-trail",
+    "receipts",
     "gui",
     "automation",
     "workflow",

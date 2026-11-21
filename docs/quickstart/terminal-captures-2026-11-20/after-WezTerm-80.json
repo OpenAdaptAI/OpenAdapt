@@ -1,0 +1,11 @@
+{
+  "command": [
+    "openadapt",
+    "quickstart",
+    "--break-it"
+  ],
+  "term_program": "WezTerm",
+  "cols": 80,
+  "exit_code": 0,
+  "seconds": 42.6
+}
