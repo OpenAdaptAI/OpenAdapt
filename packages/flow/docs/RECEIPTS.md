@@ -36,6 +36,18 @@ URLs or page text.** Evidence files, screenshots included, appear only by
 SHA-256 digest. A verifier refuses a receipt or card that carries an image,
 a base64 blob, a URL or long text (`embedded_content`).
 
+A receipt may also carry **counterparty confirmations**: evidence read from
+another party's system about a handoff, such as a referral a portal later
+shows as recorded. Each confirmation states the kind of system, how it was
+read (a portal read-back, an API, or an acknowledgment message), its state
+(`sent`, `acknowledged`, `recorded_as_intended` or `recorded_differently`) and
+its own strength. Who the other party is, when it was observed, which fields
+it showed and any reason are salted commitments, never shown on a public card.
+The verifier prints each one on its own line, for example "Confirmed in the
+other party's system at 2026-11-20T23:41:07Z". That line never merges with or
+upgrades the signer line: "Signed by this computer" still means only that this
+computer signed the statement.
+
 ## Who signed it
 
 Each signature names a key id. The verifier's pinned key registry maps that

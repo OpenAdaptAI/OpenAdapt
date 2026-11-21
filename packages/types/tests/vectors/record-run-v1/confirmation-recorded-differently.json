@@ -1,0 +1,52 @@
+{
+  "description": "A counterparty confirmation in state recorded_differently, with its private openings.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoyLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjIsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjowLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImNvbmZpcm1hdGlvbnMiOlt7ImNvbW1pdG1lbnRzIjp7ImNvdW50ZXJwYXJ0eSI6ImM3ZjFjZWY2NmI0YjRmOTY1NWU5MWYxNmJiYzllOGQ4MTUzYjkxYjdiMjU4MzFhMmUzYTM5NDEzYzQ5MWYzYTAiLCJmaWVsZC4wIjoiZjQzYTMyNzY3YjFmZTlhZDZkOWU3MDczMzA0NWU5ODhkZWQyNDUzMTQzMDdkOWU3OTAzNTg0ZDEzYWViMjgxYiIsIm9ic2VydmVkX2F0IjoiYmY2NDhkZmI5ZDUzM2MyNmQxYWVhNDAxOTlhYTA4NWVkMmJmZTBiM2U1ZWVlMmIyMTQzZTI2ZTJhNGU1OTVjMSJ9LCJkaWZmZXJpbmdfY291bnQiOjEsImZvcl9zdGVwIjo0LCJraW5kIjoiY291bnRlcnBhcnR5X2NvbmZpcm1hdGlvbiIsInJlYWRfbWV0aG9kIjoiYXBpIiwic3RhdGUiOiJyZWNvcmRlZF9kaWZmZXJlbnRseSIsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwic3lzdGVtX2tpbmQiOiJlaHIifV0sImRpc2Nsb3N1cmUiOnsiY29tbWl0bWVudHMiOnt9LCJ2ZXJzaW9uIjoib3BlbmFkYXB0LnB1YmxpYy1kaXNjbG9zdXJlL3YxIn0sImxpbmVzIjpbeyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbXSwib3BlcmF0aW9uIjoid3JpdGUiLCJzdGVwIjoyLCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn0seyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbImZpZWxkX3ZhbHVlcyJdLCJvcGVyYXRpb24iOiJpcnJldmVyc2libGVfd3JpdGUiLCJzdGVwIjo0LCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn1dLCJtb2RlbF9jYWxscyI6MCwib3V0Y29tZSI6IlZFUklGSUVEIiwicHJvZ3JhbSI6eyJpZCI6InByb2ctNWJiMjFhYTBmMmU2YWMzMiIsInZlcnNpb25fc2hhMjU2IjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiJ9LCJyZWFzb25fY29kZSI6InZlcmlmaWVkIiwic3RhcnRlZF9ob3VyIjoiMjAyNi0xMS0yMFQyMzowMDowMFoiLCJzdGVwcyI6eyJvayI6NSwidG90YWwiOjV9fSwicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vb3BlbmFkYXB0LmFpL3JlY29yZC9ydW4vdjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSJ9LCJuYW1lIjoicmVwb3J0Lmpzb24ifSx7ImRpZ2VzdCI6eyJzaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sIm5hbWUiOiJidW5kbGUifV19",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "msghYiA+5/ovO95bNnZkJaFwDi3II5LVfKg3Y7wwI40BbXc1Kc641ZsU/wBj/FP38Y39LHlIFs8eo7m4gjwKBQ=="
+      }
+    ]
+  },
+  "expected": {
+    "confirmation_lines": [
+      "Recorded differently in the other party's system at 2026-11-20T23:41:07Z: 1 field differs"
+    ],
+    "demo": false,
+    "disclosed": {
+      "confirmations.0.counterparty": "ehr:cp-abababababababab",
+      "confirmations.0.field.0": "dob:a44c4b0129118145ea62c619a0c477fd8e7b3b57299d880a873ece8ca7c6b634:differs",
+      "confirmations.0.observed_at": "2026-11-20T23:41:07Z"
+    },
+    "independent": [
+      true
+    ],
+    "ok": true,
+    "outcome": "VERIFIED",
+    "reason": null,
+    "signer_lines": [
+      "Signed by this computer"
+    ]
+  },
+  "openings": {
+    "openings": {
+      "confirmations.0.counterparty": {
+        "salt": "b67beccc7c33b4ef471b7bdcad9e4bb52c0b98099499fa6876c8c22e93858846",
+        "value": "ehr:cp-abababababababab"
+      },
+      "confirmations.0.field.0": {
+        "salt": "24fbd94029ecbd16abad2875b500a848ea6491fb9719196818087e40dfb36fa8",
+        "value": "dob:a44c4b0129118145ea62c619a0c477fd8e7b3b57299d880a873ece8ca7c6b634:differs"
+      },
+      "confirmations.0.observed_at": {
+        "salt": "d0009956fa678f84cebae9e38f33695e1e22ed53bdd31af8da11b37f7425f5d4",
+        "value": "2026-11-20T23:41:07Z"
+      }
+    },
+    "payload_sha256": "702c463ff9c1bc7b43ea0a789bcf01a7683cf8dbb116bc197e0981a839e807cb",
+    "schema": "openadapt.receipt-openings/v1"
+  },
+  "registry": "registry.json"
+}

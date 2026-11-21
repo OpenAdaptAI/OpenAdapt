@@ -192,6 +192,60 @@ class Disclosure(_Closed):
     commitments: dict[StrictStr, StrictStr] = Field(max_length=16)
 
 
+SystemKind = Literal[
+    "ehr", "payer_portal", "bank", "erp", "crm", "government_portal", "email", "other"
+]
+ReadMethod = Literal["portal_read_back", "api", "acknowledgment_message"]
+ConfirmationState = Literal[
+    "sent", "acknowledged", "recorded_as_intended", "recorded_differently"
+]
+ConfirmationStrength = Literal["read_back", "acknowledgment", "none"]
+#: Read methods that look at the other party's own system of record.
+INDEPENDENT_READS: Final = ("portal_read_back", "api")
+_CONFIRMATION_KEY = re.compile(r"counterparty|observed_at|reason|field\.[0-9]{1,2}")
+ConfirmationReason = Literal[
+    "rejected_by_counterparty",
+    "conflicting_report",
+    "ambiguous_key",
+    "receiver_unreachable",
+    "not_found",
+    "no_answer_by_deadline",
+]
+#: Which reasons each state may carry (no reason is always allowed). The
+#: reason is committed, so it shows only where the private openings are read.
+REASONS_FOR_STATE: Final[Mapping[str, frozenset[str]]] = {
+    "sent": frozenset(
+        {
+            "rejected_by_counterparty",
+            "ambiguous_key",
+            "receiver_unreachable",
+            "not_found",
+            "no_answer_by_deadline",
+        }
+    ),
+    "acknowledged": frozenset({"ambiguous_key", "not_found", "no_answer_by_deadline"}),
+    "recorded_as_intended": frozenset({"conflicting_report"}),
+    "recorded_differently": frozenset({"conflicting_report"}),
+}
+
+
+class Confirmation(_Closed):
+    """Evidence read from another party's system about one handoff.
+
+    Everything that could identify the other party, the time or the fields
+    is a salted commitment; the openings stay in the private sidecar.
+    """
+
+    kind: Literal["counterparty_confirmation"]
+    for_step: Optional[Count] = Field(default=None, ge=0, le=10_000)
+    system_kind: SystemKind
+    read_method: ReadMethod
+    state: ConfirmationState
+    strength: ConfirmationStrength
+    differing_count: Count = Field(ge=0, le=64)
+    commitments: dict[StrictStr, StrictStr] = Field(min_length=2, max_length=34)
+
+
 class RunPredicateV1(_Closed):
     program: Program
     started_hour: StrictStr = Field(pattern=_HOUR)
@@ -202,6 +256,9 @@ class RunPredicateV1(_Closed):
     checks: Checks
     model_calls: Count = Field(ge=0, le=MAX_COUNT)
     disclosure: Disclosure
+    #: Counterparty confirmations; omitted from the payload when empty, so a
+    #: receipt without one is byte-identical to one made before they existed.
+    confirmations: list[Confirmation] = Field(default_factory=list, max_length=64)
 
 
 class RunStatementV1(_Closed):
@@ -211,7 +268,36 @@ class RunStatementV1(_Closed):
     predicate: RunPredicateV1
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        out = self.model_dump(mode="json", by_alias=True)
+        if not out["predicate"]["confirmations"]:
+            del out["predicate"]["confirmations"]
+        return out
+
+
+def _check_confirmation(c: Confirmation, steps: set[int]) -> Optional[str]:
+    if c.for_step is not None and c.for_step not in steps:
+        return "a confirmation names a step with no line"
+    if c.state == "sent" and c.strength != "none":
+        return "a sent handoff has no confirmation strength"
+    if c.state == "acknowledged" and c.strength != "acknowledgment":
+        return "an acknowledgment has acknowledgment strength"
+    if c.state.startswith("recorded_") and (
+        c.read_method not in INDEPENDENT_READS or c.strength != "read_back"
+    ):
+        return "only a portal or API read-back can say how the record was recorded"
+    if (c.state == "recorded_differently") != (c.differing_count > 0):
+        return "differing_count disagrees with the state"
+    if not {"counterparty", "observed_at"} <= set(c.commitments):
+        return "a confirmation commits to its counterparty and observed_at"
+    for key, value in c.commitments.items():
+        if not _CONFIRMATION_KEY.fullmatch(key) or not re.fullmatch(
+            _SHA256_HEX[1:-1], value
+        ):
+            return f"confirmation commitment {key!r} is not a known field"
+    fields = sum(1 for key in c.commitments if key.startswith("field."))
+    if c.differing_count > fields:
+        return "more differing fields than observed fields"
+    return None
 
 
 def _check_consistent(statement: RunStatementV1) -> Optional[str]:
@@ -247,6 +333,10 @@ def _check_consistent(statement: RunStatementV1) -> Optional[str]:
     steps = [line.step for line in p.lines]
     if steps != sorted(set(steps)):
         return "lines are not in step order, or repeat a step"
+    for c in p.confirmations:
+        problem = _check_confirmation(c, set(steps))
+        if problem:
+            return problem
     return None
 
 
@@ -321,7 +411,35 @@ def make_openings(
     return commitments, openings
 
 
+_CONFIRMATION_PATH = re.compile(
+    r"confirmations\.([0-9]{1,2})\.(counterparty|observed_at|reason|field\.[0-9]{1,2})"
+)
+_CONFIRMATION_VALUES: Final[Mapping[str, re.Pattern[str]]] = {
+    "counterparty": re.compile(
+        r"(ehr|payer_portal|bank|erp|crm|government_portal|email|other):cp-[a-f0-9]{16}"
+    ),
+    "observed_at": _ISO_SECONDS,
+    "reason": re.compile(
+        r"rejected_by_counterparty|conflicting_report|ambiguous_key"
+        r"|receiver_unreachable|not_found|no_answer_by_deadline"
+    ),
+    "field": re.compile(r"[a-z][a-z0-9_]{0,31}:[a-f0-9]{64}(:differs)?"),
+}
+
+
+def confirmation_path(index: int, key: str) -> str:
+    return f"confirmations.{index}.{key}"
+
+
 def _value_problem(path: str, value: Any) -> Optional[str]:
+    found = _CONFIRMATION_PATH.fullmatch(path)
+    if found:
+        if not isinstance(value, str):
+            return f"{path!r} is not a string"
+        kind = found.group(2).split(".")[0]
+        if not _CONFIRMATION_VALUES[kind].fullmatch(value):
+            return f"{path!r} does not match its field's pattern"
+        return None
     pattern = DISCLOSURE_FIELDS.get(path)
     if pattern is None:
         return f"{path!r} is not a disclosure field"
@@ -575,6 +693,13 @@ class ReceiptVerification:
     disclosed: Mapping[str, str] = field(default_factory=dict)
     #: True when a full private openings file was checked.
     private: bool = False
+    #: One line per counterparty confirmation. Never merged with, and never
+    #: upgrading, ``signer_lines``.
+    confirmation_lines: tuple[str, ...] = ()
+    #: Per confirmation: read from the other party's own system (portal or
+    #: API). Decided only from the read method; the signer's role comes
+    #: from the pinned registry.
+    independent: tuple[bool, ...] = ()
 
 
 _REFUSAL_LINES: Final[Mapping[str, str]] = {
@@ -731,7 +856,10 @@ def verify_receipt(
     problem = _check_consistent(statement)
     if problem:
         return _refuse("inconsistent", problem)
-    commitments = statement.predicate.disclosure.commitments
+    commitments = dict(statement.predicate.disclosure.commitments)
+    for index, c in enumerate(statement.predicate.confirmations):
+        for key, value in c.commitments.items():
+            commitments[confirmation_path(index, key)] = value
     disclosed: dict[str, str] = {}
     private = False
     if card_openings is not None:
@@ -755,6 +883,12 @@ def verify_receipt(
             return result
         disclosed = result
         private = True
+        for index, c in enumerate(statement.predicate.confirmations):
+            reason = disclosed.get(confirmation_path(index, "reason"))
+            if reason is not None and reason not in REASONS_FOR_STATE[c.state]:
+                return _refuse(
+                    "inconsistent", f"a {c.state} confirmation can't have reason {reason}"
+                )
     ordered = sorted(
         checks,
         key=lambda c: _ROLE_ORDER.index(c.role) if c.role in _ROLE_ORDER else -1,
@@ -763,8 +897,14 @@ def verify_receipt(
     for c in ordered:
         if c.line not in lines:
             lines.append(c.line)
+    confirmations = statement.predicate.confirmations
     return ReceiptVerification(
         True,
+        confirmation_lines=tuple(
+            confirmation_line(c, disclosed.get(confirmation_path(i, "observed_at")))
+            for i, c in enumerate(confirmations)
+        ),
+        independent=tuple(c.read_method in INDEPENDENT_READS for c in confirmations),
         signers=tuple(ordered),
         signer_lines=tuple(lines),
         demo=demo,
@@ -773,6 +913,22 @@ def verify_receipt(
         disclosed=disclosed,
         private=private,
     )
+
+
+def confirmation_line(c: Confirmation, observed_at: Optional[str] = None) -> str:
+    """The verifier's line for one confirmation, as every verifier prints it."""
+    at = f" at {observed_at}" if observed_at else ""
+    if c.state == "recorded_as_intended":
+        return f"Confirmed in the other party's system{at}"
+    if c.state == "recorded_differently":
+        noun = "field differs" if c.differing_count == 1 else "fields differ"
+        return (
+            f"Recorded differently in the other party's system{at}: "
+            f"{c.differing_count} {noun}"
+        )
+    if c.state == "acknowledged":
+        return f"Acknowledged by the other party{at}"
+    return f"Sent to the other party{at}, not confirmed"
 
 
 def _check_openings(
@@ -846,6 +1002,9 @@ __all__ = [
     "add_signature",
     "canonical_json",
     "commitment",
+    "Confirmation",
+    "confirmation_line",
+    "confirmation_path",
     "find_embedded_content",
     "is_receipt_card",
     "is_receipt_envelope",
