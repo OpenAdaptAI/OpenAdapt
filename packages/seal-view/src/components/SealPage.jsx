@@ -90,6 +90,8 @@ const reasonText = (reason) =>
           ? "The authorization doesn't cover this run."
           : 'The check failed.')
 
+// A host-given file link: a relative path or an https URL, never a javascript: URI.
+const safeHref = (href) => (typeof href === 'string' && /^(?:https:\/\/|\/|\.{0,2}\/|[\w.-]+$)/.test(href) ? href : null)
 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`
 // Required effect predicates can check record cardinality or individual fields.
 // Their count describes checks, never a count of fields or separate reads.
@@ -1491,14 +1493,14 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
                 <p className={s.fileLinks}>
                     {['report.json', 'seal.json', files.anchor ? 'seal.anchor.json' : null, files.tsa ? 'seal.tsa.json' : null, files.tsr ? 'seal.tsr' : null]
                         .filter(Boolean)
-                        .map((name) => [name, links.file(name)])
+                        .map((name) => [name, safeHref(links.file(name))])
                         .filter(([, href]) => href)
                         .map(([name, href]) => (
                             <a key={name} href={href}>
                                 {name}
                             </a>
                         ))}
-                    {links.keys ? <a href={links.keys.href}>{links.keys.label}</a> : null}
+                    {links.keys && safeHref(links.keys.href) ? <a href={safeHref(links.keys.href) /* nosemgrep: react-href-var -- safeHref allows only a relative path or an https URL. */}>{links.keys.label}</a> : null}
                 </p>
             ) : null}
         </section>
