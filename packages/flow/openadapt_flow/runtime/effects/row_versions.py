@@ -30,10 +30,14 @@ one that changed by exactly one: two writers mean another user's save sits
 inside the window. That is the lost-update rule of ``versions.py`` (one step
 per save) with the row's own transaction ids as the steps.
 
-Known limit: a lock shared by two transactions sets ``xmax`` to a multixact
-id, a separate counter. If that number happened to equal the later writer's
-transaction id, two writers would read as one. Nothing here can tell the two
-counters apart without the ``pageinspect`` extension.
+A lock shared by two transactions sets ``xmax`` to a multixact id, a
+separate counter. If that number equals the later writer's transaction id,
+two writers could read as one; when a multixact with that id exists and
+names another updater, the check is not checked rather than held.
+
+What it doesn't see: a row the window adds and removes again (no snapshot
+holds it; the frame's counter check catches it when the key comes from a
+sequence), and writes to rows other than the target, which the frame judges.
 """
 
 from __future__ import annotations
@@ -210,6 +214,27 @@ def take(token: str) -> Optional[HeldRead]:
         return _HELD.pop(token, None)
 
 
+#: ``pg_get_multixact_members`` modes that update a row (not just lock it).
+_UPDATE_MODES = frozenset({"nokeyupd", "upd"})
+
+
+def _multixact_updater_other_than(cur: Any, value: str, writer: str) -> bool:
+    """Could ``value``, read as the old version's ``xmax``, be a multixact id
+    (a shared lock) whose updater is a transaction other than ``writer``?
+    Then two writers could read as one. A value that is no multixact (the
+    function errors) can't."""
+
+    try:
+        cur.execute(
+            "SELECT CAST(xid AS TEXT), mode FROM pg_get_multixact_members(CAST(%s AS xid))",
+            (value,),
+        )
+        members = cur.fetchall()
+    except Exception:  # noqa: BLE001 - not a multixact id: a plain xid
+        return False
+    return any(str(m) in _UPDATE_MODES and str(x) != writer for x, m in members)
+
+
 def judge_row_versions(
     spec: FrameRowVersions,
     held: Optional[HeldRead],
@@ -232,10 +257,18 @@ def judge_row_versions(
         old = held.rows(spec, keys) if keys else {}
         conn = connect()
         try:
+            conn.autocommit = True
             cur = conn.cursor()
             cur.execute(_query(spec), (keys,))
             now = {str(k): (x, m) for k, x, m in cur.fetchall()}
-            conn.rollback()
+            ambiguous = {
+                k
+                for k, (base_xmin, base_xmax) in old.items()
+                if k in now
+                and now[k][0] != base_xmin
+                and base_xmax == now[k][0]
+                and _multixact_updater_other_than(cur, base_xmax, now[k][0])
+            }
         finally:
             conn.close()
     except Exception:  # noqa: BLE001 - unreadable -> the check stops the run
@@ -277,6 +310,14 @@ def judge_row_versions(
             )
             continue
         (base_xmin, base_xmax), (cur_xmin, _cur_xmax) = base, cur
+        if target in ambiguous:
+            stop(
+                "not_checked",
+                "ambiguous_xmax",
+                "the version the baseline saw was replaced under a shared lock, "
+                "so one save can't be told from two",
+            )
+            continue
         if cur_xmin == base_xmin:
             writers = 0
         elif base_xmax not in (None, "0") and base_xmax == cur_xmin:

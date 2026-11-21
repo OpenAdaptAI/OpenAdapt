@@ -36,6 +36,12 @@ from tests.test_learned_excuses import (
 _homes = _le._homes
 
 
+@pytest.fixture(autouse=True)
+def _no_leaked_holds() -> Any:
+    yield
+    assert not rv._HELD, "a held read was left open"
+
+
 @pytest.fixture
 def pg(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
     if not _le._PG:
@@ -106,22 +112,24 @@ class _Held:
 
 
 class _Cur:
-    def __init__(self, rows: list[tuple]) -> None:
-        self._rows = rows
+    def __init__(self, rows: list[tuple], members: Optional[list[tuple]]) -> None:
+        self._rows, self._members, self._sql = rows, members, ""
 
-    def execute(self, *a: Any) -> None:
-        pass
+    def execute(self, sql: str, *a: Any) -> None:
+        self._sql = sql
+        if "multixact" in sql and self._members is None:
+            raise RuntimeError("MultiXactId has not been created yet")
 
     def fetchall(self) -> list[tuple]:
-        return self._rows
+        return list(self._members or []) if "multixact" in self._sql else self._rows
 
 
 class _Conn:
-    def __init__(self, rows: list[tuple]) -> None:
-        self._rows = rows
+    def __init__(self, rows: list[tuple], members: Optional[list[tuple]] = None) -> None:
+        self._rows, self._members, self.autocommit = rows, members, False
 
     def cursor(self) -> _Cur:
-        return _Cur(self._rows)
+        return _Cur(self._rows, self._members)
 
     def rollback(self) -> None:
         pass
@@ -131,12 +139,17 @@ class _Conn:
 
 
 def _judge(
-    old: tuple, now: tuple, *, changed: bool, held: bool = True
+    old: tuple,
+    now: tuple,
+    *,
+    changed: bool,
+    held: bool = True,
+    members: Optional[list[tuple]] = None,
 ) -> rv.VersionVerdict:
     spec = rv.FrameRowVersions(**SPEC)
     h: Optional[_Held] = _Held({"1": old}) if held else None
     result = rv.judge_row_versions(
-        spec, h, lambda: _Conn([("1", *now)]), [("1", True, changed)]
+        spec, h, lambda: _Conn([("1", *now)], members), [("1", True, changed)]
     )
     if h is not None:
         assert h.closed
@@ -158,6 +171,23 @@ def test_judge_counts_writers() -> None:
     assert (odd.status, odd.problem) == ("not_checked", "no_new_version")
     # A lock left on the old version (xmax) but no save: still nobody.
     assert _judge(("100", "103"), ("100", "103"), changed=False).status == "held"
+
+
+def test_judge_never_reads_a_shared_lock_as_one_writer() -> None:
+    """The old version's xmax may be a multixact id equal to the current
+    xmin by chance; if that multixact names another updater, not checked."""
+
+    v = _judge(
+        ("100", "105"), ("105", "0"), changed=True, members=[("103", "upd"), ("104", "keysh")]
+    )
+    assert (v.status, v.problem) == ("not_checked", "ambiguous_xmax")
+    # Lockers only, or the writer itself as the updater: still one writer.
+    assert _judge(
+        ("100", "105"), ("105", "0"), changed=True, members=[("104", "keysh")]
+    ).status == "held"
+    assert _judge(
+        ("100", "105"), ("105", "0"), changed=True, members=[("105", "nokeyupd")]
+    ).status == "held"
 
 
 def test_judge_stops_without_the_held_read() -> None:
@@ -220,8 +250,8 @@ def _generated(dialect: str, query: str, *, read_same: bool = True) -> dict:
 
 GENERATED = (
     'SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."name" AS TEXT) AS "name", '
-    'CASE WHEN (SELECT COUNT(*) FROM "part_note" n WHERE n.part_id = t.id) = 0 '
-    'THEN \'1\' ELSE \'0\' END AS "p__notes" FROM "part_part" t'
+    'CASE WHEN CAST(t."minimum_stock" AS numeric) = CAST(%(v0)s AS numeric) '
+    'THEN \'1\' ELSE \'0\' END AS "p__minimum_stock" FROM "part_part" t'
 )
 
 
@@ -248,6 +278,14 @@ def test_detects_the_row_versions_of_a_generated_read() -> None:
             'SELECT CAST(t."id" AS TEXT) AS "id" FROM "part_part" t JOIN x ON x.id = t.id',
         ),
         _generated("postgresql", 'SELECT CAST(t."pk" + 1 AS TEXT) AS "id" FROM "p" t'),
+        # A read that also counts child rows: those rows have versions of
+        # their own, which this source doesn't count.
+        _generated(
+            "postgresql",
+            'SELECT CAST(t."id" AS TEXT) AS "id", CASE WHEN (SELECT COUNT(*) '
+            'FROM "part_tag" g WHERE g.part_id = t.id) = 1 THEN \'1\' ELSE '
+            '\'0\' END AS "p__tags" FROM "part_part" t',
+        ),
     ],
 )
 def test_no_row_versions_where_none_can_be_derived(doc: dict) -> None:
@@ -383,7 +421,15 @@ def test_judge_without_the_held_read_stops(
 ) -> None:
     """A judge in another process finds no held read: never a pass."""
 
-    monkeypatch.setattr(rv, "take", lambda token: None)
+    real_take = rv.take
+
+    def gone(token: str) -> None:
+        held = real_take(token)  # the other process never had it
+        if held is not None:
+            held.close()
+        return None
+
+    monkeypatch.setattr(rv, "take", gone)
     r = check(
         pg,
         rename_contract(pg),

@@ -337,7 +337,7 @@ def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     alone: on PostgreSQL, the target's own row versions
     (``frame.row_versions``). Found only when every write effect reads one
     surface, that surface's read is a plain ``SELECT ... FROM <table> t``
-    over the frame's own connection, and it selects the identity field
+    with no other ``FROM`` over the frame's own connection, and it selects the identity field
     straight from one column. Anything else: None (no excuse).
 
     A MySQL or MariaDB target has no such source: ``updated_at`` and
@@ -373,7 +373,10 @@ def detect_row_versions(data: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         return None  # another database: its rows aren't the frame's
     query = " ".join(str(source.get("sql_query") or "").split())
     main = _MAIN_FROM.search(query)
-    if main is None:
+    # One FROM: the declared record is one row, so the row's versions are
+    # the record's. A read that also looks into other tables (a list of
+    # tags, a child row) declares rows this source doesn't count.
+    if main is None or len(re.findall(r"\bFROM\b", query, re.IGNORECASE)) != 1:
         return None
     field = str(frame.get("identity_field") or "id")
     column = re.search(
