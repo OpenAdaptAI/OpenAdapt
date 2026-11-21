@@ -3640,6 +3640,11 @@ class Replayer:
             if decide_approval:
                 self._stamp_approval(report)
         report.save(run_dir)
+        # A pooled item's first report preceded its last system-of-record read.
+        # Only this settled save can be offered as its opted-in receipt.
+        from openadapt_flow.receipt_record import receipt_after_run
+
+        receipt_after_run(run_dir, require_opt_in=True, expected_report=report)
         return report
 
     def recheck_deferred_readback(
