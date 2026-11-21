@@ -1,0 +1,16 @@
+{"portal": "corvane", "case_id": "cv-s01", "outcome": "submitted", "correct": true}
+{"portal": "corvane", "case_id": "cv-s02", "outcome": "submitted", "correct": false}
+{"portal": "corvane", "case_id": "cv-s03", "outcome": "submitted", "correct": true}
+{"portal": "corvane", "case_id": "cv-s04", "outcome": "submitted", "correct": false}
+{"portal": "corvane", "case_id": "cv-s05", "outcome": "submitted", "correct": false}
+{"portal": "corvane", "case_id": "cv-s06", "outcome": "submitted", "correct": false}
+{"portal": "corvane", "case_id": "cv-s07", "outcome": "submitted", "correct": false}
+{"portal": "corvane", "case_id": "cv-s08", "outcome": "submitted", "correct": true}
+{"portal": "pellbrook", "case_id": "pb-s01", "outcome": "submitted", "correct": true}
+{"portal": "pellbrook", "case_id": "pb-s02", "outcome": "submitted", "correct": false}
+{"portal": "pellbrook", "case_id": "pb-s03", "outcome": "submitted", "correct": true}
+{"portal": "pellbrook", "case_id": "pb-s04", "outcome": "submitted", "correct": false}
+{"portal": "pellbrook", "case_id": "pb-s05", "outcome": "submitted", "correct": false}
+{"portal": "pellbrook", "case_id": "pb-s06", "outcome": "submitted", "correct": true}
+{"portal": "pellbrook", "case_id": "pb-s07", "outcome": "submitted", "correct": false}
+{"portal": "pellbrook", "case_id": "pb-s08", "outcome": "submitted", "correct": false}

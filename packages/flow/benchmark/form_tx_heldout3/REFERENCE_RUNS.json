@@ -1,0 +1,988 @@
+{
+ "environment": "Linux 6.18.54.1-microsoft-standard-WSL2; Python 3.12.16; Playwright 1.61.0; headless Chromium",
+ "summary": {
+  "reference_human": {
+   "scored_cases": 16,
+   "correct": 16,
+   "wrong": [],
+   "not_submitted": [],
+   "clean_cases": 6,
+   "clean_cases_correct": 6,
+   "dev_correct": 2,
+   "per_portal": {
+    "corvane": {
+     "scored_cases": 8,
+     "correct": 8
+    },
+    "pellbrook": {
+     "scored_cases": 8,
+     "correct": 8
+    }
+   }
+  },
+  "naive_filler": {
+   "scored_cases": 16,
+   "correct": 6,
+   "wrong": [
+    "cv-s02",
+    "cv-s04",
+    "cv-s05",
+    "cv-s06",
+    "cv-s07",
+    "pb-s02",
+    "pb-s04",
+    "pb-s05",
+    "pb-s07",
+    "pb-s08"
+   ],
+   "not_submitted": [],
+   "clean_cases": 6,
+   "clean_cases_correct": 6,
+   "dev_correct": 2,
+   "per_portal": {
+    "corvane": {
+     "scored_cases": 8,
+     "correct": 3
+    },
+    "pellbrook": {
+     "scored_cases": 8,
+     "correct": 3
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "portal": "corvane",
+   "case_id": "cv-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.0,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.0,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "estimator shown 358000, field 358,000",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "estimator shown 567000, field 525,280",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 3.8,
+   "events": [
+    "session expired at step 4",
+    "restart from step 1",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-dev",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 1.1,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s01",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s02",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s03",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s04",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "summary differs: ['total_horsepower']",
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s05",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s06",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [
+    "book value shown 20300, field 20,300",
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s07",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s08",
+   "filler": "reference",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "rule_trap"
+   ],
+   "operator_labels_not_seen": [],
+   "filler_name": "reference_human"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.9,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.0,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "co_applicant_name"
+   ],
+   "wrong_details": [
+    {
+     "field": "co_applicant_name",
+     "expected": "",
+     "stored": "Celia Aldecott"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "estimator shown 358000, field 358,000",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "dog_breeds",
+    "dog_bite_history"
+   ],
+   "wrong_details": [
+    {
+     "field": "dog_breeds",
+     "expected": "Labrador retriever, Border collie mix",
+     "stored": ""
+    },
+    {
+     "field": "dog_bite_history",
+     "expected": "No",
+     "stored": "Yes"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "mortgagee"
+   ],
+   "wrong_details": [
+    {
+     "field": "mortgagee",
+     "expected": "Brightwater Federal Credit Union ISAOA ATIMA, PO Box 2210, Tacoma WA 98401",
+     "stored": "Brightwater Federal Credit Union ISAOA ATIMA, PO Box 5520, Spokane WA 99205"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "typeahead_ambiguous"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 1.1,
+   "events": [
+    "estimator shown 567000, field 525,280",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "dwelling_limit"
+   ],
+   "wrong_details": [
+    {
+     "field": "dwelling_limit",
+     "expected": 567000,
+     "stored": 525280
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "estimator_wrong"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 3.2,
+   "events": [
+    "session expired at step 4",
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "square_feet",
+    "roof_year",
+    "occupancy"
+   ],
+   "wrong_details": [
+    {
+     "field": "square_feet",
+     "expected": 2120,
+     "stored": 1640
+    },
+    {
+     "field": "roof_year",
+     "expected": 2019,
+     "stored": 2003
+    },
+    {
+     "field": "occupancy",
+     "expected": "Owner-occupied secondary or seasonal home",
+     "stored": "Owner-occupied primary residence"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "session_timeout"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "corvane",
+   "case_id": "cv-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote CVH-Q027001"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-dev",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s01",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s02",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "layup_period"
+   ],
+   "wrong_details": [
+    {
+     "field": "layup_period",
+     "expected": "Nov 1 to Apr 1",
+     "stored": "Oct 15 to May 1"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s03",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "prefill_agree"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s04",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.3,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "total_horsepower"
+   ],
+   "wrong_details": [
+    {
+     "field": "total_horsepower",
+     "expected": 400,
+     "stored": 800
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "summary_differs"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s05",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.4,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "layup_period"
+   ],
+   "wrong_details": [
+    {
+     "field": "layup_period",
+     "expected": "Nov 1 to Apr 1",
+     "stored": "Oct 15 to May 1"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "recurring_rule"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s06",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "book value shown 20300, field 20,300",
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "submit_clean",
+   "record_correct": true,
+   "correct": true,
+   "wrong_fields": [],
+   "wrong_details": [],
+   "missing_fields": [],
+   "traps": [
+    "clean",
+    "estimator_ok"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s07",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.1,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "must_stop_before_submit",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "lienholder"
+   ],
+   "wrong_details": [
+    {
+     "field": "lienholder",
+     "expected": "",
+     "stored": "Nantucket Sound Marine Credit"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "prefill_conflict"
+   ],
+   "filler_name": "naive_filler"
+  },
+  {
+   "portal": "pellbrook",
+   "case_id": "pb-s08",
+   "filler": "naive",
+   "outcome": "submitted",
+   "seconds": 2.2,
+   "events": [
+    "quote PBM-41001-Q"
+   ],
+   "submitted": true,
+   "submit_count": 1,
+   "expected_behavior": "needs_operator_answer",
+   "record_correct": false,
+   "correct": false,
+   "wrong_fields": [
+    "layup_period"
+   ],
+   "wrong_details": [
+    {
+     "field": "layup_period",
+     "expected": "No lay-up (in commission year-round)",
+     "stored": "Oct 15 to May 1"
+    }
+   ],
+   "missing_fields": [],
+   "traps": [
+    "unknown_question",
+    "rule_trap"
+   ],
+   "filler_name": "naive_filler"
+  }
+ ]
+}

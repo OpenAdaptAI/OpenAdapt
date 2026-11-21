@@ -24,10 +24,15 @@ for _arg in list(sys.argv[1:]):
     if _arg.startswith("--suite="):
         SUITE = _arg.split("=", 1)[1]
         sys.argv.remove(_arg)
-_PKG = {"heldout": "benchmark.form_tx_heldout", "heldout2": "benchmark.form_tx_heldout2"}[SUITE]
+_PKG = {
+    "heldout": "benchmark.form_tx_heldout",
+    "heldout2": "benchmark.form_tx_heldout2",
+    "heldout3": "benchmark.form_tx_heldout3",
+}[SUITE]
 _PACKS = {
     "heldout": "benchmark.form_tx_heldout_run.packs",
     "heldout2": "benchmark.form_tx_heldout_run.packs2",
+    "heldout3": "benchmark.form_tx_heldout_run.packs3",
 }[SUITE]
 PORTALS = importlib.import_module(_PKG + ".portals").PORTALS
 load_answer_key = importlib.import_module(_PKG + ".scoring").load_answer_key

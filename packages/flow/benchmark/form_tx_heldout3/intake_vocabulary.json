@@ -1,0 +1,248 @@
+{
+  "corvane": {
+    "portal": "corvane",
+    "keys": {
+      "first_name": {
+        "type": "str"
+      },
+      "last_name": {
+        "type": "str"
+      },
+      "date_of_birth": {
+        "type": "date"
+      },
+      "email": {
+        "type": "str"
+      },
+      "phone": {
+        "type": "phone"
+      },
+      "marital_status": {
+        "type": "enum",
+        "values": [
+          "Married",
+          "Single",
+          "Divorced",
+          "Widowed"
+        ]
+      },
+      "spouse_name": {
+        "type": "str"
+      },
+      "co_applicant_name": {
+        "type": "str"
+      },
+      "property_street": {
+        "type": "str"
+      },
+      "property_city": {
+        "type": "str"
+      },
+      "property_state": {
+        "type": "enum",
+        "values": [
+          "ID",
+          "MN",
+          "NC",
+          "OH",
+          "OR",
+          "VT",
+          "WA"
+        ]
+      },
+      "property_zip": {
+        "type": "str"
+      },
+      "year_built": {
+        "type": "int"
+      },
+      "square_feet": {
+        "type": "int"
+      },
+      "construction": {
+        "type": "enum",
+        "values": [
+          "Frame",
+          "Masonry veneer",
+          "Masonry"
+        ]
+      },
+      "roof_material": {
+        "type": "enum",
+        "values": [
+          "Asphalt shingle",
+          "Metal",
+          "Wood shake",
+          "Tile",
+          "Slate"
+        ]
+      },
+      "roof_year": {
+        "type": "int"
+      },
+      "occupancy": {
+        "type": "enum",
+        "values": [
+          "Owner-occupied primary residence",
+          "Owner-occupied secondary or seasonal home"
+        ]
+      },
+      "dogs_on_premises": {
+        "type": "bool"
+      },
+      "dog_breeds": {
+        "type": "str"
+      },
+      "dog_bite_history": {
+        "type": "enum",
+        "values": [
+          "Yes",
+          "No"
+        ]
+      },
+      "lender_name": {
+        "type": "str"
+      },
+      "lender_clause_address": {
+        "type": "str"
+      },
+      "loan_number": {
+        "type": "str"
+      },
+      "dwelling_limit": {
+        "type": "money"
+      },
+      "dwelling_limit_basis": {
+        "type": "enum",
+        "values": [
+          "Estimated replacement cost"
+        ]
+      },
+      "personal_liability": {
+        "type": "money"
+      },
+      "deductible": {
+        "type": "money"
+      },
+      "effective_date": {
+        "type": "date"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "pellbrook": {
+    "portal": "pellbrook",
+    "keys": {
+      "first_name": {
+        "type": "str"
+      },
+      "last_name": {
+        "type": "str"
+      },
+      "date_of_birth": {
+        "type": "date"
+      },
+      "email": {
+        "type": "str"
+      },
+      "garaging_zip": {
+        "type": "str"
+      },
+      "boat_year": {
+        "type": "int"
+      },
+      "boat_make": {
+        "type": "str"
+      },
+      "boat_model": {
+        "type": "str"
+      },
+      "length_ft": {
+        "type": "int"
+      },
+      "engine_type": {
+        "type": "enum",
+        "values": [
+          "Outboard",
+          "Inboard",
+          "Sterndrive (inboard/outboard)",
+          "Jet drive"
+        ]
+      },
+      "engine_count": {
+        "type": "enum",
+        "values": [
+          "Single",
+          "Twin",
+          "Triple"
+        ]
+      },
+      "total_horsepower": {
+        "type": "int"
+      },
+      "agreed_hull_value": {
+        "type": "money"
+      },
+      "hull_value_basis": {
+        "type": "enum",
+        "values": [
+          "Book value (average retail)"
+        ]
+      },
+      "storage": {
+        "type": "enum",
+        "values": [
+          "On a trailer at my home",
+          "Dry stack or rack storage",
+          "Wet slip at a marina",
+          "On a mooring"
+        ]
+      },
+      "layup_period": {
+        "type": "enum",
+        "values": [
+          "Oct 15 to May 1",
+          "Nov 1 to Apr 1",
+          "Dec 1 to Mar 31",
+          "No lay-up (in commission year-round)"
+        ]
+      },
+      "navigation_area": {
+        "type": "enum",
+        "values": [
+          "Inland lakes and rivers",
+          "Coastal waters within 25 miles of shore",
+          "Coastal waters up to 75 miles offshore"
+        ]
+      },
+      "safety_course": {
+        "type": "bool"
+      },
+      "losses_3yr": {
+        "type": "int"
+      },
+      "financing": {
+        "type": "enum",
+        "values": [
+          "Financed",
+          "Paid in full"
+        ]
+      },
+      "lienholder": {
+        "type": "str"
+      },
+      "liability_limit": {
+        "type": "money"
+      },
+      "deductible": {
+        "type": "money"
+      },
+      "effective_date": {
+        "type": "date"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  }
+}

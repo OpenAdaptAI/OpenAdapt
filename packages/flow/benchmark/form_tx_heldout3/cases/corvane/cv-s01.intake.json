@@ -1,0 +1,30 @@
+{
+  "case_id": "cv-s01",
+  "facts": {
+    "first_name": "Ingrid",
+    "last_name": "Vasquez-Holm",
+    "date_of_birth": "1975-09-03",
+    "email": "ingrid.vh@example.test",
+    "phone": "802-555-0177",
+    "marital_status": "Married",
+    "spouse_name": "Tobias Holm",
+    "property_street": "61 Quaking Aspen Rd",
+    "property_city": "Essex",
+    "property_state": "VT",
+    "property_zip": "05452",
+    "year_built": 1972,
+    "square_feet": 2240,
+    "construction": "Masonry veneer",
+    "roof_material": "Metal",
+    "roof_year": 2018,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Marrowfield Savings Bank",
+    "lender_clause_address": "PO Box 3344, Burlington VT 05401",
+    "loan_number": "MSB-0071-3329",
+    "dwelling_limit": 468000,
+    "personal_liability": 500000,
+    "deductible": 2500,
+    "effective_date": "2027-03-15"
+  }
+}

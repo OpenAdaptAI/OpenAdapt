@@ -1,0 +1,29 @@
+{
+  "case_id": "cv-s03",
+  "facts": {
+    "first_name": "Desmond",
+    "last_name": "Achterberg",
+    "date_of_birth": "1987-06-30",
+    "email": "d.achterberg@example.test",
+    "phone": "218-555-0164",
+    "marital_status": "Single",
+    "property_street": "908 Norrland Ave",
+    "property_city": "Duluth",
+    "property_state": "MN",
+    "property_zip": "55803",
+    "year_built": 1954,
+    "square_feet": 1580,
+    "construction": "Masonry",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2015,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Lindqvist Community Bank",
+    "lender_clause_address": "PO Box 912, Duluth MN 55801",
+    "loan_number": "LCB-20-77314",
+    "dwelling_limit_basis": "Estimated replacement cost",
+    "personal_liability": 300000,
+    "deductible": 2500,
+    "effective_date": "2027-04-01"
+  }
+}

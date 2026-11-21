@@ -1,0 +1,26 @@
+{
+  "case_id": "pb-dev",
+  "facts": {
+    "first_name": "Harlan",
+    "last_name": "Quist",
+    "date_of_birth": "1977-08-14",
+    "email": "harlan.quist@example.test",
+    "garaging_zip": "54806",
+    "boat_year": 2019,
+    "boat_make": "Tidelark Boats",
+    "boat_model": "Shoalrunner 18",
+    "length_ft": 18,
+    "engine_type": "Outboard",
+    "engine_count": "Single",
+    "total_horsepower": 115,
+    "agreed_hull_value": 26500,
+    "storage": "On a trailer at my home",
+    "navigation_area": "Inland lakes and rivers",
+    "safety_course": true,
+    "losses_3yr": 0,
+    "financing": "Paid in full",
+    "liability_limit": 300000,
+    "deductible": 500,
+    "effective_date": "2027-05-01"
+  }
+}

@@ -344,7 +344,16 @@ def test_expiry_redirect_is_a_sign_in_wall_and_sign_in_resumes(
     assert portal.records == []
 
     _sign_in(page)
-    done = _resolve(reconciler, session, halt, HumanDecisionAction.FIXED_ON_SCREEN)
+    resumed = _resolve(reconciler, session, halt, HumanDecisionAction.FIXED_ON_SCREEN)
+    # The sign-in came after fields were entered on step 1, and this pack
+    # gives no way back to step 1, so the layer stops before submit and
+    # names them; the operator checks them and the run goes on.
+    assert resumed.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN, resumed.what_happened
+    (recheck,) = resumed.halts
+    assert recheck.kind == FormHaltKind.FIELDS_NOT_RECHECKED
+    assert set(recheck.portal_value) == {"First name", "Does the home have a pool?"}
+    assert portal.records == []
+    done = _resolve(reconciler, session, recheck, HumanDecisionAction.FIXED_ON_SCREEN)
     assert done.outcome == FormTxOutcome.VERIFIED_DONE, done.what_happened
     assert portal.records == [{"first_name": "Avery", "pool": "no"}]
     statuses = {v.dossier_key: v.status for v in done.summary_verdict.field_verdicts}

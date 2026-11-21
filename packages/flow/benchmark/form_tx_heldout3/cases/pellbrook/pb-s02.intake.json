@@ -1,0 +1,26 @@
+{
+  "case_id": "pb-s02",
+  "facts": {
+    "first_name": "Bertil",
+    "last_name": "Szymanowski",
+    "date_of_birth": "1962-05-06",
+    "email": "bertil.sz@example.test",
+    "garaging_zip": "49770",
+    "boat_year": 2016,
+    "boat_make": "Halvorsen Craft",
+    "boat_model": "Northlight 26 Cruiser",
+    "length_ft": 26,
+    "engine_type": "Sterndrive (inboard/outboard)",
+    "engine_count": "Single",
+    "total_horsepower": 300,
+    "agreed_hull_value": 61000,
+    "storage": "Wet slip at a marina",
+    "navigation_area": "Inland lakes and rivers",
+    "safety_course": false,
+    "losses_3yr": 0,
+    "financing": "Paid in full",
+    "liability_limit": 500000,
+    "deductible": 1000,
+    "effective_date": "2027-05-15"
+  }
+}

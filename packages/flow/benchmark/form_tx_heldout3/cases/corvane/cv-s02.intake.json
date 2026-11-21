@@ -1,0 +1,29 @@
+{
+  "case_id": "cv-s02",
+  "facts": {
+    "first_name": "Rowan",
+    "last_name": "Aldecott",
+    "date_of_birth": "1969-12-22",
+    "email": "rowan.aldecott@example.test",
+    "phone": "614-555-0119",
+    "marital_status": "Divorced",
+    "property_street": "4407 Harrowfield Ct",
+    "property_city": "Kettering",
+    "property_state": "OH",
+    "property_zip": "45429",
+    "year_built": 1988,
+    "square_feet": 1720,
+    "construction": "Frame",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2020,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Quarrystone Home Lending",
+    "lender_clause_address": "PO Box 81130, Dayton OH 45401",
+    "loan_number": "QHL-5530981",
+    "dwelling_limit": 338000,
+    "personal_liability": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-01-20"
+  }
+}

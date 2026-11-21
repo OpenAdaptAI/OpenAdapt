@@ -1,0 +1,30 @@
+{
+  "case_id": "cv-s07",
+  "facts": {
+    "first_name": "Cormac",
+    "last_name": "Brennagh",
+    "date_of_birth": "1958-03-27",
+    "email": "cormac.brennagh@example.test",
+    "phone": "541-555-0150",
+    "marital_status": "Married",
+    "spouse_name": "Ilse Brennagh",
+    "property_street": "88 Obsidian Ridge Dr",
+    "property_city": "Sisters",
+    "property_state": "OR",
+    "property_zip": "97759",
+    "year_built": 1994,
+    "square_feet": 2120,
+    "construction": "Frame",
+    "roof_material": "Metal",
+    "roof_year": 2019,
+    "occupancy": "Owner-occupied secondary or seasonal home",
+    "dogs_on_premises": false,
+    "lender_name": "Penhallow Bank of Oregon",
+    "lender_clause_address": "PO Box 1180, Bend OR 97701",
+    "loan_number": "PB-90331876",
+    "dwelling_limit": 425000,
+    "personal_liability": 300000,
+    "deductible": 2500,
+    "effective_date": "2027-06-01"
+  }
+}
