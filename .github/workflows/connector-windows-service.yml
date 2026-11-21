@@ -84,12 +84,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:CONNECTOR_DIR | Out-Null
           $storage = Join-Path $env:RUNNER_TEMP 'byoc-storage'
           New-Item -ItemType Directory -Force -Path $storage | Out-Null
+          $profilePath = Join-Path $env:CONNECTOR_DIR 'deployment.yaml'
+          [IO.File]::WriteAllText($profilePath, "runtime: {profile: standard}`n")
           $toml = @(
             '[connector]',
             "control_plane_url = `"http://127.0.0.1:$env:STUB_PORT`"",
             "token = `"$env:CI_CONNECTOR_TOKEN`"",
             'org_id = "org_stub"',
             'poll_wait_s = 2',
+            "profile = '$profilePath'",
             'storage_backend = "local"',
             "storage_root = '$storage'"
           ) -join "`n"
