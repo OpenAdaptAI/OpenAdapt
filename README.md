@@ -169,7 +169,12 @@ sandbox workflow that returns every outcome. To serve your own workflows, run
 `--mode production` the agent can list them but not run them.
 `openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
 and `openadapt verify effect` judges a write made by any agent or script
-against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
+against the system of record. `openadapt hooks install --agent claude-code`
+(or `codex`) checks a coding agent's writes to the databases, APIs and MCP
+servers you declare: each is pre-checked, read back and given a signed
+receipt. The hooks are advisory; see
+[HOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HOOKS.md).
+[Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
 
 ### Record a task by hand
