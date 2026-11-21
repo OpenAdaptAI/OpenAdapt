@@ -70,7 +70,6 @@ from typing import (  # noqa: F401
 from urllib.parse import urlsplit
 
 from openadapt_flow import sealed_set as _sealed
-from openadapt_flow import second_factor as _second_factor
 from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
@@ -265,11 +264,13 @@ from openadapt_flow.runtime.secret_frames import persisted_run_frame
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.runtime.typed_echo import read_typed_echo
+from openadapt_flow.second_factor import runtime_value as _one_time_value
 from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
     SECRET_ENV_PREFIX,
     require_secret_sources,
     secret_env_var,
     secret_env_vars,
+    step_secret_text,
 )
 from openadapt_flow.verification import (
     EffectContractMutationError,
@@ -13353,29 +13354,16 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
             return None
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            if step.secret and step.one_time == "code":  # asked of a person now
-                text, refusal = _second_factor.runtime_value(step, result)
+            if step.secret:  # never in the bundle/params (secret_inputs.py)
+                text, refusal = (
+                    _one_time_value(step, result)
+                    if step.one_time == "code"  # asked of a person now
+                    else step_secret_text(
+                        step, getattr(self, "secret_env_overrides", {})
+                    )
+                )
                 if refusal is not None:
                     return refusal
-            elif step.secret:
-                # Secret value is never in the bundle/params: inject it from
-                # the environment, failing fast with an actionable message.
-                env_var = getattr(self, "secret_env_overrides", {}).get(
-                    step.param or ""
-                ) or secret_env_var(step.param or "")
-                text = os.environ.get(env_var, "")
-                if not step.param:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) is marked secret "
-                        "but names no parameter"
-                    )
-                if not text:
-                    return (
-                        f"Step '{step.id}' ({step.intent}) requires secret "
-                        f"parameter '{step.param}', but the environment "
-                        f"variable {env_var} is not set — export it with the "
-                        "secret value and re-run"
-                    )
             elif step.param is not None:
                 if step.param not in params:
                     return (
@@ -13810,7 +13798,7 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
 
         if step.action is ActionKind.WAIT:
             if step.one_time == "approval":  # a person approves on their device
-                return _second_factor.runtime_value(step, result)[1]
+                return _one_time_value(step, result)[1]
             # WAIT means wait_settled only; the post-action settle handles it.
             return None
 
