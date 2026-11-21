@@ -26,6 +26,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 from openadapt_flow.form_tx.types import (
+    FieldWriteRecord,
+    FormCodecKind,
     FormPack,
     FormTxOutcome,
     FormTxReceiptPayload,
@@ -150,6 +152,7 @@ def issue_form_tx_receipt(
     receipt_id: Optional[str] = None,
     salt_hex: Optional[str] = None,
     timestamp_utc: Optional[str] = None,
+    writes: Optional[Sequence[FieldWriteRecord]] = None,
 ) -> SignedFormTxReceipt:
     """Issue a value-scrubbed, Ed25519-signed ``SignedFormTxReceipt``."""
     priv_key = _coerce_private_key(signing_key)
@@ -261,6 +264,27 @@ def issue_form_tx_receipt(
             raise ValueError(
                 "Verified receipt requires every bound field with a value "
                 f"to pass read-back; missing: {missing}"
+            )
+        # Coverage of the individual subjects (every written, kept or
+        # accepted control, popup inputs included), not just top-level keys.
+        if writes is None:
+            raise ValueError(
+                "Verified receipt requires the run's writes to check coverage"
+            )
+        from openadapt_flow.form_tx.judge import (
+            read_subjects,
+            uncovered_subject_verdicts,
+        )
+
+        uncovered = uncovered_subject_verdicts(
+            read_subjects(writes, human_resolutions),
+            summary_verdict.field_verdicts,
+            lambda _k: FormCodecKind.WHITESPACE_COLLAPSE,
+        )
+        if uncovered:
+            raise ValueError(
+                "Verified receipt requires a verdict for every control the run "
+                f"wrote, kept or accepted; uncovered: {[v.dossier_key for v in uncovered]}"
             )
 
     hr_digests = tuple(salted_sha256(rec, actual_salt) for rec in human_resolutions)
