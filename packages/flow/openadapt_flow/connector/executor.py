@@ -63,6 +63,7 @@ from openadapt_flow.runtime.durable.authority import (
     REMOTE_AUTHORITY_URL_ENV,
     REMOTE_DISPATCH_SESSION_ID_ENV,
 )
+from openadapt_flow.wire_check import mask_secrets
 
 #: A run-gate refusal (fail-closed admission denied) exits 2 before the replay
 #: creates report.json.
@@ -75,6 +76,7 @@ class RunOutcome:
 
     returncode: int
     report: dict[str, Any] = field(default_factory=dict)
+    output: str = field(default="", repr=False)
 
 
 #: A runner maps argv -> RunOutcome. The default shells the governed ``run`` CLI
@@ -91,12 +93,14 @@ class ExecutionResult:
     halt: Optional[dict[str, Any]]
     report_ref: Optional[str]
     #: Local, operator-facing detail. NEVER sent: it can name paths or values.
-    error: Optional[str] = None
+    error: Optional[str] = field(default=None, repr=False)
     verified_bundle_sha256: Optional[str] = None
     failure_signal: Optional[dict[str, Any]] = None
     outcome: Optional[dict[str, Any]] = None
     #: Closed code that may leave the machine (ack ``error_code``).
     error_code: Optional[str] = None
+    child_output: str = field(default="", repr=False)
+    local_diagnostics_unavailable: bool = False
 
 
 # --- Wrap programs: admission and independent read-back -----------------------
@@ -268,12 +272,14 @@ class _ChildNotStarted(RuntimeError):
 def _subprocess_runner(
     argv: list[str], run_dir: Path, child_env: Mapping[str, str]
 ) -> RunOutcome:
+    from openadapt_flow.connector.diagnostics import child_output
+
     job_id = getattr(_CURRENT, "job_id", None)
     try:
         proc = subprocess.Popen(  # nosec - fixed argv and exact process-local env
             argv,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             env=dict(child_env),
         )
     except OSError as exc:
@@ -285,8 +291,9 @@ def _subprocess_runner(
         if cancelled:
             proc.terminate()
     try:
-        proc.wait()
+        output = child_output(proc)
     finally:
+        proc.wait()
         if job_id:
             with _CHILDREN.lock:
                 _CHILDREN.procs.pop(job_id, None)
@@ -294,10 +301,12 @@ def _subprocess_runner(
     report: dict[str, Any] = {}
     if report_path.is_file():
         try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
+            document = json.loads(report_path.read_text(encoding="utf-8"))
+            if isinstance(document, dict):
+                report = document
         except (OSError, ValueError):
             report = {}
-    return RunOutcome(returncode=proc.returncode, report=report)
+    return RunOutcome(returncode=proc.returncode, report=report, output=output)
 
 
 def status_from_report(returncode: int, report: dict[str, Any]) -> str:
@@ -577,17 +586,57 @@ def execute_job(
     ``error_code`` (which may leave the machine) and a local ``error`` detail
     (which never does).
     """
+    from openadapt_flow.crypto import ENV_KEY
+
+    known_secrets = [
+        value
+        for value in (
+            job.run_token,
+            settings.token,
+            settings.pending_token,
+            os.environ.get(ENV_KEY),
+        )
+        if value
+    ]
+
+    def remember_secrets(values: list[str]) -> None:
+        known_secrets.extend(values)
+        if on_secrets is not None:
+            on_secrets(values)
+
     _CURRENT.job_id = job.lease_job_id
     try:
-        return _execute_job(
+        result = _execute_job(
             job,
             settings,
             storage,
             runner=runner,
             require_run_token=require_run_token,
-            on_secrets=on_secrets,
+            on_secrets=remember_secrets,
             on_child_start=on_child_start,
         )
+        if result.error or (result.status != "success" and result.child_output):
+            sink = getattr(storage, "write_diagnostics", None)
+            if callable(sink):
+                try:
+                    sink(
+                        job.report_ref(),
+                        {
+                            "run_id": job.run_id,
+                            "error_code": result.error_code,
+                            "detail": mask_secrets(result.error, known_secrets)
+                            if result.error
+                            else None,
+                            "child_output": mask_secrets(
+                                result.child_output, known_secrets
+                            ),
+                        },
+                    )
+                except Exception:
+                    # Losing an optional local diagnostic cannot change the run outcome.
+                    result.local_diagnostics_unavailable = True
+        result.child_output = ""
+        return result
     finally:
         _CURRENT.job_id = None
 
@@ -876,6 +925,20 @@ def _execute_job(
             status = "failed"
             error_code = "cancelled_by_control_plane"
             outcome_error = "cancelled by the control plane while running"
+        elif not report or report_target_kind is None:
+            # Exit status alone cannot establish what happened to the record.
+            status = "halt"
+            error_code = (
+                "child_no_report" if not report else "child_report_missing_target"
+            )
+            outcome_error = (
+                f"governed child exited with code {outcome.returncode} and "
+                + (
+                    "no readable report"
+                    if not report
+                    else "no execution_target_kind in its report"
+                )
+            )
         elif report_target_kind != job.target_kind:
             status = "failed"
             error_code = "target_kind_mismatch"
@@ -922,14 +985,18 @@ def _execute_job(
                 )
 
         # 4. The PHI-bearing report body goes to the CUSTOMER'S store, never ours.
-        report_ref: Optional[str] = job.report_ref()
+        # An absent or unreadable report has no bytes to bind in a Receipt.
+        report_ref: Optional[str] = job.report_ref() if report else None
         halt = halt_object(report)
+        if status == "halt" and halt is None:
+            halt = {"present": True}
         outcome_envelope = precise_outcome_from_report(report)
         if error_code is not None and outcome_envelope is not None:
             # A cancelled or mismatched run never reports a success envelope.
             outcome_envelope = None
         try:
-            storage.write_report(report_ref, report)
+            if report_ref is not None:
+                storage.write_report(report_ref, report)
         except Exception as exc:
             # A storage fault says nothing about what the child did, so it
             # never becomes a runner failure: a run that actuated would show
@@ -967,4 +1034,5 @@ def _execute_job(
             failure_signal=automation_failure_signal(report, status, job.target_kind),
             outcome=outcome_envelope,
             error_code=error_code,
+            child_output=outcome.output,
         )

@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import httpx
@@ -815,6 +816,160 @@ def test_local_storage_refuses_unpacked_directory_bundle(tmp_path):
     storage = LocalCustomerStorage(str(tmp_path))
     with pytest.raises(RuntimeError, match="exact approved ZIP"):
         storage.fetch_bundle_archive("bundles/wf", tmp_path / "scratch.zip")
+
+
+@pytest.mark.parametrize(
+    "phase", ["before_child", "no_report", "missing_target", "wrong_target"]
+)
+def test_local_diagnostic_keeps_child_output_and_refusal_off_the_wire(
+    tmp_path, monkeypatch, capsys, phase
+):
+    from openadapt_flow import at_rest, crypto
+    from openadapt_flow.connector.diagnostics import MAX_OUTPUT, read_diagnostics
+    from openadapt_flow.connector.executor import _subprocess_runner
+
+    marker = "synthetic-private-diagnostic-value"
+    monkeypatch.setenv(crypto.ENV_KEY, "synthetic-local-encryption")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    payload = _payload()
+    if phase == "before_child":
+        payload["safety"] = {}
+    cp = StubControlPlane()
+    cp.enqueue("org_demo", payload)
+    audit = tmp_path / "egress.jsonl"
+    client = ConnectorClient(
+        "https://app.test",
+        transport=httpx.MockTransport(cp.handler),
+        egress_audit_log=str(audit),
+    )
+    client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
+    root = tmp_path / "customer"
+    bundle = root / payload["storage"]["bundle_ref"]
+    bundle.parent.mkdir(parents=True)
+    bundle.write_bytes(_BUNDLE_BYTES)
+    report = root / payload["storage"]["report_ref"]
+    fake_report = {
+        "missing_target": {"success": True},
+        "wrong_target": {"execution_target_kind": "citrix"},
+    }.get(phase)
+
+    def runner(argv, run_dir, env):
+        assert phase != "before_child"
+        program = (
+            "import pathlib, sys\n"
+            f"print('old-prefix' + 'x' * {MAX_OUTPUT + 5000}, flush=True)\n"
+            f"print({payload['run_token']!r}, flush=True)\n"
+            f"print('gate detail: {marker}', flush=True)\n"
+            f"print('run REFUSED: {marker}', file=sys.stderr, flush=True)\n"
+        )
+        if fake_report is not None:
+            program += (
+                f"pathlib.Path(sys.argv[1]).write_text({json.dumps(fake_report)!r})\n"
+            )
+        return _subprocess_runner(
+            [sys.executable, "-c", program, str(run_dir / "report.json")], run_dir, env
+        )
+
+    result = run_once(client, _settings(storage_root=str(root)), runner=runner)
+    expected = {
+        "before_child": "governance_refused",
+        "no_report": "child_no_report",
+        "missing_target": "child_report_missing_target",
+        "wrong_target": "target_kind_mismatch",
+    }
+    assert result["error_code"] == expected[phase]
+    assert result["callback_accepted"]
+    assert result["status"] == (
+        "halt" if phase in {"no_report", "missing_target"} else "failed"
+    )
+    sidecar = report.with_name(report.name + ".connector-diagnostics")
+    if phase == "no_report":
+        assert not report.exists()
+        callback = cp.callbacks[0]["body"]
+        assert callback["report_path"] is None
+        assert "report_sha256" not in callback["metrics"]
+    assert marker.encode() not in sidecar.read_bytes()
+    assert crypto.is_encrypted(sidecar.read_bytes())
+    if os.name == "posix":
+        assert stat.S_IMODE(sidecar.stat().st_mode) == 0o600
+    diagnostic = read_diagnostics(sidecar)
+    assert diagnostic["run_id"] == payload["run_id"]
+    assert diagnostic["error_code"] == expected[phase]
+    assert diagnostic["detail"]
+    if phase == "before_child":
+        assert "policy" in diagnostic["detail"]
+        assert diagnostic["child_output"] == ""
+    else:
+        assert diagnostic["child_output"].splitlines()[-2:] == [
+            f"gate detail: {marker}",
+            f"run REFUSED: {marker}",
+        ]
+        assert "old-prefix" not in diagnostic["child_output"]
+        assert payload["run_token"] not in diagnostic["child_output"]
+        assert len(diagnostic["child_output"]) <= MAX_OUTPUT
+    captured = capsys.readouterr()
+    shared = (
+        captured.out
+        + captured.err
+        + str(result)
+        + str(cp.callbacks)
+        + str(cp.acks)
+        + audit.read_text()
+    )
+    assert marker not in shared and diagnostic["detail"] not in shared
+
+
+def test_private_diagnostic_plaintext_requires_recorded_optout(tmp_path, monkeypatch):
+    from openadapt_flow import at_rest, crypto
+    from openadapt_flow.connector.diagnostics import read_diagnostics, write_diagnostics
+
+    monkeypatch.delenv(crypto.ENV_KEY, raising=False)
+    monkeypatch.delenv(at_rest.MODE_ENV, raising=False)
+    monkeypatch.setenv(at_rest.HOME_ENV, str(tmp_path / "state"))
+    monkeypatch.setenv(at_rest.LEDGER_DIR_ENV, str(tmp_path / "ledger"))
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "synthetic diagnostics fixture")
+    at_rest._reset_for_tests()
+    sidecar = tmp_path / "report.json.connector-diagnostics"
+    content = {"detail": "synthetic refusal detail"}
+    write_diagnostics(sidecar, content)
+    assert not crypto.is_encrypted(sidecar.read_bytes())
+    assert read_diagnostics(sidecar) == content
+    assert "connector diagnostics" in at_rest.ledger_path().read_text()
+    if os.name == "posix":
+        sidecar.chmod(0o644)
+        with pytest.raises(ValueError, match="owner-only"):
+            read_diagnostics(sidecar)
+
+
+def test_unavailable_private_diagnostic_preserves_authoritative_result(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.connector.diagnostics import write_diagnostics
+
+    path = tmp_path / "report.json.connector-diagnostics"
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", "synthetic-key")
+
+    def refuse_descriptor(fd):
+        raise PermissionError("synthetic private path detail")
+
+    monkeypatch.setattr(
+        "openadapt_flow.connector.diagnostics._check_private", refuse_descriptor
+    )
+    with pytest.raises(PermissionError):
+        write_diagnostics(path, {"detail": "private"})
+    assert not list(tmp_path.iterdir())
+
+    cp = StubControlPlane()
+    cp.enqueue("org_demo", _payload(safety={}))
+    client = ConnectorClient(
+        "https://app.test", transport=httpx.MockTransport(cp.handler)
+    )
+    client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
+    result = run_once(client, _settings(storage_root=str(tmp_path)), runner=pytest.fail)
+    assert result["callback_accepted"] and result["status"] == "failed"
+    assert result["error_code"] == "governance_refused"
+    assert result["local_diagnostics_unavailable"] is True
+    assert "local_diagnostics_unavailable" not in str(cp.callbacks)
 
 
 def test_local_storage_copies_exact_archive_bytes(tmp_path):

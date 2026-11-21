@@ -51,9 +51,9 @@ jobs:
           --lock 'packages/flow[connector-windows]'
           --editable packages/types --editable packages/flow
 
-      - name: Unit tests (service wrapper)
+      - name: Unit tests (service wrapper and child output)
         working-directory: packages/flow
-        run: python -m pytest tests/test_connector_windows_service.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_connector_windows_service.py tests/test_connector_diagnostic_process.py -q -p no:cacheprovider
 
       - name: Start the stub control plane on 127.0.0.1
         run: |
