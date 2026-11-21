@@ -70,8 +70,9 @@ class FakeCloud:
         if path == seal_claim.CLAIM_PATH:
             request = json.loads(body)
             ids = request["seal_ids"]
-            if any(i not in self.seals for i in ids):
-                return reply(404, {"error": "not_found"})
+            missing = [i for i in ids if i not in self.seals]
+            if missing:
+                return reply(404, {"error": "not_found", "missing": missing})
             keys = {self.seals[i][0] for i in ids}
             if len(keys) != 1:
                 return reply(403, {"error": "bad_proof"})
@@ -247,6 +248,13 @@ def test_after_login_claims_and_never_raises(tmp_path, monkeypatch):
     lines: list[str] = []
     seal_claim.after_login(transport=cloud, say=lines.append)
     assert lines == [f"Your published run is in your workspace: {ORIGIN}/dashboard"]
+    # The next login has nothing new to claim and says nothing.
+    calls = len(cloud.calls)
+    seal_claim.after_login(transport=cloud, say=lines.append)
+    assert len(lines) == 1
+    assert [url for _, url, _ in cloud.calls[calls:]] == [
+        ORIGIN + seal_claim.STATUS_PATH
+    ]
 
     def boom(*_a, **_k):
         raise RuntimeError("keychain locked")
@@ -301,3 +309,37 @@ def test_the_login_hook_runs_only_after_a_successful_login(monkeypatch):
     monkeypatch.setattr("openadapt_flow.__main__.main", lambda argv: 0)
     assert cli._invoke_flow(["login", "--host=https://x.test"]) == 0
     assert calls == ["https://x.test"]
+
+
+def test_seals_taken_down_are_dropped_and_the_rest_claimed(tmp_path):
+    signer = Signer()
+    _published(tmp_path, signer, 1)  # taken down: Cloud no longer has it
+    b = _published(tmp_path, signer, 2)
+    cloud = FakeCloud()
+    cloud.store(b.id, signer, b.seal_sha256)
+    lines: list[str] = []
+    home = tmp_path / "seal-home"
+    code = seal_claim.claim_published(
+        ORIGIN, TOKEN, transport=cloud, signer=signer, home=home, say=lines.append
+    )
+    assert code == 0
+    assert set(cloud.claims) == {b.id}
+    assert lines == [
+        "Skipped 1 Seal that is no longer online.",
+        f"Your published run is in your workspace: {ORIGIN}/dashboard",
+    ]
+    assert [e["id"] for e in seal_claim.read_index(home)] == [b.id]
+
+
+def test_unpublish_forgets_the_seal(tmp_path):
+    signer = Signer()
+    a = _published(tmp_path, signer, 1)
+    run = tmp_path / "run-1"
+    (run / seal_publish.PUBLISH_FILE).write_text(
+        json.dumps(
+            {"id": a.id, "url": f"{ORIGIN}/seal#{a.id}", "delete_token": "t" * 43}
+        )
+    )
+    deleted = lambda *_a: Response(204, {}, b"")  # noqa: E731
+    seal_publish.unpublish(run, origin=ORIGIN, transport=deleted)
+    assert seal_claim.read_index(tmp_path / "seal-home") == []

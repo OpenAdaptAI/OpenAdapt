@@ -53,6 +53,14 @@ MAX_PER_CLAIM = 8
 _SHA256 = len(hashlib.sha256().hexdigest())
 
 
+class SealsGone(PublishError):
+    """Cloud no longer has these Seals (taken down, or never there)."""
+
+    def __init__(self, seal_ids: list[str]) -> None:
+        super().__init__("Not claimed: a Seal is no longer online.")
+        self.seal_ids = seal_ids
+
+
 @dataclass(frozen=True)
 class Claimable:
     id: str
@@ -108,6 +116,18 @@ def read_index(home: Optional[Path] = None) -> list[dict[str, Any]]:
     )
 
 
+def _write_index(folder: Path, entries: list[dict[str, Any]]) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / INDEX_FILE
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"seals": entries}, indent=2, sort_keys=True) + "\n")
+    os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
+    os.replace(tmp, path)
+    return path
+
+
 def remember(
     run_dir: Path,
     record: Mapping[str, Any],
@@ -129,19 +149,35 @@ def remember(
         }
         entries = [e for e in read_index(folder) if e.get("id") != entry["id"]]
         entries.append(entry)
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / INDEX_FILE
-        tmp = path.with_name(path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps({"seals": entries}, indent=2, sort_keys=True) + "\n"
-            )
-        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
-        os.replace(tmp, path)
-        return path
+        return _write_index(folder, entries)
     except Exception:  # noqa: BLE001 - see docstring
         return None
+
+
+def mark_claimed(seal_ids: list[str], *, home: Optional[Path] = None) -> None:
+    """Note that Cloud holds these Seals for a workspace, so the next login
+    does not claim them again. Never raises."""
+    try:
+        folder = _home(home)
+        entries = read_index(folder)
+        for entry in entries:
+            if entry.get("id") in set(seal_ids):
+                entry["claimed"] = True
+        _write_index(folder, entries)
+    except Exception:  # noqa: BLE001 - the note is a convenience
+        return
+
+
+def forget(seal_ids: list[str], *, home: Optional[Path] = None) -> None:
+    """Drop Seals that were taken down (or are gone) from the note. Never raises."""
+    try:
+        folder = _home(home)
+        entries = read_index(folder)
+        kept = [e for e in entries if e.get("id") not in set(seal_ids)]
+        if len(kept) != len(entries):
+            _write_index(folder, kept)
+    except Exception:  # noqa: BLE001 - the note is a convenience
+        return
 
 
 def _from_run_dir(run_dir: Path) -> Optional[Claimable]:
@@ -187,6 +223,7 @@ def find_claimable(
     *,
     run_dirs: Optional[list[Path]] = None,
     home: Optional[Path] = None,
+    include_claimed: bool = True,
 ) -> tuple[list[Claimable], int]:
     """Seals published to ``origin`` and signed by ``key_id``, oldest first.
 
@@ -194,6 +231,8 @@ def find_claimable(
     because another key signed them (a key replaced since)."""
     found: dict[str, Claimable] = {}
     for entry in read_index(home):
+        if entry.get("claimed") and not include_claimed:
+            continue
         try:
             item = Claimable(
                 id=str(entry["id"]),
@@ -300,6 +339,11 @@ def claim(
         raise PublishError(f"Not claimed: could not reach {host_of(origin)} ({exc}).")
     if answer.status == 200:
         return len(seals)
+    if answer.status == 404:
+        ids = {s.id for s in seals}
+        missing = _json(answer.body).get("missing")
+        if isinstance(missing, list) and missing and set(missing) <= ids:
+            raise SealsGone([str(m) for m in missing])
     reasons = {
         404: "a Seal is no longer online",
         409: "another workspace already claimed one of these Seals",
@@ -307,6 +351,14 @@ def claim(
     }
     reason = reasons.get(answer.status, f"Cloud answered HTTP {answer.status}")
     raise PublishError(f"Not claimed: {reason}.")
+
+
+def _claim(
+    seals: list[Claimable], origin: str, token: str, signer: Any, transport: Transport
+) -> int:
+    return claim(
+        seals, origin=origin, token=token, sign=signer.sign, transport=transport
+    )
 
 
 def _signer() -> Any:
@@ -325,13 +377,18 @@ def claim_published(
     home: Optional[Path] = None,
     say: Callable[[str], None] = print,
     quiet_when_none: bool = False,
+    include_claimed: bool = True,
 ) -> int:
     """Find this computer's published Seals for ``origin`` and claim them.
 
     Returns 0 on success (including nothing to claim), 1 on a refusal."""
     signer = signer or _signer()
     seals, other_key = find_claimable(
-        origin, signer.key_id, run_dirs=run_dirs, home=home
+        origin,
+        signer.key_id,
+        run_dirs=run_dirs,
+        home=home,
+        include_claimed=include_claimed,
     )
     if other_key:
         say(
@@ -342,23 +399,39 @@ def claim_published(
         if not quiet_when_none:
             say(f"No published Seals to claim on {host_of(origin)}.")
         return 0
-    claimed = 0
+    claimed: list[str] = []
+    gone: list[str] = []
     try:
         for start in range(0, len(seals), MAX_PER_CLAIM):
-            claimed += claim(
-                seals[start : start + MAX_PER_CLAIM],
-                origin=origin,
-                token=token,
-                sign=signer.sign,
-                transport=transport,
-            )
+            batch = seals[start : start + MAX_PER_CLAIM]
+            try:
+                _claim(batch, origin, token, signer, transport)
+            except SealsGone as exc:
+                # Drop the Seals Cloud no longer has, then claim the rest once.
+                gone += exc.seal_ids
+                batch = [s for s in batch if s.id not in exc.seal_ids]
+                if batch:
+                    _claim(batch, origin, token, signer, transport)
+            claimed += [s.id for s in batch]
     except PublishError as exc:
         say(str(exc))
         return 1
+    finally:
+        if gone:
+            forget(gone, home=home)
+        if claimed:
+            mark_claimed(claimed, home=home)
+    if gone:
+        say(
+            f"Skipped {len(gone)} Seal{'s' if len(gone) != 1 else ''} that "
+            f"{'are' if len(gone) != 1 else 'is'} no longer online."
+        )
+    if not claimed:
+        return 0
     what = (
         "Your published run is"
-        if claimed == 1
-        else f"Your {claimed} published runs are"
+        if len(claimed) == 1
+        else f"Your {len(claimed)} published runs are"
     )
     say(f"{what} in your workspace: {origin}/dashboard")
     return 0
@@ -382,7 +455,7 @@ def after_login(
         if not claims_live(origin, transport=sender):
             return
         signer = _signer()
-        if not find_claimable(origin, signer.key_id)[0]:
+        if not find_claimable(origin, signer.key_id, include_claimed=False)[0]:
             return
         claim_published(
             origin,
@@ -391,6 +464,7 @@ def after_login(
             signer=signer,
             say=say,
             quiet_when_none=True,
+            include_claimed=False,
         )
     except Exception:  # noqa: BLE001 - claiming is a convenience after login
         return
