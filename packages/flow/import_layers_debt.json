@@ -277,6 +277,42 @@
       "reason": "namespace-query",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "281d88aeb06abd3ae205c86dc0f9c6651f8614e22b2849c51af8897952ab9591"
+    },
+    {
+      "module": "openadapt_flow",
+      "path": "packages/flow/openadapt_flow/__init__.py",
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow: unresolvable dynamic import (importer value escape)",
+      "reason": "package-attribute-compat",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "be27badadc793ca5e92733f3edabf1b0007faf2acea376c20a611bd5f33b2deb"
+    },
+    {
+      "module": "openadapt_flow",
+      "path": "packages/flow/openadapt_flow/__init__.py",
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow: unresolvable dynamic import (importer value escape)",
+      "reason": "package-attribute-compat",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "d597761e4e6584da83f0bf82fc4d4ace4a64969c508e5e229d2af11082836e8f"
+    },
+    {
+      "module": "openadapt_flow",
+      "path": "packages/flow/openadapt_flow/__init__.py",
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow: unresolvable dynamic import (importer value escape)",
+      "reason": "package-attribute-compat",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "8a4b1078c2e1df22fa5f7d4cae40096e0211d1685042386282849bf1a51693b0"
+    },
+    {
+      "module": "openadapt_flow",
+      "path": "packages/flow/openadapt_flow/__init__.py",
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow: unresolvable dynamic import (importer value escape)",
+      "reason": "package-attribute-compat",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "9a823f2598f4bac53532fe603b2db7e8749ebcfe050f2325f208dd03bc3fce83"
     }
   ]
 }
