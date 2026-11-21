@@ -50,3 +50,28 @@ def test_the_launcher_installs_the_built_in_agent_sdk():
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     )["project"]
     assert any(d.startswith("anthropic>=") for d in project["dependencies"])
+
+
+def test_wrap_keeps_the_separator_before_a_wrapped_command(monkeypatch):
+    calls = []
+    module = types.ModuleType("openadapt_flow.wrap.cli")
+    module.main = lambda argv: calls.append(argv) or 0
+    monkeypatch.setitem(sys.modules, "openadapt_flow.wrap.cli", module)
+    monkeypatch.setattr(cli, "_python_minor", lambda: cli._SUPPORTED_PYTHON[1])
+    arguments = ["--task", "t.json", "--json", "--", "python", "agent.py", "--json"]
+    monkeypatch.setattr(sys, "argv", ["openadapt", "wrap", *arguments])
+    result = CliRunner().invoke(cli.main, ["wrap", *arguments])
+    assert result.exit_code == 0
+    assert calls == [arguments]
+
+
+def test_wrap_ignores_an_unrelated_process_argv(monkeypatch):
+    calls = []
+    module = types.ModuleType("openadapt_flow.wrap.cli")
+    module.main = lambda argv: calls.append(argv) or 0
+    monkeypatch.setitem(sys.modules, "openadapt_flow.wrap.cli", module)
+    monkeypatch.setattr(cli, "_python_minor", lambda: cli._SUPPORTED_PYTHON[1])
+    monkeypatch.setattr(sys, "argv", ["openadapt", "wrap", "--", "other"])
+    result = CliRunner().invoke(cli.main, ["wrap", "--example"])
+    assert result.exit_code == 0
+    assert calls == [["--example"]]

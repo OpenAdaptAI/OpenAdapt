@@ -1867,7 +1867,26 @@ def wrap(command_ctx: click.Context) -> None:
             "Error: this openadapt-flow installation has no wrap command.", err=True
         )
         sys.exit(2)
-    sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
+    sys.exit(int(wrap_main(_wrap_arguments(list(command_ctx.args))) or 0))
+
+
+def _wrap_arguments(parsed: list[str]) -> list[str]:
+    """``wrap``'s arguments with the ``--`` before a wrapped command kept.
+
+    Click consumes ``--``, but ``openadapt wrap --task T -- CMD`` needs it to
+    tell wrap's options from the command's. The process's own argv is used
+    only when it holds exactly the same arguments apart from separators.
+    """
+
+    argv = list(sys.argv[1:])
+    if "wrap" not in argv:
+        return parsed
+    raw = argv[argv.index("wrap") + 1 :]
+    if "--" in raw and [a for a in raw if a != "--"] == [
+        a for a in parsed if a != "--"
+    ]:
+        return raw
+    return parsed
 
 
 @main.command(

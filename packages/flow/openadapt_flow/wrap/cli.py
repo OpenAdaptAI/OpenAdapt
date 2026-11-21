@@ -30,6 +30,10 @@ def add_parser(sub: Any) -> None:
     )
 
 
+class NoAdmittedProgram(RuntimeError):
+    """``wrap run``: the task has no admitted program, so nothing ran."""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt wrap",
@@ -37,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "openadapt wrap --example runs the whole loop on a bundled synthetic "
             "task (see its --help). "
+            "openadapt wrap --task TASK [--param ...] -- COMMAND runs your own "
+            "agent command for the first run: it gets OPENADAPT_MCP_URL, "
+            "OPENADAPT_MCP_TOKEN and OPENADAPT_TASK, and drives OpenAdapt's "
+            "browser through that endpoint (see docs/WRAP.md). "
+            "openadapt wrap run --task TASK [--param ...] runs the admitted "
+            "program only, with no model calls. "
             "openadapt wrap export --bundle BUNDLE --out NEW_DIR prepares an "
             "untrusted local candidate (see docs/WRAP_CANDIDATE.md). "
             "openadapt wrap publish --task TASK publishes the task's admitted "
@@ -101,6 +111,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Expose this task as a local stdio MCP tool",
     )
+    parser.add_argument(
+        "--command-timeout",
+        type=float,
+        default=600.0,
+        help="With -- COMMAND: seconds before the command is stopped (default 600)",
+    )
     return parser
 
 
@@ -159,7 +175,13 @@ def _prices(rows: Sequence[str]) -> dict[str, float] | None:
     return prices
 
 
-def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedTask:
+def _task(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    *,
+    command_agent: Any = None,
+    replay_only: bool = False,
+) -> WrappedTask:
     from openadapt_flow.integrations.agents.recording import load_task
 
     options: dict[str, Any] = {}
@@ -209,7 +231,12 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
         cached = setup.cache.server(setup.instruction, names)
         halted = False
     agent = None
-    if cached is None and not halted:
+    if cached is None and not halted and replay_only:
+        raise NoAdmittedProgram()
+    if cached is None and not halted and command_agent is not None:
+        # The wrapped command brings its own model; OpenAdapt sends none.
+        agent = command_agent
+    elif cached is None and not halted:
         cap = args.max_cost_usd
         if cap is None or not math.isfinite(cap) or cap <= 0:
             parser.error("a cache miss requires a positive --max-cost-usd")
@@ -399,17 +426,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         from openadapt_flow.wrap.publish import main as publish_main
 
         return publish_main(rows[1:])
+    command = rows[rows.index("--") + 1 :] if "--" in rows else None
+    replay_only = head[:1] == ["run"]
+    if replay_only:
+        head = head[1:]
     parser = build_parser()
-    args = parser.parse_args(rows)
+    if replay_only:
+        parser.prog = "openadapt wrap run"
+    args = parser.parse_args(head)
+    if command is not None and (replay_only or args.serve):
+        parser.error(
+            "-- COMMAND runs the first run; it can't be used with run or --serve"
+        )
+    if command == []:
+        parser.error("-- needs a command to run")
     if args.serve and (args.param or args.request_id):
         parser.error("--serve takes request IDs and parameters from MCP calls")
     if not args.serve and not args.request_id:
-        parser.error("a run requires --request-id")
+        if command is None and not replay_only:
+            parser.error("a run requires --request-id")
+        import uuid
+
+        # A wrapped command or a replay is one new request unless named.
+        args.request_id = "wrap-" + uuid.uuid4().hex
     from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
 
+    agent = None
     try:
         values = _params(args.param)
-        task = _task(args, parser)
+        if command is not None:
+            from openadapt_flow.wrap.process import ProcessAgent
+
+            agent = ProcessAgent(command, timeout_s=args.command_timeout)
+        task = _task(args, parser, command_agent=agent, replay_only=replay_only)
+        if agent is not None and task.agent is not agent:
+            print(
+                "openadapt wrap: this task has an admitted program; it runs "
+                "instead of the command, with no model calls",
+                file=sys.stderr,
+            )
         if args.serve:
             from openadapt_flow.wrap.mcp import serve
 
@@ -418,6 +473,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = task.call(args.request_id, _with_secret_env(values, task.parameters))
     except TaskArgumentsError as exc:
         parser.error(str(exc))
+    except NoAdmittedProgram:
+        print(
+            "openadapt wrap run: this task has no admitted program; nothing ran. "
+            "Do the first run with openadapt wrap --task TASK -- COMMAND "
+            "[NO_ADMITTED_PROGRAM]",
+            file=sys.stderr,
+        )
+        return 2
     except MissingModelKey:
         # Raised before the agent runs, so no run record exists yet. Name the
         # variable only; the message never carries a key value.
@@ -437,6 +500,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     print(json.dumps(result, sort_keys=True))
+    exit_code = getattr(agent, "exit_code", None)
+    if isinstance(exit_code, int) and exit_code != 0:
+        # The wrapped command's own failure is its exit status.
+        return exit_code if 0 < exit_code < 256 else 1
     return 0 if result.get("verified") is True else 1
 
 
