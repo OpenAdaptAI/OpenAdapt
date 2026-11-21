@@ -317,7 +317,13 @@ def scoped_write(
     adapter: RestAdapter = ctx.adapter(system)
     reader = AuditReader(spec_system.audit, adapter.http) if spec_system.audit else None
     state = ctx.state
-    the_slot = create_slot(scoped, {**where, **fields}, slot) if op == "create" else str(rid)
+    # An update or delete is keyed on its record; ``slot`` names a second,
+    # deliberate write to the same record within one task (``step-2``).
+    the_slot = (
+        create_slot(scoped, {**where, **fields}, slot)
+        if op == "create"
+        else str(rid) + (f":{slot}" if slot else "")
+    )
     key = state.key_for(task=task, system=system, collection=collection, op=op, slot=the_slot)
     payload = sha256({"op": op, "id": rid, "path": where, "fields": fields})
     digest = sha256({"schema": SCOPED_SCHEMA, "task": task, "key": key, "payload": payload})
@@ -458,6 +464,8 @@ def _finish(
         payload=payload,
         code=",".join(result.get("codes") or []) or "verified",
     )
+    # Nothing here is approved: an unsettled check is not an approved write.
+    line["effect_approved_unverified"] = False
     run = _write_run(ctx.state, digest, "api", outcome=outcome, results=[line], tx=tx, approval=None, started=started)
     result = {**result, "outcome": outcome, "run_dir": str(run), "receipt": (run / "receipt.json").is_file()}
     if record_key:
@@ -646,7 +654,10 @@ TOOLS = [
                 "collection": {"type": "string"},
                 "op": {"type": "string", "enum": ["create", "update", "delete"]},
                 "id": {"type": "string"},
-                "slot": {"type": "string"},
+                "slot": {
+                    "type": "string",
+                    "description": "Names a second create, or a second write to the same record, in this task.",
+                },
                 "fields": {"type": "object"},
             },
             "required": ["system", "collection", "op"],

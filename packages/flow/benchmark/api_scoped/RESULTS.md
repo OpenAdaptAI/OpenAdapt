@@ -70,12 +70,24 @@ These behaviors were measured by hand before the runs.
 
 ## Development runs
 
-The first full runs used a cursor placed on server time alone. Medplum
-stopped 4 of 300 clean writes (1.3%), which meets the kill criterion. Gitea
-stopped 1 of 300 clean writes and 2 of the 10 other-actor controls. In both cases the write's own event was in the log, but it
-was stamped earlier than the newest event read at the cursor, which was a
-read made before the write. Medplum's `AuditEvent` times run up to about 2
-seconds out of request order.
+The first full runs used a cursor placed on server time alone, and each
+system had stops:
+
+- **Medplum** stopped 4 of 300 clean writes (1.3%), which meets the kill
+  criterion. In two traces of those stops, the write's own `AuditEvent` was in
+  the log, but it was stamped about 1.5 seconds earlier than the newest event
+  read at the cursor, which was a read made before the write. The cause inside
+  Medplum was not identified.
+- **Gitea** stopped 1 of 300 clean writes and 2 of the 10 other-actor
+  controls. The cause was not reproduced: 40 comments made in a separate probe
+  all appeared in the feed within a second. The fix below removed these stops
+  in the final run, but nothing shows it was the same cause.
+- **The Medplum partial-write plant** was not stopped in 1 of 10 runs, which
+  also meets the kill criterion. That plant set `gender` to `other`, and a
+  likely cause is a seed patient whose gender was already `other`, which would
+  make the unwritten field correct. This was not confirmed from the data. The
+  plant now always picks a gender different from the record's, and the
+  oracle checks that the field was left unwritten.
 
 The fix places the window by event ids. The cursor keeps the ids of every
 event within `skew_s` of the newest one, and the window reads back that far.
@@ -102,6 +114,13 @@ summaries of those runs are in [results/development/](results/development/).
   development run, Medplum's identity included `birthDate`, so a regenerated
   payload with a different birth date got a new key and was not refused. The
   pack now uses `name` only.
+- FHIR `_history` is not used. Medplum serves no system-level history, so
+  collateral changes are read from `AuditEvent`. A per-resource version count
+  (`Patient/{id}/_history`) would be a second signal for duplicate updates,
+  but it isn't implemented.
+- On Medplum, an update that changes nothing reads the log once, with no
+  settle wait (`settle_s` is 0 in the pack). A collateral change that lands in
+  the log late, next to such an update, can be missed.
 - Stripe: not run (see above).
 
 ## Reproduce

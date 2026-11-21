@@ -98,6 +98,15 @@ ledger (`~/.openadapt/tx`) before the write is sent.
   where the API honors one, such as Stripe. A FHIR server gets an identifier
   marker and an `If-None-Exist` conditional create.
 
+An update or delete is keyed on its record. A second, deliberate write to the
+same record in one task names a new `slot` (`step-2`). Without one, it is
+refused as a replay.
+
+The ledger's `begun` event holds the record as it read before the write, so
+that a recovery after a crash can still judge the frame. The state folder is
+owner-only (mode 0700, files 0600). Put it on encrypted storage when the
+records hold personal data.
+
 The guard is only as good as the `identity` fields. If they include a value
 that a regenerated payload can change, the retry gets a new key and is sent as
 a new record.
@@ -124,6 +133,8 @@ holds field paths, codes and counts, never record values. The receipt line is
 - Changes of a kind the log doesn't record. Gitea's activity feed records
   creates, comments, closes and reopens, but not title or body edits.
 - On a create, fields the server adds. Only the intended fields are judged.
+- FHIR `_history`. A server without system-level history, such as Medplum,
+  shows collateral changes in `AuditEvent` only.
 - The log for an update that changes nothing (the record already held the
   intent). Medplum logged most such updates but not all, so none is required
   (`no_change_update`), and a repeat of one can't be seen.

@@ -622,3 +622,57 @@ def test_one_mcp_endpoint_serves_sql_and_api_tools(lab: Any, tmp_path: Path) -> 
         server.stop()
     env = child_environment({"APP_TOKEN": "agent", "PATH": "/bin", "COPY": "x-agent-x"}, ["agent"])
     assert env == {"PATH": "/bin"}
+
+
+# -- receipts and one task's several writes -------------------------------------------------
+
+
+def test_every_outcome_writes_a_receipt_that_verifies(lab: Any) -> None:
+    import os
+
+    from openadapt_flow.receipt_record import local_registry, verify_run_receipt
+
+    store, url, state = lab
+    registry = local_registry(Path(os.environ["OPENADAPT_SEAL_HOME"]))
+    ok = _write(_ctx(url, state), op="create", fields={"title": "Synthetic W"})
+
+    def wrong(adapter: Any, coll: Any, **kw: Any) -> Any:
+        return default_send(adapter, coll, **{**kw, "fields": {**kw["fields"], "title": "x"}})
+
+    bad = _write(_ctx(url, state), task="t2", op="create", fields={"title": "Synthetic X"}, send=wrong)
+    store.hidden_reads = 50
+    slow = _write(_ctx(url, state), task="t3", op="create", fields={"title": "Synthetic Y"})
+    store.hidden_reads = 0
+    with pytest.raises(TxRefused) as refused:
+        _write(_ctx(url, state), task="t1", op="create", fields={"title": "Synthetic W", "qty": 9})
+    runs = {
+        "VERIFIED": Path(ok["run_dir"]),
+        "FAILED": Path(bad["run_dir"]),
+        "UNKNOWN": Path(slow["run_dir"]),
+        "STOPPED": Path(refused.value.report["run_dir"]),
+    }
+    for outcome, run in runs.items():
+        got = verify_run_receipt(run, registry)
+        assert got.ok, (outcome, got.reason, got.detail)
+        assert got.outcome == outcome
+        for line in got.statement["predicate"]["lines"]:
+            assert "approved_unverified" not in line["not_checked"]
+
+
+def test_two_deliberate_updates_of_one_record_in_one_task(lab: Any) -> None:
+    store, url, state = lab
+    tools = ApiTools(_ctx(url, state), task="session")
+    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "create",
+                                         "fields": {"title": "Synthetic Z", "qty": 1}})
+    rid = json.loads(text)["id"]
+    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
+                                         "id": rid, "fields": {"qty": 2}})
+    assert not err, text
+    # The same record again with another value is a replay unless the caller names a new step.
+    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
+                                         "id": rid, "fields": {"qty": 3}})
+    assert err and json.loads(text)["refused"] == "replay_mismatch"
+    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
+                                         "id": rid, "slot": "step-3", "fields": {"qty": 3}})
+    assert not err, text
+    assert store.records[int(rid)]["qty"] == 3 and store.writes == 3
