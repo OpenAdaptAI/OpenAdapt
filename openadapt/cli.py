@@ -2010,7 +2010,9 @@ def receipt(command_ctx: click.Context) -> None:
                 command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
             )
             if agent_main is None:
-                click.echo("Not verified: this openadapt-agent can't check that format.")
+                click.echo(
+                    "Not verified: this openadapt-agent can't check that format."
+                )
                 return 1
             return int(agent_main(argv) or 0)
 
