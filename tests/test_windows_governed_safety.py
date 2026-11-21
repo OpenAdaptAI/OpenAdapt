@@ -34,9 +34,19 @@ def _script():
 check = _script()
 
 
+SEED = {
+    1: ("Ada", "Park", "1980-01-02"),
+    2: ("Ben", "Ruiz", "1975-05-06"),
+    3: ("Cy", "Lee", "1990-09-10"),
+}
+
+
 def _rows(written: dict[int, str] | None = None) -> list[dict]:
     written = written or {}
-    return [{"id": i, "note": written.get(i, "")} for i in (1, 2, 3)]
+    return [
+        {"id": i, "first": f, "last": la, "dob": d, "note": written.get(i, "")}
+        for i, (f, la, d) in SEED.items()
+    ]
 
 
 def _passing() -> dict:
@@ -44,6 +54,7 @@ def _passing() -> dict:
         "target_id": 1,
         "expected_note": NOTE,
         "phases": ["approved", "held", "resumed"],
+        "seed_rows": _rows(),
         "approved": {
             "exit": 0,
             "rows": _rows({1: NOTE}),
@@ -223,3 +234,183 @@ def test_the_workflow_gates_on_the_check_after_the_governed_step() -> None:
     assert gate.get("if") == "always()"
     assert "continue-on-error" not in gate
     assert "scripts/ci/check_windows_governed_safety.py" in gate["run"]
+
+
+@pytest.mark.parametrize("column", ["first", "last", "dob"])
+def test_a_wrong_field_write_fails(column) -> None:
+    evidence = _passing()
+    evidence["approved"]["rows"][1][column] = "changed"
+    assert f"approved: row 2 changed ['{column}']" in check.check(evidence)
+
+
+def test_a_deleted_row_fails() -> None:
+    evidence = _passing()
+    evidence["resumed"]["rows"] = [
+        r for r in evidence["resumed"]["rows"] if r["id"] != 3
+    ]
+    assert "resumed: seeded rows [3] are gone" in check.check(evidence)
+
+
+def test_an_added_row_fails() -> None:
+    evidence = _passing()
+    extra = {"id": 4, "first": "Dee", "last": "Ko", "dob": "2000-01-01", "note": ""}
+    evidence["held"]["rows"].append(extra)
+    assert "held: rows [4] are not in the seed" in check.check(evidence)
+
+
+def test_missing_seed_rows_fail() -> None:
+    evidence = _passing()
+    del evidence["seed_rows"]
+    assert any("no seed rows" in p for p in check.check(evidence))
+
+
+def test_no_phase_ran_is_said(tmp_path, capsys) -> None:
+    evidence = _passing()
+    evidence["phases"] = []
+    assert _run(tmp_path, evidence) == 0
+    out = capsys.readouterr().out
+    assert "governed safety: no phase ran" in out
+    assert "no unsafe write" not in out
+
+
+def test_coverage_reports_a_halt_without_gating(tmp_path, monkeypatch) -> None:
+    evidence = _passing()
+    evidence["phases"] = ["approved"]
+    evidence["approved"].update(
+        exit=1,
+        rows=_rows(),
+        outcome="HALTED_BEFORE_EFFECT",
+        approval_decision="problem",
+        halts=[
+            {"step": "save", "category": "form_changed_after_approval", "error": ""}
+        ],
+    )
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    assert _run(tmp_path, evidence) == 0
+    line = summary.read_text(encoding="utf-8").strip()
+    assert line == (
+        "governed coverage: approved: HALTED_BEFORE_EFFECT form_changed_after_approval;"
+        " held: not run; resumed: not run"
+    )
+    kept = json.loads((tmp_path / "windows-governed-evidence.json").read_text())
+    assert kept["coverage"]["phases"] == ["approved"]
+    assert kept["coverage"]["held_ran"] is False
+    assert kept["coverage"]["resumed_ran"] is False
+    assert kept["coverage"]["outcomes"]["approved"]["halt"] == (
+        "form_changed_after_approval"
+    )
+
+
+PN_DB = ROOT / "packages" / "flow" / "scripts" / "desktop" / "pn_db.py"
+
+
+@pytest.mark.parametrize("phase", ["approved", "held", "resumed"])
+def test_a_sibling_note_changed_to_null_fails(phase) -> None:
+    evidence = _passing()
+    evidence[phase]["rows"][1]["note"] = None
+    assert check.check(evidence)
+
+
+@pytest.mark.parametrize("phase", ["approved", "held", "resumed"])
+def test_a_target_note_changed_to_null_fails(phase) -> None:
+    evidence = _passing()
+    evidence[phase]["rows"][0]["note"] = None
+    assert check.check(evidence)
+
+
+@pytest.mark.parametrize("phase", ["approved", "resumed"])
+def test_a_halted_target_note_changed_to_null_fails(phase) -> None:
+    evidence = _passing()
+    evidence[phase].update(
+        exit=1,
+        rows=_rows({1: None}),
+        outcome="HALTED_BEFORE_EFFECT",
+        approval_decision="problem",
+    )
+    assert check.check(evidence)
+
+
+def _read_all(db: Path) -> list[dict]:
+    import os
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, str(PN_DB), "all"],
+        env={**os.environ, "PN_DB": str(db)},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(out.stdout)
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "fails"),
+    [("note", None, True), ("first", "Changed", True), (None, None, False)],
+)
+def test_a_held_run_is_checked_through_the_real_reader(
+    tmp_path, column, value, fails
+) -> None:
+    """Seed the SQLite fixture, change row 2 the way a held run might, and
+    read it back with ``pn_db.py all`` as the Windows test does."""
+
+    import os
+    import sqlite3
+    import subprocess
+    import sys
+
+    db = tmp_path / "patients.db"
+    env = {**os.environ, "PN_DB": str(db)}
+    subprocess.run([sys.executable, str(PN_DB), "seed"], env=env, check=True,
+                   capture_output=True)
+    seed_rows = _read_all(db)
+    if column is not None:
+        con = sqlite3.connect(db)
+        con.execute(f"UPDATE patients SET {column} = ? WHERE id = 2", (value,))
+        con.commit()
+        con.close()
+    evidence = {
+        "target_id": seed_rows[0]["id"],
+        "expected_note": NOTE,
+        "phases": ["held"],
+        "seed_rows": seed_rows,
+        "held": {
+            "exit": 1,
+            "rows": _read_all(db),
+            "outcome": "HALTED_BEFORE_EFFECT",
+            "approval_decision": "approval_required",
+        },
+    }
+    assert bool(check.check(evidence)) is fails
+
+
+@pytest.mark.parametrize("phase", ["approved", "resumed"])
+def test_a_halted_target_note_changed_to_null_through_real_reader_fails(
+    tmp_path, phase
+) -> None:
+    """Seed SQLite, set the target note to SQL NULL, and confirm that an approved
+    or resumed run reporting HALTED_BEFORE_EFFECT fails the check."""
+    import os
+    import sqlite3
+    import subprocess
+    import sys
+
+    db = tmp_path / f"patients_{phase}.db"
+    env = {**os.environ, "PN_DB": str(db)}
+    subprocess.run([sys.executable, str(PN_DB), "seed"], env=env, check=True,
+                   capture_output=True)
+    con = sqlite3.connect(db)
+    con.execute("UPDATE patients SET note = NULL WHERE id = 1")
+    con.commit()
+    con.close()
+    evidence = _passing()
+    evidence[phase].update(
+        exit=1,
+        rows=_read_all(db),
+        outcome="HALTED_BEFORE_EFFECT",
+        approval_decision="problem",
+    )
+    assert check.check(evidence)
+
