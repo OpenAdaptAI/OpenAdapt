@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## v3.4.0 (2026-11-20)
+## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
 ### Features
 
