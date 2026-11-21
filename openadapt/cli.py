@@ -138,6 +138,7 @@ class _FlowFirstGroup(click.Group):
             and root_name == "verify"
             and len(raw) > 1
             and not raw[1].startswith("-")
+            and raw[1] not in _verify_operations(self.commands.get("verify"))
             and (
                 Path(raw[1]).exists()
                 or "/" in raw[1]
@@ -1969,6 +1970,20 @@ def receipt(command_ctx: click.Context) -> None:
         f"No such receipt command '{args[0]}'. Use verify, view, publish, "
         "unpublish or keys."
     )
+
+
+def _verify_operations(group: Optional[click.Command]) -> set[str]:
+    """`openadapt verify` subcommands and operations: never read as a path."""
+    from openadapt.cli_tasks import FLOW_NAMES, NATIVE_ROUTES
+
+    names = {
+        route.split()[1]
+        for route in FLOW_NAMES.values()
+        if route.startswith("verify ") and len(route.split()) > 1
+    }
+    names |= {path[1] for path in NATIVE_ROUTES if path[0] == "verify"}
+    names |= set(getattr(group, "commands", {}) or {})
+    return names
 
 
 def _verify_receipts(argv: list[str], agent: Callable[[list[str]], int]) -> int:

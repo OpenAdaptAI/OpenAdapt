@@ -260,9 +260,11 @@ def _inspect_tutorial(tutorial_dir: Path) -> dict[str, object]:
         )
     if not receipt.get("bundle_digest") or not receipt.get("receipt_digest"):
         raise AssertionError("receipt is not digest-bound and cannot be checked")
-    for path in (run_dir / "receipt.png", run_dir / "receipt.md"):
+    stem = receipt_path.stem
+    for path in (run_dir / f"{stem}.png", run_dir / f"{stem}.md"):
         if not path.is_file():
             raise AssertionError(f"missing receipt artifact: {path}")
+    signed = _check_signed_receipt(run_dir) if stem == "run-summary" else False
 
     return {
         "tutorial_outcome": "VERIFIED",
@@ -271,7 +273,34 @@ def _inspect_tutorial(tutorial_dir: Path) -> dict[str, object]:
         "tutorial_effects_confirmed": passed,
         "tutorial_effect_tier": min(confirmed_tiers),
         "tutorial_receipt_emitted": True,
+        "tutorial_signed_receipt_verified": signed,
     }
+
+
+def _check_signed_receipt(run_dir: Path) -> bool:
+    """The run's signed receipt verifies, and a changed copy of its report doesn't."""
+    import shutil
+    import tempfile
+
+    from openadapt_flow.receipt_record import local_registry, verify_run_receipt
+
+    registry = local_registry()
+    result = verify_run_receipt(run_dir, registry)
+    if not result.ok:
+        raise AssertionError(f"the run's receipt.json doesn't verify: {result.reason}")
+    if result.outcome != "VERIFIED":
+        raise AssertionError(f"the receipt's outcome is {result.outcome!r}")
+    with tempfile.TemporaryDirectory() as scratch:
+        copy = Path(scratch) / "run"
+        copy.mkdir()
+        for name in ("report.json", "receipt.json", "receipt.private.json"):
+            shutil.copy2(run_dir / name, copy / name)
+        report = json.loads((copy / "report.json").read_text(encoding="utf-8"))
+        report["model_calls"] = int(report.get("model_calls") or 0) + 1
+        (copy / "report.json").write_text(json.dumps(report), encoding="utf-8")
+        if verify_run_receipt(copy, registry).ok:
+            raise AssertionError("a changed report still verified against its receipt")
+    return True
 
 
 def run_lifecycle(
