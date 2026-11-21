@@ -11,10 +11,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
@@ -245,6 +246,24 @@ class UIProfileSpec(BaseModel):
     debounce_grace_ms: int = Field(default=120, ge=0, le=5000)
     settle_window_ms: int = Field(default=150, ge=20, le=5000)
     max_settle_ms: int = Field(default=12000, ge=200, le=60000)
+    frame_path_patterns: tuple[str, ...] = ()
+    """Ordered regular expressions, full-matched against frame URL paths, that
+    route the surface into one same-origin iframe holding the form. Empty
+    means the top-level document. See ``PlaywrightFormSurface``."""
+
+    @field_validator("frame_path_patterns")
+    @classmethod
+    def _frame_patterns_compile(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for pattern in value:
+            if not pattern:
+                raise ValueError("frame_path_patterns entries must be non-empty")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"Invalid frame path pattern {pattern!r}: {exc}"
+                ) from exc
+        return value
 
 
 class FieldCodecSpec(BaseModel):

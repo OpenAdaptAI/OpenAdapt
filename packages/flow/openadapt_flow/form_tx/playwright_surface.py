@@ -103,8 +103,81 @@ _DOCUMENT_CONTEXT_JS = r"""
 """
 
 
-_CHECK_BUSY_AND_DOM_JS = r"""
-(busySelectors) => {
+_DOM_HELPERS_JS = r"""
+    // Composed-tree helpers shared by every in-page script. Open shadow roots
+    // are walked like ordinary subtrees; closed shadow roots stay invisible.
+    // A control inside a shadow root gets a selector of the form
+    // ``<host selector> >> <selector unique inside that root>``, which
+    // Playwright locators accept, and ``resolveSel`` resolves the same way.
+    const rootOf = (el) => (el && el.getRootNode) ? el.getRootNode() : document;
+    const parentAcross = (el) => {
+        if (!el) return null;
+        if (el.parentElement) return el.parentElement;
+        const r = rootOf(el);
+        return (r && r.host) ? r.host : null;
+    };
+    const byIdIn = (el, id) => {
+        const r = rootOf(el);
+        let ref = null;
+        if (r && typeof r.getElementById === 'function') ref = r.getElementById(id);
+        return ref || document.getElementById(id);
+    };
+    let __hasShadow = null;
+    const docHasShadow = () => {
+        if (__hasShadow === null) {
+            __hasShadow = false;
+            for (const e of document.querySelectorAll('*')) {
+                if (e.shadowRoot) { __hasShadow = true; break; }
+            }
+        }
+        return __hasShadow;
+    };
+    const shallowQueryAll = (root, sel) => {
+        if (!sel || !root) return [];
+        try {
+            return Array.from(root.querySelectorAll(sel));
+        } catch (e) {
+            return [];
+        }
+    };
+    // Every element matching ``sel`` under ``scope`` in composed-tree order,
+    // descending into open shadow roots (a host's shadow content first).
+    const safeQueryAll = (scope, sel) => {
+        if (!sel || !scope) return [];
+        if (!docHasShadow()) return shallowQueryAll(scope, sel);
+        try {
+            document.createDocumentFragment().querySelector(sel);
+        } catch (e) {
+            return [];
+        }
+        const out = [];
+        const walk = (node) => {
+            for (const child of Array.from(node.children || [])) {
+                if (child.matches(sel)) out.push(child);
+                if (child.shadowRoot) walk(child.shadowRoot);
+                walk(child);
+            }
+        };
+        if (scope.shadowRoot) walk(scope.shadowRoot);
+        walk(scope);
+        return out;
+    };
+    const resolveSel = (sel) => {
+        if (!sel) return [];
+        const parts = String(sel).split(/\s+>>\s+/);
+        let scopes = [document];
+        for (const part of parts) {
+            const next = [];
+            for (const sc of scopes) {
+                for (const el of safeQueryAll(sc, part)) {
+                    if (el !== sc && !next.includes(el)) next.push(el);
+                }
+            }
+            scopes = next;
+            if (!scopes.length) break;
+        }
+        return scopes;
+    };
     const isVisible = (el) => {
         if (!el || !(el instanceof Element)) return false;
         let cur = el;
@@ -119,17 +192,101 @@ _CHECK_BUSY_AND_DOM_JS = r"""
                     cs.visibility === 'collapse') {
                 return false;
             }
-            cur = cur.parentElement;
+            cur = parentAcross(cur);
         }
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
     };
+    const DYNAMIC_ID_RE = /(?:[_:-]\d+|\d{2,}|_[0-9a-f]{6,}|^:)/i;
+    // Unique inside the element's own root, counting what a Playwright
+    // locator would also see through nested open shadow roots.
+    const isUniqueMatch = (sel, target) => {
+        if (!sel) return false;
+        const nodes = safeQueryAll(rootOf(target), sel);
+        return nodes.length === 1 && nodes[0] === target;
+    };
+    const quoteAttrVal = (val) => {
+        return '"' + String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    };
+    const structuralSelector = (target) => {
+        const parts = [];
+        let cur = target;
+        while (cur && cur !== document.documentElement) {
+            if (cur !== target && cur.id && !DYNAMIC_ID_RE.test(cur.id)) {
+                const anchorSel = '#' + CSS.escape(cur.id);
+                if (isUniqueMatch(anchorSel, cur)) {
+                    parts.unshift(anchorSel);
+                    break;
+                }
+            }
+            const tag = cur.tagName.toLowerCase();
+            if (cur === document.body) {
+                parts.unshift('body');
+                break;
+            }
+            const parent = cur.parentElement;
+            if (!parent) {
+                // Top of a shadow root (or detached): siblings are the root's children.
+                const r = rootOf(cur);
+                const sibs = (r && r !== document && r.children) ? Array.from(r.children) : [cur];
+                const sameTag = sibs.filter((sib) => sib.tagName === cur.tagName);
+                parts.unshift(sameTag.length > 1 ? `${tag}:nth-of-type(${sameTag.indexOf(cur) + 1})` : tag);
+                break;
+            }
+            const sameTag = Array.from(parent.children).filter(
+                (sib) => sib.tagName === cur.tagName
+            );
+            if (sameTag.length === 1) {
+                parts.unshift(tag);
+            } else {
+                const idx = sameTag.indexOf(cur) + 1;
+                parts.unshift(`${tag}:nth-of-type(${idx})`);
+            }
+            cur = parent;
+        }
+        return parts.join(' > ');
+    };
+    const localSelector = (el) => {
+        if (el.id && !DYNAMIC_ID_RE.test(el.id)) {
+            const idSel = '#' + CSS.escape(el.id);
+            if (isUniqueMatch(idSel, el)) return idSel;
+        }
+        const testId = el.getAttribute('data-testid');
+        if (testId && !DYNAMIC_ID_RE.test(testId)) {
+            const tidSel = `[data-testid=${quoteAttrVal(testId)}]`;
+            if (isUniqueMatch(tidSel, el)) return tidSel;
+        }
+        const tag = el.tagName.toLowerCase();
+        const nameAttr = el.getAttribute('name') || '';
+        if (nameAttr && !DYNAMIC_ID_RE.test(nameAttr)) {
+            const typeAttr = (el.getAttribute('type') || '').toLowerCase();
+            if ((typeAttr === 'radio' || typeAttr === 'checkbox') && el.hasAttribute('value')) {
+                const nvSel = `${tag}[name=${quoteAttrVal(nameAttr)}][value=${quoteAttrVal(el.getAttribute('value') || '')}]`;
+                if (isUniqueMatch(nvSel, el)) return nvSel;
+            }
+            const nameSel = `${tag}[name=${quoteAttrVal(nameAttr)}]`;
+            if (isUniqueMatch(nameSel, el)) return nameSel;
+        }
+        return structuralSelector(el);
+    };
+    const computeDomSelector = (el) => {
+        const r = rootOf(el);
+        if (r && r !== document && r.host) {
+            return computeDomSelector(r.host) + ' >> ' + localSelector(el);
+        }
+        return localSelector(el);
+    };
+"""
 
+
+_CHECK_BUSY_AND_DOM_JS = r"""
+(busySelectors) => {
+/*@DOM_HELPERS@*/
     let busyMatch = '';
     for (const sel of (busySelectors || [])) {
         let nodes = [];
         try {
-            nodes = document.querySelectorAll(sel);
+            nodes = safeQueryAll(document, sel);
         } catch (e) {
             continue;
         }
@@ -142,10 +299,14 @@ _CHECK_BUSY_AND_DOM_JS = r"""
         if (busyMatch) break;
     }
 
-    const bodyHtmlLen = document.body ? document.body.innerHTML.length : 0;
-    const elemCount = document.querySelectorAll('*').length;
+    let bodyHtmlLen = document.body ? document.body.innerHTML.length : 0;
+    const allEls = safeQueryAll(document, '*');
+    for (const host of allEls) {
+        if (host.shadowRoot) bodyHtmlLen += host.shadowRoot.innerHTML.length;
+    }
+    const elemCount = allEls.length;
     let valAcc = 0;
-    for (const inp of document.querySelectorAll('input, select, textarea')) {
+    for (const inp of safeQueryAll(document, 'input, select, textarea')) {
         valAcc = ((valAcc * 31) + String(inp.value || '').length + (inp.checked ? 7 : 3)) >>> 0;
     }
     return {
@@ -159,6 +320,7 @@ _CHECK_BUSY_AND_DOM_JS = r"""
 
 _SNAPSHOT_WALKER_JS = r"""
 (cfg) => {
+/*@DOM_HELPERS@*/
     const cleanText = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
     const PLACEHOLDERS = new Set([
@@ -173,7 +335,6 @@ _SNAPSHOT_WALKER_JS = r"""
     ]);
     const isPlaceholderText = (s) => PLACEHOLDERS.has(cleanText(s).toLowerCase());
 
-    const DYNAMIC_ID_RE = /(?:[_:-]\d+|\d{2,}|_[0-9a-f]{6,}|^:)/i;
 
     const SECRET_AUTOCOMPLETE = new Set([
         'one-time-code',
@@ -220,26 +381,6 @@ _SNAPSHOT_WALKER_JS = r"""
         return false;
     };
 
-    const isVisible = (el) => {
-        if (!el || !(el instanceof Element)) return false;
-        let cur = el;
-        while (cur && cur !== document.documentElement) {
-            if (cur.hasAttribute('hidden')) return false;
-            if (cur.tagName === 'DIALOG' && !cur.open &&
-                    cur.getAttribute('data-modal-open') !== 'true') {
-                return false;
-            }
-            const cs = window.getComputedStyle(cur);
-            if (cs.display === 'none' || cs.visibility === 'hidden' ||
-                    cs.visibility === 'collapse') {
-                return false;
-            }
-            cur = cur.parentElement;
-        }
-        const rect = el.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-    };
-
     const isOpenModal = (el) => {
         if (!el || !(el instanceof Element)) return false;
         if (el.tagName === 'DIALOG') {
@@ -252,15 +393,6 @@ _SNAPSHOT_WALKER_JS = r"""
         return isVisible(el);
     };
 
-    const safeQueryAll = (root, sel) => {
-        if (!sel) return [];
-        try {
-            return Array.from(root.querySelectorAll(sel));
-        } catch (e) {
-            return [];
-        }
-    };
-
     const anyVisibleMatch = (selectors) => {
         for (const sel of (selectors || [])) {
             for (const el of safeQueryAll(document, sel)) {
@@ -268,79 +400,6 @@ _SNAPSHOT_WALKER_JS = r"""
             }
         }
         return false;
-    };
-
-    const isUniqueMatch = (sel, target) => {
-        if (!sel) return false;
-        try {
-            const nodes = document.querySelectorAll(sel);
-            return nodes.length === 1 && nodes[0] === target;
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const quoteAttrVal = (val) => {
-        return '"' + String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-    };
-
-    const structuralSelector = (target) => {
-        const parts = [];
-        let cur = target;
-        while (cur && cur !== document.documentElement) {
-            if (cur !== target && cur.id && !DYNAMIC_ID_RE.test(cur.id)) {
-                const anchorSel = '#' + CSS.escape(cur.id);
-                if (isUniqueMatch(anchorSel, cur)) {
-                    parts.unshift(anchorSel);
-                    break;
-                }
-            }
-            const tag = cur.tagName.toLowerCase();
-            if (cur === document.body) {
-                parts.unshift('body');
-                break;
-            }
-            const parent = cur.parentElement;
-            if (!parent) {
-                parts.unshift(tag);
-                break;
-            }
-            const sameTag = Array.from(parent.children).filter(
-                (sib) => sib.tagName === cur.tagName
-            );
-            if (sameTag.length === 1) {
-                parts.unshift(tag);
-            } else {
-                const idx = sameTag.indexOf(cur) + 1;
-                parts.unshift(`${tag}:nth-of-type(${idx})`);
-            }
-            cur = parent;
-        }
-        return parts.join(' > ');
-    };
-
-    const computeDomSelector = (el) => {
-        if (el.id && !DYNAMIC_ID_RE.test(el.id)) {
-            const idSel = '#' + CSS.escape(el.id);
-            if (isUniqueMatch(idSel, el)) return idSel;
-        }
-        const testId = el.getAttribute('data-testid');
-        if (testId && !DYNAMIC_ID_RE.test(testId)) {
-            const tidSel = `[data-testid=${quoteAttrVal(testId)}]`;
-            if (isUniqueMatch(tidSel, el)) return tidSel;
-        }
-        const tag = el.tagName.toLowerCase();
-        const nameAttr = el.getAttribute('name') || '';
-        if (nameAttr && !DYNAMIC_ID_RE.test(nameAttr)) {
-            const typeAttr = (el.getAttribute('type') || '').toLowerCase();
-            if ((typeAttr === 'radio' || typeAttr === 'checkbox') && el.hasAttribute('value')) {
-                const nvSel = `${tag}[name=${quoteAttrVal(nameAttr)}][value=${quoteAttrVal(el.getAttribute('value') || '')}]`;
-                if (isUniqueMatch(nvSel, el)) return nvSel;
-            }
-            const nameSel = `${tag}[name=${quoteAttrVal(nameAttr)}]`;
-            if (isUniqueMatch(nameSel, el)) return nameSel;
-        }
-        return structuralSelector(el);
     };
 
     const extractLabelCloneText = (labelEl) => {
@@ -362,7 +421,7 @@ _SNAPSHOT_WALKER_JS = r"""
 
     const resolveLabelText = (el, tag, inputType, role) => {
         if (el.id) {
-            const linked = safeQueryAll(document, `label[for=${quoteAttrVal(el.id)}]`);
+            const linked = shallowQueryAll(rootOf(el), `label[for=${quoteAttrVal(el.id)}]`);
             const parts = linked.map((lbl) => extractLabelCloneText(lbl)).filter(Boolean);
             if (parts.length) return parts.join(' ');
         }
@@ -371,7 +430,7 @@ _SNAPSHOT_WALKER_JS = r"""
             const parts = labelledBy
                 .split(/\s+/)
                 .map((id) => {
-                    const ref = document.getElementById(id);
+                    const ref = byIdIn(el, id);
                     return ref ? cleanText(ref.textContent) : '';
                 })
                 .filter(Boolean);
@@ -413,7 +472,7 @@ _SNAPSHOT_WALKER_JS = r"""
     };
 
     const resolveSectionText = (el) => {
-        let cur = el.parentElement;
+        let cur = parentAcross(el);
         while (cur && cur !== document.documentElement) {
             if (cur.tagName === 'FIELDSET') {
                 const legend = Array.from(cur.children).find((c) => c.tagName === 'LEGEND');
@@ -429,7 +488,7 @@ _SNAPSHOT_WALKER_JS = r"""
                     const txt = lby
                         .split(/\s+/)
                         .map((id) => {
-                            const ref = document.getElementById(id);
+                            const ref = byIdIn(el, id);
                             return ref ? cleanText(ref.textContent) : '';
                         })
                         .filter(Boolean)
@@ -452,7 +511,7 @@ _SNAPSHOT_WALKER_JS = r"""
                 const ht = cleanText(directHeadings[directHeadings.length - 1].textContent);
                 if (ht) return ht;
             }
-            cur = cur.parentElement;
+            cur = parentAcross(cur);
         }
         const allHeadings = safeQueryAll(document, 'h1, h2, h3').filter(
             (h) => isVisible(h) &&
@@ -485,7 +544,7 @@ _SNAPSHOT_WALKER_JS = r"""
         const errIdAttr = cleanText(el.getAttribute('aria-errormessage'));
         if (errIdAttr) {
             for (const id of errIdAttr.split(/\s+/)) {
-                const ref = document.getElementById(id);
+                const ref = byIdIn(el, id);
                 if (ref && isVisible(ref) && !isInteractiveElement(ref)) {
                     const t = cleanText(ref.textContent);
                     if (t) return t;
@@ -495,7 +554,7 @@ _SNAPSHOT_WALKER_JS = r"""
         const descBy = cleanText(el.getAttribute('aria-describedby'));
         if (descBy) {
             for (const id of descBy.split(/\s+/)) {
-                const ref = document.getElementById(id);
+                const ref = byIdIn(el, id);
                 if (ref && isVisible(ref) && !isInteractiveElement(ref)) {
                     if (el.getAttribute('aria-invalid') === 'true' ||
                             matchesAnySelector(ref, cfg.fieldErrorSelectors)) {
@@ -807,81 +866,13 @@ _SNAPSHOT_WALKER_JS = r"""
 
 _EXTRACT_PORTAL_OPTIONS_JS = r"""
 (cfg) => {
+/*@DOM_HELPERS@*/
     const cleanText = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-
-    const isVisible = (el) => {
-        if (!el || !(el instanceof Element)) return false;
-        let cur = el;
-        while (cur && cur !== document.documentElement) {
-            if (cur.hasAttribute('hidden')) return false;
-            if (cur.tagName === 'DIALOG' && !cur.open &&
-                    cur.getAttribute('data-modal-open') !== 'true') {
-                return false;
-            }
-            const cs = window.getComputedStyle(cur);
-            if (cs.display === 'none' || cs.visibility === 'hidden' ||
-                    cs.visibility === 'collapse') {
-                return false;
-            }
-            cur = cur.parentElement;
-        }
-        const rect = el.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-    };
-
-    const safeQueryAll = (root, sel) => {
-        if (!sel) return [];
-        try {
-            return Array.from(root.querySelectorAll(sel));
-        } catch (e) {
-            return [];
-        }
-    };
-
-    const isUniqueMatch = (sel, target) => {
-        try {
-            const nodes = document.querySelectorAll(sel);
-            return nodes.length === 1 && nodes[0] === target;
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const structuralSelector = (target) => {
-        const parts = [];
-        let cur = target;
-        while (cur && cur !== document.documentElement) {
-            if (cur === document.body) {
-                parts.unshift('body');
-                break;
-            }
-            const tag = cur.tagName.toLowerCase();
-            const parent = cur.parentElement;
-            if (!parent) {
-                parts.unshift(tag);
-                break;
-            }
-            const sameTag = Array.from(parent.children).filter(
-                (sib) => sib.tagName === cur.tagName
-            );
-            if (sameTag.length === 1) {
-                parts.unshift(tag);
-            } else {
-                const idx = sameTag.indexOf(cur) + 1;
-                parts.unshift(`${tag}:nth-of-type(${idx})`);
-            }
-            cur = parent;
-        }
-        return parts.join(' > ');
-    };
 
     let triggerEl = null;
     if (cfg.triggerSelector) {
-        try {
-            triggerEl = document.querySelector(cfg.triggerSelector);
-        } catch (e) {
-            triggerEl = null;
-        }
+        const found = resolveSel(cfg.triggerSelector);
+        triggerEl = found.length === 1 ? found[0] : null;
     }
 
     let candidateListboxes = [];
@@ -890,7 +881,7 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
         for (const attr of ['aria-controls', 'aria-owns']) {
             const refId = cleanText(triggerEl.getAttribute(attr));
             if (refId) {
-                const lb = document.getElementById(refId);
+                const lb = byIdIn(triggerEl, refId);
                 if (lb && isVisible(lb) && !seenLb.has(lb)) {
                     seenLb.add(lb);
                     candidateListboxes.push(lb);
@@ -928,9 +919,7 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
             if (value === null) value = optEl.getAttribute('data-value');
             if (value === null) value = optEl.getAttribute('value');
             if (value === null) value = label;
-            const selector = (optEl.id && isUniqueMatch('#' + CSS.escape(optEl.id), optEl))
-                ? '#' + CSS.escape(optEl.id)
-                : structuralSelector(optEl);
+            const selector = computeDomSelector(optEl);
             options.push({
                 value: String(value),
                 label: String(label),
@@ -943,6 +932,16 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
 """
 
 
+# Every in-page script shares one set of composed-tree helpers.
+_CHECK_BUSY_AND_DOM_JS = _CHECK_BUSY_AND_DOM_JS.replace(
+    "/*@DOM_HELPERS@*/", _DOM_HELPERS_JS
+)
+_SNAPSHOT_WALKER_JS = _SNAPSHOT_WALKER_JS.replace("/*@DOM_HELPERS@*/", _DOM_HELPERS_JS)
+_EXTRACT_PORTAL_OPTIONS_JS = _EXTRACT_PORTAL_OPTIONS_JS.replace(
+    "/*@DOM_HELPERS@*/", _DOM_HELPERS_JS
+)
+
+
 class PlaywrightFormSurface:
     """Form backend for a Page, a native Frame, or a bounded frame route.
 
@@ -950,7 +949,12 @@ class PlaywrightFormSurface:
     observed frame URL paths. The first matching pattern must identify exactly
     one attached frame on ``base_origin`` (or the Page's initial HTTP origin).
     Unknown, cross-origin and ambiguous contexts are refused. Paths are pack
-    data; no application routing rules live in this backend.
+    data (``UIProfileSpec.frame_path_patterns``, used when the argument is
+    empty); no application routing rules live in this backend.
+
+    Controls inside open shadow roots are observed and acted on like any
+    others; their selectors read ``<host selector> >> <selector inside the
+    root>``. Closed shadow roots cannot be read and stay invisible.
     """
 
     def __init__(
@@ -967,6 +971,8 @@ class PlaywrightFormSurface:
         self._page = page
         self._owner_page = getattr(page, "page", None) or page
         self._is_frame = self._owner_page is not page
+        # The UI profile carries frame routing as data; an explicit argument wins.
+        frame_path_patterns = frame_path_patterns or ui_profile.frame_path_patterns
         self._frame_path_patterns = tuple(re.compile(p) for p in frame_path_patterns)
         origin_url = base_origin or str(self._owner_page.url or "")
         self._frame_origin = self._url_origin(origin_url)
@@ -1051,6 +1057,19 @@ class PlaywrightFormSurface:
                     "No attached frame matches the allowed origin and paths"
                 )
         self._assert_available()
+
+    def _popup_closed_itself(self) -> bool:
+        """A child popup window may close itself after its apply button.
+
+        That is the popup's normal end, not a lost form: the parent surface
+        settles and reads back the result. Frames and main pages never count.
+        """
+        return (
+            self._scoped_to_page_only
+            and not self._is_frame
+            and not self._detached
+            and self._is_page_closed()
+        )
 
     def _assert_available(self, *, check_frame: bool = True) -> None:
         if self._detached or self._owner_page.is_closed():
@@ -1183,6 +1202,8 @@ class PlaywrightFormSurface:
 
     def wait_for_quiescence(self) -> None:
         """Block until debounce grace elapses, busy selectors clear, and DOM+network settle."""
+        if self._popup_closed_itself():
+            return
         self._assert_available(check_frame=False)
 
         max_settle_s = self._ui_profile.max_settle_ms / 1000.0
@@ -1199,6 +1220,8 @@ class PlaywrightFormSurface:
         fallback_since: float = 0.0
 
         while time.monotonic() < deadline:
+            if self._popup_closed_itself():
+                return
             try:
                 self._refresh_target()
             except _NoMatchingFrameError:
