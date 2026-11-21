@@ -22,6 +22,7 @@
 tests/test_desktop_check_it_cli_mockmed.py  # 126s
 tests/test_effectbench_task_pack.py  # 34s
 tests/test_ap_invoice_benchmark.py  # 12s
+live tests/test_form_tx_heldout_portals_selfcheck.py::test_reference_human_solves_every_scored_case  # ~4 min, 32 browser runs
 tests/test_o2c_recon_benchmark.py  # 9s
 
 tests/test_agent_teach_branch.py::test_two_demonstrations_become_one_approved_branch  # 5s

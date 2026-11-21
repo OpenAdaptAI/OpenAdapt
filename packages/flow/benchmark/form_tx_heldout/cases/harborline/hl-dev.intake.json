@@ -1,0 +1,27 @@
+{
+  "case_id": "hl-dev",
+  "facts": {
+    "applicant.date_of_birth": "1984-03-09",
+    "applicant.email": "marisol.q@example.test",
+    "applicant.first_name": "Marisol",
+    "applicant.last_name": "Quennell",
+    "applicant.phone": "503-555-0117",
+    "coverage.deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.liability_limit": 300000,
+    "history.prior_claims_5yr": 0,
+    "property.address_line1": "2290 Larkspur Ct",
+    "property.city": "Bend",
+    "property.construction_quality": "Standard",
+    "property.exterior_wall": "vinyl siding",
+    "property.has_pool": true,
+    "property.pool_fenced": true,
+    "property.roof_material": "Architectural Shingle",
+    "property.roof_year": 2015,
+    "property.square_feet": 1850,
+    "property.state": "OR",
+    "property.stories": "2",
+    "property.year_built": 1994,
+    "property.zip": "97701"
+  }
+}
