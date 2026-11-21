@@ -15,6 +15,16 @@ if str(REPO_ROOT) not in sys.path:
 
 pytest_plugins = ("tests._orders_portal",)
 
+# Session-wide, before any fixture of any scope: module and session fixtures
+# (an e2e recording compiled once per module) must not seal their output
+# under a key a later per-test home can't open, and nothing may reach the
+# person's OS keychain. The per-test isolation below sets these again.
+os.environ["OPENADAPT_FLOW_KEY_STORE"] = "file"
+if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
+    os.environ.setdefault(
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data"
+    )
+
 from tests import lanes  # noqa: E402 - needs the sys.path line above
 from tests._approver_keys import approver  # noqa: E402,F401 - shared fixture
 from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line above
