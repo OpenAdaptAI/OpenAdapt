@@ -3310,7 +3310,6 @@ name = "openadapt"
 version = "1.23.0"
 source = { editable = "." }
 dependencies = [
-    { name = "anthropic", marker = "python_full_version < '3.13'" },
     { name = "click" },
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
     { name = "openadapt-flow", extra = ["browser", "hosted"], marker = "python_full_version < '3.13'" },
@@ -3385,10 +3384,13 @@ viewer = [
 windows = [
     { name = "openadapt-flow", extra = ["windows"], marker = "python_full_version < '3.13'" },
 ]
+wrap = [
+    { name = "anthropic", marker = "python_full_version < '3.13'" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "python_full_version < '3.13'", specifier = ">=0.40" },
+    { name = "anthropic", marker = "python_full_version < '3.13' and extra == 'wrap'", specifier = ">=0.40" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "openadapt", extras = ["browser", "core", "grounding", "retrieval", "privacy", "flow", "windows", "rdp", "agent"], marker = "extra == 'all'" },
@@ -3416,7 +3418,7 @@ requires-dist = [
     { name = "rich", marker = "python_full_version < '3.13'", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
 ]
-provides-extras = ["browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "core", "all", "dev"]
+provides-extras = ["wrap", "browser", "capture", "windows", "macos", "linux", "rdp", "ml", "evals", "viewer", "grounding", "retrieval", "privacy", "flow", "agent", "core", "all", "dev"]
 
 [[package]]
 name = "openadapt-agent"

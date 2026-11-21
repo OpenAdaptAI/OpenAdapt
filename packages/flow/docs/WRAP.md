@@ -9,7 +9,7 @@ and every save is read back again.
 
 ```bash
 export ANTHROPIC_API_KEY=...
-uvx --python 3.12 openadapt@latest wrap --example
+uvx --python 3.12 'openadapt[wrap]@latest' wrap --example
 ```
 
 `--example` runs the whole loop on a bundled sample task. Nothing leaves the

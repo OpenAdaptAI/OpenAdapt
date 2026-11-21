@@ -39,9 +39,9 @@ def test_wrap_example_reaches_the_engine_unchanged(monkeypatch):
     assert calls == [["--example", "--json"]]
 
 
-def test_the_launcher_installs_the_built_in_agent_sdk():
-    # ``uvx openadapt wrap --example`` runs the built-in Claude agent, so the
-    # launcher's own install must bring its SDK.
+def test_the_wrap_extra_brings_the_built_in_agent_sdk_and_the_base_stays_lean():
+    # ``uvx 'openadapt[wrap]' wrap --example`` runs the built-in Claude agent;
+    # the base launcher install must not pull its SDK.
     from pathlib import Path
 
     import tomllib
@@ -49,4 +49,7 @@ def test_the_launcher_installs_the_built_in_agent_sdk():
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     )["project"]
-    assert any(d.startswith("anthropic>=") for d in project["dependencies"])
+    assert not any(d.startswith("anthropic") for d in project["dependencies"])
+    assert any(
+        d.startswith("anthropic>=") for d in project["optional-dependencies"]["wrap"]
+    )
