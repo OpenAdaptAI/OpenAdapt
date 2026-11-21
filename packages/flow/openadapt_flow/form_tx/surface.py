@@ -16,6 +16,7 @@ from openadapt_flow.form_tx.types import (
     FormSnapshot,
     ObservedControl,
     ObservedOption,
+    ObservedTextPair,
     UIProfileSpec,
 )
 
@@ -188,6 +189,38 @@ def match_anchor_in_snapshot(
     if len(candidates) == 1:
         return candidates[0]
     return None
+
+
+def match_text_pair_in_snapshot(
+    anchor: FieldAnchorSpec,
+    snapshot: FormSnapshot,
+) -> Optional[ObservedTextPair]:
+    """Resolve ``anchor`` to at most one label and value pair shown as page text.
+
+    Only ``label_patterns`` (narrowed by ``section_patterns``) can match page
+    text: it has no name, id or selector. Raises ``AmbiguousAnchorError`` when
+    more than one pair matches, even if their values agree, so a summary that
+    shows a label twice is never read as proof. Returns ``None`` when the
+    anchor has no label patterns or nothing matches.
+    """
+    if not anchor.label_patterns:
+        return None
+    matches = [
+        pair
+        for pair in snapshot.text_pairs
+        if _matches_any_pattern(pair.label, anchor.label_patterns)
+        and (
+            not anchor.section_patterns
+            or _matches_any_pattern(pair.section_text, anchor.section_patterns)
+        )
+    ]
+    if len(matches) > 1:
+        labels = [f"{p.label} ({p.source})" for p in matches]
+        raise AmbiguousAnchorError(
+            f"Anchor {anchor.model_dump(exclude_none=True)} matched "
+            f"{len(matches)} labels in the page text: {labels}"
+        )
+    return matches[0] if matches else None
 
 
 def compute_field_signature(ctrl: ObservedControl) -> str:

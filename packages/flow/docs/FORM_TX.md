@@ -57,6 +57,35 @@ re-read from their controls just before the popup's apply button. A mismatch
 stops the run before apply. A match does not count as a read-back of the
 record: unless the summary shows the field, it stays `not_checked`.
 
+#### Summaries shown as page text
+
+Many confirmation pages show the stored quote as text, not in form controls.
+When a read-back anchor finds no control, the judge looks for the field in
+label and value pairs read from the page text:
+
+- definition lists (`dt` then `dd`);
+- two-cell table rows (`th` or `td`, then `td`);
+- tables with one header row and exactly one data row (each header names the
+  cell below it);
+- "Label: value" text in a block element, and a block with two leaf
+  children whose first ends in a colon or is a `dt`, `th`, `label`,
+  `strong` or `b`.
+
+Open shadow roots are read too; closed ones are not. Only an anchor's
+`label_patterns`, narrowed by `section_patterns`, can match page text, because
+text has no name, id or selector. The rules:
+
+- a label shown more than once (even with the same value) makes the field
+  `not_checked`;
+- an empty or placeholder value is `failed` when a value was expected;
+- a different value under the field's codec is `failed`;
+- the same value is `passed`, with a reason that says it was read from page
+  text.
+
+A control always wins over page text. Outputs such as a quote number are read
+from page text the same way. The pairs are kept apart from the form controls,
+so the layer never fills or halts on them.
+
 The summary must match its declared landmark when one is configured. This is
 the configured browser read-back only. It does not prove server-side
 isolation, the absence of changes in other records, or atomic rollback of a
@@ -69,10 +98,6 @@ Measured on four held-out synthetic portals
 
 - It reads only the top document: a form inside an iframe shows no controls,
   and controls inside shadow DOM are invisible.
-- It reads values back only from form controls (`input`, `select`,
-  `textarea`, `output`, `[data-readonly-output]`). A summary or confirmation
-  page that shows values as plain text cannot be read, so every field ends
-  `not_checked`.
 - A popup routine has one apply button; an estimator that needs Calculate and
   then Use This Value stops for a person.
 - A type-ahead that fetches suggestions only after typing cannot be filled:

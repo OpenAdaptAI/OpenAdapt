@@ -468,6 +468,23 @@ class ObservedModal(BaseModel):
     message_text: str = ""
 
 
+class ObservedTextPair(BaseModel):
+    """A label and value shown as page text, not in a form control.
+
+    Read-only summary pages often show stored values as a definition list, a
+    table or "Label: value" text. These pairs are kept apart from ``controls``
+    so nothing ever treats them as fillable; only the read-back judge and
+    output extraction look at them.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str
+    value: str = ""
+    section_text: str = ""
+    source: Literal["dl", "table_row", "table_columns", "inline"] = "inline"
+
+
 class FormSnapshot(BaseModel):
     """Complete structural snapshot of the current form surface."""
 
@@ -483,6 +500,7 @@ class FormSnapshot(BaseModel):
     active_modals: tuple[ObservedModal, ...] = ()
     banner_errors: tuple[str, ...] = ()
     inflight_mutations: int = 0
+    text_pairs: tuple[ObservedTextPair, ...] = ()
 
 
 class FormHaltItem(BaseModel):

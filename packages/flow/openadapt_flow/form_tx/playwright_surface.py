@@ -33,6 +33,7 @@ from openadapt_flow.form_tx.types import (
     ObservedEntityRow,
     ObservedModal,
     ObservedOption,
+    ObservedTextPair,
     UIProfileSpec,
     WizardScreenSpec,
 )
@@ -919,6 +920,275 @@ _EXTRACT_PORTAL_OPTIONS_JS = r"""
 """
 
 
+# Label and value pairs shown as page text (definition lists, tables and
+# "Label: value" lines). Kept out of the controls so nothing fills them; only
+# read-back and output extraction use them. Open shadow roots are traversed;
+# closed ones cannot be read.
+_TEXT_PAIRS_JS = r"""
+(cfg) => {
+    const MAX_PAIRS = cfg.maxPairs || 500;
+    const MAX_LEN = cfg.maxValueLength || 500;
+    const MAX_LABEL = 120;
+    const cleanText = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+    const parentOf = (el) => {
+        if (el.parentElement) return el.parentElement;
+        const root = el.getRootNode ? el.getRootNode() : null;
+        return (root && root.host) ? root.host : null;
+    };
+
+    const isVisible = (el) => {
+        if (!el || !(el instanceof Element)) return false;
+        let cur = el;
+        while (cur && cur !== document.documentElement) {
+            if (cur.hasAttribute('hidden')) return false;
+            if (cur.tagName === 'DIALOG' && !cur.open &&
+                    cur.getAttribute('data-modal-open') !== 'true') {
+                return false;
+            }
+            const cs = window.getComputedStyle(cur);
+            if (cs.display === 'none' || cs.visibility === 'hidden' ||
+                    cs.visibility === 'collapse') {
+                return false;
+            }
+            cur = parentOf(cur);
+        }
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    };
+
+    // Hidden by style or attribute; an empty element with no size still counts
+    // as shown, so an empty value reads as empty rather than vanishing.
+    const isShown = (el) => {
+        let cur = el;
+        while (cur && cur !== document.documentElement) {
+            if (cur.hasAttribute('hidden')) return false;
+            const cs = window.getComputedStyle(cur);
+            if (cs.display === 'none' || cs.visibility === 'hidden' ||
+                    cs.visibility === 'collapse') {
+                return false;
+            }
+            cur = parentOf(cur);
+        }
+        return true;
+    };
+
+    // Every open shadow root, nested ones included.
+    const roots = [document];
+    for (let i = 0; i < roots.length && roots.length < 2000; i += 1) {
+        for (const el of roots[i].querySelectorAll('*')) {
+            if (el.shadowRoot) roots.push(el.shadowRoot);
+        }
+    }
+    const deepAll = (sel) => {
+        const out = [];
+        for (const r of roots) {
+            try {
+                for (const el of r.querySelectorAll(sel)) out.push(el);
+            } catch (e) {}
+        }
+        return out;
+    };
+
+    const CONTROL_SEL = 'input:not([type="hidden"]), select, textarea, button, ' +
+        '[role="combobox"], [role="listbox"], [role="checkbox"], [role="radio"], [contenteditable="true"]';
+    const STRIP_SEL = CONTROL_SEL + ', option, script, style, noscript, template';
+    const hasControl = (el) => {
+        try {
+            return Boolean(el.querySelector(CONTROL_SEL));
+        } catch (e) {
+            return false;
+        }
+    };
+    const textOf = (el) => {
+        const clone = el.cloneNode(true);
+        try {
+            for (const child of Array.from(clone.querySelectorAll(STRIP_SEL))) child.remove();
+        } catch (e) {}
+        return cleanText(clone.textContent);
+    };
+    const normLabel = (s) => cleanText(String(s || '').replace(/[:：]\s*$/, '').replace(/\*\s*$/, ''));
+
+    const HEADING_SEL = 'h1, h2, h3, h4, legend, caption';
+    const headings = deepAll(HEADING_SEL).filter(isVisible);
+    const sectionOf = (el) => {
+        let best = '';
+        const root = el.getRootNode();
+        for (const h of headings) {
+            if (h.getRootNode() !== root) continue;
+            if (h === el || h.contains(el)) {
+                if (h.tagName === 'CAPTION' || h.tagName === 'LEGEND') best = cleanText(h.textContent);
+                continue;
+            }
+            if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                best = cleanText(h.textContent);
+            }
+        }
+        // A table's caption names the rows inside it.
+        const table = el.closest ? el.closest('table') : null;
+        if (table && table.caption && cleanText(table.caption.textContent)) {
+            return cleanText(table.caption.textContent);
+        }
+        return best;
+    };
+
+    const pairs = [];
+    const consumed = new Set();
+    const push = (label, value, el, source) => {
+        if (pairs.length >= MAX_PAIRS) return;
+        const l = normLabel(label);
+        if (!l || l.length > MAX_LABEL || !/[A-Za-z0-9À-￿]/.test(l)) return;
+        pairs.push({
+            label: l,
+            value: cleanText(value).slice(0, MAX_LEN),
+            section_text: sectionOf(el),
+            source,
+        });
+    };
+    const isConsumed = (el) => {
+        let cur = el;
+        for (let d = 0; cur && d < 12; d += 1) {
+            if (consumed.has(cur)) return true;
+            cur = parentOf(cur);
+        }
+        return false;
+    };
+
+    // 1. Definition lists: dt then its dd(s).
+    for (const dl of deepAll('dl')) {
+        if (!isVisible(dl) || hasControl(dl)) continue;
+        const items = [];
+        for (const child of Array.from(dl.children)) {
+            if (child.tagName === 'DT' || child.tagName === 'DD') {
+                items.push(child);
+            } else if (child.tagName === 'DIV') {
+                for (const g of Array.from(child.children)) {
+                    if (g.tagName === 'DT' || g.tagName === 'DD') items.push(g);
+                }
+            }
+        }
+        let labels = [];
+        let values = [];
+        let anchor = null;
+        const flush = () => {
+            if (labels.length && anchor) {
+                for (const l of labels) push(l, values.join(', '), anchor, 'dl');
+            }
+            labels = [];
+            values = [];
+            anchor = null;
+        };
+        // A hidden dd still ends its group: it counts as an empty value, so
+        // a later dd is never joined onto earlier labels. A hidden dt starts a
+        // group nobody can see, and its dd values are dropped.
+        let hiddenGroup = false;
+        for (const it of items) {
+            consumed.add(it);
+            const shown = isShown(it);
+            if (it.tagName === 'DT') {
+                if (values.length || !shown) flush();
+                hiddenGroup = !shown;
+                if (!shown) continue;
+                labels.push(textOf(it));
+                if (!anchor) anchor = it;
+            } else if (hiddenGroup) {
+                continue;
+            } else if (labels.length) {
+                values.push(shown ? textOf(it) : '');
+            }
+        }
+        flush();
+        consumed.add(dl);
+    }
+
+    // 2. Tables without form controls.
+    for (const table of deepAll('table')) {
+        if (!isVisible(table)) continue;
+        const rows = Array.from(table.rows || []).filter(
+            (r) => r.closest('table') === table && isVisible(r)
+        );
+        if (!rows.length) continue;
+        const cellsOf = (r) => Array.from(r.cells || []);
+        const first = cellsOf(rows[0]);
+        const headerRow = first.length >= 2 && first.every((c) => c.tagName === 'TH');
+        const dataRows = rows.slice(1);
+        if (headerRow && dataRows.length === 1 && !hasControl(table)) {
+            const cells = cellsOf(dataRows[0]);
+            if (cells.length === first.length) {
+                for (let i = 0; i < cells.length; i += 1) {
+                    push(textOf(first[i]), textOf(cells[i]), cells[i], 'table_columns');
+                }
+                consumed.add(table);
+                continue;
+            }
+        }
+        for (const row of rows) {
+            const cells = cellsOf(row);
+            if (cells.length !== 2) continue;
+            if (hasControl(row)) continue;
+            if (cells[0].tagName === 'TH' && cells[1].tagName === 'TH') continue;
+            if (cells[0].colSpan > 1 || cells[1].colSpan > 1) continue;
+            push(textOf(cells[0]), textOf(cells[1]), cells[0], 'table_row');
+            consumed.add(row);
+        }
+    }
+
+    // 3. Two leaf children: <div><span>Label:</span><span>value</span></div>.
+    const INLINE = new Set([
+        'B', 'STRONG', 'EM', 'I', 'SPAN', 'SMALL', 'LABEL', 'ABBR', 'CODE', 'BR',
+        'A', 'TIME', 'MARK', 'SUP', 'SUB', 'U', 'DATA', 'OUTPUT', 'BDI',
+    ]);
+    const isLeaf = (el) => Array.from(el.children).every((c) => INLINE.has(c.tagName) && c.children.length === 0);
+    const BLOCK_SEL = 'p, li, div, span, td, dd';
+    const emitted = new Set();
+    for (const el of deepAll(BLOCK_SEL)) {
+        if (pairs.length >= MAX_PAIRS) break;
+        if (isConsumed(el) || !isVisible(el) || hasControl(el)) continue;
+        const kids = Array.from(el.children).filter((c) => c.tagName !== 'BR' && textOf(c));
+        if (kids.length !== 2) continue;
+        if (!kids.every((k) => k.children.length === 0 || isLeaf(k))) continue;
+        const loose = Array.from(el.childNodes).filter(
+            (n) => n.nodeType === Node.TEXT_NODE && cleanText(n.textContent)
+        );
+        if (loose.length) continue;
+        const firstText = textOf(kids[0]);
+        const labelish = /[:：]\s*$/.test(firstText) ||
+            ['DT', 'TH', 'LABEL', 'STRONG', 'B'].includes(kids[0].tagName);
+        if (!labelish) continue;
+        push(firstText, textOf(kids[1]), el, 'inline');
+        emitted.add(el);
+        consumed.add(el);
+    }
+
+    // 4. "Label: value" text in a leaf block.
+    const LINE_RE = /^([^:：]{1,120})[:：]\s*([\s\S]*)$/;
+    const candidates = deepAll(BLOCK_SEL).filter(
+        (el) => !isConsumed(el) && isLeaf(el) && !hasControl(el) && isVisible(el)
+    );
+    const candSet = new Set(candidates);
+    for (const el of candidates) {
+        if (pairs.length >= MAX_PAIRS) break;
+        let up = parentOf(el);
+        let nested = false;
+        for (let d = 0; up && d < 6; d += 1) {
+            if (candSet.has(up)) {
+                nested = true;
+                break;
+            }
+            up = parentOf(up);
+        }
+        if (nested) continue;
+        const text = textOf(el);
+        const m = LINE_RE.exec(text);
+        if (!m) continue;
+        if (/^\/\//.test(m[2])) continue; // a URL, not a label
+        push(m[1], m[2], el, 'inline');
+    }
+    return pairs;
+}
+"""
+
+
 class PlaywrightFormSurface:
     """Playwright-backed ``FormSurfaceBackend`` with DOM/network quiescence barriers."""
 
@@ -1301,6 +1571,7 @@ class PlaywrightFormSurface:
         }
 
         raw = self._page.evaluate(_SNAPSHOT_WALKER_JS, walker_cfg)
+        text_pairs = self._read_text_pairs()
         url_clean = _strip_url_to_origin_and_path(str(self._page.url or ""))
         title = str(raw.get("title") or "")
 
@@ -1381,7 +1652,35 @@ class PlaywrightFormSurface:
             active_modals=active_modals_list,
             banner_errors=tuple(str(b) for b in (raw.get("banner_errors") or ())),
             inflight_mutations=self.inflight_mutations,
+            text_pairs=text_pairs,
         )
+
+    def _read_text_pairs(self) -> tuple[ObservedTextPair, ...]:
+        """Read label and value pairs shown as page text.
+
+        A failure to read them leaves the tuple empty, so any read-back that
+        needs them ends ``not_checked``, never passed.
+        """
+        try:
+            raw_pairs = self._page.evaluate(
+                _TEXT_PAIRS_JS, {"maxPairs": 500, "maxValueLength": 500}
+            )
+        except Exception:
+            return ()
+        pairs: list[ObservedTextPair] = []
+        for item in raw_pairs or ():
+            source = str(item.get("source") or "inline")
+            if source not in ("dl", "table_row", "table_columns", "inline"):
+                source = "inline"
+            pairs.append(
+                ObservedTextPair(
+                    label=str(item.get("label") or ""),
+                    value=str(item.get("value") or ""),
+                    section_text=str(item.get("section_text") or ""),
+                    source=source,  # type: ignore[arg-type]
+                )
+            )
+        return tuple(pairs)
 
     def _resolve_live_locator(self, dom_selector: str) -> Any:
         if not dom_selector or not dom_selector.strip():
