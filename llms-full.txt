@@ -104,13 +104,14 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt demo quickstart --break-it
+uvx --python 3.12 openadapt@latest quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
-fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
-does the same.
+fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
+Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+then `openadapt quickstart --break-it` does the same. The browser runs hidden
+and progress shows in the terminal; add `--watch` to see the browser window.
 
 ### What it shows
 
@@ -589,6 +590,7 @@ improvising or retrying when something is off.
 | --- | --- | --- | --- |
 | Compile one or more demonstrations into a deterministic program | Released | Real app (OpenEMR referral, 62 timed runs) | `openadapt-flow record`, `compile`; [packages/flow](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md) |
 | Try the three acts on a real app: `openadapt quickstart --app openemr` runs the certified OpenEMR referral program in Docker, five referrals at once checked in OpenEMR's record, then a possible duplicate stopped before saving; without Docker or a clone it says so and exits 2 | On main ([#1431](https://github.com/OpenAdaptAI/OpenAdapt/pull/1431)) | Real app (local OpenEMR 8.0.0.3, synthetic patients) | `openadapt quickstart --app openemr`; [docs/quickstart](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/quickstart/README.md#on-a-real-app---app-openemr) |
+| Run the quickstart without taking over the screen: `uvx --python 3.12 openadapt@latest quickstart` keeps the browser hidden and shows progress in the terminal (`--watch` shows the window, `--open` opens the Seal page), runs a run whose starting screen never settles once more in a new folder and otherwise says why in plain words, and reruns itself with Python 3.12 under `uvx` on an unsupported Python. Flow's page settle hands a page that draws no frames (a covered headed window) to the screenshot check instead of waiting out its timeout | On main ([#2365](https://github.com/OpenAdaptAI/OpenAdapt/pull/2365)) | Unit tests; headless terminal captures at 80, 120 and 250 columns for Terminal.app, WezTerm and iTerm2 settings; a headed covered-window run is not reproduced here | `openadapt quickstart`; [openadapt/quickstart](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/quickstart/__init__.py), [_page_quiescence.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/backends/_page_quiescence.py) |
 | Classify common local edits without a person (select-all, Enter in a field or dropdown, an in-form tab, an informational dialog's dismiss), only when the recording's network capture shows no write and a runtime check confirms only the expected change | Released ([#1366](https://github.com/OpenAdaptAI/OpenAdapt/pull/1366)) | Synthetic; OpenEMR referral recording re-admitted offline (violations 12 to 1 under `permissive`) | [LOCAL_EDIT_CLASSIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/design/LOCAL_EDIT_CLASSIFICATION.md), `compiler/local_edit.py` |
 | Keep the empty search result a person confirmed through (a duplicate check's "No matches were found.") as an exact check after the click that opens the dialog and again right before Confirm, so a run whose dialog lists a match stops before the save; only fixed-vocabulary search-result statements shown once, never text with a name or search term, and a confirmation dialog without one is noted in `compile_notes.json` | On main | Real app frames (an OpenEMR referral recording, compiled offline) | `compiler/empty_result_guard.py` |
 | Mine that check in any language: induction keeps the one line a named dialog adds (not its title or buttons, not a question, no typed value or number) when two or more demonstrations whose typed values all differ show the same line, refuses when the demonstrations disagree on a mined check instead of copying the first one's, and qualification then needs a business-rule run that halts at it | On main | Synthetic (a search dialog recorded in Chromium by the real recorder, German statement, real OCR) | `compiler/empty_result_guard.py`, `compiler/induction.py` |
@@ -618,7 +620,7 @@ improvising or retrying when something is off.
 | Install the write checker alone: `pip install openadapt-verify` (21 distributions, about 41 MB, no vision, OCR, browser, GUI or NumPy stack; Flow 3 moved those to its `vision` extra) runs Flow's own verifier, ledger, journal, SQL guards and receipts. `openadapt-verify quickstart` checks three scripted agent writes (correct, wrong value, claimed but not saved) against REST, SQLite, FHIR, PostgreSQL and MySQL, each `CONFIRMED`, `REFUTED` or `UNCERTAIN` with a checked signed receipt; `@verified` and `checked_write` wrap a plain Python write in one line | On main | Synthetic (disposable local stores and PostgreSQL and MySQL containers; a clean-venv CI job enforces the install budget and an import test refuses the vision modules) | [packages/verify](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/README.md), `openadapt_verify/quickstart.py`, `openadapt_verify/guard.py` |
 | Audit your own automation's success check: `openadapt-verify audit` puts an HTTP proxy in front of the app, runs your command through it N times, changes the save (the first write whose body carries a declared value, or that matches `--write-path`) once per run (not saved with a replayed success reply, rejected, a value blanked or changed, saved twice, an extra changed copy, the reply lost after the save, and a rewritten record field when given one), and counts the runs where the command reported success but the contract's independent read path shows a wrong or missing save, plus false alarms; table and JSON report. HTTP/1.x only, no app code, no WebSocket or server-sent events; a stale overwrite and a change outside the read path are not run | On main | Synthetic (two scripted HTTP clients against the quickstart's REST store: a script that trusts the 2xx reply reported success on 10 of 12 bad saves and failure on 2 saves that landed, one that reads its record back through the app on 4 of 12, missing the duplicate and extra writes) | `openadapt-verify audit`, [packages/verify](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/README.md#audit-your-automations-success-check), `openadapt_verify/audit.py` |
 | Never send a write twice while its outcome is unknown: an append-only ledger on local disk (pluggable backend), keyed by the write's identity, that every adapter, the MCP tools and the CLI consult before sending; a read-back against the attempt's own baseline resolves it, and a refuted write waits for a person (`openadapt verify ledger list`, `reconcile`, `release`) | Released | Synthetic (MockMed's fault server: a worker killed between the send and the read-back, killed during a timed-out send, killed before the send, a late write, and two worker processes started together on one write) | `openadapt_flow/write_ledger.py`, [VERIFIER_API.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md#the-uncertain-write-ledger) |
-| Commit one record update through a transaction lens: `openadapt-verify tx-run` (or `tx_verified` in Python) reads the target record, sends the update, reads it back and judges the intended fields and every other field (frame) with one comparison policy, and signs a receipt. Without a separately supplied SQLite row authority every HTTP write is refused; `--prototype-unqualified` runs it with an `UNCERTAIN` result at best and no automatic undo. `tx-induce` proposes a lens from a HAR trace and can probe a declared sandbox, but its probe report never authorizes execution, and an observed mismatch never becomes an accepted value mapping. Induction takes route roles from what each request did, so a create sent as `PUT` and an update sent as `POST` are recognized, and the sandbox probe checks an update route of any method for replace semantics. A field that only looks like a timestamp stays in the frame unless the probe sees the server change it. When the probe cannot create its own record, an update lens is left in replace mode (whole-record writes), and a certification fault the server refuses is reported as not delivered, never as a pass. Undo refuses to overwrite a change made after the write. The wire tap hands a redirect that stays on the tapped origin back to the client and refuses one that leaves it; it never follows a redirect itself. Not checked: server-side effects outside the target record, such as triggers or background jobs | On main ([#2293](https://github.com/OpenAdaptAI/OpenAdapt/pull/2293)) | Synthetic (local SQLite and HTTP fixture servers), plus induction and the replace probe on one open-source task app (recorded trace in CI, live tests in the lab) | `openadapt-verify tx-induce`, `tx-run`, `openadapt_flow/tx/`, `openadapt_verify/tx.py` |
+| Commit one record update through a transaction lens: `openadapt-verify tx-run` (or `tx_verified` in Python) reads the target record, sends the update, reads it back and judges the intended fields and every other field (frame) with one comparison policy, and signs a receipt. Without a separately supplied SQLite row authority every HTTP write is refused; `--prototype-unqualified` runs it with an `UNCERTAIN` result at best and no automatic undo. `tx-induce` proposes a lens from a HAR trace and can probe a declared sandbox, but its probe report never authorizes execution, and an observed mismatch never becomes an accepted value mapping. Induction takes route roles from what each request did, so a create sent as `PUT` and an update sent as `POST` are recognized, and the sandbox probe checks an update route of any method for replace semantics. A field that only looks like a timestamp stays in the frame unless the probe sees the server change it. Induction refuses a trace that shows no write it can attribute to a record (an update at the record's URL, or a create whose record is then read there) instead of guessing a route; the CLI allows a guessed item route only when it certifies the lens on a sandbox. When the probe cannot create its own record, an update lens is left in replace mode (whole-record writes), and a certification fault the server refuses is reported as not delivered, never as a pass. Undo refuses to overwrite a change made after the write. The wire tap hands a redirect that stays on the tapped origin back to the client and refuses one that leaves it; it never follows a redirect itself. Not checked: server-side effects outside the target record, such as triggers or background jobs | On main ([#2293](https://github.com/OpenAdaptAI/OpenAdapt/pull/2293)) | Synthetic (local SQLite and HTTP fixture servers), plus induction and the replace probe on one open-source task app (recorded trace in CI, live tests in the lab) | `openadapt-verify tx-induce`, `tx-run`, `openadapt_flow/tx/`, `openadapt_verify/tx.py` |
 | Reconcile one prior authorization or claim across the EHR (FHIR), the clearinghouse (X12 278 and 277 files) and the payer (Da Vinci PAS): each leg is a verifier contract judged by the same record checks, and the result names each break (`not_received`, `mismatch`, `not_written_back`, `duplicate`, `not_accepted`) with `CONFIRMED`/`REFUTED`/`UNCERTAIN` and a Scope; absence before a deadline is `UNCERTAIN`, an unreadable store is never agreement, a rejected or returned 277 is never agreement, and a judged record or value with two distinct candidates in the read (repeated segments, list elements, join targets, a group's latest) is never `CONFIRMED` | On main | HL7 Da Vinci PAS reference implementation and Medplum run locally, synthetic X12: 36 of 36 planted breaks found, 0 of 27 faulty units `CONFIRMED`, 17 of 17 clean units `CONFIRMED` (units 1 to 47; the 3 status-category units added later are covered by unit tests); a Hypothesis property test over generated multi-candidate reads; Epic's public sandbox read-only as the EHR leg | `openadapt-flow reconcile`, [RECONCILE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RECONCILE.md), [results](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/reconcile/RESULTS.md) |
 | Catch a write that lands after the verdict (a background job, a trigger, a delayed side record): a `CONFIRMED` with a recheck due is provisional (`provisional`, `recheck_due_at`); the recheck reads the whole database again and refutes the earlier result when a change since the post-save read has no explanation, and a recheck that doesn't confirm holds the write in the ledger. Run it from Python (`verifier.recheck`) or MCP (`verify_recheck`). A write after the recheck's read is not seen (`frame.database.recheck_after_s`, no default window) | Released ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)); provisional result, MCP tool and ledger hold ([#1669](https://github.com/OpenAdaptAI/OpenAdapt/pull/1669)) | Real app (Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, 180 s window: 4 of 4 planted late writes at 125 to 130 s refuted at the recheck, correct writes confirmed; EspoCRM's cron daemon needs its job tables declared; Redmine 6.1 on PostgreSQL 17, 180 s window: the first-contact study's late writes F19 and F20 refuted at the recheck, correct writes confirmed); synthetic (SQLite); opt-in live OpenEMR test | `openadapt_flow/verifier.py`, `runtime/effects/late_write.py`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md#writes-that-land-later) |
 | Diff the whole database for the frame (`frame.database`) on SQLite, MySQL, MariaDB and PostgreSQL. On MySQL and MariaDB every column type is read exactly (binary strings, `BIT`, geometries and vectors as hex, `FLOAT` widened to `DOUBLE`, `JSON` as stored text, decimals at full precision). On PostgreSQL every column type is read as text by a declared rule in a session pinned to UTC and exact float output, and a type without a rule, a table the account can't read in full, or an unreadable sequence is refused. So a row the save adds, changes or removes outside the declared records, such as an extra planned call or a stream note, is refuted unless a declared effect, a side record, an attributed concurrent write or an allow-listed bookkeeping table explains it | Released ([#1661](https://github.com/OpenAdaptAI/OpenAdapt/pull/1661)); PostgreSQL ([#1673](https://github.com/OpenAdaptAI/OpenAdapt/pull/1673)) | Real app (Dolibarr 21 on MariaDB 11.4: all 387 tables read where the frame raised `TypeError`; EspoCRM on MariaDB 11.4: the first-contact study's extra call and stream note refuted, correct opportunities verified; Redmine 6.1 on PostgreSQL 17: 58 tables read, a stray upload in a table the contract doesn't read refuted, correct writes verified); live MariaDB and PostgreSQL type tests | [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md#the-whole-database), `runtime/effects/db_snapshot.py` |
@@ -2438,9 +2440,20 @@ automation into an independently certified transaction system.
   registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
   otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
   and public key an owner or admin must register.
+- `openadapt login` with no token signs in through the browser: a PKCE
+  loopback grant on `127.0.0.1` that stores the same credential `push` and
+  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
+  the old path (#2379).
 
 ### Fixes
 
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
   secret boundary stops recording before that text reaches its artifacts.
@@ -2470,3 +2483,41 @@ automation into an independently certified transaction system.
   derived from its explicit key for its own lifetime. Without that, each
   checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
   instead of 3.5 s (131 derivations, now 1).
+- In reverse-proxy mode the wire tap relays a redirect to a path on the
+  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
+  so it can front a form app that answers a save with Post/Redirect/Get. The
+  client's next request comes back through the tap. Browser route mode still
+  refuses every redirect, and the tap never follows one itself (#2392).
+- Guarded native keyboard delivery on a Windows agent that advertises
+  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
+  control and frame. #2313 describes when it applies and what it checks.
+- A repair candidate id that would leave the repair store is refused (#2369).
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+- An admitted managed run, and its resume, keep the policy the local Standard
+  gate chose when neither the CLI nor the deployment names one, instead of
+  exiting with code 2 (#2401).
+- Lens route induction can use a trace's observed effects, not only HTTP
+  methods, to assign route roles (#2393).
+- Generated verify contracts stop fewer correct writes: five generator causes
+  of false stops are fixed, each by one schema-independent rule (#2418).
+- `import openadapt_flow` loads its `ir` re-exports on first use, and the
+  qualification models and several replayer helpers moved into their own
+  modules. Names still import explicitly from their old modules;
+  `from openadapt_flow.qualification import *` no longer includes
+  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
+  #2455, #2456, #2459).
+
+### Requirements
+
+- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
+  release with `sanitization_config()`, which sanitized reuse and approval bind
+  to.
+- On Python 3.11 and newer, the lock moves Pillow, filelock and other
+  dependencies to a release that fixes an open security advisory. The
+  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
