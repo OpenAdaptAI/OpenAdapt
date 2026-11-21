@@ -3,7 +3,10 @@
 This synthetic observation variant removes the grid from the visible form so
 virtual cells with no independent native value source do not obscure the
 specific field contract under test. The original SQLite data and save handler
-remain. It qualifies neither those virtual cells nor a complete Flow save.
+remain. Empty and short values use the modern WinForms accessibility provider,
+which supplies explicit pattern availability. The long-value negative uses
+the legacy provider that returns a 4,096-unit prefix. The two processes share
+the original SQLite seed. Neither the virtual cells nor a full save is covered.
 """
 
 from __future__ import annotations
@@ -45,6 +48,11 @@ HOOK = r"""
 # This is a synthetic observation variant, not qualification of virtual cells.
 $form.Controls.Remove($grid)
 $grid.Hide()
+if ($PSVersionTable.PSEdition -eq 'Core') {
+    # The positive covers WinForms controls. Non-client window chrome belongs
+    # to an OS provider with a separate capability contract.
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+}
 $approvalProbe = New-Object System.Windows.Forms.TextBox
 $approvalProbe.Name = 'approvalProbe'
 $approvalProbe.AccessibleName = 'approvalProbe'
@@ -66,7 +74,9 @@ function Get-ApprovalStored {
             suffix=$text.Substring([Math]::Max(0, $text.Length - 16));
             hwnd=$control.Handle.ToInt64(); pid=$PID }
     }
-    return @{ fields=$values; form_hwnd=$form.Handle.ToInt64(); pid=$PID }
+    return @{ fields=$values; form_hwnd=$form.Handle.ToInt64(); pid=$PID;
+        powershell_edition=$PSVersionTable.PSEdition;
+        winforms_version=[System.Windows.Forms.Form].Assembly.GetName().Version.ToString() }
 }
 $approvalTimer = New-Object System.Windows.Forms.Timer
 $approvalTimer.Interval = 40
@@ -184,7 +194,7 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
             return response
 
         monkeypatch.setattr(backend._session, "post", post)
-        host.launch_app()
+        host.launch_app(powershell="pwsh.exe")
         before = host.rows()
         evidence["before_rows"] = before
         for name, expected in (
@@ -192,7 +202,13 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
             ("short", SHORT),
             ("long", "x" * 8192 + "-END"),
         ):
+            if name == "long":
+                # Exercise the stock legacy provider's actual truncation on the
+                # same database, without reseeding between provider versions.
+                host.launch_app(reseed=False)
             managed = _command(tmp_path, name)
+            expected_edition = "Desktop" if name == "long" else "Core"
+            assert managed["powershell_edition"] == expected_edition
             _check_stored(managed, expected)
             payload = {"hwnd": managed["form_hwnd"], "pid": managed["pid"]}
             # Reacquire actual UIA/runtime/native scope, using the exact engine
