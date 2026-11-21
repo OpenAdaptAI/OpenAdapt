@@ -1896,7 +1896,11 @@ def dump_har(
     debugging; a file is always sealed under the at-rest key
     (``write_private_record``). TODO(#2423): use the key hierarchy's data key.
     """
-    from openadapt_flow import capture_privacy as cp
+    from openadapt_flow.capture_privacy import (
+        BodyMinimizer,
+        is_minimized_har,
+        minimize_har,
+    )
 
     raw_har: Mapping[str, Any] = (
         har_or_tap.export_har()
@@ -1905,7 +1909,7 @@ def dump_har(
     )
     secret_tuple = tuple(s for s in secrets if s)
     scrubbed = _scrub_har_value(dict(raw_har), secret_tuple)
-    if not raw_bodies and not cp.is_minimized_har(scrubbed):
+    if not raw_bodies and not is_minimized_har(scrubbed):
         policy = (
             har_or_tap.policy
             if isinstance(har_or_tap, SessionWireTap)
@@ -1916,7 +1920,7 @@ def dump_har(
             if keep_fields is None
             else tuple(keep_fields)
         )
-        scrubbed = cp.minimize_har(scrubbed, cp.BodyMinimizer(fields))
+        scrubbed = minimize_har(scrubbed, BodyMinimizer(fields))
     payload = json.dumps(scrubbed, indent=2, sort_keys=False)
     if path is not None:
         out = Path(path)

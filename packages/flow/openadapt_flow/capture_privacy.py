@@ -29,8 +29,8 @@ that look like ordinary field names are kept as written. A key that does not
 look like a field name (spaces, punctuation, over 64 characters) is hashed
 like a value. Header values are handled by the credential redaction only.
 
-Stdlib only, and no ``openadapt_flow`` import at module level, so the wire
-tap and the recorder can load it lazily without changing their import cost.
+Stdlib only (no ``openadapt_flow`` import), so the wire tap and the
+recorder load it without changing their import cost.
 """
 
 from __future__ import annotations
@@ -176,8 +176,6 @@ class BodyMinimizer:
         if ctype == "application/x-www-form-urlencoded":
             return "form", self.pairs(up.parse_qsl(text, keep_blank_values=True))
         if ctype == "multipart/form-data":
-            from openadapt_flow.network_capture import parse_multipart
-
             parsed = parse_multipart(data, full_type)
             if parsed is None:
                 return None
@@ -360,3 +358,60 @@ def minimize_line(line: Mapping[str, Any], minimizer: BodyMinimizer) -> dict[str
             truncated=bool(out.get("response_truncated")),
         )
     return out
+
+
+def parse_multipart(
+    raw: bytes, content_type: str
+) -> Optional[tuple[list[list[str]], list[str]]]:
+    """The fields of a ``multipart/form-data`` body that carries no file.
+
+    Returns ``([[name, value], ...], [file field names])`` in the order sent:
+    a file input left empty is a part with ``filename=""`` and no content,
+    kept as ``[name, ""]`` and named in the second list. ``None`` when a part
+    carries a file, a part has a header other than its disposition and an
+    ``application/octet-stream`` type for an empty file, a value isn't UTF-8,
+    or the body doesn't parse: those bodies aren't kept.
+    """
+
+    m = re.search(r'boundary=(?:"([^"]+)"|([^;\s]+))', content_type, re.I)
+    if not m:
+        return None
+    delimiter = b"--" + (m.group(1) or m.group(2)).encode("latin-1")
+    chunks = raw.split(delimiter)
+    if len(chunks) < 2 or chunks[0].strip() or not chunks[-1].startswith(b"--"):
+        return None
+    pairs: list[list[str]] = []
+    files: list[str] = []
+    for chunk in chunks[1:-1]:
+        if not chunk.startswith(b"\r\n") or not chunk.endswith(b"\r\n"):
+            return None
+        head, sep, value = chunk[2:-2].partition(b"\r\n\r\n")
+        if not sep:
+            return None
+        try:
+            head_lines = head.decode("utf-8").split("\r\n")
+            text = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        disposition = head_lines[0]
+        extra = [h.lower() for h in head_lines[1:]]
+        name = re.fullmatch(
+            r'(?i)content-disposition: form-data; name="([^"]*)"(; filename="([^"]*)")?',
+            disposition,
+        )
+        if name is None:
+            return None
+        if name.group(2) is None:
+            if extra:
+                return None
+            pairs.append([name.group(1), text])
+            continue
+        if (
+            name.group(3)
+            or text
+            or extra not in ([], ["content-type: application/octet-stream"])
+        ):
+            return None  # a file was attached
+        pairs.append([name.group(1), ""])
+        files.append(name.group(1))
+    return pairs, files
