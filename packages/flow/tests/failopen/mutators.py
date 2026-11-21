@@ -144,7 +144,7 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
             spec.subject.set(ev, "other-run"),
             "not_pass",
         )
-    for lens in spec.values:
+    for which, lens in enumerate(spec.values):
         try:
             current = lens.get(ev)
         except (KeyError, IndexError, TypeError):
@@ -152,7 +152,9 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
         for label, value in perturbations(current):
             if label in spec.equivalent:
                 continue
-            yield Mutation("M10", f"value {label}", lens.set(ev, value), "not_pass")
+            yield Mutation(
+                "M10", f"value {which} {label}", lens.set(ev, value), "not_pass"
+            )
     if spec.corpus is not None:
         for entry in spec.corpus_entries():
             mutated = spec.corpus.apply(ev, entry)

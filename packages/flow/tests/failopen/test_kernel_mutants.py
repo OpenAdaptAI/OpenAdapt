@@ -29,13 +29,16 @@ MUTANTS: dict[str, tuple[str, str]] = {
     ),
     "ignore unexpected": ("            and not self.unexpected\n", "\n"),
     "ignore mismatched": (
-        "        got = [r for r in same_key if not binding_mismatches(item, r.subject)]\n",
-        "        got = list(same_key)\n",
+        "        matches[n] = [r for r in same_key if not binding_mismatches(item, r.subject)]\n",
+        "        matches[n] = list(same_key)\n",
     ),
-    "keep last writer": (
-        "        elif len({r.status for r in got}) > 1:\n            conflicting.append(item)\n"
-        "        else:\n            buckets[got[0].status.value].append(item)\n",
-        "        else:\n            buckets[got[-1].status.value].append(item)\n",
+    "one writer wins": (
+        "        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):\n",
+        "        elif any(takers[id(r)] > 1 for r in got):\n",
+    ),
+    "a shared result counts twice": (
+        "        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):\n",
+        "        elif len({r.status for r in got}) > 1:\n",
     ),
     "truncate at limit": (
         "    used: set[int] = set()\n",
@@ -84,9 +87,11 @@ def battery(v: ModuleType) -> None:
     assert not v.settle(fix(bound), [held(S(key="a", run_id="run-2"))]).passes, (
         "run ignored"
     )
-    assert not v.settle(fix(a), [R.refuted(a, v.Observed(0), "x"), held(a)]).passes, (
-        "last writer"
-    )
+    refuted_a = R.refuted(a, v.Observed(0), "x")
+    for pair in ([refuted_a, held(a)], [held(a), refuted_a]):
+        assert not v.settle(fix(a), pair).passes, "one writer wins"
+    shared = S(key="a", run_id="r")
+    assert not v.settle(fix(a, shared), [held(shared)]).passes, "one result, two claims"
     many = [S(key=str(i)) for i in range(5)]
     results = [held(s) for s in many[:-1]] + [R.refuted(many[-1], v.Observed(0), "x")]
     settled = v.settle(fix(*many), results, limit=3)

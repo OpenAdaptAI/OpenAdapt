@@ -793,7 +793,8 @@
   },
   "packages/flow/openadapt_flow/rl_env/reward.py": {
     "says_success": 2,
-    "cmp_literal": 5
+    "cmp_literal": 5,
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/rl_env/trainers.py": {
     "swallow": 1
@@ -1087,7 +1088,8 @@
   "packages/flow/openadapt_flow/taskgen/validate.py": {
     "says_success": 1,
     "cmp_literal": 2,
-    "bool_fold": 3
+    "bool_fold": 3,
+    "swallow": 2
   },
   "packages/flow/openadapt_flow/taskgen/workbench.py": {
     "swallow": 2

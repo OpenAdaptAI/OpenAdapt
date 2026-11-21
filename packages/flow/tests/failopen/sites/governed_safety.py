@@ -85,7 +85,7 @@ register(
     ),
     xfail="#2258: a held target note changed between '' and NULL reads as no write",
     known=[
-        "M10 P2: value empty for null: still passes",
-        "seed P0: held, '' became NULL: pass=True",
+        "M10 P2: seed 0: value 0 empty for null: still passes",
+        "seed P0: seed 2 held, '' became NULL: pass=True",
     ],
 )

@@ -37,10 +37,10 @@ from typing import Any, Optional
 P2 = frozenset({"M1", "M2", "M3", "M4", "M5", "M7", "M10", "M14"})
 P3 = frozenset({"M8", "M11"})
 #: Mutators P1 applies to: each one only removes or corrupts evidence. A
-#: value perturbation (M10), a rebuilt set (M2) or a dropped result (M1, which
-#: can drop the one bad result) can repair a failing seed, so those are held
-#: to P2/P3 only.
-P1_IDS = frozenset({"M3", "M4", "M5", "M7", "M8"})
+#: value perturbation (M10), a rebuilt set (M2), a dropped result (M1, which
+#: can drop the one bad result) or a duplicate (M7, which can restore a
+#: missing pair) can repair a failing seed, so those are held to P2/P3 only.
+P1_IDS = frozenset({"M3", "M4", "M5", "M8"})
 
 
 @dataclass(frozen=True)
@@ -224,11 +224,17 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
     if not any(seed.correct_pass for seed in seeds):
         failures.append(Failure(spec.id, "seed", "P0", "no pass seed to mutate"))
     ran = 0
-    for seed in seeds:
+    for number, seed in enumerate(seeds):
+        at = f"seed {number}"
         got = safe_pass(spec, seed.evidence)
         if got != seed.correct_pass:
             failures.append(
-                Failure(spec.id, "seed", "P0", f"{seed.note or 'seed'}: pass={got}")
+                Failure(
+                    spec.id,
+                    "seed",
+                    "P0",
+                    f"{at} {seed.note}: pass={got}".replace("  ", " "),
+                )
             )
             continue
         for m in mutators.mutations(spec, seed):
@@ -238,20 +244,27 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
             if m.check is not None:
                 problem = m.check()
                 if problem:
-                    failures.append(Failure(spec.id, m.id, m.prop, problem))
+                    failures.append(Failure(spec.id, m.id, m.prop, f"{at}: {problem}"))
                 continue
             after = safe_pass(spec, m.evidence)
             if not got and after and m.id in P1_IDS:
                 failures.append(
-                    Failure(spec.id, m.id, "P1", f"{m.label}: a not-pass became a pass")
+                    Failure(
+                        spec.id,
+                        m.id,
+                        "P1",
+                        f"{at}: {m.label}: a not-pass became a pass",
+                    )
                 )
             elif got and m.expect == "not_pass" and after:
                 prop = "P3" if m.id in P3 else "P2"
                 failures.append(
-                    Failure(spec.id, m.id, prop, f"{m.label}: still passes")
+                    Failure(spec.id, m.id, prop, f"{at}: {m.label}: still passes")
                 )
             elif m.expect == "same" and after != got:
-                failures.append(Failure(spec.id, m.id, "P4", f"{m.label}: changed"))
+                failures.append(
+                    Failure(spec.id, m.id, "P4", f"{at}: {m.label}: changed")
+                )
     if not ran and only is None:
         failures.append(Failure(spec.id, "spec", "P0", "no mutation applies"))
     return failures

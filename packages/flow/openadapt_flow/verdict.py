@@ -28,7 +28,8 @@ Stdlib only, so it can move to ``openadapt_types`` unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from enum import Enum
 from fractions import Fraction
 from typing import Optional, Union
@@ -201,14 +202,18 @@ def require_bound(expected: Subject, got: Subject) -> None:
 
 # -- results ----------------------------------------------------------------------
 
-#: Only this module's constructors hold it, so ``Result(..., Status.HELD, ...)``
-#: written anywhere else raises. The token is bound to the subject, so
-#: ``dataclasses.replace(result, subject=other)`` raises too.
-_JUDGED = object()
+#: Set only while :meth:`Result.held` or :meth:`Result.from_code` builds a
+#: HELD result. ``Result(..., Status.HELD, ...)`` anywhere else raises, and so
+#: does ``dataclasses.replace`` on any result that would come out HELD.
+_MINTING: ContextVar[bool] = ContextVar("_verdict_minting", default=False)
 
 
-def _seal(subject: "Subject") -> object:
-    return (_JUDGED, subject)
+def _mint_held(subject: "Subject", reason: str) -> "Result":
+    token = _MINTING.set(True)
+    try:
+        return Result(subject, Status.HELD, reason)
+    finally:
+        _MINTING.reset(token)
 
 
 @dataclass(frozen=True)
@@ -218,19 +223,11 @@ class Result:
     subject: Subject
     status: Status
     reason: str
-    _token: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, Status):
             raise TypeError(f"status must be a Status, not {self.status!r}")
-        token = self._token
-        sealed = (
-            isinstance(token, tuple)
-            and len(token) == 2
-            and token[0] is _JUDGED
-            and token[1] == self.subject
-        )
-        if self.status is Status.HELD and not sealed:
+        if self.status is Status.HELD and not _MINTING.get():
             raise TypeError(
                 "HELD comes only from Result.held or Result.from_code; "
                 "see docs/FAIL_CLOSED.md"
@@ -242,7 +239,7 @@ class Result:
 
         if not isinstance(obs, Observed) or obs.complete is not True:
             raise TypeError("HELD needs a complete Observed value")
-        return cls(subject, Status.HELD, reason or "held", _seal(subject))
+        return _mint_held(subject, reason or "held")
 
     @classmethod
     def refuted(cls, subject: Subject, obs: Observation, reason: str) -> "Result":
@@ -294,7 +291,7 @@ class Result:
         status = from_code(code, held=held, refuted=refuted)
         text = reason or f"code {code!r}"
         if status is Status.HELD:
-            return cls(subject, status, text, _seal(subject))
+            return _mint_held(subject, text)
         return cls(subject, status, text)
 
 
@@ -435,15 +432,22 @@ def settle(
     }
     conflicting: list[Subject] = []
     used: set[int] = set()
-    for item in obligations.items:
+    matches: dict[int, list[Result]] = {}
+    takers: dict[int, int] = {}
+    for n, item in enumerate(obligations.items):
         same_key = by_key.get(item.key_tuple(), [])
-        got = [r for r in same_key if not binding_mismatches(item, r.subject)]
+        matches[n] = [r for r in same_key if not binding_mismatches(item, r.subject)]
+        for r in matches[n]:
+            takers[id(r)] = takers.get(id(r), 0) + 1
+    for n, item in enumerate(obligations.items):
+        got = matches[n]
         used.update(id(r) for r in got)
-        if not same_key:
+        if not by_key.get(item.key_tuple()):
             buckets["missing"].append(item)
         elif not got:
             buckets["mismatched"].append(item)
-        elif len({r.status for r in got}) > 1:
+        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):
+            # Two results that disagree, or one result two obligations claim.
             conflicting.append(item)
         else:
             buckets[got[0].status.value].append(item)

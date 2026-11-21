@@ -20,16 +20,19 @@ F = TypeVar("F", bound=Callable[..., object])
 
 #: ``{site id: the fail-open classes it is tested for}``, filled at import.
 SITES: dict[str, str] = {}
+#: ``{site id: module.qualname}``: one id names one function.
+_WHERE: dict[str, str] = {}
 
 
 def verdict_site(id: str, *, classes: str) -> Callable[[F], F]:
     """Register ``id`` and return the function unchanged."""
 
     def mark(fn: F) -> F:
-        known = SITES.get(id)
-        if known is not None and known != classes:
+        where = f"{getattr(fn, '__module__', '?')}.{getattr(fn, '__qualname__', '?')}"
+        if _WHERE.get(id, where) != where or SITES.get(id, classes) != classes:
             raise ValueError(f"verdict site {id!r} registered twice")
         SITES[id] = classes
+        _WHERE[id] = where
         setattr(fn, "__verdict_site__", id)
         return fn
 

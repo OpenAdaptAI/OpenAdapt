@@ -113,6 +113,9 @@ def decorated_sites(path: Path) -> dict[str, str]:
                         )
                     out[site] = name
                 visit(child, name + ".")
+            else:
+                # Inside an ``if``, ``try`` or ``with``: same scope, same prefix.
+                visit(child, prefix)
 
     visit(tree, "")
     return out
@@ -155,16 +158,31 @@ _NOT_CHECKED_STRINGS = frozenset(
 )
 
 
+def _not_checked_value(value: ast.AST) -> bool:
+    """True when every value the expression can produce is a not-checked one."""
+
+    if isinstance(value, ast.IfExp):
+        return _not_checked_value(value.body) and _not_checked_value(value.orelse)
+    if isinstance(value, ast.Constant):
+        return value.value in _NOT_CHECKED_STRINGS
+    if isinstance(value, ast.Name):
+        return value.id in _NOT_CHECKED_NAMES
+    if isinstance(value, ast.Attribute):
+        return value.attr in _NOT_CHECKED_NAMES or value.attr in _NOT_CHECKED_STRINGS
+    if isinstance(value, ast.Call):
+        return _not_checked_value(value.func)
+    if isinstance(value, (ast.Tuple, ast.List)):
+        return bool(value.elts) and _not_checked_value(value.elts[0])
+    return False
+
+
 def _closed_exit(node: ast.AST) -> bool:
     """True for a ``return`` that hands back a not-checked value."""
 
     value = getattr(node, "value", None)
     if not isinstance(node, ast.Return) or value is None:
         return False
-    return any(n in _NOT_CHECKED_NAMES for n in _names(value)) or any(
-        isinstance(c, ast.Constant) and c.value in _NOT_CHECKED_STRINGS
-        for c in ast.walk(value)
-    )
+    return _not_checked_value(value)
 
 
 _COUNTING = frozenset({"sum", "len", "Counter", "tally", "count"})
@@ -326,15 +344,41 @@ def compare(
 def lowered(
     found: dict[str, dict[str, int]], baseline: dict[str, dict[str, int]]
 ) -> dict[str, dict[str, int]]:
-    """The baseline lowered to what is found; never raised."""
+    """The baseline lowered to what is found, per kind; a kind's total never
+    rises. A kind whose total fell (or held) takes the counts found, so a fold
+    that moved files moves its baseline entry too. A kind whose total rose
+    keeps its old entries."""
 
+    now, allowed = totals(found), totals(baseline)
+    source = {k: (found if now[k] <= allowed[k] else baseline) for k in KINDS}
     out: dict[str, dict[str, int]] = {}
-    for rel, kinds in baseline.items():
-        for kind, allowed in kinds.items():
-            n = min(allowed, found.get(rel, {}).get(kind, 0))
-            if n:
-                out.setdefault(rel, {})[kind] = n
-    return dict(sorted(out.items()))
+    for kind in KINDS:
+        for rel, kinds in source[kind].items():
+            if kinds.get(kind, 0):
+                out.setdefault(rel, {})[kind] = kinds[kind]
+    return {rel: dict(sorted(k.items())) for rel, k in sorted(out.items())}
+
+
+SPEC_ID = re.compile(r"""["']([\w.\-]+)["']""")  # any quoted id in a spec file
+
+
+def unregistered_sites(root: Path = ROOT) -> list[str]:
+    """Decorated sites whose id appears in no spec under tests/failopen/sites.
+
+    The meta-test (tests/failopen/test_registry_complete.py) checks the same
+    thing and runs the specs, but only when the Flow tests run; this runs on
+    every change, so a launcher or scripts/ci site can't skip its spec.
+    """
+
+    config = load_config()
+    specs = root / "packages/flow/tests/failopen/sites"
+    ids = {m for f in specs.glob("*.py") for m in SPEC_ID.findall(f.read_text("utf-8"))}
+    missing = []
+    for path in scope_files(config, root):
+        for site, name in decorated_sites(path).items():
+            if site not in ids:
+                missing.append(f"{path.relative_to(root).as_posix()}: {name} ({site})")
+    return missing
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -350,6 +394,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     found = scan()
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     grown = compare(found, baseline)
+    unspecced = unregistered_sites()
+    if unspecced:
+        print(
+            "A @verdict_site has no spec under packages/flow/tests/failopen/sites "
+            "(docs/FAIL_CLOSED.md, 'Register a site'):",
+            file=sys.stderr,
+        )
+        print("\n".join(f"  {line}" for line in unspecced), file=sys.stderr)
     if args.update_baseline:
         BASELINE.write_text(
             json.dumps(lowered(found, baseline), indent=2) + "\n", encoding="utf-8"
@@ -364,6 +416,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             file=sys.stderr,
         )
         print("\n".join(f"  {line}" for line in grown), file=sys.stderr)
+    if grown or unspecced:
         return 1
     total = sum(n for kinds in baseline.values() for n in kinds.values())
     print(f"Verdict folds OK ({total} baseline folds left)")

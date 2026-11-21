@@ -263,7 +263,8 @@ def _meta(repetitions: int) -> dict[str, Any]:
     }
 
 
-def _gate_ev(scored: int) -> dict[str, Any]:
+def _gate_ev(scored: int, base_scored: int = 20) -> dict[str, Any]:
+    """Twenty runs planned: two scenarios, ten repetitions."""
     base = {
         "schema": "openadapt.agent-test.baseline/v1",
         "app": "app",
@@ -272,8 +273,8 @@ def _gate_ev(scored: int) -> dict[str, Any]:
         "images": ["img"],
         "agent": "agent",
         "repetitions": 10,
-        "scored": 10,
-        "rates": _summary(10)["rates"],
+        "scored": base_scored,
+        "rates": _summary(base_scored)["rates"],
     }
     return {
         "results": {"meta": _meta(10), "summary": _summary(scored)},
@@ -297,15 +298,17 @@ def gate_spec(mod: Any, id: str) -> SiteSpec:
         kind="selftest",
         run=call,
         is_pass=lambda out: out["verdict"] == "pass",
-        seeds=lambda: [Seed(_gate_ev(10), True)],
-        # Twenty runs were planned (two scenarios, ten repetitions).
+        seeds=lambda: [
+            Seed(_gate_ev(20), True, "all 20 planned runs scored"),
+            Seed(_gate_ev(1, 1), False, "1 of 20 planned runs scored"),
+        ],
         knob=Knob("min_scored", None, (20,), call),
-        relabel=lambda ev: _gate_ev(9),
+        relabel=lambda ev: _gate_ev(18),
     )
 
 
-pair("S5_gate_min_scored", gate_spec, _v_s5_gate_pre, None, {"M9"})
-pair("S5_gate_head", gate_spec, _v_s5_gate_head, None, {"M9"})
+pair("S5_gate_min_scored", gate_spec, _v_s5_gate_pre, None, {"seed", "M9"})
+pair("S5_gate_head", gate_spec, _v_s5_gate_head, None, {"seed"})
 
 
 # -- S6 type-ahead leading part (#2448, fixed by c329c57dc) ------------------------

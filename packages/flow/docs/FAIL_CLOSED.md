@@ -45,7 +45,8 @@ found didn't stop the next one, so the shapes are now fixed in one place:
    (system, surface, table, key, field) and the run it belongs to (run id,
    nonce, digest). A result whose binding disagrees with the obligation is
    mismatched, so a result from another run or from a decoy table doesn't
-   count.
+   count. One result can't settle two obligations: if two claim it, both
+   are conflicting.
 6. **Say who signed only from a verified source.** `trust_label(source,
    verified=...)` names the signer only for a verified `TrustSource`; anything
    else is "not verified".
@@ -121,7 +122,7 @@ applies to, fails too:
 | S2 audit read ends at an old-stamped event before the cursor (#2437) | `de5ee3db2^` | `de5ee3db2` | M2, M7 |
 | S3 a write with no undo counted as rolled back (#2428) | `fda539c78^` | `fda539c78` | M14 |
 | S4 a written field with no expected value gets no verdict (#2429) | `fa26f69fc^` | `fa26f69fc` | M1 |
-| S5 `min_scored=1`; an undelivered fault drops a run from the rates (#2419) | `275199914^` and `275199914` | open | M9 |
+| S5 `min_scored=1` passes 1 of 20 planned runs; an undelivered fault drops a run from the rates (#2419) | `275199914^` and `275199914` | open | P0, M9 (relabel, `^` only) |
 | S6 a type-ahead prefix matches an assumed typed baseline (#2448) | `c329c57dc^` | `c329c57dc` | P0, M11 |
 | S7 a cancel after the child started is reported as failed (#2300) | `fd7133866` | #2300 head | M12 |
 | S3b the S3 fix still keeps a deny-list: a per-write code nobody listed is `ROLLED_BACK` | `fda539c78` | open | M14 |

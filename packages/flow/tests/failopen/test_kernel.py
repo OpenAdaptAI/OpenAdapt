@@ -245,12 +245,26 @@ def test_a_stray_result_from_another_run_is_unexpected() -> None:
     assert settled.held == (a,) and len(settled.unexpected) == 1 and not settled.passes
 
 
-def test_a_held_result_cannot_be_moved_to_another_subject() -> None:
+def test_a_held_result_cannot_be_copied_or_restored() -> None:
     import dataclasses
 
     a = Subject(key="1", run_id="r1")
+    held = _result(a, "held")
     with pytest.raises(TypeError):
-        dataclasses.replace(_result(a, "held"), subject=Subject(key="1", run_id="r2"))
+        dataclasses.replace(held, subject=Subject(key="1", run_id="r2"))
+    with pytest.raises(TypeError):
+        dataclasses.replace(held, reason="again")
+    refuted = dataclasses.replace(held, status=Status.REFUTED)
+    with pytest.raises(TypeError):
+        dataclasses.replace(refuted, status=Status.HELD)
+
+
+def test_one_result_cannot_satisfy_two_obligations() -> None:
+    unbound, bound = Subject(key="1"), Subject(key="1", run_id="r")
+    settled = settle(
+        Obligations.fix([unbound, bound], source="p"), [_result(bound, "held")]
+    )
+    assert not settled.passes and set(settled.conflicting) == {unbound, bound}
 
 
 def test_benign_cannot_map_a_raise_to_a_value() -> None:

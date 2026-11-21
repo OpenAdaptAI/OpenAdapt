@@ -86,7 +86,7 @@ register(
         "(FAIL_CLOSED.md follow-up 3, class of #2300)"
     ),
     known=[
-        "M12 P7: RECONCILIATION_REQUIRED/FAILED rc=0: may have changed, reported 'failed'",
-        "M12 P7: RECONCILIATION_REQUIRED/FAILED rc=1: may have changed, reported 'failed'",
+        "M12 P7: seed 0: RECONCILIATION_REQUIRED/FAILED rc=0: may have changed, reported 'failed'",
+        "M12 P7: seed 0: RECONCILIATION_REQUIRED/FAILED rc=1: may have changed, reported 'failed'",
     ],
 )

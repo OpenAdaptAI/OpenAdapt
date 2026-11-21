@@ -43,6 +43,10 @@ def test_each_exit_of_a_handler_is_judged(tmp_path: Path) -> None:
     assert _count(tmp_path, mixed).get("swallow") == 1
     literal = "def f(g):\n    try:\n        return g()\n    except Exception:\n        return 'not_checked'\n"
     assert "swallow" not in _count(tmp_path, literal)
+    mixed_exp = "def f(g, ok):\n    try:\n        return g()\n    except Exception:\n        return True if ok else 'unknown'\n"
+    assert _count(tmp_path, mixed_exp).get("swallow") == 1
+    attr = "def f(g):\n    try:\n        return g()\n    except Exception:\n        return Verdict.INDETERMINATE\n"
+    assert "swallow" not in _count(tmp_path, attr)
     reraise = "def f(g):\n    try:\n        return g()\n    except Exception:\n        raise\n"
     assert "swallow" not in _count(tmp_path, reraise)
 
@@ -92,6 +96,27 @@ def test_the_baseline_only_lowers() -> None:
     assert folds.lowered({"a.py": {"swallow": 5}, "b.py": {"swallow": 1}}, base) == {
         "a.py": {"swallow": 2}
     }
+
+
+def test_lowering_after_a_move_keeps_the_moved_fold() -> None:
+    base = {"a.py": {"swallow": 2}}
+    moved = {"a.py": {"swallow": 1}, "b.py": {"swallow": 1}}
+    new = folds.lowered(moved, base)
+    assert new == moved and not folds.compare(moved, new)
+
+
+def test_every_decorated_site_has_a_spec_id() -> None:
+    assert folds.unregistered_sites() == []
+
+
+def test_a_conditional_site_is_found(tmp_path: Path) -> None:
+    path = tmp_path / "m.py"
+    path.write_text(
+        "import sys\nif sys:\n    @verdict_site('x', classes='C2')\n    def a(): ...\n"
+        "else:\n    @verdict_site('x', classes='C2')\n    def b(): ...\n"
+    )
+    with pytest.raises(ValueError):
+        folds.decorated_sites(path)
 
 
 def test_main_is_within_the_baseline() -> None:

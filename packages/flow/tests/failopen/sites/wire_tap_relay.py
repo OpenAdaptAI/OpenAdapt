@@ -56,9 +56,12 @@ def _main() -> None:
         ),
         xfail="#2470: '///host' is relayed raw and a browser reads it as a host",
         known=[
-            "M11 P3: accepted '///evil.example/x' as '///evil.example/x'",
-            "M11 P3: accepted '////evil.example/x' as '////evil.example/x'",
-            "M11 P3: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
+            "M11 P3: seed 0: accepted '///evil.example/x' as '///evil.example/x'",
+            "M11 P3: seed 0: accepted '////evil.example/x' as '////evil.example/x'",
+            "M11 P3: seed 0: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
+            "M11 P3: seed 1: accepted '///evil.example/x' as '///evil.example/x'",
+            "M11 P3: seed 1: accepted '////evil.example/x' as '////evil.example/x'",
+            "M11 P3: seed 1: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
         ],
     )
 
