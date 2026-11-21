@@ -66,8 +66,8 @@ _CODE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _CODE_PATTERN = _CODE.pattern
 _TECHNICAL_CODE_PATTERN = (
     r"^(transaction_outcome|execute_terminal_outcome|execute_state|execution_outcome"
-    r"|agent_status|connector_status|managed_tool_status|clinic_tool_status"
-    r"|program_terminal_state|overlay_phase|fallback)"
+    r"|agent_status|connector_status|clinic_tool_status|program_terminal_state|overlay_phase"
+    r"|fallback)"
     r"=[A-Za-z][A-Za-z0-9_]{0,63}$"
 )
 
@@ -105,9 +105,10 @@ class OutcomeSourceV1(str, Enum):
     EXECUTION_OUTCOME = "execution_outcome"
     AGENT_STATUS = "agent_status"
     CONNECTOR_STATUS = "connector_status"
-    MANAGED_TOOL_STATUS = "managed_tool_status"
-    #: Legacy/compat alias for ``MANAGED_TOOL_STATUS``.
-    CLINIC_TOOL_STATUS = "managed_tool_status"
+    #: Domain-neutral alias; v1 wire key remains ``clinic_tool_status`` for
+    #: compatibility with deployed v1 readers and schemas.
+    MANAGED_TOOL_STATUS = "clinic_tool_status"
+    CLINIC_TOOL_STATUS = "clinic_tool_status"
     PROGRAM_TERMINAL_STATE = "program_terminal_state"
     OVERLAY_PHASE = "overlay_phase"
 
@@ -131,8 +132,6 @@ class PlainOutcomeInputsV1(_StrictContract):
     execution_outcome: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     agent_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     connector_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
-    managed_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
-    #: Legacy/compat v1 field; prefer ``managed_tool_status`` for new outcomes.
     clinic_tool_status: StrictStr | None = Field(default=None, pattern=_CODE_PATTERN)
     program_terminal_state: StrictStr | None = Field(
         default=None, pattern=_CODE_PATTERN
@@ -141,24 +140,30 @@ class PlainOutcomeInputsV1(_StrictContract):
     dispatched: StrictBool | None = None
     delivery_uncertain: StrictBool | None = None
 
-    @model_validator(mode="after")
-    def _reject_conflicting_tool_status(self) -> "PlainOutcomeInputsV1":
-        if (
-            self.managed_tool_status is not None
-            and self.clinic_tool_status is not None
-            and self.managed_tool_status != self.clinic_tool_status
-        ):
-            raise ValueError(
-                "conflicting managed_tool_status and legacy clinic_tool_status values"
-            )
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_managed_tool_status(cls, data: object) -> object:
+        # Accept domain-neutral managed_tool_status input and normalize onto the
+        # v1 wire field so deployed v1 readers and schemas see exact v1 bytes.
+        if isinstance(data, Mapping) and "managed_tool_status" in data:
+            normalized = dict(data)
+            managed_val = normalized.pop("managed_tool_status")
+            if (
+                "clinic_tool_status" in normalized
+                and normalized["clinic_tool_status"] != managed_val
+            ):
+                raise ValueError(
+                    "conflicting managed_tool_status and legacy clinic_tool_status values"
+                )
+            normalized.setdefault("clinic_tool_status", managed_val)
+            return normalized
+        return data
 
-    def effective_managed_tool_status(self) -> StrictStr | None:
-        return (
-            self.managed_tool_status
-            if self.managed_tool_status is not None
-            else self.clinic_tool_status
-        )
+    @property
+    def managed_tool_status(self) -> StrictStr | None:
+        """Domain-neutral alias for the v1 ``clinic_tool_status`` field."""
+
+        return self.clinic_tool_status
 
 
 class PlainOutcomeV1(_StrictContract):
@@ -232,24 +237,17 @@ class PlainOutcomeV1(_StrictContract):
             if row is None:
                 raise ValueError(f"{self.technical_code} names no fallback")
         else:
-            canonical_source = (
-                "managed_tool_status" if source == "clinic_tool_status" else source
-            )
-            exact_values = {
-                name.value: getattr(self.exact, name.value)
-                for name in OutcomeSourceV1
-            }
-            exact_values["managed_tool_status"] = (
-                self.exact.effective_managed_tool_status()
-            )
             decision = _decide(
                 table,
-                exact_values,
+                {
+                    name.value: getattr(self.exact, name.value)
+                    for name in OutcomeSourceV1
+                },
                 dispatched=self.exact.dispatched,
                 delivery_uncertain=self.exact.delivery_uncertain,
             )
             if decision.row is None or (decision.source, decision.value) != (
-                canonical_source,
+                source,
                 value,
             ):
                 raise ValueError(
@@ -555,7 +553,7 @@ def plain_outcome(
             "execution_outcome": execution_outcome,
             "agent_status": agent_status,
             "connector_status": connector_status,
-            "managed_tool_status": effective_managed_tool_status,
+            "clinic_tool_status": effective_managed_tool_status,
             "program_terminal_state": program_terminal_state,
             "overlay_phase": overlay_phase,
         },

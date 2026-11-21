@@ -679,7 +679,7 @@ export function Qualification({
     try {
       const response = await engineInvoke<QualificationResponse>(
         CMD.CERTIFY_QUALIFICATION,
-        { workflow_id: workflowId, policy: POLICY },
+        { workflow_id: workflowId, policy: project?.policy || POLICY },
       );
       if (!response.ok) {
         setError(response.error);

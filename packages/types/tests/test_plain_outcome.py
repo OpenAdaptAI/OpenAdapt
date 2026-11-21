@@ -78,7 +78,7 @@ def test_sources_match_the_table_in_precedence_order() -> None:
     [
         (ExecuteTerminalOutcomeV1, "execute_terminal_outcome"),
         (ExecuteLifecycleStateV1, "execute_state"),
-        (ManagedToolStatusV1, "managed_tool_status"),
+        (ManagedToolStatusV1, "clinic_tool_status"),
         (ControlOverlayPhase, "overlay_phase"),
     ],
 )
@@ -93,9 +93,9 @@ def test_every_value_of_this_packages_enums_is_mapped(enum_cls: type, source: st
     [
         "openadapt_types.execute:ExecuteTerminalOutcomeV1=execute_terminal_outcome",
         "openadapt_types.execute:ExecuteLifecycleStateV1=execute_state",
-        "openadapt_types.managed_job:ManagedToolStatusV1=managed_tool_status",
+        "openadapt_types.managed_job:ManagedToolStatusV1=clinic_tool_status",
         "openadapt_types.execute:ExecuteStatusV1.terminal_outcome=execute_terminal_outcome",
-        "openadapt_types.managed_job:ManagedToolResultV1.status=managed_tool_status",
+        "openadapt_types.managed_job:ManagedToolResultV1.status=clinic_tool_status",
         "openadapt_types.control_overlay:ControlOverlayPhase=overlay_phase",
         "openadapt_types.control_overlay:ControlOverlayFrameV1.phase=overlay_phase",
         "openadapt_types.control_overlay_tracking:ControlOverlayFrameV2.phase=overlay_phase",
@@ -328,7 +328,7 @@ def test_coarse_status_combinations_keep_the_safety_rule() -> None:
     for agent, connector, managed, program in itertools.product(
         _value_choices("agent_status"),
         _value_choices("connector_status"),
-        _value_choices("managed_tool_status"),
+        _value_choices("clinic_tool_status"),
         _value_choices("program_terminal_state"),
     ):
         for dispatched, uncertain in FLAGS:
@@ -359,36 +359,27 @@ def test_a_coarse_halt_never_reads_as_stopped_before_saving() -> None:
 
 
 def test_legacy_clinic_tool_status_compat_alias() -> None:
-    outcome = plain_outcome(clinic_tool_status="HALTED")
-    assert outcome.result is PlainResultV1.CHECK_THE_RECORD
-    assert outcome.technical_code == "managed_tool_status=HALTED"
-    assert outcome.exact.managed_tool_status == "HALTED"
+    outcome_from_managed = plain_outcome(managed_tool_status="HALTED")
+    outcome_from_legacy = plain_outcome(clinic_tool_status="HALTED")
+    assert outcome_from_managed == outcome_from_legacy
+    assert outcome_from_managed.result is PlainResultV1.CHECK_THE_RECORD
+    assert outcome_from_managed.technical_code == "clinic_tool_status=HALTED"
+    assert outcome_from_managed.exact.managed_tool_status == "HALTED"
+    assert outcome_from_managed.exact.clinic_tool_status == "HALTED"
 
-    # Saved v1 outcome carrying legacy technical_code and exact.clinic_tool_status
-    saved_v1 = {
-        "schema_version": "openadapt.plain-outcome/v1",
-        "result": "check_the_record",
-        "label": "Check the record",
-        "may_have_changed": True,
-        "safe_to_retry": False,
-        "next_action": outcome.next_action,
-        "proof": "none",
-        "technical_code": "clinic_tool_status=HALTED",
-        "exact": {"clinic_tool_status": "HALTED"},
-    }
-    restored = PlainOutcomeV1.model_validate(saved_v1)
-    assert restored.result is PlainResultV1.CHECK_THE_RECORD
-    assert restored.technical_code == "clinic_tool_status=HALTED"
-    assert restored.exact.clinic_tool_status == "HALTED"
+    # Saved v1 outcome round-trips without adding unknown fields to v1 exact
+    dumped = outcome_from_legacy.model_dump(mode="json")
+    assert "managed_tool_status" not in dumped["exact"]
+    assert dumped["exact"]["clinic_tool_status"] == "HALTED"
+    assert PlainOutcomeV1.model_validate(dumped).model_dump(mode="json") == dumped
 
-    # Exported JSON schema accepts legacy exact.clinic_tool_status and technical_code
-    shipped = json.loads(
-        files("openadapt_types.schemas")
-        .joinpath("plain-outcome-v1.json")
-        .read_text(encoding="utf-8")
+    # Domain-neutral PlainOutcomeInputsV1 input normalizes onto canonical v1 field
+    parsed_inputs = PlainOutcomeInputsV1.model_validate(
+        {"managed_tool_status": "VERIFIED"}
     )
-    assert "clinic_tool_status" in shipped["$defs"]["PlainOutcomeInputsV1"]["properties"]
-    assert "clinic_tool_status" in shipped["properties"]["technical_code"]["pattern"]
+    assert parsed_inputs.managed_tool_status == "VERIFIED"
+    assert parsed_inputs.clinic_tool_status == "VERIFIED"
+    assert "managed_tool_status" not in parsed_inputs.model_dump(mode="json")
 
     # Conflicting managed_tool_status and clinic_tool_status must fail closed
     with pytest.raises(ValueError, match="conflicting"):

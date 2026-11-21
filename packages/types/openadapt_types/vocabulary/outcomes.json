@@ -79,7 +79,7 @@
       "values": ["queued", "running", "decision_required", "waiting_for_reconciliation", "terminal"]
     },
     {
-      "source": "managed_tool_status",
+      "source": "clinic_tool_status",
       "repository": "OpenAdaptAI/openadapt-types",
       "symbol": "openadapt_types/managed_job.py ManagedToolStatusV1",
       "read_at": "origin/main 07b8b0c, read 2026-10-09",
@@ -213,14 +213,14 @@
     "execution_outcome",
     "agent_status",
     "connector_status",
-    "managed_tool_status",
+    "clinic_tool_status",
     "program_terminal_state",
     "overlay_phase"
   ],
   "tiers": [
     ["transaction_outcome", "execute_terminal_outcome", "execute_state"],
     ["execution_outcome"],
-    ["agent_status", "connector_status", "managed_tool_status", "program_terminal_state", "overlay_phase"]
+    ["agent_status", "connector_status", "clinic_tool_status", "program_terminal_state", "overlay_phase"]
   ],
   "sources": {
     "transaction_outcome": {
@@ -454,7 +454,7 @@
         }
       }
     },
-    "managed_tool_status": {
+    "clinic_tool_status": {
       "meaning": "The status on a managed tool result. HALTED here is coarse.",
       "values": {
         "VERIFIED": {

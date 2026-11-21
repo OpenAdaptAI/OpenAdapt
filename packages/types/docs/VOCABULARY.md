@@ -94,7 +94,7 @@ The one exception only adds caution: when `transaction_outcome` and
 |---|---|---|
 | 1 | `transaction_outcome`, `execute_terminal_outcome`, `execute_state` | Flow's `report.json` and hosted callbacks; an Execute status, receipt, or webhook |
 | 2 | `execution_outcome` | Flow's coarse outcome |
-| 3 | `agent_status`, `connector_status`, `managed_tool_status`, `program_terminal_state`, `overlay_phase` | The Agent, a Flow connector, a managed tool result, where the program graph ended, and the on-screen overlay |
+| 3 | `agent_status`, `connector_status`, `clinic_tool_status`, `program_terminal_state`, `overlay_phase` | The Agent, a Flow connector, a managed tool result (v1 wire key `clinic_tool_status`), where the program graph ended, and the on-screen overlay |
 
 Tiers 2 and 3 are coarse. A halt from them never says that nothing was written. <!-- vocab-allow: no-change-claim -- states the rule, not a run result -->
 An Agent timeout or error, or a connector failure, says so only when you pass

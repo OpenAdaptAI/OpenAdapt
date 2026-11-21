@@ -2278,7 +2278,7 @@ def certify_bundle(
         raise QualificationError(
             "Initialize the qualification boundary before running certification."
         )
-    policy = _policy(policy_source)
+    policy = _policy(policy_source, workflow=workflow, prefer_recorded=True)
     workflow_contract = api["workflow_contract_sha256"](workflow)
     capability_coverage = _capability_coverage(
         bundle_dir,
@@ -2317,7 +2317,7 @@ def certify_bundle(
     result = inspect_bundle(
         bundle_dir,
         workflow_id=workflow_id,
-        policy_source=policy.name,
+        policy_source=policy_source,
         bundle_key=bundle_key,
     )
     result["certification_attempt"] = report.model_dump(mode="json")

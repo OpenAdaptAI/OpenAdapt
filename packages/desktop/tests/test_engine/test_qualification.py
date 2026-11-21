@@ -1809,3 +1809,43 @@ def test_inspect_bundle_preserves_recorded_policy_for_existing_certified_bundle(
     # identity from last_certification.
     reopened = inspect_bundle(bundle, workflow_id="wf-1")
     assert reopened["policy"] == "clinical-write"
+
+    # Re-running certification with the UI's default policy ("record-write") also
+    # keeps the recorded policy identity instead of switching policies mid-flight.
+    recertified = certify_bundle(bundle, workflow_id="wf-1")
+    assert recertified["policy"] == "clinical-write"
+    assert recertified["project"]["last_certification"]["policy_name"] == "clinical-write"
+
+
+def test_certify_bundle_with_custom_policy_yaml_path_succeeds_on_readback(
+    tmp_path: Path,
+) -> None:
+    custom_policy = tmp_path / "custom-policy.yaml"
+    custom_policy.write_text(
+        "name: custom-campaign-policy\n"
+        "description: Custom YAML policy whose internal name is not a built-in.\n"
+        "prohibit_unarmed_clicks: false\n"
+        "prohibit_vacuous_postconditions: false\n"
+        "max_unverified_steps: 99\n",
+        encoding="utf-8",
+    )
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    certified = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source=str(custom_policy),
+    )
+    assert certified["ok"] is True
+    assert certified["policy"] == "custom-campaign-policy"
+    assert certified["project"]["last_certification"]["policy_name"] == "custom-campaign-policy"

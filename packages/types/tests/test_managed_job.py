@@ -268,6 +268,24 @@ def test_catalog_schema_and_model_reject_invalid_tool_combinations() -> None:
             "schema_version": "openadapt.managed-mcp-tools/v1",
             "tools": [{}, valid_tools[1], valid_tools[2]],
         },
+        # Non-boolean numeric 0 for run_collect.requires_outbox (rejected by StrictBool and JSON Schema)
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [
+                {**valid_tools[0], "requires_outbox": 0},
+                valid_tools[1],
+                valid_tools[2],
+            ],
+        },
+        # Non-boolean numeric 1 for run_attach_artifact.requires_outbox (rejected by StrictBool and JSON Schema)
+        {
+            "schema_version": "openadapt.managed-mcp-tools/v1",
+            "tools": [
+                valid_tools[0],
+                {**valid_tools[1], "requires_outbox": 1},
+                valid_tools[2],
+            ],
+        },
     ]
     for bad in invalid_catalogs:
         with pytest.raises(ValidationError):
@@ -277,10 +295,12 @@ def test_catalog_schema_and_model_reject_invalid_tool_combinations() -> None:
         for tool_obj, (name, action, requires_outbox) in zip(
             bad["tools"], expected, strict=True
         ):
+            raw_outbox = tool_obj.get("requires_outbox")
             if (
                 tool_obj.get("name") != name
                 or tool_obj.get("action") != action
-                or tool_obj.get("requires_outbox") is not requires_outbox
+                or type(raw_outbox) is not bool
+                or raw_outbox is not requires_outbox
             ):
                 slot_mismatches += 1
         assert slot_mismatches > 0

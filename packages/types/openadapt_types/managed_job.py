@@ -28,6 +28,7 @@ from pydantic import (
     Field,
     StrictBool,
     StrictStr,
+    field_validator,
     model_validator,
 )
 
@@ -195,6 +196,13 @@ class ManagedMcpToolSpecV1(_StrictContract):
     requires_outbox: StrictBool
     destructive: Literal[True] = True
     read_only: Literal[False] = False
+
+    @field_validator("requires_outbox", "destructive", "read_only", mode="before")
+    @classmethod
+    def _must_be_strict_bool(cls, value: object) -> object:
+        if type(value) is not bool:
+            raise ValueError("Input should be a valid boolean")
+        return value
 
     @model_validator(mode="after")
     def _action_matches_name(self) -> "ManagedMcpToolSpecV1":
