@@ -81,6 +81,11 @@ def render(raw: bytes, cols: int, rows: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _controlling_tty() -> None:
+    os.setsid()
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -129,7 +134,9 @@ def main() -> int:
         stderr=slave,
         env=env,
         cwd=args.cwd,
-        start_new_session=True,
+        # Its own session with the pty as controlling terminal, so /dev/tty
+        # is the pty and the image query goes to (unanswered by) this script.
+        preexec_fn=_controlling_tty,
     )
     os.close(slave)
     raw = b""
