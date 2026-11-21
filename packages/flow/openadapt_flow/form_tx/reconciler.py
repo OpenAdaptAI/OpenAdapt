@@ -37,7 +37,6 @@ from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
     MissingAnchorError,
-
     collapse_radio_groups,
     compute_field_signature,
     match_anchor_in_snapshot,
@@ -429,6 +428,7 @@ def _surface_action_halt(
         ),
         allowed_actions=allowed,
     )
+
 
 def _session_expired_text(
     snapshot: FormSnapshot, ui_profile: Optional[UIProfileSpec]
@@ -1939,9 +1939,7 @@ class FormReconciler:
         if ctrl is None:
             # A result shown as page text ("Estimated cost: $512,340").
             try:
-                pair = match_text_pair_in_snapshot(
-                    subroutine.result_anchor, popup_snap
-                )
+                pair = match_text_pair_in_snapshot(subroutine.result_anchor, popup_snap)
             except AmbiguousAnchorError as exc:
                 return None, (
                     f"Popup {subroutine.subroutine_id!r} result is ambiguous: {exc}"

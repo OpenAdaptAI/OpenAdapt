@@ -220,6 +220,7 @@ def match_text_pair_in_snapshot(
         )
     return matches[0] if matches else None
 
+
 def is_native_radio(ctrl: ObservedControl) -> bool:
     """True for an ``<input type="radio">`` control."""
     return ctrl.tag.casefold() == "input" and ctrl.input_type.casefold() == "radio"

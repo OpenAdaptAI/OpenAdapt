@@ -104,7 +104,9 @@ def main(argv: list[str]) -> None:
             reference_human.make_source, [pid], include_dev=True, only=[spec.dev_case]
         )
         print(
-            MARK + "_RESULT " + json.dumps(
+            MARK
+            + "_RESULT "
+            + json.dumps(
                 [{"case_id": r["case_id"], "correct": r.get("correct")} for r in rows]
             ),
             flush=True,

@@ -69,12 +69,20 @@ MARK = "FORM_TX_HELDOUT_LAYER"
 MAX_HALTS = 12
 CASE_WALL_S = 180
 APPROVER = "scripted-approver"
-IGNORED_MUTATIONS = ("/quote/step/*", "/agent/login*", "/login*", "/signin*", "/tools/*")
+IGNORED_MUTATIONS = (
+    "/quote/step/*",
+    "/agent/login*",
+    "/login*",
+    "/signin*",
+    "/tools/*",
+)
 
 
 def _post(url: str, body: dict[str, Any]) -> None:
     req = urllib.request.Request(
-        url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
     )
     urllib.request.urlopen(req, timeout=30).read()
 
@@ -125,7 +133,9 @@ def sign_in(page: Any, username: str, password: str) -> bool:
         "input[type=text]:visible, input[type=email]:visible, input:not([type]):visible"
     ).first.fill(username)
     pw.first.fill(password)
-    button = frame.get_by_role("button", name=re.compile(r"sign ?in|log ?in|continue", re.I))
+    button = frame.get_by_role(
+        "button", name=re.compile(r"sign ?in|log ?in|continue", re.I)
+    )
     if button.count() and button.first.is_visible():
         button.first.click()
     else:
@@ -179,7 +189,9 @@ def _norm(text: str) -> str:
     return " ".join(str(text).replace("*", "").rstrip(":").split()).casefold()
 
 
-def lookup_script(script: dict[str, Any], label: str, key: Optional[str]) -> Optional[dict]:
+def lookup_script(
+    script: dict[str, Any], label: str, key: Optional[str]
+) -> Optional[dict]:
     by_norm = {_norm(k): v for k, v in script.items() if isinstance(v, dict)}
     if label and _norm(label) in by_norm:
         return by_norm[_norm(label)]
@@ -234,7 +246,9 @@ def operator_decision(
     }
     allowed = set(halt.allowed_actions)
 
-    def res(action: HumanDecisionAction, value: Any = None, mapped: Optional[str] = None):
+    def res(
+        action: HumanDecisionAction, value: Any = None, mapped: Optional[str] = None
+    ):
         note["action"] = action.value
         return (
             HumanResolutionInput(
@@ -314,7 +328,13 @@ def run_case(
     spec = PORTALS[pid]
     _post(f"{base}/__oracle/load_case", {"case_id": case_id})
     intake = json.loads(
-        (HERE.parent / SUITES[_SUITE["name"]][0].split(".")[-1] / "cases" / pid / f"{case_id}.intake.json").read_text()
+        (
+            HERE.parent
+            / SUITES[_SUITE["name"]][0].split(".")[-1]
+            / "cases"
+            / pid
+            / f"{case_id}.intake.json"
+        ).read_text()
     )
     script = answer_key["cases"][case_id].get("operator_script", {})
     out: dict[str, Any] = {"portal": pid, "case_id": case_id, "halts": []}
@@ -334,7 +354,9 @@ def run_case(
         )
         reconciler = FormReconciler(surface)
         session = reconciler.create_session(
-            pack, dossier_for(intake, request_id=f"{case_id}-req"), run_id=f"run-{case_id}"
+            pack,
+            dossier_for(intake, request_id=f"{case_id}-req"),
+            run_id=f"run-{case_id}",
         )
         result = reconciler.run_until_halt_or_done(session)
         n = 0
@@ -369,7 +391,11 @@ def run_case(
         verdict = result.summary_verdict
         if verdict is not None:
             out["readback"] = {
-                "passed": sum(1 for v in verdict.field_verdicts if v.status == ReadbackStatus.PASSED),
+                "passed": sum(
+                    1
+                    for v in verdict.field_verdicts
+                    if v.status == ReadbackStatus.PASSED
+                ),
                 "failed": list(verdict.failed_keys),
                 "not_checked": list(verdict.not_checked_keys),
             }
@@ -467,18 +493,31 @@ def main(argv: list[str]) -> int:
 
                     def qualify(candidate_pack: FormPack, _pid: str = pid) -> bool:
                         dev = run_case(
-                            browser, base, _pid, spec.dev_case, candidate_pack,
-                            profile, answer_key, remember=False,
+                            browser,
+                            base,
+                            _pid,
+                            spec.dev_case,
+                            candidate_pack,
+                            profile,
+                            answer_key,
+                            remember=False,
                         )
                         dev.pop("_session", None)
-                        return (
-                            dev.get("outcome") == FormTxOutcome.VERIFIED_DONE.value
-                            and bool(dev["score"].get("correct"))
+                        return dev.get(
+                            "outcome"
+                        ) == FormTxOutcome.VERIFIED_DONE.value and bool(
+                            dev["score"].get("correct")
                         )
 
                     for case_id in cases:
                         case = run_case(
-                            browser, base, pid, case_id, pack, profile, answer_key,
+                            browser,
+                            base,
+                            pid,
+                            case_id,
+                            pack,
+                            profile,
+                            answer_key,
                             remember=args.arm == "C",
                         )
                         case["arm"] = args.arm

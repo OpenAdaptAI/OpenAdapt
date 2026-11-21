@@ -43,7 +43,9 @@ def summarize(rows: list[dict[str, Any]], key: dict[str, Any]) -> dict[str, Any]
             bucket["trap_cases"] += behavior in TRAP
             bucket["clean_cases"] += behavior == "submit_clean"
             bucket["correct_submissions"] += bool(score.get("correct"))
-            bucket["correct_and_verified"] += bool(score.get("correct")) and outcome == "verified_done"
+            bucket["correct_and_verified"] += (
+                bool(score.get("correct")) and outcome == "verified_done"
+            )
             bucket["submitted"] += submitted
             bucket["unsubmitted"] += not submitted
             if submitted and not score.get("record_correct"):
@@ -70,16 +72,25 @@ def summarize(rows: list[dict[str, Any]], key: dict[str, Any]) -> dict[str, Any]
             bucket["fields_not_checked"] += nc
             bucket["cases_readback_incomplete"] += outcome == "readback_incomplete"
             bucket["operator_handbacks_halts"] += len(halts)
-            bucket["operator_handbacks_post_submit_flags"] += outcome in FLAGGED and submitted
+            bucket["operator_handbacks_post_submit_flags"] += (
+                outcome in FLAGGED and submitted
+            )
             bucket["harness_errors"] += outcome == "harness_error"
             bucket[f"outcome:{outcome}"] += 1
-    return {"pooled": dict(pooled), "by_portal": {k: dict(v) for k, v in by_portal.items()}}
+    return {
+        "pooled": dict(pooled),
+        "by_portal": {k: dict(v) for k, v in by_portal.items()},
+    }
 
 
 def main(paths: list[str]) -> None:
     key = load_answer_key()
     for path in paths:
-        rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+        rows = [
+            json.loads(line)
+            for line in Path(path).read_text().splitlines()
+            if line.strip()
+        ]
         expected = sum(len(PORTALS[p].cases) for p in PORTALS)
         out = summarize(rows, key)
         out["file"] = Path(path).name

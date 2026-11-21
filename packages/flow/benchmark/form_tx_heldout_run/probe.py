@@ -22,7 +22,9 @@ from openadapt_flow.form_tx.types import UIProfileSpec  # noqa: E402
 
 def post(url: str, body: dict) -> None:
     req = urllib.request.Request(
-        url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
     )
     urllib.request.urlopen(req).read()
 
@@ -34,7 +36,9 @@ def sign_in(page, username: str, password: str) -> None:
         if candidate.locator("input[type=password]").count():
             frame = candidate
             break
-    frame.locator("input[type=text], input[type=email], input:not([type])").first.fill(username)
+    frame.locator("input[type=text], input[type=email], input:not([type])").first.fill(
+        username
+    )
     frame.locator("input[type=password]").first.fill(password)
     frame.locator("input[type=password]").first.press("Enter")
     page.wait_for_load_state()
@@ -61,7 +65,9 @@ def main() -> None:
                 page.wait_for_load_state()
                 surface = PlaywrightFormSurface(page, UIProfileSpec(profile_id="probe"))
                 snap = surface.snapshot()
-                print(f"== {pid} url={snap.url_origin_and_path} controls={len(snap.controls)} frames={len(page.frames)}")
+                print(
+                    f"== {pid} url={snap.url_origin_and_path} controls={len(snap.controls)} frames={len(page.frames)}"
+                )
                 for c in snap.controls:
                     print(
                         f"   {c.tag}/{c.input_type or c.role} label={c.label_text!r} "

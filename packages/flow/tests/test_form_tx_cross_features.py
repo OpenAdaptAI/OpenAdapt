@@ -197,9 +197,7 @@ def _pack() -> FormPack:
         codec=FieldCodecSpec(kind=FormCodecKind.CASEFOLD),
     )
     readbacks = tuple(
-        b.model_copy(
-            update={"anchor": FieldAnchorSpec(label_patterns=(f"^{label}$",))}
-        )
+        b.model_copy(update={"anchor": FieldAnchorSpec(label_patterns=(f"^{label}$",))})
         for b, label in (
             (first, "First name"),
             (city, "City"),

@@ -53,6 +53,7 @@ class SurfaceContextError(RuntimeError):
 class _NoMatchingFrameError(SurfaceContextError):
     """A routed surface has no candidate yet; a settle barrier may wait for one."""
 
+
 class SurfaceStateError(RuntimeError):
     """A control did not take the state the surface set; the run must stop."""
 
@@ -2375,7 +2376,6 @@ __all__ = [
     "PlaywrightFormSurface",
     "PopupContractError",
     "SurfaceContextError",
-
     "SurfaceStateError",
     "SurfaceSettleTimeoutError",
 ]
