@@ -274,9 +274,8 @@ def tutorial_provenance(run_dir: Path) -> Optional[str]:
         except OSError:
             pass
     for folder in folders:
-        try:
-            receipt = json.loads((folder / "receipt.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        receipt = _read_run_summary(folder)
+        if receipt is None:
             continue
         if (
             isinstance(receipt, dict)
@@ -786,3 +785,15 @@ __all__ = [
     "unpublish",
     "upload",
 ]
+
+
+def _read_run_summary(folder: Path) -> Optional[dict]:
+    """The run summary from ``run-summary.json``, or an older ``receipt.json``."""
+    for name in ("run-summary.json", "receipt.json"):
+        try:
+            data = json.loads((folder / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and "schema_version" in data:
+            return data
+    return None
