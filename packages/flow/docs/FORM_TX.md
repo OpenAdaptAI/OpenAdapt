@@ -86,6 +86,17 @@ A control always wins over page text. Outputs such as a quote number are read
 from page text the same way. The pairs are kept apart from the form controls,
 so the layer never fills or halts on them.
 
+A popup routine can list `compute_anchors`, buttons clicked in order after
+its inputs are filled and before its apply button (for example Calculate,
+then Use This Value). Inputs are re-read before the first step and again
+before apply. A missing or ambiguous step button, or an error shown after a
+step, stops the run. `popup_mode: in_page` runs an estimator that opens as a
+dialog in the same page: only controls that were not on the page before the
+trigger count as the dialog's, and the apply button must be gone afterwards.
+If the intake already gives the value the popup returns and the two differ,
+the run stops before submit. A popup that will not open or never settles is
+a stop, not an error.
+
 The summary must match its declared landmark when one is configured. This is
 the configured browser read-back only. It does not prove server-side
 isolation, the absence of changes in other records, or atomic rollback of a
@@ -100,6 +111,14 @@ Measured on four held-out synthetic portals
   and controls inside shadow DOM are invisible.
 - A popup routine has one apply button; an estimator that needs Calculate and
   then Use This Value stops for a person.
+
+- It reads values back only from form controls (`input`, `select`,
+  `textarea`, `output`, `[data-readonly-output]`). A summary or confirmation
+  page that shows values as plain text cannot be read, so every field ends
+  `not_checked`.
+- A type-ahead that fetches suggestions only after typing cannot be filled:
+  the surface opens a listbox by clicking, finds none, and the run raises an
+  error instead of stopping.
 - An unchecked native radio reads as holding its value attribute, so a pack
   must set radios from the intake rather than treat them as prefill.
 

@@ -9,6 +9,7 @@ ungrounded required fields (including newly materialized conditional fields).
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +27,10 @@ from openadapt_flow.form_tx.codecs import (
     values_equivalent,
 )
 from openadapt_flow.form_tx.judge import SummaryJudge
+from openadapt_flow.form_tx.playwright_surface import (
+    PopupContractError,
+    SurfaceSettleTimeoutError,
+)
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
@@ -1254,7 +1259,95 @@ class FormReconciler:
 
         return halts
 
+    def _popup_contract_halt(
+        self,
+        session: ReconcilerSession,
+        parent_snapshot: FormSnapshot,
+        subroutine: PopupSubroutineSpec,
+        sig: str,
+        message: str,
+    ) -> FormHaltItem:
+        halt_id = _deterministic_halt_id(
+            session.run_id,
+            FormHaltKind.POPUP_CONTRACT_FAILED,
+            parent_snapshot.screen_id,
+            subroutine.subroutine_id,
+            sig,
+        )
+        halt = FormHaltItem(
+            halt_id=halt_id,
+            kind=FormHaltKind.POPUP_CONTRACT_FAILED,
+            screen_id=parent_snapshot.screen_id,
+            dossier_key=subroutine.return_output_key,
+            message=message,
+            allowed_actions=(
+                HumanDecisionAction.FIXED_ON_SCREEN,
+                HumanDecisionAction.ESCALATE_TO_OWNER,
+                HumanDecisionAction.ABORT_RUN,
+            ),
+        )
+        session._halt_metadata[halt_id] = {"field_signature": sig}
+        return halt
+
     def _run_popup_subroutine(
+        self,
+        parent_surface: FormSurfaceBackend,
+        session: ReconcilerSession,
+        parent_snapshot: FormSnapshot,
+        subroutine: PopupSubroutineSpec,
+    ) -> Optional[list[FormHaltItem]]:
+        """Execute ``subroutine``; a surface failure inside it becomes a stop.
+
+        A popup that will not open, a button that is missing or matches twice,
+        or a popup that never settles ends in a ``POPUP_CONTRACT_FAILED`` halt
+        for a person, never in an exception out of the run.
+        """
+        try:
+            return self._run_popup_subroutine_steps(
+                parent_surface, session, parent_snapshot, subroutine
+            )
+        except (
+            PopupContractError,
+            MissingAnchorError,
+            AmbiguousAnchorError,
+            SurfaceSettleTimeoutError,
+        ) as exc:
+            sig = f"popup_error|{subroutine.subroutine_id}|{type(exc).__name__}"
+            return [
+                self._popup_contract_halt(
+                    session,
+                    parent_snapshot,
+                    subroutine,
+                    sig,
+                    f"Popup {subroutine.subroutine_id!r} could not be run: {exc}",
+                )
+            ]
+
+    @contextlib.contextmanager
+    def _open_in_page_popup(
+        self, parent_surface: FormSurfaceBackend, trigger_selector: str
+    ) -> Any:
+        parent_surface.click(trigger_selector)
+        yield parent_surface
+
+    @staticmethod
+    def _scope_to_new_controls(
+        snapshot: FormSnapshot, parent_selectors: Optional[frozenset[str]]
+    ) -> FormSnapshot:
+        """Keep only controls that were not on the page before an in-page popup opened."""
+        if parent_selectors is None:
+            return snapshot
+        return snapshot.model_copy(
+            update={
+                "controls": tuple(
+                    c
+                    for c in snapshot.controls
+                    if c.dom_selector not in parent_selectors
+                ),
+            }
+        )
+
+    def _run_popup_subroutine_steps(
         self,
         parent_surface: FormSurfaceBackend,
         session: ReconcilerSession,
@@ -1371,12 +1464,31 @@ class FormReconciler:
             }
             return [halt]
 
-        with parent_surface.open_popup_surface(
-            trigger_ctrl.dom_selector,
-            url_pattern=subroutine.popup_url_pattern,
-            title_pattern=subroutine.popup_title_pattern,
-        ) as popup_surface:
-            popup_snap = popup_surface.snapshot()
+        in_page = subroutine.popup_mode == "in_page"
+        parent_selectors: Optional[frozenset[str]] = (
+            frozenset(c.dom_selector for c in parent_snapshot.controls)
+            if in_page
+            else None
+        )
+        parent_errors = (
+            set(_collect_surface_errors(parent_snapshot)) if in_page else set()
+        )
+
+        def _popup_snapshot(surface: FormSurfaceBackend) -> FormSnapshot:
+            return self._scope_to_new_controls(surface.snapshot(), parent_selectors)
+
+        popup_cm = (
+            self._open_in_page_popup(parent_surface, trigger_ctrl.dom_selector)
+            if in_page
+            else parent_surface.open_popup_surface(
+                trigger_ctrl.dom_selector,
+                url_pattern=subroutine.popup_url_pattern,
+                title_pattern=subroutine.popup_title_pattern,
+            )
+        )
+        commit_selector: Optional[str] = None
+        with popup_cm as popup_surface:
+            popup_snap = _popup_snapshot(popup_surface)
 
             # Replay any prior manual human fills for unmapped popup controls.
             for (sub_id, sel), val in list(session._popup_manual_fills.items()):
@@ -1406,7 +1518,7 @@ class FormReconciler:
                         selector=sel,
                         in_popup_subroutine=sub_id,
                     )
-                    popup_snap = popup_surface.snapshot()
+                    popup_snap = _popup_snapshot(popup_surface)
 
             for _ in range(self.max_passes_per_screen):
                 edited, _, bind_halt = self._reconcile_bindings_pass(
@@ -1420,7 +1532,7 @@ class FormReconciler:
                     return [bind_halt]
                 if not edited:
                     break
-                popup_snap = popup_surface.snapshot()
+                popup_snap = _popup_snapshot(popup_surface)
 
             popup_ungrounded = self._collect_ungrounded_required_halts(
                 session,
@@ -1431,12 +1543,72 @@ class FormReconciler:
             if popup_ungrounded:
                 return popup_ungrounded
 
+            # Intermediate steps (for example Calculate) before apply. Inputs
+            # are re-read before the first step and again before apply,
+            # because a step may re-render the popup.
+            if subroutine.compute_anchors:
+                entry_halt = self._check_popup_entries_before_apply(
+                    session,
+                    popup_surface,
+                    parent_snapshot,
+                    subroutine,
+                    scope=parent_selectors,
+                )
+                if entry_halt is not None:
+                    return [entry_halt]
+            for step_index, step_anchor in enumerate(subroutine.compute_anchors):
+                popup_snap = _popup_snapshot(popup_surface)
+                try:
+                    step_ctrl = match_anchor_in_snapshot(
+                        step_anchor, popup_snap, include_readonly=False
+                    )
+                except AmbiguousAnchorError as exc:
+                    step_ctrl = None
+                    step_err = str(exc)
+                else:
+                    step_err = (
+                        f"Popup step {step_index + 1} button not found for "
+                        f"{subroutine.subroutine_id!r}"
+                    )
+                if step_ctrl is None:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_step|{subroutine.subroutine_id}|{step_index}",
+                            step_err,
+                        )
+                    ]
+                popup_surface.click(step_ctrl.dom_selector)
+                popup_snap = _popup_snapshot(popup_surface)
+                step_errors = [
+                    e
+                    for e in _collect_surface_errors(popup_snap)
+                    if e not in parent_errors
+                ]
+                if step_errors:
+                    return [
+                        self._popup_contract_halt(
+                            session,
+                            parent_snapshot,
+                            subroutine,
+                            f"popup_step_error|{subroutine.subroutine_id}|{step_index}",
+                            f"Popup {subroutine.subroutine_id!r} showed an error "
+                            f"after step {step_index + 1}: {step_errors}",
+                        )
+                    ]
+
             entry_halt = self._check_popup_entries_before_apply(
-                session, popup_surface, parent_snapshot, subroutine
+                session,
+                popup_surface,
+                parent_snapshot,
+                subroutine,
+                scope=parent_selectors,
             )
             if entry_halt is not None:
                 return [entry_halt]
-            popup_snap = popup_surface.snapshot()
+            popup_snap = _popup_snapshot(popup_surface)
 
             try:
                 popup_commit = match_anchor_in_snapshot(
@@ -1451,30 +1623,18 @@ class FormReconciler:
                 )
 
             if popup_commit is None:
-                sig = f"popup_commit|{subroutine.subroutine_id}"
-                halt_id = _deterministic_halt_id(
-                    session.run_id,
-                    FormHaltKind.POPUP_CONTRACT_FAILED,
-                    parent_snapshot.screen_id,
-                    subroutine.subroutine_id,
-                    sig,
-                )
-                halt = FormHaltItem(
-                    halt_id=halt_id,
-                    kind=FormHaltKind.POPUP_CONTRACT_FAILED,
-                    screen_id=parent_snapshot.screen_id,
-                    dossier_key=subroutine.return_output_key,
-                    message=commit_err,
-                    allowed_actions=(
-                        HumanDecisionAction.FIXED_ON_SCREEN,
-                        HumanDecisionAction.ESCALATE_TO_OWNER,
-                        HumanDecisionAction.ABORT_RUN,
-                    ),
-                )
-                session._halt_metadata[halt_id] = {"field_signature": sig}
-                return [halt]
+                return [
+                    self._popup_contract_halt(
+                        session,
+                        parent_snapshot,
+                        subroutine,
+                        f"popup_commit|{subroutine.subroutine_id}",
+                        commit_err,
+                    )
+                ]
 
-            popup_surface.click(popup_commit.dom_selector)
+            commit_selector = popup_commit.dom_selector
+            popup_surface.click(commit_selector)
 
         # Verify parent return anchor after popup closes.
         after_parent_snap = parent_surface.snapshot(
@@ -1482,6 +1642,20 @@ class FormReconciler:
             modal_rules=session.pack.modal_rules,
             screens=session.pack.screens,
         )
+        if in_page and any(
+            c.visible and c.dom_selector == commit_selector
+            for c in after_parent_snap.controls
+        ):
+            return [
+                self._popup_contract_halt(
+                    session,
+                    parent_snapshot,
+                    subroutine,
+                    f"popup_open|{subroutine.subroutine_id}",
+                    f"In-page popup {subroutine.subroutine_id!r} is still open "
+                    f"after its apply button was clicked",
+                )
+            ]
         return_after = match_anchor_in_snapshot(
             subroutine.parent_return_anchor,
             after_parent_snap,
@@ -1530,6 +1704,49 @@ class FormReconciler:
             }
             return [halt]
 
+        # A value the intake already states must match what the popup put
+        # back; otherwise stop before submit rather than keep the popup's.
+        existing_fact = session.effective_facts.get(subroutine.return_output_key)
+        if existing_fact is not None and not values_equivalent(
+            existing_fact.value, return_after.current_value, subroutine.return_codec
+        ):
+            ctrl_sig = compute_field_signature(return_after)
+            halt_id = _deterministic_halt_id(
+                session.run_id,
+                FormHaltKind.PREFILL_VALUE_CONFLICT,
+                after_parent_snap.screen_id,
+                return_after.dom_selector,
+                ctrl_sig,
+            )
+            halt = FormHaltItem(
+                halt_id=halt_id,
+                kind=FormHaltKind.PREFILL_VALUE_CONFLICT,
+                screen_id=after_parent_snap.screen_id,
+                control_id=return_after.control_id,
+                dom_selector=return_after.dom_selector,
+                field_label=return_after.label_text,
+                section_text=return_after.section_text,
+                dossier_key=subroutine.return_output_key,
+                portal_value=return_after.current_value,
+                dossier_value=existing_fact.value,
+                message=(
+                    f"Popup {subroutine.subroutine_id!r} returned a value that "
+                    f"differs from the intake's {subroutine.return_output_key!r}"
+                ),
+                allowed_actions=(
+                    HumanDecisionAction.ACCEPT_PORTAL_PREFILL,
+                    HumanDecisionAction.PROVIDE_VALUE,
+                    HumanDecisionAction.FIXED_ON_SCREEN,
+                    HumanDecisionAction.ESCALATE_TO_OWNER,
+                    HumanDecisionAction.ABORT_RUN,
+                ),
+            )
+            session._halt_metadata[halt_id] = {
+                "field_signature": ctrl_sig,
+                "control": return_after,
+            }
+            return [halt]
+
         session.subroutines_completed.append(subroutine.subroutine_id)
         session._filled_selectors.add(return_after.dom_selector)
         session.record_write(
@@ -1557,6 +1774,8 @@ class FormReconciler:
         popup_surface: FormSurfaceBackend,
         parent_snapshot: FormSnapshot,
         subroutine: PopupSubroutineSpec,
+        *,
+        scope: Optional[frozenset[str]] = None,
     ) -> Optional[FormHaltItem]:
         """Re-read every field typed in the popup before its apply button.
 
@@ -1567,7 +1786,7 @@ class FormReconciler:
         field is still reported as not_checked: a re-read of the popup is not a
         read-back of what the application recorded.
         """
-        snap = popup_surface.snapshot()
+        snap = self._scope_to_new_controls(popup_surface.snapshot(), scope)
         problems: list[str] = []
         for ledger_key, write in list(session._writes.items()):
             if write.in_popup_subroutine != subroutine.subroutine_id:
