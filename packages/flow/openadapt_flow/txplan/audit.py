@@ -383,10 +383,9 @@ class AuditReader:
         return text
 
     def _get(self, path: str, params: Mapping[str, Any]) -> Any:
+        url = self._url(path)  # an off-origin link refuses before any request
         try:
-            resp = self.http.request(
-                "GET", self._url(path), params=dict(params) or None
-            )
+            resp = self.http.request("GET", url, params=dict(params) or None)
         except Exception as exc:  # noqa: BLE001 - transport: the window is unknown
             raise AuditError(f"the log read failed: {type(exc).__name__}") from exc
         if resp.status_code >= 400:

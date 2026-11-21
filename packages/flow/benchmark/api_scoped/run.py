@@ -44,17 +44,25 @@ RUN = format(int(time.time()) % 16**5, "05x")
 
 
 class Trial:
-    def __init__(self, kind: str, fault: Optional[str], kwargs: dict[str, Any],
-                 send: Optional[Callable[..., Any]] = None,
-                 landed: Optional[Callable[[dict[str, Any]], bool]] = None,
-                 exposed: bool = True) -> None:
+    def __init__(
+        self,
+        kind: str,
+        fault: Optional[str],
+        kwargs: dict[str, Any],
+        send: Optional[Callable[..., Any]] = None,
+        landed: Optional[Callable[[dict[str, Any]], bool]] = None,
+        exposed: bool = True,
+    ) -> None:
         self.kind, self.fault, self.kwargs, self.send = kind, fault, kwargs, send
         self.landed, self.exposed = landed, exposed
 
 
 def _with(fields: dict[str, Any], **change: Any) -> Callable[..., Any]:
     def send(adapter: Any, coll: Any, **kw: Any) -> Any:
-        return default_send(adapter, coll, **{**kw, "fields": {**kw["fields"], **change}})
+        return default_send(
+            adapter, coll, **{**kw, "fields": {**kw["fields"], **change}}
+        )
+
     return send
 
 
@@ -72,6 +80,7 @@ def _twice(strip_guard: bool = True) -> Callable[..., Any]:
         else:
             default_send(adapter, coll, **kw)
         return default_send(adapter, coll, **kw)
+
     return send
 
 
@@ -80,12 +89,18 @@ def _then(extra: Callable[[], None]) -> Callable[..., Any]:
         rid = default_send(adapter, coll, **kw)
         extra()
         return rid
+
     return send
 
 
 def _only(keep: list[str]) -> Callable[..., Any]:
     def send(adapter: Any, coll: Any, **kw: Any) -> Any:
-        return default_send(adapter, coll, **{**kw, "fields": {k: v for k, v in kw["fields"].items() if k in keep}})
+        return default_send(
+            adapter,
+            coll,
+            **{**kw, "fields": {k: v for k, v in kw["fields"].items() if k in keep}},
+        )
+
     return send
 
 
@@ -101,21 +116,38 @@ class MedplumScenario:
         self.seeds: list[str] = []
 
     def _h(self, role: str = "writer") -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.lab.token(role)}", "Content-Type": "application/fhir+json"}
+        return {
+            "Authorization": f"Bearer {self.lab.token(role)}",
+            "Content-Type": "application/fhir+json",
+        }
 
     def patient(self) -> dict[str, Any]:
         r = self.rng
         return {
-            "name": [{"family": f"{r.choice(FAMILIES)}-{RUN}-{r.randrange(16**6):06x}", "given": [r.choice(GIVEN)]}],
+            "name": [
+                {
+                    "family": f"{r.choice(FAMILIES)}-{RUN}-{r.randrange(16**6):06x}",
+                    "given": [r.choice(GIVEN)],
+                }
+            ],
             "birthDate": f"{r.randint(1940, 2010)}-{r.randint(1, 12):02d}-{r.randint(1, 28):02d}",
             "gender": r.choice(["female", "male", "other", "unknown"]),
-            "address": [{"city": r.choice(["Springfield", "Riverton", "Lakeside"]), "country": "XX"}],
+            "address": [
+                {
+                    "city": r.choice(["Springfield", "Riverton", "Lakeside"]),
+                    "country": "XX",
+                }
+            ],
         }
 
     def seed(self, n: int) -> None:
         for _ in range(n):
-            c, got = http("POST", self.fhir + "/Patient", body={"resourceType": "Patient", **self.patient()},
-                          headers=self._h("bystander"))
+            c, got = http(
+                "POST",
+                self.fhir + "/Patient",
+                body={"resourceType": "Patient", **self.patient()},
+                headers=self._h("bystander"),
+            )
             assert c == 201, (c, got)
             self.seeds.append(got["id"])
 
@@ -125,53 +157,134 @@ class MedplumScenario:
     def _edit(self, role: str, rid: str) -> None:
         c, cur = http("GET", f"{self.fhir}/Patient/{rid}", headers=self._h(role))
         cur["birthDate"] = f"19{self.rng.randint(10, 39)}-01-01"
-        c, _ = http("PUT", f"{self.fhir}/Patient/{rid}", body=cur, headers=self._h(role))
+        c, _ = http(
+            "PUT", f"{self.fhir}/Patient/{rid}", body=cur, headers=self._h(role)
+        )
         assert c == 200, c
 
     def clean(self, i: int) -> Trial:
         if i % 2 == 0:
-            return Trial("create", None, {"collection": "patient", "op": "create", "fields": self.patient()})
+            return Trial(
+                "create",
+                None,
+                {"collection": "patient", "op": "create", "fields": self.patient()},
+            )
         rid = self.rng.choice(self.seeds)
         p = self.patient()
         field = self.rng.choice(["birthDate", "gender", "address"])
-        return Trial("update", None, {"collection": "patient", "op": "update", "rid": rid, "fields": {field: p[field]}})
+        return Trial(
+            "update",
+            None,
+            {
+                "collection": "patient",
+                "op": "update",
+                "rid": rid,
+                "fields": {field: p[field]},
+            },
+        )
 
     def faults(self, i: int) -> list[Trial]:
         rid = self.rng.choice(self.seeds)
         p = self.patient()
         oracle = self.lab.oracle_patient
         # The fault leaves gender unwritten, so the intent must change it.
-        new_gender = next(g for g in ("other", "female", "male") if g != (oracle(rid) or {}).get("gender"))
+        new_gender = next(
+            g
+            for g in ("other", "female", "male")
+            if g != (oracle(rid) or {}).get("gender")
+        )
         out = [
-            Trial("create", "wrong_value", {"collection": "patient", "op": "create", "fields": p},
-                  _with(p, birthDate="1901-01-01"),
-                  lambda r: (oracle(r["id"]) or {}).get("birthDate") == "1901-01-01"),
-            Trial("update", "wrong_value", {"collection": "patient", "op": "update", "rid": rid,
-                                            "fields": {"birthDate": "1903-03-03"}},
-                  _with({}, birthDate="1902-02-02"),
-                  lambda r, rid=rid: (oracle(rid) or {}).get("birthDate") == "1902-02-02"),
-            Trial("create", "duplicate", {"collection": "patient", "op": "create", "fields": self.patient()},
-                  _twice(), None),
-            Trial("update", "duplicate", {"collection": "patient", "op": "update", "rid": rid,
-                                          "fields": {"birthDate": p["birthDate"]}}, _twice(), None),
-            Trial("update", "partial_write", {"collection": "patient", "op": "update", "rid": rid,
-                                              "fields": {"birthDate": "1977-07-07", "gender": new_gender}},
-                  _only(["birthDate"]),
-                  lambda r, rid=rid, g=new_gender: (oracle(rid) or {}).get("birthDate") == "1977-07-07"
-                  and (oracle(rid) or {}).get("gender") != g),
+            Trial(
+                "create",
+                "wrong_value",
+                {"collection": "patient", "op": "create", "fields": p},
+                _with(p, birthDate="1901-01-01"),
+                lambda r: (oracle(r["id"]) or {}).get("birthDate") == "1901-01-01",
+            ),
+            Trial(
+                "update",
+                "wrong_value",
+                {
+                    "collection": "patient",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"birthDate": "1903-03-03"},
+                },
+                _with({}, birthDate="1902-02-02"),
+                lambda r, rid=rid: (oracle(rid) or {}).get("birthDate") == "1902-02-02",
+            ),
+            Trial(
+                "create",
+                "duplicate",
+                {"collection": "patient", "op": "create", "fields": self.patient()},
+                _twice(),
+                None,
+            ),
+            Trial(
+                "update",
+                "duplicate",
+                {
+                    "collection": "patient",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"birthDate": p["birthDate"]},
+                },
+                _twice(),
+                None,
+            ),
+            Trial(
+                "update",
+                "partial_write",
+                {
+                    "collection": "patient",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"birthDate": "1977-07-07", "gender": new_gender},
+                },
+                _only(["birthDate"]),
+                lambda r, rid=rid, g=new_gender: (
+                    (oracle(rid) or {}).get("birthDate") == "1977-07-07"
+                    and (oracle(rid) or {}).get("gender") != g
+                ),
+            ),
         ]
         victim = self.other(rid)
-        out.append(Trial("update", "collateral_same_actor",
-                         {"collection": "patient", "op": "update", "rid": rid, "fields": {"birthDate": "1966-06-06"}},
-                         _then(lambda v=victim: self._edit("writer", v)), lambda r: True))
+        out.append(
+            Trial(
+                "update",
+                "collateral_same_actor",
+                {
+                    "collection": "patient",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"birthDate": "1966-06-06"},
+                },
+                _then(lambda v=victim: self._edit("writer", v)),
+                lambda r: True,
+            )
+        )
         victim2 = self.other(rid)
-        out.append(Trial("update", "collateral_other_actor",
-                         {"collection": "patient", "op": "update", "rid": rid, "fields": {"birthDate": "1955-05-05"}},
-                         _then(lambda v=victim2: self._edit("bystander", v)), lambda r: True, exposed=False))
+        out.append(
+            Trial(
+                "update",
+                "collateral_other_actor",
+                {
+                    "collection": "patient",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"birthDate": "1955-05-05"},
+                },
+                _then(lambda v=victim2: self._edit("bystander", v)),
+                lambda r: True,
+                exposed=False,
+            )
+        )
         # Duplicate creates: count the records holding the same name in the oracle.
         fam = out[2].kwargs["fields"]["name"][0]["family"]
         out[2].landed = lambda r, fam=fam: self.lab.oracle_count(fam) == 2
-        out[3].landed = lambda r: True  # two PUTs were sent; the log decides if the server kept both
+        out[3].landed = lambda r: (
+            True
+        )  # two PUTs were sent; the log decides if the server kept both
         return out
 
 
@@ -194,8 +307,12 @@ class GiteaScenario:
 
     def seed(self, n: int) -> None:
         for _ in range(n):
-            c, got = http("POST", self.api + "/issues", body={"title": self.title(), "body": "seed"},
-                          headers=self._h("bystander"))
+            c, got = http(
+                "POST",
+                self.api + "/issues",
+                body={"title": self.title(), "body": "seed"},
+                headers=self._h("bystander"),
+            )
             assert c == 201, (c, got)
             self.seeds.append(str(got["number"]))
 
@@ -206,17 +323,49 @@ class GiteaScenario:
         k = i % 4
         rid = self.rng.choice(self.seeds)
         if k == 0:
-            return Trial("create", None, {"collection": "issue", "op": "create",
-                                          "fields": {"title": self.title(), "body": f"Synthetic body {i}"}})
+            return Trial(
+                "create",
+                None,
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": self.title(), "body": f"Synthetic body {i}"},
+                },
+            )
         if k == 1:
-            return Trial("comment", None, {"collection": "comment", "op": "create", "path": {"issue": rid},
-                                           "slot": f"c{i}", "fields": {"body": f"Synthetic comment {i}"}})
+            return Trial(
+                "comment",
+                None,
+                {
+                    "collection": "comment",
+                    "op": "create",
+                    "path": {"issue": rid},
+                    "slot": f"c{i}",
+                    "fields": {"body": f"Synthetic comment {i}"},
+                },
+            )
         if k == 2:
             state = self.lab.oracle_issue("lab", rid)["state"]
-            return Trial("close", None, {"collection": "issue", "op": "update", "rid": rid,
-                                         "fields": {"state": "open" if state == "closed" else "closed"}})
-        return Trial("edit", None, {"collection": "issue", "op": "update", "rid": rid,
-                                    "fields": {"title": self.title()}})
+            return Trial(
+                "close",
+                None,
+                {
+                    "collection": "issue",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"state": "open" if state == "closed" else "closed"},
+                },
+            )
+        return Trial(
+            "edit",
+            None,
+            {
+                "collection": "issue",
+                "op": "update",
+                "rid": rid,
+                "fields": {"title": self.title()},
+            },
+        )
 
     def faults(self, i: int) -> list[Trial]:
         rid = self.rng.choice(self.seeds)
@@ -230,49 +379,153 @@ class GiteaScenario:
         # it (status < 300): a rejected one is not evidence of a plant.
         planted: dict[str, bool] = {}
 
-        def side(tag: str, method: str, url: str, body: dict[str, Any], h: dict[str, str]) -> None:
+        def side(
+            tag: str, method: str, url: str, body: dict[str, Any], h: dict[str, str]
+        ) -> None:
             code, _ = http(method, url, body=body, headers=h)
             planted[tag] = code < 300
 
         def comment(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
-            return lambda: side(tag, "POST", f"{self.api}/issues/{n}/comments", {"body": "collateral"}, h)
+            return lambda: side(
+                tag,
+                "POST",
+                f"{self.api}/issues/{n}/comments",
+                {"body": "collateral"},
+                h,
+            )
 
         def retitle(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
-            return lambda: side(tag, "PATCH", f"{self.api}/issues/{n}", {"title": self.title()}, h)
+            return lambda: side(
+                tag, "PATCH", f"{self.api}/issues/{n}", {"title": self.title()}, h
+            )
 
         def toggle(h: dict[str, str], n: str, tag: str) -> Callable[[], None]:
             def go() -> None:
                 st = oracle("lab", n)["state"]
-                side(tag, "PATCH", f"{self.api}/issues/{n}", {"state": "open" if st == "closed" else "closed"}, h)
+                side(
+                    tag,
+                    "PATCH",
+                    f"{self.api}/issues/{n}",
+                    {"state": "open" if st == "closed" else "closed"},
+                    h,
+                )
+
             return go
 
         def landed(tag: str) -> Callable[[dict[str, Any]], bool]:
             return lambda r: planted.get(tag, False)
 
         return [
-            Trial("create", "wrong_value", {"collection": "issue", "op": "create", "fields": {"title": t, "body": "x"}},
-                  _with({}, title=t + " (wrong)"), lambda r: (oracle("lab", r["id"]) or {}).get("title", "").endswith("(wrong)")),
-            Trial("edit", "wrong_value", {"collection": "issue", "op": "update", "rid": rid, "fields": {"title": t}},
-                  _with({}, title=t + " (wrong)"), lambda r, n=rid: (oracle("lab", n) or {}).get("title", "").endswith("(wrong)")),
-            Trial("create", "duplicate", {"collection": "issue", "op": "create", "fields": {"title": t + " d", "body": "x"}},
-                  _twice(), None),
-            Trial("comment", "duplicate", {"collection": "comment", "op": "create", "path": {"issue": rid},
-                                           "slot": f"d{i}", "fields": {"body": f"dup {i}"}}, _twice(), lambda r: True),
-            Trial("create", "partial_write", {"collection": "issue", "op": "create",
-                                              "fields": {"title": t + " p", "body": "Synthetic body"}},
-                  _only(["title"]), lambda r: (oracle("lab", r["id"]) or {}).get("body") in ("", None)),
-            Trial("comment", "collateral_same_actor", {"collection": "comment", "op": "create", "path": {"issue": rid},
-                                                       "slot": f"x{i}", "fields": {"body": f"c {i}"}},
-                  _then(comment(w, victim, "c")), landed("c")),
-            Trial("create", "collateral_same_actor", {"collection": "issue", "op": "create",
-                                                      "fields": {"title": t + " c", "body": "x"}},
-                  _then(toggle(w, victim, "t")), landed("t")),
-            Trial("create", "collateral_same_actor_unlogged", {"collection": "issue", "op": "create",
-                                                               "fields": {"title": t + " u", "body": "x"}},
-                  _then(retitle(w, victim, "r")), landed("r"), exposed=False),
-            Trial("create", "collateral_other_actor", {"collection": "issue", "op": "create",
-                                                       "fields": {"title": t + " o", "body": "x"}},
-                  _then(comment(b, victim, "o")), landed("o"), exposed=False),
+            Trial(
+                "create",
+                "wrong_value",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t, "body": "x"},
+                },
+                _with({}, title=t + " (wrong)"),
+                lambda r: (
+                    (oracle("lab", r["id"]) or {}).get("title", "").endswith("(wrong)")
+                ),
+            ),
+            Trial(
+                "edit",
+                "wrong_value",
+                {
+                    "collection": "issue",
+                    "op": "update",
+                    "rid": rid,
+                    "fields": {"title": t},
+                },
+                _with({}, title=t + " (wrong)"),
+                lambda r, n=rid: (
+                    (oracle("lab", n) or {}).get("title", "").endswith("(wrong)")
+                ),
+            ),
+            Trial(
+                "create",
+                "duplicate",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t + " d", "body": "x"},
+                },
+                _twice(),
+                None,
+            ),
+            Trial(
+                "comment",
+                "duplicate",
+                {
+                    "collection": "comment",
+                    "op": "create",
+                    "path": {"issue": rid},
+                    "slot": f"d{i}",
+                    "fields": {"body": f"dup {i}"},
+                },
+                _twice(),
+                lambda r: True,
+            ),
+            Trial(
+                "create",
+                "partial_write",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t + " p", "body": "Synthetic body"},
+                },
+                _only(["title"]),
+                lambda r: (oracle("lab", r["id"]) or {}).get("body") in ("", None),
+            ),
+            Trial(
+                "comment",
+                "collateral_same_actor",
+                {
+                    "collection": "comment",
+                    "op": "create",
+                    "path": {"issue": rid},
+                    "slot": f"x{i}",
+                    "fields": {"body": f"c {i}"},
+                },
+                _then(comment(w, victim, "c")),
+                landed("c"),
+            ),
+            Trial(
+                "create",
+                "collateral_same_actor",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t + " c", "body": "x"},
+                },
+                _then(toggle(w, victim, "t")),
+                landed("t"),
+            ),
+            Trial(
+                "create",
+                "collateral_same_actor_unlogged",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t + " u", "body": "x"},
+                },
+                _then(retitle(w, victim, "r")),
+                landed("r"),
+                exposed=False,
+            ),
+            Trial(
+                "create",
+                "collateral_other_actor",
+                {
+                    "collection": "issue",
+                    "op": "create",
+                    "fields": {"title": t + " o", "body": "x"},
+                },
+                _then(comment(b, victim, "o")),
+                landed("o"),
+                exposed=False,
+            ),
         ]
 
     def dup_landed(self, trial: Trial) -> bool:
@@ -280,8 +533,11 @@ class GiteaScenario:
             return True
         title = trial.kwargs["fields"]["title"]
         # Newest issues first, no search index (the index trails the write).
-        c, got = http("GET", f"{self.api}/issues?state=all&type=issues&sort=newest&limit=20",
-                      headers=self._h("oracle"))
+        c, got = http(
+            "GET",
+            f"{self.api}/issues?state=all&type=issues&sort=newest&limit=20",
+            headers=self._h("oracle"),
+        )
         return sum(1 for x in got if x["title"] == title) == 2
 
 
@@ -297,7 +553,9 @@ def run_one(ctx: Ctx, system: str, trial: Trial, task: str) -> dict[str, Any]:
         out = {"outcome": "REFUSED", "codes": [exc.code], "notes": []}
     out["seconds"] = round(time.monotonic() - t0, 3)
     if out.get("run_dir"):
-        tx = json.loads((Path(out["run_dir"]) / "report.json").read_text()).get("tx", {})
+        tx = json.loads((Path(out["run_dir"]) / "report.json").read_text()).get(
+            "tx", {}
+        )
         out["audit"] = tx.get("audit")
         out["mismatched_fields"] = tx.get("mismatched_fields")
     return out
@@ -315,7 +573,9 @@ def main() -> int:
     lab = LABS[args.system]()
     for k, v in lab.env().items():
         os.environ[k] = v
-    os.environ.setdefault("OPENADAPT_SEAL_HOME", tempfile.mkdtemp(prefix="api-scoped-seal-"))
+    os.environ.setdefault(
+        "OPENADAPT_SEAL_HOME", tempfile.mkdtemp(prefix="api-scoped-seal-")
+    )
     spec = load_spec(HERE / "packs" / f"{args.system}.tx.yaml")
     state = State(Path(tempfile.mkdtemp(prefix="api-scoped-state-")))
     ctx = Ctx(spec=spec, state=state)
@@ -330,13 +590,26 @@ def main() -> int:
         rows.append({"phase": "clean", "kind": trial.kind, "fault": None, **_row(out)})
     for i in range(args.faults):
         for trial in sc.faults(i):
-            out = run_one(ctx, args.system, trial, f"fault-{run_id}-{i}-{trial.fault}-{trial.kind}")
+            out = run_one(
+                ctx,
+                args.system,
+                trial,
+                f"fault-{run_id}-{i}-{trial.fault}-{trial.kind}",
+            )
             if trial.fault == "duplicate" and trial.landed is None:
                 landed = sc.dup_landed(trial) if hasattr(sc, "dup_landed") else None
             else:
                 landed = trial.landed(out) if trial.landed else None
-            rows.append({"phase": "fault", "kind": trial.kind, "fault": trial.fault, "exposed": trial.exposed,
-                         "landed": landed, **_row(out)})
+            rows.append(
+                {
+                    "phase": "fault",
+                    "kind": trial.kind,
+                    "fault": trial.fault,
+                    "exposed": trial.exposed,
+                    "landed": landed,
+                    **_row(out),
+                }
+            )
     # Idempotency: the same task retried, and retried with a regenerated payload.
     for i in range(args.faults):
         trial = sc.clean(0)
@@ -346,13 +619,33 @@ def main() -> int:
         regen = dict(trial.kwargs)
         regen["fields"] = _regenerated(sc, regen["fields"])
         third = run_one(ctx, args.system, Trial(trial.kind, None, regen), task)
-        rows.append({"phase": "retry", "kind": trial.kind, "fault": "retry_same_payload",
-                     "first": first["outcome"], **_row(again)})
-        rows.append({"phase": "retry", "kind": trial.kind, "fault": "retry_regenerated_payload",
-                     "first": first["outcome"], **_row(third)})
+        rows.append(
+            {
+                "phase": "retry",
+                "kind": trial.kind,
+                "fault": "retry_same_payload",
+                "first": first["outcome"],
+                **_row(again),
+            }
+        )
+        rows.append(
+            {
+                "phase": "retry",
+                "kind": trial.kind,
+                "fault": "retry_regenerated_payload",
+                "first": first["outcome"],
+                **_row(third),
+            }
+        )
 
     summary = summarize(rows)
-    result = {"system": args.system, "seed": args.seed, "started": run_id, "summary": summary, "rows": rows}
+    result = {
+        "system": args.system,
+        "seed": args.seed,
+        "started": run_id,
+        "summary": summary,
+        "rows": rows,
+    }
     text = json.dumps(result, indent=2, sort_keys=True)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -393,7 +686,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if r["phase"] != "fault":
             continue
         k = f"{r['fault']}/{r['kind']}"
-        f = faults.setdefault(k, {"n": 0, "landed": 0, "stopped": 0, "exposed": r["exposed"], "codes": {}})
+        f = faults.setdefault(
+            k, {"n": 0, "landed": 0, "stopped": 0, "exposed": r["exposed"], "codes": {}}
+        )
         f["n"] += 1
         f["landed"] += 1 if r["landed"] else 0
         if r["outcome"] != "VERIFIED":
@@ -416,9 +711,14 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "faults": faults,
         "exposed_faults_missed": missed,
         "retry": {
-            "same_payload_replayed": sum(1 for r in retry if r["fault"] == "retry_same_payload" and r["replayed"]),
+            "same_payload_replayed": sum(
+                1 for r in retry if r["fault"] == "retry_same_payload" and r["replayed"]
+            ),
             "regenerated_refused": sum(
-                1 for r in retry if r["fault"] == "retry_regenerated_payload" and "replay_mismatch" in r["codes"]
+                1
+                for r in retry
+                if r["fault"] == "retry_regenerated_payload"
+                and "replay_mismatch" in r["codes"]
             ),
             "n": sum(1 for r in retry if r["fault"] == "retry_same_payload"),
         },

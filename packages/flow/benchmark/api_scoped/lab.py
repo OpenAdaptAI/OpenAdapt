@@ -100,7 +100,8 @@ class MedplumLab:
 
     def oracle_patient(self, rid: str) -> Optional[dict[str, Any]]:
         out = self.psql(
-            "SELECT content FROM \"Patient\" WHERE deleted = false AND id = '%s';" % rid.replace("'", "")
+            "SELECT content FROM \"Patient\" WHERE deleted = false AND id = '%s';"
+            % rid.replace("'", "")
         ).strip()
         return json.loads(out) if out else None
 
@@ -126,14 +127,24 @@ class GiteaLab:
 
     def compose(self, *args: str) -> str:
         proc = subprocess.run(
-            ["docker", "compose", "-p", self.project, "-f", str(HERE / "gitea.compose.yml"), *args],
+            [
+                "docker",
+                "compose",
+                "-p",
+                self.project,
+                "-f",
+                str(HERE / "gitea.compose.yml"),
+                *args,
+            ],
             capture_output=True,
             text=True,
             env={**os.environ, "GITEA_PORT": str(GITEA_PORT)},
             timeout=900,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"compose {' '.join(args[:2])} failed: {proc.stderr[-800:]}")
+            raise RuntimeError(
+                f"compose {' '.join(args[:2])} failed: {proc.stderr[-800:]}"
+            )
         return proc.stdout
 
     def _secrets(self) -> dict[str, Any]:
@@ -154,35 +165,79 @@ class GiteaLab:
         pw = self._secrets()
         for user in self.users:
             got = subprocess.run(
-                ["docker", "compose", "-p", self.project, "-f", str(HERE / "gitea.compose.yml"),
-                 "exec", "-T", "-u", "git", "gitea", "gitea", "admin", "user", "create",
-                 "--username", user, "--password", pw[user], "--email", f"{user}@example.invalid",
-                 "--must-change-password=false", *(["--admin"] if user == "oa-admin" else [])],
-                capture_output=True, text=True, env={**os.environ, "GITEA_PORT": str(GITEA_PORT)},
+                [
+                    "docker",
+                    "compose",
+                    "-p",
+                    self.project,
+                    "-f",
+                    str(HERE / "gitea.compose.yml"),
+                    "exec",
+                    "-T",
+                    "-u",
+                    "git",
+                    "gitea",
+                    "gitea",
+                    "admin",
+                    "user",
+                    "create",
+                    "--username",
+                    user,
+                    "--password",
+                    pw[user],
+                    "--email",
+                    f"{user}@example.invalid",
+                    "--must-change-password=false",
+                    *(["--admin"] if user == "oa-admin" else []),
+                ],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "GITEA_PORT": str(GITEA_PORT)},
             )
-            if got.returncode != 0 and "already exists" not in (got.stdout + got.stderr):
+            if got.returncode != 0 and "already exists" not in (
+                got.stdout + got.stderr
+            ):
                 raise RuntimeError(f"user create failed: {got.stderr[-300:]}")
         for repo in ("lab", "other"):
-            http("POST", f"{self.base}/api/v1/user/repos", body={"name": repo, "auto_init": True},
-                 headers=self._basic("oa-writer"))
-            http("PUT", f"{self.base}/api/v1/repos/oa-writer/{repo}/collaborators/oa-bystander",
-                 body={"permission": "write"}, headers=self._basic("oa-writer"))
+            http(
+                "POST",
+                f"{self.base}/api/v1/user/repos",
+                body={"name": repo, "auto_init": True},
+                headers=self._basic("oa-writer"),
+            )
+            http(
+                "PUT",
+                f"{self.base}/api/v1/repos/oa-writer/{repo}/collaborators/oa-bystander",
+                body={"permission": "write"},
+                headers=self._basic("oa-writer"),
+            )
 
     def down(self) -> None:
         self.compose("down", "-v")
 
     def _basic(self, user: str) -> dict[str, str]:
         pw = self._secrets()[user]
-        return {"Authorization": "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()}
+        return {
+            "Authorization": "Basic "
+            + base64.b64encode(f"{user}:{pw}".encode()).decode()
+        }
 
     def token(self, role: str) -> str:
-        user = {"writer": "oa-writer", "bystander": "oa-bystander", "oracle": "oa-admin"}[role]
+        user = {
+            "writer": "oa-writer",
+            "bystander": "oa-bystander",
+            "oracle": "oa-admin",
+        }[role]
         data = self._secrets()
         key = f"token:{user}"
         if key not in data:
             code, got = http(
-                "POST", f"{self.base}/api/v1/users/{user}/tokens",
-                body={"name": f"bench-{secrets.token_hex(3)}", "scopes": ["write:repository", "write:issue", "read:user"]},
+                "POST",
+                f"{self.base}/api/v1/users/{user}/tokens",
+                body={
+                    "name": f"bench-{secrets.token_hex(3)}",
+                    "scopes": ["write:repository", "write:issue", "read:user"],
+                },
                 headers=self._basic(user),
             )
             if code != 201:
@@ -195,8 +250,11 @@ class GiteaLab:
         return {"GITEA_URL": self.base, "GITEA_TOKEN": self.token("writer")}
 
     def oracle_issue(self, repo: str, number: str) -> Optional[dict[str, Any]]:
-        code, got = http("GET", f"{self.base}/api/v1/repos/oa-writer/{repo}/issues/{number}",
-                         headers={"Authorization": f"token {self.token('oracle')}"})
+        code, got = http(
+            "GET",
+            f"{self.base}/api/v1/repos/oa-writer/{repo}/issues/{number}",
+            headers={"Authorization": f"token {self.token('oracle')}"},
+        )
         return got if code == 200 else None
 
 
@@ -207,16 +265,33 @@ LABS = {"medplum": MedplumLab, "gitea": GiteaLab}
 #: forwarded to this machine's loopback. Only the oracle's ``docker exec``
 #: goes over SSH.
 REMOTE = os.environ.get("API_SCOPED_SSH", "")
-REMOTE_KEY = os.environ.get("API_SCOPED_SSH_KEY", str(Path.home() / ".ssh" / "oalab_ed25519"))
+REMOTE_KEY = os.environ.get(
+    "API_SCOPED_SSH_KEY", str(Path.home() / ".ssh" / "oalab_ed25519")
+)
 
 
 def remote_psql(container: str, sql: str) -> str:
     import shlex
 
-    cmd = "docker exec -i " + shlex.quote(container) + " psql -U medplum -d medplum -At -v ON_ERROR_STOP=1"
+    cmd = (
+        "docker exec -i "
+        + shlex.quote(container)
+        + " psql -U medplum -d medplum -At -v ON_ERROR_STOP=1"
+    )
     proc = subprocess.run(
-        ["ssh", "-i", REMOTE_KEY, "-o", "BatchMode=yes", REMOTE, f"wsl -d Ubuntu-24.04 -- {cmd}"],
-        input=sql, capture_output=True, text=True, timeout=60,
+        [
+            "ssh",
+            "-i",
+            REMOTE_KEY,
+            "-o",
+            "BatchMode=yes",
+            REMOTE,
+            f"wsl -d Ubuntu-24.04 -- {cmd}",
+        ],
+        input=sql,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"remote psql failed: {proc.stderr[-300:]}")
@@ -224,6 +299,7 @@ def remote_psql(container: str, sql: str) -> str:
 
 
 if REMOTE:
+
     def _psql(self: MedplumLab, sql: str) -> str:
         return remote_psql("oa-api-scoped-medplum-postgres-1", sql)
 

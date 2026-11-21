@@ -857,8 +857,18 @@ def test_a_stale_stamped_event_does_not_end_the_read_before_the_cursor() -> None
 def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
     from openadapt_flow.txplan.audit import AuditError, check_window
 
-    src = {"path": "/feed", "fields": {"id": "id", "at": "at", "actor": "by", "resource": "r", "action": "a"},
-           "actor": {"any": True}, "actions": {"create": ["made"], "update": ["set"]}}
+    src = {
+        "path": "/feed",
+        "fields": {
+            "id": "id",
+            "at": "at",
+            "actor": "by",
+            "resource": "r",
+            "action": "a",
+        },
+        "actor": {"any": True},
+        "actions": {"create": ["made"], "update": ["set"]},
+    }
     # An event with no time can't be placed.
     r = _reader(src, {"http://x/feed": [{"id": 9, "by": "u", "r": "x/1", "a": "set"}]})
     with pytest.raises(AuditError):
@@ -869,15 +879,24 @@ def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
         r.after(Cursor(at=None))
     # A next link off the log's origin never gets the credential.
     linked = {**src, "paging": {"kind": "link", "path": "next"}, "items": "items"}
-    r = _reader(linked, {"http://x/feed": {"items": [], "next": "https://evil.example/feed"}})
+    page = {
+        "items": [{"id": 1, "at": 10, "by": "u", "r": "x/1", "a": "set"}],
+        "next": "https://evil.example/feed",
+    }
+    r = _reader(linked, {"http://x/feed": page})
     with pytest.raises(AuditError, match="origin"):
         r.after(Cursor(at=None))
     # One event naming the target and another record changed both.
     both = [{"id": 1, "at": 10, "by": "u", "r": ["x/1", "x/2"], "a": "set"}]
     src_list = {**src, "fields": {**src["fields"], "resource": "r.*"}}
     audit = check_window(
-        _reader(src_list, {"http://x/feed": both}), Cursor(at=None), op="update",
-        target="x/1", collection_prefix="x/", logged=True, sleep=lambda s: None,
+        _reader(src_list, {"http://x/feed": both}),
+        Cursor(at=None),
+        op="update",
+        target="x/1",
+        collection_prefix="x/",
+        logged=True,
+        sleep=lambda s: None,
     )
     assert audit.collateral and audit.own
 
