@@ -398,6 +398,13 @@ place is refused. The external attended journal stores each decision-log
 snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
 cover the plaintext. A run whose attended files are plaintext from an earlier
 version still resumes, and its first encrypted write converts them.
+
+A durable store is itself a caller-owned handle. It keeps the keys it
+derived from its own explicit key, by salt and work factors, for its own
+lifetime, so one run stretches the passphrase once rather than once per
+checkpoint read. Each read still authenticates the container on disk. Another
+store, a changed key, or a store that reads the key from the environment
+derives again.
 File and journal operations derive their keys with scrypt under the random
 salt kept in the run's `.attended_state.encrypted` marker. A conversion
 operation reuses its local AEAD across the files it converts; independent

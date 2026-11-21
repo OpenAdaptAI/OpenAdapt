@@ -30,7 +30,7 @@ SNAPSHOT = Path(__file__).parent / "fixtures" / "import_surface.json"
 MODULES = {
     "openadapt_flow.runtime.replayer": "openadapt_flow/runtime/replayer.py",
     "openadapt_flow.__main__": "openadapt_flow/__main__.py",
-    "openadapt_flow.qualification": "openadapt_flow/qualification.py",
+    "openadapt_flow.qualification": "openadapt_flow/qualification/__init__.py",
     "openadapt_flow.ir": "openadapt_flow/ir.py",
 }
 CLASSES = {"openadapt_flow.runtime.replayer": ["Replayer"]}
@@ -45,6 +45,17 @@ def _defined(source: str) -> set[str]:
             names.update(t.id for t in node.targets if isinstance(t, ast.Name))
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             names.add(node.target.id)
+    return names
+
+
+def _reexported(source: str, module: str) -> set[str]:
+    """Names a package re-exports from its own submodules after a split."""
+    names: set[str] = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+            module + "."
+        ):
+            names.update(alias.asname or alias.name for alias in node.names)
     return names
 
 
@@ -82,7 +93,9 @@ def _current() -> dict[str, list[str]]:
     surface: dict[str, list[str]] = {}
     for module, rel in MODULES.items():
         source = (FLOW / rel).read_text(encoding="utf-8")
-        surface[module] = sorted(_defined(source) | _imported_elsewhere(module))
+        surface[module] = sorted(
+            _defined(source) | _reexported(source, module) | _imported_elsewhere(module)
+        )
         for cls in CLASSES.get(module, []):
             surface[f"{module}:{cls}"] = sorted(_methods(module, cls))
     return surface

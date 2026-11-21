@@ -1377,6 +1377,7 @@
     "examples/claude-code-demo/policy.yaml",
     "examples/legacy_records/answers.demo.json",
     "examples/legacy_records/answers.ledger.demo.json",
+    "import_direction_debt.json",
     "import_layers.json",
     "import_layers_debt.json",
     "openadapt_flow/app_profiles/openemr.yaml",

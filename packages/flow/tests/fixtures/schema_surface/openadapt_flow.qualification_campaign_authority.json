@@ -1,0 +1,1527 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "QualificationCampaignAuthority": {
+   "validation": {
+    "$defs": {
+     "AdmittedRuntimeBuildIdentity": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.admitted-runtime-build/v1",
+        "default": "openadapt.admitted-runtime-build/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "substrate": {
+        "enum": [
+         "web",
+         "windows",
+         "macos",
+         "linux",
+         "rdp",
+         "citrix"
+        ],
+        "title": "Substrate",
+        "type": "string"
+       },
+       "flow_version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Flow Version",
+        "type": "string"
+       },
+       "flow_release_commit": {
+        "pattern": "^[a-f0-9]{40}$",
+        "title": "Flow Release Commit",
+        "type": "string"
+       },
+       "flow_wheel_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Flow Wheel Sha256",
+        "type": "string"
+       },
+       "runtime_manifest": {
+        "$ref": "#/$defs/RuntimeComponentManifest"
+       },
+       "runtime_manifest_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Manifest Sha256",
+        "type": "string"
+       },
+       "runner_build": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Runner Build",
+        "type": "string"
+       },
+       "runner_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runner Artifact Sha256",
+        "type": "string"
+       },
+       "managed_browser": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ManagedBrowserBuild"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "substrate_runtime": {
+        "$ref": "#/$defs/SubstrateRuntimeBinding"
+       }
+      },
+      "required": [
+       "substrate",
+       "flow_version",
+       "flow_release_commit",
+       "flow_wheel_sha256",
+       "runtime_manifest",
+       "runtime_manifest_sha256",
+       "runner_build",
+       "runner_artifact_sha256",
+       "managed_browser",
+       "substrate_runtime"
+      ],
+      "title": "AdmittedRuntimeBuildIdentity",
+      "type": "object"
+     },
+     "ManagedBrowserBuild": {
+      "additionalProperties": false,
+      "properties": {
+       "playwright_version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Playwright Version",
+        "type": "string"
+       },
+       "browser_base_image": {
+        "pattern": "^[a-z0-9][a-z0-9._/:\\-]{0,255}@sha256:[a-f0-9]{64}$",
+        "title": "Browser Base Image",
+        "type": "string"
+       }
+      },
+      "required": [
+       "playwright_version",
+       "browser_base_image"
+      ],
+      "title": "ManagedBrowserBuild",
+      "type": "object"
+     },
+     "QualificationCampaignPermitEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+       "payload": {
+        "$ref": "#/$defs/QualificationCampaignPermitPayload"
+       },
+       "algorithm": {
+        "const": "ed25519",
+        "default": "ed25519",
+        "title": "Algorithm",
+        "type": "string"
+       },
+       "signature": {
+        "maxLength": 88,
+        "minLength": 88,
+        "title": "Signature",
+        "type": "string"
+       }
+      },
+      "required": [
+       "payload",
+       "signature"
+      ],
+      "title": "QualificationCampaignPermitEnvelope",
+      "type": "object"
+     },
+     "QualificationCampaignPermitExpected": {
+      "additionalProperties": false,
+      "properties": {
+       "tenant_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_build_identity": {
+        "$ref": "#/$defs/AdmittedRuntimeBuildIdentity"
+       },
+       "trial": {
+        "$ref": "#/$defs/QualificationCampaignTrialBinding"
+       }
+      },
+      "required": [
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "environment_digest",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_build_identity",
+       "trial"
+      ],
+      "title": "QualificationCampaignPermitExpected",
+      "type": "object"
+     },
+     "QualificationCampaignPermitPayload": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-campaign-permit/v1",
+        "default": "openadapt.qualification-campaign-permit/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "execution_purpose": {
+        "const": "qualification_campaign",
+        "default": "qualification_campaign",
+        "title": "Execution Purpose",
+        "type": "string"
+       },
+       "environment_class": {
+        "const": "non_production",
+        "default": "non_production",
+        "title": "Environment Class",
+        "type": "string"
+       },
+       "production_data_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Data Prohibited",
+        "type": "boolean"
+       },
+       "production_authority_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Authority Prohibited",
+        "type": "boolean"
+       },
+       "production_success_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Success Prohibited",
+        "type": "boolean"
+       },
+       "permit_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Permit Id",
+        "type": "string"
+       },
+       "tenant_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_build_identity": {
+        "$ref": "#/$defs/AdmittedRuntimeBuildIdentity"
+       },
+       "runtime_build_identity_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Build Identity Sha256",
+        "type": "string"
+       },
+       "qualification_signer_registry_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Qualification Signer Registry Sha256",
+        "type": "string"
+       },
+       "qualification_signer_registry_revision": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "title": "Qualification Signer Registry Revision",
+        "type": "integer"
+       },
+       "trial": {
+        "$ref": "#/$defs/QualificationCampaignTrialBinding"
+       },
+       "policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Policy Sha256",
+        "type": "string"
+       },
+       "issuer": {
+        "$ref": "#/$defs/QualificationIssuer"
+       },
+       "issued_at": {
+        "title": "Issued At",
+        "type": "string"
+       },
+       "not_before": {
+        "title": "Not Before",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       }
+      },
+      "required": [
+       "permit_id",
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "environment_digest",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_build_identity",
+       "runtime_build_identity_sha256",
+       "qualification_signer_registry_sha256",
+       "qualification_signer_registry_revision",
+       "trial",
+       "policy_sha256",
+       "issuer",
+       "issued_at",
+       "not_before",
+       "expires_at"
+      ],
+      "title": "QualificationCampaignPermitPayload",
+      "type": "object"
+     },
+     "QualificationCampaignTrialBinding": {
+      "additionalProperties": false,
+      "properties": {
+       "campaign_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Campaign Id",
+        "type": "string"
+       },
+       "campaign_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Campaign Contract Sha256",
+        "type": "string"
+       },
+       "trial_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Trial Id",
+        "type": "string"
+       },
+       "qualification_run_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Qualification Run Id",
+        "type": "string"
+       },
+       "task": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "trial_ordinal": {
+        "maximum": 10000,
+        "minimum": 1,
+        "title": "Trial Ordinal",
+        "type": "integer"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "input_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Input Digest",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "evidence_sink_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Evidence Sink Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "campaign_id",
+       "campaign_contract_sha256",
+       "trial_id",
+       "qualification_run_id",
+       "task",
+       "condition",
+       "trial_ordinal",
+       "required_trials",
+       "input_digest",
+       "oracle_contract_sha256",
+       "evidence_sink_sha256"
+      ],
+      "title": "QualificationCampaignTrialBinding",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "properties": {
+       "key_id": {
+        "pattern": "^qa-ed25519-[a-f0-9]{16}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     },
+     "QualificationSignerRegistry": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-signer-registry/v2",
+        "default": "openadapt.qualification-signer-registry/v2",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "revision": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+       },
+       "generated_at": {
+        "title": "Generated At",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       },
+       "signers": {
+        "items": {
+         "$ref": "#/$defs/QualificationSignerRegistryEntry"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Signers",
+        "type": "array"
+       }
+      },
+      "required": [
+       "revision",
+       "generated_at",
+       "expires_at",
+       "signers"
+      ],
+      "title": "QualificationSignerRegistry",
+      "type": "object"
+     },
+     "QualificationSignerRegistryEntry": {
+      "additionalProperties": false,
+      "properties": {
+       "algorithm": {
+        "const": "ed25519",
+        "title": "Algorithm",
+        "type": "string"
+       },
+       "key_id": {
+        "pattern": "^qa-ed25519-[a-f0-9]{16}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "public_key": {
+        "title": "Public Key",
+        "type": "string"
+       },
+       "allowed_workflows": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Allowed Workflows",
+        "type": "array"
+       },
+       "allowed_ref_prefixes": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Allowed Ref Prefixes",
+        "type": "array"
+       },
+       "status": {
+        "enum": [
+         "active",
+         "revoked"
+        ],
+        "title": "Status",
+        "type": "string"
+       },
+       "revoked_at": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Revoked At"
+       }
+      },
+      "required": [
+       "algorithm",
+       "key_id",
+       "public_key",
+       "allowed_workflows",
+       "allowed_ref_prefixes",
+       "status",
+       "revoked_at"
+      ],
+      "title": "QualificationSignerRegistryEntry",
+      "type": "object"
+     },
+     "RuntimeComponent": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Name",
+        "type": "string"
+       },
+       "version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Version",
+        "type": "string"
+       },
+       "release_commit": {
+        "pattern": "^[a-f0-9]{40}$",
+        "title": "Release Commit",
+        "type": "string"
+       },
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "roles": {
+        "items": {
+         "enum": [
+          "actuator",
+          "observer",
+          "operator_surface",
+          "orchestrator",
+          "transport"
+         ],
+         "type": "string"
+        },
+        "maxItems": 5,
+        "minItems": 1,
+        "title": "Roles",
+        "type": "array"
+       },
+       "capabilities": {
+        "items": {
+         "enum": [
+          "accessibility_observation",
+          "atspi_observation",
+          "browser_actuation",
+          "browser_observation",
+          "desktop_operator_surface",
+          "flow_runtime",
+          "native_actuation",
+          "native_capture",
+          "pixel_observation",
+          "remote_transport",
+          "runner_wrapper",
+          "uia_observation"
+         ],
+         "type": "string"
+        },
+        "maxItems": 12,
+        "minItems": 1,
+        "title": "Capabilities",
+        "type": "array"
+       }
+      },
+      "required": [
+       "name",
+       "version",
+       "release_commit",
+       "artifact_sha256",
+       "roles",
+       "capabilities"
+      ],
+      "title": "RuntimeComponent",
+      "type": "object"
+     },
+     "RuntimeComponentManifest": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.runtime-component-manifest/v1",
+        "default": "openadapt.runtime-component-manifest/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "components": {
+        "items": {
+         "$ref": "#/$defs/RuntimeComponent"
+        },
+        "maxItems": 32,
+        "minItems": 2,
+        "title": "Components",
+        "type": "array"
+       }
+      },
+      "required": [
+       "components"
+      ],
+      "title": "RuntimeComponentManifest",
+      "type": "object"
+     },
+     "SubstrateRuntimeBinding": {
+      "additionalProperties": false,
+      "properties": {
+       "os_family": {
+        "enum": [
+         "windows",
+         "macos",
+         "linux"
+        ],
+        "title": "Os Family",
+        "type": "string"
+       },
+       "transport": {
+        "enum": [
+         "local",
+         "browser",
+         "rdp",
+         "citrix"
+        ],
+        "title": "Transport",
+        "type": "string"
+       },
+       "runtime_boundary_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Boundary Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "os_family",
+       "transport",
+       "runtime_boundary_sha256"
+      ],
+      "title": "SubstrateRuntimeBinding",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Closed handoff for one signed, isolated qualification trial.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-campaign-authority/v1",
+      "default": "openadapt.qualification-campaign-authority/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "qualification_campaign_permit": {
+      "$ref": "#/$defs/QualificationCampaignPermitEnvelope"
+     },
+     "qualification_campaign_permit_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Qualification Campaign Permit Sha256",
+      "type": "string"
+     },
+     "expected": {
+      "$ref": "#/$defs/QualificationCampaignPermitExpected"
+     },
+     "qualification_signer_registry": {
+      "$ref": "#/$defs/QualificationSignerRegistry"
+     },
+     "qualification_signer_registry_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Qualification Signer Registry Sha256",
+      "type": "string"
+     },
+     "consumed_permit_ids": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Consumed Permit Ids",
+      "type": "array"
+     }
+    },
+    "required": [
+     "qualification_campaign_permit",
+     "qualification_campaign_permit_sha256",
+     "expected",
+     "qualification_signer_registry",
+     "qualification_signer_registry_sha256"
+    ],
+    "title": "QualificationCampaignAuthority",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "AdmittedRuntimeBuildIdentity": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.admitted-runtime-build/v1",
+        "default": "openadapt.admitted-runtime-build/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "substrate": {
+        "enum": [
+         "web",
+         "windows",
+         "macos",
+         "linux",
+         "rdp",
+         "citrix"
+        ],
+        "title": "Substrate",
+        "type": "string"
+       },
+       "flow_version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Flow Version",
+        "type": "string"
+       },
+       "flow_release_commit": {
+        "pattern": "^[a-f0-9]{40}$",
+        "title": "Flow Release Commit",
+        "type": "string"
+       },
+       "flow_wheel_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Flow Wheel Sha256",
+        "type": "string"
+       },
+       "runtime_manifest": {
+        "$ref": "#/$defs/RuntimeComponentManifest"
+       },
+       "runtime_manifest_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Manifest Sha256",
+        "type": "string"
+       },
+       "runner_build": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Runner Build",
+        "type": "string"
+       },
+       "runner_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runner Artifact Sha256",
+        "type": "string"
+       },
+       "managed_browser": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/ManagedBrowserBuild"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "substrate_runtime": {
+        "$ref": "#/$defs/SubstrateRuntimeBinding"
+       }
+      },
+      "required": [
+       "substrate",
+       "flow_version",
+       "flow_release_commit",
+       "flow_wheel_sha256",
+       "runtime_manifest",
+       "runtime_manifest_sha256",
+       "runner_build",
+       "runner_artifact_sha256",
+       "managed_browser",
+       "substrate_runtime"
+      ],
+      "title": "AdmittedRuntimeBuildIdentity",
+      "type": "object"
+     },
+     "ManagedBrowserBuild": {
+      "additionalProperties": false,
+      "properties": {
+       "playwright_version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Playwright Version",
+        "type": "string"
+       },
+       "browser_base_image": {
+        "pattern": "^[a-z0-9][a-z0-9._/:\\-]{0,255}@sha256:[a-f0-9]{64}$",
+        "title": "Browser Base Image",
+        "type": "string"
+       }
+      },
+      "required": [
+       "playwright_version",
+       "browser_base_image"
+      ],
+      "title": "ManagedBrowserBuild",
+      "type": "object"
+     },
+     "QualificationCampaignPermitEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+       "payload": {
+        "$ref": "#/$defs/QualificationCampaignPermitPayload"
+       },
+       "algorithm": {
+        "const": "ed25519",
+        "default": "ed25519",
+        "title": "Algorithm",
+        "type": "string"
+       },
+       "signature": {
+        "maxLength": 88,
+        "minLength": 88,
+        "title": "Signature",
+        "type": "string"
+       }
+      },
+      "required": [
+       "payload",
+       "signature"
+      ],
+      "title": "QualificationCampaignPermitEnvelope",
+      "type": "object"
+     },
+     "QualificationCampaignPermitExpected": {
+      "additionalProperties": false,
+      "properties": {
+       "tenant_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_build_identity": {
+        "$ref": "#/$defs/AdmittedRuntimeBuildIdentity"
+       },
+       "trial": {
+        "$ref": "#/$defs/QualificationCampaignTrialBinding"
+       }
+      },
+      "required": [
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "environment_digest",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_build_identity",
+       "trial"
+      ],
+      "title": "QualificationCampaignPermitExpected",
+      "type": "object"
+     },
+     "QualificationCampaignPermitPayload": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-campaign-permit/v1",
+        "default": "openadapt.qualification-campaign-permit/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "execution_purpose": {
+        "const": "qualification_campaign",
+        "default": "qualification_campaign",
+        "title": "Execution Purpose",
+        "type": "string"
+       },
+       "environment_class": {
+        "const": "non_production",
+        "default": "non_production",
+        "title": "Environment Class",
+        "type": "string"
+       },
+       "production_data_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Data Prohibited",
+        "type": "boolean"
+       },
+       "production_authority_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Authority Prohibited",
+        "type": "boolean"
+       },
+       "production_success_prohibited": {
+        "const": true,
+        "default": true,
+        "title": "Production Success Prohibited",
+        "type": "boolean"
+       },
+       "permit_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Permit Id",
+        "type": "string"
+       },
+       "tenant_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Tenant Id",
+        "type": "string"
+       },
+       "workflow_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Id",
+        "type": "string"
+       },
+       "workflow_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Workflow Version Id",
+        "type": "string"
+       },
+       "bundle_version_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Bundle Version Id",
+        "type": "string"
+       },
+       "bundle_artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Artifact Sha256",
+        "type": "string"
+       },
+       "bundle_content_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Bundle Content Digest",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "runtime_environment_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Environment Sha256",
+        "type": "string"
+       },
+       "runtime_build_identity": {
+        "$ref": "#/$defs/AdmittedRuntimeBuildIdentity"
+       },
+       "runtime_build_identity_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Build Identity Sha256",
+        "type": "string"
+       },
+       "qualification_signer_registry_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Qualification Signer Registry Sha256",
+        "type": "string"
+       },
+       "qualification_signer_registry_revision": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "title": "Qualification Signer Registry Revision",
+        "type": "integer"
+       },
+       "trial": {
+        "$ref": "#/$defs/QualificationCampaignTrialBinding"
+       },
+       "policy_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Policy Sha256",
+        "type": "string"
+       },
+       "issuer": {
+        "$ref": "#/$defs/QualificationIssuer"
+       },
+       "issued_at": {
+        "title": "Issued At",
+        "type": "string"
+       },
+       "not_before": {
+        "title": "Not Before",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       }
+      },
+      "required": [
+       "permit_id",
+       "tenant_id",
+       "workflow_id",
+       "workflow_version_id",
+       "bundle_version_id",
+       "bundle_artifact_sha256",
+       "bundle_content_digest",
+       "environment_digest",
+       "environment_contract_sha256",
+       "runtime_environment_sha256",
+       "runtime_build_identity",
+       "runtime_build_identity_sha256",
+       "qualification_signer_registry_sha256",
+       "qualification_signer_registry_revision",
+       "trial",
+       "policy_sha256",
+       "issuer",
+       "issued_at",
+       "not_before",
+       "expires_at"
+      ],
+      "title": "QualificationCampaignPermitPayload",
+      "type": "object"
+     },
+     "QualificationCampaignTrialBinding": {
+      "additionalProperties": false,
+      "properties": {
+       "campaign_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Campaign Id",
+        "type": "string"
+       },
+       "campaign_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Campaign Contract Sha256",
+        "type": "string"
+       },
+       "trial_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Trial Id",
+        "type": "string"
+       },
+       "qualification_run_id": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "title": "Qualification Run Id",
+        "type": "string"
+       },
+       "task": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Task",
+        "type": "string"
+       },
+       "condition": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Condition",
+        "type": "string"
+       },
+       "trial_ordinal": {
+        "maximum": 10000,
+        "minimum": 1,
+        "title": "Trial Ordinal",
+        "type": "integer"
+       },
+       "required_trials": {
+        "maximum": 10000,
+        "minimum": 3,
+        "title": "Required Trials",
+        "type": "integer"
+       },
+       "input_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Input Digest",
+        "type": "string"
+       },
+       "oracle_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Oracle Contract Sha256",
+        "type": "string"
+       },
+       "evidence_sink_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Evidence Sink Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "campaign_id",
+       "campaign_contract_sha256",
+       "trial_id",
+       "qualification_run_id",
+       "task",
+       "condition",
+       "trial_ordinal",
+       "required_trials",
+       "input_digest",
+       "oracle_contract_sha256",
+       "evidence_sink_sha256"
+      ],
+      "title": "QualificationCampaignTrialBinding",
+      "type": "object"
+     },
+     "QualificationIssuer": {
+      "additionalProperties": false,
+      "properties": {
+       "key_id": {
+        "pattern": "^qa-ed25519-[a-f0-9]{16}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "workflow": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Workflow",
+        "type": "string"
+       },
+       "ref": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Ref",
+        "type": "string"
+       }
+      },
+      "required": [
+       "key_id",
+       "workflow",
+       "ref"
+      ],
+      "title": "QualificationIssuer",
+      "type": "object"
+     },
+     "QualificationSignerRegistry": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualification-signer-registry/v2",
+        "default": "openadapt.qualification-signer-registry/v2",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "revision": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+       },
+       "generated_at": {
+        "title": "Generated At",
+        "type": "string"
+       },
+       "expires_at": {
+        "title": "Expires At",
+        "type": "string"
+       },
+       "signers": {
+        "items": {
+         "$ref": "#/$defs/QualificationSignerRegistryEntry"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Signers",
+        "type": "array"
+       }
+      },
+      "required": [
+       "revision",
+       "generated_at",
+       "expires_at",
+       "signers"
+      ],
+      "title": "QualificationSignerRegistry",
+      "type": "object"
+     },
+     "QualificationSignerRegistryEntry": {
+      "additionalProperties": false,
+      "properties": {
+       "algorithm": {
+        "const": "ed25519",
+        "title": "Algorithm",
+        "type": "string"
+       },
+       "key_id": {
+        "pattern": "^qa-ed25519-[a-f0-9]{16}$",
+        "title": "Key Id",
+        "type": "string"
+       },
+       "public_key": {
+        "title": "Public Key",
+        "type": "string"
+       },
+       "allowed_workflows": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Allowed Workflows",
+        "type": "array"
+       },
+       "allowed_ref_prefixes": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "title": "Allowed Ref Prefixes",
+        "type": "array"
+       },
+       "status": {
+        "enum": [
+         "active",
+         "revoked"
+        ],
+        "title": "Status",
+        "type": "string"
+       },
+       "revoked_at": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Revoked At"
+       }
+      },
+      "required": [
+       "algorithm",
+       "key_id",
+       "public_key",
+       "allowed_workflows",
+       "allowed_ref_prefixes",
+       "status",
+       "revoked_at"
+      ],
+      "title": "QualificationSignerRegistryEntry",
+      "type": "object"
+     },
+     "RuntimeComponent": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,199}$",
+        "title": "Name",
+        "type": "string"
+       },
+       "version": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:\\-]{0,127}$",
+        "title": "Version",
+        "type": "string"
+       },
+       "release_commit": {
+        "pattern": "^[a-f0-9]{40}$",
+        "title": "Release Commit",
+        "type": "string"
+       },
+       "artifact_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Artifact Sha256",
+        "type": "string"
+       },
+       "roles": {
+        "items": {
+         "enum": [
+          "actuator",
+          "observer",
+          "operator_surface",
+          "orchestrator",
+          "transport"
+         ],
+         "type": "string"
+        },
+        "maxItems": 5,
+        "minItems": 1,
+        "title": "Roles",
+        "type": "array"
+       },
+       "capabilities": {
+        "items": {
+         "enum": [
+          "accessibility_observation",
+          "atspi_observation",
+          "browser_actuation",
+          "browser_observation",
+          "desktop_operator_surface",
+          "flow_runtime",
+          "native_actuation",
+          "native_capture",
+          "pixel_observation",
+          "remote_transport",
+          "runner_wrapper",
+          "uia_observation"
+         ],
+         "type": "string"
+        },
+        "maxItems": 12,
+        "minItems": 1,
+        "title": "Capabilities",
+        "type": "array"
+       }
+      },
+      "required": [
+       "name",
+       "version",
+       "release_commit",
+       "artifact_sha256",
+       "roles",
+       "capabilities"
+      ],
+      "title": "RuntimeComponent",
+      "type": "object"
+     },
+     "RuntimeComponentManifest": {
+      "additionalProperties": false,
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.runtime-component-manifest/v1",
+        "default": "openadapt.runtime-component-manifest/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "components": {
+        "items": {
+         "$ref": "#/$defs/RuntimeComponent"
+        },
+        "maxItems": 32,
+        "minItems": 2,
+        "title": "Components",
+        "type": "array"
+       }
+      },
+      "required": [
+       "components"
+      ],
+      "title": "RuntimeComponentManifest",
+      "type": "object"
+     },
+     "SubstrateRuntimeBinding": {
+      "additionalProperties": false,
+      "properties": {
+       "os_family": {
+        "enum": [
+         "windows",
+         "macos",
+         "linux"
+        ],
+        "title": "Os Family",
+        "type": "string"
+       },
+       "transport": {
+        "enum": [
+         "local",
+         "browser",
+         "rdp",
+         "citrix"
+        ],
+        "title": "Transport",
+        "type": "string"
+       },
+       "runtime_boundary_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Boundary Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "os_family",
+       "transport",
+       "runtime_boundary_sha256"
+      ],
+      "title": "SubstrateRuntimeBinding",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Closed handoff for one signed, isolated qualification trial.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-campaign-authority/v1",
+      "default": "openadapt.qualification-campaign-authority/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "qualification_campaign_permit": {
+      "$ref": "#/$defs/QualificationCampaignPermitEnvelope"
+     },
+     "qualification_campaign_permit_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Qualification Campaign Permit Sha256",
+      "type": "string"
+     },
+     "expected": {
+      "$ref": "#/$defs/QualificationCampaignPermitExpected"
+     },
+     "qualification_signer_registry": {
+      "$ref": "#/$defs/QualificationSignerRegistry"
+     },
+     "qualification_signer_registry_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Qualification Signer Registry Sha256",
+      "type": "string"
+     },
+     "consumed_permit_ids": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Consumed Permit Ids",
+      "type": "array"
+     }
+    },
+    "required": [
+     "qualification_campaign_permit",
+     "qualification_campaign_permit_sha256",
+     "expected",
+     "qualification_signer_registry",
+     "qualification_signer_registry_sha256"
+    ],
+    "title": "QualificationCampaignAuthority",
+    "type": "object"
+   }
+  }
+ }
+}

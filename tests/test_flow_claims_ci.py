@@ -185,7 +185,7 @@ def test_producer_and_consumer_share_the_shard_count_and_current_run_artifacts()
     classify = jobs["scope"]["steps"][-1]["run"]
     assert classify.index('echo "flow_unit_shards=') < classify.index("all() {")
     assert (
-        'if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi'
+        'if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi'
         in classify
     )
     unit = jobs["flow-unit"]
