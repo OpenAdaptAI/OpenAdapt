@@ -458,7 +458,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from openadapt_flow.wrap.process import ProcessAgent
 
             agent = ProcessAgent(command, timeout_s=args.command_timeout)
-        task = _task(args, parser, command_agent=agent, replay_only=replay_only)
+        if agent is None and not replay_only:
+            task = _task(args, parser)
+        else:
+            task = _task(args, parser, command_agent=agent, replay_only=replay_only)
         if agent is not None and task.agent is not agent:
             print(
                 "openadapt wrap: this task has an admitted program; it runs "
