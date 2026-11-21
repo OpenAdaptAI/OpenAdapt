@@ -1196,16 +1196,33 @@ class FormReconciler:
                         available_options=opts,
                     )
                 before_value = ""
+                pre: Optional[FormSnapshot] = None
                 if typed_query is not None:
+                    # The baseline for "did the click change the field" is the
+                    # control as it stands just before the click; without it
+                    # the pick cannot be proven, so the run stops.
                     pre = surface.snapshot()
-                    before_value = next(
+                    pre_ctrl = next(
                         (
-                            c.current_value
+                            c
                             for c in pre.controls
                             if c.visible and c.dom_selector == ctrl.dom_selector
                         ),
-                        "",
+                        None,
                     )
+                    if pre_ctrl is None:
+                        return _surface_action_halt(
+                            run_id,
+                            snapshot,
+                            MissingAnchorError(
+                                f"{ctrl.label_text or ctrl.dom_selector!r} was redrawn "
+                                "while typing, so the pick cannot be checked"
+                            ),
+                            ctrl=ctrl,
+                            dossier_key=dossier_key,
+                            dossier_value=intended_value,
+                        )
+                    before_value = pre_ctrl.current_value
                 surface.choose_portal_combobox_option(ctrl.dom_selector, opt)
                 if typed_query is not None:
                     return self._verify_typeahead_choice(
@@ -1219,6 +1236,7 @@ class FormReconciler:
                         run_id=run_id,
                         typed_query=typed_query,
                         before_value=before_value,
+                        pre_click=pre,
                     )
                 return None
 
@@ -1307,6 +1325,7 @@ class FormReconciler:
         run_id: str,
         typed_query: str = "",
         before_value: str = "",
+        pre_click: Optional[FormSnapshot] = None,
     ) -> Optional[FormHaltItem]:
         """Stop unless the type-ahead now holds the chosen suggestion.
 
@@ -1336,7 +1355,8 @@ class FormReconciler:
             if collapse_whitespace(ctrl.label_text):
                 # Only a control that was not on the page before the pick can
                 # be the redrawn input; an existing look-alike never is.
-                before_selectors = {c.dom_selector for c in snapshot.controls}
+                baseline = pre_click if pre_click is not None else snapshot
+                before_selectors = {c.dom_selector for c in baseline.controls}
                 same = [
                     c
                     for c in after.controls
