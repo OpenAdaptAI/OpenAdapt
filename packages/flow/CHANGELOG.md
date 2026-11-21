@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
+## v3.4.0 (2026-11-21)
 
 ### Features
 
@@ -64,6 +64,10 @@
   registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
   otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
   and public key an owner or admin must register.
+- `openadapt login` with no token signs in through the browser: a PKCE
+  loopback grant on `127.0.0.1` that stores the same credential `push` and
+  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
+  the old path (#2379).
 
 ### Fixes
 
@@ -92,6 +96,21 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
+- The wire tap relays a redirect that stays on an allowed origin instead of
+  answering 502, so it can front a form app that answers a save with
+  Post/Redirect/Get. A redirect to another origin is still refused, and the tap
+  never follows one itself (#2392).
+- Native typing, keys and hotkeys need a one-shot focus lease bound to the live
+  control and the exact frame that authorized the input, and a typed value must
+  be read back completely from two independent sources. Anything uncertain
+  releases held keys and produces no keyboard receipt (#2313).
+- A repair candidate id that would leave the repair store is refused (#2369).
+
+### Requirements
+
+- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
+  release with `sanitization_config()`, which sanitized reuse and approval bind
+  to.
 
 ## v3.3.0 (2026-11-19)
 
