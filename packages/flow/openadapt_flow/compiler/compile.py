@@ -4060,7 +4060,8 @@ def _compile_recording(
         # recorded frame; keep pixel checks off it (_checks_without_withheld_fields).
         redacted = event.get("redacted_region")
         if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
-            secret_field_regions.append(tuple(int(v) for v in redacted))
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            secret_field_regions.append((x0, y0, x1, y1))
         _record_withheld_field_changes(
             _checks_without_withheld_fields(
                 step, step_after, secret_field_regions, bundle
@@ -4437,11 +4438,12 @@ def _compile_recording(
     # field as the recorder's black box. Apply the same rule as mining.
     withheld_boxes: list[Region] = []
     after_by_step: dict[str, tuple[Optional[bytes], list[Region]]] = {}
-    for step, _sb, sa, event in pending:
+    for step, _sb, after_png, event in pending:
         redacted = event.get("redacted_region")
         if isinstance(redacted, (list, tuple)) and len(redacted) == 4:
-            withheld_boxes.append(tuple(int(v) for v in redacted))
-        after_by_step[step.id] = (sa, list(withheld_boxes))
+            x0, y0, x1, y1 = (int(v) for v in redacted)
+            withheld_boxes.append((x0, y0, x1, y1))
+        after_by_step[step.id] = (after_png, list(withheld_boxes))
     for step in steps:
         after, boxes = after_by_step.get(step.id, (None, []))
         _record_withheld_field_changes(
