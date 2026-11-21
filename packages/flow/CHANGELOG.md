@@ -15,6 +15,18 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+
 ## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
 
 ### Features
