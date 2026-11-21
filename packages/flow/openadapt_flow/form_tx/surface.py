@@ -195,7 +195,7 @@ def match_anchor_in_snapshot(
             return both[0]
 
     if len(candidates) > 1 and anchor.row_cell_dossier_keys and facts is not None:
-        wanted = []
+        wanted: list[str] = []
         for key in anchor.row_cell_dossier_keys:
             fact = facts.get(key)
             value = getattr(fact, "value", fact)
