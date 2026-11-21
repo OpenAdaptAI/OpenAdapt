@@ -1236,15 +1236,23 @@ _TEXT_PAIRS_JS = r"""
             values = [];
             anchor = null;
         };
+        // A hidden dd still ends its group: it counts as an empty value, so
+        // a later dd is never joined onto earlier labels. A hidden dt starts a
+        // group nobody can see, and its dd values are dropped.
+        let hiddenGroup = false;
         for (const it of items) {
-            if (!isShown(it)) continue;
             consumed.add(it);
+            const shown = isShown(it);
             if (it.tagName === 'DT') {
-                if (values.length) flush();
+                if (values.length || !shown) flush();
+                hiddenGroup = !shown;
+                if (!shown) continue;
                 labels.push(textOf(it));
                 if (!anchor) anchor = it;
+            } else if (hiddenGroup) {
+                continue;
             } else if (labels.length) {
-                values.push(textOf(it));
+                values.push(shown ? textOf(it) : '');
             }
         }
         flush();
