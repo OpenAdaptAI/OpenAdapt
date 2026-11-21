@@ -81,4 +81,5 @@ jobs:
             runs/launcher-lifecycle/artifacts/**/REPORT.md
             runs/launcher-lifecycle/artifacts/**/report.json
             runs/launcher-lifecycle/artifacts/**/receipt.json
+            runs/launcher-lifecycle/artifacts/**/run-summary.json
           if-no-files-found: warn

@@ -736,6 +736,11 @@ def _run_tutorial_stages(
         system_of_record_records=record_count,
     )
 
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    # The signed receipt, for any outcome; the run summary below is separate.
+    receipt_after_run(run_dir)
+
     if emit_receipt:
         # One rail, one rule: the shareable artifact is the SUCCESS rail, and
         # only a VERIFIED run may use it -- exactly what ``report-run``

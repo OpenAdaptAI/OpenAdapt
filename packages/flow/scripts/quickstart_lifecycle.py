@@ -245,7 +245,9 @@ def _inspect_tutorial(tutorial_dir: Path) -> dict[str, object]:
             f"required tier: {confirmed_tiers}"
         )
 
-    receipt_path = run_dir / "receipt.json"
+    receipt_path = run_dir / "run-summary.json"
+    if not receipt_path.is_file():
+        receipt_path = run_dir / "receipt.json"  # engines before Flow 3.5
     if not receipt_path.is_file():
         raise AssertionError(f"tutorial emitted no shareable receipt: {receipt_path}")
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
