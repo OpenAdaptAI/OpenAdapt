@@ -339,7 +339,7 @@ def example_main(rows: Sequence[str], *, client: Any = None) -> int:
 
         model_key = load_customer_model_key(key_provider)
         agent = build_agent(
-            provider,
+            "claude" if provider == "claude" else "openai",
             model=args.model,
             max_turns=args.max_turns,
             max_cost_usd=cap,

@@ -104,7 +104,11 @@ def load_pack(name: str = DEFAULT_EXAMPLE) -> ExamplePack:
 
     if not isinstance(name, str) or not name.replace("-", "").isalnum():
         raise ExampleError("unknown example")
-    path = resource_files("openadapt_flow.wrap").joinpath("examples", name + ".json")
+    path = (
+        resource_files("openadapt_flow.wrap")
+        .joinpath("examples")
+        .joinpath(name + ".json")
+    )
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
