@@ -63,6 +63,12 @@ FIELDS: tuple[tuple[str, str, ControlKind, FieldCodecSpec], ...] = (
 )
 
 
+# A select the portal pre-sets to a default that disagreed with the (clean)
+# dev case is overwritten from the intake. Every other prefilled value that
+# disagrees with the intake stops for a person.
+PORTAL_DEFAULTS = frozenset({"coverage.loss_of_rents"})
+
+
 def _bind(key: str, label: str, kind: ControlKind, codec: FieldCodecSpec) -> FieldBindingSpec:
     return FieldBindingSpec(
         binding_id=f"fc_{key}",
@@ -70,7 +76,11 @@ def _bind(key: str, label: str, kind: ControlKind, codec: FieldCodecSpec) -> Fie
         anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
         control_kind=kind,
         codec=codec,
-        prefill_policy=PrefillPolicy.HALT_ON_CONFLICT,
+        prefill_policy=(
+            PrefillPolicy.OVERWRITE_WITH_DOSSIER
+            if key in PORTAL_DEFAULTS
+            else PrefillPolicy.HALT_ON_CONFLICT
+        ),
     )
 
 
