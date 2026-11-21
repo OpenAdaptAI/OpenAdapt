@@ -48,8 +48,6 @@ EXTENSION_URI = "https://openadapt.ai/extensions/handoff-receipt/v1"
 DETACHED_SUFFIX = ".handoff.json"
 #: Largest inline payload, in bytes. A bigger one goes detached.
 MAX_INLINE_BYTES = 1_048_576
-#: Read methods that look at the other party's system, not the sender's.
-INDEPENDENT_READ_METHODS = frozenset({"portal_read_back", "api"})
 
 WHAT_A_SIGNATURE_PROVES = (
     "A valid signature proves who signed this receipt and that it has not "
@@ -184,6 +182,12 @@ class Verdict:
     confirmation_lines: list[str] = field(default_factory=list)
     independent_confirmations: int = 0
     what_this_proves: list[str] = field(default_factory=list)
+    #: The receiver's own read of its own record, when it made one
+    #: (:func:`decide`). ``None``: the receiver didn't check.
+    receiver_check: Optional[dict[str, Any]] = None
+    #: ``accept`` only when the receipt is intact and the receiver's own
+    #: record shows the claim; ``reject``; or ``unchecked`` (no own read).
+    decision: str = "unchecked"
 
     @property
     def ok(self) -> bool:
@@ -205,6 +209,8 @@ class Verdict:
             "confirmation_lines": list(self.confirmation_lines),
             "independent_confirmations": self.independent_confirmations,
             "what_this_proves": list(self.what_this_proves),
+            "receiver_check": self.receiver_check,
+            "decision": self.decision,
         }
 
 
@@ -213,6 +219,7 @@ def _refused(reason: str, detail: str = "", line: Optional[str] = None) -> Verdi
 
     return Verdict(
         integrity="refused",
+        decision="reject",
         reason=reason,
         detail=detail,
         signer_lines=[line or refusal_line(reason)],
@@ -257,53 +264,37 @@ def _checks(statement: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _confirmations(statement: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Each counterparty confirmation, marked independent from its read method.
+def _confirmations(statement: Mapping[str, Any], result: Any) -> list[dict[str, Any]]:
+    """Each counterparty confirmation, with the verifier's own independence flag.
 
-    Independence is decided here, from the closed ``read_method`` the signed
-    statement carries, never from anything else in the handoff.
+    :func:`openadapt_types.receipt.verify_receipt` decides independence from
+    the signed, closed ``read_method`` alone (``portal_read_back`` or
+    ``api``), never from anything else in the handoff.
     """
+    items = [
+        c
+        for c in (statement.get("predicate") or {}).get("confirmations") or []
+        if isinstance(c, Mapping)
+    ]
+    flags = tuple(getattr(result, "independent", ()) or ())
+    lines = tuple(getattr(result, "confirmation_lines", ()) or ())
     out = []
-    for item in (statement.get("predicate") or {}).get("confirmations") or []:
-        if not isinstance(item, Mapping):
-            continue
-        state = item.get("state")
-        read_method = item.get("read_method")
-        independent = read_method in INDEPENDENT_READ_METHODS and state in (
-            "recorded_as_intended",
-            "recorded_differently",
-        )
+    for index, item in enumerate(items):
         out.append(
             {
                 "for_step": item.get("for_step"),
                 "system_kind": item.get("system_kind"),
-                "state": state,
-                "read_method": read_method,
+                "state": item.get("state"),
+                "read_method": item.get("read_method"),
                 "strength": item.get("strength"),
                 "differing_count": item.get("differing_count"),
-                "independent": independent,
+                # Fail closed: a confirmation the verifier gave no flag for
+                # is not independent.
+                "independent": bool(flags[index]) if index < len(flags) else False,
+                "line": lines[index] if index < len(lines) else None,
             }
         )
     return out
-
-
-def _confirmation_line(item: Mapping[str, Any]) -> str:
-    system = str(item.get("system_kind") or "other").replace("_", " ")
-    state = item.get("state")
-    if state == "recorded_as_intended":
-        text = f"Confirmed in the other party's system ({system}): recorded as intended"
-    elif state == "recorded_differently":
-        text = (
-            f"Confirmed in the other party's system ({system}): recorded "
-            f"differently ({item.get('differing_count') or 0} field(s) differ)"
-        )
-    elif state == "acknowledged":
-        text = f"The other party ({system}) acknowledged it; not read back"
-    else:
-        text = f"Sent to the other party ({system}); no answer recorded"
-    if not item.get("independent"):
-        text += ". Reported by the sender, not read independently"
-    return text
 
 
 def _payload_verdict(
@@ -390,10 +381,8 @@ def verify_handoff(
     payload_result, problem = _payload_verdict(doc_payload, statement, payload)
     if problem:
         return _refused("payload_mismatch", problem, "Not verified: " + problem)
-    confirmations = _confirmations(statement)
-    lines = list(getattr(result, "confirmation_lines", ()) or ())
-    if not lines:
-        lines = [_confirmation_line(c) for c in confirmations]
+    confirmations = _confirmations(statement, result)
+    lines = [c["line"] for c in confirmations if c["line"]]
     independent = sum(1 for c in confirmations if c["independent"])
     proves = [WHAT_A_SIGNATURE_PROVES]
     if result.demo:
@@ -424,6 +413,110 @@ def verify_handoff(
     )
 
 
+# -- the receiver's own record ------------------------------------------------------
+
+#: States a receiver's own read can return, as in a counterparty confirmation.
+RECEIVER_STATES = ("recorded_as_intended", "recorded_differently", "not_found", "unreadable")
+
+ACCEPT_LINE = (
+    "Accepted: your own system shows the record the handoff describes. That "
+    "read, not the sender's signature, is what confirms the claim."
+)
+UNCHECKED_LINE = (
+    "Not accepted: the signature shows who sent this, but a sender-signed "
+    "receipt can't prove the claim. Read your own record before acting on it."
+)
+
+
+@dataclass(frozen=True)
+class ReceiverRecord:
+    """The receiver's own read of its own system for one handoff's claim."""
+
+    state: str
+    #: Closed field ids that differ, never their values.
+    differing_fields: tuple[str, ...] = ()
+    #: How the receiver read it, e.g. ``api`` or ``portal_read_back``.
+    read_method: str = "api"
+
+    def __post_init__(self) -> None:
+        if self.state not in RECEIVER_STATES:
+            raise ValueError(f"unknown receiver state {self.state!r}")
+
+
+def _payload_value(document: Mapping[str, Any], supplied: Optional[bytes]) -> Any:
+    doc_payload = document.get("payload") or {}
+    if "content" in doc_payload:
+        return doc_payload["content"]
+    data = supplied
+    if data is None and "content_base64" in doc_payload:
+        data = base64.b64decode(str(doc_payload["content_base64"]), validate=True)
+    if data is None:
+        raise HandoffError("the payload is not available to check")
+    try:
+        return json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return data
+
+
+def decide(
+    document: Any,
+    registry: Sequence[Any],
+    receiver_check: Optional[Any] = None,
+    *,
+    payload: Optional[bytes] = None,
+) -> Verdict:
+    """Verify a handoff, then confirm its claim in the receiver's own record.
+
+    ``receiver_check(claim) -> ReceiverRecord`` reads the receiver's own
+    system for the payload's claim. The handoff is accepted only when the
+    receipt is intact and that read is ``recorded_as_intended``. A fabricated
+    or differing claim is rejected even with a valid signature from a
+    trusted sender. Without a ``receiver_check`` the decision is
+    ``unchecked``: the receipt alone never accepts a claim. Any error in the
+    read rejects (fails closed).
+    """
+    if isinstance(document, (bytes, str)):
+        try:
+            document = _loads_strict(document)
+        except (UnicodeDecodeError, ValueError):
+            document = None
+    verdict = verify_handoff(document, registry, payload=payload)
+    if not verdict.ok:
+        verdict.decision = "reject"
+        return verdict
+    if receiver_check is None:
+        verdict.what_this_proves.append(UNCHECKED_LINE)
+        return verdict
+    try:
+        record = receiver_check(_payload_value(document, payload))
+        if not isinstance(record, ReceiverRecord):
+            raise TypeError("receiver_check returns a ReceiverRecord")
+    except Exception as exc:  # noqa: BLE001 - an unreadable record never accepts
+        record = ReceiverRecord("unreadable")
+        verdict.detail = f"the receiver's own read failed: {type(exc).__name__}"
+    verdict.receiver_check = {
+        "state": record.state,
+        "differing_fields": list(record.differing_fields),
+        "read_method": record.read_method,
+    }
+    if record.state == "recorded_as_intended":
+        verdict.decision = "accept"
+        verdict.what_this_proves.append(ACCEPT_LINE)
+    else:
+        verdict.decision = "reject"
+        verdict.what_this_proves.append(
+            {
+                "recorded_differently": (
+                    "Rejected: your own system has this record with different "
+                    f"values ({len(record.differing_fields)} field(s) differ)."
+                ),
+                "not_found": "Rejected: your own system has no such record.",
+                "unreadable": "Rejected: your own record could not be read.",
+            }[record.state]
+        )
+    return verdict
+
+
 def load_registry(path: Optional[Path] = None) -> list[Any]:
     """The receiver's pinned keys: a registry file, or this computer's defaults."""
     if path is not None:
@@ -443,11 +536,13 @@ __all__ = [
     "DETACHED_SUFFIX",
     "EXTENSION_URI",
     "HandoffError",
-    "INDEPENDENT_READ_METHODS",
     "MEDIA_TYPE",
     "SCHEMA",
     "VERDICT_SCHEMA",
+    "RECEIVER_STATES",
+    "ReceiverRecord",
     "Verdict",
+    "decide",
     "detached_path",
     "load_registry",
     "make_handoff",

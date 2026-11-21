@@ -14,6 +14,20 @@ license = { text = "MIT" }
 # the identity and dense-surface safety evidence first.
 requires-python = ">=3.10,<3.13"
 authors = [{ name = "OpenAdapt.AI" }]
+keywords = [
+    "gui",
+    "automation",
+    "workflow",
+    "verification",
+    "mcp",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "receipts",
+    "in-toto",
+    "dsse",
+]
 # The Python classifiers feed the PyPI "python versions" badge; keep them in
 # step with requires-python above.
 classifiers = [
@@ -308,6 +322,15 @@ agent = [
     "mcp>=1.28,<3",
     "jsonschema>=4.20.0",
     "anyio>=4.0",
+]
+
+# Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
+# `openadapt-agent serve --a2a`. a2a-sdk is Apache-2.0 (a2aproject/a2a-python);
+# http-server adds Starlette and sse-starlette (BSD-3-Clause).
+a2a = [
+    "openadapt-flow[agent]",
+    "a2a-sdk[http-server]>=1.3.1,<2",
+    "uvicorn>=0.29",
 ]
 
 # Verified write tools for agent frameworks

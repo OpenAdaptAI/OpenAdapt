@@ -20,6 +20,12 @@ keywords = [
     "citrix",
     "emr",
     "data-entry",
+    "mcp",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "receipts",
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -133,6 +139,14 @@ flow = [
 # `pip install openadapt[agent]` still resolves.
 agent = [
     "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+]
+# Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
+# `openadapt agent serve --a2a`. Handoffs over MCP, HTTP and files need no extra.
+# Listed directly, not as openadapt-flow[a2a], so the extra resolves the same
+# whichever Flow release is installed; keep in step with Flow's a2a extra.
+a2a = [
+    "a2a-sdk[http-server]>=1.3.1,<2; python_version < '3.13'",
+    "uvicorn>=0.29; python_version < '3.13'",
 ]
 # Bundles
 core = [

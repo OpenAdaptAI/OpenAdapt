@@ -1,0 +1,1 @@
+Hand a result to another agent with its run's receipt attached (inline, detached beside a file, or POSTed to a webhook), and verify one on arrival against your pinned keys: who signed, what was checked, and that a valid signature proves who signed, not that the claim is true.
