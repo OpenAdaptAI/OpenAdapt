@@ -113,7 +113,10 @@ PACK = FormPack(
                 ),
             ),
             compute_anchors=(FieldAnchorSpec(label_patterns=(r"^Calculate$",)),),
-            result_anchor=FieldAnchorSpec(label_patterns=(r"^Estimated value$",)),
+            # The calculator shows its result as one unlabelled output
+            # ("Estimated value: $19,200"), which the frozen engine cannot read
+            # as a result (seen on the dev case), so there is no result_anchor.
+            # The figure it returns is then reported not_checked.
             commit_anchor=FieldAnchorSpec(label_patterns=(r"^Use this amount$",)),
             parent_return_anchor=FieldAnchorSpec(
                 label_patterns=(f"^{PERSONAL_PROPERTY}$",)
