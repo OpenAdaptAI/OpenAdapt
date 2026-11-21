@@ -123,12 +123,12 @@ from openadapt_flow.runtime.effects.file_arrival import (  # noqa: F401
     ArrivalTransport,
     FileArrivalVerifier,
 )
-from openadapt_flow.runtime.effects.local_state import (  # noqa: F401
-    LocalStateVerifier,
-)
 from openadapt_flow.runtime.effects.graphql import (  # noqa: F401
     GraphQLRecordVerifier,
     assert_read_only_graphql,
+)
+from openadapt_flow.runtime.effects.local_state import (  # noqa: F401
+    LocalStateVerifier,
 )
 from openadapt_flow.runtime.effects.rest import (  # noqa: F401
     RestRecordVerifier,

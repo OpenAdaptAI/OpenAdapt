@@ -546,8 +546,8 @@ class EffectsConfig(BaseModel):
     #: (contents and SHA-256), ``macos_defaults`` (a preference key) and
     #: ``windows_registry`` (a registry value). There is no free-form command;
     #: see :mod:`openadapt_flow.runtime.effects.local_state`.
-    local_state: list[Annotated[LocalStateSource, Field(discriminator="type")]] = (
-        Field(default_factory=list)
+    local_state: list[Annotated[LocalStateSource, Field(discriminator="type")]] = Field(
+        default_factory=list
     )
 
     # -- plugin record-check packs (registered kinds only) --------------------

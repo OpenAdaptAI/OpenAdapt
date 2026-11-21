@@ -100,7 +100,7 @@ class NotepadSave(Example):
             timeout_s=90.0,
         )
         lab.launch_interactive(
-            rf'cmd.exe /c start "" /max notepad.exe "%USERPROFILE%\openadapt-examples\note.txt"',
+            r'cmd.exe /c start "" /max notepad.exe "%USERPROFILE%\openadapt-examples\note.txt"',
             name="OAFlowLSC",
         )
         time.sleep(6)
@@ -128,7 +128,9 @@ class NotepadSave(Example):
 
     def unreadable_verify(self, verify: dict[str, Any]) -> dict[str, Any]:
         doc = json.loads(json.dumps(verify))
-        doc["verifier"]["local_state"][0]["path"] = "~/openadapt-examples-missing/note.txt"
+        doc["verifier"]["local_state"][0]["path"] = (
+            "~/openadapt-examples-missing/note.txt"
+        )
         return doc
 
 
@@ -165,12 +167,20 @@ def _guest_check(
         lab.push_file(work / name, rf"{g}\{name}")
     env = f"$env:PYTHONPATH='{GUEST_PATH}'; $env:OPENADAPT_FLOW_PLAINTEXT_AT_REST='lab: synthetic text'; "
     base = f"& '{GUEST_PY}' -m openadapt_flow verify-run --verify '{g}\\verify.json' --params '{g}\\params.json'"
-    return {"guest_dir": g, "env": env, "base": base, "work": work, "baseline": baseline}
+    return {
+        "guest_dir": g,
+        "env": env,
+        "base": base,
+        "work": work,
+        "baseline": baseline,
+    }
 
 
 def _capture_baseline(lab: winrm_lab.WinRMLab, ctx: dict[str, Any]) -> str:
     done = lab.run_ps(
-        ctx["env"] + ctx["base"] + f" --capture-baseline '{ctx['guest_dir']}\\baseline.json'",
+        ctx["env"]
+        + ctx["base"]
+        + f" --capture-baseline '{ctx['guest_dir']}\\baseline.json'",
         check=False,
     )
     return (done.stdout or "") + (done.stderr or "")
@@ -200,7 +210,9 @@ def _verify(lab: winrm_lab.WinRMLab, ctx: dict[str, Any]) -> dict[str, Any]:
         (ctx["work"] / "effect-receipt.json").write_text(json.dumps(doc, indent=2))
         # write_result stores {"receipt": ..., "evidence": ...}.
         receipt = doc.get("receipt", doc)
-        receipt["readback_effects"] = doc.get("evidence", {}).get("readback", {}).get("effects")
+        receipt["readback_effects"] = (
+            doc.get("evidence", {}).get("readback", {}).get("effects")
+        )
         receipt["frame_status"] = doc.get("evidence", {}).get("frame", {}).get("status")
     exit_line = [ln for ln in text.splitlines() if ln.startswith("EXIT=")]
     return {
@@ -210,8 +222,12 @@ def _verify(lab: winrm_lab.WinRMLab, ctx: dict[str, Any]) -> dict[str, Any]:
         "verification_tier": receipt and receipt.get("verification_tier"),
         "checked_how": receipt and receipt.get("checked_how"),
         "frame_status": receipt and receipt.get("frame_status"),
-        "effects": receipt and [
-            {k: e.get(k) for k in ("kind", "verdict", "substrate", "flow_verification_tier")}
+        "effects": receipt
+        and [
+            {
+                k: e.get(k)
+                for k in ("kind", "verdict", "substrate", "flow_verification_tier")
+            }
             for e in receipt.get("readback_effects") or []
         ],
         "log_tail": text.strip().splitlines()[-6:],
@@ -229,7 +245,9 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.runtime import Replayer
 
-    verify = _load_yaml(FLOW / "examples" / "local_state" / example.name / "verify.yaml")
+    verify = _load_yaml(
+        FLOW / "examples" / "local_state" / example.name / "verify.yaml"
+    )
     lab = winrm_lab.WinRMLab()
     prefix = lab.profile.prefix
     row.update(
@@ -253,13 +271,20 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
     # 1. Record.
     example.reset(lab)
     rec_check = _guest_check(
-        lab, out, "record", verify, example.params_recorded, baseline=True,
+        lab,
+        out,
+        "record",
+        verify,
+        example.params_recorded,
+        baseline=True,
         run_record={"executor_kind": "human", "executor_id": "lab-demonstration"},
     )
     row["record_baseline"] = _capture_baseline(lab, rec_check)[-300:]
     example.bring_to_front(agent, viewport)
     t0 = time.monotonic()
-    recording = record_desktop_demo(agent, out / "recording", lambda r: example.demonstrate(r, viewport))
+    recording = record_desktop_demo(
+        agent, out / "recording", lambda r: example.demonstrate(r, viewport)
+    )
     row["record_s"] = round(time.monotonic() - t0, 1)
     row["record_check"] = _verify(lab, rec_check)
 
@@ -277,8 +302,16 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
     # 3. Replay with a new value, then check.
     example.reset(lab)
     run_check = _guest_check(
-        lab, out, "replay", verify, example.params_replayed, baseline=True,
-        run_record={"executor_kind": "flow_replay", "executor_id": f"lab-{example.name}"},
+        lab,
+        out,
+        "replay",
+        verify,
+        example.params_replayed,
+        baseline=True,
+        run_record={
+            "executor_kind": "flow_replay",
+            "executor_id": f"lab-{example.name}",
+        },
     )
     row["replay_baseline"] = _capture_baseline(lab, run_check)[-300:]
     example.bring_to_front(agent, viewport)
@@ -293,7 +326,11 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
     row["replay"] = {
         "success": report.success,
         "steps": [
-            {"step": r.step_id, "status": getattr(r, "status", None), "reason": (getattr(r, "reason", "") or "")[:160]}
+            {
+                "step": r.step_id,
+                "status": getattr(r, "status", None),
+                "reason": (getattr(r, "reason", "") or "")[:160],
+            }
             for r in report.results
         ],
         # What the replay itself says about checking, with no effect declared.
@@ -305,7 +342,12 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
     # 4. Negative control: reset, no replay, same check.
     example.reset(lab)
     neg = _guest_check(
-        lab, out, "no-replay", verify, example.params_replayed, baseline=True,
+        lab,
+        out,
+        "no-replay",
+        verify,
+        example.params_replayed,
+        baseline=True,
         run_record={"executor_kind": "flow_replay", "executor_id": "lab-skipped"},
     )
     _capture_baseline(lab, neg)
@@ -313,13 +355,19 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
 
     # 5. Unreadable: the same contract on state that cannot be read.
     bad = _guest_check(
-        lab, out, "unreadable", example.unreadable_verify(verify), example.params_replayed,
+        lab,
+        out,
+        "unreadable",
+        example.unreadable_verify(verify),
+        example.params_replayed,
         baseline=False,
         run_record={"executor_kind": "flow_replay", "executor_id": "lab-unreadable"},
     )
     row["unreadable"] = _verify(lab, bad)
     lab.stop_interactive("OAFlowLSC")
-    lab.run_ps("Stop-Process -Name notepad -Force -ErrorAction SilentlyContinue", check=False)
+    lab.run_ps(
+        "Stop-Process -Name notepad -Force -ErrorAction SilentlyContinue", check=False
+    )
 
     row["accepted"] = bool(
         row["record_check"]["outcome"] == "verified"
@@ -338,7 +386,9 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("example", choices=sorted(EXAMPLES))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -351,7 +401,9 @@ def main() -> int:
         row["failure"] = f"{type(exc).__name__}: {str(exc)[:400]}"
         (args.out / "traceback.txt").write_text(traceback.format_exc())
     row["completed_at"] = datetime.now(timezone.utc).isoformat()
-    (args.out / "evidence.json").write_text(json.dumps(row, indent=2, sort_keys=True, default=str) + "\n")
+    (args.out / "evidence.json").write_text(
+        json.dumps(row, indent=2, sort_keys=True, default=str) + "\n"
+    )
     print(json.dumps(row, indent=2, sort_keys=True, default=str))
     return 0 if row.get("accepted") else 1
 

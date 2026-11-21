@@ -26,8 +26,8 @@ from openadapt_flow.runtime.effects.local_state import (
     WindowsRegistrySource,
     value_text,
 )
-from openadapt_flow.verify_run import VerifyConfig, capture_baseline, verify_run
 from openadapt_flow.verification import VerificationTier
+from openadapt_flow.verify_run import VerifyConfig, capture_baseline, verify_run
 
 RUN_RECORD = {"executor_kind": "flow_replay", "executor_id": "test-replay"}
 
@@ -110,7 +110,9 @@ def test_reading_never_changes_the_file(tmp_path: Path) -> None:
 class _Defaults:
     """Stands in for ``defaults export <domain> -``."""
 
-    def __init__(self, domains: dict[str, dict[str, Any]], rc: int = 0, raw: bytes = b"") -> None:
+    def __init__(
+        self, domains: dict[str, dict[str, Any]], rc: int = 0, raw: bytes = b""
+    ) -> None:
         self.domains = domains
         self.rc = rc
         self.raw = raw
@@ -126,7 +128,9 @@ def _mac(runner: _Defaults, *sources: Any) -> LocalStateVerifier:
     return LocalStateVerifier(list(sources), runner=runner, platform="darwin")
 
 
-APPEARANCE = MacosDefaultsSource(id="appearance", domain="-g", key="AppleInterfaceStyle")
+APPEARANCE = MacosDefaultsSource(
+    id="appearance", domain="-g", key="AppleInterfaceStyle"
+)
 
 
 def test_defaults_value_and_absent_key() -> None:
@@ -158,7 +162,11 @@ def test_defaults_reads_each_domain_once_per_read() -> None:
 
 @pytest.mark.parametrize(
     "runner",
-    [_Defaults({}, rc=1), _Defaults({}, raw=b"not a plist"), _Defaults({}, raw=plistlib.dumps([1]))],
+    [
+        _Defaults({}, rc=1),
+        _Defaults({}, raw=b"not a plist"),
+        _Defaults({}, raw=plistlib.dumps([1])),
+    ],
     ids=["nonzero-exit", "not-a-plist", "not-a-dict"],
 )
 def test_defaults_failure_is_unreadable_not_absent(runner: _Defaults) -> None:
@@ -212,7 +220,11 @@ class _Winreg:
     REG_SZ = 1
     REG_DWORD = 4
 
-    def __init__(self, keys: dict[tuple[str, str], dict[str, tuple[Any, int]]], error: type[OSError] | None = None) -> None:
+    def __init__(
+        self,
+        keys: dict[tuple[str, str], dict[str, tuple[Any, int]]],
+        error: type[OSError] | None = None,
+    ) -> None:
         self.keys = keys
         self.error = error
         self.opened: list[tuple[Any, str, int, int]] = []
@@ -232,7 +244,9 @@ class _Winreg:
 
 
 PERSONALIZE = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-THEME = WindowsRegistrySource(id="apps_theme", hive="HKCU", path=PERSONALIZE, name="AppsUseLightTheme")
+THEME = WindowsRegistrySource(
+    id="apps_theme", hive="HKCU", path=PERSONALIZE, name="AppsUseLightTheme"
+)
 
 
 def test_registry_value_absent_and_read_only_access() -> None:
@@ -293,9 +307,7 @@ def test_sources_need_distinct_ids_and_at_least_one(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         LocalStateVerifier([])
     with pytest.raises(ValueError, match="distinct"):
-        LocalStateVerifier(
-            [FileSource(id="a", path="x"), FileSource(id="a", path="y")]
-        )
+        LocalStateVerifier([FileSource(id="a", path="x"), FileSource(id="a", path="y")])
 
 
 def test_tier_is_independent_system() -> None:
@@ -313,7 +325,13 @@ def test_effects_config_builds_and_refuses_free_form_commands(tmp_path: Path) ->
             "local_state": [
                 {"type": "file", "id": "note", "path": str(tmp_path / "n.txt")},
                 {"type": "macos_defaults", "id": "a", "domain": "-g", "key": "K"},
-                {"type": "windows_registry", "id": "r", "hive": "HKCU", "path": "S", "name": "v"},
+                {
+                    "type": "windows_registry",
+                    "id": "r",
+                    "hive": "HKCU",
+                    "path": "S",
+                    "name": "v",
+                },
             ],
         }
     )
@@ -326,11 +344,19 @@ def test_effects_config_builds_and_refuses_free_form_commands(tmp_path: Path) ->
     ]
     with pytest.raises(ValidationError):
         EffectsConfig.model_validate(
-            {"kind": "local-state", "local_state": [{"type": "command", "id": "x", "argv": ["sh"]}]}
+            {
+                "kind": "local-state",
+                "local_state": [{"type": "command", "id": "x", "argv": ["sh"]}],
+            }
         )
     with pytest.raises(ValidationError):
         EffectsConfig.model_validate(
-            {"kind": "local-state", "local_state": [{"type": "file", "id": "x", "path": "p", "command": "sh"}]}
+            {
+                "kind": "local-state",
+                "local_state": [
+                    {"type": "file", "id": "x", "path": "p", "command": "sh"}
+                ],
+            }
         )
     with pytest.raises(ValueError, match="requires effects.local_state"):
         build_effect_verifier(EffectsConfig(kind="local-state"))

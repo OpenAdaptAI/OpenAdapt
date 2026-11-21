@@ -190,7 +190,9 @@ def value_text(value: Any) -> Optional[str]:
     try:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     except (TypeError, ValueError) as exc:
-        raise _Unreadable(f"value of type {type(value).__name__} has no text form") from exc
+        raise _Unreadable(
+            f"value of type {type(value).__name__} has no text form"
+        ) from exc
 
 
 def _plist_type(value: Any) -> str:
@@ -300,13 +302,13 @@ class LocalStateVerifier(VerifierAdapterBase):
             except (OSError, subprocess.SubprocessError) as exc:
                 raise _Unreadable(f"{source.id}: {type(exc).__name__}") from exc
             if done.returncode != 0:
-                raise _Unreadable(
-                    f"{source.id}: defaults exited {done.returncode}"
-                )
+                raise _Unreadable(f"{source.id}: defaults exited {done.returncode}")
             try:
                 parsed = plistlib.loads(done.stdout)
             except Exception as exc:  # noqa: BLE001 - any parse failure is unreadable
-                raise _Unreadable(f"{source.id}: defaults output is not a plist") from exc
+                raise _Unreadable(
+                    f"{source.id}: defaults output is not a plist"
+                ) from exc
             if not isinstance(parsed, dict):
                 raise _Unreadable(f"{source.id}: defaults output is not a dictionary")
             domain = parsed
@@ -337,7 +339,9 @@ class LocalStateVerifier(VerifierAdapterBase):
             reg = self._winreg()
         except _Unreadable as exc:
             raise _Unreadable(f"{source.id}: {exc}") from exc
-        hive = getattr(reg, "HKEY_CURRENT_USER" if source.hive == "HKCU" else "HKEY_LOCAL_MACHINE")
+        hive = getattr(
+            reg, "HKEY_CURRENT_USER" if source.hive == "HKCU" else "HKEY_LOCAL_MACHINE"
+        )
         record: dict[str, Any] = {"id": source.id, "type": source.type}
         try:
             with reg.OpenKey(hive, source.path, 0, reg.KEY_READ) as key:
