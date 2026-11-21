@@ -17,7 +17,7 @@ every run. OpenAdapt lets your agent, or a person, do a task once in a web,
 Windows, macOS, Linux or remote-desktop app. It compiles that run into a program,
 and your agent calls the program as one tool. The program runs with no model
 calls and sends no screenshots anywhere. It confirms the right record before
-each save, reads the save back from the system of record after it, and returns
+each save, reads the save back after it outside the session that made it, and returns
 a plain outcome. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
@@ -312,7 +312,7 @@ the right record is on screen, makes the entry, and reads the record back.
 | Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
 | When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
 | Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
-| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back from the system of record |
+| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back outside the acting session; the report names how |
 | Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
 
 ## What it can do
