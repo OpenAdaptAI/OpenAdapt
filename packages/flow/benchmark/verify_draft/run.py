@@ -107,7 +107,7 @@ def heldout(run: AppRun, contract_path: Path, work: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("app", choices=sorted(SETUPS))
     ap.add_argument("--out", required=True)
     ap.add_argument(
