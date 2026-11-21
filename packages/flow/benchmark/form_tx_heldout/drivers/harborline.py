@@ -123,7 +123,13 @@ def run_estimator(page: Any, cell: Any, label: str, src: Source) -> None:
     shown = pop.locator("#rce_value").inner_text()
     displayed = int(shown.replace("$", "").replace(",", ""))
     with pop.expect_event("close"):
-        pop.locator("input[value='Use This Value']").click()
+        # The button closes its own window; a click that loses that race
+        # raises after the click went through, so a closed popup is success.
+        try:
+            pop.locator("input[value='Use This Value']").click(no_wait_after=True)
+        except Exception:
+            if not pop.is_closed():
+                raise
     box = cell.locator("input[type=text]")
     final = src.estimator(label, displayed, box.input_value())
     if final is not None:
