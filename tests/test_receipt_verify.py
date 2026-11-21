@@ -105,6 +105,32 @@ def test_a_verified_report_with_a_refuted_write_is_not_verified():
     assert statement["predicate"]["outcome"] == "UNKNOWN"
 
 
+@pytest.mark.parametrize(
+    "tail,reason",
+    [
+        ([{"effect_verified": False}], "refuted_write"),
+        ([{"effect_verified": True}], "too_many_writes"),
+    ],
+)
+def test_writes_past_the_line_limit_still_decide_the_outcome(tail, reason):
+    """A receipt shows at most MAX_LINES writes; it never says VERIFIED over
+    writes it left out."""
+    from openadapt_types.receipt import MAX_LINES
+
+    confirmed = [{"ok": True, "effect_verified": True}] * MAX_LINES
+    report = {"execution_outcome": "VERIFIED", "results": confirmed + tail}
+    statement, _ = build_statement(report, "1" * 64, flow_version="3.5.0")
+    predicate = statement["predicate"]
+    assert (predicate["outcome"], predicate["reason_code"]) == ("UNKNOWN", reason)
+    assert len(predicate["lines"]) == MAX_LINES
+    exact, _ = build_statement(
+        {"execution_outcome": "VERIFIED", "results": confirmed},
+        "1" * 64,
+        flow_version="3.5.0",
+    )
+    assert exact["predicate"]["outcome"] == "VERIFIED"
+
+
 def test_tampering_with_the_report_is_detected(tmp_path):
     run = _run(tmp_path, "HALTED")
     write_receipt_record(run)

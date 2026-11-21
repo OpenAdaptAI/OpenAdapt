@@ -118,14 +118,20 @@ def build_statement(
         if isinstance(results, list)
         else []
     )
-    lines = [_line(i, x) for i, x in enumerate(results) if _is_write(x)][: r.MAX_LINES]
+    every_line = [_line(i, x) for i, x in enumerate(results) if _is_write(x)]
+    lines = every_line[: r.MAX_LINES]
     tally = {
         k: sum(1 for line in lines if line["check"] == k)
         for k in ("confirmed", "refuted", "not_checked")
     }
     outcome, reason = r.receipt_outcome(report.get("execution_outcome"))
-    if outcome == "VERIFIED" and tally["refuted"]:
+    # Judge every write, not only the ones that fit: a refuted write past
+    # the line limit still refuses VERIFIED, and so does any write the
+    # receipt can't show.
+    if outcome == "VERIFIED" and any(x["check"] == "refuted" for x in every_line):
         outcome, reason = "UNKNOWN", "refuted_write"
+    elif outcome == "VERIFIED" and len(every_line) > r.MAX_LINES:
+        outcome, reason = "UNKNOWN", "too_many_writes"
     bundle = report.get("bundle_content_digest")
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
