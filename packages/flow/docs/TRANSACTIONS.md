@@ -207,11 +207,18 @@ its own credentials to the system.
 
 All runs took place on 21 November 2026, on the lab laptop's WSL with
 synthetic data. The rules (server-set and derived fields, ignored tables) were
-fixed after a pilot and before the measured run. The pilot found one engine
-bug: an undo of an SQL update didn't restore a column the database sets
-itself (`ON UPDATE CURRENT_TIMESTAMP`). It was fixed by restoring the whole
-before-image. Results, counts and record ids only, are in
-[`benchmark/ext_tx/results/`](../benchmark/ext_tx/results/).
+fixed after a pilot. The pilot found one engine bug: an undo of an SQL update
+didn't restore a column the database sets itself
+(`ON UPDATE CURRENT_TIMESTAMP`). It was fixed by restoring the whole
+before-image.
+
+There were two measured runs. Run 1's receipts weren't signed, because the lab
+environment's `openadapt-types` predates `record/run/v1`. Run 2 used the
+repository's own types and signed every phase. Its numbers are below. Run 1's
+numbers were the same. The results (counts and record ids only) are in
+[`benchmark/ext_tx/results/`](../benchmark/ext_tx/results/). The apps run used
+code at `2668a20f`, and the proxy and setup runs used `c88d728c`, which also
+compares values at apply.
 
 | Surface | Writes | Missed effects | False diffs | Verified undo | Double effects through |
 |---|---|---|---|---|---|
@@ -221,36 +228,46 @@ before-image. Results, counts and record ids only, are in
 | Mailpit v1.27.10 (email, holdback) | 100 sends | 0 | 0 | 50 cancelled in holdback and never sent; 50 released exactly once. A released email has no undo. | 0 of 20 (20 refused); the control arm doubled 20 of 20 |
 
 - **Crash after the send, before the outcome was recorded** (5 per app, REST
-  and SQL): the regenerated retry was refused, and the identical retry was
-  read back and held. The run had no second effect in any of the 10 cases.
+  and SQL): there was no second effect in 10 of 10 cases.
 - **Identical replays** sent nothing in 60 of 60 cases.
 - **The independent read-back** (the verifier's `capture_database` and
   `diff_database`) agreed with the proxy's dry run on every table's counts for
-  all 120 statements.
+  120 of 120 statements.
 - **Seeded faults, to show the checks can fail:**
-  - A change the plan didn't predict, injected during apply, was counted as a
-    missed effect in 10 of 10 cases.
-  - A change injected before undo was caught in 10 of 10 cases: as collateral
-    in 9, and in 1 as `changed_since_apply`, because the injected change hit
-    the planned record. The undo refused to overwrite it.
+  - A change injected during apply was counted as a missed effect in 10 of 10
+    cases.
+  - A change injected before undo was caught in 10 of 10 cases. In run 1, one
+    of these hit the planned record, and the undo refused to overwrite it
+    (`changed_since_apply`).
 - **A trigger probe** (PostgreSQL, outside the measured set): the dry run
-  showed the trigger's 5 audit rows, and apply found no missed effect. The undo
-  fires the trigger again, so it reported `RECONCILIATION_REQUIRED` with 5
-  collateral rows, never `ROLLED_BACK`.
+  showed the trigger's 5 audit rows. The undo fires the trigger again, so it
+  reported `RECONCILIATION_REQUIRED` with 5 collateral rows.
+- **Receipts:**
+  - In the apps run, 660 of 660 phase receipts were signed and verified. Every
+    apply, undo and release receipt binds its approval to the plan digest.
+  - In the proxy run, 446 of 446 were signed and verified. There, a script
+    pressed `y`, so 139 apply receipts say `person`, although no person
+    approved them.
 - **One session over the real MCP client SDK** (`mcp` 1.x, streamable HTTP)
-  listed the four tools, applied and undid a statement.
-- **Setup time.** From an empty virtual environment to the first diff took 8
-  to 10 seconds over three runs: install `openadapt-flow`, `openadapt-types`
-  and `psycopg` with no package cache, then `openadapt-flow proxy --postgres
-  ... -- <stand-in agent>` and its first `sql_preview`. The target was under
-  2 minutes. Not included: installing Python and uv, and building the wheels
-  from source, which stood in for PyPI. The machine was the lab laptop, not
-  a fresh one.
-- **Median dry-run time:** 0.78 s for the 600-user, 1,500-order database.
+  listed the four tools, applied a statement and undid it.
+- **A live Claude Code session** went through the proxy (Claude Code 2.1.305,
+  headless, `--allowedTools` limited to the proxy's tools). The bulk update was
+  held: 60 rows, 2 of them admins. Claude Code reported the refusal and didn't
+  work around it. After the approval, a second session applied it and undid
+  it. See [`results/2026-11-21-live-claude-code.md`](../benchmark/ext_tx/results/2026-11-21-live-claude-code.md).
+- **Setup time:** 11.5 to 12.4 s over three runs (run 1: 8.2 to 9.8 s). That is
+  from an empty virtual environment to the first diff on a local PostgreSQL:
+  installing `openadapt-flow`, `openadapt-types` and `psycopg` with no package
+  cache, then `openadapt-flow proxy --postgres ... -- <stand-in agent>` and its
+  first `sql_preview`. The target was under 2 minutes. Not included:
+  installing Python and uv, and building the wheels from source, which stood
+  in for PyPI. The machine was the lab laptop, not a fresh one.
+- **Median dry-run time:** 0.87 s for 600 users and 1,500 orders. A statement
+  is staged three times.
 
-The kill criteria were: a verified undo failing on more than 5% of supported
-writes, a dry-run diff missing an effect that the read-back found, or a double
-effect getting through. None was tripped.
+The kill criteria were a verified undo failing on more than 5% of supported
+writes, a dry-run diff missing an effect that the read-back found, a double
+effect getting through, and setup over 2 minutes. None was tripped.
 
 ## References
 
