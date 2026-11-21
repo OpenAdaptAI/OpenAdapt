@@ -313,3 +313,40 @@ def test_ambiguous_typeahead_in_frame_and_shadow_root_stops_before_submit(
     assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
     assert result.halts[0].kind == FormHaltKind.AMBIGUOUS_OPTION_OR_TARGET
     assert result.halts[0].field_label == "City"
+
+
+CLOBBERED = """<!doctype html><html><body>
+<script>window.CSS = {supports: () => true};</script>
+<form onsubmit="return false">
+  <label for="1st.name">First name</label><input id="1st.name">
+  <label for="last:name">Last name</label><input id="last:name">
+</form></body></html>"""
+
+
+def test_page_that_replaces_the_css_global_is_still_read_and_filled(
+    browser: Any,
+) -> None:
+    context = browser.new_context()
+    try:
+        context.route(
+            f"{ORIGIN}/**",
+            lambda route: route.fulfill(
+                status=200, content_type="text/html", body=CLOBBERED
+            ),
+        )
+        page = context.new_page()
+        surface = PlaywrightFormSurface(
+            page,
+            UIProfileSpec(profile_id="css-global-test", max_settle_ms=4000),
+            base_origin=ORIGIN,
+        )
+        surface.goto(f"{ORIGIN}/form")
+        snap = surface.snapshot()
+        by_label = {c.label_text: c for c in snap.controls}
+        assert set(by_label) == {"First name", "Last name"}
+        surface.fill_text(by_label["First name"].dom_selector, "Marisol")
+        surface.fill_text(by_label["Last name"].dom_selector, "Okafor")
+        assert page.locator("input").nth(0).input_value() == "Marisol"
+        assert page.locator("input").nth(1).input_value() == "Okafor"
+    finally:
+        context.close()
