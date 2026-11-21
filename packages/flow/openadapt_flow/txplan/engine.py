@@ -30,9 +30,11 @@ from openadapt_flow.txplan.adapters import (
     MailAdapter,
     SqlAdapter,
     adapter_for,
+    after_image,
     column_digests,
     diff_frames,
     same,
+    volatile_columns,
 )
 from openadapt_flow.txplan.spec import (
     Collection,
@@ -370,6 +372,15 @@ def _row_anomalies(
                     "detail": "ddl",
                 }
             )
+        if w.get("volatile_other"):
+            found.append(
+                {
+                    "label": "values differ between dry runs (not compared at apply)",
+                    "write": n,
+                    "detail": "volatile",
+                    "value": ", ".join(w["volatile_other"]),
+                }
+            )
     return found
 
 
@@ -677,6 +688,21 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
             [writes[i] for i in idx], [baselines[i] for i in idx]
         )
         _merge(predicted[f"{name}:*"], _staged_to_prediction(diff))
+        if any(writes[i]["op"] == "sql" for i in idx):
+            # A second staged run finds the columns a statement sets differently
+            # each time (now(), random(), a time default): apply doesn't compare them.
+            _, again = ctx.adapter(name).stage(
+                [writes[i] for i in idx], [baselines[i] for i in idx]
+            )
+            for i, res, res2 in zip(idx, results, again):
+                if writes[i]["op"] == "sql":
+                    vol = volatile_columns(res["after_raw"], res2["after_raw"])
+                    writes[i]["volatile"] = vol
+                    kinds = res["after_raw"].get("kinds", {})
+                    writes[i]["volatile_other"] = [
+                        c for c in vol if kinds.get(c) != "time"
+                    ]
+                    writes[i]["staged_after"] = after_image(res["after_raw"], vol)
         for i, res in zip(idx, results):
             if writes[i]["op"] == "sql":
                 writes[i]["staged_diff"] = res["staged_diff"]
@@ -759,7 +785,11 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
                     )
                 },
                 **(
-                    {"ddl": w["ddl"], "staged_diff": _counts(w.get("staged_diff"))}
+                    {
+                        "ddl": w["ddl"],
+                        "staged_diff": _counts(w.get("staged_diff")),
+                        "volatile": w.get("volatile", []),
+                    }
                     if w["op"] == "sql"
                     else {}
                 ),

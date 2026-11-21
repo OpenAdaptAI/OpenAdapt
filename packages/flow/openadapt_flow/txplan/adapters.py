@@ -52,6 +52,94 @@ class Diverged(AdapterError):
     """The statement did something other than the plan showed. Nothing landed."""
 
 
+def after_raw(
+    diff: Mapping[str, Any],
+    frame: Mapping[str, Mapping[str, str]],
+    rows: Mapping[str, Any],
+) -> dict[str, Any]:
+    """The column digests a statement left: each changed row by id, and each
+    added row without its primary key (a sequence may give it another id)."""
+    added: dict[str, list[dict[str, str]]] = {}
+    for rid in diff["added"]:
+        table = rid.split("/", 1)[0]
+        pk = set((rows.get(rid) or {}).get("pk") or [])
+        added.setdefault(table, []).append(
+            {c: d for c, d in frame[rid].items() if c not in pk}
+        )
+    kinds: dict[str, str] = {}
+    recent: set[str] = set()
+    for rid in [*diff["added"], *diff["changed"]]:
+        table = rid.split("/", 1)[0]
+        for c, v in ((rows.get(rid) or {}).get("row") or {}).items():
+            when = _as_time(v)
+            if kinds.get(f"{table}.{c}") != "other":
+                kinds[f"{table}.{c}"] = "time" if when is not None else "other"
+            if when is not None and abs(time.time() - when) < 600:
+                recent.add(f"{table}.{c}")  # "now", to the second: may differ at apply
+    return {
+        "changed": {rid: dict(frame[rid]) for rid in diff["changed"]},
+        "added": added,
+        "kinds": kinds,
+        "recent_time": sorted(recent),
+    }
+
+
+_TIME_TEXT = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$"
+)
+
+
+def _as_time(v: Any) -> Optional[float]:
+    """A tagged datetime, or ISO-looking text, as epoch seconds (naive = UTC or
+    local, whichever is closer to now)."""
+    raw = v.get("v") if isinstance(v, dict) and v.get("$t") == "dt" else v
+    if not isinstance(raw, str) or not _TIME_TEXT.match(raw):
+        return None
+    try:
+        t = _dt.datetime.fromisoformat(raw.replace("Z", "+00:00").replace(" ", "T"))
+    except ValueError:
+        return None
+    if t.tzinfo is not None:
+        return t.timestamp()
+    utc = t.replace(tzinfo=_dt.timezone.utc).timestamp()
+    local = t.timestamp()
+    return min((utc, local), key=lambda x: abs(time.time() - x))
+
+
+def volatile_columns(a: Mapping[str, Any], b: Mapping[str, Any]) -> list[str]:
+    """``table.column`` values that differ between two staged runs of the same
+    statement (``now()``, ``random()``, a time default): not compared."""
+    out: set[str] = set(a.get("recent_time", [])) | set(b.get("recent_time", []))
+    for rid in set(a["changed"]) | set(b["changed"]):
+        x, y = a["changed"].get(rid, {}), b["changed"].get(rid, {})
+        t = rid.split("/", 1)[0]
+        out |= {f"{t}.{c}" for c in set(x) | set(y) if x.get(c) != y.get(c)}
+    for t in set(a["added"]) | set(b["added"]):
+        xs, ys = a["added"].get(t, []), b["added"].get(t, [])
+        for c in {c for r in [*xs, *ys] for c in r}:
+            if sorted(r.get(c, "") for r in xs) != sorted(r.get(c, "") for r in ys):
+                out.add(f"{t}.{c}")
+    return sorted(out)
+
+
+def after_image(raw: Mapping[str, Any], volatile: Sequence[str]) -> dict[str, Any]:
+    """``after_raw`` without the volatile columns, in a comparable form."""
+    skip = set(volatile)
+    changed = {
+        rid: {
+            c: d for c, d in cols.items() if f"{rid.split('/', 1)[0]}.{c}" not in skip
+        }
+        for rid, cols in sorted(raw["changed"].items())
+    }
+    added = {
+        t: sorted(
+            digest({c: d for c, d in r.items() if f"{t}.{c}" not in skip}) for r in rs
+        )
+        for t, rs in sorted(raw["added"].items())
+    }
+    return {"changed": changed, "added": added}
+
+
 def _shape(diff: Mapping[str, Any]) -> tuple[Any, ...]:
     """A diff, comparable across runs: ids added by a sequence can differ, so
     added rows count per table."""
@@ -648,8 +736,12 @@ class SqlAdapter:
                 for w, b in zip(writes, baselines):
                     result = self._exec(cur, w, b)
                     if w["op"] == "sql":
-                        now_ = self.frame_cur(cur)
+                        now_rows: dict[str, Any] = {}
+                        now_ = self.frame_cur(cur, now_rows)
                         result["staged_diff"] = diff_frames(prev, now_)
+                        result["after_raw"] = after_raw(
+                            result["staged_diff"], now_, now_rows
+                        )
                         result["before_rows"] = {
                             rid: rows[rid]["row"]
                             for rid in [
@@ -708,10 +800,15 @@ class SqlAdapter:
                 after_rows: dict[str, Any] = {}
                 after = self.frame_cur(cur, after_rows)
                 diff = diff_frames(before, after)
-                if _shape(diff) != _shape(want):
+                got_after = after_image(
+                    after_raw(diff, after, after_rows), write.get("volatile") or []
+                )
+                if _shape(diff) != _shape(want) or (
+                    "staged_after" in write and got_after != write["staged_after"]
+                ):
                     con.rollback()
                     raise Diverged(
-                        "the statement's diff is not the planned diff; rolled back"
+                        "the statement's rows or values are not the planned ones; rolled back"
                     )
                 images = {
                     "before": {

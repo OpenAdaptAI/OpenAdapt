@@ -138,8 +138,17 @@ class Proxy:
     """The tools, over one database, for one task (this proxy session)."""
 
     def __init__(
-        self, ctx: Ctx, *, task: str, system: str = "db", interactive: bool = False
+        self,
+        ctx: Ctx,
+        *,
+        task: str,
+        system: str = "db",
+        interactive: bool = False,
+        extra: Any = None,
     ) -> None:
+        #: Another toolset served by the same endpoint: an object with
+        #: ``tools() -> list[dict]`` and ``call(name, args) -> (text, is_error)``.
+        self.extra = extra
         self.ctx = ctx
         self.task = task
         self.system = system
@@ -255,6 +264,10 @@ class Proxy:
                 got = self.apply(str(args["plan"]))
             elif name == "sql_undo":
                 got = self.undo(str(args["plan"]))
+            elif self.extra is not None and name in {
+                t["name"] for t in self.extra.tools()
+            }:
+                return self.extra.call(name, args)
             else:
                 return f"unknown tool {name}", True
         except TxRefused as exc:
@@ -268,6 +281,9 @@ class Proxy:
                 {"error": type(exc).__name__, "detail": str(exc)[:300]}
             ), True
         return json.dumps(got, default=str), False
+
+    def tools(self) -> list[dict[str, Any]]:
+        return [*TOOLS, *(self.extra.tools() if self.extra is not None else [])]
 
     # the person's keys ---------------------------------------------------------
 
@@ -416,7 +432,7 @@ class McpServer:
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            result = {"tools": TOOLS}
+            result = {"tools": self.proxy.tools()}
         elif method == "tools/call":
             params = msg.get("params") or {}
             text, is_error = self.proxy.call(

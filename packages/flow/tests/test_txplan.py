@@ -947,3 +947,77 @@ def test_flow_cli_proxy_runs_the_command_with_scrubbed_env(
         and got["DATABASE_URL"] is None
     )
     assert got["OPENADAPT_TASK"].startswith("proxy-")
+
+
+def test_proxy_commits_only_the_planned_values(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=10)
+    proxy = _proxy(db, max_rows=100)
+    got = proxy.preview("UPDATE users SET role = 'viewer' WHERE id = 3")
+    digest = proxy.ctx.state.find_plan(got["plan"])
+    priv_path = proxy.ctx.state.plan_dir(digest) / "private.json"
+    priv = json.loads(priv_path.read_text())
+    w = priv["writes"][0]
+    w["fields"]["sql"] = (
+        "UPDATE users SET role = 'admin' WHERE id = 3"  # same row, same column
+    )
+    priv_path.write_text(json.dumps(priv))
+    before = _all(db)
+    with pytest.raises(TxRefused):
+        proxy.apply(got["plan"])
+    assert _all(db) == before
+
+
+def test_proxy_time_defaults_are_volatile_and_random_values_are_flagged(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, created TEXT DEFAULT CURRENT_TIMESTAMP)"
+    )
+    con.commit()
+    con.close()
+    from openadapt_flow.txplan.proxy import Proxy, sql_spec
+
+    proxy = Proxy(
+        Ctx(spec=sql_spec(sqlite=str(db), max_rows=10), state=State()), task="T-vol"
+    )
+    a = proxy.preview("INSERT INTO notes (body) VALUES ('hi')")
+    assert a["approval"] == "approved by policy"
+    import time as _t
+
+    _t.sleep(1.1)  # CURRENT_TIMESTAMP moves on: still the planned row
+    assert proxy.apply(a["plan"])["outcome"] == "VERIFIED"
+    b = proxy.preview("UPDATE notes SET body = hex(randomblob(8))")
+    assert any("differ between dry runs" in x for x in b["anomalies"])
+    assert b["approval"].startswith("waiting")
+
+
+def test_proxy_serves_an_extra_toolset(tmp_path: Path) -> None:
+    class Extra:
+        def tools(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "api_read",
+                    "description": "x",
+                    "inputSchema": {"type": "object"},
+                }
+            ]
+
+        def call(self, name: str, args: Any) -> tuple[str, bool]:
+            return json.dumps({"tool": name}), False
+
+    from openadapt_flow.txplan.proxy import McpServer, Proxy, sql_spec
+
+    db = _users(tmp_path / "app.sqlite", n=3)
+    proxy = Proxy(
+        Ctx(spec=sql_spec(sqlite=str(db)), state=State()), task="T-x", extra=Extra()
+    )
+    server = McpServer(proxy)
+    names = [
+        t["name"]
+        for t in server.handle({"id": 1, "method": "tools/list"})["result"]["tools"]
+    ]
+    assert names[-1] == "api_read" and "sql_preview" in names
+    assert proxy.call("api_read", {}) == ('{"tool": "api_read"}', False)
+    server.http.server_close()

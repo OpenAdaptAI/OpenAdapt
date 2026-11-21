@@ -53,7 +53,13 @@ Each write statement goes through five stages:
    binds to the plan digest and is used once.
 4. **Execute once.** The statement runs again in a transaction. It commits
    only when the diff read inside that transaction is exactly the planned
-   diff. Otherwise it rolls back (`diverged`). A plan whose database moved
+   diff: the same rows, the same changed columns and the same values (column
+   digests). Added rows are compared without their generated keys.
+   Otherwise it rolls back (`diverged`). The dry run is staged twice. A
+   column whose value differs between the two runs is *volatile* and is not
+   compared: `now()`, a time default, or a timestamp within ten minutes of
+   now. A volatile column that isn't a time, such as `random()`, is an
+   anomaly, so the plan waits for a person. A plan whose database moved
    since the dry run is refused before anything runs (`plan_stale`).
 5. **Read back and undo.** Every table is read again and compared with the
    prediction. The undo images (each changed or removed row's before-image,
@@ -68,7 +74,10 @@ a restore, such as `balance + 100.00 ... AND active IS NOT NULL` in place of
 `balance + 100`, touches the same rows and gets the same key. Because new
 work can also touch the same rows, the proxy doesn't refuse it outright. It
 marks the plan `possible_replay`, never approves it by policy, and waits for
-a person. A statement that only inserts is keyed by its table, with the same
+a person. Any overlap with rows the task already wrote counts, not only the
+exact same set: `id IN (9, 10)` after `id = 9` is held too. The default task
+is one per database and project folder, stable across proxy restarts. Use
+`--task` to start a new one. A statement that only inserts is keyed by its table, with the same
 rule. An identical statement after the first apply changes nothing, and its
 dry run is empty.
 
