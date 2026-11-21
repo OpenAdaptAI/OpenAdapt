@@ -137,8 +137,9 @@ def _skills(bridge: AgentBridge, *, include_workflows: bool) -> list[Any]:
                     )
                     + " Send a data part {\"skill\": \""
                     + name
-                    + "\", \"inputs\": {...}, \"request_id\": \"...\"}. The "
-                    "result includes the run's signed receipt.",
+                    + "\", \"inputs\": {...}, \"request_id\": \"...\"}. A "
+                    "finished run's result includes its signed receipt when Flow "
+                    "wrote one.",
                     tags=["openadapt", "workflow", "receipt"],
                     input_modes=["application/json"],
                     output_modes=["application/json", MEDIA_TYPE],
@@ -204,8 +205,8 @@ def build_agent_card(
         name="OpenAdapt",
         description=(
             "Runs compiled OpenAdapt workflows on this computer and checks that "
-            "they saved. Every run's result carries its signed receipt, and any "
-            "agent can send a handoff to be verified."
+            "they saved. A finished run's result carries its signed receipt when "
+            "Flow wrote one, and any agent can send a handoff to be verified."
         ),
         provider=AgentProvider(organization="OpenAdapt", url="https://openadapt.ai"),
         version=__version__,
@@ -567,8 +568,16 @@ def read_token(path: Optional[str]) -> Optional[str]:
 
 def serve(bridge: AgentBridge, config: A2AConfig) -> None:
     """Serve until interrupted."""
+    import sys
+
     import uvicorn
 
+    print(
+        f"openadapt-agent: serving over A2A at {config.base_url} (Agent Card "
+        f"{config.base_url}/.well-known/agent-card.json); "
+        + ("bearer token required" if config.token else "loopback only"),
+        file=sys.stderr,
+    )
     uvicorn.run(
         build_app(bridge, config),
         host=config.host,

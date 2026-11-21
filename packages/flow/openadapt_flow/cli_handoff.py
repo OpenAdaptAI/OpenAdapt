@@ -88,6 +88,28 @@ def register(sub: argparse._SubParsersAction) -> None:
     v.add_argument("--json", action="store_true", help="print the verdict as JSON")
     v.set_defaults(func=cmd_verify)
 
+    k = hsub.add_parser(
+        "key",
+        help="Print this computer's receipt key, for another agent to trust",
+        allow_abbrev=False,
+    )
+    k.set_defaults(func=cmd_key)
+
+    t = hsub.add_parser(
+        "trust",
+        help="Add another party's key (from `handoff key`) to your key registry",
+        allow_abbrev=False,
+    )
+    t.add_argument("key_file", help="the other party's `handoff key` output")
+    t.add_argument("--org", required=True, help="who they are, e.g. 'Example Clinic'")
+    t.add_argument(
+        "--keys",
+        required=True,
+        metavar="REGISTRY",
+        help="your registry file (created if missing)",
+    )
+    t.set_defaults(func=cmd_trust)
+
 
 def _read(path: str) -> bytes:
     if path == "-":
@@ -219,3 +241,57 @@ def cmd_verify(args: argparse.Namespace) -> int:
     else:
         _print_verdict(verdict)
     return 0 if verdict["integrity"] == "intact" else 1
+
+
+def cmd_key(args: argparse.Namespace) -> int:
+    from openadapt_flow.offline_seal import public_key_entry, seal_home
+
+    try:
+        entry = public_key_entry(seal_home())
+    except Exception as exc:  # noqa: BLE001 - no usable key: say so, sign nothing
+        print(f"handoff key: no receipt key on this computer ({exc})", file=sys.stderr)
+        return 2
+    print(json.dumps({"key_id": entry["key_id"], "public_key": entry["public_key"]}, indent=2))
+    return 0
+
+
+def cmd_trust(args: argparse.Namespace) -> int:
+    """Pin another party's key as ``customer_key`` with the org you name.
+
+    Their receipts then verify as "Signed by <org>'s key", never as this
+    computer. The registry is parsed again after the change, so a bad
+    entry is refused before it is written.
+    """
+    from openadapt_types import receipt as r
+
+    try:
+        entry = r.loads_strict(Path(args.key_file).read_text("utf-8"))
+        path = Path(args.keys)
+        registry = (
+            r.loads_strict(path.read_text("utf-8"))
+            if path.is_file()
+            else {"schema": r.REGISTRY_SCHEMA, "keys": []}
+        )
+        if not isinstance(entry, dict) or set(entry) - {"key_id", "public_key", "status"}:
+            raise ValueError("the key file is one `handoff key` entry")
+        keys = [k for k in registry.get("keys", []) if k.get("key_id") != entry.get("key_id")]
+        keys.append(
+            {
+                "key_id": entry.get("key_id"),
+                "public_key": entry.get("public_key"),
+                "role": "customer_key",
+                "org": args.org,
+                "status": "active",
+            }
+        )
+        updated = {"schema": r.REGISTRY_SCHEMA, "keys": keys}
+        r.parse_registry(updated)
+    except r.RegistryError as exc:
+        print(f"handoff trust: refused ({exc.reason}): {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as exc:
+        print(f"handoff trust: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+    path.write_text(json.dumps(updated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"handoff: {args.org}'s key {entry['key_id']} is trusted in {path}", file=sys.stderr)
+    return 0

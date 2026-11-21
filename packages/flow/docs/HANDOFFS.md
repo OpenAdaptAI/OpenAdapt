@@ -65,6 +65,22 @@ it. It rejects when your read fails. Without a read it never accepts.
 - **The pass bar.** The second party must accept no false handoff, reject no
   true one, and spend at most 2 s checking each.
 
+## Trusting another party's key
+
+Each party pins the keys it trusts. Nothing in a handoff can make a key
+trusted. The sender prints its key, and the receiver pins it under the
+sender's name:
+
+```bash
+# Sender
+openadapt handoff key > sender-key.json
+# Receiver, after getting sender-key.json from the sender by a channel it trusts
+openadapt handoff trust sender-key.json --org "Example Clinic" --keys trusted-keys.json
+```
+
+Receipts from that key then verify as "Signed by Example Clinic's key". They
+never verify as "Signed by this computer", which is reserved for your own key.
+
 ## From the command line
 
 ```bash

@@ -24,13 +24,27 @@ openadapt agent serve --bundles ./bundles --mode production --a2a
 | One skill per workflow | Send a data part `{"skill": NAME, "inputs": {...}, "request_id": ID}`. |
 | Skill `verify_handoff` | Send another agent's handoff and get the verdict ([HANDOFFS.md](HANDOFFS.md)). |
 | `capabilities.extensions` | `https://openadapt.ai/extensions/handoff-receipt/v1`, not required ([HANDOFF_RECEIPTS.md](HANDOFF_RECEIPTS.md)). |
-| Task artifact `run_result` | The run result (`outcome`, `safe_to_retry` unchanged) plus the `openadapt.handoff/v1` document with the run's signed receipt (`record/run/v1`). |
+| Task artifact `run_result` | The run result (`outcome`, `safe_to_retry` unchanged), plus the `openadapt.handoff/v1` document with the run's signed receipt (`record/run/v1`) when Flow wrote one. Otherwise a text part says why no receipt is attached. |
 
 Only outcome `done` is `TASK_STATE_COMPLETED`. `needs_review` is
 `TASK_STATE_INPUT_REQUIRED`: a person at this computer decides. A message on
 that task only re-checks the run; it never approves it. Every other outcome
 is `TASK_STATE_FAILED`. Cancelling a task never stops a run part way through
 a write; the server answers `TaskNotCancelableError`.
+
+## When a run has no receipt
+
+Flow writes `receipt.json` after every `openadapt-flow run` and `replay`.
+Three kinds of run have none:
+
+- **Sandbox runs.** `--mode sandbox` runs on a synthetic app, not through
+  the Flow CLI.
+- **Encrypted runs.** With `OPENADAPT_FLOW_AT_REST=strict`, the run folder is
+  encrypted at rest and Flow writes no receipt.
+- **Runs with receipts off.** Runs with `OPENADAPT_RECEIPT=off`.
+
+For these, `get_handoff` refuses, and the A2A artifact carries the run result
+without a handoff.
 
 ## Same rules as MCP
 
@@ -47,8 +61,8 @@ A request over A2A goes through the same gate as the same request over MCP
 Only these calls exist over A2A: `list_workflows`, `run_workflow`, `get_run`,
 `get_handoff` and `verify_handoff`. Attended decisions, admission decisions
 and approval answers need a person in a confirmation form, so A2A doesn't
-serve them. `--authoring`, `--guard`, `--verify`, `--teach` and
-`--teach-browser` stay on MCP stdio.
+serve them. `--authoring`, `--guard`, `--verify`, `--teach`,
+`--teach-browser` and `--allow-protected-export` stay on MCP stdio.
 
 ## Network
 

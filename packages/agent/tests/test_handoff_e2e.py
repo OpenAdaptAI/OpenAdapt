@@ -404,6 +404,17 @@ def test_mcp_run_get_handoff_and_verify(bridge, signer, mcp_client):
     assert h.verify_handoff(handoff, _registry(signer)).ok
 
 
+def test_a2a_refuses_flags_that_need_a_person_or_export_protected_data(bundles_root, capsys):
+    from openadapt_flow.agent.cli import main
+
+    for flag in (["--allow-protected-export"], ["--authoring"]):
+        assert main(["serve", "--bundles", str(bundles_root), "--a2a", *flag]) == 2
+    err = capsys.readouterr().err
+    assert "--allow-protected-export stays on local MCP stdio" in err
+    assert "--authoring needs a person" in err
+    assert main(["serve", "--a2a-token-file", "x"]) == 2
+
+
 def test_handoff_tools_are_off_unless_asked(bundles_root, runner_config):
     bridge = AgentBridge(bundles_root, runner_config, allow_run=True, mode="production")
     names = {s.name for s in bridge.list_tool_specs()}
@@ -440,7 +451,14 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
             return h.ReceiverRecord("recorded_differently", ("note",))
         return h.ReceiverRecord("recorded_as_intended")
 
-    registry = _registry(signer)
+    # B pins A's key under A's name, never as "this computer".
+    registry = r.parse_registry(
+        {
+            "schema": r.REGISTRY_SCHEMA,
+            "keys": [{**signer.registry_entry(), "role": "customer_key", "org": "Party A"}],
+        }
+    )
+    signer_lines: set[tuple[str, ...]] = set()
     decisions: list[tuple[str, str, float]] = []
 
     class Inbox(BaseHTTPRequestHandler):
@@ -454,6 +472,7 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
             spent = time.perf_counter() - started
             kind = json.loads(body)["payload"]["content"]["kind"]
             decisions.append((kind, verdict.decision, spent))
+            signer_lines.add(tuple(verdict.signer_lines))
             self.send_response(202)
             self.end_headers()
 
@@ -497,6 +516,7 @@ def test_two_party_twenty_handoffs_receiver_reads_its_own_record(a2a_url, bridge
         f"rejected true {len(rejected_true)}, slowest check {slowest * 1000:.1f} ms"
     )
     assert accepted_false == [] and rejected_true == []
+    assert signer_lines == {("Signed by Party A's key",)}
     assert slowest <= 2.0
     # Without its own read, the receiver never accepts on the signature.
     unchecked = h.decide(h.make_handoff({"ref": "x"}, receipts[0]), registry)

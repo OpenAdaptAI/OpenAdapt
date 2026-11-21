@@ -1587,6 +1587,11 @@ def _a2a_problem(args: argparse.Namespace) -> Optional[str]:
                 f"--a2a serves run and handoff tools only; {flag} needs a person "
                 "in an MCP client, so it stays on MCP stdio"
             )
+    if args.allow_protected_export:
+        return (
+            "--allow-protected-export stays on local MCP stdio; --a2a never "
+            "sends protected workflow data"
+        )
     if not a2a_server.a2a_available():
         return a2a_server.A2A_INSTALL_HINT
     return None

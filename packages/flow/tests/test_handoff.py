@@ -238,6 +238,23 @@ def test_cli_send_and_verify_inline_and_detached(run_dir, signer, tmp_path, caps
     assert flow_main(["handoff", "verify", str(out), "--keys", str(other)]) == 1
 
 
+def test_cli_key_and_trust_pin_the_other_party_by_name(run_dir, signer, tmp_path, capsys):
+    key = tmp_path / "sender-key.json"
+    key.write_text(json.dumps({k: v for k, v in signer.registry_entry().items() if k != "status"}))
+    keys = tmp_path / "trusted.json"
+    args = ["handoff", "trust", str(key), "--org", "Example Clinic", "--keys", str(keys)]
+    assert flow_main(args) == 0
+    registry = r.parse_registry(json.loads(keys.read_text()))
+    assert [(k.role, k.org) for k in registry] == [("customer_key", "Example Clinic")]
+    doc = h.make_handoff({"outcome": "done"}, h.receipt_for_run(run_dir))
+    assert h.verify_handoff(doc, registry).signer_lines == ["Signed by Example Clinic's key"]
+    bad = ["handoff", "trust", str(key), "--org", "x" * 80, "--keys", str(keys)]
+    assert flow_main(bad) == 2
+    key.write_text('{"key_id": "seal-ed25519-0000000000000000", "public_key": "AAAA"}')
+    assert flow_main(args) == 2
+    capsys.readouterr()
+
+
 def test_cli_send_refuses_the_private_file_and_plain_http(run_dir, tmp_path, capsys):
     payload = tmp_path / "p.json"
     payload.write_text("{}")
