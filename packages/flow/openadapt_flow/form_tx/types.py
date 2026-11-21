@@ -507,6 +507,10 @@ class FormPack(BaseModel):
     # submit, and any other value it did not set keeps the run from
     # ``verified_done``. These are listed as not covered on the receipt.
     unbound_controls: tuple["UnboundControlSpec", ...] = ()
+    # Intake keys this pack enters some other way (through derived facts) or
+    # knowingly does not enter. Any other intake key with a value that no
+    # binding enters keeps the run from ``verified_done``.
+    ignored_intake_keys: tuple[str, ...] = ()
 
     def digest(self) -> str:
         return canonical_sha256(self)
