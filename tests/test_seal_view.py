@@ -65,6 +65,11 @@ def _data(page: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def test_only_this_computers_own_key_is_labelled_this_computer(runs):
+    """A --keys registry the caller supplied is a pinned key, never "this computer"."""
+    assert "signer" not in _data(_page(runs / "run-1"))["host"]
+
+
 def test_the_viewer_ships_in_the_package_with_a_slot_and_no_network():
     html = viewer_template()
     assert html.count(DATA_SLOT) == 1
@@ -264,10 +269,13 @@ def test_the_page_verifies_the_quickstarts_real_seal(browser, runs):
     reader = Reader(browser, _page(runs / "run-1"))
     try:
         text = reader.verdict("Valid")
-        assert "checked against this computer's signing key" not in text  # keys were given
+        assert (
+            "checked against this computer's signing key" not in text
+        )  # keys were given
         signer = reader.page.locator("[data-signer]")
         assert signer.get_attribute("data-signer") == "signed"
-        assert "Signed by this computer" in signer.inner_text()
+        # The keys were given by the caller: a pinned key, never "this computer".
+        assert "Signed by a pinned key" in signer.inner_text()
         # The format is in the Raw tab, not the headline.
         assert "older format" not in signer.inner_text().lower()
         reader.page.locator("[data-tab='raw']").click()
@@ -299,8 +307,13 @@ def test_try_changing_it_flips_a_copy_and_restore_verifies_again(browser, runs):
         text = changed.inner_text()
         assert "execution_outcome" in text and "VERIFIED" in text and "HALTED" in text
         assert "→" in text
-        assert "This changed copy fails: outcome VERIFIED → HALTED. The receipt no longer matches." in text
-        assert "The published files are unchanged; this was a copy in your browser" in text
+        assert (
+            "This changed copy fails: outcome VERIFIED → HALTED. The receipt no longer matches."
+            in text
+        )
+        assert (
+            "The published files are unchanged; this was a copy in your browser" in text
+        )
         signer = reader.page.locator("[data-signer]").inner_text()
         assert signer.startswith("Not verified")
         # The other two changes appear only after "Try another change".
@@ -360,7 +373,9 @@ def test_the_stopped_run_verifies_and_replays_to_the_stop(browser, runs):
 @pytest.mark.parametrize("width", [375, 1440])
 def test_the_map_card_names_the_step_and_has_no_back_button(browser, runs, width):
     page_path = _page(runs / "run-1")
-    context = browser.new_context(viewport={"width": width, "height": 900}, reduced_motion="reduce")
+    context = browser.new_context(
+        viewport={"width": width, "height": 900}, reduced_motion="reduce"
+    )
     page = context.new_page()
     try:
         page.goto(page_path.resolve().as_uri())
@@ -382,7 +397,9 @@ def test_the_map_card_names_the_step_and_has_no_back_button(browser, runs, width
 @pytest.mark.parametrize("width", [320, 1920])
 def test_buttons_wrap_inside_their_card(browser, runs, width):
     page_path = _page(runs / "run-1")
-    context = browser.new_context(viewport={"width": width, "height": 900}, reduced_motion="reduce")
+    context = browser.new_context(
+        viewport={"width": width, "height": 900}, reduced_motion="reduce"
+    )
     page = context.new_page()
     try:
         page.goto(page_path.resolve().as_uri())

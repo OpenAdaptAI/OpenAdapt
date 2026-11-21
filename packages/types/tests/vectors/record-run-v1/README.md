@@ -119,10 +119,11 @@ files are referenced only by SHA-256 digest.
    copies the original's `subject` and every predicate field except
    `confirmations` and `follows`. A chain verifies only when the original
    verifies and is not itself a follow-up, every update verifies on its own,
-   names the original's payload digest, counts 1, 2, 3, copies the original
+   is signed only by keys that signed the original, names the original's
+   payload digest, counts 1, 2, 3, copies the original
    unchanged, and has the same demo marking as the original. Refusals:
    `original_refused`, `original_is_follow_up`, `update_refused`,
    `not_a_follow_up`, `wrong_original`, `out_of_sequence`, `changed_original`,
-   `mixed_demo`. A valid chain's `lines` are the original's confirmation
+   `mixed_demo`, `different_signer`. A valid chain's `lines` are the original's confirmation
    lines, then `Update N: <line>` for each update's. `chain-*.json` holds
    `{chain: {original, updates}, expected: {ok, reason, lines}}`.
