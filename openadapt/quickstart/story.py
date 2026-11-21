@@ -110,11 +110,11 @@ class NextSteps:
     #: The command that checks one run folder, for its Seal page.
     verify_run: Optional[Callable[[Path], str]] = None
     #: In a terminal and outside CI only: asks once whether to publish the
-    #: run's public Seal, and does so on a yes. Called as
-    #: ``offer_publish(run_dir, say, ask)``; returns False, having said
-    #: nothing, when hosted Seals are not live.
+    #: public Seals of the checked run and the stopped run, and does so on a
+    #: yes. Called as ``offer_publish(run_dirs, say, ask)``; returns False,
+    #: having said nothing, when hosted Seals are not live.
     offer_publish: Optional[
-        Callable[[Path, Callable[[str], None], Callable[[str], str]], bool]
+        Callable[[list[Path], Callable[[str], None], Callable[[str], str]], bool]
     ] = None
 
 

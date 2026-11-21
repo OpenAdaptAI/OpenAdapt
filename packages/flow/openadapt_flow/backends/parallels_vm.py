@@ -742,9 +742,12 @@ class ParallelsVM:
         launcher = os.path.abspath(os.path.join(_SCRIPT_DIR, "session1_launch.py"))
         self.exec_cmd(f"if not exist {GUEST_DIR} mkdir {GUEST_DIR}")
         self.push_file(server, f"{GUEST_DIR}/win_agent_server.py", host_ip=host_ip)
-        self.push_file(
-            native_value, f"{GUEST_DIR}/win_agent_native_value.py", host_ip=host_ip
-        )
+        for helper in ("keyboard_lease", "native_value"):
+            self.push_file(
+                os.path.join(os.path.dirname(server), helper + ".py"),
+                f"{GUEST_DIR}/win_agent_{helper}.py",
+                host_ip=host_ip,
+            )
         self.push_file(launcher, f"{GUEST_DIR}/session1_launch.py", host_ip=host_ip)
         self.exec(
             [

@@ -437,7 +437,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
+        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # every one of its 88 pull-request runs and used 168 runner-minutes.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -1105,7 +1108,7 @@ jobs:
         # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
-        run: uv pip install --require-hashes -r ci/crewai-1.6.1.txt
+        run: uv pip install --no-config --require-hashes -r ci/crewai-1.6.1.txt
       - name: Install and launch Playwright browser
         timeout-minutes: 12
         run: >-
