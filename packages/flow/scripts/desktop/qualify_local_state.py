@@ -67,6 +67,9 @@ class Example:
     def reset(self, lab: winrm_lab.WinRMLab) -> None:
         raise NotImplementedError
 
+    def bring_to_front(self, agent: Any, viewport: tuple[int, int]) -> None:
+        return None
+
     def demonstrate(self, rec: Any, viewport: tuple[int, int]) -> None:
         raise NotImplementedError
 
@@ -101,6 +104,17 @@ class NotepadSave(Example):
             name="OAFlowLSC",
         )
         time.sleep(6)
+
+    def bring_to_front(self, agent: Any, viewport: tuple[int, int]) -> None:
+        """Setup, not part of the demonstration: put Notepad in front.
+
+        A window started from a scheduled task doesn't always get the
+        foreground, so typed keys could go nowhere. One click in the empty
+        editor puts the caret there, the state a person starts from.
+        """
+        w, h = viewport
+        agent.click(w // 2, h // 2)
+        time.sleep(1.0)
 
     def demonstrate(self, rec: Any, viewport: tuple[int, int]) -> None:
         # Notepad opens the file with the caret in the editor, so the person
@@ -243,6 +257,7 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
         run_record={"executor_kind": "human", "executor_id": "lab-demonstration"},
     )
     row["record_baseline"] = _capture_baseline(lab, rec_check)[-300:]
+    example.bring_to_front(agent, viewport)
     t0 = time.monotonic()
     recording = record_desktop_demo(agent, out / "recording", lambda r: example.demonstrate(r, viewport))
     row["record_s"] = round(time.monotonic() - t0, 1)
@@ -266,6 +281,7 @@ def run_trial(example: Example, out: Path, row: dict[str, Any]) -> None:
         run_record={"executor_kind": "flow_replay", "executor_id": f"lab-{example.name}"},
     )
     row["replay_baseline"] = _capture_baseline(lab, run_check)[-300:]
+    example.bring_to_front(agent, viewport)
     t0 = time.monotonic()
     report = Replayer(agent, use_structural=True).run(
         workflow,
