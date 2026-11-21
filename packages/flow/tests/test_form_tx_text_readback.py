@@ -298,7 +298,9 @@ def test_text_summary_showing_an_empty_value_fails(browser: Any, layout: str) ->
     assert result.receipt is None
 
 
-@pytest.mark.parametrize("layout", ["dl", "table_row", "inline", "shadow"])
+@pytest.mark.parametrize(
+    "layout", ["dl", "table_row", "table_columns", "inline", "shadow"]
+)
 def test_label_shown_twice_is_not_checked(browser: Any, layout: str) -> None:
     result, _ = _run(browser, layout, "duplicate")
     assert result.outcome == FormTxOutcome.READBACK_INCOMPLETE, result.what_happened
@@ -306,6 +308,41 @@ def test_label_shown_twice_is_not_checked(browser: Any, layout: str) -> None:
     assert verdicts["applicant.first_name"].status == ReadbackStatus.NOT_CHECKED
     assert verdicts["property.roof_material"].status == ReadbackStatus.PASSED
     assert result.receipt is None
+
+
+HIDDEN_DD = """<!doctype html><html><body><h1>Quote saved</h1><dl id="summary">
+<dt>Middle name</dt><dd style="display:none"></dd>
+<dt>Last name</dt><dd>Smith</dd>
+<dt style="display:none">Suffix</dt><dd>Jr</dd>
+<dt>City</dt><dd>Saltmarsh</dd>
+</dl></body></html>"""
+
+
+def test_hidden_dd_never_lets_a_later_value_join_earlier_labels(
+    browser: Any,
+) -> None:
+    context = browser.new_context()
+    try:
+        context.route(
+            f"{ORIGIN}/**",
+            lambda route: route.fulfill(
+                status=200, content_type="text/html", body=HIDDEN_DD
+            ),
+        )
+        page = context.new_page()
+        surface = PlaywrightFormSurface(page, _profile(), base_origin=ORIGIN)
+        surface.goto(f"{ORIGIN}/summary")
+        pairs = {p.label: p.value for p in surface.snapshot().text_pairs}
+    finally:
+        context.close()
+    # The hidden dd is an empty value, not "Smith"; the hidden dt's value is
+    # dropped rather than joined onto "Last name".
+    assert pairs.get("Middle name", "") == ""
+    assert pairs["Last name"] == "Smith"
+    assert "Suffix" not in pairs
+    assert pairs["City"] == "Saltmarsh"
+    snap_pairs = [p for p in pairs.values() if "Jr" in p]
+    assert not snap_pairs
 
 
 def test_page_text_is_never_a_fill_target(browser: Any) -> None:
