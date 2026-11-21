@@ -343,15 +343,13 @@ def _check_approval(a: Approval) -> Optional[str]:
     for key, value in a.commitments.items():
         if not _APPROVAL_KEY.fullmatch(key) or not re.fullmatch(_SHA256_HEX[1:-1], value):
             return f"approval commitment {key!r} is not a known field"
-    if a.mode == "not_gated":
-        if a.approver_kind != "none":
-            return "a not_gated run names no approver"
-    elif a.approver_kind == "none" or set(a.commitments) != {
-        "principal",
-        "scope",
-        "approved_at",
-    }:
-        return "a gated approval names its approver kind, principal, scope and time"
+    if a.mode == "not_gated" and a.approver_kind != "none":
+        return "a not_gated run names no approver"
+    if a.approver_kind == "none":
+        if a.commitments:
+            return "an approval with no approver commits to nothing"
+    elif not {"principal", "scope"} <= set(a.commitments):
+        return "an approval names its approver's principal and scope"
     return None
 
 
@@ -1017,6 +1015,9 @@ def approval_line(a: Optional[Approval]) -> str:
         return "No approval recorded"
     if a.mode == "not_gated":
         return "Not gated: no approval was required for these writes"
+    if a.approver_kind == "none":
+        mode = "each item" if a.mode == "each_item" else "items that fail a check"
+        return f"Approval required for {mode}; no item was approved"
     who = "a person" if a.approver_kind == "person" else "an agent delegate"
     how = "each item" if a.mode == "each_item" else "items that failed a check"
     return f"Approved by {who}: {how}"

@@ -227,3 +227,63 @@ def test_the_public_allow_list_is_inside_todays_public_fields():
             schema, field = source.split(":")
             known = card_fields if schema == "public-card/v1" else evidence_fields
             assert field in known, (version, path, source)
+
+
+def _approved_run(tmp_path: Path, approvals: list, mode: str = "each_item") -> Path:
+    run = _run(tmp_path, "VERIFIED", f"approved-{mode}-{len(approvals)}")
+    report = json.loads((run / "report.json").read_text())
+    report["approval"] = {
+        "schema_version": "openadapt.approval-mode-item/v1",
+        "mode": mode,
+        "decision": "approved" if approvals else "no_person",
+        "needs_person": False,
+        "approvals": approvals,
+    }
+    (run / "report.json").write_text(json.dumps(report))
+    return run
+
+
+PERSON_APPROVAL = {
+    "step_id": "save",
+    "request_sha256": "sha256:" + "3" * 64,
+    "answer_sha256": "sha256:" + "4" * 64,
+    "decision": "approved",
+    "decided_by": "human",
+    "route": "desktop_run_it",
+    "approver_kind": "cloud_user",
+    "approver_id": "usr_synthetic01",
+    "auth_method": "cloud_aal2",
+}
+
+
+def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
+    run = _approved_run(tmp_path, [PERSON_APPROVAL])
+    write_receipt_record(run)
+    payload = base64.b64decode(json.loads((run / "receipt.json").read_text())["payload"])
+    assert b"usr_synthetic01" not in payload
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    approval = result.statement["predicate"]["approval"]
+    assert (approval["mode"], approval["approver_kind"]) == ("each_item", "person")
+    assert set(approval["commitments"]) == {"principal", "scope"}
+    assert result.approval_line == "Approved by a person: each item"
+    assert result.disclosed["approval.principal"].startswith("person:pr-")
+    out = _verify(str(run))
+    assert "Approved by a person: each item" in out.output
+
+
+def test_an_unapproved_run_says_no_approval_recorded(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok
+    assert "approval" not in result.statement["predicate"]
+    assert result.approval_line == "No approval recorded"
+    assert "No approval recorded" in _verify(str(run)).output
+
+
+def test_a_not_gated_run_says_so(tmp_path):
+    run = _approved_run(tmp_path, [], mode="not_gated")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.approval_line == "Not gated: no approval was required for these writes"

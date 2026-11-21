@@ -97,7 +97,10 @@ files are referenced only by SHA-256 digest.
    `approver_kind` (`person`, `agent`, `none`) and `commitments` to
    `principal` (`<kind>:pr-<16 hex>`, never a name), `scope` (a 64-hex digest)
    and `approved_at` (ISO seconds), opened only from the private sidecar at
-   `approval.<key>`. `not_gated` has kind `none`; the other modes need a kind
-   and all three commitments. Lines: "Approved by a person: each item",
+   `approval.<key>`. `not_gated` has kind `none`. Kind `none` commits to
+   nothing; a `person` or `agent` approval commits at least to `principal`
+   and `scope` (`approved_at` when the run recorded it). Lines: "Approved by a person: each item",
    "Approved by an agent delegate: items that failed a check", "Not gated: no
-   approval was required for these writes".
+   approval was required for these writes", and for a gated run in which no
+   item was approved, "Approval required for each item; no item was
+   approved" (or "items that fail a check").
