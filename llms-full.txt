@@ -2465,11 +2465,9 @@ automation into an independently certified transaction system.
   In reverse-proxy mode only the upstream origin is allowed; in browser route
   mode, any origin on the tap's allowlist. Other targets are still refused, and
   the tap never follows a redirect itself (#2392).
-- A Windows agent that advertises `native_keyboard_lease_v1` binds native
-  typing, keys and hotkeys to a one-shot focus lease over the live control and
-  the frame that authorized the input. If focus changes during delivery, no
-  further key goes down and held keys are released. A complete native value
-  observation needs two agreeing independent reads (#2313).
+- Guarded native keyboard delivery on a Windows agent that advertises
+  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
+  control and frame. #2313 describes when it applies and what it checks.
 - A repair candidate id that would leave the repair store is refused (#2369).
 - `wrap publish` no longer refuses programs whose identity templates carry
   `punctuation_body_keys`. These values are salted token hashes, the same
@@ -2481,10 +2479,8 @@ automation into an independently certified transaction system.
 - An admitted managed run, and its resume, keep the policy the local Standard
   gate chose when neither the CLI nor the deployment names one, instead of
   exiting with code 2 (#2401).
-- Lens route induction can take a route's role from its observed effects
-  instead of its HTTP method, so some apps that create with `PUT` or update
-  with `POST` get the right roles. Where the trace does not show the effect,
-  roles still follow the method (#2393).
+- Lens route induction can use a trace's observed effects, not only HTTP
+  methods, to assign route roles (#2393).
 - Generated verify contracts stop fewer correct writes: five generator causes
   of false stops are fixed, each by one schema-independent rule (#2418).
 - `import openadapt_flow` loads its `ir` re-exports on first use, and the
