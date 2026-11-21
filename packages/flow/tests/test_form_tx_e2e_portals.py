@@ -78,6 +78,10 @@ def test_full_three_arm_multi_portal_benchmark():
         and c.arm == "openadapt_form_tx"
     )
     assert uw_06_tx.human_decisions == 1
+    # The saved record is checked against the server oracle on its own, so a
+    # wrong stored answer fails here whatever the run's outcome.
+    assert uw_06_tx.saved_record_accurate is True
+    assert all(c.saved_record_accurate is True for c in underwriting_tx)
 
     # Zero-mutation keepalive & request_id idempotency on second synthetic portal
     assert report.hms_keepalive_pings >= 1
