@@ -544,7 +544,9 @@ def test_a_real_download_beneath_a_mixed_store_is_not_verified(
     monkeypatch.setenv("TMPDIR", str(store))
     monkeypatch.setenv("TMP", str(store))
     monkeypatch.setenv("TEMP", str(store))
-    verifier = DocumentHashVerifier(store, glob="**/*.pdf", producer="system_of_record")
+    # Playwright saves a download under a random name with no extension, so
+    # a store whose glob matches every file is the one that picks it up.
+    verifier = DocumentHashVerifier(store, glob="**/*", producer="system_of_record")
     before = verifier.capture_pre_state()
     with _ClaimServer(tmp_path / "app-store") as app:
         with sync_api.sync_playwright() as pw:
@@ -576,7 +578,7 @@ def test_a_real_download_beneath_a_mixed_store_is_not_verified(
             if child.is_file():
                 child.unlink()
     (store / "reports" / "claim.pdf").write_bytes(PDF_BYTES)
-    fresh = DocumentHashVerifier(store, glob="**/*.pdf", producer="system_of_record")
+    fresh = DocumentHashVerifier(store, glob="**/*", producer="system_of_record")
     verdict = fresh.verify(_hash_effect(), before)
     assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
     assert verdict.read_evidence["provenance"]["check_level"] == "system_of_record"
