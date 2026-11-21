@@ -538,16 +538,6 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
-    # -- artifact provenance (file, document, document-hash, email) ----------
-    #: Who wrote what ``root`` holds: ``acting_session``, ``separate_session``,
-    #: ``system_of_record`` or ``unknown`` (the default, graded like the acting
-    #: session). Sets the strongest check level; see
-    #: ``runtime/effects/artifact_provenance.py``.
-    artifact_producer: Optional[str] = None
-    #: Folders the acting session writes or downloads into. A ``root`` that
-    #: overlaps one is graded as the acting session's whatever is declared.
-    acting_roots: list[str] = Field(default_factory=list)
-
     # -- plugin record-check packs (registered kinds only) --------------------
     #: Non-secret settings for a PLUGIN verifier kind: the per-system record
     #: check a private pack implements (which read endpoint, which record
@@ -574,6 +564,16 @@ class EffectsConfig(BaseModel):
     # -- shared --------------------------------------------------------------
     timeout_s: float = 5.0
     poll_interval_s: float = 0.2
+
+    # -- artifact provenance (file, document, document-hash, email) ----------
+    #: Who wrote what ``root`` holds: ``acting_session``, ``separate_session``,
+    #: ``system_of_record`` or ``unknown`` (the default, graded like the acting
+    #: session). Sets the strongest check level; see
+    #: ``runtime/effects/artifact_provenance.py``.
+    artifact_producer: Optional[str] = None
+    #: Folders the acting session writes or downloads into. A ``root`` that
+    #: overlaps one is graded as the acting session's whatever is declared.
+    acting_roots: list[str] = Field(default_factory=list)
 
     @field_validator("options")
     @classmethod
