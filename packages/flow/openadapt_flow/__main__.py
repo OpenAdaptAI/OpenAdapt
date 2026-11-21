@@ -13194,10 +13194,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_receipt(sub)
 
-    from openadapt_flow.cli_handoff import register as _register_handoff
-
-    _register_handoff(sub)
-
     from openadapt_flow.learn import register as _register_learn
 
     _register_learn(sub)
