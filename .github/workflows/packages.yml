@@ -966,6 +966,7 @@ jobs:
             tests/e2e/test_browser_teach_write_guard_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
             tests/e2e/test_wrap_example_e2e.py \
+            tests/e2e/test_wrap_command_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Golden runs (report, artifacts and actions unchanged)
         # docs/design/DECOMPOSITION.md, section 3.1. The baselines are Linux
