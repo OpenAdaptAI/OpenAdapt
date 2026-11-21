@@ -824,7 +824,6 @@ def test_proxy_mcp_endpoint_needs_its_token_and_scrubs_the_child(
     tmp_path: Path,
 ) -> None:
     import httpx
-
     from openadapt_flow.txplan.proxy import McpServer, child_environment
 
     db = _users(tmp_path / "app.sqlite", n=5)
@@ -885,3 +884,38 @@ def test_proxy_mcp_endpoint_needs_its_token_and_scrubs_the_child(
         ["postgres://u:pw@h/db"],
     )
     assert env == {"PATH": "/bin"}
+
+
+def test_proxy_overlapping_rows_after_apply_are_a_possible_replay(
+    tmp_path: Path,
+) -> None:
+    db = _users(tmp_path / "app.sqlite", n=50)
+    proxy = _proxy(db, max_rows=100)
+    a = proxy.preview("UPDATE users SET name = 'refund' WHERE id = 9")
+    proxy.apply(a["plan"])
+    b = proxy.preview("UPDATE users SET name = 'refund again' WHERE id IN (9, 10)")
+    assert b["ledger"] == "possible_replay" and b["approval"].startswith("waiting")
+    other = proxy.preview("UPDATE users SET name = 'other' WHERE id IN (11, 12)")
+    assert other["ledger"] == "free" and other["approval"] == "approved by policy"
+
+
+def test_proxy_query_refuses_a_write(tmp_path: Path) -> None:
+    db = _users(tmp_path / "app.sqlite", n=5)
+    before = _all(db)
+    proxy = _proxy(db)
+    assert proxy.query("SELECT count(*) FROM users")["rows"] == [[5]]
+    for bad in (
+        "COMMIT; UPDATE users SET name = 'x'",
+        "UPDATE users SET name = 'x'",
+        "SELECT 1; DELETE FROM users",
+    ):
+        text, is_error = proxy.call("sql_query", {"sql": bad})
+        assert is_error, bad
+    text, is_error = proxy.call(
+        "sql_query",
+        {
+            "sql": "WITH x AS (SELECT 1) INSERT INTO users (name, role, active) SELECT 'y', 'm', 1 FROM x"
+        },
+    )
+    assert is_error
+    assert _all(db) == before

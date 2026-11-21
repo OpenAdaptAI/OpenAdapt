@@ -32,7 +32,6 @@ from typing import Any, Callable
 
 import httpx
 import yaml
-
 from openadapt_flow.txplan import engine
 from openadapt_flow.txplan.adapters import MailAdapter, RestAdapter, SqlAdapter
 from openadapt_flow.txplan.engine import Ctx, TxRefused

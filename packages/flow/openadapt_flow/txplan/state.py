@@ -147,6 +147,12 @@ class State:
         )
         return "ik-" + hmac.new(self.secret(), body, hashlib.sha256).hexdigest()[:40]
 
+    def tag(self, text: str) -> str:
+        """A keyed tag for a row id or a task: comparable, never the value."""
+        return hmac.new(
+            self.secret(), text.encode("utf-8"), hashlib.sha256
+        ).hexdigest()[:20]
+
     # -- the lock ------------------------------------------------------------
 
     @contextlib.contextmanager

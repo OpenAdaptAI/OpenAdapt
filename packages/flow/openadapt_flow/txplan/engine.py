@@ -276,6 +276,19 @@ def _write_run(
     return run_dir
 
 
+def receipt_status(run_dir: Path | str) -> str:
+    """``signed``, or why the phase has no receipt."""
+    run_dir = Path(run_dir)
+    if (run_dir / "receipt.json").exists():
+        return "signed"
+    err = run_dir / "receipt.error.json"
+    return (
+        f"not signed: {read_json(err).get('error', '')[:120]}"
+        if err.exists()
+        else "not signed"
+    )
+
+
 def _line(
     *, ok: bool, verified: Optional[bool], irreversible: bool, payload: str, code: str
 ) -> dict[str, Any]:
@@ -567,11 +580,15 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
         for i, res in zip(idx, pre):
             d = res["staged_diff"]
             touched = sorted([*d["changed"], *d["removed"]])
+            tables = sorted({r.split("/", 1)[0] for r in d["added"]})
             if touched:
                 slots[i] = "rows:" + sha256(touched)[:32]
             else:
-                tables = sorted({r.split("/", 1)[0] for r in d["added"]})
                 slots[i] = "insert:" + ",".join(tables) if tables else "noop"
+            writes[i]["row_tags"] = sorted(
+                {state.tag(r) for r in touched}
+                | {state.tag("insert:" + t) for t in tables}
+            )
     for w, slot in zip(writes, slots):
         if w["op"] in ("update", "delete"):
             dup = [
@@ -597,6 +614,13 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
         )
         w["irreversible"] = _irreversible(spec.system(w["system"]), w)
     # The ledger first: a key already used under another payload is a replay.
+    task_tag = state.tag("task:" + task)
+    applied_rows: dict[str, set[str]] = {}
+    if any(w["op"] == "sql" for w in writes):
+        for e in state.entries():
+            begun = next((x for x in reversed(e.events) if x["event"] == "begun"), {})
+            if e.status not in FREE and begun.get("task_tag") == task_tag:
+                applied_rows[e.key] = set(begun.get("rows") or [])
     replays = []
     for n, w in enumerate(writes):
         entry = state.entry(w["key"])
@@ -612,6 +636,14 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
             replays.append(
                 {"write": n, "status": w["ledger"], "prior_plan": entry.plan[:12]}
             )
+        elif w["op"] == "sql":
+            # Overlap, not only the exact row set: `id IN (9, 10)` after `id = 9`.
+            mine = set(w.get("row_tags") or [])
+            if any(k != w["key"] and mine & rows for k, rows in applied_rows.items()):
+                w["ledger"] = "possible_replay"
+                replays.append(
+                    {"write": n, "status": "possible_replay", "prior_plan": ""}
+                )
     baselines: list[Optional[dict]] = []
     for w in writes:
         base = None
@@ -775,7 +807,13 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
         approval=None,
         started=started,
     )
-    return {**core, "digest": digest, "run_dir": str(run), "anomaly_details": anomalies}
+    return {
+        **core,
+        "digest": digest,
+        "run_dir": str(run),
+        "receipt": receipt_status(run),
+        "anomaly_details": anomalies,
+    }
 
 
 def load_plan(state: State, digest: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -959,7 +997,14 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 )
                 continue
             state.record(
-                key, "begun", plan=digest, payload=payload, op=w["op"], slot=w["slot"]
+                key,
+                "begun",
+                plan=digest,
+                payload=payload,
+                op=w["op"],
+                slot=w["slot"],
+                task_tag=state.tag("task:" + plan["task"]),
+                rows=w.get("row_tags"),
             )
             if w["irreversible"]:
                 release_at = now() + float(plan["holdback_s"])
@@ -1068,7 +1113,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             state.plan_dir(digest) / "applied.json",
             {"images": images, "frames_after": after},
         )
-        ok = not stop and not missed and not tx["refuted"]
+        ok = not stop and not missed and not false and not tx["refuted"]
         outcome = (
             "VERIFIED"
             if ok and not tx.get("held")
@@ -1088,6 +1133,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             "outcome": outcome,
             "tx": tx,
             "run_dir": str(run),
+            "receipt": receipt_status(run),
             "missed": missed,
             "false": false,
         }
@@ -1269,6 +1315,7 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             "outcome": outcome,
             "tx": tx,
             "run_dir": str(run),
+            "receipt": receipt_status(run),
             "collateral": collateral,
         }
 
@@ -1386,7 +1433,12 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
             approval=state.approval_record(digest),
             started=started,
         )
-        return {"outcome": outcome, "tx": tx, "run_dir": str(run)}
+        return {
+            "outcome": outcome,
+            "tx": tx,
+            "run_dir": str(run),
+            "receipt": receipt_status(run),
+        }
 
 
 def summary_lines(plan: Mapping[str, Any]) -> list[str]:

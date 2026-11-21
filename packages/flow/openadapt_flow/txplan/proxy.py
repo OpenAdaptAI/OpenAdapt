@@ -155,13 +155,22 @@ class Proxy:
     # tools -------------------------------------------------------------------
 
     def query(self, sql: str) -> dict[str, Any]:
-        """A read, in a transaction that is always rolled back."""
-        con = self.adapter.connect()
+        """One read statement, on a read-only connection or in a read-only
+        transaction, always rolled back. Anything else is refused."""
+        from openadapt_flow.txplan.engine import _READ
+
+        text = sql.strip().rstrip(";").strip()
+        if ";" in text or not _READ.match(text):
+            raise ValueError(
+                "sql_query takes one read statement; use sql_preview for a write"
+            )
+        con = self.adapter.connect(read_only=True)
         try:
             cur = con.cursor()
             self.adapter._begin(cur)
             if self.adapter.system.dialect == "postgresql":
                 cur.execute("SET TRANSACTION READ ONLY")
+            sql = text
             try:
                 cur.execute(sql)
                 cols = [str(d[0]) for d in (cur.description or [])]
@@ -510,5 +519,8 @@ def run(
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def default_task() -> str:
-    return "proxy-" + sha256([os.getpid(), secrets.token_hex(8)])[:16]
+def default_task(database: str) -> str:
+    """One task per database and project folder, stable across restarts, so a
+    relaunched proxy still knows what this project already wrote. ``--task``
+    starts a new one."""
+    return "proxy-" + sha256([database, str(Path.cwd().resolve())])[:16]

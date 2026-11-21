@@ -401,7 +401,7 @@ class SqlAdapter:
 
     # connection -------------------------------------------------------------
 
-    def connect(self) -> Any:
+    def connect(self, *, read_only: bool = False) -> Any:
         s = self.system
         if s.dialect == "sqlite":
             import sqlite3
@@ -410,6 +410,9 @@ class SqlAdapter:
             path = Path(str(s.path))
             if not path.is_absolute() and self.root is not None:
                 path = Path(self.root) / path
+            if read_only:
+                uri = path.resolve().as_uri() + "?mode=ro"
+                return sqlite3.connect(uri, uri=True, isolation_level=None)
             con = sqlite3.connect(str(path), isolation_level=None)
             return con
         module = importlib.import_module(str(s.driver))
