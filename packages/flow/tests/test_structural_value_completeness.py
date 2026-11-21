@@ -195,24 +195,61 @@ def test_unqualified_scope_and_name_only_sources_never_become_values(
     assert answer["text"] is None and answer["complete"] is False
 
 
-@pytest.mark.parametrize("stage", ["sensitivity", "children_error", "depth_limit"])
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "sensitivity_property_query",
+        "sensitivity_provider_refusal",
+        "sensitivity_missing_status",
+        "sensitivity_unrecognized_status",
+        "sensitivity_structure_query",
+        "sensitivity_native_edit",
+        "sensitivity_recheck",
+        "children_error",
+        "depth_limit",
+    ],
+)
 def test_census_trace_records_only_the_stopping_stage(monkeypatch, capsys, stage):
     import sys
 
     import openadapt_flow.backends.win_agent.server as server
+    from openadapt_flow.backends.win_agent import native_value
+    from tests.test_approval_form_fields import _UNSUPPORTED_PROPERTY
 
     control = _Control("EditControl", value="synthetic fixture content")
     control.AutomationId = "field"
     window = _window(control)
     perform = _agent(monkeypatch, window)
     sys.modules["uiautomation"].GetRootControl = lambda: window
-    if stage == "sensitivity":
-        control.GetPropertyValueEx = lambda *_: None
+    calls = []
+
+    def fail(*_):
+        raise RuntimeError("private provider exception")
+
+    def property_value(property_id, _):
+        calls.append(property_id)
+        if stage == "sensitivity_property_query":
+            fail()
+        if stage == "sensitivity_provider_refusal":
+            return True
+        if stage == "sensitivity_missing_status":
+            return None
+        if stage == "sensitivity_unrecognized_status":
+            return "private provider answer"
+        if stage == "sensitivity_structure_query" and property_id == 30043:
+            fail()
+        if stage == "sensitivity_recheck" and len(calls) == 2:
+            return True
+        return _UNSUPPORTED_PROPERTY
+
+    if stage.startswith("sensitivity_"):
+        control.GetPropertyValueEx = property_value
+        if stage == "sensitivity_structure_query":
+            control.ControlTypeName = "PaneControl"
+        monkeypatch.setattr(
+            native_value, "_native_plain_edit", lambda _: stage == "sensitivity_recheck"
+        )
     elif stage == "children_error":
-
-        def fail():
-            raise RuntimeError("private provider exception")
-
         control.GetChildren = fail
     else:
         monkeypatch.setattr(server, "_MAX_UIA_DEPTH", 0)
@@ -222,8 +259,11 @@ def test_census_trace_records_only_the_stopping_stage(monkeypatch, capsys, stage
     refusal = perform("read", request)
     assert refusal["reason"] == "not_unique" and not refusal["complete"]
     assert capsys.readouterr().err == ""
+    original_calls = list(calls)
+    calls.clear()
     monkeypatch.setenv("OAFLOW_AGENT_TRACE_CENSUS", "1")
     assert perform("read", request) == refusal
+    assert calls == original_calls
     assert capsys.readouterr().err.splitlines() == [
         f"[win-agent] strict census stop: {stage}"
     ]

@@ -1204,6 +1204,11 @@ def _find_candidates(
                 error, native_api.ValueUnavailable
             ):
                 stage = "sensitivity"
+                # Older standalone helpers report the coarse stage. Only the
+                # matching helper's enum may supply a more precise log label.
+                detail = getattr(error, "census_stage", None)
+                if type(detail) is getattr(native_api, "SensitivityStage", None):
+                    stage = detail.value
             try:
                 print(
                     f"[win-agent] strict census stop: {stage}",

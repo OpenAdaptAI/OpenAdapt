@@ -10,6 +10,7 @@ import ctypes
 import hashlib
 import time
 from dataclasses import asdict, dataclass
+from enum import Enum
 from typing import Any, Callable, Protocol
 
 MAX_UTF16_UNITS = 65536
@@ -25,8 +26,22 @@ def utf16_bytes(value: str) -> bytes:
     return value.encode("utf-16-le", errors="surrogatepass")
 
 
+class SensitivityStage(Enum):
+    """Fixed guest-only diagnostics for the strict census; never provider data."""
+
+    PROPERTY_QUERY = "sensitivity_property_query"
+    PROVIDER_REFUSAL = "sensitivity_provider_refusal"
+    MISSING_STATUS = "sensitivity_missing_status"
+    UNRECOGNIZED_STATUS = "sensitivity_unrecognized_status"
+    STRUCTURE_QUERY = "sensitivity_structure_query"
+    NATIVE_EDIT = "sensitivity_native_edit"
+    RECHECK = "sensitivity_recheck"
+
+
 class ValueUnavailable(Exception):
     """A specific absence of completeness evidence; never carries field text."""
+
+    census_stage: SensitivityStage | None = None
 
 
 @dataclass(frozen=True)
@@ -262,12 +277,26 @@ def pattern_presence(pattern: object) -> bool | None:
 
 # These UIA node types can carry a caption or structural metadata. A type
 # alone never establishes that its value pattern is absent.
-_STRUCTURAL_TYPES = frozenset({
-    "WindowControl", "PaneControl", "GroupControl", "TitleBarControl",
-    "ButtonControl", "SplitButtonControl", "TextControl", "ToolBarControl",
-    "MenuBarControl", "MenuControl", "MenuItemControl", "StatusBarControl",
-    "CheckBoxControl", "RadioButtonControl", "TabControl", "TabItemControl",
-})
+_STRUCTURAL_TYPES = frozenset(
+    {
+        "WindowControl",
+        "PaneControl",
+        "GroupControl",
+        "TitleBarControl",
+        "ButtonControl",
+        "SplitButtonControl",
+        "TextControl",
+        "ToolBarControl",
+        "MenuBarControl",
+        "MenuControl",
+        "MenuItemControl",
+        "StatusBarControl",
+        "CheckBoxControl",
+        "RadioButtonControl",
+        "TabControl",
+        "TabItemControl",
+    }
+)
 
 
 def _known_non_value_structure(control: Any, get_property: Callable[..., Any]) -> bool:
@@ -290,22 +319,35 @@ def _known_non_value_structure(control: Any, get_property: Callable[..., Any]) -
 
 
 def _require_non_sensitive(control: Any, *, structural: bool) -> None:
+    stage = SensitivityStage.PROPERTY_QUERY
     try:
         method = control.GetPropertyValueEx
         raw = method(IS_PASSWORD_PROPERTY, 1)
         if type(raw) is bool:
             if raw is False:
                 return
+            stage = SensitivityStage.PROVIDER_REFUSAL
         elif is_uia_not_supported(raw):
+            stage = SensitivityStage.STRUCTURE_QUERY
             if structural and _known_non_value_structure(control, method):
                 return
+            stage = SensitivityStage.NATIVE_EDIT
             if _native_plain_edit(control):
+                stage = SensitivityStage.RECHECK
                 status = method(IS_PASSWORD_PROPERTY, 1)
                 if status is False or is_uia_not_supported(status):
                     return
+        else:
+            stage = (
+                SensitivityStage.MISSING_STATUS
+                if raw is None
+                else SensitivityStage.UNRECOGNIZED_STATUS
+            )
     except Exception:
         pass
-    raise ValueUnavailable("password_or_password_status_unavailable")
+    error = ValueUnavailable("password_or_password_status_unavailable")
+    error.census_stage = stage
+    raise error
 
 
 def require_non_sensitive_value(control: Any) -> None:
