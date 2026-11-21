@@ -23,7 +23,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -131,6 +131,48 @@ def _normalize_origin(url_or_origin: str) -> str:
     ):
         return f"{scheme}://{host}"
     return f"{scheme}://{host}:{port}"
+
+
+def relay_redirect_location(
+    location: str,
+    *,
+    request_url: str,
+    allowed_origins: frozenset[str],
+    rewrite_from_origin: Optional[str] = None,
+    rewrite_to_origin: Optional[str] = None,
+) -> Optional[str]:
+    """Return the ``Location`` to relay for a same-origin redirect, else ``None``.
+
+    The tap never follows a redirect itself. It hands a redirect back to the
+    client only when the target, resolved against the request URL, stays on an
+    allowed origin, so the next request passes through the tap again. A
+    protocol-relative or absolute target on any other origin is refused.
+    ``rewrite_from_origin``/``rewrite_to_origin`` map an absolute upstream
+    target onto the tap's own origin in reverse-proxy mode.
+    """
+    raw = (location or "").strip()
+    # Browsers read a backslash as a slash, so ``/\\host`` leaves the origin
+    # even though URL parsers here treat it as a relative path.
+    if not raw or any(ch in raw for ch in "\r\n\\"):
+        return None
+    resolved = urljoin(request_url, raw)
+    origin = _normalize_origin(resolved)
+    if not origin or origin not in allowed_origins:
+        return None
+    parts = urlsplit(raw)
+    if not parts.scheme and not parts.netloc:
+        return raw
+    if rewrite_from_origin is not None and rewrite_to_origin is not None:
+        if origin != rewrite_from_origin:
+            return None
+        target = urlsplit(resolved)
+        rewritten = rewrite_to_origin.rstrip("/") + (target.path or "/")
+        if target.query:
+            rewritten += "?" + target.query
+        if target.fragment:
+            rewritten += "#" + target.fragment
+        return rewritten
+    return raw
 
 
 class _ResolvedTarget(NamedTuple):
@@ -1679,12 +1721,24 @@ class SessionWireTap:
             resp_body = resp.read()
             resp_headers = list(resp.msg.items())
             if 300 <= resp.status < 400:
-                return (
-                    502,
-                    "Bad Gateway",
-                    [("Content-Type", "application/json")],
-                    b'{"error":"redirect_refused"}',
+                relayed = self._relayable_location(
+                    _get_header(resp_headers, "location"),
+                    request_url=(
+                        f"{self._upstream_scheme}://{self._upstream_netloc}"
+                        f"{target_path}"
+                    ),
                 )
+                if relayed is None:
+                    return (
+                        502,
+                        "Bad Gateway",
+                        [("Content-Type", "application/json")],
+                        b'{"error":"redirect_refused"}',
+                    )
+                resp_headers = [
+                    (k, relayed if k.lower() == "location" else v)
+                    for k, v in resp_headers
+                ]
             return (
                 resp.status,
                 resp.reason or _status_text(resp.status),
@@ -1708,6 +1762,22 @@ class SessionWireTap:
                 conn.close()
             except Exception:
                 pass
+
+    def _relayable_location(self, location: str, *, request_url: str) -> Optional[str]:
+        """Same-origin redirect target as the reverse-proxy client must see it."""
+        with self._lock:
+            tap_origin = (
+                _normalize_origin(self._bound_base_url) if self._bound_base_url else ""
+            )
+        if not tap_origin:
+            return None
+        return relay_redirect_location(
+            location,
+            request_url=request_url,
+            allowed_origins=frozenset({self._upstream_origin}),
+            rewrite_from_origin=self._upstream_origin,
+            rewrite_to_origin=tap_origin,
+        )
 
     def _proxy_http_exchange(
         self,
@@ -1898,7 +1968,20 @@ class SessionWireTap:
             if callable(fetch_fn) and callable(fulfill_fn):
                 fetched = fetch_fn(max_redirects=0)
                 resp_status, resp_headers, resp_body = _extract_route_response(fetched)
-                if resp_status is not None and 300 <= resp_status < 400:
+                relayed_location = (
+                    relay_redirect_location(
+                        _get_header(resp_headers, "location"),
+                        request_url=req_url,
+                        allowed_origins=self._allowed_origins,
+                    )
+                    if resp_status is not None and 300 <= resp_status < 400
+                    else None
+                )
+                if (
+                    resp_status is not None
+                    and 300 <= resp_status < 400
+                    and relayed_location is None
+                ):
                     self._finalize_request(
                         ticket,
                         request_headers=req_headers,
