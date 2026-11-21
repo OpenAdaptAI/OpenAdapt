@@ -46,10 +46,6 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.execution_profiles import (
-    AUTOMATED_GUI_ACTUATIONS,
-    build_outcome_envelope,
-)
 from openadapt_flow.identity_signals import (
     canonical_normalizers,
     parameterize_identity_text,
@@ -74,6 +70,16 @@ if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import BusinessDecisionSpec, IdentityTemplate, Step, Workflow
     from openadapt_flow.policy import Policy
     from openadapt_flow.subroutines import SubroutineLibrary
+
+if not TYPE_CHECKING:
+    # ``ir`` imports this module as it loads and ``execution_profiles`` imports
+    # ``ir``, so the two names this module imported from it load on first use.
+    def __getattr__(name: str) -> object:
+        if name in ("AUTOMATED_GUI_ACTUATIONS", "build_outcome_envelope"):
+            from openadapt_flow import execution_profiles
+
+            return getattr(execution_profiles, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
@@ -164,6 +170,7 @@ def _qualification_actuation_path(
     value: Optional[str],
 ) -> Optional[Literal["gui", "api"]]:
     """Project one closed runtime actuation receipt onto a qualified path."""
+    from openadapt_flow.execution_profiles import AUTOMATED_GUI_ACTUATIONS
 
     if value == "api":
         return "api"
@@ -2729,7 +2736,10 @@ def _case_run_report_integrity_error(
     transition_predicate_vision: Any | None = None,
 ) -> Optional[tuple[QualificationRefusalCode, str]]:
     """Bind one signed case result to its exact retained run and input bytes."""
-
+    from openadapt_flow.execution_profiles import (
+        AUTOMATED_GUI_ACTUATIONS,
+        build_outcome_envelope,
+    )
     from openadapt_flow.ir import RunReport
     from openadapt_flow.qualification_environment import (
         qualification_environment_binding_sha256,
