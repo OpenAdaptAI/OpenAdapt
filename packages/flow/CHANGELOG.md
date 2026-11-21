@@ -15,6 +15,20 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
+  credential field. The recorder blacks out a withheld field in every frame
+  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
+  black box that no live screen shows. That refuted the step on every hosted
+  run, for example the click into the password field. Such a check is now
+  clipped to the part of its region clear of the box and re-cropped from the
+  same frame. When no usable part is left, it is dropped and recorded in
+  `param_hygiene.json`. This applies to mined checks and to the
+  focused-field pass.
+
 ## v3.4.0 (2026-11-20)
 
 ### Features
@@ -66,16 +80,6 @@
   and public key an owner or admin must register.
 
 ### Fixes
-
-- A wrapped sign-in no longer compiles a pixel check that freezes a withheld
-  credential field. The recorder blacks out a withheld field in every frame
-  that still shows it, so a `REGION_STABLE` crop that overlapped one held a
-  black box that no live screen shows. That refuted the step on every hosted
-  run, for example the click into the password field. Such a check is now
-  clipped to the part of its region clear of the box and re-cropped from the
-  same frame. When no usable part is left, it is dropped and recorded in
-  `param_hygiene.json`. This applies to mined checks and to the
-  focused-field pass.
 
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
