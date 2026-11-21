@@ -1881,6 +1881,27 @@ def hooks(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "plan",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def plan(command_ctx: click.Context) -> None:
+    """Dry-run a batch of writes to external systems, then apply, undo or release it."""
+    _require_supported_python()
+    plan_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.cli",))
+    if plan_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no plan command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(plan_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "wrap",
     context_settings={
         "ignore_unknown_options": True,
