@@ -26,9 +26,13 @@ bodies at any depth. A JSON body has those values replaced field by field,
 whatever their length, then every value found is withheld wherever else it
 appears.
 
-Patient or other business values the person typed stay in the file, as they
-do in ``events.jsonl``. A recording made with capture is as sensitive as any
-other recording.
+Bodies are minimized before they are written (``bodies="minimized"``, the
+default; :mod:`openadapt_flow.capture_privacy`): only the values of the
+recording's declared fields (its parameter and identifier fields) are kept;
+every other value, every HTML or text page and every URL query value is
+replaced by a keyed hash. ``bodies="raw"`` keeps the redacted bodies as
+before, for API step proposals and debugging, and is refused unless the
+recording is encrypted (or plaintext at rest was explicitly allowed).
 
 Static assets (images, fonts, style sheets, scripts, media) are skipped.
 Request and response bodies are cut at :data:`MAX_REQUEST_BYTES` and
@@ -100,9 +104,24 @@ class NetworkCapture:
     to password-like names (the recorder's declared secret fields).
     """
 
-    def __init__(self, context: Any, *, secret_names: Iterable[str] = ()) -> None:
+    def __init__(
+        self,
+        context: Any,
+        *,
+        secret_names: Iterable[str] = (),
+        keep_fields: Iterable[str] = (),
+        bodies: str = "minimized",
+    ) -> None:
+        from openadapt_flow.capture_privacy import BODY_MODES
+
+        if bodies not in BODY_MODES:
+            raise ValueError(f"bodies must be one of {BODY_MODES}, not {bodies!r}")
         self._context = context
         self._secret_names = frozenset(secret_names)
+        # Declared fields whose values survive minimization; ``bodies`` says
+        # whether anything else of a body reaches disk (only "raw", sealed).
+        self._keep_fields = frozenset(keep_fields) - self._secret_names
+        self._bodies = bodies
         # Cookie values the browser sent or a response set, and Authorization
         # values, kept in memory only so they can be withheld wherever a page
         # echoes one. Never written.
@@ -309,15 +328,60 @@ class NetworkCapture:
         )
 
     def write(self, recording_dir: Path | str, t0_monotonic: float) -> Path:
+        from openadapt_flow import capture_privacy as cp
         from openadapt_flow import sealed_set
 
         path = Path(recording_dir) / NETWORK_FILE
         lines = self.lines(t0_monotonic)
-        text = json.dumps({"schema": SCHEMA, "exchanges": len(lines)}) + "\n"
+        if self._bodies == cp.RAW:
+            _require_sealed_or_allowed(path)
+        else:
+            minimizer = cp.BodyMinimizer(self._keep_fields)
+            lines = [cp.minimize_line(line, minimizer) for line in lines]
+        header = {"schema": SCHEMA, "exchanges": len(lines), "bodies": self._bodies}
+        text = json.dumps(header) + "\n"
         text += "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines)
         # Sealed in memory when the recording is encrypted.
         sealed_set.write_text(path, text)
         return path
+
+
+def _require_sealed_or_allowed(path: Path) -> None:
+    """Refuse raw bodies on disk unless the recording is encrypted.
+
+    TODO(#2423): once the key hierarchy lands, seal raw captures under the
+    recording's own data key rather than relying on the recording writer.
+    """
+    from openadapt_flow import at_rest, sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        return
+    purpose = "raw network bodies (network.jsonl, bodies=raw)"
+    if at_rest.plaintext_allowed(purpose):
+        return
+    raise at_rest.AtRestRefused(
+        at_rest.refusal(purpose, "the recording is not encrypted")
+    )
+
+
+def bodies_mode(recording_dir: Path | str) -> Optional[str]:
+    """``"minimized"`` or ``"raw"`` for a recording's capture, None if absent.
+
+    A capture written before minimization existed has no ``bodies`` field
+    and is raw.
+    """
+
+    from openadapt_flow import sealed_set
+
+    path = Path(recording_dir) / NETWORK_FILE
+    if not sealed_set.is_file(path):
+        return None
+    first = sealed_set.read_text(path).split("\n", 1)[0]
+    try:
+        header = json.loads(first)
+    except ValueError:
+        return None
+    return str(header.get("bodies") or "raw") if isinstance(header, dict) else None
 
 
 def parse_multipart(

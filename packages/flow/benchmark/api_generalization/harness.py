@@ -143,7 +143,7 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
         page.goto(app.base + "/")
         if app.login_required:
             app.login(page)
-        capture = NetworkCapture(ctx).start()
+        capture = NetworkCapture(ctx, bodies="raw").start()
         app.open_form(page)
         rec = Recorder(
             PlaywrightBackend(page),

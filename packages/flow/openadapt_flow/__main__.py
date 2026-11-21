@@ -1547,6 +1547,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             stop_when=_record_until_stop(args),
             surface="web",
             capture_network=bool(getattr(args, "capture_network", False)),
+            network_bodies=_network_bodies(args, recording_key),
             encryption_key=recording_key,
         )
     except BrowserAttachError as exc:
@@ -1741,6 +1742,22 @@ def _records_automatically(args: argparse.Namespace) -> bool:
         "capture_network",
     ) + tuple(attr for attr, _ in _RECORD_TARGET_FLAGS)
     return not any(getattr(args, attr, None) for attr in target_flags)
+
+
+def _network_bodies(args: argparse.Namespace, recording_key: Optional[str]) -> str:
+    """``--capture-network-bodies``, refused up front when raw can't be sealed."""
+
+    from openadapt_flow import at_rest
+
+    mode = getattr(args, "capture_network_bodies", None) or "minimized"
+    if mode == "raw" and recording_key is None:
+        purpose = "raw network bodies (network.jsonl, bodies=raw)"
+        if not at_rest.plaintext_allowed(purpose):
+            raise SystemExit(
+                "record: --capture-network-bodies raw needs an encrypted "
+                "recording (drop --no-encrypt). Nothing was recorded."
+            )
+    return mode
 
 
 def _cmd_record_surfaces(args: argparse.Namespace) -> int:
@@ -9584,9 +9601,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Web only: also keep the page's requests (network.jsonl; cookies, "
-            "passwords and session tokens withheld). compile then proposes an "
+            "passwords and session tokens withheld; bodies minimized, see "
+            "--capture-network-bodies). With raw bodies, compile proposes an "
             "API step for a save it can repeat as one request; a person admits "
             "it with 'api admit'"
+        ),
+    )
+    p.add_argument(
+        "--capture-network-bodies",
+        choices=("minimized", "raw"),
+        default="minimized",
+        help=(
+            "With --capture-network: 'minimized' (default) keeps only the "
+            "--param and --identifier values of each body and a keyed hash of "
+            "the rest; 'raw' keeps the redacted bodies, which API step "
+            "proposals and debugging need, and requires an encrypted recording"
         ),
     )
     p.add_argument(

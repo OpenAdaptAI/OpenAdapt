@@ -69,7 +69,7 @@ class _Context:
 
 def _capture(tmp_path):
     ctx = _Context()
-    cap = nc.NetworkCapture(ctx).start()
+    cap = nc.NetworkCapture(ctx, bodies="raw").start()
     finished = ctx.handlers["requestfinished"]
     login = json.dumps(
         {"user": {"login": "amy.synthetic", "password": PASSWORD, "pin": "1234"}}

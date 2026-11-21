@@ -2334,6 +2334,7 @@ class InteractiveRecorder:
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
         capture_network: bool = False,
+        network_bodies: str = "minimized",
         encryption_key: Optional[str] = None,
         event_clock: Optional[list[float]] = None,
     ) -> None:
@@ -2349,6 +2350,8 @@ class InteractiveRecorder:
         # ``record --capture-network``: keep the page's requests next to the
         # events (openadapt_flow.network_capture). Off by default.
         self._capture_network = capture_network
+        # Only declared field values leave memory unless "raw" (sealed).
+        self._network_bodies = network_bodies
         self._network = None
         self._out_dir = Path(out_dir)
         self._secret_fields = set(secret_fields)
@@ -2519,7 +2522,10 @@ class InteractiveRecorder:
                 # Attach before navigating, so the page that serves the form
                 # is in the capture.
                 self._network = NetworkCapture(
-                    self._context, secret_names=self._secret_fields
+                    self._context,
+                    secret_names=self._secret_fields,
+                    keep_fields=self._param_fields | self._identifier_fields,
+                    bodies=self._network_bodies,
                 ).start()
             if self._owns_browser:
                 self._context.on("page", self._context_page_listener)
