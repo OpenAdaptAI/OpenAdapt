@@ -256,7 +256,11 @@ class Proxy:
 
     def tools(self) -> list[dict[str, Any]]:
         """The SQL tools when this proxy holds a database, then the extra tools."""
-        out = list(TOOLS) if any(s.name == self.system for s in self.ctx.spec.systems) else []
+        out = (
+            list(TOOLS)
+            if any(s.name == self.system for s in self.ctx.spec.systems)
+            else []
+        )
         return out + (list(self.extra.tools()) if self.extra is not None else [])
 
     def call(self, name: str, args: Mapping[str, Any]) -> tuple[str, bool]:

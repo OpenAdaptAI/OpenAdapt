@@ -111,8 +111,12 @@ def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
                     # The agent never gets the API credentials either.
                     hidden.append(os.environ.get(system.auth.value_env, ""))
         if args.postgres or args.sqlite:
-            spec = sql_spec(postgres=args.postgres, sqlite=args.sqlite,
-                            max_rows=args.auto_approve_max_rows, flags=args.flag)
+            spec = sql_spec(
+                postgres=args.postgres,
+                sqlite=args.sqlite,
+                max_rows=args.auto_approve_max_rows,
+                flags=args.flag,
+            )
         else:
             assert api_spec is not None
             spec = TxSpec(schema_version="openadapt.tx/v1", systems=api_spec.systems)

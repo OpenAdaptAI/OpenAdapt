@@ -85,13 +85,17 @@ def _norm_identity(value: Any) -> Any:
     return value
 
 
-def create_slot(scoped: ScopedCollection, fields: Mapping[str, Any], slot: Optional[str]) -> str:
+def create_slot(
+    scoped: ScopedCollection, fields: Mapping[str, Any], slot: Optional[str]
+) -> str:
     if slot:
         return str(slot)
     if scoped.identity:
         ident = {k: _norm_identity(fields.get(k)) for k in scoped.identity}
         if all(v in (None, "") for v in ident.values()):
-            raise TxSpecError("the create holds none of the collection's identity fields")
+            raise TxSpecError(
+                "the create holds none of the collection's identity fields"
+            )
         return "id-" + sha256(ident)[:24]
     return "1"
 
@@ -101,7 +105,11 @@ def create_slot(scoped: ScopedCollection, fields: Mapping[str, Any], slot: Optio
 
 def _form(value: Any, prefix: str = "") -> list[tuple[str, str]]:
     if isinstance(value, Mapping):
-        return [kv for k, v in value.items() for kv in _form(v, f"{prefix}[{k}]" if prefix else str(k))]
+        return [
+            kv
+            for k, v in value.items()
+            for kv in _form(v, f"{prefix}[{k}]" if prefix else str(k))
+        ]
     if isinstance(value, list):
         return [kv for i, v in enumerate(value) for kv in _form(v, f"{prefix}[{i}]")]
     if value is None:
@@ -161,12 +169,24 @@ def default_send(
         if marker and scoped.marker:
             body.update(fill_json(scoped.marker, {"marker": marker}))
         if marker and scoped.condition_header:
-            headers.update({k: fill(v, {"marker": marker}) for k, v in scoped.condition_header.items()})
+            headers.update(
+                {
+                    k: fill(v, {"marker": marker})
+                    for k, v in scoped.condition_header.items()
+                }
+            )
     elif op == "delete":
         body = None
     else:
         body = adapter._body(coll, route, dict(baseline) if baseline else None, fields)
-    _, got = _request(adapter, route.method, adapter._fill(route.path, values), body, headers, scoped.encoding)
+    _, got = _request(
+        adapter,
+        route.method,
+        adapter._fill(route.path, values),
+        body,
+        headers,
+        scoped.encoding,
+    )
     if op == "create":
         new = (got or {}).get(route.id_from or coll.id_field)
         if new in (None, ""):
@@ -222,6 +242,7 @@ def judge_record(
         # written: a partial write. A field at some third value is wrong.
         before = flatten_record(baseline) if baseline and op != "create" else {}
         now_ = flatten_record(after)
+
         def _unwritten(p: str) -> bool:
             got = now_.get(p, _ABSENT)
             if op == "create":
@@ -240,29 +261,52 @@ def judge_record(
     return codes, detail
 
 
-def _search(adapter: RestAdapter, scoped: ScopedCollection, marker: str, id_field: str) -> Optional[list[str]]:
+def _search(
+    adapter: RestAdapter, scoped: ScopedCollection, marker: str, id_field: str
+) -> Optional[list[str]]:
     if not scoped.search:
         return None
     _, got = _request(adapter, "GET", fill(scoped.search, {"marker": marker}))
-    items = pick(got, scoped.search_items) if scoped.search_items else (got if isinstance(got, list) else [])
+    items = (
+        pick(got, scoped.search_items)
+        if scoped.search_items
+        else (got if isinstance(got, list) else [])
+    )
     if scoped.search_items and len(items) == 1 and isinstance(items[0], list):
         items = items[0]
-    return [str(x.get(id_field)) for x in items if isinstance(x, Mapping) and x.get(id_field) is not None]
+    return [
+        str(x.get(id_field))
+        for x in items
+        if isinstance(x, Mapping) and x.get(id_field) is not None
+    ]
 
 
-def _read(adapter: RestAdapter, coll: Collection, rid: str, where: Mapping[str, Any]) -> Optional[dict[str, Any]]:
-    got = adapter._call(coll.read.method, adapter._fill(coll.read.path, {**where, "id": rid}))
+def _read(
+    adapter: RestAdapter, coll: Collection, rid: str, where: Mapping[str, Any]
+) -> Optional[dict[str, Any]]:
+    got = adapter._call(
+        coll.read.method, adapter._fill(coll.read.path, {**where, "id": rid})
+    )
     if got is not None and not isinstance(got, dict):
         raise AdapterError("a read did not return an object")
     return got
 
 
-def _ref(scoped: ScopedCollection, fields: Mapping[str, Any], where: Mapping[str, Any], rid: Optional[str]) -> str:
+def _ref(
+    scoped: ScopedCollection,
+    fields: Mapping[str, Any],
+    where: Mapping[str, Any],
+    rid: Optional[str],
+) -> str:
     return fill(scoped.audit_ref, {**fields, **where, "id": rid})
 
 
-def _matches(coll: Collection, record: Optional[Mapping[str, Any]], fields: Mapping[str, Any]) -> bool:
-    codes, _ = judge_record(coll, op="create", baseline=None, after=record, fields=fields)
+def _matches(
+    coll: Collection, record: Optional[Mapping[str, Any]], fields: Mapping[str, Any]
+) -> bool:
+    codes, _ = judge_record(
+        coll, op="create", baseline=None, after=record, fields=fields
+    )
     return not codes
 
 
@@ -273,7 +317,7 @@ def _rid_of(ref: str, scoped: ScopedCollection) -> Optional[str]:
     head, _, tail = scoped.audit_ref.partition("{id}")
     if not ref.startswith(head) or (tail and not ref.endswith(tail)):
         return None
-    return ref[len(head): len(ref) - len(tail) if tail else None] or None
+    return ref[len(head) : len(ref) - len(tail) if tail else None] or None
 
 
 # -- the write -------------------------------------------------------------------
@@ -324,9 +368,13 @@ def scoped_write(
         if op == "create"
         else str(rid) + (f":{slot}" if slot else "")
     )
-    key = state.key_for(task=task, system=system, collection=collection, op=op, slot=the_slot)
+    key = state.key_for(
+        task=task, system=system, collection=collection, op=op, slot=the_slot
+    )
     payload = sha256({"op": op, "id": rid, "path": where, "fields": fields})
-    digest = sha256({"schema": SCOPED_SCHEMA, "task": task, "key": key, "payload": payload})
+    digest = sha256(
+        {"schema": SCOPED_SCHEMA, "task": task, "key": key, "payload": payload}
+    )
     marker = marker_for(key) if op == "create" else None
     sender = send or default_send
     notes: list[str] = []
@@ -343,7 +391,16 @@ def scoped_write(
         entry = state.entry(key)
         if entry is not None and entry.payload != payload:
             tx["codes"] = ["replay_mismatch"]
-            run = _write_run(state, digest, "api", outcome="HALTED", results=[], tx=tx, approval=None, started=started)
+            run = _write_run(
+                state,
+                digest,
+                "api",
+                outcome="HALTED",
+                results=[],
+                tx=tx,
+                approval=None,
+                started=started,
+            )
             raise TxRefused(
                 "replay_mismatch",
                 "this task already wrote this record with a different payload; nothing was sent",
@@ -360,9 +417,20 @@ def scoped_write(
             if baseline is None:
                 tx["codes"] = ["missing_resource"]
                 run = _write_run(
-                    state, digest, "api", outcome="HALTED", results=[], tx=tx, approval=None, started=started
+                    state,
+                    digest,
+                    "api",
+                    outcome="HALTED",
+                    results=[],
+                    tx=tx,
+                    approval=None,
+                    started=started,
                 )
-                raise TxRefused("missing_resource", f"{collection}/{rid} does not exist; nothing was sent", {"run_dir": str(run)})
+                raise TxRefused(
+                    "missing_resource",
+                    f"{collection}/{rid} does not exist; nothing was sent",
+                    {"run_dir": str(run)},
+                )
 
         sent_id: Optional[str] = None
         cursor: Optional[Cursor] = None
@@ -372,15 +440,24 @@ def scoped_write(
             begun = next(e for e in reversed(entry.events) if e["event"] == "begun")
             cursor = Cursor.from_json(begun["cursor"]) if begun.get("cursor") else None
             baseline = begun.get("baseline", baseline)
-            found, proven_absent = _recover(adapter, coll, reader, cursor, op, fields, rid, where, marker, sleep)
+            found, proven_absent = _recover(
+                adapter, coll, reader, cursor, op, fields, rid, where, marker, sleep
+            )
             if found is not None:
                 sent_id, skip_send = found, True
                 notes.append("recovered_without_resend")
             elif not proven_absent:
                 tx["codes"] = ["recovery_unproven"]
                 return _finish(
-                    ctx, digest, key, tx, started, outcome="COMPLETED_UNVERIFIED", verified=None,
-                    payload=payload, result={"id": None, "codes": ["recovery_unproven"]},
+                    ctx,
+                    digest,
+                    key,
+                    tx,
+                    started,
+                    outcome="COMPLETED_UNVERIFIED",
+                    verified=None,
+                    payload=payload,
+                    result={"id": None, "codes": ["recovery_unproven"]},
                     record_key=False,
                 )
             else:
@@ -411,23 +488,51 @@ def scoped_write(
         if not skip_send:
             try:
                 sent_id = sender(
-                    adapter, coll, op=op, fields=fields, rid=rid, baseline=baseline, key=key, marker=marker,
+                    adapter,
+                    coll,
+                    op=op,
+                    fields=fields,
+                    rid=rid,
+                    baseline=baseline,
+                    key=key,
+                    marker=marker,
                     path=where,
                 )
             except AdapterError as exc:
                 state.record(key, "sent", result={"id": None, "error": str(exc)[:200]})
                 tx["codes"] = ["send_failed"]
                 return _finish(
-                    ctx, digest, key, tx, started, outcome="COMPLETED_UNVERIFIED", verified=None,
-                    payload=payload, result={"id": None, "codes": ["send_failed"], "error": str(exc)[:200]},
+                    ctx,
+                    digest,
+                    key,
+                    tx,
+                    started,
+                    outcome="COMPLETED_UNVERIFIED",
+                    verified=None,
+                    payload=payload,
+                    result={
+                        "id": None,
+                        "codes": ["send_failed"],
+                        "error": str(exc)[:200],
+                    },
                     record_key=False,
                 )
             state.record(key, "sent", result={"id": sent_id})
 
         target_id = sent_id if op == "create" else str(rid)
         codes, detail = _verify(
-            adapter, coll, reader, cursor, op=op, fields=fields, baseline=baseline,
-            rid=target_id, where=where, marker=marker, notes=notes, sleep=sleep,
+            adapter,
+            coll,
+            reader,
+            cursor,
+            op=op,
+            fields=fields,
+            baseline=baseline,
+            rid=target_id,
+            where=where,
+            marker=marker,
+            notes=notes,
+            sleep=sleep,
         )
         hard = [c for c in codes if c in HARD]
         soft = [c for c in codes if c in SOFT]
@@ -440,7 +545,15 @@ def scoped_write(
         tx.update({"codes": codes, "notes": notes, **detail})
         result = {"id": target_id, "outcome": outcome, "codes": codes, "notes": notes}
         return _finish(
-            ctx, digest, key, tx, started, outcome=outcome, verified=verified, payload=payload, result=result
+            ctx,
+            digest,
+            key,
+            tx,
+            started,
+            outcome=outcome,
+            verified=verified,
+            payload=payload,
+            result=result,
         )
 
 
@@ -466,16 +579,37 @@ def _finish(
     )
     # Nothing here is approved: an unsettled check is not an approved write.
     line["effect_approved_unverified"] = False
-    run = _write_run(ctx.state, digest, "api", outcome=outcome, results=[line], tx=tx, approval=None, started=started)
-    result = {**result, "outcome": outcome, "run_dir": str(run), "receipt": (run / "receipt.json").is_file()}
+    run = _write_run(
+        ctx.state,
+        digest,
+        "api",
+        outcome=outcome,
+        results=[line],
+        tx=tx,
+        approval=None,
+        started=started,
+    )
+    result = {
+        **result,
+        "outcome": outcome,
+        "run_dir": str(run),
+        "receipt": (run / "receipt.json").is_file(),
+    }
     if record_key:
         ctx.state.record(key, "resolved", result=result)
     return result
 
 
 def _readback(
-    adapter: RestAdapter, coll: Collection, *, op: str, rid: Optional[str], where: Mapping[str, Any],
-    baseline: Optional[Mapping[str, Any]], fields: Mapping[str, Any], sleep: Callable[[float], None],
+    adapter: RestAdapter,
+    coll: Collection,
+    *,
+    op: str,
+    rid: Optional[str],
+    where: Mapping[str, Any],
+    baseline: Optional[Mapping[str, Any]],
+    fields: Mapping[str, Any],
+    sleep: Callable[[float], None],
 ) -> tuple[list[str], dict[str, Any], int]:
     scoped = coll.scoped
     assert scoped is not None
@@ -484,7 +618,9 @@ def _readback(
     tries = 0
     for tries in range(1, scoped.readback_attempts + 1):
         after = _read(adapter, coll, str(rid), where) if rid else None
-        codes, detail = judge_record(coll, op=op, baseline=baseline, after=after, fields=fields)
+        codes, detail = judge_record(
+            coll, op=op, baseline=baseline, after=after, fields=fields
+        )
         if not codes:
             break
         sleep(scoped.readback_wait_s)
@@ -509,7 +645,14 @@ def _verify(
     scoped = coll.scoped
     assert scoped is not None
     codes, detail, tries = _readback(
-        adapter, coll, op=op, rid=rid, where=where, baseline=baseline, fields=fields, sleep=sleep
+        adapter,
+        coll,
+        op=op,
+        rid=rid,
+        where=where,
+        baseline=baseline,
+        fields=fields,
+        sleep=sleep,
     )
     detail["readback_attempts"] = tries
     if marker and scoped.search:
@@ -533,9 +676,13 @@ def _verify(
         notes.append("no_change_update")
     try:
         audit: Audit = check_window(
-            reader, cursor, op=op,  # type: ignore[arg-type]
-            target=target, collection_prefix=prefix_of(scoped.audit_ref),
-            logged=logged, sleep=sleep,
+            reader,
+            cursor,
+            op=op,  # type: ignore[arg-type]
+            target=target,
+            collection_prefix=prefix_of(scoped.audit_ref),
+            logged=logged,
+            sleep=sleep,
         )
     except AuditError as exc:
         codes.append("audit_unreadable")
@@ -551,7 +698,9 @@ def _verify(
         # Two creates under one reference (two comments on one issue) or two
         # updates of the record: the write landed twice.
         codes.append("duplicate_write")
-    if any(e.kind != op and e.kind in ("create", "update", "delete") for e in audit.own):
+    if any(
+        e.kind != op and e.kind in ("create", "update", "delete") for e in audit.own
+    ):
         # The record changed in another way too (a delete after an update).
         codes.append("frame_clobbered")
     for e in audit.same_collection_creates:
@@ -615,7 +764,9 @@ def _recover(
                     if prefix and not r.startswith(prefix):
                         continue
                     other = _rid_of(r, scoped)
-                    if other and _matches(coll, _read(adapter, coll, other, where), fields):
+                    if other and _matches(
+                        coll, _read(adapter, coll, other, where), fields
+                    ):
                         return other, False
             sleep(reader.source.lag.wait_s)
         # The log records creates and, read to the cursor, shows none of this
@@ -679,7 +830,9 @@ class ApiTools:
     def call(self, name: str, args: Mapping[str, Any]) -> tuple[str, bool]:
         try:
             if name == "api_read":
-                got: Any = self.ctx.adapter(str(args["system"])).read(str(args["collection"]), str(args["id"]))
+                got: Any = self.ctx.adapter(str(args["system"])).read(
+                    str(args["collection"]), str(args["id"])
+                )
             elif name == "api_write":
                 got = scoped_write(
                     self.ctx,
@@ -696,7 +849,9 @@ class ApiTools:
         except TxRefused as exc:
             return json.dumps({"refused": exc.code, "detail": exc.detail}), True
         except (AdapterError, AuditError, TxSpecError, KeyError, ValueError) as exc:
-            return json.dumps({"error": type(exc).__name__, "detail": str(exc)[:300]}), True
+            return json.dumps(
+                {"error": type(exc).__name__, "detail": str(exc)[:300]}
+            ), True
         if isinstance(got, Mapping) and got.get("outcome") not in (None, "VERIFIED"):
             return json.dumps(got, default=str), True
         return json.dumps(got, default=str), False

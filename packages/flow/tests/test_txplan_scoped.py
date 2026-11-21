@@ -77,7 +77,11 @@ class AuditedStore:
 
             def _rid(self) -> Optional[int]:
                 parts = urlsplit(self.path).path.strip("/").split("/")
-                return int(parts[2]) if len(parts) == 3 and parts[:2] == ["api", "items"] else None
+                return (
+                    int(parts[2])
+                    if len(parts) == 3 and parts[:2] == ["api", "items"]
+                    else None
+                )
 
             def do_GET(self) -> None:  # noqa: N802
                 url = urlsplit(self.path)
@@ -96,7 +100,11 @@ class AuditedStore:
                     page, size = int(q.get("page", 1)), int(q.get("limit", 3))
                     return self._send(200, shown[(page - 1) * size : page * size])
                 if url.path == "/api/items" and "marker" in q:
-                    found = [r for r in store.records.values() if r.get("ext_ref") == q["marker"]]
+                    found = [
+                        r
+                        for r in store.records.values()
+                        if r.get("ext_ref") == q["marker"]
+                    ]
                     return self._send(200, {"items": found})
                 rid = self._rid()
                 if rid is None or rid not in store.records:
@@ -147,7 +155,13 @@ class AuditedStore:
         return srv, f"http://127.0.0.1:{srv.server_address[1]}"
 
 
-def _spec(url: str, *, search: bool = True, idem: bool = False, logs: Optional[list[str]] = None) -> TxSpec:
+def _spec(
+    url: str,
+    *,
+    search: bool = True,
+    idem: bool = False,
+    logs: Optional[list[str]] = None,
+) -> TxSpec:
     scoped: dict[str, Any] = {
         "audit_ref": "item/{id}",
         "identity": ["title"],
@@ -195,7 +209,11 @@ def _spec(url: str, *, search: bool = True, idem: bool = False, logs: Optional[l
                     "name": "app",
                     "kind": "rest",
                     "base_url": url,
-                    "auth": {"header": "Authorization", "prefix": "Bearer ", "value_env": "APP_TOKEN"},
+                    "auth": {
+                        "header": "Authorization",
+                        "prefix": "Bearer ",
+                        "value_env": "APP_TOKEN",
+                    },
                     **({"idempotency_header": "Idempotency-Key"} if idem else {}),
                     "audit": audit,
                     "collections": [
@@ -204,7 +222,11 @@ def _spec(url: str, *, search: bool = True, idem: bool = False, logs: Optional[l
                             "list": {"path": "/api/items"},
                             "read": {"path": "/api/items/{id}"},
                             "create": {"method": "POST", "path": "/api/items"},
-                            "update": {"method": "PUT", "path": "/api/items/{id}", "replace": True},
+                            "update": {
+                                "method": "PUT",
+                                "path": "/api/items/{id}",
+                                "replace": True,
+                            },
                             "delete": {"method": "DELETE", "path": "/api/items/{id}"},
                             "scoped": scoped,
                         }
@@ -242,7 +264,9 @@ def _other(url: str, token: str = "agent") -> httpx.Client:
 
 def _write(ctx: Ctx, **kw: Any) -> dict[str, Any]:
     kw.setdefault("task", "t1")
-    return scoped_write(ctx, system="app", collection="item", sleep=lambda s: None, **kw)
+    return scoped_write(
+        ctx, system="app", collection="item", sleep=lambda s: None, **kw
+    )
 
 
 # -- clean writes ----------------------------------------------------------------
@@ -264,7 +288,9 @@ def test_clean_create_and_update_verify_with_a_receipt(lab: Any) -> None:
 def test_null_and_empty_note_read_back_as_one_value(lab: Any) -> None:
     store, url, state = lab
     store.empty_to_null = True  # the server stores an empty note as null
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic B", "note": ""})
+    out = _write(
+        _ctx(url, state), op="create", fields={"title": "Synthetic B", "note": ""}
+    )
     assert out["outcome"] == "VERIFIED", out
     assert store.records[int(out["id"])]["note"] is None
 
@@ -283,35 +309,64 @@ def test_wrong_value_is_a_hard_failure(lab: Any) -> None:
     _, url, state = lab
 
     def wrong(adapter: Any, coll: Any, **kw: Any) -> Any:
-        return default_send(adapter, coll, **{**kw, "fields": {**kw["fields"], "qty": 99}})
+        return default_send(
+            adapter, coll, **{**kw, "fields": {**kw["fields"], "qty": 99}}
+        )
 
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic D", "qty": 2}, send=wrong)
+    out = _write(
+        _ctx(url, state),
+        op="create",
+        fields={"title": "Synthetic D", "qty": 2},
+        send=wrong,
+    )
     assert out["outcome"] == "FAILED" and "wrong_value" in out["codes"], out
 
 
 def test_partial_write_is_a_hard_failure(lab: Any) -> None:
     store, url, state = lab
-    rec = store.records[1] = {"id": 1, "title": "Synthetic E", "qty": 1, "colour": "red", "note": None}
+    rec = store.records[1] = {
+        "id": 1,
+        "title": "Synthetic E",
+        "qty": 1,
+        "colour": "red",
+        "note": None,
+    }
     store.next_id = 2
 
     def half(adapter: Any, coll: Any, **kw: Any) -> Any:
-        return default_send(adapter, coll, **{**kw, "fields": {"qty": kw["fields"]["qty"]}})
+        return default_send(
+            adapter, coll, **{**kw, "fields": {"qty": kw["fields"]["qty"]}}
+        )
 
-    out = _write(_ctx(url, state), op="update", rid="1", fields={"qty": 5, "colour": "blue"}, send=half)
+    out = _write(
+        _ctx(url, state),
+        op="update",
+        rid="1",
+        fields={"qty": 5, "colour": "blue"},
+        send=half,
+    )
     assert out["outcome"] == "FAILED" and "partial_write" in out["codes"], out
     assert rec["colour"] == "red"
 
 
 def test_clobbered_field_on_a_replace_is_a_hard_failure(lab: Any) -> None:
     store, url, state = lab
-    store.records[1] = {"id": 1, "title": "Synthetic F", "qty": 1, "colour": "red", "note": None}
+    store.records[1] = {
+        "id": 1,
+        "title": "Synthetic F",
+        "qty": 1,
+        "colour": "red",
+        "note": None,
+    }
     store.next_id = 2
 
     def clobber(adapter: Any, coll: Any, **kw: Any) -> Any:
         base = {k: v for k, v in kw["baseline"].items() if k != "colour"}
         return default_send(adapter, coll, **{**kw, "baseline": base})
 
-    out = _write(_ctx(url, state), op="update", rid="1", fields={"qty": 5}, send=clobber)
+    out = _write(
+        _ctx(url, state), op="update", rid="1", fields={"qty": 5}, send=clobber
+    )
     assert out["outcome"] == "FAILED" and "frame_clobbered" in out["codes"], out
 
 
@@ -319,10 +374,17 @@ def test_duplicate_create_is_a_hard_failure(lab: Any) -> None:
     store, url, state = lab
 
     def twice(adapter: Any, coll: Any, **kw: Any) -> Any:
-        default_send(adapter, coll, **{**kw, "marker": None})  # a retry storm without the marker
+        default_send(
+            adapter, coll, **{**kw, "marker": None}
+        )  # a retry storm without the marker
         return default_send(adapter, coll, **kw)
 
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic G", "qty": 1}, send=twice)
+    out = _write(
+        _ctx(url, state),
+        op="create",
+        fields={"title": "Synthetic G", "qty": 1},
+        send=twice,
+    )
     assert out["outcome"] == "FAILED" and "duplicate_write" in out["codes"], out
     assert store.writes == 2
 
@@ -350,7 +412,9 @@ def test_collateral_edit_by_the_same_actor_is_a_hard_failure(lab: Any) -> None:
         _other(url).put("/api/items/7", json={"title": "Synthetic other", "qty": 0})
         return rid
 
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic I"}, send=collateral)
+    out = _write(
+        _ctx(url, state), op="create", fields={"title": "Synthetic I"}, send=collateral
+    )
     assert out["outcome"] == "FAILED" and "collateral_mutation" in out["codes"], out
 
 
@@ -361,10 +425,14 @@ def test_another_actors_edit_is_outside_the_scope(lab: Any) -> None:
 
     def busy(adapter: Any, coll: Any, **kw: Any) -> Any:
         rid = default_send(adapter, coll, **kw)
-        _other(url, token="someone-else").put("/api/items/7", json={"title": "x", "qty": 0})
+        _other(url, token="someone-else").put(
+            "/api/items/7", json={"title": "x", "qty": 0}
+        )
         return rid
 
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic J"}, send=busy)
+    out = _write(
+        _ctx(url, state), op="create", fields={"title": "Synthetic J"}, send=busy
+    )
     assert out["outcome"] == "VERIFIED", out
 
 
@@ -376,7 +444,9 @@ def test_unknown_event_types_are_logged_not_stopped(lab: Any) -> None:
         store.log("agent", int(rid), "exported")
         return rid
 
-    out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic K"}, send=export)
+    out = _write(
+        _ctx(url, state), op="create", fields={"title": "Synthetic K"}, send=export
+    )
     assert out["outcome"] == "VERIFIED", out
     assert "unknown_events_logged" in out["notes"]
 
@@ -397,7 +467,9 @@ def test_a_log_that_never_shows_the_write_is_not_verified(lab: Any) -> None:
     store, url, state = lab
     store.hidden_reads = 50
     out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic M"})
-    assert out["outcome"] == "COMPLETED_UNVERIFIED" and out["codes"] == ["audit_lag"], out
+    assert out["outcome"] == "COMPLETED_UNVERIFIED" and out["codes"] == ["audit_lag"], (
+        out
+    )
 
 
 def test_a_log_that_records_no_updates_says_so(lab: Any) -> None:
@@ -415,8 +487,12 @@ def test_a_log_that_records_no_updates_says_so(lab: Any) -> None:
 
 def test_a_retry_returns_the_first_result_and_sends_nothing(lab: Any) -> None:
     store, url, state = lab
-    first = _write(_ctx(url, state), op="create", fields={"title": "Synthetic O", "qty": 1})
-    again = _write(_ctx(url, state), op="create", fields={"qty": 1, "title": "Synthetic O"})
+    first = _write(
+        _ctx(url, state), op="create", fields={"title": "Synthetic O", "qty": 1}
+    )
+    again = _write(
+        _ctx(url, state), op="create", fields={"qty": 1, "title": "Synthetic O"}
+    )
     assert again["replayed"] is True and again["id"] == first["id"]
     assert store.writes == 1
 
@@ -430,7 +506,9 @@ def test_acrfence_regenerated_payload_is_refused_not_written_twice(lab: Any) -> 
     store, url, state = lab
     _write(_ctx(url, state), op="create", fields={"title": "Synthetic P", "qty": 1})
     with pytest.raises(TxRefused) as err:
-        _write(_ctx(url, state), op="create", fields={"title": " synthetic  p", "qty": 2})
+        _write(
+            _ctx(url, state), op="create", fields={"title": " synthetic  p", "qty": 2}
+        )
     assert err.value.code == "replay_mismatch"
     assert store.writes == 1
 
@@ -441,8 +519,16 @@ def test_acrfence_control_without_the_guard_writes_twice(lab: Any) -> None:
     adapter = ctx.adapter("app")
     coll = ctx.spec.system("app").collection("item")
     for qty in (1, 2):
-        default_send(adapter, coll, op="create", fields={"title": "Synthetic Q", "qty": qty},
-                     rid=None, baseline=None, key="k", marker=None)
+        default_send(
+            adapter,
+            coll,
+            op="create",
+            fields={"title": "Synthetic Q", "qty": qty},
+            rid=None,
+            baseline=None,
+            key="k",
+            marker=None,
+        )
     assert store.writes == 2
 
 
@@ -450,8 +536,12 @@ class _Crash(BaseException):
     pass
 
 
-@pytest.mark.parametrize("search", [True, False], ids=["marker-search", "audit-log-only"])
-def test_a_crash_between_send_and_ledger_is_recovered_without_a_resend(lab: Any, search: bool) -> None:
+@pytest.mark.parametrize(
+    "search", [True, False], ids=["marker-search", "audit-log-only"]
+)
+def test_a_crash_between_send_and_ledger_is_recovered_without_a_resend(
+    lab: Any, search: bool
+) -> None:
     store, url, state = lab
 
     def crash(adapter: Any, coll: Any, **kw: Any) -> Any:
@@ -459,8 +549,15 @@ def test_a_crash_between_send_and_ledger_is_recovered_without_a_resend(lab: Any,
         raise _Crash()
 
     with pytest.raises(_Crash):
-        _write(_ctx(url, state, search=search), op="create", fields={"title": "Synthetic R"}, send=crash)
-    out = _write(_ctx(url, state, search=search), op="create", fields={"title": "Synthetic R"})
+        _write(
+            _ctx(url, state, search=search),
+            op="create",
+            fields={"title": "Synthetic R"},
+            send=crash,
+        )
+    out = _write(
+        _ctx(url, state, search=search), op="create", fields={"title": "Synthetic R"}
+    )
     assert out["outcome"] == "VERIFIED", out
     assert "recovered_without_resend" in out["notes"]
     assert store.writes == 1
@@ -473,28 +570,45 @@ def test_a_crash_before_the_send_resends_once_proven_absent(lab: Any) -> None:
         raise _Crash()
 
     with pytest.raises(_Crash):
-        _write(_ctx(url, state), op="create", fields={"title": "Synthetic S"}, send=crash)
+        _write(
+            _ctx(url, state), op="create", fields={"title": "Synthetic S"}, send=crash
+        )
     out = _write(_ctx(url, state), op="create", fields={"title": "Synthetic S"})
-    assert out["outcome"] == "VERIFIED" and "resent_after_proven_absent" in out["notes"], out
+    assert (
+        out["outcome"] == "VERIFIED" and "resent_after_proven_absent" in out["notes"]
+    ), out
     assert store.writes == 1
 
 
 def test_the_key_goes_out_as_idempotency_key_where_supported(lab: Any) -> None:
     store, url, state = lab
-    out = _write(_ctx(url, state, idem=True), op="create", fields={"title": "Synthetic T"})
+    out = _write(
+        _ctx(url, state, idem=True), op="create", fields={"title": "Synthetic T"}
+    )
     assert out["outcome"] == "VERIFIED"
-    assert len(store.idempotency_keys) == 1 and store.idempotency_keys[0].startswith("ik-")
+    assert len(store.idempotency_keys) == 1 and store.idempotency_keys[0].startswith(
+        "ik-"
+    )
 
 
 def test_mcp_tools_shape(lab: Any) -> None:
     _, url, state = lab
     tools = ApiTools(_ctx(url, state), task="mcp")
     assert {t["name"] for t in tools.tools()} == {"api_read", "api_write"}
-    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "create",
-                                         "fields": {"title": "Synthetic U"}})
+    text, err = tools.call(
+        "api_write",
+        {
+            "system": "app",
+            "collection": "item",
+            "op": "create",
+            "fields": {"title": "Synthetic U"},
+        },
+    )
     assert not err, text
     rid = json.loads(text)["id"]
-    text, err = tools.call("api_read", {"system": "app", "collection": "item", "id": rid})
+    text, err = tools.call(
+        "api_read", {"system": "app", "collection": "item", "id": rid}
+    )
     assert not err and json.loads(text)["title"] == "Synthetic U"
 
 
@@ -511,49 +625,123 @@ def _reader(source: dict[str, Any], pages: dict[str, Any]) -> AuditReader:
 
 def test_fhir_bundle_shape_pages_by_link() -> None:
     def ev(i: int, at: str, who: str, what: str, code: str) -> dict[str, Any]:
-        return {"resource": {"resourceType": "AuditEvent", "id": f"a{i}", "recorded": at,
-                             "agent": [{"who": {"reference": who}}],
-                             "entity": [{"what": {"reference": what}}],
-                             "subtype": [{"code": code}]}}
+        return {
+            "resource": {
+                "resourceType": "AuditEvent",
+                "id": f"a{i}",
+                "recorded": at,
+                "agent": [{"who": {"reference": who}}],
+                "entity": [{"what": {"reference": what}}],
+                "subtype": [{"code": code}],
+            }
+        }
 
-    p1 = {"entry": [ev(3, "2026-01-01T00:00:03.000Z", "ClientApplication/me", "Patient/9", "update")],
-          "link": [{"relation": "next", "url": "http://x/fhir/AuditEvent?page=2"}]}
-    p2 = {"entry": [ev(2, "2026-01-01T00:00:02.000Z", "ClientApplication/me", "Patient/8", "create"),
-                    ev(1, "2026-01-01T00:00:01.000Z", "ClientApplication/me", "Patient/7", "read")],
-          "link": []}
-    src = {"pattern": "fhir_audit_event", "path": "/fhir/AuditEvent", "items": "entry.*.resource",
-           "paging": {"kind": "link", "path": "link[relation=next].url"},
-           "fields": {"id": "id", "at": "recorded", "actor": "agent.*.who.reference",
-                      "resource": "entity.*.what.reference", "action": "subtype.*.code"},
-           "actions": {"create": ["create"], "update": ["update"], "read": ["read"]},
-           "actor": {"any": False, "value_env": "FHIR_ACTOR"}}
+    p1 = {
+        "entry": [
+            ev(
+                3,
+                "2026-01-01T00:00:03.000Z",
+                "ClientApplication/me",
+                "Patient/9",
+                "update",
+            )
+        ],
+        "link": [{"relation": "next", "url": "http://x/fhir/AuditEvent?page=2"}],
+    }
+    p2 = {
+        "entry": [
+            ev(
+                2,
+                "2026-01-01T00:00:02.000Z",
+                "ClientApplication/me",
+                "Patient/8",
+                "create",
+            ),
+            ev(
+                1,
+                "2026-01-01T00:00:01.000Z",
+                "ClientApplication/me",
+                "Patient/7",
+                "read",
+            ),
+        ],
+        "link": [],
+    }
+    src = {
+        "pattern": "fhir_audit_event",
+        "path": "/fhir/AuditEvent",
+        "items": "entry.*.resource",
+        "paging": {"kind": "link", "path": "link[relation=next].url"},
+        "fields": {
+            "id": "id",
+            "at": "recorded",
+            "actor": "agent.*.who.reference",
+            "resource": "entity.*.what.reference",
+            "action": "subtype.*.code",
+        },
+        "actions": {"create": ["create"], "update": ["update"], "read": ["read"]},
+        "actor": {"any": False, "value_env": "FHIR_ACTOR"},
+    }
     import os
 
     os.environ["FHIR_ACTOR"] = "ClientApplication/me"
-    r = _reader(src, {"http://x/fhir/AuditEvent": p1, "http://x/fhir/AuditEvent?page=2": p2})
+    r = _reader(
+        src, {"http://x/fhir/AuditEvent": p1, "http://x/fhir/AuditEvent?page=2": p2}
+    )
     win = r.after(Cursor(at=1767225601.0, ids=frozenset({"a1"})))
     assert [(e.id, e.kind) for e in win.events] == [("a3", "update"), ("a2", "create")]
 
 
 def test_event_stream_shape_pages_by_last_id() -> None:
-    def ev(i: int, created: int, typ: str, obj: str, req: Optional[str]) -> dict[str, Any]:
-        return {"id": f"evt_{i}", "created": created, "type": typ,
-                "data": {"object": {"id": obj}}, "request": {"id": req}}
+    def ev(
+        i: int, created: int, typ: str, obj: str, req: Optional[str]
+    ) -> dict[str, Any]:
+        return {
+            "id": f"evt_{i}",
+            "created": created,
+            "type": typ,
+            "data": {"object": {"id": obj}},
+            "request": {"id": req},
+        }
 
-    p1 = {"data": [ev(4, 104, "customer.updated", "cus_1", "req_a"),
-                   ev(3, 103, "invoice.finalized", "in_1", None)], "has_more": True}
-    p2 = {"data": [ev(2, 102, "customer.created", "cus_2", "req_b"),
-                   ev(1, 101, "customer.created", "cus_0", "req_0")], "has_more": False}
-    src = {"pattern": "event_stream", "path": "/v1/events", "items": "data",
-           "paging": {"kind": "cursor", "param": "starting_after", "has_more": "has_more"},
-           "fields": {"id": "id", "at": "created", "actor": "request.id",
-                      "resource": "data.object.id", "action": "type"},
-           "actions": {"create": ["customer.created"], "update": ["customer.updated"]},
-           "actor": {"any": True}}
-    r = _reader(src, {"http://x/v1/events": p1, "http://x/v1/events?starting_after=evt_3": p2})
+    p1 = {
+        "data": [
+            ev(4, 104, "customer.updated", "cus_1", "req_a"),
+            ev(3, 103, "invoice.finalized", "in_1", None),
+        ],
+        "has_more": True,
+    }
+    p2 = {
+        "data": [
+            ev(2, 102, "customer.created", "cus_2", "req_b"),
+            ev(1, 101, "customer.created", "cus_0", "req_0"),
+        ],
+        "has_more": False,
+    }
+    src = {
+        "pattern": "event_stream",
+        "path": "/v1/events",
+        "items": "data",
+        "paging": {"kind": "cursor", "param": "starting_after", "has_more": "has_more"},
+        "fields": {
+            "id": "id",
+            "at": "created",
+            "actor": "request.id",
+            "resource": "data.object.id",
+            "action": "type",
+        },
+        "actions": {"create": ["customer.created"], "update": ["customer.updated"]},
+        "actor": {"any": True},
+    }
+    r = _reader(
+        src, {"http://x/v1/events": p1, "http://x/v1/events?starting_after=evt_3": p2}
+    )
     win = r.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
     # The automatic invoice event names no request, so it isn't this caller's.
-    assert [(e.id, e.kind) for e in win.events] == [("evt_4", "update"), ("evt_2", "create")]
+    assert [(e.id, e.kind) for e in win.events] == [
+        ("evt_4", "update"),
+        ("evt_2", "create"),
+    ]
 
 
 def test_a_log_that_comes_back_empty_is_not_read_as_new() -> None:
@@ -561,26 +749,113 @@ def test_a_log_that_comes_back_empty_is_not_read_as_new() -> None:
     the start of the log, where every old event would look like this write's."""
     from openadapt_flow.txplan.audit import AuditError
 
-    src = {"path": "/feed", "fields": {"id": "id", "at": "at", "actor": "by", "resource": "r", "action": "a"},
-           "actor": {"any": True}, "lag": {"attempts": 3, "wait_s": 0}}
+    src = {
+        "path": "/feed",
+        "fields": {
+            "id": "id",
+            "at": "at",
+            "actor": "by",
+            "resource": "r",
+            "action": "a",
+        },
+        "actor": {"any": True},
+        "lag": {"attempts": 3, "wait_s": 0},
+    }
     r = _reader(src, {"http://x/feed": []})
     with pytest.raises(AuditError):
         r.cursor(sleep=lambda s: None)
-    r2 = _reader(src, {"http://x/feed": [{"id": 9, "at": 50, "by": "u", "r": "x/1", "a": "made"}]})
+    r2 = _reader(
+        src,
+        {"http://x/feed": [{"id": 9, "at": 50, "by": "u", "r": "x/1", "a": "made"}]},
+    )
     with pytest.raises(AuditError):
         r2.after(Cursor(at=40.0, ids=frozenset({"7"})))
 
 
+def test_a_stale_stamped_event_does_not_end_the_read_before_the_cursor() -> None:
+    """One event with an old timestamp on the first page must not hide a
+    duplicate on the next page: the read goes on until the cursor is reached."""
+
+    def ev(i: Any, created: int, typ: str, obj: str) -> dict[str, Any]:
+        return {
+            "id": f"evt_{i}",
+            "created": created,
+            "type": typ,
+            "data": {"object": {"id": obj}},
+            "request": {"id": "req_me"},
+        }
+
+    p1 = {
+        "data": [
+            ev(5, 110, "customer.created", "cus_9"),
+            ev("stale", 50, "customer.updated", "cus_3"),
+        ],
+        "has_more": True,
+    }
+    p2 = {
+        "data": [
+            ev(4, 109, "customer.created", "cus_9b"),
+            ev(1, 101, "customer.created", "cus_0"),
+        ],
+        "has_more": False,
+    }
+    src = {
+        "pattern": "event_stream",
+        "path": "/v1/events",
+        "items": "data",
+        "paging": {"kind": "cursor", "param": "starting_after", "has_more": "has_more"},
+        "fields": {
+            "id": "id",
+            "at": "created",
+            "actor": "request.id",
+            "resource": "data.object.id",
+            "action": "type",
+        },
+        "actions": {"create": ["customer.created"], "update": ["customer.updated"]},
+        "actor": {"any": True},
+    }
+    r = _reader(
+        src,
+        {"http://x/v1/events": p1, "http://x/v1/events?starting_after=evt_stale": p2},
+    )
+    win = r.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
+    assert [e.id for e in win.events] == ["evt_5", "evt_4"]
+    # A log that never reaches the cursor is incomplete, not new.
+    from openadapt_flow.txplan.audit import AuditError
+
+    short = _reader(src, {"http://x/v1/events": {**p1, "has_more": False}})
+    with pytest.raises(AuditError):
+        short.after(Cursor(at=101.0, ids=frozenset({"evt_1"})))
+
+
 def test_activity_feed_resource_from_two_parts() -> None:
-    item = {"id": 5, "created": "2026-01-01T00:00:00Z", "act_user": {"login": "me"},
-            "op_type": "comment_issue", "repo": {"full_name": "oa/lab"}, "content": "12|Synthetic"}
-    src = AuditSource.model_validate({
-        "path": "/feeds",
-        "fields": {"id": "id", "at": "created", "actor": "act_user.login",
-                   "resource": {"parts": [{"path": "repo.full_name"},
-                                          {"path": "content", "regex": "^(\\d+)\\|"}], "sep": "#"},
-                   "action": "op_type"},
-        "actor": {"value_env": "X"}})
+    item = {
+        "id": 5,
+        "created": "2026-01-01T00:00:00Z",
+        "act_user": {"login": "me"},
+        "op_type": "comment_issue",
+        "repo": {"full_name": "oa/lab"},
+        "content": "12|Synthetic",
+    }
+    src = AuditSource.model_validate(
+        {
+            "path": "/feeds",
+            "fields": {
+                "id": "id",
+                "at": "created",
+                "actor": "act_user.login",
+                "resource": {
+                    "parts": [
+                        {"path": "repo.full_name"},
+                        {"path": "content", "regex": "^(\\d+)\\|"},
+                    ],
+                    "sep": "#",
+                },
+                "action": "op_type",
+            },
+            "actor": {"value_env": "X"},
+        }
+    )
     assert src.fields.resource.values(item) == ["oa/lab#12"]
     assert pick({"a": [{"b": 1}, {"b": 2}]}, "a.*.b") == [1, 2]
 
@@ -600,27 +875,53 @@ def test_one_mcp_endpoint_serves_sql_and_api_tools(lab: Any, tmp_path: Path) -> 
 
     store, url, state = lab
     db = tmp_path / "app.db"
-    sqlite3.connect(db).executescript("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);")
-    proxy = Proxy(Ctx(spec=sql_spec(sqlite=str(db)), state=state), task="both",
-                  extra=ApiTools(_ctx(url, state), task="both"))
+    sqlite3.connect(db).executescript(
+        "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);"
+    )
+    proxy = Proxy(
+        Ctx(spec=sql_spec(sqlite=str(db)), state=state),
+        task="both",
+        extra=ApiTools(_ctx(url, state), task="both"),
+    )
     server = McpServer(proxy, port=0)
     server.start()
     try:
+
         def rpc(method: str, params: dict[str, Any]) -> Any:
-            got = httpx.post(server.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
-                             headers={"Authorization": f"Bearer {server.token}",
-                                      "Accept": "application/json, text/event-stream"})
+            got = httpx.post(
+                server.url,
+                json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                headers={
+                    "Authorization": f"Bearer {server.token}",
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
             return got.json()["result"]
 
         names = {t["name"] for t in rpc("tools/list", {})["tools"]}
         assert {"sql_query", "sql_preview", "api_read", "api_write"} <= names
-        out = rpc("tools/call", {"name": "api_write", "arguments": {
-            "system": "app", "collection": "item", "op": "create", "fields": {"title": "Synthetic V"}}})
-        assert out["isError"] is False and json.loads(out["content"][0]["text"])["outcome"] == "VERIFIED"
+        out = rpc(
+            "tools/call",
+            {
+                "name": "api_write",
+                "arguments": {
+                    "system": "app",
+                    "collection": "item",
+                    "op": "create",
+                    "fields": {"title": "Synthetic V"},
+                },
+            },
+        )
+        assert (
+            out["isError"] is False
+            and json.loads(out["content"][0]["text"])["outcome"] == "VERIFIED"
+        )
         assert store.writes == 1
     finally:
         server.stop()
-    env = child_environment({"APP_TOKEN": "agent", "PATH": "/bin", "COPY": "x-agent-x"}, ["agent"])
+    env = child_environment(
+        {"APP_TOKEN": "agent", "PATH": "/bin", "COPY": "x-agent-x"}, ["agent"]
+    )
     assert env == {"PATH": "/bin"}
 
 
@@ -637,14 +938,29 @@ def test_every_outcome_writes_a_receipt_that_verifies(lab: Any) -> None:
     ok = _write(_ctx(url, state), op="create", fields={"title": "Synthetic W"})
 
     def wrong(adapter: Any, coll: Any, **kw: Any) -> Any:
-        return default_send(adapter, coll, **{**kw, "fields": {**kw["fields"], "title": "x"}})
+        return default_send(
+            adapter, coll, **{**kw, "fields": {**kw["fields"], "title": "x"}}
+        )
 
-    bad = _write(_ctx(url, state), task="t2", op="create", fields={"title": "Synthetic X"}, send=wrong)
+    bad = _write(
+        _ctx(url, state),
+        task="t2",
+        op="create",
+        fields={"title": "Synthetic X"},
+        send=wrong,
+    )
     store.hidden_reads = 50
-    slow = _write(_ctx(url, state), task="t3", op="create", fields={"title": "Synthetic Y"})
+    slow = _write(
+        _ctx(url, state), task="t3", op="create", fields={"title": "Synthetic Y"}
+    )
     store.hidden_reads = 0
     with pytest.raises(TxRefused) as refused:
-        _write(_ctx(url, state), task="t1", op="create", fields={"title": "Synthetic W", "qty": 9})
+        _write(
+            _ctx(url, state),
+            task="t1",
+            op="create",
+            fields={"title": "Synthetic W", "qty": 9},
+        )
     runs = {
         "VERIFIED": Path(ok["run_dir"]),
         "FAILED": Path(bad["run_dir"]),
@@ -662,18 +978,50 @@ def test_every_outcome_writes_a_receipt_that_verifies(lab: Any) -> None:
 def test_two_deliberate_updates_of_one_record_in_one_task(lab: Any) -> None:
     store, url, state = lab
     tools = ApiTools(_ctx(url, state), task="session")
-    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "create",
-                                         "fields": {"title": "Synthetic Z", "qty": 1}})
+    text, err = tools.call(
+        "api_write",
+        {
+            "system": "app",
+            "collection": "item",
+            "op": "create",
+            "fields": {"title": "Synthetic Z", "qty": 1},
+        },
+    )
     rid = json.loads(text)["id"]
-    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
-                                         "id": rid, "fields": {"qty": 2}})
+    text, err = tools.call(
+        "api_write",
+        {
+            "system": "app",
+            "collection": "item",
+            "op": "update",
+            "id": rid,
+            "fields": {"qty": 2},
+        },
+    )
     assert not err, text
     # The same record again with another value is a replay unless the caller names a new step.
-    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
-                                         "id": rid, "fields": {"qty": 3}})
+    text, err = tools.call(
+        "api_write",
+        {
+            "system": "app",
+            "collection": "item",
+            "op": "update",
+            "id": rid,
+            "fields": {"qty": 3},
+        },
+    )
     assert err and json.loads(text)["refused"] == "replay_mismatch"
-    text, err = tools.call("api_write", {"system": "app", "collection": "item", "op": "update",
-                                         "id": rid, "slot": "step-3", "fields": {"qty": 3}})
+    text, err = tools.call(
+        "api_write",
+        {
+            "system": "app",
+            "collection": "item",
+            "op": "update",
+            "id": rid,
+            "slot": "step-3",
+            "fields": {"qty": 3},
+        },
+    )
     assert not err, text
     assert store.records[int(rid)]["qty"] == 3 and store.writes == 3
 
@@ -690,7 +1038,9 @@ def test_proxy_cli_api_only_gets_a_stable_default_task(
     tx.write_text(yaml.safe_dump(_spec(url).model_dump(mode="json", exclude_none=True)))
     seen: list[dict[str, Any]] = []
     monkeypatch.setattr(proxy, "run", lambda command, **kw: seen.append(kw) or 0)
-    args = proxy_cli._parser().parse_args(["--api", str(tx), "--state", str(tmp_path / "s")])
+    args = proxy_cli._parser().parse_args(
+        ["--api", str(tx), "--state", str(tmp_path / "s")]
+    )
     assert proxy_cli._run(args, []) == 0
     assert proxy_cli._run(args, []) == 0
     first, second = seen

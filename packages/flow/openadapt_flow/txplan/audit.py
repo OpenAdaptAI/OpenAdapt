@@ -69,7 +69,11 @@ def pick(value: Any, path: str) -> list[Any]:
                 name, key, want = sel.groups()
                 got = item.get(name) if isinstance(item, Mapping) else None
                 if isinstance(got, list):
-                    out += [x for x in got if isinstance(x, Mapping) and str(x.get(key)) == want]
+                    out += [
+                        x
+                        for x in got
+                        if isinstance(x, Mapping) and str(x.get(key)) == want
+                    ]
             elif part == "*":
                 if isinstance(item, list):
                     out += item
@@ -326,7 +330,9 @@ class AuditReader:
         self.source = source
         self.http = http
         self._actor: Optional[str] = None
-        base = source.base_url or (os.environ.get(source.base_url_env, "") if source.base_url_env else "")
+        base = source.base_url or (
+            os.environ.get(source.base_url_env, "") if source.base_url_env else ""
+        )
         self.base = base.rstrip("/")
 
     # who -------------------------------------------------------------------
@@ -365,7 +371,9 @@ class AuditReader:
 
     def _get(self, path: str, params: Mapping[str, Any]) -> Any:
         try:
-            resp = self.http.request("GET", self._url(path), params=dict(params) or None)
+            resp = self.http.request(
+                "GET", self._url(path), params=dict(params) or None
+            )
         except Exception as exc:  # noqa: BLE001 - transport: the window is unknown
             raise AuditError(f"the log read failed: {type(exc).__name__}") from exc
         if resp.status_code >= 400:
@@ -413,7 +421,11 @@ class AuditReader:
             if s.paging.size_param:
                 q[s.paging.size_param] = s.paging.size
             got = self._get(path, q)
-            raw = pick(got, s.items) if s.items else (got if isinstance(got, list) else [])
+            raw = (
+                pick(got, s.items)
+                if s.items
+                else (got if isinstance(got, list) else [])
+            )
             if s.items and len(raw) == 1 and isinstance(raw[0], list):
                 raw = raw[0]
             items = [e for e in (self._event(x) for x in raw) if e is not None]
@@ -492,7 +504,10 @@ class AuditReader:
                     win.events.append(e)
                 else:
                     win.other_actors += 1
-            if older:
+            # An event older than the window ends the read only once the
+            # cursor's own events were seen: one stale-stamped event must not
+            # hide a duplicate or collateral change on a later page.
+            if older and reached:
                 return win
             if not items:
                 break
