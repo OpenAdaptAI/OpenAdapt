@@ -7,7 +7,8 @@ qualification projects and admission envelopes are files people keep, so a
 move must not change what a model accepts or writes.
 
 For each module below, this test pins every Pydantic model defined in it when
-the snapshot was written, by the name it is imported under from that module:
+the snapshot was first written, plus every name already pinned, by the name it
+is imported under from that module:
 its validation schema and its serialization schema from ``model_json_schema``,
 with property order kept (field order is part of what a model writes). After a
 move the name still resolves through the old module, and its schemas must be
@@ -41,6 +42,7 @@ SNAPSHOTS = Path(__file__).parent / "fixtures" / "schema_surface"
 # requests change it; receipt and Seal formats have their own vector tests.
 MODULES = [
     "openadapt_flow.approval_mode.model",
+    "openadapt_flow.deployment",
     "openadapt_flow.ir",
     "openadapt_flow.production_qualification",
     "openadapt_flow.qualification",
@@ -95,10 +97,15 @@ def test_snapshots_are_current_when_regenerating() -> None:
         pytest.skip("set OPENADAPT_WRITE_SCHEMA_SURFACE=1 to regenerate")
     SNAPSHOTS.mkdir(parents=True, exist_ok=True)
     for module_name in MODULES:
-        models = {
-            name: _schemas(model)
-            for name, model in _defined_models(module_name).items()
-        }
+        module = importlib.import_module(module_name)
+        names = set(_defined_models(module_name))
+        if _path(module_name).exists():
+            # Keep every name already pinned, resolved through this module, so
+            # a model that moved to a submodule and is re-exported here stays
+            # pinned after regeneration.
+            pinned = json.loads(_path(module_name).read_text(encoding="utf-8"))
+            names |= set(pinned["models"])
+        models = {name: _schemas(getattr(module, name)) for name in sorted(names)}
         payload = {"pydantic": _pydantic(), "models": models}
         _path(module_name).write_text(
             json.dumps(payload, indent=1) + "\n", encoding="utf-8"
