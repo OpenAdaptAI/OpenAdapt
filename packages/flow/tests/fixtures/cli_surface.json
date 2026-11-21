@@ -360,7 +360,8 @@
     "variants": [],
     "verify-run": [],
     "visualize": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow admit": {
    "arguments": [
@@ -384,7 +385,8 @@
     "decide": [],
     "run": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow admit decide": {
    "arguments": [
@@ -430,7 +432,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow admit run": {
    "arguments": [
@@ -550,7 +553,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow admit status": {
    "arguments": [
@@ -612,7 +616,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow api": {
    "arguments": [
@@ -636,7 +641,8 @@
     "admit": [],
     "propose": [],
     "show": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow api admit": {
    "arguments": [
@@ -724,7 +730,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow api propose": {
    "arguments": [
@@ -770,7 +777,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow api show": {
    "arguments": [
@@ -816,7 +824,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow approve": {
    "arguments": [
@@ -932,7 +941,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow approve-sanitized": {
    "arguments": [
@@ -992,7 +1002,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow approver-grant": {
    "arguments": [
@@ -1015,7 +1026,8 @@
    "commands": {
     "sign": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow approver-grant sign": {
    "arguments": [
@@ -1089,7 +1101,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow approver-grant verify": {
    "arguments": [
@@ -1135,7 +1148,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow attach-seal": {
    "arguments": [
@@ -1195,7 +1209,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow bench": {
    "arguments": [
@@ -1297,7 +1312,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow benchmark": {
    "arguments": [
@@ -1387,7 +1403,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow bind-record-checks": {
    "arguments": [
@@ -1476,7 +1493,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow browser-accessibility": {
    "arguments": [
@@ -1524,7 +1542,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "enable",
+      "disable"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow business-decisions": {
    "arguments": [
@@ -1546,7 +1573,8 @@
    ],
    "commands": {
     "serve": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow business-decisions serve": {
    "arguments": [
@@ -1650,7 +1678,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow certify": {
    "arguments": [
@@ -1710,7 +1739,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow check": {
    "arguments": [
@@ -1735,7 +1765,8 @@
     "admit": [],
     "mark": [],
     "show": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow check accept": {
    "arguments": [
@@ -1767,7 +1798,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow check admit": {
    "arguments": [
@@ -1827,7 +1859,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow check mark": {
    "arguments": [
@@ -1929,7 +1962,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow check show": {
    "arguments": [
@@ -1975,7 +2009,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow cleanup": {
    "arguments": [
@@ -1997,7 +2032,8 @@
    ],
    "commands": {
     "qualify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow cleanup qualify": {
    "arguments": [
@@ -2099,7 +2135,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow compile": {
    "arguments": [
@@ -2215,7 +2252,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow compile-agent": {
    "arguments": [
@@ -2677,7 +2715,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow compose": {
    "arguments": [
@@ -2781,7 +2820,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow confirm-surfaces": {
    "arguments": [
@@ -2827,7 +2867,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow connect": {
    "arguments": [
@@ -2935,7 +2976,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "pairing",
+      "uri"
+     ],
+     "required": true
+    }
+   ]
   },
   "openadapt-flow connector": {
    "arguments": [
@@ -2959,7 +3009,8 @@
     "enroll": [],
     "run": [],
     "service": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow connector enroll": {
    "arguments": [
@@ -3091,7 +3142,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow connector run": {
    "arguments": [
@@ -3237,7 +3289,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow connector service": {
    "arguments": [
@@ -3303,7 +3356,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow console": {
    "arguments": [
@@ -3827,7 +3881,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign": {
    "arguments": [
@@ -3857,7 +3912,8 @@
     "resolve": [],
     "timestamp-baseline": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow countersign add": {
    "arguments": [
@@ -4044,7 +4100,17 @@
      "type": "int"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "tsa_url",
+      "no_timestamp",
+      "tsa_local"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow countersign close": {
    "arguments": [
@@ -4212,7 +4278,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign disclose": {
    "arguments": [
@@ -4287,7 +4354,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign dossier": {
    "arguments": [
@@ -4435,7 +4503,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign exceptions": {
    "arguments": [
@@ -4502,7 +4571,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign purge": {
    "arguments": [
@@ -4550,7 +4620,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign resolve": {
    "arguments": [
@@ -4638,7 +4709,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow countersign timestamp-baseline": {
    "arguments": [
@@ -4785,7 +4857,24 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "baseline",
+      "baseline_sha256"
+     ],
+     "required": true
+    },
+    {
+     "dests": [
+      "tsa_url",
+      "no_timestamp",
+      "tsa_local"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow countersign verify": {
    "arguments": [
@@ -4887,7 +4976,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow deferred": {
    "arguments": [
@@ -4910,7 +5000,8 @@
    "commands": {
     "settle": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow deferred settle": {
    "arguments": [
@@ -5075,7 +5166,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow deferred status": {
    "arguments": [
@@ -5135,7 +5227,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow demo": {
    "arguments": [
@@ -5212,7 +5305,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow demo-record": {
    "arguments": [
@@ -5316,7 +5410,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow disambiguate": {
    "arguments": [
@@ -5390,7 +5485,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow emit-mcp": {
    "arguments": [
@@ -5436,7 +5532,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow emit-skill": {
    "arguments": [
@@ -5482,7 +5579,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow explain": {
    "arguments": [
@@ -5514,7 +5612,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet": {
    "arguments": [
@@ -5555,7 +5654,8 @@
     "roles": [],
     "simulate": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow fleet allow": {
    "arguments": [
@@ -5645,7 +5745,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet disallow": {
    "arguments": [
@@ -5721,7 +5822,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet policy": {
    "arguments": [
@@ -5745,7 +5847,8 @@
     "keygen": [],
     "sign": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow fleet policy keygen": {
    "arguments": [
@@ -5793,7 +5896,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet policy sign": {
    "arguments": [
@@ -5953,7 +6057,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet policy verify": {
    "arguments": [
@@ -5987,7 +6092,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet roles": {
    "arguments": [
@@ -6049,7 +6155,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet simulate": {
    "arguments": [
@@ -6083,7 +6190,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow fleet status": {
    "arguments": [
@@ -6117,7 +6225,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow for-each": {
    "arguments": [
@@ -6247,7 +6356,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow guard": {
    "arguments": [
@@ -6438,7 +6548,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow induce": {
    "arguments": [
@@ -6596,7 +6707,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow intake": {
    "arguments": [
@@ -6752,7 +6864,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow item-approval": {
    "arguments": [
@@ -6776,7 +6889,8 @@
     "approve": [],
     "decline": [],
     "show": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow item-approval approve": {
    "arguments": [
@@ -7041,7 +7155,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow item-approval decline": {
    "arguments": [
@@ -7324,7 +7439,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow item-approval show": {
    "arguments": [
@@ -7370,7 +7486,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit": {
    "arguments": [
@@ -7399,7 +7516,8 @@
     "review": [],
     "sign-policy": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow jit admit": {
    "arguments": [
@@ -7515,7 +7633,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit approver": {
    "arguments": [
@@ -7540,7 +7659,8 @@
     "init": [],
     "list": [],
     "remove": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow jit approver add": {
    "arguments": [
@@ -7630,7 +7750,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit approver init": {
    "arguments": [
@@ -7692,7 +7813,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit approver list": {
    "arguments": [
@@ -7740,7 +7862,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit approver remove": {
    "arguments": [
@@ -7830,7 +7953,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit keygen": {
    "arguments": [
@@ -7878,7 +8002,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit register": {
    "arguments": [
@@ -7958,7 +8083,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit reject": {
    "arguments": [
@@ -8032,7 +8158,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit review": {
    "arguments": [
@@ -8162,7 +8289,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "step",
+      "all_steps_shown"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow jit sign-policy": {
    "arguments": [
@@ -8236,7 +8372,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow jit status": {
    "arguments": [
@@ -8282,7 +8419,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow known-ids": {
    "arguments": [
@@ -8305,7 +8443,8 @@
    "commands": {
     "confirm": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow known-ids confirm": {
    "arguments": [
@@ -8421,7 +8560,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow known-ids status": {
    "arguments": [
@@ -8495,7 +8635,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow learn": {
    "arguments": [
@@ -8519,7 +8660,8 @@
     "approve": [],
     "collect": [],
     "propose": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow learn approve": {
    "arguments": [
@@ -8635,7 +8777,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow learn collect": {
    "arguments": [
@@ -8725,7 +8868,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow learn propose": {
    "arguments": [
@@ -8857,7 +9001,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow lint": {
    "arguments": [
@@ -8903,7 +9048,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal": {
    "arguments": [
@@ -8964,7 +9110,8 @@
     "submit": [],
     "timestamp": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow local-seal anchor": {
    "arguments": [
@@ -9038,7 +9185,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal authorize": {
    "arguments": [
@@ -9063,7 +9211,8 @@
     "create": [],
     "sign": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow local-seal authorize anchor": {
    "arguments": [
@@ -9137,7 +9286,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal authorize create": {
    "arguments": [
@@ -9269,7 +9419,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal authorize sign": {
    "arguments": [
@@ -9343,7 +9494,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal authorize verify": {
    "arguments": [
@@ -9473,7 +9625,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal batch": {
    "arguments": [
@@ -9493,7 +9646,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal file": {
    "arguments": [
@@ -9571,7 +9725,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal key": {
    "arguments": [
@@ -9595,7 +9750,8 @@
     "create": [],
     "pin": [],
     "revoke": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow local-seal key create": {
    "arguments": [
@@ -9615,7 +9771,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal key pin": {
    "arguments": [
@@ -9647,7 +9804,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal key revoke": {
    "arguments": [
@@ -9705,7 +9863,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal profile": {
    "arguments": [
@@ -9849,7 +10008,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal proof": {
    "arguments": [
@@ -9881,7 +10041,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal public": {
    "arguments": [
@@ -9972,7 +10133,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "names",
+      "names"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow local-seal run": {
    "arguments": [
@@ -10060,7 +10230,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal submit": {
    "arguments": [
@@ -10094,7 +10265,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal timestamp": {
    "arguments": [
@@ -10154,7 +10326,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow local-seal verify": {
    "arguments": [
@@ -10354,7 +10527,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow login": {
    "arguments": [
@@ -10518,7 +10692,16 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "browser",
+      "browser"
+     ],
+     "required": false
+    }
+   ]
   },
   "openadapt-flow materialize-approved": {
    "arguments": [
@@ -10594,7 +10777,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow narration": {
    "arguments": [
@@ -10617,7 +10801,8 @@
    "commands": {
     "attach": [],
     "show": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow narration attach": {
    "arguments": [
@@ -10719,7 +10904,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "audio",
+      "transcript"
+     ],
+     "required": true
+    }
+   ]
   },
   "openadapt-flow narration show": {
    "arguments": [
@@ -10751,7 +10945,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow no-outbound": {
    "arguments": [
@@ -10773,7 +10968,8 @@
    ],
    "commands": {
     "allow": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow no-outbound allow": {
    "arguments": [
@@ -10812,7 +11008,8 @@
     "derive": [],
     "list": [],
     "remove": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow no-outbound allow add": {
    "arguments": [
@@ -10858,7 +11055,8 @@
      "type": "int"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow no-outbound allow derive": {
    "arguments": [
@@ -10890,7 +11088,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow no-outbound allow list": {
    "arguments": [
@@ -10924,7 +11123,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow no-outbound allow remove": {
    "arguments": [
@@ -10956,7 +11156,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow process": {
    "arguments": [
@@ -11103,7 +11304,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow propose-qualification": {
    "arguments": [
@@ -11198,7 +11400,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow pull": {
    "arguments": [
@@ -11328,7 +11531,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow push": {
    "arguments": [
@@ -11567,7 +11771,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify": {
    "arguments": [
@@ -11611,7 +11816,8 @@
     "set-identity": [],
     "set-risk": [],
     "trust-runner": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow qualify accept": {
    "arguments": [
@@ -11718,7 +11924,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify add-case": {
    "arguments": [
@@ -11847,7 +12054,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify add-requalification": {
    "arguments": [
@@ -11916,7 +12124,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify admit-local": {
    "arguments": [
@@ -11976,7 +12185,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify business-decision": {
    "arguments": [
@@ -12036,7 +12246,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify campaign": {
    "arguments": [
@@ -12180,7 +12391,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify certify": {
    "arguments": [
@@ -12299,7 +12511,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify drills": {
    "arguments": [
@@ -12373,7 +12586,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify explain": {
    "arguments": [
@@ -12447,7 +12661,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify from-demo": {
    "arguments": [
@@ -12556,7 +12771,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify init": {
    "arguments": [
@@ -12712,7 +12928,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify inspect": {
    "arguments": [
@@ -12786,7 +13003,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify judgment-cases": {
    "arguments": [
@@ -12846,7 +13064,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify label": {
    "arguments": [
@@ -12870,7 +13089,8 @@
     "list": [],
     "remove": [],
     "set": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow qualify label list": {
    "arguments": [
@@ -12902,7 +13122,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify label remove": {
    "arguments": [
@@ -12948,7 +13169,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify label set": {
    "arguments": [
@@ -13025,7 +13247,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify propose": {
    "arguments": [
@@ -13120,7 +13343,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify report": {
    "arguments": [
@@ -13194,7 +13418,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify run": {
    "arguments": [
@@ -13254,7 +13479,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify run-case": {
    "arguments": [
@@ -13951,7 +14177,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify schema": {
    "arguments": [
@@ -13971,7 +14198,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify set-effect": {
    "arguments": [
@@ -14067,7 +14295,8 @@
      "type": "int"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify set-identity": {
    "arguments": [
@@ -14211,7 +14440,8 @@
      "type": "int"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify set-risk": {
    "arguments": [
@@ -14290,7 +14520,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow qualify trust-runner": {
    "arguments": [
@@ -14350,7 +14581,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow receipt": {
    "arguments": [
@@ -14374,7 +14606,8 @@
     "anchor": [],
     "keys": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow receipt anchor": {
    "arguments": [
@@ -14406,7 +14639,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow receipt keys": {
    "arguments": [
@@ -14428,7 +14662,8 @@
    ],
    "commands": {
     "export": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow receipt keys export": {
    "arguments": [
@@ -14460,7 +14695,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow receipt verify": {
    "arguments": [
@@ -14576,7 +14812,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow reconcile": {
    "arguments": [
@@ -14666,7 +14903,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow record": {
    "arguments": [
@@ -15131,7 +15369,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow redact-report": {
    "arguments": [
@@ -15191,7 +15430,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair": {
    "arguments": [
@@ -15226,7 +15466,8 @@
     "stage": [],
     "standard-changes": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow repair approve": {
    "arguments": [
@@ -15300,7 +15541,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair campaign": {
    "arguments": [
@@ -15363,7 +15605,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair canary": {
    "arguments": [
@@ -15423,7 +15666,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair canary-record": {
    "arguments": [
@@ -15483,7 +15727,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair clear-hold": {
    "arguments": [
@@ -15559,7 +15804,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair list": {
    "arguments": [
@@ -15593,7 +15839,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair register": {
    "arguments": [
@@ -15686,7 +15933,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair revert": {
    "arguments": [
@@ -15746,7 +15994,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair review": {
    "arguments": [
@@ -15806,7 +16055,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair rollback": {
    "arguments": [
@@ -15868,7 +16118,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair show": {
    "arguments": [
@@ -15928,7 +16179,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair stage": {
    "arguments": [
@@ -15974,7 +16226,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair standard-changes": {
    "arguments": [
@@ -16036,7 +16289,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow repair status": {
    "arguments": [
@@ -16070,7 +16324,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow replay": {
    "arguments": [
@@ -16732,7 +16987,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow report-break": {
    "arguments": [
@@ -16869,7 +17125,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow report-run": {
    "arguments": [
@@ -17056,7 +17313,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow resume": {
    "arguments": [
@@ -17767,7 +18025,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow review-sanitized": {
    "arguments": [
@@ -17841,7 +18100,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow rollback": {
    "arguments": [
@@ -17863,7 +18123,8 @@
    ],
    "commands": {
     "qualify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow rollback qualify": {
    "arguments": [
@@ -17993,7 +18254,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow route": {
    "arguments": [
@@ -18312,7 +18574,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow run": {
    "arguments": [
@@ -19623,7 +19886,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow sanitize": {
    "arguments": [
@@ -19714,7 +19978,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow scaffold-verifier": {
    "arguments": [
@@ -19887,7 +20152,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow seal": {
    "arguments": [
@@ -19934,7 +20200,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow sections": {
    "arguments": [
@@ -20059,7 +20326,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow serve-execute": {
    "arguments": [
@@ -20163,7 +20431,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow serve-reward": {
    "arguments": [
@@ -20267,7 +20536,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service": {
    "arguments": [
@@ -20295,7 +20565,8 @@
     "pf": [],
     "restart": [],
     "run": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow service boot-check": {
    "arguments": [
@@ -20343,7 +20614,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service egress-audit": {
    "arguments": [
@@ -20419,7 +20691,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service health": {
    "arguments": [
@@ -20509,7 +20782,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service notices": {
    "arguments": [
@@ -20585,7 +20859,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service pf": {
    "arguments": [
@@ -20608,7 +20883,8 @@
    "commands": {
     "check": [],
     "render": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow service pf check": {
    "arguments": [
@@ -20668,7 +20944,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service pf render": {
    "arguments": [
@@ -20730,7 +21007,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service restart": {
    "arguments": [
@@ -20764,7 +21042,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow service run": {
    "arguments": [
@@ -20854,7 +21133,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow shadow": {
    "arguments": [
@@ -21060,7 +21340,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow silent-saves": {
    "arguments": [
@@ -21077,7 +21358,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow skill": {
    "arguments": [
@@ -21101,7 +21383,8 @@
     "bind": [],
     "qualify": [],
     "status": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow skill bind": {
    "arguments": [
@@ -21147,7 +21430,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow skill qualify": {
    "arguments": [
@@ -21249,7 +21533,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow skill status": {
    "arguments": [
@@ -21281,7 +21566,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow teach": {
    "arguments": [
@@ -21383,7 +21669,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow teach-authorization": {
    "arguments": [
@@ -21407,7 +21694,8 @@
     "create": [],
     "sign": [],
     "verify": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow teach-authorization create": {
    "arguments": [
@@ -21495,7 +21783,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow teach-authorization sign": {
    "arguments": [
@@ -21569,7 +21858,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow teach-authorization verify": {
    "arguments": [
@@ -21629,7 +21919,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow teach-branch": {
    "arguments": [
@@ -21736,7 +22027,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow triage": {
    "arguments": [
@@ -21763,7 +22055,8 @@
     "eligibility": [],
     "estimate": [],
     "plan": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow triage approve-batch": {
    "arguments": [
@@ -21896,7 +22189,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow triage calibrate": {
    "arguments": [
@@ -22000,7 +22294,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow triage decide": {
    "arguments": [
@@ -22151,7 +22446,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "approve",
+      "decline"
+     ],
+     "required": true
+    }
+   ]
   },
   "openadapt-flow triage eligibility": {
    "arguments": [
@@ -22283,7 +22587,8 @@
      "type": "float"
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow triage estimate": {
    "arguments": [
@@ -22317,7 +22622,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow triage plan": {
    "arguments": [
@@ -22457,7 +22763,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow tutorial": {
    "arguments": [
@@ -22589,7 +22896,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow undo": {
    "arguments": [
@@ -22616,7 +22924,8 @@
     "list": [],
     "propose": [],
     "run": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow undo accept": {
    "arguments": [
@@ -22662,7 +22971,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow undo approve": {
    "arguments": [
@@ -22736,7 +23046,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow undo declare": {
    "arguments": [
@@ -22852,7 +23163,16 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": [
+    {
+     "dests": [
+      "from_bundle",
+      "from_file"
+     ],
+     "required": true
+    }
+   ]
   },
   "openadapt-flow undo list": {
    "arguments": [
@@ -22912,7 +23232,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow undo propose": {
    "arguments": [
@@ -23056,7 +23377,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow undo run": {
    "arguments": [
@@ -23494,7 +23816,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow validate-hosted": {
    "arguments": [
@@ -23738,7 +24061,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow variants": {
    "arguments": [
@@ -23762,7 +24086,8 @@
     "add": [],
     "author": [],
     "show": []
-   }
+   },
+   "exclusive": []
   },
   "openadapt-flow variants add": {
    "arguments": [
@@ -23896,7 +24221,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow variants author": {
    "arguments": [
@@ -23958,7 +24284,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow variants show": {
    "arguments": [
@@ -23990,7 +24317,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow verify-run": {
    "arguments": [
@@ -24225,7 +24553,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   },
   "openadapt-flow visualize": {
    "arguments": [
@@ -24309,7 +24638,8 @@
      "type": null
     }
    ],
-   "commands": {}
+   "commands": {},
+   "exclusive": []
   }
  }
 }

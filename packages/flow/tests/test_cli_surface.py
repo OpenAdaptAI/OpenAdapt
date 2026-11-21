@@ -7,7 +7,8 @@ This test pins the parser tree that ``build_parser()`` builds:
 
 * the structure, on every Python version: each command path, its aliases, and
   for each argument its option strings, ``dest``, action, ``nargs``,
-  ``required``, choices, metavar, type, help text and a primitive default;
+  ``required``, choices, metavar, type, help text and a primitive default,
+  and each mutually exclusive group;
 * the ``--help`` text of every command, byte for byte, on the Python minor the
   snapshot was written on (argparse formats help differently across minors).
 
@@ -102,7 +103,15 @@ def _walk(
         for key, names in by_parser.items():
             commands[names[0]] = names[1:]
             children.append((names[0], parsers[key]))
-    out[path] = {"arguments": _arguments(parser), "commands": commands}
+    exclusive = [
+        {"required": group.required, "dests": [a.dest for a in group._group_actions]}
+        for group in parser._mutually_exclusive_groups
+    ]
+    out[path] = {
+        "arguments": _arguments(parser),
+        "commands": commands,
+        "exclusive": exclusive,
+    }
     helps[path] = parser.format_help()
     for name, sub in children:
         _walk(sub, f"{path} {name}", out, helps)
@@ -174,13 +183,18 @@ def test_walker_sees_nested_commands_and_aliases() -> None:
     one = sub.add_parser("one", aliases=["uno"])
     one.add_argument("path")
     inner = one.add_subparsers(dest="inner")
-    inner.add_parser("deep").add_argument("--n", type=int, choices=[1, 2])
+    deep_parser = inner.add_parser("deep")
+    deep_parser.add_argument("--n", type=int, choices=[1, 2])
+    either = deep_parser.add_mutually_exclusive_group(required=True)
+    either.add_argument("--a", action="store_true")
+    either.add_argument("--b", action="store_true")
     tree: dict[str, Any] = {}
     helps: dict[str, str] = {}
     _walk(parser, "x", tree, helps)
     assert sorted(tree) == ["x", "x one", "x one deep"]
     assert tree["x"]["commands"] == {"one": ["uno"]}
-    deep = tree["x one deep"]["arguments"][-1]
+    assert tree["x one deep"]["exclusive"] == [{"required": True, "dests": ["a", "b"]}]
+    deep = tree["x one deep"]["arguments"][-3]
     assert deep["options"] == ["--n"] and deep["choices"] == ["1", "2"]
     assert deep["type"] == "int"
     assert tree["x"]["arguments"][-1]["default"] == 3
