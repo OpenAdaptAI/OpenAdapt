@@ -1,4 +1,4 @@
-"""Score a case's stored submissions against ``answer_key.json``.
+"""Score a case's stored submissions against ``answers.json``.
 
 ``score_case(case_id, stored_records)`` takes the JSON list returned by the
 portal's ``GET /__oracle/submissions`` and returns::
@@ -52,7 +52,7 @@ HERE = Path(__file__).resolve().parent
 
 @lru_cache(maxsize=1)
 def load_answer_key() -> dict[str, Any]:
-    return json.loads((HERE / "answer_key.json").read_text())
+    return json.loads((HERE / "answers.json").read_text())
 
 
 _MISSING = object()
