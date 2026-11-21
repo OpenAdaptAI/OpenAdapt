@@ -135,4 +135,29 @@ what is measured: every pack is written from one dev case.
 
 ## Deviations
 
-None yet.
+**D1, 2026-11-21. Engine re-pinned before any scored case.** `ENGINE_SHA`
+moves from `8a9f08b75` to `13772e2b6`. The only engine change is
+`33851c2b9`; the later commit touches docs only. The change came from the
+dev re-run of the eight known portals with their old packs, and from the
+pellbrook pack author's dev-case smoke. Every part is a general fix with a
+test and no portal names:
+- an intake value that no binding enters, and that the pack does not list in
+  `ignored_intake_keys`, keeps a run from `verified_done` (`intake:<key>`
+  `not_checked`). This is the class behind a false receipt that recurred on
+  the dev set, an additional-driver list the pack never entered;
+- a radio group with no legend is named by its table row's header cell;
+- a validation marker counts only when it is added to a row's old text;
+- a screen's "did it advance" signature includes the visible field labels,
+  so a form that asks one question at a time in one control advances (the
+  pellbrook dev case stopped at its second question without it).
+
+Both pack authors then updated their packs for the first rule (corvane
+lists 4 keys, pellbrook 2, each with a reason in the module), and both dev
+cases end `verified_done` and correct at `13772e2b6`. Departures from the
+read limits, as the authors reported them: the pellbrook author ran one
+`grep` in `playwright_surface.py` (the engine, not the portal), and both
+authors ran extra dev-case diagnostics (a dev run with two bindings removed;
+snapshot hooks on the dev case) to see blank-form defaults that the
+demonstration did not capture. Neither read portal source, scored intakes or
+the answer key. Packs are frozen at the commit that adds them, before the
+first scored case.
