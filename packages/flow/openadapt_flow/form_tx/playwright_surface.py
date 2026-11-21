@@ -159,6 +159,8 @@ _SNAPSHOT_WALKER_JS = r"""
         'select',
         'choose one',
         'please choose',
+        'choose',
+        '-- choose one --',
     ]);
     const isPlaceholderText = (s) => PLACEHOLDERS.has(cleanText(s).toLowerCase());
 
@@ -427,6 +429,25 @@ _SNAPSHOT_WALKER_JS = r"""
             }
             const t = cleanText(text);
             if (t) return t;
+        }
+        // A table layout: the label is in the cell before the control's cell.
+        // Only when the control is alone in its cell and the label cell holds
+        // no control.
+        const cell = el.closest('td, th');
+        if (cell && !(tag === 'input' && (inputType === 'radio' || inputType === 'checkbox'))) {
+            const CONTROLS = 'input:not([type="hidden"]), select, textarea, button, [role="combobox"], [role="checkbox"], [role="radio"]';
+            if (safeQueryAll(cell, CONTROLS).length === 1) {
+                let prev = cell.previousElementSibling;
+                while (prev && !cleanText(prev.textContent) &&
+                        !safeQueryAll(prev, CONTROLS).length) {
+                    prev = prev.previousElementSibling;
+                }
+                if (prev && (prev.tagName === 'TD' || prev.tagName === 'TH') &&
+                        !safeQueryAll(prev, CONTROLS).length) {
+                    const lt = extractLabelCloneText(prev);
+                    if (lt) return lt;
+                }
+            }
         }
         return '';
     };

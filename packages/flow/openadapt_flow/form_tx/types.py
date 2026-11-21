@@ -313,6 +313,8 @@ class FieldBindingSpec(BaseModel):
         "Select",
         "Choose one",
         "Please choose",
+        "Choose",
+        "-- Choose one --",
     )
 
 

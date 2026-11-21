@@ -92,6 +92,8 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "Select",
     "Choose one",
     "Please choose",
+    "Choose",
+    "-- Choose one --",
 )
 
 
