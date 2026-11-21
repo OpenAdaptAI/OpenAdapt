@@ -37,6 +37,12 @@ inputs:
   tolerance:
     description: How far (0-1) a gated rate may rise above the baseline before the build fails.
     default: "0.05"
+  min-scored:
+    description: >-
+      Refuse the gate (fail) when fewer runs than this were scored. An agent
+      that stops saving has its faulted runs left out of the rates, so set this
+      near the scenario count times repetitions.
+    default: "1"
   spend-cap-usd:
     description: Model spend cap for the run.
     default: "5"
@@ -118,6 +124,7 @@ runs:
         A_BASELINE: ${{ inputs.baseline }}
         A_TOL: ${{ inputs.tolerance }}
         A_CAP: ${{ inputs.spend-cap-usd }}
+        A_MIN: ${{ inputs.min-scored }}
         A_PORT: ${{ inputs.port }}
         A_START: ${{ inputs.start-app }}
         A_HOST: ${{ inputs.app-host }}
@@ -127,7 +134,7 @@ runs:
       run: |
         set -uo pipefail
         args=(run --app "$A_APP" --port "$A_PORT" --app-host "$A_HOST" --docker "$A_DOCKER"
-              --repetitions "$A_REPS" --tolerance "$A_TOL" --spend-cap-usd "$A_CAP" --out "$A_OUT")
+              --repetitions "$A_REPS" --tolerance "$A_TOL" --spend-cap-usd "$A_CAP" --min-scored "$A_MIN" --out "$A_OUT")
         [ -n "$A_AGENT" ] && args+=(--agent "$A_AGENT")
         [ -n "$A_AGENT_CMD" ] && args+=(--agent-cmd "$A_AGENT_CMD")
         [ -n "$A_MODEL" ] && args+=(--model "$A_MODEL")

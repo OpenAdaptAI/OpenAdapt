@@ -10,15 +10,17 @@ corruption or false claims of success rise above a stored baseline, for
 example after an agent change or a model upgrade.
 
 The apps (OpenEMR, Dolibarr, EspoCRM) and the scenarios are data: a YAML
-app pack and a YAML scenario pack each. A new app or a new fault is a new
-file.
+app pack and a YAML scenario pack each. A new app on a MariaDB table, or a
+new scenario using the fault kinds below, is a new file; a new fault kind or
+another kind of store (PostgreSQL, FHIR) is code (`faults.py`, `store.py`).
 
 ## Run it in 15 minutes
 
 You need Docker with Compose and Python 3.10 to 3.12.
 
 ```bash
-pip install "openadapt-flow[agent-test]" openadapt      # or from a checkout: pip install -e packages/types -e "packages/flow[agent-test]"
+# from a checkout of OpenAdapt (agent_test is not in a PyPI release yet)
+pip install -e packages/types -e "packages/flow[agent-test]" -e .
 python -m playwright install chromium-headless-shell
 openadapt test list
 openadapt test up --app dolibarr                         # pulls the images, about 2 minutes
@@ -136,7 +138,10 @@ openadapt test gate --results run-b/results.json --baseline baseline.json --tole
 ```
 
 The gate fails (exit 1) when silent corruption or false success is higher
-than the baseline's by more than the tolerance. It refuses (exit 2) a run
+than the baseline's by more than the tolerance. A run whose planted fault
+never took effect (the agent never saved) is left out of the rates, so an
+agent that stops saving could pass; `--min-scored` refuses (exit 2) a run
+with fewer scored runs than you set. It refuses (exit 2) a run
 whose scenario pack, app pack or images differ from the baseline's. The
 agent may differ: that is what it compares. It does not test significance;
 with ten scenarios one more false success is ten points, so run more
@@ -161,7 +166,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-It installs `openadapt-flow[agent-test]` from the pinned ref, starts the
+It installs `openadapt-flow[agent-test]` from the pinned ref's source
+(`install: pypi` once a release carries it), starts the
 app's containers on the runner, runs the scenarios, uploads `report.html`,
 `results.json`, `receipt.json` and `gate.json`, writes the table to the job
 summary, stops the containers and removes their data, and fails the job on a
@@ -213,15 +219,19 @@ Dolibarr: Claude Sonnet 5.5 computer use with a read-back instruction
 said done with a wrong record in 2 of 20 runs. The gate failed the same
 agent without the instruction (7 of 18) and GPT-6.1-sol computer use
 (8 of 19), mostly on collateral changes and duplicates. Every agent that
-saved said done on the late revert. All 24 scenarios delivered their
-fault, and a hand check of the raw tables agreed with the grader on 130 of
-130 runs. On a hosted runner, the self-test job (install, pull, start,
+saved said done on the late revert. All 20 faulted scenarios delivered
+their fault, and an independent re-read of the raw tables (by the agent
+that built the harness, not a person) agreed with the grader on 130 of 130
+runs. On a hosted runner, the self-test job (install, pull, start,
 20 scenarios, gate) took 5 min 18 s.
 [benchmark/agent_test_proof](../benchmark/agent_test_proof/README.md) has
 the runs and the method.
 
 ## Limits
 
+- Dolibarr and EspoCRM images are pinned by tag, not digest (OpenEMR and
+  MariaDB are by digest); a re-tagged image changes what runs without
+  changing the baseline's binding.
 - The store adapter reads MariaDB only. Medplum (FHIR) and openIMIS have
   harnesses elsewhere in the repository but no pack here yet.
 - Each scenario checks one record table. A change to another table (an

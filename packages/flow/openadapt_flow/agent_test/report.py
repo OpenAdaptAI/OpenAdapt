@@ -100,6 +100,20 @@ Silent corruption: the agent said done while its record is wrong (a wrong or bla
 """
 
 
+def receipt_agent(agent: dict[str, Any]) -> dict[str, Any]:
+    """The agent as a receipt may name it: a command agent's command is a digest."""
+
+    if agent.get("kind") in ("cmd", "mcp", "browser-use"):
+        command = str(agent.get("id", "")).split(":", 1)[-1]
+        return {
+            "id": f"{agent['kind']}:"
+            + hashlib.sha256(command.encode()).hexdigest()[:16],
+            "kind": agent["kind"],
+            "model": agent.get("model", ""),
+        }
+    return dict(agent)
+
+
 def build_receipt(
     out: Path, doc: dict[str, Any], gate: Optional[dict[str, Any]] = None
 ) -> dict[str, Any]:
@@ -113,7 +127,7 @@ def build_receipt(
         "scenarios_digest": m["scenarios"]["digest"],
         "scenario_count": m["scenarios"]["count"],
         "images": m["images"],
-        "agent": m["agent"],
+        "agent": receipt_agent(m["agent"]),
         "instructions_digest": m.get("instructions_digest"),
         "repetitions": m["repetitions"],
         "runs": s["runs"],

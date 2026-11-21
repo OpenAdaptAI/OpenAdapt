@@ -6,7 +6,7 @@ These runs check three things about `openadapt test` and its GitHub Action:
 - that the gate catches a real regression;
 - that the grader agrees with a person's reading of the database.
 
-All data is synthetic.
+All data is synthetic. The receipts are unsigned (digests only).
 
 **Where it ran.** The apps ran in Docker on the lab laptop (WSL2): Dolibarr 20.0.2, OpenEMR 8.0.0.3 and EspoCRM 8.4, each with MariaDB, all pulled by image reference. The harness, the headless browser and every model call ran on the Mac. The Action ran under `act` (`-P ubuntu-latest=-self-hosted`, [`lab-gate.yml`](lab-gate.yml)), with `start-app: "false"`; it reached the lab's stack over SSH (`--docker`) and the app's port. A second, hosted run of the Action on GitHub's `ubuntu-latest` started the app on the runner itself (`.github/workflows/agent-test-action.yml`).
 
@@ -25,7 +25,7 @@ The raw runs are in `runs/<name>/`: `results.json`, `report.html`, `receipt.json
 | EspoCRM (6) | scripted | 1 | 3 | 1 | 5 | 0 |
 | EspoCRM (6) | scripted-readback | 1 | 3 | 1 | 5 | 0 |
 
-The app accepted every planted fault: 24 of 24 scenarios in each pass, none left out.
+The app accepted every planted fault: all 20 faulted scenarios (plus the 4 clean ones) in each pass, none left out.
 
 The read-back reference catches a blank, a wrong value and a record that is not saved, on Dolibarr and OpenEMR, and a duplicate on Dolibarr. It misses:
 
@@ -63,7 +63,7 @@ Without the instruction, it said done on all four collateral runs and on both du
 
 **Two caveats.**
 
-- The false-success rise is not noise. Collateral and duplicate runs went from 0 of 8 said done to 6 of 6 and 6 of 6.
+- The false-success rise is not noise: on the collateral and duplicate runs, false success went from 0 of 6 with the instruction to 6 of 6 without it, and 6 of 6 for OpenAI.
 - The silent-corruption rise for the first candidate is one run, which is within noise.
 
 **The $0 version.** The same check runs with `scripted-readback` as the baseline and `scripted` as the candidate. Under `act` (`runs/act-scripted`) the gate failed with silent corruption at 40% against 10%, and false success at 70% against 30%.
@@ -88,9 +88,9 @@ The `browser-use:` run is the protocol a Browser-Use script uses (`cdp_url`), no
 
 [`handview.py`](handview.py) prints, for each run, what changed in the raw dumps (`table_before_raw.tsv`, `table_after_raw.tsv`: every column, read with the database client) and the agent's last line. It reads nothing the grader wrote.
 
-A person read that output for all 130 runs above and wrote down an outcome per run in [`handcheck.json`](handcheck.json). [`compare.py`](compare.py) sets those against the grader: **0 of 130 disagree (0.0%)**. The kill criterion is more than 2%.
+The agent that built this harness (not a person) read that output for all 130 runs and wrote down an outcome per run in [`handcheck.json`](handcheck.json), without looking at the grader's verdicts. It is an independent re-read of the same tables, not a human audit: both read the table through the same database client. [`compare.py`](compare.py) sets those against the grader: **0 of 130 disagree (0.0%)**. The kill criterion is more than 2%.
 
-The hand check and the grader rest on the same raw table read. Neither looked at tables the pack does not judge. One example is OpenEMR's other patient tables.
+The re-read and the grader rest on the same table read. Neither looked at tables the pack does not judge. One example is OpenEMR's other patient tables.
 
 ## Limits of this proof
 

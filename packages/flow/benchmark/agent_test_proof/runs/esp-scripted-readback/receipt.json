@@ -1,6 +1,6 @@
 {
  "schema": "openadapt.agent-test-receipt/v1",
- "created": "2026-11-21T08:39:27+00:00",
+ "created": "2026-11-21T08:47:01+00:00",
  "run_id": "20261121T082803Z-29e35a",
  "app": "espocrm",
  "app_pack_digest": "sha256:9b08b9e8b79b2de31ab6ee13f00dd35b5ae0eb3e339788a430b0337da4c088e0",
@@ -54,7 +54,7 @@
   }
  },
  "cost_usd": 0.0,
- "results_sha256": "sha256:8b846704f0eac584d5d75aabd27eedb0bcc1cdbbefb42f6c903d357288ba09d9",
+ "results_sha256": "sha256:85d045cc850044a2a357c3deb9413c65dddd50b30699c76c7c7675cbbdeecc49",
  "report_sha256": "sha256:f0b8772551ea049d2a538e299119ee9d417aa5015b78234d44a891b5ec7d5c56",
  "openadapt_flow": "2.6.0",
  "gate": null,

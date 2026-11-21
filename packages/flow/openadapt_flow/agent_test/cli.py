@@ -124,6 +124,7 @@ def _gate_and_write(
     tolerance: float,
     sign_key: Optional[Path],
     allow_pack_change: bool = False,
+    min_scored: int = 1,
 ) -> int:
     doc = json.loads((out / "results.json").read_text())
     g = None
@@ -133,6 +134,7 @@ def _gate_and_write(
             baseline,
             tolerance=tolerance,
             allow_pack_change=allow_pack_change,
+            min_scored=min_scored,
         )
         (out / "gate.json").write_text(json.dumps(g, indent=1) + "\n")
     paths = report.write_outputs(out, doc, g, sign_key)
@@ -256,6 +258,7 @@ def cmd_run(a: argparse.Namespace) -> int:
         a.tolerance,
         Path(a.sign_key) if a.sign_key else None,
         a.allow_pack_change,
+        getattr(a, "min_scored", 1),
     )
 
 
@@ -267,6 +270,7 @@ def cmd_gate(a: argparse.Namespace) -> int:
         a.tolerance,
         Path(a.sign_key) if a.sign_key else None,
         a.allow_pack_change,
+        getattr(a, "min_scored", 1),
     )
 
 
@@ -380,6 +384,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="gate even if the scenarios or app changed",
     )
     p.add_argument(
+        "--min-scored",
+        type=int,
+        default=1,
+        help="refuse to gate (exit 2) a run with fewer scored runs than this; "
+        "an agent that stops saving has its faulted runs left out of the rates",
+    )
+    p.add_argument(
         "--sign-key",
         default="",
         help="an Ed25519 private key (PEM) to sign the receipt",
@@ -397,6 +408,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--baseline", required=True)
     p.add_argument("--tolerance", type=float, default=0.05)
     p.add_argument("--allow-pack-change", action="store_true")
+    p.add_argument(
+        "--min-scored",
+        type=int,
+        default=1,
+        help="refuse to gate (exit 2) a run with fewer scored runs than this; "
+        "an agent that stops saving has its faulted runs left out of the rates",
+    )
     p.add_argument("--sign-key", default="")
     p.set_defaults(fn=cmd_gate)
     p = sub.add_parser("baseline", help="write a baseline from a run's results.json")

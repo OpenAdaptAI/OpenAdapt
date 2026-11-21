@@ -1,7 +1,7 @@
 # Dolibarr (ERP and accounting, GPL-3.0): add a contact.
 #
-# The app runs from the project's own published image, pulled by digest when
-# the stack starts. Nothing from Dolibarr is copied into this package; the
+# The app runs from the project's own published image (by tag; the database
+# image by digest), pulled when the stack starts. Nothing from Dolibarr is copied into this package; the
 # SQL below is ours and only reads and writes the contact table.
 schema: openadapt.agent-test.app/v1
 name: dolibarr

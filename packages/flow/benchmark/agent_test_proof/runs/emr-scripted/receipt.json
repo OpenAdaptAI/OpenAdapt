@@ -1,6 +1,6 @@
 {
  "schema": "openadapt.agent-test-receipt/v1",
- "created": "2026-11-21T08:39:26+00:00",
+ "created": "2026-11-21T08:47:01+00:00",
  "run_id": "20261121T082003Z-64ba2c",
  "app": "openemr",
  "app_pack_digest": "sha256:c5ee71eff045aff40b1dd6ff214b7929b4b3df9d4e48640c2ad633b925e5ccfa",
@@ -54,7 +54,7 @@
   }
  },
  "cost_usd": 0.0,
- "results_sha256": "sha256:7792282ebdef1673d4ff1937184ae942b9790f239e10c7f23176f5e8d6711092",
+ "results_sha256": "sha256:1118b4d9eb3c3b01ff08255a8cfa312faa4a06d1f9ed4f1387f0d697918ad7e5",
  "report_sha256": "sha256:1b8ebfd5422c8a9bbe86c522a2cba3b90a4ee6ca5ef92230126acffe1fd48f2c",
  "openadapt_flow": "2.6.0",
  "gate": null,
