@@ -73,6 +73,15 @@ packages = ["openadapt_privacy"]
 # release works. A pip install of the presidio extra still follows Presidio's cap.
 override-dependencies = ["cryptography>=50.0.2"]
 
+# Lockfile-only floors for security fixes that require Python 3.11+ (Pillow
+# 13.0.0 is the first release fixing GHSA-332p-7hrc-92wf and the other 2026
+# Pillow advisories; filelock 4.2.1 and dnspython 2.9.2 likewise). Python 3.10
+# keeps the last compatible release until the 3.10 floor is dropped.
+constraint-dependencies = [
+    "pillow>=13.0.0; python_full_version >= '3.11'",
+    "filelock>=4.2.1; python_full_version >= '3.11'",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
