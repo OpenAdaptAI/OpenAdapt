@@ -126,6 +126,7 @@ def run(
         raise I.InputError(
             f"the sandbox's read account can't read the whole database: {problem}"
         )
+    app.sign_in_all()  # before the first read: sign-in rows are starting state
     base = store.read()
     log(f"store: {len(store.tables)} tables; trace: {len(writes)} write request(s)")
     demo = A.record_demo(store, app, writes, task.params, base)

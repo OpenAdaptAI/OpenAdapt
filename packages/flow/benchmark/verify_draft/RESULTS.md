@@ -19,8 +19,10 @@ browser-free and headless. Raw data for every run, void or not, is under
 - **Mealie, first valid run: 9.2 minutes, and no contract was admitted.**
 - **Directus, reported run: 6.0 minutes**, admitted in round 2. The first
   draft passed every planted fault and every clean write. Round 1 was lost
-  only to a rule stricter than the brief, which refuses an exclusion that
-  never moved (below).
+  to a qualifier bug found in review after the run. The agent signed in
+  inside the demonstration's window, so the model was shown the sign-in's
+  rows as part of the write and excluded `last_access`. The probe, signed in
+  by then, never saw it move (below).
 
 The other two clauses do not fire:
 
@@ -111,9 +113,25 @@ added.
   table skipped.
 
 All 17 cases passed in round 1, including the lost update. The draft was
-rejected only because it also excluded `directus_users.last_access`. That
-column moves at sign-in, not during a write, so it never moved in a probe.
-Round 2 dropped that exclusion and was admitted. Held out, the contract
+rejected only because it also excluded `directus_users.last_access`, which
+then never moved in a probe write.
+
+That exclusion came from a qualifier bug, found in review after the run.
+Actors signed in lazily, so the agent's sign-in fell inside the
+demonstration replay. The model was shown the rows a sign-in writes as part
+of the write: a session, the sign-in activity row and `last_access`.
+
+Round 2 dropped the `last_access` exclusion and was admitted. It kept
+`directus_sessions: skip`. A whole-table exclusion that never moved was not
+checked then. It is now, so the committed contract would be refused today.
+Since the run, every actor signs in before the store is first read, and a
+skipped or append-only table that never moved in the probe is refused.
+
+The lost-update catch was checked in the case evidence. In round 2 and held
+out, the first reason is `frame.versions`: "another user saved a version of
+the target inside the window". In the held-out run the other user's sign-in
+also moved `last_access` inside the window, for the same reason. A post-fix
+Directus rerun was not made. Held out, the contract
 refuted all 8 applicable faults:
 
 - the faults planted on another ticket with other values;

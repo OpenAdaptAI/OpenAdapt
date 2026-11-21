@@ -661,13 +661,18 @@ class App:
         return {a.login.path for a in self.cfg.actors.values() if a.login}
 
     def session(self, actor: str) -> Any:
-        import requests
+        """The actor's signed-in HTTP client (httpx, a base dependency)."""
+
+        import httpx
 
         if actor in self._sessions:
             return self._sessions[actor]
         spec = self.cfg.actor(actor)
-        s = requests.Session()
-        s.headers.update(_expand(dict(spec.headers)))
+        s = httpx.Client(
+            headers=_expand(dict(spec.headers)),
+            timeout=self.cfg.app.timeout_s,
+            follow_redirects=False,
+        )
         if spec.login is not None:
             login = spec.login
             url = self.cfg.app.base_url.rstrip("/") + login.path
@@ -676,8 +681,6 @@ class App:
                 url,
                 data=_expand(login.form) if login.form else None,
                 json=_expand(login.json_body) if login.json_body else None,
-                allow_redirects=False,
-                timeout=self.cfg.app.timeout_s,
             )
             if r.status_code >= 400:
                 raise SandboxError(f"actor {actor} could not sign in ({r.status_code})")
@@ -692,6 +695,14 @@ class App:
                 s.headers["Authorization"] = f"Bearer {token}"
         self._sessions[actor] = s
         return s
+
+    def sign_in_all(self) -> None:
+        """Sign every actor in now, before the store is first read, so the
+        rows a sign-in writes (a session, a last-login time) are part of the
+        starting state and never land inside a write's window."""
+
+        for name in self.cfg.actors:
+            self.session(name)
 
     def send(
         self,
@@ -727,10 +738,8 @@ class App:
                 r = s.request(
                     req.method,
                     url,
-                    data=body.encode("utf-8") if isinstance(body, str) else body,
+                    content=body.encode("utf-8") if isinstance(body, str) else body,
                     headers=headers,
-                    allow_redirects=False,
-                    timeout=self.cfg.app.timeout_s,
                 )
                 statuses.append(r.status_code)
         return statuses

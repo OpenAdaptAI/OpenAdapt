@@ -145,6 +145,9 @@ _ATTRIBUTION_KEYS = frozenset(
         "server_set",
     }
 )
+_SECRET_COLUMN = re.compile(
+    r"pass(word)?|secret|token|api[-_]?key|hash|salt|(^|_)(otp|tfa)(_|$)", re.I
+)
 _IDENTIFIER = re.compile(r"(^|_)(id|key|no|number|code|slug|mrn|ref|uuid)$", re.I)
 
 
@@ -324,7 +327,9 @@ class Demo:
             cols = m.columns if m.change == "changed" else sorted(row or {})
             vals = {
                 c: (
-                    f"{text((m.before or {}).get(c))!r} -> {text((m.after or {}).get(c))!r}"
+                    "***"  # a secret-named column: its name, never its value
+                    if _SECRET_COLUMN.search(c)
+                    else f"{text((m.before or {}).get(c))!r} -> {text((m.after or {}).get(c))!r}"
                     if m.change == "changed"
                     else text((row or {}).get(c))
                 )
@@ -1158,18 +1163,23 @@ class Qualifier:
         moved = {(a.table, a.column) for a in out}
         for table, masked_cols in mask.items():
             for col in masked_cols:
-                if col == "*" and any(t == table for t, _ in moved):
-                    continue
-                if col == "+" and (table, "+") in moved:
-                    continue
-                if (table, col) not in moved and col not in ("*", "+"):
+                if col == "*":
+                    unexcused = not any(t == table for t, _ in moved)
+                    what = "a skipped table"
+                elif col == "+":
+                    unexcused = (table, "+") not in moved
+                    what = "an append-only table"
+                else:
+                    unexcused = (table, col) not in moved
+                    what = "excluded"
+                if unexcused:
                     out.append(
                         Attribution(
                             table,
                             col,
                             "never moved",
                             True,
-                            "excluded, but it never moved in any probe write: nothing to excuse",
+                            f"{what}, but it never moved in any probe write: nothing to excuse",
                         )
                     )
         return out, cases

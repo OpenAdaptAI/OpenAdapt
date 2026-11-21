@@ -42,6 +42,7 @@ def heldout(run: AppRun, contract_path: Path, work: Path) -> dict[str, Any]:
     from openadapt_flow.verify_draft.inputs import load_task, load_trace, writes
 
     task = load_task(run.task)
+    app.sign_in_all()
     base = store.read()
     demo = A.record_demo(
         store,

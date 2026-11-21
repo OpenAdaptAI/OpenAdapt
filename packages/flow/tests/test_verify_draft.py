@@ -443,3 +443,42 @@ def test_one_question_at_most(mockloan: Path, monkeypatch: pytest.MonkeyPatch) -
     calls.clear()
     outcome = _run(mockloan, Fixed(GOOD), rounds=1, ask=lambda q, c: None)
     assert not outcome.admitted and outcome.decisions == 0
+
+
+def test_actors_sign_in_before_the_store_is_read(
+    mockloan: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sign-in that writes rows (a session, a last-login time) must be
+    starting state, never inside the demonstration's or a case's window."""
+
+    from openadapt_flow.verify_draft import sandbox as S
+
+    events: list[str] = []
+    real_session, real_read = S.App.session, S.Store.read
+
+    def session(self: Any, actor: str) -> Any:
+        if actor not in self._sessions:
+            events.append(f"sign-in:{actor}")
+        return real_session(self, actor)
+
+    def read(self: Any, tables: Any = None) -> Any:
+        events.append("read")
+        return real_read(self, tables)
+
+    monkeypatch.setattr(S.App, "session", session)
+    monkeypatch.setattr(S.Store, "read", read)
+    _run(mockloan, Fixed("not: [valid"), rounds=1)
+    first_read = events.index("read")
+    assert {"sign-in:agent", "sign-in:other"} <= set(events[:first_read])
+
+
+@pytest.mark.timeout(300)
+def test_a_skip_of_a_table_that_never_moves_is_refused(mockloan: Path) -> None:
+    skipping = GOOD.replace(
+        "    dialect: sqlite\n",
+        "    dialect: sqlite\n    allow_tables:\n    - {table: metadata, mode: skip, reason: counters}\n",
+    )
+    outcome = _run(mockloan, Fixed(skipping), rounds=1)
+    assert not outcome.admitted
+    problems = [a for a in outcome.admissions[0].attribution if a.problem]
+    assert any(a.table == "metadata" and "skipped table" in a.problem for a in problems)

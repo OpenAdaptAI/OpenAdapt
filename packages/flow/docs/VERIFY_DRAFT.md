@@ -93,10 +93,14 @@ no reset hook.
 
 ## What it does
 
-1. **Record the demonstration.** The sandbox replays the trace's writes
-   once, between two reads of the store, to see which rows they move. The
-   model gets the rows and columns that moved, with their values. The
-   sandbox holds synthetic data only.
+1. **Record the demonstration.** Every actor signs in first, before the
+   store is read, so the rows a sign-in writes (a session, a last-login
+   time) are starting state and never land inside a write's window. The
+   sandbox then replays the trace's writes once, between two reads of the
+   store, to see which rows they move. The model gets the rows and columns
+   that moved, with their values, except a secret-named column (password,
+   token, secret, key, hash), whose value is masked. The sandbox holds
+   synthetic data only.
 2. **Draft.** The pinned model writes a contract, as JSON text, that diffs
    the whole database (`frame.database`). It also writes other valid values
    for the task to test with. The draft may only read the database with
@@ -190,6 +194,18 @@ another, never changes the check silently: the response's model id is
 recorded too. Every call is appended to a spend ledger (`--spend-ledger`,
 default `~/.openadapt/verify-draft/spend.jsonl`). The command refuses to
 send a call that could pass `--spend-cap-usd` (default 30).
+
+## Install
+
+The command runs from the engine (`pip install openadapt`, which installs
+`openadapt-flow`). It talks to the app through `httpx`, a base dependency.
+It also needs:
+
+- the Anthropic SDK, to draft: `pip install anthropic`;
+- the store's DB-API driver, as any SQL contract does: `psycopg2-binary`
+  for PostgreSQL, or `pymysql` for MySQL and MariaDB. SQLite needs none.
+
+Without the SDK the command stops before drafting and says what to install.
 
 ## Limits
 
