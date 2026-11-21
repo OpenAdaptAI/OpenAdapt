@@ -109,6 +109,22 @@
   be read back completely from two independent sources. Anything uncertain
   releases held keys and produces no keyboard receipt (#2313).
 - A repair candidate id that would leave the repair store is refused (#2369).
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+- An admitted managed run, and its resume, keep the policy the local Standard
+  gate chose when neither the CLI nor the deployment names one, instead of
+  exiting with code 2 (#2401).
+- Lens route roles come from each route's observed effects rather than its
+  HTTP method, so an app that creates with `PUT` or updates with `POST` gets
+  the right roles, and a whole-record replace answering 200 counts as an
+  update (#2393).
+- Generated verify contracts stop fewer correct writes: five generator causes
+  of false stops are fixed, each by one schema-independent rule (#2418).
 - `import openadapt_flow` loads its `ir` re-exports on first use, and the
   qualification models and several replayer helpers moved into their own
   modules. Every public name is re-exported unchanged (#2439, #2451, #2454,
