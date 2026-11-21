@@ -110,7 +110,8 @@
     display: flex;
     align-items: center;
     gap: 8px 16px;
-    min-height: var(--top-h);
+    /* A fixed floor: SealPage measures the bar into --top-h for the sticky tabs. */
+    min-height: 52px;
     padding: 0 16px;
     border-bottom: 1px solid var(--line);
     background: var(--oa-header-bg);
@@ -322,6 +323,10 @@
 .page[data-layout='split'] .mapPane {
     grid-area: map;
     padding: 12px 6px 14px 16px;
+    /* The pane takes the grid's height and never sizes the grid's rows: the
+       map measures itself to fit (SealMap's fill), so its content must not
+       feed back into the rows beside it. */
+    contain: size;
 }
 .page[data-expanded] .mapPane {
     padding-right: 16px;
