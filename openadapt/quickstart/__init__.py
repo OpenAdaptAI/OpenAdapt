@@ -48,7 +48,7 @@ def next_steps(
     def build(outcome: Outcome) -> NextSteps:
         verify = None
         if outcome.seal is not None:
-            verify = hint(f"seal verify {quote(display_path(outcome.root))}")
+            verify = hint(f"verify {quote(display_path(outcome.root))}")
         if agent_serves_tutorial:
             agent = hint("agent serve --allow-run")
         else:
@@ -58,7 +58,7 @@ def next_steps(
         return NextSteps(
             verify=verify,
             verify_run=lambda run_dir: hint(
-                f"seal verify {quote(display_path(run_dir))}"
+                f"verify {quote(display_path(run_dir))}"
             ),
             record=hint(
                 f"flow record --backend web --url {YOUR_APP_URL} --out my-task"

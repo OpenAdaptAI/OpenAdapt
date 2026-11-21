@@ -646,6 +646,7 @@ class FlowEngine:
         except ImportError:
             return False
         seal_run(broken.run_dir, home=seal_home(), enqueue=False)
+        write_run_receipts([broken.run_dir])
         return (broken.run_dir / "seal.json").is_file()
 
     def seal_pages(
@@ -744,6 +745,8 @@ def seal_runs(runs: list[RunFacts]) -> Optional[SealFacts]:
         from openadapt_flow.offline_seal import seal_home, seal_run
     except ImportError:
         return None
+    # Every run gets a receipt, whatever its outcome; signing isn't grading.
+    write_run_receipts([run.run_dir for run in runs])
     checked = [run for run in runs if run.checked]
     if not checked:
         return None
@@ -754,6 +757,24 @@ def seal_runs(runs: list[RunFacts]) -> Optional[SealFacts]:
         seal = seal_run(run.run_dir, home=seal_home(), enqueue=False)
         key_id = str(seal.key_id)
     return SealFacts(key_id=key_id, sealed=len(checked))
+
+
+def write_run_receipts(run_dirs: list[Path]) -> int:
+    """Write each run's ``receipt.json`` (record/run/v1); returns how many exist."""
+
+    try:
+        from openadapt_flow.offline_seal import seal_home, signer_for
+        from openadapt_flow.receipt_record import write_receipt_record
+    except ImportError:
+        return 0
+    written = 0
+    for run_dir in run_dirs:
+        if not (Path(run_dir) / "report.json").is_file():
+            continue
+        home = seal_home()
+        write_receipt_record(Path(run_dir), signer=signer_for(home), home=home)
+        written += 1
+    return written
 
 
 def return_focus_to_terminal(

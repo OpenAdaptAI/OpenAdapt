@@ -1,0 +1,21 @@
+{
+  "description": "The stopped run's payload edited to say VERIFIED after signing.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoxLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjEsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjoxLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImRpc2Nsb3N1cmUiOnsiY29tbWl0bWVudHMiOnt9LCJ2ZXJzaW9uIjoib3BlbmFkYXB0LnB1YmxpYy1kaXNjbG9zdXJlL3YxIn0sImxpbmVzIjpbeyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbXSwib3BlcmF0aW9uIjoid3JpdGUiLCJzdGVwIjoyLCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn0seyJjaGVjayI6InJlZnV0ZWQiLCJub3RfY2hlY2tlZCI6WyJmaWVsZF92YWx1ZXMiXSwib3BlcmF0aW9uIjoiaXJyZXZlcnNpYmxlX3dyaXRlIiwic3RlcCI6NCwic3RyZW5ndGgiOiJyZWFkX2JhY2siLCJ0YXJnZXRfa2luZCI6Imd1aSJ9XSwibW9kZWxfY2FsbHMiOjAsIm91dGNvbWUiOiJWRVJJRklFRCIsInByb2dyYW0iOnsiaWQiOiJwcm9nLTViYjIxYWEwZjJlNmFjMzIiLCJ2ZXJzaW9uX3NoYTI1NiI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIifSwicmVhc29uX2NvZGUiOiJoYWx0ZWQiLCJzdGFydGVkX2hvdXIiOiIyMDI2LTExLTIwVDIzOjAwOjAwWiIsInN0ZXBzIjp7Im9rIjo0LCJ0b3RhbCI6NX19LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9vcGVuYWRhcHQuYWkvcmVjb3JkL3J1bi92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIn0sIm5hbWUiOiJyZXBvcnQuanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIifSwibmFtZSI6ImJ1bmRsZSJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "zUVs6e6aXqV4QQ7xYID366IN+Zo+Bgzom1HC+rrTFrvXnDHs4c25VIq1wX14bKtMSg8rHpBgzvRpzI5V+888CA=="
+      }
+    ]
+  },
+  "expected": {
+    "ok": false,
+    "reason": "bad_signature",
+    "signer_lines": [
+      "Not verified: the receipt was changed after it was signed"
+    ]
+  },
+  "registry": "registry.json"
+}
