@@ -231,9 +231,16 @@ _DOM_HELPERS_JS = r"""
     const DYNAMIC_ID_RE = /(?:[_:-]\d+|\d{2,}|_[0-9a-f]{6,}|^:)/i;
     // Unique inside the element's own root, counting what a Playwright
     // locator would also see through nested open shadow roots.
+    // For an element in a shadow root the scope is its host's whole composed
+    // subtree: a ``host >> inner`` locator also matches the host's light-DOM
+    // descendants (slotted nodes included), so ``inner`` must be unique there.
+    const uniquenessScope = (target) => {
+        const r = rootOf(target);
+        return (r && r !== document && r.host) ? r.host : r;
+    };
     const isUniqueMatch = (sel, target) => {
         if (!sel) return false;
-        const nodes = safeQueryAll(rootOf(target), sel);
+        const nodes = safeQueryAll(uniquenessScope(target), sel);
         return nodes.length === 1 && nodes[0] === target;
     };
     const quoteAttrVal = (val) => {
@@ -1978,6 +1985,15 @@ class PlaywrightFormSurface:
         if total == 0:
             raise MissingAnchorError(
                 f"Selector {dom_selector!r} matched 0 elements in live DOM"
+            )
+        if total > 1 and " >> " in dom_selector:
+            # A shadow-root selector is emitted unique across its host's whole
+            # subtree. More than one match means a light-DOM or slotted node
+            # (visible or not) shares it, so the observed element is not
+            # certain: refuse rather than act on the one that happens to show.
+            raise AmbiguousAnchorError(
+                f"Shadow-root selector {dom_selector!r} matched {total} elements "
+                f"in live DOM"
             )
         if total == 1:
             if not loc.is_visible():
