@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 pytest.importorskip("openadapt_flow.receipt_record")
 
+from openadapt.cli import main  # noqa: E402
 from openadapt_flow.receipt_record import (  # noqa: E402
     build_statement,
     local_registry,
@@ -24,8 +25,6 @@ from openadapt_flow.receipt_record import (  # noqa: E402
     write_receipt_record,
 )
 from openadapt_types import receipt as r  # noqa: E402
-
-from openadapt.cli import main  # noqa: E402
 
 BUNDLE = "2" * 64
 
@@ -372,6 +371,91 @@ def test_the_public_allow_list_is_inside_todays_public_fields():
             assert field in known, (version, path, source)
 
 
+def _approved_run(tmp_path: Path, approvals: list, mode: str = "each_item") -> Path:
+    """A run whose report carries Flow's own approval block, built by its model."""
+    from openadapt_flow.approval_mode.model import (
+        ApprovalModeItemEvidence,
+        ItemApprovalRef,
+    )
+
+    run = _run(tmp_path, "VERIFIED", f"approved-{mode}-{len(approvals)}")
+    report = json.loads((run / "report.json").read_text())
+    if mode == "not_gated":
+        decision = "not_gated"
+    else:
+        decision = "approved" if approvals else "no_person"
+    evidence = ApprovalModeItemEvidence(
+        mode=mode,
+        decision=decision,
+        needs_person=False,
+        approvals=[ItemApprovalRef.model_validate(a) for a in approvals],
+    )
+    report["approval"] = evidence.model_dump(mode="json")
+    (run / "report.json").write_text(json.dumps(report))
+    return run
+
+
+PERSON_APPROVAL = {
+    "step_id": "save",
+    "request_sha256": "sha256:" + "3" * 64,
+    "answer_sha256": "sha256:" + "4" * 64,
+    "decision": "approved",
+    "decided_by": "human",
+    "route": "desktop_run_it",
+    "approver_kind": "cloud_user",
+    "approver_id": "usr_synthetic01",
+    "auth_method": "cloud_aal2",
+}
+
+
+def test_an_approved_runs_receipt_records_the_mode_and_approver_kind(tmp_path):
+    run = _approved_run(tmp_path, [PERSON_APPROVAL])
+    write_receipt_record(run)
+    payload = base64.b64decode(
+        json.loads((run / "receipt.json").read_text())["payload"]
+    )
+    assert b"usr_synthetic01" not in payload
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    approval = result.statement["predicate"]["approval"]
+    assert (approval["mode"], approval["approver_kind"]) == ("each_item", "person")
+    assert set(approval["commitments"]) == {"principal", "scope"}
+    assert result.approval_line == "Approved by a person: each item"
+    assert result.disclosed["approval.principal"].startswith("person:pr-")
+    out = _verify(str(run))
+    assert "Approved by a person: each item" in out.output
+
+
+def test_earlier_approvals_never_make_a_declined_item_read_as_approved(tmp_path):
+    from openadapt_flow.receipt_record import _approval
+
+    run = _approved_run(tmp_path, [PERSON_APPROVAL])
+    report = json.loads((run / "report.json").read_text())
+    for decision in ("declined", "needs_person", "no_person", None):
+        block = dict(report["approval"], decision=decision)
+        approval, values = _approval({"approval": block})
+        assert (approval["approver_kind"], values) == ("none", {}), decision
+
+
+def test_an_unapproved_run_says_no_approval_recorded(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok
+    assert "approval" not in result.statement["predicate"]
+    assert result.approval_line == "No approval recorded"
+    assert "No approval recorded" in _verify(str(run)).output
+
+
+def test_a_not_gated_run_says_so(tmp_path):
+    run = _approved_run(tmp_path, [], mode="not_gated")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert (
+        result.approval_line == "Not gated: no approval was required for these writes"
+    )
+
+
 # -- routing, broken receipts and older formats ---------------------------------
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
@@ -493,3 +577,41 @@ def test_receipts_trust_cloud_keys_pinned_where_seal_keys_pin_writes(
     monkeypatch.setenv("OPENADAPT_SEAL_KEYS_PATH", str(pinned))
     keys = {k.key_id: k.role for k in local_registry()}
     assert keys[by_role["openadapt_cloud"]["key_id"]] == "openadapt_cloud"
+
+
+def test_one_delegate_answer_never_reads_as_approved_by_a_person(tmp_path):
+    delegate = {
+        **PERSON_APPROVAL,
+        "step_id": "save-2",
+        "decided_by": "automation",
+        "route": "mcp",
+        "approver_kind": "unauthenticated",
+        "approver_id": None,
+        "auth_method": "none",
+        "approver": {
+            "kind": "agent",
+            "auth": "mcp_session",
+            "id": "agent-approver-bot",
+        },
+    }
+    run = _approved_run(tmp_path, [PERSON_APPROVAL, delegate])
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    assert result.statement["predicate"]["approval"]["approver_kind"] == "agent"
+    assert result.approval_line == "Approved by an agent delegate: each item"
+
+
+def test_a_receipt_names_both_report_digests(tmp_path):
+    run = _run(tmp_path, "VERIFIED", "canonical")
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    names = {s["name"]: s["digest"]["sha256"] for s in result.statement["subject"]}
+    report = json.loads((run / "report.json").read_text())
+    assert names["report.canonical"] == r.report_canonical_sha256(report)
+    # The same report written with other whitespace matches report.canonical.
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert verify_run_receipt(run, local_registry()).ok
+    report["model_calls"] = 3
+    (run / "report.json").write_text(json.dumps(report, indent=4))
+    assert not verify_run_receipt(run, local_registry()).ok

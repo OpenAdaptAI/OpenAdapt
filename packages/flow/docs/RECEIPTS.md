@@ -36,6 +36,29 @@ URLs or page text.** Evidence files, screenshots included, appear only by
 SHA-256 digest. A verifier refuses a receipt or card that carries an image,
 a base64 blob, a URL or long text (`embedded_content`).
 
+A receipt may also carry **counterparty confirmations**: evidence read from
+another party's system about a handoff, such as a referral a portal later
+shows as recorded. Each confirmation states the kind of system, how it was
+read (a portal read-back, an API, or an acknowledgment message), its state
+(`sent`, `acknowledged`, `recorded_as_intended` or `recorded_differently`) and
+its own strength. Who the other party is, when it was observed, which fields
+it showed and any reason are salted commitments, never shown on a public card.
+The verifier prints each one on its own line, for example "Confirmed in the
+other party's system at 2026-11-20T23:41:07Z". That line never merges with or
+upgrades the signer line: "Signed by this computer" still means only that this
+computer signed the statement.
+
+A receipt handed to another party can also be **bound to the bytes it hands
+over**: a `payload` subject names the SHA-256 and media type of the MCP tool
+result, HTTP body or file. The receiver checks the bytes it got against it.
+And it says **how its writes were approved**, from Flow's item approval
+binding ([APPROVAL_AND_VERIFICATION.md](APPROVAL_AND_VERIFICATION.md)): the
+approval mode (`each_item`, `problems_only` or `not_gated`) and the kind of
+approver (a person or an agent delegate) are visible; who approved, the
+scope and the time are commitments. A receipt with no approval block says
+"No approval recorded", so a receipt never implies authority it doesn't
+record.
+
 ## Who signed it
 
 Each signature names a key id. The verifier's pinned key registry maps that

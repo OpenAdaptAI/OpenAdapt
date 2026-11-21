@@ -101,6 +101,53 @@ def _line(index: int, result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _approval(
+    report: Mapping[str, Any],
+) -> tuple[Optional[dict[str, Any]], dict[str, Optional[str]]]:
+    """``predicate.approval`` from the report's item-approval block, and its values.
+
+    The source is Flow's approval binding (``report.approval``,
+    ``openadapt.approval-mode-item/v1``): its mode, and each approved
+    ``ItemApprovalRef``. The approver's id is committed, never shown.
+    """
+    block = report.get("approval")
+    if not isinstance(block, Mapping):
+        return None, {}
+    mode = block.get("mode")
+    if mode not in ("each_item", "problems_only", "not_gated"):
+        return None, {}
+    approved = [
+        a
+        for a in block.get("approvals") or []
+        if isinstance(a, Mapping) and a.get("decision") == "approved"
+    ]
+    # The item's final decision decides: earlier "approved" answers never
+    # make a declined, waiting or unanswered item read as approved.
+    if mode == "not_gated" or block.get("decision") != "approved" or not approved:
+        return {"mode": mode, "approver_kind": "none", "commitments": {}}, {}
+    # The weakest approver counts: one delegate's answer among people's makes
+    # the whole run "approved by an agent delegate", never "by a person".
+    kind = (
+        "person" if all(a.get("decided_by") == "human" for a in approved) else "agent"
+    )
+    ids = sorted(
+        str(
+            a.get("approver_id")
+            or (a.get("approver") or {}).get("id")
+            or a.get("approver_kind")
+            or "unknown"
+        )
+        for a in approved
+    )
+    scope = sorted(str(a.get("request_sha256", "")) for a in approved)
+    values: dict[str, Optional[str]] = {
+        "approval.principal": f"{kind}:pr-"
+        + hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:16],
+        "approval.scope": hashlib.sha256("\n".join(scope).encode("utf-8")).hexdigest(),
+    }
+    return {"mode": mode, "approver_kind": kind, "commitments": {}}, values
+
+
 def build_statement(
     report: Mapping[str, Any],
     report_sha256: str,
@@ -137,6 +184,15 @@ def build_statement(
     bundle = bundle if isinstance(bundle, str) and _SHA256.fullmatch(bundle) else None
     version = bundle or report_sha256
     subject = [{"name": "report.json", "digest": {"sha256": report_sha256}}]
+    try:
+        subject.append(
+            {
+                "name": "report.canonical",
+                "digest": {"sha256": r.report_canonical_sha256(report)},
+            }
+        )
+    except ValueError:  # a report JSON can't express canonically: file digest only
+        pass
     if bundle:
         subject.append({"name": "bundle", "digest": {"sha256": bundle}})
     name = report.get("workflow_name")
@@ -152,9 +208,14 @@ def build_statement(
     run_id = report.get("run_id")
     if isinstance(run_id, str) and r.DISCLOSURE_FIELDS["run_id"].fullmatch(run_id):
         values["run_id"] = run_id
-    commitments, openings = r.make_openings(values, salt=salt)
+    approval, approval_values = _approval(report)
+    commitments, openings = r.make_openings({**values, **approval_values}, salt=salt)
+    if approval is not None:
+        approval["commitments"] = {
+            path.split(".", 1)[1]: commitments.pop(path) for path in approval_values
+        }
     checks = _checks(report)
-    statement = {
+    statement: dict[str, Any] = {
         "_type": r.STATEMENT_TYPE,
         "subject": subject,
         "predicateType": r.PREDICATE_TYPE,
@@ -187,6 +248,8 @@ def build_statement(
             },
         },
     }
+    if approval is not None:
+        statement["predicate"]["approval"] = approval
     return statement, openings
 
 
@@ -411,12 +474,20 @@ def verify_run_receipt(
     result = r.verify_receipt(envelope, registry, openings=openings)
     if not result.ok or result.statement is None:
         return result
-    subjects = {s["name"]: s["digest"]["sha256"] for s in result.statement["subject"]}
-    # ``attach-seal`` keeps the signed bytes as report.pre-seal.json.
+    # ``attach-seal`` keeps the signed bytes as report.pre-seal.json. The
+    # file digest is checked against ``report.json`` and the canonical digest
+    # against ``report.canonical``, never one against the other.
     for name in ("report.json", "report.pre-seal.json"):
         path = run_dir / name
-        if path.is_file() and (
-            hashlib.sha256(path.read_bytes()).hexdigest() == subjects.get("report.json")
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        try:
+            canonical = r.report_canonical_sha256(loads_strict(data.decode("utf-8")))
+        except (UnicodeDecodeError, ValueError):
+            canonical = None
+        if r.report_subject_match(
+            result.statement, file_bytes=data, canonical_sha256=canonical
         ):
             if name != "report.json" and (run_dir / "report.json").is_file():
                 # Say which bytes it covers: never a silent pass for a
