@@ -83,6 +83,12 @@ dependencies = [
 
 [project.optional-dependencies]
 # Individual packages
+# `openadapt wrap` runs OpenAdapt's built-in Claude agent on a cache miss:
+# `uvx --python 3.12 'openadapt[wrap]@latest' wrap --example`. The base
+# launcher stays lean; wrap imports the SDK only when it runs the agent.
+wrap = [
+    "anthropic>=0.40; python_version < '3.13'",
+]
 browser = [
     # Kept as a compatibility alias for existing install commands. The base
     # launcher now selects this Flow contract because the bundled quickstart
