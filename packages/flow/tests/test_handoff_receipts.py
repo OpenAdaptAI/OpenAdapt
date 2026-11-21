@@ -308,6 +308,14 @@ def test_sign_updates_refuses_a_receipt_it_cannot_verify_or_did_not_sign(tmp_pat
     with pytest.raises(ValueError, match="does not verify"):
         followup.sign_updates(run_dir, [referrals], signer=stranger)
     assert not (run_dir / "receipt.update-3.json").exists()
+    # A tampered update already in the chain is never extended.
+    update = run_dir / "receipt.update-2.json"
+    good_update = update.read_text()
+    one = json.loads((run_dir / "receipt.update-1.json").read_text())
+    update.write_text(json.dumps(dict(json.loads(good_update), payload=one["payload"])))
+    with pytest.raises(ValueError, match="does not verify"):
+        followup.sign_updates(run_dir, [referrals], signer=signer)
+    assert not (run_dir / "receipt.update-3.json").exists()
 
 
 def test_handoff_list_signs_updates_and_shows_the_history(tmp_path, env, capsys):
@@ -342,3 +350,13 @@ def test_handoff_list_signs_updates_and_shows_the_history(tmp_path, env, capsys)
     assert "Update 1: Confirmed in the other party's system" in out
     assert main(argv) == 0
     assert "Signed receipt.update" not in capsys.readouterr().out
+    # A history that no longer verifies fails the command, and nothing new
+    # is signed on top of it.
+    update = run_dir / "receipt.update-1.json"
+    envelope = json.loads(update.read_text())
+    update.write_text(json.dumps(dict(envelope, signatures=[])))
+    assert main(argv) == 1
+    assert "Signed history: not verified" in capsys.readouterr().out
+    intake.check(referrals, referral.id, "REF-1", Fake(_found(birth_date="1984-03-10")))
+    assert main([*argv, "--sign-updates"]) == 2
+    assert not (run_dir / "receipt.update-2.json").exists()

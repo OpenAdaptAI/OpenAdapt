@@ -194,6 +194,8 @@ def cmd_handoff_list(args: argparse.Namespace) -> int:
     if history is not None and history.get("error"):
         print(f"handoff list: {history['error']}", file=sys.stderr)
         return 2
+    # A signed history that doesn't verify fails the command, after listing.
+    status_code = 1 if history is not None and not history.get("verified") else 0
     now: datetime = now_utc()
     if args.json:
         out = []
@@ -222,10 +224,12 @@ def cmd_handoff_list(args: argparse.Namespace) -> int:
             print(json.dumps({"handoffs": out, "signed_history": history}, indent=2))
         else:
             print(json.dumps(out, indent=2))
-        return 0
+        return status_code
     if not handoffs:
         print("No handoffs.")
-        return 0
+        if history is not None:
+            _print_history(history)
+        return status_code
     grouped: dict[str, list["Handoff"]] = {key: [] for key, _ in _GROUPS}
     for handoff in handoffs:
         grouped[handoff.status(now)].append(handoff)
@@ -247,7 +251,7 @@ def cmd_handoff_list(args: argparse.Namespace) -> int:
         print()
     if history is not None:
         _print_history(history)
-    return 0
+    return status_code
 
 
 def _history(
