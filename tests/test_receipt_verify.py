@@ -137,6 +137,70 @@ def test_a_run_folder_without_its_report_is_not_verified(tmp_path):
     (run / "report.json").unlink()
     result = verify_run_receipt(run, local_registry())
     assert (result.ok, result.reason) == (False, "malformed")
+    out = _verify(str(run))
+    assert out.exit_code != 0 and "no report.json" in out.output
+
+
+def test_a_pre_seal_match_says_which_report_it_covers(tmp_path):
+    run = _run(tmp_path, "VERIFIED")
+    write_receipt_record(run)
+    (run / "report.pre-seal.json").write_bytes((run / "report.json").read_bytes())
+    (run / "report.json").write_text("{}")
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok and "report.json changed" in result.detail
+    assert "report.json changed" in _verify(str(run)).output
+
+
+def test_a_revocation_survives_a_keys_file_listing_the_key_active(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow import receipt_record as rr
+
+    key = r.RoleKey("k" * 16, "A" * 44, "openadapt_cloud")
+    revoked = r.RoleKey(
+        key.key_id, key.public_key, "openadapt_cloud", "revoked", "2026-11-01T00:00:00Z"
+    )
+    monkeypatch.setattr(rr, "_pinned_cloud_keys", lambda home: [revoked])
+    merged = [k for k in local_registry(extra=[key]) if k.key_id == key.key_id]
+    assert [(k.status, k.revoked_at) for k in merged] == [
+        ("revoked", "2026-11-01T00:00:00Z")
+    ]
+
+
+def test_legacy_routes_never_drop_a_requested_check(tmp_path, monkeypatch):
+    from openadapt import receipt_verify as rv
+
+    calls = []
+
+    def folder(path, extra):
+        calls.append((path, extra))
+        return 0
+
+    def route(target, **kw):
+        return rv.verify_path(
+            target,
+            say=lambda s: None,
+            invoke_flow=None,
+            invoke_agent=None,
+            legacy_folder=folder,
+            legacy_link=lambda u, e: 0,
+            is_link=lambda t: t.startswith("https://"),
+            **kw,
+        )
+
+    keys = tmp_path / "keys.json"
+    keys.write_text("{}")
+    # A hosted link can't be pinned with --keys: refused, not ignored.
+    assert route("https://openadapt.ai/s/x", keys=keys) == 1
+    seal = tmp_path / "run" / "seal.json"
+    seal.parent.mkdir()
+    seal.write_text(json.dumps({"schema": "openadapt.local-seal/v1"}))
+    assert route(str(seal), keys=keys, extra=["--strict"]) == 0
+    assert calls[-1] == (seal.parent, ["--strict", "--keys", str(keys)])
+    # Another file that claims to be a Seal never stands for the folder's.
+    other = seal.with_name("copy.json")
+    other.write_text(seal.read_text())
+    assert route(str(other)) == 1 and len(calls) == 1
 
 
 def test_tampering_with_the_report_is_detected(tmp_path):

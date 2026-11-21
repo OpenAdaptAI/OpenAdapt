@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
@@ -336,9 +337,18 @@ def local_registry(
             keys.append(RoleKey(entry["key_id"], entry["public_key"], "this_computer"))
     except Exception:  # noqa: BLE001 - no key on this computer: trust nothing local
         pass
-    keys += [
-        k for k in _pinned_cloud_keys(home) if k.key_id not in {x.key_id for x in keys}
-    ]
+    # Lost-revocation class: a key listed twice keeps the revoked entry, so a
+    # revocation from any source survives the merge.
+    for k in _pinned_cloud_keys(home):
+        same = [i for i, x in enumerate(keys) if x.key_id == k.key_id]
+        if not same:
+            keys.append(k)
+        elif k.status == "revoked":
+            for i in same:
+                if keys[i].status != "revoked":
+                    keys[i] = replace(
+                        keys[i], status="revoked", revoked_at=k.revoked_at
+                    )
     return keys
 
 
@@ -408,6 +418,13 @@ def verify_run_receipt(
         if path.is_file() and (
             hashlib.sha256(path.read_bytes()).hexdigest() == subjects.get("report.json")
         ):
+            if name != "report.json" and (run_dir / "report.json").is_file():
+                # Say which bytes it covers: never a silent pass for a
+                # report.json that changed after signing.
+                return replace(
+                    result,
+                    detail="covers report.pre-seal.json; report.json changed after signing",
+                )
             return result
     if not (run_dir / "report.json").is_file():
         # A run folder's receipt is checked against its report: without the

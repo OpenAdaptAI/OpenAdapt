@@ -45,6 +45,8 @@ def _describe(result: Any, say: Say, indent: str = "  ") -> None:
         if result.detail:
             say(f"{indent}({result.detail})")
         return
+    if result.detail:
+        say(f"{indent}Note: {result.detail}")
     statement = result.statement or {}
     predicate = statement.get("predicate", {})
     reason = predicate.get("reason_code")
@@ -66,12 +68,21 @@ def _describe(result: Any, say: Say, indent: str = "  ") -> None:
 
 
 def verify_record_file(
-    path: Path, registry: Sequence[Any], say: Say, *, openings: Optional[Path] = None
+    path: Path,
+    registry: Sequence[Any],
+    say: Say,
+    *,
+    openings: Optional[Path] = None,
+    run_folder: bool = False,
 ) -> int:
     from openadapt_flow.receipt_record import PRIVATE_FILE, verify_run_receipt
     from openadapt_types.receipt import verify_receipt
 
-    if path.name == "receipt.json" and (path.parent / "report.json").is_file():
+    # A run folder's receipt is always checked against the folder's report
+    # (missing evidence class: no report never verifies a run folder).
+    if path.name == "receipt.json" and (
+        run_folder or (path.parent / "report.json").is_file()
+    ):
         result = verify_run_receipt(path.parent, registry)
     else:
         sidecar = openings or path.with_name(PRIVATE_FILE)
@@ -106,6 +117,14 @@ def verify_path(
     """Verify one target. Returns 0 only when every receipt in it verified."""
     if is_link(target):
         say(f"{target}  public-seal/v1 ({OLDER})")
+        if keys is not None:
+            # Dropped-requirement class: a hosted link is checked against the
+            # site's published keys, never a --keys registry, so refuse
+            # rather than ignore the pin.
+            say(
+                "  Not verified: --keys can't pin a hosted link; download it and verify the file"
+            )
+            return 1
         return legacy_link(target, list(extra))
     path = Path(target)
     if path.is_dir():
@@ -147,7 +166,14 @@ def verify_path(
     if schema == "openadapt.local-seal/v1":
         # A Seal is over its run's report: check the folder it sits in.
         _legacy_label(say, path, "local-seal/v1")
-        legacy_extra = list(extra) if keys is None else ["--keys", str(keys)]
+        # Wrong-subject class: the folder check reads the folder's seal.json,
+        # so only that file may stand for it.
+        if path.name != "seal.json":
+            say("  Not verified: a Seal is checked as its run folder's seal.json")
+            return 1
+        # Dropped-requirement class: --keys is added to, never replaces, the
+        # other options (--strict, --require-anchor, --require-timestamp).
+        legacy_extra = list(extra) + ([] if keys is None else ["--keys", str(keys)])
         return legacy_folder(path.parent, legacy_extra)
     if isinstance(doc, dict) and {"card", "seal"} <= set(doc):
         return _verify_public_seal(path, data, keys, say)
@@ -227,7 +253,9 @@ def _verify_folder(
     if with_receipt:
         registry = _registry(keys)
         for run in with_receipt:
-            failed += verify_record_file(run / "receipt.json", registry, say)
+            failed += verify_record_file(
+                run / "receipt.json", registry, say, run_folder=True
+            )
     if sealed_only:
         say(f"{len(sealed_only)} run(s) have only a seal.json ({OLDER})")
         legacy_extra = [*extra] if keys is None else ["--keys", str(keys)]
