@@ -86,8 +86,12 @@ def _run_hook(project: Path, agent: str, event: str) -> int:
         doc, code = render(agent, event, out)  # type: ignore[arg-type]
     except Exception as exc:  # noqa: BLE001 - fail closed before a tool call
         print(
-            f"OpenAdapt's hook failed ({type(exc).__name__}: {exc}); "
-            + ("the call is blocked." if event == "PreToolUse" else "nothing was checked."),
+            f"OpenAdapt's hook failed ({type(exc).__name__}); "
+            + (
+                "the call is blocked."
+                if event == "PreToolUse"
+                else "nothing was checked."
+            ),
             file=sys.stderr,
         )
         return 2 if event == "PreToolUse" else 1
@@ -140,7 +144,9 @@ def cmd_hooks(args: argparse.Namespace) -> int:
 def _print_status(info: dict) -> None:
     for name, agent in info["agents"].items():
         if agent["installed"]:
-            line = f"{name}: installed in {agent['file']} ({', '.join(agent['events'])})"
+            line = (
+                f"{name}: installed in {agent['file']} ({', '.join(agent['events'])})"
+            )
             if agent["missing_events"]:
                 line += f"; missing {', '.join(agent['missing_events'])}"
         else:
@@ -161,7 +167,9 @@ def _print_status(info: dict) -> None:
         print(f"system {system['name']} ({system['kind']}): {writes}")
     state = info["state"]
     for entry in state["approvals"]:
-        print(f"waiting for approval: {entry['id']} ({entry.get('system')}: {entry.get('detail')})")
+        print(
+            f"waiting for approval: {entry['id']} ({entry.get('system')}: {entry.get('detail')})"
+        )
     for entry in state["held"]:
         print(
             f"held: {entry['write_id']} {entry.get('label')} "
@@ -173,7 +181,9 @@ def _print_status(info: dict) -> None:
             f"receipt {run['id']}: {run['outcome']} {run.get('system')}.{run.get('write')}"
             + ("" if run["receipt"] else " (not signed)")
         )
-    print("Hooks are advisory: they see tool calls, not every way an agent can reach a system.")
+    print(
+        "Hooks are advisory: they see tool calls, not every way an agent can reach a system."
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

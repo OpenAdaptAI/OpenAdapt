@@ -52,6 +52,94 @@ class Diverged(AdapterError):
     """The statement did something other than the plan showed. Nothing landed."""
 
 
+def after_raw(
+    diff: Mapping[str, Any],
+    frame: Mapping[str, Mapping[str, str]],
+    rows: Mapping[str, Any],
+) -> dict[str, Any]:
+    """The column digests a statement left: each changed row by id, and each
+    added row without its primary key (a sequence may give it another id)."""
+    added: dict[str, list[dict[str, str]]] = {}
+    for rid in diff["added"]:
+        table = rid.split("/", 1)[0]
+        pk = set((rows.get(rid) or {}).get("pk") or [])
+        added.setdefault(table, []).append(
+            {c: d for c, d in frame[rid].items() if c not in pk}
+        )
+    kinds: dict[str, str] = {}
+    recent: set[str] = set()
+    for rid in [*diff["added"], *diff["changed"]]:
+        table = rid.split("/", 1)[0]
+        for c, v in ((rows.get(rid) or {}).get("row") or {}).items():
+            when = _as_time(v)
+            if kinds.get(f"{table}.{c}") != "other":
+                kinds[f"{table}.{c}"] = "time" if when is not None else "other"
+            if when is not None and abs(time.time() - when) < 600:
+                recent.add(f"{table}.{c}")  # "now", to the second: may differ at apply
+    return {
+        "changed": {rid: dict(frame[rid]) for rid in diff["changed"]},
+        "added": added,
+        "kinds": kinds,
+        "recent_time": sorted(recent),
+    }
+
+
+_TIME_TEXT = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$"
+)
+
+
+def _as_time(v: Any) -> Optional[float]:
+    """A tagged datetime, or ISO-looking text, as epoch seconds (naive = UTC or
+    local, whichever is closer to now)."""
+    raw = v.get("v") if isinstance(v, dict) and v.get("$t") == "dt" else v
+    if not isinstance(raw, str) or not _TIME_TEXT.match(raw):
+        return None
+    try:
+        t = _dt.datetime.fromisoformat(raw.replace("Z", "+00:00").replace(" ", "T"))
+    except ValueError:
+        return None
+    if t.tzinfo is not None:
+        return t.timestamp()
+    utc = t.replace(tzinfo=_dt.timezone.utc).timestamp()
+    local = t.timestamp()
+    return min((utc, local), key=lambda x: abs(time.time() - x))
+
+
+def volatile_columns(a: Mapping[str, Any], b: Mapping[str, Any]) -> list[str]:
+    """``table.column`` values that differ between two staged runs of the same
+    statement (``now()``, ``random()``, a time default): not compared."""
+    out: set[str] = set(a.get("recent_time", [])) | set(b.get("recent_time", []))
+    for rid in set(a["changed"]) | set(b["changed"]):
+        x, y = a["changed"].get(rid, {}), b["changed"].get(rid, {})
+        t = rid.split("/", 1)[0]
+        out |= {f"{t}.{c}" for c in set(x) | set(y) if x.get(c) != y.get(c)}
+    for t in set(a["added"]) | set(b["added"]):
+        xs, ys = a["added"].get(t, []), b["added"].get(t, [])
+        for c in {c for r in [*xs, *ys] for c in r}:
+            if sorted(r.get(c, "") for r in xs) != sorted(r.get(c, "") for r in ys):
+                out.add(f"{t}.{c}")
+    return sorted(out)
+
+
+def after_image(raw: Mapping[str, Any], volatile: Sequence[str]) -> dict[str, Any]:
+    """``after_raw`` without the volatile columns, in a comparable form."""
+    skip = set(volatile)
+    changed = {
+        rid: {
+            c: d for c, d in cols.items() if f"{rid.split('/', 1)[0]}.{c}" not in skip
+        }
+        for rid, cols in sorted(raw["changed"].items())
+    }
+    added = {
+        t: sorted(
+            digest({c: d for c, d in r.items() if f"{t}.{c}" not in skip}) for r in rs
+        )
+        for t, rs in sorted(raw["added"].items())
+    }
+    return {"changed": changed, "added": added}
+
+
 def _shape(diff: Mapping[str, Any]) -> tuple[Any, ...]:
     """A diff, comparable across runs: ids added by a sequence can differ, so
     added rows count per table."""
@@ -59,7 +147,11 @@ def _shape(diff: Mapping[str, Any]) -> tuple[Any, ...]:
     for rid in diff["added"]:
         t = rid.split("/", 1)[0]
         added[t] = added.get(t, 0) + 1
-    return (sorted(added.items()), sorted(diff["removed"]), sorted((k, tuple(v)) for k, v in diff["changed"].items()))
+    return (
+        sorted(added.items()),
+        sorted(diff["removed"]),
+        sorted((k, tuple(v)) for k, v in diff["changed"].items()),
+    )
 
 
 # -- values --------------------------------------------------------------------
@@ -105,16 +197,27 @@ def same(a: Any, b: Any) -> bool:
     """Equal as values (``1`` and ``1.0`` are equal; ``"1"`` and ``1`` aren't; a
     datetime equals its ISO text)."""
     a, b = untag(a), untag(b)
-    if isinstance(a, (_dt.date, _dt.datetime)) or isinstance(b, (_dt.date, _dt.datetime)):
+    if isinstance(a, (_dt.date, _dt.datetime)) or isinstance(
+        b, (_dt.date, _dt.datetime)
+    ):
+
         def text(v: Any) -> str:
-            return v.isoformat() if isinstance(v, (_dt.date, _dt.datetime)) else str(v).replace(" ", "T")
+            return (
+                v.isoformat()
+                if isinstance(v, (_dt.date, _dt.datetime))
+                else str(v).replace(" ", "T")
+            )
 
         return text(a) == text(b)
     if isinstance(a, bool) or isinstance(b, bool):
         return a is b or a == b and type(a) is type(b)
-    if isinstance(a, (int, float, decimal.Decimal)) and isinstance(b, (int, float, decimal.Decimal)):
+    if isinstance(a, (int, float, decimal.Decimal)) and isinstance(
+        b, (int, float, decimal.Decimal)
+    ):
         return decimal.Decimal(str(a)) == decimal.Decimal(str(b))
-    return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+    return json.dumps(a, sort_keys=True, default=str) == json.dumps(
+        b, sort_keys=True, default=str
+    )
 
 
 # -- diffs ---------------------------------------------------------------------
@@ -133,10 +236,16 @@ def diff_frames(
         cols = sorted(c for c in set(a) | set(b) if a.get(c) != b.get(c))
         if cols:
             changed[rid] = cols
-    return {"added": added, "removed": removed, "changed": dict(sorted(changed.items()))}
+    return {
+        "added": added,
+        "removed": removed,
+        "changed": dict(sorted(changed.items())),
+    }
 
 
-def column_digests(record: Mapping[str, Any], drop: Sequence[str] = ()) -> dict[str, str]:
+def column_digests(
+    record: Mapping[str, Any], drop: Sequence[str] = ()
+) -> dict[str, str]:
     return {k: digest(tag(v)) for k, v in record.items() if k not in drop}
 
 
@@ -155,7 +264,9 @@ class RestAdapter:
         if system.auth is not None:
             secret = os.environ.get(system.auth.value_env, "")
             if not secret:
-                raise TxSpecError(f"system {system.name}: ${system.auth.value_env} is not set")
+                raise TxSpecError(
+                    f"system {system.name}: ${system.auth.value_env} is not set"
+                )
             headers[system.auth.header] = system.auth.prefix + secret
         self.http = client or httpx.Client(
             base_url=system.url(), headers=headers, timeout=system.timeout_s
@@ -184,7 +295,9 @@ class RestAdapter:
         if key and self.system.idempotency_header:
             headers[self.system.idempotency_header] = key
         try:
-            resp = self.http.request(method, path, json=body, params=params, headers=headers)
+            resp = self.http.request(
+                method, path, json=body, params=params, headers=headers
+            )
         except Exception as exc:  # noqa: BLE001 - transport failure: delivery unknown
             raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
         if resp.status_code == 404 and method == "GET":
@@ -215,7 +328,7 @@ class RestAdapter:
 
     def frame(self, collection: Optional[str]) -> dict[str, dict[str, str]]:
         coll = self.coll(collection)
-        route = coll.list
+        route = coll.list_
         out: dict[str, dict[str, str]] = {}
         page = 1
         while True:
@@ -240,18 +353,27 @@ class RestAdapter:
             if page > 10_000:
                 raise AdapterError("the list never ended")
 
-    def predict(self, write: Mapping[str, Any], baseline: Optional[Record]) -> dict[str, Any]:
+    def predict(
+        self, write: Mapping[str, Any], baseline: Optional[Record]
+    ) -> dict[str, Any]:
         coll = self.coll(write.get("collection"))
         fields = dict(write.get("fields") or {})
         op = write["op"]
         if op == "create":
-            return {"added": {coll.name: 1}, "changed": {}, "removed": [], "derived": {}}
+            return {
+                "added": {coll.name: 1},
+                "changed": {},
+                "removed": [],
+                "derived": {},
+            }
         rid = f"{coll.name}/{write['id']}"
         if op == "delete":
             return {"added": {}, "changed": {}, "removed": [rid], "derived": {}}
         base = baseline or {}
         cols = sorted(
-            k for k, v in fields.items() if k not in coll.server_fields and not same(base.get(k), v)
+            k
+            for k, v in fields.items()
+            if k not in coll.server_fields and not same(base.get(k), v)
         )
         derived = sorted({d for c in cols for d in coll.derived.get(c, [])} - set(cols))
         return {
@@ -261,14 +383,22 @@ class RestAdapter:
             "derived": {rid: derived} if derived else {},
         }
 
-    def _body(self, coll: Collection, route: Any, base: Optional[Record], fields: Mapping[str, Any]) -> Record:
+    def _body(
+        self,
+        coll: Collection,
+        route: Any,
+        base: Optional[Record],
+        fields: Mapping[str, Any],
+    ) -> Record:
         if route.replace and base is not None:
             body = {k: v for k, v in base.items() if k not in coll.server_fields}
             body.update(fields)
             return body
         return dict(fields)
 
-    def apply(self, write: Mapping[str, Any], baseline: Optional[Record], key: str) -> dict[str, Any]:
+    def apply(
+        self, write: Mapping[str, Any], baseline: Optional[Record], key: str
+    ) -> dict[str, Any]:
         coll = self.coll(write.get("collection"))
         op = write["op"]
         fields = dict(write.get("fields") or {})
@@ -290,7 +420,11 @@ class RestAdapter:
         return {"id": str(write["id"])}
 
     def compensate(
-        self, write: Mapping[str, Any], baseline: Optional[Record], result: Mapping[str, Any], key: str
+        self,
+        write: Mapping[str, Any],
+        baseline: Optional[Record],
+        result: Mapping[str, Any],
+        key: str,
     ) -> None:
         coll = self.coll(write.get("collection"))
         op = write["op"]
@@ -298,8 +432,12 @@ class RestAdapter:
         if op == "create":
             route = coll.delete
             if route is None:
-                raise AdapterError(f"{coll.name} declares no delete, so a create can't be undone")
-            self._call(route.method, self._fill(route.path, {"id": rid}), key=key + ":undo")
+                raise AdapterError(
+                    f"{coll.name} declares no delete, so a create can't be undone"
+                )
+            self._call(
+                route.method, self._fill(route.path, {"id": rid}), key=key + ":undo"
+            )
             return
         if op == "update":
             route = coll.update
@@ -311,7 +449,10 @@ class RestAdapter:
                 else {k: baseline.get(k) for k in changed}
             )
             self._call(
-                route.method, self._fill(route.path, {**baseline, "id": rid}), restore, key=key + ":undo"
+                route.method,
+                self._fill(route.path, {**baseline, "id": rid}),
+                restore,
+                key=key + ":undo",
             )
             return
         raise AdapterError(f"no exact undo for a REST {op}")
@@ -323,7 +464,11 @@ class RestAdapter:
         if write["op"] == "delete":
             return None
         coll = self.coll(write.get("collection"))
-        return {k: v for k, v in (write.get("fields") or {}).items() if k not in coll.server_fields}
+        return {
+            k: v
+            for k, v in (write.get("fields") or {}).items()
+            if k not in coll.server_fields
+        }
 
     def frame_id(self, write: Mapping[str, Any], result: Mapping[str, Any]) -> str:
         return f"{write.get('collection')}/{result.get('id') or write.get('id')}"
@@ -344,7 +489,7 @@ class SqlAdapter:
 
     # connection -------------------------------------------------------------
 
-    def connect(self) -> Any:
+    def connect(self, *, read_only: bool = False) -> Any:
         s = self.system
         if s.dialect == "sqlite":
             import sqlite3
@@ -353,6 +498,9 @@ class SqlAdapter:
             path = Path(str(s.path))
             if not path.is_absolute() and self.root is not None:
                 path = Path(self.root) / path
+            if read_only:
+                uri = path.resolve().as_uri() + "?mode=ro"
+                return sqlite3.connect(uri, uri=True, isolation_level=None)
             con = sqlite3.connect(str(path), isolation_level=None)
             return con
         module = importlib.import_module(str(s.driver))
@@ -398,14 +546,18 @@ class SqlAdapter:
     def _tables(self, cur: Any) -> list[str]:
         d = self.system.dialect
         if d == "sqlite":
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
         elif d == "mysql":
             cur.execute(
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
             )
         else:
-            cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()")
+            cur.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"
+            )
         names = sorted(str(r[0]) for r in cur.fetchall())
         return [n for n in names if n not in self.system.frame_ignore_tables]
 
@@ -457,7 +609,11 @@ class SqlAdapter:
             seen: dict[str, int] = {}
             for row in rows:
                 rec = dict(zip(cols, row))
-                digs = {c: digest(tag(v)) for c, v in rec.items() if not self._ignored(table, c)}
+                digs = {
+                    c: digest(tag(v))
+                    for c, v in rec.items()
+                    if not self._ignored(table, c)
+                }
                 if pk and all(c in rec for c in pk):
                     rid = "|".join(str(rec[c]) for c in pk)
                 else:  # no key: the whole row is its identity
@@ -467,7 +623,8 @@ class SqlAdapter:
                 out[f"{table}/{rid}"] = digs
                 if rows_out is not None:
                     rows_out[f"{table}/{rid}"] = {
-                        "pk": pk, "row": {c: tag(v) for c, v in rec.items()}
+                        "pk": pk,
+                        "row": {c: tag(v) for c, v in rec.items()},
                     }
         return out
 
@@ -488,7 +645,8 @@ class SqlAdapter:
         if key is None:
             raise AdapterError(f"table {table} is not declared")
         cur.execute(
-            f"SELECT * FROM {self._ident(table)} WHERE {self._ident(key)} = {self.ph}", (rid,)
+            f"SELECT * FROM {self._ident(table)} WHERE {self._ident(key)} = {self.ph}",
+            (rid,),
         )
         cols = [str(d[0]) for d in cur.description]
         rows = cur.fetchall()
@@ -513,7 +671,9 @@ class SqlAdapter:
 
     # writing ----------------------------------------------------------------
 
-    def _exec(self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]) -> dict[str, Any]:
+    def _exec(
+        self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]
+    ) -> dict[str, Any]:
         table = str(write["collection"])
         key = self.system.tables.get(table)
         if key is None and write["op"] != "sql":
@@ -523,6 +683,7 @@ class SqlAdapter:
             cur.execute(str((write.get("fields") or {})["sql"]))
             return {"rows": max(0, int(cur.rowcount or 0))}
         fields = {k: untag(v) for k, v in (write.get("fields") or {}).items()}
+        assert key is not None
         t = self._ident(table)
         if op == "create":
             cols = list(fields)
@@ -551,7 +712,9 @@ class SqlAdapter:
             cur.execute(f"DELETE FROM {t} WHERE {self._ident(key)} = {self.ph}", (rid,))
         else:
             raise AdapterError(f"no SQL {op}")
-        if cur.rowcount != 1 and not (op == "update" and self.system.dialect == "mysql"):
+        if cur.rowcount != 1 and not (
+            op == "update" and self.system.dialect == "mysql"
+        ):
             raise AdapterError(f"the {op} touched {cur.rowcount} rows, not one")
         return {"id": rid}
 
@@ -573,11 +736,18 @@ class SqlAdapter:
                 for w, b in zip(writes, baselines):
                     result = self._exec(cur, w, b)
                     if w["op"] == "sql":
-                        now_ = self.frame_cur(cur)
+                        now_rows: dict[str, Any] = {}
+                        now_ = self.frame_cur(cur, now_rows)
                         result["staged_diff"] = diff_frames(prev, now_)
+                        result["after_raw"] = after_raw(
+                            result["staged_diff"], now_, now_rows
+                        )
                         result["before_rows"] = {
                             rid: rows[rid]["row"]
-                            for rid in [*result["staged_diff"]["removed"], *result["staged_diff"]["changed"]]
+                            for rid in [
+                                *result["staged_diff"]["removed"],
+                                *result["staged_diff"]["changed"],
+                            ]
                             if rid in rows
                         }
                         prev = now_
@@ -589,10 +759,14 @@ class SqlAdapter:
             con.close()
         return diff_frames(before, after), results
 
-    def predict(self, write: Mapping[str, Any], baseline: Optional[Record]) -> dict[str, Any]:
+    def predict(
+        self, write: Mapping[str, Any], baseline: Optional[Record]
+    ) -> dict[str, Any]:
         raise NotImplementedError("SQL plans are staged as one transaction")
 
-    def apply(self, write: Mapping[str, Any], baseline: Optional[Record], key: str) -> dict[str, Any]:
+    def apply(
+        self, write: Mapping[str, Any], baseline: Optional[Record], key: str
+    ) -> dict[str, Any]:
         if write["op"] == "sql":
             return self._apply_sql(write)
         con = self.connect()
@@ -626,11 +800,20 @@ class SqlAdapter:
                 after_rows: dict[str, Any] = {}
                 after = self.frame_cur(cur, after_rows)
                 diff = diff_frames(before, after)
-                if _shape(diff) != _shape(want):
+                got_after = after_image(
+                    after_raw(diff, after, after_rows), write.get("volatile") or []
+                )
+                if _shape(diff) != _shape(want) or (
+                    "staged_after" in write and got_after != write["staged_after"]
+                ):
                     con.rollback()
-                    raise Diverged("the statement's diff is not the planned diff; rolled back")
+                    raise Diverged(
+                        "the statement's rows or values are not the planned ones; rolled back"
+                    )
                 images = {
-                    "before": {r: rows[r] for r in [*diff["removed"], *diff["changed"]]},
+                    "before": {
+                        r: rows[r] for r in [*diff["removed"], *diff["changed"]]
+                    },
                     "after": {r: after[r] for r in [*diff["added"], *diff["changed"]]},
                     "added_pk": {r: after_rows[r] for r in diff["added"]},
                 }
@@ -646,37 +829,43 @@ class SqlAdapter:
 
     def compensate_sql(self, images: Mapping[str, Any]) -> None:
         """Undo one statement from its images, in one transaction: delete what
-        it added, restore what it changed, reinsert what it removed."""
+        it added, restore what it changed, reinsert what it removed.
+
+        Foreign keys can make the order matter (a cascade removed children
+        with their parent), so each row runs under a savepoint and failed rows
+        are retried in later passes until none makes progress."""
+        steps: list[tuple[str, str, Mapping[str, Any]]] = [
+            ("delete", rid, item) for rid, item in images.get("added_pk", {}).items()
+        ] + [("restore", rid, item) for rid, item in images.get("before", {}).items()]
         con = self.connect()
         try:
             cur = con.cursor()
             self._begin(cur)
             try:
-                for rid, item in images.get("added_pk", {}).items():
-                    self._delete_row(cur, rid, item)
-                for rid, item in images.get("before", {}).items():
-                    table = rid.split("/", 1)[0]
-                    pk, row = item["pk"], item["row"]
-                    if not pk:
-                        raise AdapterError(f"{table} has no primary key: no generated undo")
-                    where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
-                    cur.execute(f"SELECT 1 FROM {self._ident(table)} WHERE {where}",
-                                tuple(untag(row[c]) for c in pk))
-                    if cur.fetchall():
-                        cols = [c for c in row if c not in pk]
-                        sets = ", ".join(f"{self._ident(c)} = {self.ph}" for c in cols)
-                        if cols:
-                            cur.execute(
-                                f"UPDATE {self._ident(table)} SET {sets} WHERE {where}",
-                                (*(untag(row[c]) for c in cols), *(untag(row[c]) for c in pk)),
-                            )
-                    else:
-                        cols = list(row)
-                        cur.execute(
-                            f"INSERT INTO {self._ident(table)} ({', '.join(self._ident(c) for c in cols)}) "
-                            f"VALUES ({', '.join([self.ph] * len(cols))})",
-                            tuple(untag(row[c]) for c in cols),
+                left = steps
+                n = 0
+                while left:
+                    failed = []
+                    for step in left:
+                        n += 1
+                        sp = f"oa_undo_{n}"
+                        cur.execute(f"SAVEPOINT {sp}")
+                        try:
+                            if step[0] == "delete":
+                                self._delete_row(cur, step[1], step[2])
+                            else:
+                                self._restore_row(cur, step[1], step[2])
+                            cur.execute(f"RELEASE SAVEPOINT {sp}")
+                        except AdapterError:
+                            raise
+                        except Exception:  # noqa: BLE001 - a constraint: retry after the others
+                            cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                            failed.append(step)
+                    if len(failed) == len(left):
+                        raise AdapterError(
+                            f"{len(failed)} row(s) could not be restored"
                         )
+                    left = failed
             except Exception:
                 con.rollback()
                 raise
@@ -684,21 +873,56 @@ class SqlAdapter:
         finally:
             con.close()
 
+    def _restore_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
+        table = rid.split("/", 1)[0]
+        pk, row = item["pk"], item["row"]
+        if not pk:
+            raise AdapterError(f"{table} has no primary key: no generated undo")
+        where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
+        cur.execute(
+            f"SELECT 1 FROM {self._ident(table)} WHERE {where}",
+            tuple(untag(row[c]) for c in pk),
+        )
+        if cur.fetchall():
+            cols = [c for c in row if c not in pk]
+            if cols:
+                sets = ", ".join(f"{self._ident(c)} = {self.ph}" for c in cols)
+                cur.execute(
+                    f"UPDATE {self._ident(table)} SET {sets} WHERE {where}",
+                    (*(untag(row[c]) for c in cols), *(untag(row[c]) for c in pk)),
+                )
+        else:
+            cols = list(row)
+            cur.execute(
+                f"INSERT INTO {self._ident(table)} ({', '.join(self._ident(c) for c in cols)}) "
+                f"VALUES ({', '.join([self.ph] * len(cols))})",
+                tuple(untag(row[c]) for c in cols),
+            )
+
     def _delete_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
         table = rid.split("/", 1)[0]
         pk, row = item["pk"], item["row"]
         if not pk:
             raise AdapterError(f"{table} has no primary key: no generated undo")
         where = " AND ".join(f"{self._ident(c)} = {self.ph}" for c in pk)
-        cur.execute(f"DELETE FROM {self._ident(table)} WHERE {where}", tuple(untag(row[c]) for c in pk))
+        cur.execute(
+            f"DELETE FROM {self._ident(table)} WHERE {where}",
+            tuple(untag(row[c]) for c in pk),
+        )
 
-    def current_digests(self, rids: Sequence[str]) -> dict[str, Optional[dict[str, str]]]:
+    def current_digests(
+        self, rids: Sequence[str]
+    ) -> dict[str, Optional[dict[str, str]]]:
         """The current column digests of some frame rows (None when gone)."""
         frame = self.frame()
         return {r: frame.get(r) for r in rids}
 
     def compensate(
-        self, write: Mapping[str, Any], baseline: Optional[Record], result: Mapping[str, Any], key: str
+        self,
+        write: Mapping[str, Any],
+        baseline: Optional[Record],
+        result: Mapping[str, Any],
+        key: str,
     ) -> None:
         op = write["op"]
         rid = str(result.get("id") or write.get("id"))
@@ -711,12 +935,23 @@ class SqlAdapter:
             # same row) is restored too, by naming its old value explicitly.
             current = self.read(write["collection"], rid) or {}
             fields = {
-                k: v for k, v in baseline.items() if k in current and not same(current.get(k), v)
+                k: v
+                for k, v in baseline.items()
+                if k in current and not same(current.get(k), v)
             } or {k: baseline.get(k) for k in (write.get("fields") or {})}
-            inverse = {"op": "update", "collection": write["collection"], "id": rid, "fields": fields}
+            inverse = {
+                "op": "update",
+                "collection": write["collection"],
+                "id": rid,
+                "fields": fields,
+            }
         elif op == "delete":
             assert baseline is not None
-            inverse = {"op": "create", "collection": write["collection"], "fields": dict(baseline)}
+            inverse = {
+                "op": "create",
+                "collection": write["collection"],
+                "fields": dict(baseline),
+            }
         else:
             raise AdapterError(f"no SQL undo for {op}")
         self.apply(inverse, None, key + ":undo")
@@ -753,7 +988,9 @@ class MailAdapter:
         out: list[dict[str, Any]] = []
         start = 0
         while True:
-            resp = self.http.get("/api/v1/messages", params={"start": start, "limit": 250})
+            resp = self.http.get(
+                "/api/v1/messages", params={"start": start, "limit": 250}
+            )
             if resp.status_code >= 400:
                 raise AdapterError(f"the mailbox returned {resp.status_code}")
             page = resp.json().get("messages") or []
@@ -776,12 +1013,24 @@ class MailAdapter:
 
     def count(self, key: str) -> int:
         mid = self.message_id(key).strip("<>")
-        return sum(1 for m in self._messages() if str(m.get("MessageID", "")).strip("<>") == mid)
+        return sum(
+            1
+            for m in self._messages()
+            if str(m.get("MessageID", "")).strip("<>") == mid
+        )
 
-    def predict(self, write: Mapping[str, Any], baseline: Optional[Record]) -> dict[str, Any]:
+    def predict(
+        self, write: Mapping[str, Any], baseline: Optional[Record]
+    ) -> dict[str, Any]:
         return {"added": {}, "changed": {}, "removed": [], "derived": {}, "queued": 1}
 
-    def send(self, write: Mapping[str, Any], key: str, *, smtp_factory: Optional[Callable[..., Any]] = None) -> None:
+    def send(
+        self,
+        write: Mapping[str, Any],
+        key: str,
+        *,
+        smtp_factory: Optional[Callable[..., Any]] = None,
+    ) -> None:
         import smtplib
         from email.message import EmailMessage
 
@@ -796,7 +1045,9 @@ class MailAdapter:
         msg.set_content(str(fields.get("body", "")))
         factory = smtp_factory or smtplib.SMTP
         try:
-            with factory(self.system.smtp.host, self.system.smtp.port, timeout=20) as smtp:
+            with factory(
+                self.system.smtp.host, self.system.smtp.port, timeout=20
+            ) as smtp:
                 smtp.send_message(msg)
         except Exception as exc:  # noqa: BLE001 - delivery unknown
             raise AdapterError(f"SMTP failed: {type(exc).__name__}") from exc

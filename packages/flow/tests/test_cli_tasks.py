@@ -86,7 +86,8 @@ def test_every_legacy_leaf_retains_namespace_errors_and_handler(parsers):
     parser, legacy = parsers
     cases = list(_cases(parser))
     assert set(_children(parser)) == set(cli_tasks.FLOW_NAMES) | (
-        set(_children(parser)) & set(cli_tasks.INTEGRATION_NAMES)
+        set(_children(parser))
+        & (set(cli_tasks.INTEGRATION_NAMES) | set(cli_tasks.RENAMED_LEAVES))
     )
     assert len(cases) >= 170
     successes = 0

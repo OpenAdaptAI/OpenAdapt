@@ -67,7 +67,12 @@ def write_private(path: Path, payload: Any) -> None:
     tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        os.write(fd, (json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n").encode())
+        os.write(
+            fd,
+            (
+                json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+            ).encode(),
+        )
         os.fsync(fd)
     finally:
         os.close(fd)
@@ -132,9 +137,21 @@ class State:
         self, *, task: str, system: str, collection: str, op: str, slot: str
     ) -> str:
         body = canonical(
-            {"task": task, "system": system, "collection": collection, "op": op, "slot": slot}
+            {
+                "task": task,
+                "system": system,
+                "collection": collection,
+                "op": op,
+                "slot": slot,
+            }
         )
         return "ik-" + hmac.new(self.secret(), body, hashlib.sha256).hexdigest()[:40]
+
+    def tag(self, text: str) -> str:
+        """A keyed tag for a row id or a task: comparable, never the value."""
+        return hmac.new(
+            self.secret(), text.encode("utf-8"), hashlib.sha256
+        ).hexdigest()[:20]
 
     # -- the lock ------------------------------------------------------------
 
@@ -147,7 +164,7 @@ class State:
             if os.name == "nt":  # pragma: no cover - Windows
                 import msvcrt
 
-                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
             else:
                 import fcntl
 
@@ -165,8 +182,12 @@ class State:
 
     def record(self, key: str, event: str, **fields: Any) -> None:
         """Append one event, durably, before the caller acts on it."""
-        line = json.dumps({"event": event, "at": now(), **fields}, sort_keys=True, default=str)
-        fd = os.open(self._ledger_path(key), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        line = json.dumps(
+            {"event": event, "at": now(), **fields}, sort_keys=True, default=str
+        )
+        fd = os.open(
+            self._ledger_path(key), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
+        )
         try:
             os.write(fd, (line + "\n").encode())
             os.fsync(fd)
@@ -206,7 +227,9 @@ class State:
 
     def find_plan(self, prefix: str) -> str:
         prefix = prefix.removeprefix("pl-")
-        hits = [p.name for p in (self.root / "plans").iterdir() if p.name.startswith(prefix)]
+        hits = [
+            p.name for p in (self.root / "plans").iterdir() if p.name.startswith(prefix)
+        ]
         if len(hits) != 1:
             raise StateError("plan_not_found" if not hits else "plan_ambiguous", prefix)
         return hits[0]
@@ -215,7 +238,10 @@ class State:
 
     def approve(self, digest: str, *, approver: str, decided_by: str) -> dict[str, Any]:
         path = self.root / "approvals" / f"{digest}.json"
-        if path.exists() or (self.root / "approvals" / f"{digest}.consumed.json").exists():
+        if (
+            path.exists()
+            or (self.root / "approvals" / f"{digest}.consumed.json").exists()
+        ):
             raise StateError("already_approved", digest[:12])
         record = {
             "plan": digest,
@@ -256,7 +282,9 @@ class State:
         write_private(self.root / "holdback" / f"{key}.json", dict(item))
 
     def held(self) -> list[dict[str, Any]]:
-        return [read_json(p) for p in sorted((self.root / "holdback").glob("ik-*.json"))]
+        return [
+            read_json(p) for p in sorted((self.root / "holdback").glob("ik-*.json"))
+        ]
 
     def unhold(self, key: str) -> None:
         with contextlib.suppress(FileNotFoundError):

@@ -78,6 +78,9 @@ def _launcher_text(project: Path, python: str) -> str:
 # Runs one OpenAdapt hook event: $1 is the agent, $2 the event, stdin the
 # agent's hook input. If the hook can't run before a tool call, the call is
 # blocked (exit 2), never let through.
+# Run from this folder (no Python files), so a project file named like a
+# module Python imports can't shadow it.
+cd "$(dirname "$0")" || exit 2
 {py} -m openadapt_flow.hooks run --project {root} --agent "$1" --event "$2"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
@@ -91,12 +94,16 @@ exit "$rc"
 
 def _entry(agent: str, event: str, launcher: Path) -> dict[str, Any]:
     command = f"{shlex.quote(str(launcher))} {agent} {event}"
-    handler = {
+    handler: dict[str, Any] = {
         "type": "command",
         "command": command,
         "timeout": TIMEOUT_S,
         "statusMessage": "OpenAdapt: checking writes to declared systems",
     }
+    if agent == "claude-code" and event == "PreToolUse":
+        # Claude Code 2.1.295+: a timeout or a hook that can't start blocks
+        # the call instead of letting it run.
+        handler["onFailure"] = "block"
     group: dict[str, Any] = {"hooks": [handler]}
     if event != "Stop":
         group = {"matcher": MATCHERS[agent], **group}
@@ -104,7 +111,9 @@ def _entry(agent: str, event: str, launcher: Path) -> dict[str, Any]:
 
 
 def _ours(handler: Any, launcher: Path) -> bool:
-    return isinstance(handler, dict) and str(launcher) in str(handler.get("command", ""))
+    return isinstance(handler, dict) and str(launcher) in str(
+        handler.get("command", "")
+    )
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -181,7 +190,11 @@ def _manifest(project: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"schema_version": MANIFEST_SCHEMA, "agents": {}}
-    return data if isinstance(data, dict) else {"schema_version": MANIFEST_SCHEMA, "agents": {}}
+    return (
+        data
+        if isinstance(data, dict)
+        else {"schema_version": MANIFEST_SCHEMA, "agents": {}}
+    )
 
 
 def install(
@@ -210,7 +223,9 @@ def install(
         encoding="utf-8",
     )
     launcher = launcher_path(project)
-    launcher.write_text(_launcher_text(project, python or sys.executable), encoding="utf-8")
+    launcher.write_text(
+        _launcher_text(project, python or sys.executable), encoding="utf-8"
+    )
     launcher.chmod(0o755)
     path = project / CONFIG_FILES[agent]
     existed = path.exists()
@@ -234,7 +249,9 @@ def install(
     }
     manifest["python"] = python or sys.executable
     manifest["schema_version"] = MANIFEST_SCHEMA
-    _manifest_path(project).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    _manifest_path(project).write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     return {
         "agent": agent,
         "file": str(path),
@@ -297,7 +314,9 @@ def status(project: Path) -> dict[str, Any]:
             for event, groups in hooks.items() if isinstance(hooks, dict) else []:
                 for group in groups if isinstance(groups, list) else []:
                     handlers = group.get("hooks") if isinstance(group, dict) else None
-                    if isinstance(handlers, list) and any(_ours(h, launcher) for h in handlers):
+                    if isinstance(handlers, list) and any(
+                        _ours(h, launcher) for h in handlers
+                    ):
                         found.append(event)
         missing = [e for e in EVENTS[name] if e not in found]
         agents[name] = {

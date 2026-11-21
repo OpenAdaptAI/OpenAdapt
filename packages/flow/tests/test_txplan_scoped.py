@@ -676,3 +676,23 @@ def test_two_deliberate_updates_of_one_record_in_one_task(lab: Any) -> None:
                                          "id": rid, "slot": "step-3", "fields": {"qty": 3}})
     assert not err, text
     assert store.records[int(rid)]["qty"] == 3 and store.writes == 3
+
+
+def test_proxy_cli_api_only_gets_a_stable_default_task(
+    lab: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    from openadapt_flow.txplan import proxy, proxy_cli
+
+    _, url, _ = lab
+    tx = tmp_path / "systems.tx.yaml"
+    tx.write_text(yaml.safe_dump(_spec(url).model_dump(mode="json", exclude_none=True)))
+    seen: list[dict[str, Any]] = []
+    monkeypatch.setattr(proxy, "run", lambda command, **kw: seen.append(kw) or 0)
+    args = proxy_cli._parser().parse_args(["--api", str(tx), "--state", str(tmp_path / "s")])
+    assert proxy_cli._run(args, []) == 0
+    assert proxy_cli._run(args, []) == 0
+    first, second = seen
+    assert first["task"] == second["task"] and first["task"].startswith("proxy-")
+    assert first["api_spec"] is not None and "agent" in first["secrets_"]
