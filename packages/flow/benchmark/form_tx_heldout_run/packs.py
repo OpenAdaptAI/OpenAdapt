@@ -284,6 +284,8 @@ def _label(key: str, label: str, kind: ControlKind = ControlKind.TEXT,
         anchor=FieldAnchorSpec(label_patterns=(f"^{label}$",)),
         control_kind=kind,
         codec=codec,
+        # The portal's selects start on "Select one", which has an empty value.
+        placeholder_values=("", "Select one"),
         prefill_policy=(
             PrefillPolicy.OVERWRITE_WITH_DOSSIER
             if portal_default
