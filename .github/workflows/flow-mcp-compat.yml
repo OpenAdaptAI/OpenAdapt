@@ -1,7 +1,34 @@
 name: Flow MCP compatibility
 
+# Runs five MCP tests against two pinned MCP SDK releases (1.28.0 and 2.3.0)
+# besides the locked one, which flow-unit already covers. These tests are an
+# extra SDK compatibility check outside the required `ci` check.
+#
+# Pull requests run it only when they change code that talks to the MCP SDK,
+# its tests or the pinned requirements. Every push to main that touches Flow,
+# Types or the CI scripts runs it, as pull requests used to. On 2026-11-20 it
+# ran on 107 pull-request commits per SDK version and never failed, with two
+# runner slots per Flow commit.
 on:
   pull_request:
+    # Drafts run nothing (the job checks `draft`); marking one ready runs it.
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'packages/flow/openadapt_flow/emit/**'
+      - 'packages/flow/openadapt_flow/agent/mcp.py'
+      - 'packages/flow/openadapt_flow/wrap/mcp.py'
+      - 'packages/flow/openadapt_flow/integrations/agents/**'
+      - 'packages/flow/tests/_mcp_tools.py'
+      - 'packages/flow/tests/test_mcp_sdk_compatibility.py'
+      - 'packages/flow/tests/test_generated_parameter_binding.py'
+      - 'packages/flow/tests/test_backend_parity_refusals.py'
+      - 'packages/flow/pyproject.toml'
+      - 'packages/flow/uv.lock'
+      - 'scripts/ci/mcp-*.requirements'
+      - 'scripts/ci/locked_install.py'
+      - '.github/workflows/flow-mcp-compat.yml'
+  push:
+    branches: [main]
     paths:
       - 'packages/flow/**'
       - 'packages/types/**'
@@ -12,10 +39,18 @@ on:
 permissions:
   contents: read
 
-# Supplementary SDK boundaries; the existing CI required-job closure is unchanged.
+# A pull request's newer push cancels its older run. On main one run goes at
+# a time and the newest waiting push replaces an older waiting one: it tests
+# a tree that contains the older one. No release reads this workflow. A
+# cancelled run on main means a newer push replaced it, not a failure.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   flow-mcp-compat:
     name: flow MCP compatibility (${{ matrix.mcp }})
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
