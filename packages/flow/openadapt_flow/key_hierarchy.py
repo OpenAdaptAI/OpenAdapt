@@ -674,7 +674,9 @@ def _write_private(path: Path, data: bytes) -> None:
 
     at_rest._private_dir(path.parent)
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    from openadapt_flow.private_file import open_binary
+
+    fd = open_binary(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         os.write(fd, data)
         os.fsync(fd)
