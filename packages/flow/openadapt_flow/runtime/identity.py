@@ -2312,6 +2312,14 @@ def verify_target_identity(
         params: Effective run parameter values (run values merged over the
             recorded defaults).
         param_examples: The workflow's recorded example values per param.
+        sibling_rows: Optional opt-in sibling row bands from the same list or
+            table. When supplied, tokens shared across sibling rows are
+            excluded from discriminative names and identity-bearing coverage
+            via :func:`derive_sibling_chrome_words`. Standard single-band
+            callers without sibling rows leave this empty and rely on
+            :data:`_GENERIC_IDENTITY_WORDS`.
+        extra_generic: Optional precomputed OCR-canonical non-identifying
+            chrome tokens to exclude alongside :data:`_GENERIC_IDENTITY_CANON`.
 
     Returns:
         An :class:`~openadapt_flow.ir.IdentityCheck`:

@@ -249,7 +249,7 @@ def _populate_band(
             salt,
             token,
             _id.identity_bearing(raw, token, extra_generic=extra_generic),
-            _id.generic_label_role(raw, token, extra_generic=extra_generic),
+            _id.generic_label_role(raw, token),
         )
         for raw, token in zip(raw_words, words)
     ]
@@ -355,6 +355,7 @@ def _template_punctuation_agrees(tmpl: IdentityTemplate, obs: list[str]) -> bool
     salt = _salt_bytes(tmpl.salt)
     keys = [token.c for token in tmpl.tokens]
     body_keys = [tmpl.punctuation_body_keys.get(i, key) for i, key in enumerate(keys)]
+    static_generic_keys = {_hash(salt, word) for word in _id._GENERIC_IDENTITY_CANON}
     expected = _id._punctuation_signature(
         keys,
         body_keys,
@@ -362,7 +363,10 @@ def _template_punctuation_agrees(tmpl: IdentityTemplate, obs: list[str]) -> bool
         tmpl.punctuation_indices,
         tmpl.standalone_punctuation_indices,
         [
-            _template_identity_kind(token, lambda word: _hash(salt, word)) == "name"
+            token.alpha
+            and token.name
+            and token.n >= _id.ID_CARRY_NAME_MIN
+            and token.c not in static_generic_keys
             for token in tmpl.tokens
         ],
         [token.label is True for token in tmpl.tokens],
@@ -900,7 +904,7 @@ def _template_identity_kind(t, canon) -> Optional[_id.IdentityKind]:
         t.alpha
         and t.name
         and t.n >= _id.ID_CARRY_NAME_MIN
-        and t.label is not True
+        and t.bearing is not False
         and t.c not in {canon(w) for w in _id._GENERIC_IDENTITY_CANON}
     ):
         return "name"
