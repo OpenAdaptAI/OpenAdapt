@@ -202,16 +202,24 @@ def register(sub: argparse._SubParsersAction) -> None:
         allow_abbrev=False,
     )
     rsub = p.add_subparsers(dest="at_rest_cmd", required=True)
-    s = rsub.add_parser("status", help="Where the keys are and who can open new runs")
+    s = rsub.add_parser(
+        "status",
+        help="Where the keys are and who can open new runs",
+        allow_abbrev=False,
+    )
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=_cmd_status)
-    s = rsub.add_parser("recovery", help="The solo recovery key")
+    s = rsub.add_parser("recovery", help="The solo recovery key", allow_abbrev=False)
     rec = s.add_subparsers(dest="recovery_cmd", required=True)
-    c = rec.add_parser("create", help="Make a recovery key; the code is shown once")
+    c = rec.add_parser(
+        "create", help="Make a recovery key; the code is shown once", allow_abbrev=False
+    )
     c.add_argument("--replace", action="store_true")
     c.set_defaults(func=_cmd_recovery_create)
     s = rsub.add_parser(
-        "shred", help="Destroy an encrypted set's bucket key; nobody can open it after"
+        "shred",
+        help="Destroy an encrypted set's bucket key; nobody can open it after",
+        allow_abbrev=False,
     )
     s.add_argument("dir", help="The encrypted directory")
     s.add_argument("--yes", action="store_true", help="Confirm; this can't be undone")

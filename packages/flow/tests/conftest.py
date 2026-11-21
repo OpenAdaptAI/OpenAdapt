@@ -15,16 +15,6 @@ if str(REPO_ROOT) not in sys.path:
 
 pytest_plugins = ("tests._orders_portal",)
 
-# Session-wide, before any fixture of any scope: module and session fixtures
-# (an e2e recording compiled once per module) must not seal their output
-# under a key a later per-test home can't open, and nothing may reach the
-# person's OS keychain. The per-test isolation below sets these again.
-os.environ["OPENADAPT_FLOW_KEY_STORE"] = "file"
-if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
-    os.environ.setdefault(
-        "OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data"
-    )
-
 from tests import lanes  # noqa: E402 - needs the sys.path line above
 from tests._approver_keys import approver  # noqa: E402,F401 - shared fixture
 from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line above
@@ -39,6 +29,33 @@ def pytest_collection_modifyitems(
     """In the fast and main lanes, leave out tests in tests/nightly_only.txt."""
 
     lanes.deselect(config, items)
+
+
+_SESSION_ENV: dict[str, str | None] = {}
+
+
+def _configure_at_rest() -> None:
+    """Session-wide, before any fixture of any scope: module and session
+    fixtures (an e2e recording compiled once per module) must not seal their
+    output under a key a later per-test home can't open, and nothing may reach
+    the person's OS keychain. The per-test isolation sets these again."""
+
+    wanted = {"OPENADAPT_FLOW_KEY_STORE": "file"}
+    if os.environ.get("OPENADAPT_TEST_DEFAULT_AT_REST") != "1":
+        wanted["OPENADAPT_FLOW_PLAINTEXT_AT_REST"] = os.environ.get(
+            "OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data"
+        )
+    for name, value in wanted.items():
+        _SESSION_ENV[name] = os.environ.get(name)
+        os.environ[name] = value
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    for name, value in _SESSION_ENV.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -155,6 +172,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    _configure_at_rest()
     # A package-local pyproject.toml cuts off ancestor conftest discovery.
     if not config.pluginmanager.hasplugin("openadapt-headless"):
         from tests import headless_guard
