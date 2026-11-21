@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.4.0 (2026-11-20)
 
 ### Features
 
@@ -69,6 +69,13 @@
   Playwright dismiss it. A program recorded this way stops on a dialog no
   step expects (`dialog_unexpected`), including a before-unload warning
   that would otherwise discard unsaved edits.
+- `openadapt wrap publish` refuses, before anything is uploaded, a program
+  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
+  Hosted runs verify a person's admission or one made with a CI admitter key.
+- For an admitter-key admission, publish checks that the organization has
+  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
+  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
+  and public key an owner or admin must register.
 
 ### Fixes
 
@@ -79,6 +86,24 @@
   browser dialog is retried instead of failing the recording or run.
 - A click on a `<label>` and the click the browser forwards to its control
   record as one action.
+- Managed runs of an admitted program carry verification for that exact
+  dispatch through the CLI, public `Replayer` and deployment API. The proof
+  binds the admission, bundle, inputs, policy, run, dispatch session and
+  current trust registry. It is used once; resume verifies a fresh proof.
+  Missing or changed authority refuses before input.
+- Managed input requires a signed v3 permit with an exclusive input-start
+  deadline. The receiver checks it after preparation, immediately before each
+  desktop input or API request. Each API request retains its acknowledgment
+  before another request starts. A delayed permit, expired deadline or missing
+  receipt halts the run. Late completion evidence is retained as a separate
+  nonauthorizing uncertainty observation and cannot produce VERIFIED.
+- A governed MCP tool call no longer accepts an old or copied run report as a
+  new successful run. Each call binds its report to a fresh challenge and the
+  deployment that actually ran, and a missing or invalid completion after
+  launch is reported as uncertain, never as success (#2335).
+- Passphrase-derived keys, attended run keys and opened sealed sets are no
+  longer cached for the whole process. Each independent operation
+  authenticates again; caller-owned handles still reuse their key (#2341).
 
 ## v3.3.0 (2026-11-19)
 
