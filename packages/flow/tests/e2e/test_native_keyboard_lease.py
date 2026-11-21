@@ -167,8 +167,19 @@ class _Transport:
 
 def _read(backend, automation_id: str) -> str:
     result = backend.read_structural(StructuralLocator(automation_id=automation_id))
-    assert result is not None and result["match"] == "unique", result
-    assert result["candidate_count"] == 1 and isinstance(result["text"], str)
+    if result is None:
+        pytest.fail("UIA structural read unavailable", pytrace=False)
+    match, count = result["match"], result["candidate_count"]
+    if match != "unique" or count != 1:
+        # WindowsBackend validated the match and count. Keep provider text,
+        # previews and unrecognized reason strings out of the failure report.
+        reason = "not_unique" if result["reason"] == "not_unique" else "unclassified"
+        pytest.fail(
+            f"UIA census refused (match={match}, candidate_count={count}, reason={reason})",
+            pytrace=False,
+        )
+    if result["complete"] is not True or not isinstance(result["text"], str):
+        pytest.fail("UIA value proof incomplete after a unique match", pytrace=False)
     return result["text"]
 
 
@@ -783,7 +794,7 @@ def _editable_positive(backend, transport, root, aid, point, expected):
         ],
         "point": list(handle.point),
         "completeness_proof": {
-            "schema": "openadapt.native-value-completeness/v1",
+            "schema": "openadapt.native-value-completeness/v3",
             "method": "uia-value+wm-gettext",
             "hwnd": managed_before["hwnd"],
             "pid": managed_before["pid"],
