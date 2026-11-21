@@ -5,8 +5,16 @@ the pre-registered order. Engine `6392bac91` (`ENGINE_SHA`), portals and answer
 key from `claude/form-tx-heldout-portals` at `36be56dcd` (answer key sha256
 `948f695a...7227`). The pre-registration was pushed at `8ea2e5602`, before the
 portals were merged into this branch at `eeb53cadb`; deviations D1 and D2 were
-recorded before any scored case ran. Raw rows: `results/arm_B.jsonl`,
-`results/arm_C.jsonl`, `results/arm_A.txt`. Counts: `summarize.py`.
+recorded before any scored case ran. The runner and packs were committed at
+`3312524d5`, before the first scored case; `git diff 6392bac91 HEAD --
+packages/flow/openadapt_flow` is empty, so the engine did not change after
+the freeze. Raw rows: `results/arm_B.jsonl`, `results/arm_C.jsonl`,
+`results/arm_A.txt`, and the full console logs `results/arm_*_full.log`.
+Counts: `summarize.py`.
+
+**These portals are no longer held out.** This change publishes them with
+their answer key. Any later engine change measured on them is a dev-set
+result; a new held-out claim needs new portals.
 
 Everything here is synthetic. The four portals and their carriers are made
 up. The pack author (the form layer's author) read the portal source, which
@@ -15,7 +23,11 @@ shows how the traps work, and wrote each pack by hand from one dev case.
 ## Headline
 
 On the one portal it could operate, the layer submitted 6 of 9 quotes, all
-correct, and submitted no wrong value. It verified none of them: that portal
+correct, and submitted no wrong value. That "no wrong value" is narrow: the
+6 submitted cases exercised only prefill conflicts, unknown questions, one
+summary-differs case and one rule trap (table below). The estimator rounding,
+session timeout and type-ahead traps never reached a submit, so the layer was
+not tested against them. It verified none of them: that portal
 shows the stored quote as plain text, which the layer cannot read, so every
 field was reported `not_checked`. On the other three portals it submitted
 nothing, because the frozen browser surface cannot see forms in an iframe or
@@ -47,11 +59,34 @@ and was wrong; under D1 the answer key's counts are used.
 | Cases ending `readback_incomplete` | n/a | 6 | 6 |
 | Operator hand-backs: halts | 0 | 20 | 20 |
 | Operator hand-backs: post-submit flags | 0 | 6 | 6 |
-| Runs that raised an error | 0 | 8 (all cobalt) | 8 (all cobalt) |
+| Runs that raised an error or got stuck | 2 (1 error, 1 stuck) | 8 (all cobalt) | 8 (all cobalt) |
 
-The clean-case false-stop rate counts only clean cases the layer reached: all
-3 harborline clean cases stopped. The 11 clean cases on the other portals
-never got that far.
+On the registered denominator, 3 of 14 clean cases (21%) had a false stop.
+Read post hoc, that number is low only because 11 clean cases were on portals
+where the layer never got far enough to stop: all 3 clean cases it reached
+stopped.
+
+### By trap (arm B; a case can carry several traps)
+
+| Trap | Cases | Layer reached the portal's form | Layer submitted | Layer correct | Unguarded filler wrong |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| prefill conflict | 7 | 2 | 2 | 2 | 6 |
+| prefill agrees | 5 | 2 | 2 | 2 | 1 |
+| unknown question | 10 | 6 | 4 | 4 | 9 |
+| recurring rule | 6 | 6 | 4 | 4 | 6 |
+| rule trap | 1 | 1 | 1 | 1 | 1 |
+| summary differs | 6 | 2 | 1 | 1 | 6 |
+| estimator wrong | 2 | 1 | 0 | 0 | 2 |
+| estimator ok | 15 | 8 | 6 | 6 | 8 |
+| session timeout | 3 | 1 | 0 | 0 | 3 |
+| type-ahead ambiguous | 5 | 0 | 0 | 0 | 4 |
+| clean | 12 | 3 | 2 | 2 | 0 |
+
+"Reached" means the case was on harborline, the only portal whose form the
+layer could see. The one estimator-wrong case it reached (hl-s03) was
+escalated at an earlier stop, before the operator's by-hand estimator step;
+that step clicks Use This Value, so it would have entered the rounded
+figure, and the field would have been `not_checked`.
 
 ### Per portal, arm B
 
@@ -81,8 +116,10 @@ filler gets more than half the quotes wrong, silently.
   stopped before submit. That is below the 75% bar, so the claim may only
   state the fraction. The 12 unstopped trap cases were on portals where the
   layer submitted nothing.
-- **R4, "it does not stop clean work":** **killed.** All 3 clean cases it
-  reached stopped (100%, above the 25% bar).
+- **R4, "it does not stop clean work":** not killed on the registered
+  denominator: 3 of 14 clean cases (21%, under the 25% bar). Read post hoc,
+  the claim is still unsupported: all 3 clean cases the layer reached
+  stopped, and the other 11 were never reached.
 - **R5, "rule learning reduces hand-backs":** **killed.** 20 hand-backs in
   both arms. Candidate rules were proposed after the second consistent answer
   but every admission was refused: the qualification replays the dev case and

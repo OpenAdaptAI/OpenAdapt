@@ -115,6 +115,12 @@ field. That field describes static contract completeness, not live qualification
 or production admission. Before use, validate the draft on an authorized
 instance with planted faults and independently checked outcomes.
 
+Rule proposals are a prototype API with no command and no persistence. On the
+held-out portals they had no measured effect: rules were proposed after two
+consistent operator answers, but none passed qualification, which replays a
+dev case and needs `verified_done`. Do not describe them as learning from
+stops.
+
 Rule proposals need distinct run identities and the same pack digest. Repeated
 submissions from one run cannot increase support. Admission requires an explicit
 approval reference and a qualification check; consensus alone does not establish
