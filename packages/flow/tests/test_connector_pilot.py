@@ -835,3 +835,32 @@ def test_the_outcome_envelope_still_refuses_free_text():
     except egress.EgressViolation:
         return
     assert CANARY_RECORD not in json.dumps(sent)
+
+
+def test_wrap_readback_evidence_reads_the_v1_effect_receipt():
+    """verify-run nests the closed labels under "receipt" (effect-receipt/v1)."""
+    from openadapt_flow.connector.executor import wrap_readback_evidence
+
+    receipt = json.dumps(
+        {
+            "schema_version": "openadapt.effect-receipt/v1",
+            "receipt": {
+                "outcome": "verified",
+                "effect_verdict": "CONFIRMED",
+                "verification_tier": "system_of_record",
+            },
+            "evidence": {"checked": {"frame": "confirmed"}},
+        }
+    ).encode()
+    evidence = wrap_readback_evidence(receipt, "a" * 64)
+    assert evidence == {
+        "readback_sha256": "a" * 64,
+        "outcome": "verified",
+        "effect_verdict": "CONFIRMED",
+        "verification_tier": "system_of_record",
+        "receipt_sha256": hashlib.sha256(receipt).hexdigest(),
+    }
+    # A free-text label is still refused.
+    bad = json.loads(receipt)
+    bad["receipt"]["outcome"] = f"saw {CANARY_RECORD}"
+    assert wrap_readback_evidence(json.dumps(bad).encode(), "a" * 64) is None
