@@ -257,7 +257,7 @@ def read_devtools_active_port(user_data_dir: Path) -> tuple[int, str] | None:
     return port, path
 
 
-def http_json_version(port: int, timeout: float = 2.0) -> dict[str, Any]:
+def http_json_version(port: int, timeout: float = 5.0) -> dict[str, Any]:
     """GET ``/json/version`` from loopback, with no proxy."""
 
     import httpx
@@ -580,7 +580,7 @@ class ChromeProfileService:
             process = self._spawn(args, **self._spawn_kwargs())
             try:
                 owned = self._await_endpoint(process, user_data)
-                self._verify(owned)
+                self._verify_when_ready(owned)
             except BaseException:
                 self._stop_process(process, None)
                 raise
@@ -619,6 +619,28 @@ class ChromeProfileService:
                     "Chrome didn't report its debugging address in time. Nothing was attached.",
                 )
             self._sleep(0.2)
+
+    def _verify_when_ready(self, owned: _Owned) -> None:
+        """Verify, retrying while Chrome's debugging server is still starting.
+
+        Chrome writes ``DevToolsActivePort`` as it binds the port, which can be
+        a moment before ``/json/version`` answers. Only an unreachable server
+        is retried; an endpoint that answers for another browser is refused at
+        once.
+        """
+
+        deadline = self._clock() + self._start_timeout
+        while True:
+            try:
+                self._verify(owned)
+                return
+            except ChromeProfileError as exc:
+                retry = exc.code == "attach_unverified" and isinstance(exc.__cause__, Exception)
+                if not retry or owned.process.poll() is not None or self._clock() >= deadline:
+                    if exc.__cause__ is not None:
+                        logger.info("Chrome /json/version failed: {}", type(exc.__cause__).__name__)
+                    raise
+            self._sleep(0.25)
 
     def _verify(self, owned: _Owned) -> None:
         if owned.process.poll() is not None:

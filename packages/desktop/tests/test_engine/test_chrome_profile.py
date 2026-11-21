@@ -508,3 +508,33 @@ def test_unknown_elevation_counts_as_elevated(monkeypatch) -> None:
 
     monkeypatch.delattr(ctypes, "windll", raising=False)
     assert cp.windows_elevated() is True
+
+
+def test_a_slow_debugging_server_is_retried_until_it_answers(tmp_path: Path) -> None:
+    calls: list[int] = []
+
+    def slow(port: int) -> dict:
+        calls.append(port)
+        if len(calls) < 3:
+            raise TimeoutError("still starting")
+        return {
+            "Browser": "Chrome/158",
+            "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}{GUID}",
+        }
+
+    h = Harness(tmp_path, json_version=slow, start_timeout=5)
+    assert h.service.open(h.create())["open"] is True
+    assert len(calls) == 3
+
+
+def test_a_foreign_endpoint_is_not_retried(tmp_path: Path) -> None:
+    calls: list[int] = []
+
+    def foreign(port: int) -> dict:
+        calls.append(port)
+        return {"Browser": "Chrome/158", "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}/x"}
+
+    h = Harness(tmp_path, json_version=foreign, start_timeout=5)
+    with pytest.raises(ChromeProfileError):
+        h.service.open(h.create())
+    assert len(calls) == 1
