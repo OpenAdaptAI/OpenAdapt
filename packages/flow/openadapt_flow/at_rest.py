@@ -18,8 +18,9 @@ durable checkpoints can hold patient data. Flow encrypts them with
 * In the default mode, each recording, bundle, run directory or other output
   written in plaintext goes through :func:`unsealed_write` or :func:`seal_new`:
   stderr names the path and a ledger line (``plaintext-at-rest.jsonl``)
-  records it, and Desktop shows the ledger as a notice. Once every consumer
-  reads encrypted artifacts (#1751), the default encrypts them too
+  records it, and Desktop shows the ledger as a notice.
+  ``OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR`` relocates only this ledger. Once
+  every consumer reads encrypted artifacts (#1751), the default encrypts them too
   (:data:`DEFAULT_SEALS_ARTIFACTS`).
 * ``OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'`` turns encryption off for
   development or de-identified data, with a warning and a ledger line. Strict
@@ -132,6 +133,7 @@ def unsealed_write(artifact: str, path: Path | str, *, refuse: bool = True) -> N
 
 
 HOME_ENV: Final[str] = "OPENADAPT_FLOW_AT_REST_HOME"
+LEDGER_DIR_ENV: Final[str] = "OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR"
 
 
 def _home() -> Path:
@@ -165,7 +167,8 @@ def recent_plaintext_writes(limit: int = 20) -> list[dict]:
 
 def ledger_path() -> Path:
     """The record of every process that wrote plaintext under the opt-out."""
-    return _home() / LEDGER_NAME
+    directory = os.environ.get(LEDGER_DIR_ENV)
+    return (Path(directory) if directory else _home()) / LEDGER_NAME
 
 
 def opt_out_reason() -> Optional[str]:
@@ -251,7 +254,7 @@ def _record(
             _warned.discard(purpose)
         raise AtRestRefused(
             f"Not writing {purpose}: the plaintext ledger at {ledger_path()} "
-            f"can't be written ({exc}). Set {HOME_ENV} to a writable private "
+            f"can't be written ({exc}). Set {LEDGER_DIR_ENV} to a writable private "
             "directory. Nothing was written."
         ) from exc
 

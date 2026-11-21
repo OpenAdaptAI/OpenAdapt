@@ -143,6 +143,7 @@ def handle_job(
     # it. An unacked lease expires to `lease_expired_uncertain` and is not
     # automatically re-offered, preventing blind duplicate actuation.
     callback_accepted = False
+    local_diagnostics_unavailable = result.local_diagnostics_unavailable
     try:
         callback_body = phi_free_callback_body(job, result)
     except Exception:  # noqa: BLE001 - nothing unchecked is ever sent
@@ -185,13 +186,16 @@ def handle_job(
         except Exception:  # noqa: BLE001 - terminal uncertainty, never re-offered
             pass
 
-    return {
+    summary = {
         "job_id": job.lease_job_id,
         "run_id": job.run_id,
         "status": result.status,
         "error_code": result.error_code,
         "callback_accepted": callback_accepted,
     }
+    if local_diagnostics_unavailable:
+        summary["local_diagnostics_unavailable"] = True
+    return summary
 
 
 def _default_storage_factory(settings: ConnectorSettings) -> StorageFactory:

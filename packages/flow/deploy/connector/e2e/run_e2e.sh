@@ -66,6 +66,7 @@ runner() {
     --read-only --tmpfs /tmp --tmpfs /home/openadapt \
     -e HTTPS_PROXY="$PROXY" -e HTTP_PROXY="$PROXY" -e NO_PROXY="$APP_HOST" \
     -e OPENADAPT_HOME=/etc/openadapt \
+    --mount "type=bind,source=$STATE/runner-ledger,target=/var/lib/openadapt/ledger" \
     -v "$STATE/runner-etc:/etc/openadapt" -v "$STATE/runner-storage:/srv/openadapt" \
     "$RUNNER_IMAGE" ${RUNNER_CMD:-openadapt-flow connector run} >/dev/null
   echo "runner started; logs: $CTR logs -f byoc-runner"

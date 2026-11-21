@@ -58,6 +58,39 @@ Every flag also resolves from an environment variable
 `connector enroll` remains available for mock/development control planes; live
 Cloud token creation is authenticated and organization-scoped in the dashboard.
 
+Set `runtime.profile` explicitly in the local deployment file. Use `standard`
+for admitted programs. Qualified jobs can use `standard` or `regulated`,
+matching their authorization. Startup checks the local profile before polling.
+The child checks the exact authorization again for each run.
+
+```yaml
+runtime:
+  profile: standard
+```
+
+### Container storage and logs
+
+Mount a private directory from the customer's encrypted data volume at
+`/var/lib/openadapt/ledger`. The connector user (UID 10001) needs write access.
+Keep this directory outside the storage root used for job bundles and reports.
+For the synthetic container harness, prepare `$STATE/runner-ledger` with mode
+0700 for that user. The image sets `OPENADAPT_FLOW_PLAINTEXT_LEDGER_DIR` to
+the mount and flushes Python output to `docker logs` without a TTY.
+
+The plaintext ledger records writes already permitted by the local at-rest
+policy. The encryption key keeps its configured location. With read-only
+configuration at `/etc/openadapt`, provision any required local key beforehand
+or use the operator's existing key configuration. If the service manages token
+rotation, its enrollment state also needs its own writable location.
+
+For a refused run, look beside the expected report in the customer store for
+`<report-filename>.connector-diagnostics`, even if the child produced no report.
+Read it in the connector's environment with
+`python -m openadapt_flow.connector.diagnostics /path/to/report.json.connector-diagnostics`.
+It contains the local error and up to the final 32 KiB of combined child output.
+That output stays local. If the connector reports `local_diagnostics_unavailable`,
+check the customer storage, its access permissions and the configured key.
+
 ## Windows service
 
 The `OpenAdaptConnector` wrapper runs the connector loop under the Windows
