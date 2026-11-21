@@ -661,6 +661,27 @@ def receipt_payload_sha256(envelope: Mapping[str, Any]) -> str:
     ).hexdigest()
 
 
+def _dsse_signed_by(envelope: Mapping[str, Any], kid: str, public_raw: bytes) -> bool:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from openadapt_types import receipt as r
+
+    try:
+        if envelope.get("payloadType") != r.PAYLOAD_TYPE:
+            return False
+        signed = r.pae(
+            r.PAYLOAD_TYPE, base64.b64decode(str(envelope["payload"]), validate=True)
+        )
+        key = Ed25519PublicKey.from_public_bytes(public_raw)
+        for sig in envelope.get("signatures") or []:
+            if isinstance(sig, Mapping) and sig.get("keyid") == kid:
+                key.verify(base64.b64decode(str(sig.get("sig")), validate=True), signed)
+                return True
+    except (InvalidSignature, ValueError, KeyError, TypeError):
+        return False
+    return False
+
+
 def anchor_receipt(
     receipt_path: Path,
     signer: "SealSigner",
@@ -688,6 +709,13 @@ def anchor_receipt(
     if signer.key_id not in signed_by:
         raise AnchorError(
             "anchor_key_mismatch", f"{signer.key_id} did not sign {receipt_path.name}"
+        )
+    # Unverified-evidence class: the key id alone proves nothing; this key's
+    # DSSE signature over the payload must verify before anything is logged.
+    if not _dsse_signed_by(envelope, signer.key_id, signer.public_raw()):
+        raise AnchorError(
+            "anchor_bad_signature",
+            f"{signer.key_id}'s signature on {receipt_path.name} doesn't verify",
         )
     return anchor_record(
         {"receipt_payload_sha256": digest},

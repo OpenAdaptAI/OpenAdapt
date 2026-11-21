@@ -194,16 +194,20 @@ def local_keys(home: Optional[Path] = None) -> list[dict[str, str]]:
     return [public_key_entry(home or seal_home())]
 
 
-def receipt_registry(keys: Any) -> dict[str, Any]:
+def receipt_registry(keys: Any, *, own: bool = False) -> Optional[dict[str, Any]]:
     """The keys as an ``openadapt.receipt-keys/v1`` registry for the receipt check.
 
     A registry that already names roles is used as it is. An older Seal key
-    registry holds the keys of machines that sign their own runs, so each of
-    its keys is ``this_computer``.
+    registry names no role. Only this computer's own key (``own``) becomes
+    ``this_computer``; for any other older registry there is no role to give,
+    so the receipt isn't checked against it (None), never labelled as this
+    computer's (trust-label class).
     """
 
     if isinstance(keys, Mapping) and keys.get("schema") == "openadapt.receipt-keys/v1":
         return dict(keys)
+    if not own:
+        return None
     entries = keys.get("keys") if isinstance(keys, Mapping) else keys
     out = []
     for entry in entries or []:
@@ -229,6 +233,7 @@ def page_data(
     about: Optional[Mapping[str, Any]] = None,
     host: Optional[Mapping[str, Any]] = None,
     commands: Optional[str] = None,
+    own_keys: bool = False,
 ) -> dict[str, Any]:
     """What the viewer reads: the run's files exactly as they are on disk."""
 
@@ -251,7 +256,7 @@ def page_data(
         # The receipt (record/run/v1), checked first; seal.json is the older format.
         "receipt_text": receipt,
         "receipt_anchor_text": _text(run_dir / "receipt.anchor.json"),
-        "receipt_keys": receipt_registry(keys),
+        "receipt_keys": receipt_registry(keys, own=own_keys),
         "program": {"spec": dict(program)},
         "about": dict(about or {}),
         "host": {"files": present, **dict(host or {})},
@@ -299,6 +304,7 @@ def write_seal_page(
         report = json.loads(report_path.read_bytes())
     except (OSError, ValueError) as exc:
         raise SealViewError(f"{report_path} can't be read") from exc
+    own_keys = keys is None
     if keys is None:
         keys = local_keys()
         # A page forwarded to someone else stays a local check, not third-party proof.
@@ -316,6 +322,7 @@ def write_seal_page(
         about=about,
         host=dict(host or {}),
         commands=commands,
+        own_keys=own_keys,
     )
     target = Path(out) if out else run_dir / PAGE_NAME
     target.write_text(render_page(data), encoding="utf-8")

@@ -592,9 +592,66 @@ def test_transaction_receipts_become_lines(tmp_path):
     assert len(tx_lines) == 1
     line = tx_lines[0]
     assert line["evidence"]["kind"] == "tx_receipt"
-    assert line["evidence"]["sha256"] == __import__("hashlib").sha256(tx_path.read_bytes()).hexdigest()
+    assert (
+        line["evidence"]["sha256"]
+        == __import__("hashlib").sha256(tx_path.read_bytes()).hexdigest()
+    )
     assert (line["check"], line["strength"]) == ("confirmed", "read_back")
     assert line["step"] >= 3  # after the run's own steps
+
+
+def test_an_evidence_receipt_that_does_not_verify_is_not_promoted(tmp_path):
+    from openadapt_flow.receipt_record import evidence_lines
+    from openadapt_flow.tx.receipt import issue_tx_receipt
+
+    run = _run(tmp_path, "VERIFIED", "tx-forged")
+    _, tx_path = issue_tx_receipt(
+        run / "tx",
+        task_id="t",
+        entity_name="referral",
+        operation="create",
+        outcome="CONFIRMED",
+    )
+    assert [x["check"] for x in evidence_lines(run, 0)] == ["confirmed"]
+    # The same bytes with no signing key of their own in the run: not checked.
+    elsewhere = run / "copied" / "tx-receipt.cose"
+    elsewhere.parent.mkdir()
+    elsewhere.write_bytes(tx_path.read_bytes())
+    checks = sorted(x["check"] for x in evidence_lines(run, 0))
+    assert checks == ["confirmed", "not_checked"]
+    # Every file counts: none is cut before the caller's line limit.
+    for n in range(70):
+        extra = run / f"many-{n}" / "tx-receipt.cose"
+        extra.parent.mkdir()
+        extra.write_bytes(b"not a receipt")
+    assert len(evidence_lines(run, 0)) == 72
+
+
+def test_rewriting_an_existing_receipt_verifies_it_first(tmp_path):
+    run = _run(tmp_path, "VERIFIED", "rewrite")
+    write_receipt_record(run)
+    private = json.loads((run / "receipt.private.json").read_text())
+    opening = private["openings"]["flow_version"]
+    opening["value"] = "9.9.9"  # no longer the committed value
+    (run / "receipt.private.json").write_text(json.dumps(private))
+    from openadapt_flow.receipt_record import ReceiptRecordError
+
+    with pytest.raises(ReceiptRecordError, match="existing_unverified"):
+        write_receipt_record(run)
+
+
+def test_an_unsigned_tutorial_marker_never_opens_the_program_name(tmp_path):
+    from openadapt_flow.receipt_record import public_reveal
+
+    run = _run(tmp_path, "VERIFIED", "marker")
+    (run / "run-summary.json").write_text(
+        json.dumps({"provenance": "synthetic-tutorial"})
+    )
+    assert public_reveal(run) == ["flow_version"]
+    report = json.loads((run / "report.json").read_text())
+    report["governed_approval_source"] = "openadapt-flow-tutorial"
+    (run / "report.json").write_text(json.dumps(report))
+    assert public_reveal(run) == ["flow_version", "program_name"]
 
 
 def test_the_public_card_is_written_and_verifies(tmp_path):

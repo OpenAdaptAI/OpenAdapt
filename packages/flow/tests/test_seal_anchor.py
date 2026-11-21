@@ -1022,6 +1022,29 @@ def test_a_receipt_is_anchored_by_its_payload_and_verifies_offline(
     ).ok
 
 
+def test_a_receipt_with_a_bad_signature_is_never_sent_to_the_log(
+    tmp_path, rekor, no_network
+):
+    from openadapt_flow.receipt_record import write_receipt_record
+    from openadapt_flow.seal_anchor import AnchorError, anchor_receipt
+
+    run, signer, _, _ = _anchored(tmp_path, rekor)
+    write_receipt_record(run, signer=signer)
+    path = run / "receipt.json"
+    envelope = json.loads(path.read_text())
+    envelope["payload"] = envelope["payload"][:-4] + "AAAA"  # signer's keyid kept
+    path.write_text(json.dumps(envelope))
+    sent = []
+
+    def submit(*args):
+        sent.append(args)
+        return rekor.submit(*args)
+
+    with pytest.raises(AnchorError, match="doesn't verify"):
+        anchor_receipt(path, signer, log_keys=[rekor.log], submit=submit, env={})
+    assert sent == [] and not (run / "receipt.anchor.json").exists()
+
+
 def test_an_anchored_receipt_says_when_it_was_logged(tmp_path, rekor, monkeypatch):
     from openadapt_types.receipt import RoleKey
 

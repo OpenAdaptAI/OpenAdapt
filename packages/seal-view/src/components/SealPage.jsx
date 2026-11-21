@@ -399,7 +399,16 @@ export default function SealPage({ seal: page, host = {} }) {
 
     // The receipt (record/run/v1) is checked first; seal.json is the older
     // format. The receipt must name the exact report bytes on the page.
-    const withRecord = async (legacyResult, copy) => {
+    const withRecord = async (legacyResult, copy, required) => {
+        // Dropped-requirement class: the receipt never overrides a required
+        // check that failed (authorization, anchor), and can't stand in for
+        // one the older seal would have carried.
+        if (legacyResult.sealOk && !legacyResult.ok) return { ...legacyResult, record: null }
+        if (!legacyResult.sealOk && (required.anchor || required.authorization))
+            return { ...legacyResult, ok: false, reason: required.authorization ? 'auth_missing' : 'anchor_missing', record: null }
+        // A receipt is here but no registry names its signer's role: it is
+        // never verified by the older seal beside it.
+        if (!copy.receiptKeys) return { ...legacyResult, ok: false, reason: 'unknown_key', record: null }
         let doc
         try {
             doc = JSON.parse(copy.receiptText)
@@ -429,11 +438,12 @@ export default function SealPage({ seal: page, host = {} }) {
             try {
                 filesRef.current = filesRef.current || (await (loadFiles ? loadFiles() : loadSealFiles(files, authorization)))
                 const copy = option ? applyTamper(filesRef.current, option) : filesRef.current
+                const required = { anchor: Boolean(files.anchor), authorization: Boolean(authorization) }
                 next = await checkReceipt(copy, keys, {
-                    requireAnchor: Boolean(files.anchor),
-                    requireAuthorization: Boolean(authorization),
+                    requireAnchor: required.anchor,
+                    requireAuthorization: required.authorization,
                 })
-                if (copy.receiptText && copy.receiptKeys) next = await withRecord(next, copy)
+                if (copy.receiptText) next = await withRecord(next, copy, required)
                 seen = hasWitness ? await checkWitnesses(copy, keys) : null
                 try {
                     const sealDigest = await sealSha256(JSON.parse(copy.sealText))
