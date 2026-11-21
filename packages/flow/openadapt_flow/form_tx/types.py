@@ -798,6 +798,12 @@ class SummaryVerdict(BaseModel):
     # did the work, so it is "acting_session_reread"; only a read by a fresh,
     # separate session may be called independent.
     readback_evidence: ReadbackEvidence = "acting_session_reread"
+    # Reporting only: whether the read was the page the run landed on after
+    # commit ("same_screen"), a new navigation or search that fetched the
+    # record again ("fresh_navigation"), or a separate session.
+    read_route: Literal["same_screen", "fresh_navigation", "separate_session"] = (
+        "same_screen"
+    )
 
     @model_validator(mode="after")
     def _passed_needs_every_field_checked(self) -> "SummaryVerdict":

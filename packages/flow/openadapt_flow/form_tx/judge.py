@@ -395,6 +395,7 @@ class SummaryJudge:
         writes: Sequence[FieldWriteRecord] = (),
         uncovered: Optional[Mapping[str, str]] = None,
         unentered_intake_keys: Sequence[str] = (),
+        review_skipped: Optional[Mapping[str, str]] = None,
     ) -> SummaryVerdict:
         """Navigate/search if configured, verify all read-backs, and extract outputs."""
         active_surface = surface if surface is not None else self._surface
@@ -437,6 +438,10 @@ class SummaryJudge:
                 ),
                 *observation_screens,
             )
+        # How the read was produced (reporting only): the page the run
+        # landed on after commit, or a new navigation or search that fetched
+        # it from the server again.
+        read_route = "same_screen"
         snapshot = active_surface.snapshot(screens=observation_screens)
         seeded_outputs: dict[str, Any] = dict(known_outputs or {})
         pre_outputs, _ = _extract_present_outputs(snapshot, summary_check.outputs)
@@ -447,6 +452,7 @@ class SummaryJudge:
             snapshot.url_origin_and_path, summary_check.summary_url_path
         ):
             active_surface.goto(summary_check.summary_url_path)
+            read_route = "fresh_navigation"
             snapshot = active_surface.snapshot(screens=observation_screens)
 
         # Execute search-by-key lookup when configured.
@@ -487,6 +493,7 @@ class SummaryJudge:
                             input_ctrl.dom_selector, str(lookup_val)
                         )
                         active_surface.click(submit_ctrl.dom_selector)
+                        read_route = "fresh_navigation"
                         snapshot = active_surface.snapshot(screens=observation_screens)
 
         verdicts: list[ReadbackFieldVerdict] = []
@@ -850,6 +857,16 @@ class SummaryJudge:
                 )
             )
 
+        # Review read-backs that were skipped before submit.
+        for key, why in sorted((review_skipped or {}).items()):
+            verdicts.append(
+                _not_checked(
+                    f"review:{key}",
+                    ProvenanceKind.INTAKE_DOCUMENT,
+                    f"The review page check for {key!r} was skipped: {why}",
+                )
+            )
+
         # Intake values no binding entered: the record may lack them.
         for key in sorted(set(unentered_intake_keys)):
             verdicts.append(
@@ -992,6 +1009,7 @@ class SummaryJudge:
         )
 
         return SummaryVerdict(
+            read_route=read_route,  # type: ignore[arg-type]
             passed=passed,
             checked_count=sum(
                 1 for v in verdicts if v.status != ReadbackStatus.NOT_CHECKED

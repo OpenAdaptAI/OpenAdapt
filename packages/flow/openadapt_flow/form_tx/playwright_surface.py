@@ -1608,6 +1608,10 @@ class PlaywrightFormSurface:
         """Count of non-ignored state-changing HTTP requests since construction/reset."""
         return self._mutation_count
 
+    # This surface sees the page's HTTP traffic, so a count of 0 means
+    # nothing was sent; on a backend without it, 0 means unknown.
+    observes_network = True
+
     @property
     def confirmed_mutation_count(self) -> int:
         """Non-ignored state-changing requests the server answered with 2xx/3xx."""

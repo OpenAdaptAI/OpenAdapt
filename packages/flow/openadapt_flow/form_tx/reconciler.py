@@ -229,6 +229,8 @@ class ReconcilerSession:
         self._not_covered: set[str] = set()
         # Optional bound fields the page showed and the run left blank.
         self._optional_blank: set[str] = set()
+        # Review read-backs that could not be compared, and why.
+        self._review_skipped: dict[str, str] = {}
 
     def record_write(
         self,
@@ -1621,7 +1623,10 @@ class FormReconciler:
 
         for rb in check.review_readbacks:
             fact = session.effective_facts.get(rb.dossier_key)
+            # Every skip is recorded and becomes not_checked on the result,
+            # never a silent pass (absent-evidence-as-success).
             if fact is None:
+                session._review_skipped[rb.dossier_key] = "no intake value"
                 continue
             try:
                 ctrl = match_anchor_in_snapshot(
@@ -1633,9 +1638,12 @@ class FormReconciler:
                     else None
                 )
             except AmbiguousAnchorError:
+                session._review_skipped[rb.dossier_key] = "shown more than once"
                 continue
             if ctrl is None and pair is None:
+                session._review_skipped[rb.dossier_key] = "not shown on the review"
                 continue
+            session._review_skipped.pop(rb.dossier_key, None)
             ok = (
                 _observed_control_matches(fact.value, ctrl, rb)
                 if ctrl is not None
@@ -3062,8 +3070,12 @@ class FormReconciler:
                 pack.pack_id,
                 sig,
             )
+            observes = getattr(surface, "observes_network", False)
             msg = (
-                "The commit control was clicked but no save request was seen"
+                "This surface cannot observe saves, so whether one was sent "
+                "is unknown"
+                if delta_mutations == 0 and not observes
+                else "The commit control was clicked but no save request was seen"
                 if delta_mutations == 0
                 else "No save request was answered with success"
                 if no_confirmed_save
@@ -3133,6 +3145,7 @@ class FormReconciler:
             unentered_intake_keys=self._unconsumed_intake_keys(
                 session, include_ignored=False
             ),
+            review_skipped=session._review_skipped,
         )
         extracted_outputs = dict(verdict.extracted_outputs)
         if not verdict.passed or verdict.missing_required_outputs:
