@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s02",
+  "facts": {
+    "applicant.date_of_birth": "1976-02-26",
+    "applicant.email": "fitz.nakashima@example.test",
+    "applicant.first_name": "Fitzgerald",
+    "applicant.last_name": "Nakashima",
+    "applicant.marital_status": "Married",
+    "coverage.bi_limits": "250/500",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "none",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "NV",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 30,
+    "garaging.address_line1": "77 Larkspur Bend",
+    "garaging.city": "Coldwater Flats",
+    "garaging.state": "NV",
+    "garaging.zip": "89502",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 12500,
+    "vehicle.make": "Quellen",
+    "vehicle.model": "Ostro",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2019
+  }
+}

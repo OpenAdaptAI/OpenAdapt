@@ -1,0 +1,22 @@
+{
+  "case_id": "gw-s02",
+  "facts": {
+    "applicant.date_of_birth": "1994-12-05",
+    "applicant.email": "saoirse.l@example.test",
+    "applicant.first_name": "Saoirse",
+    "applicant.last_name": "Lindgren",
+    "building.sprinklered": true,
+    "contents.furnished": "fully",
+    "contents.rooms": 3,
+    "contents.valuables": 0,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2027-01-01",
+    "household.adults": 1,
+    "residence.address_line1": "410 Wren St",
+    "residence.address_line2": "Apt 3",
+    "residence.city": "Lindenfield",
+    "residence.state": "WI",
+    "residence.zip": "53711"
+  }
+}

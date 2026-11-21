@@ -1,0 +1,21 @@
+{
+  "case_id": "gw-s05",
+  "facts": {
+    "applicant.date_of_birth": "1990-06-14",
+    "applicant.email": "annelise.moravec@example.test",
+    "applicant.first_name": "Annelise",
+    "applicant.last_name": "Moravec",
+    "contents.furnished": "fully",
+    "contents.rooms": 4,
+    "contents.valuables": 12000,
+    "coverage.deductible": 500,
+    "coverage.liability_limit": 500000,
+    "coverage.start_date": "2026-12-05",
+    "household.adults": 1,
+    "residence.address_line1": "602 Copperleaf Dr",
+    "residence.address_line2": "Apt 11",
+    "residence.city": "Brackenfield",
+    "residence.state": "OR",
+    "residence.zip": "97405"
+  }
+}

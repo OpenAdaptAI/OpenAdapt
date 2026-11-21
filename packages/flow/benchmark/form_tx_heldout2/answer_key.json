@@ -1,0 +1,1901 @@
+{
+  "version": 1,
+  "behavior_labels": [
+    "submit_clean",
+    "must_stop_before_submit",
+    "needs_operator_answer"
+  ],
+  "portals": {
+    "ferncastle": {
+      "field_types": {
+        "client_no": "str",
+        "first_name": "str",
+        "last_name": "str",
+        "email": "str",
+        "phone": "phone",
+        "street": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "year_built": "int",
+        "units": "int",
+        "construction": "enum",
+        "sqft": "int",
+        "roof_year": "int",
+        "mortgagee": "str",
+        "monthly_rent": "money",
+        "occupancy": "enum",
+        "eff_date": "date",
+        "dwelling_limit": "money",
+        "loss_of_rents": "enum",
+        "liability": "money",
+        "deductible": "money"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_no"
+      ],
+      "case_order": [
+        "fc-dev",
+        "fc-s01",
+        "fc-s02",
+        "fc-s03",
+        "fc-s04",
+        "fc-s05",
+        "fc-s06",
+        "fc-s07",
+        "fc-s08"
+      ]
+    },
+    "glasswing": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "email": "str",
+        "street": "str",
+        "unit": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "start_date": "date",
+        "sprinklered": "enum",
+        "roommate": "str",
+        "personal_property": "money",
+        "deductible": "money",
+        "liability": "money"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_ref"
+      ],
+      "case_order": [
+        "gw-dev",
+        "gw-s01",
+        "gw-s02",
+        "gw-s03",
+        "gw-s04",
+        "gw-s05",
+        "gw-s06",
+        "gw-s07",
+        "gw-s08"
+      ]
+    },
+    "okelund": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "marital_status": "enum",
+        "email": "str",
+        "street": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "license_state": "enum",
+        "years_licensed": "int",
+        "accidents": "int",
+        "violations": "int",
+        "driver_training": "enum",
+        "vehicle_year": "int",
+        "make": "enum",
+        "model": "enum",
+        "use": "enum",
+        "annual_miles": "int",
+        "ownership": "enum",
+        "aftermarket": "enum",
+        "bi_limits": "enum",
+        "coll_ded": "money",
+        "comp_ded": "money",
+        "rental": "enum",
+        "eff_date": "date"
+      },
+      "item_types": {},
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_number"
+      ],
+      "case_order": [
+        "ok-dev",
+        "ok-s01",
+        "ok-s02",
+        "ok-s03",
+        "ok-s04",
+        "ok-s05",
+        "ok-s06",
+        "ok-s07",
+        "ok-s08"
+      ]
+    },
+    "velloway": {
+      "field_types": {
+        "first_name": "str",
+        "last_name": "str",
+        "dob": "date",
+        "email": "str",
+        "phone": "phone",
+        "street": "str",
+        "city": "str",
+        "state": "enum",
+        "zip": "str",
+        "occupation": "enum",
+        "drivers": "int",
+        "youthful_drivers": "int",
+        "youthful_violations": "enum",
+        "vehicles": "int",
+        "watercraft": "list",
+        "auto_liability": "enum",
+        "home_liability": "money",
+        "rental_properties": "int",
+        "nonprofit_board": "enum",
+        "umbrella_limit": "money",
+        "start_date": "date"
+      },
+      "item_types": {
+        "watercraft": {
+          "type": "enum",
+          "length_ft": "int"
+        }
+      },
+      "metadata_fields": [
+        "case_id",
+        "submitted_at",
+        "submit_seq",
+        "submit_count",
+        "quote_ref"
+      ],
+      "case_order": [
+        "vw-dev",
+        "vw-s01",
+        "vw-s02",
+        "vw-s03",
+        "vw-s04",
+        "vw-s05",
+        "vw-s06",
+        "vw-s07",
+        "vw-s08",
+        "vw-s09"
+      ]
+    }
+  },
+  "cases": {
+    "fc-dev": {
+      "portal": "ferncastle",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Odessa",
+        "last_name": "Brightwater",
+        "email": "odessa.b@example.test",
+        "phone": "203-555-0119",
+        "street": "17 Kettle Pond Rd",
+        "city": "Ashby Glen",
+        "state": "CT",
+        "zip": "06489",
+        "year_built": 1987,
+        "units": 1,
+        "construction": "Frame",
+        "sqft": 1620,
+        "roof_year": 2014,
+        "mortgagee": "",
+        "monthly_rent": 2100,
+        "occupancy": "",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 310000,
+        "loss_of_rents": "6 months",
+        "liability": "300000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s01": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Thaddeus",
+        "last_name": "Moorcroft",
+        "email": "tmoorcroft@example.test",
+        "phone": "856-555-0163",
+        "street": "442 Sorrel Ln",
+        "city": "Pellham Ford",
+        "state": "NJ",
+        "zip": "08061",
+        "year_built": 1958,
+        "units": 2,
+        "construction": "Frame",
+        "sqft": 2240,
+        "roof_year": 2018,
+        "mortgagee": "Coldharbor Savings Bank",
+        "monthly_rent": 1450,
+        "occupancy": "All units rented to tenants",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 395000,
+        "loss_of_rents": "6 months",
+        "liability": "300000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "Unit occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "rental.unit_occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s02": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "client_no": "FC-C-20418",
+        "first_name": "Cordelia",
+        "last_name": "Pennwright",
+        "email": "cpennwright@example.test",
+        "phone": "610-555-0182",
+        "street": "58 Quillan Row",
+        "city": "Marrow Falls",
+        "state": "PA",
+        "zip": "19352",
+        "year_built": 1962,
+        "units": 1,
+        "construction": "Frame",
+        "sqft": 1480,
+        "roof_year": 2016,
+        "mortgagee": "",
+        "monthly_rent": 1850,
+        "occupancy": "",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 265000,
+        "loss_of_rents": "6 months",
+        "liability": "300000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s03": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "client_no": "FC-C-19077",
+        "first_name": "Ignatius",
+        "last_name": "Hollowell",
+        "email": "i.hollowell@example.test",
+        "phone": "302-555-0147",
+        "street": "1204 Tanager Ave",
+        "city": "Westerby",
+        "state": "DE",
+        "zip": "19809",
+        "year_built": 1938,
+        "units": 3,
+        "construction": "Joisted masonry",
+        "sqft": 3150,
+        "roof_year": 2019,
+        "mortgagee": "",
+        "monthly_rent": 1325,
+        "occupancy": "All units rented to tenants",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 540000,
+        "loss_of_rents": "12 months",
+        "liability": "500000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "Unit occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "rental.unit_occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "Mortgagee name (blank if none)": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "property.mortgagee_name": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "Roof replaced (year)": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "property.roof_year": {
+          "action": "provide_value",
+          "value": 2019
+        },
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s04": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Rosamund",
+        "last_name": "Achebe-Lyle",
+        "email": "rosamund.al@example.test",
+        "phone": "443-555-0128",
+        "street": "9 Weatherstone Ct",
+        "city": "Calvert Mill",
+        "state": "MD",
+        "zip": "21043",
+        "year_built": 2004,
+        "units": 1,
+        "construction": "Frame",
+        "sqft": 1910,
+        "roof_year": 2021,
+        "mortgagee": "",
+        "monthly_rent": 2475,
+        "occupancy": "",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 352000,
+        "loss_of_rents": "12 months",
+        "liability": "300000",
+        "deductible": "2500"
+      },
+      "operator_script": {
+        "Deductible": {
+          "action": "provide_value",
+          "value": 2500
+        },
+        "coverage.deductible": {
+          "action": "provide_value",
+          "value": 2500
+        },
+        "Loss of rents": {
+          "action": "provide_value",
+          "value": "12 months"
+        },
+        "coverage.loss_of_rents": {
+          "action": "provide_value",
+          "value": "12 months"
+        },
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s05": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Benedetta",
+        "last_name": "Orkney",
+        "email": "b.orkney@example.test",
+        "phone": "718-555-0190",
+        "street": "3311 Halyard St",
+        "city": "Cresthaven",
+        "state": "NY",
+        "zip": "11420",
+        "year_built": 1926,
+        "units": 2,
+        "construction": "Joisted masonry",
+        "sqft": 2560,
+        "roof_year": 2015,
+        "mortgagee": "",
+        "monthly_rent": 2300,
+        "occupancy": "All units rented to tenants",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 488000,
+        "loss_of_rents": "6 months",
+        "liability": "500000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "Unit occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "rental.unit_occupancy": {
+          "action": "provide_value",
+          "value": "All units rented to tenants"
+        },
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s06": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Lysander",
+        "last_name": "Quartermaine",
+        "email": "lquartermaine@example.test",
+        "phone": "540-555-0136",
+        "street": "806 Bellflower Way",
+        "city": "Shenwick",
+        "state": "VA",
+        "zip": "22601",
+        "year_built": 1999,
+        "units": 1,
+        "construction": "Frame",
+        "sqft": 1750,
+        "roof_year": 2017,
+        "mortgagee": "Fallowmere Home Lending",
+        "monthly_rent": 1690,
+        "occupancy": "",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 288000,
+        "loss_of_rents": "None",
+        "liability": "300000",
+        "deductible": "500"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s07": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "recurring_rule",
+        "rule_trap"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Henrietta",
+        "last_name": "Vasquez-Orme",
+        "email": "hvorme@example.test",
+        "phone": "215-555-0152",
+        "street": "71 Coopersmith Pl",
+        "city": "Marrow Falls",
+        "state": "PA",
+        "zip": "19352",
+        "year_built": 1949,
+        "units": 4,
+        "construction": "Masonry noncombustible",
+        "sqft": 3880,
+        "roof_year": 2012,
+        "mortgagee": "",
+        "monthly_rent": 1175,
+        "occupancy": "One or more units vacant",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 612000,
+        "loss_of_rents": "12 months",
+        "liability": "500000",
+        "deductible": "2500"
+      },
+      "operator_script": {
+        "Unit occupancy": {
+          "action": "provide_value",
+          "value": "One or more units vacant"
+        },
+        "rental.unit_occupancy": {
+          "action": "provide_value",
+          "value": "One or more units vacant"
+        },
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "fc-s08": {
+      "portal": "ferncastle",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "client_no": "",
+        "first_name": "Percival",
+        "last_name": "Danforth-Ng",
+        "email": "percival.dn@example.test",
+        "phone": "609-555-0171",
+        "street": "25 Larkmoor Dr",
+        "city": "Pellham Ford",
+        "state": "NJ",
+        "zip": "08061",
+        "year_built": 2011,
+        "units": 1,
+        "construction": "Frame",
+        "sqft": 2020,
+        "roof_year": 2011,
+        "mortgagee": "",
+        "monthly_rent": 2650,
+        "occupancy": "",
+        "eff_date": "2027-01-01",
+        "dwelling_limit": 405000,
+        "loss_of_rents": "6 months",
+        "liability": "100000",
+        "deductible": "1000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "FC-PRD-2291",
+          "password": "ferncastle-test-pass-5"
+        }
+      }
+    },
+    "gw-dev": {
+      "portal": "glasswing",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Wilhelmina",
+        "last_name": "Achterhof",
+        "dob": "1991-02-11",
+        "email": "w.achterhof@example.test",
+        "street": "2210 Juniper Loop",
+        "unit": "Apt 4",
+        "city": "Brackenfield",
+        "state": "OR",
+        "zip": "97405",
+        "start_date": "2026-12-01",
+        "sprinklered": "Yes",
+        "roommate": "",
+        "personal_property": 19200,
+        "deductible": "500",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s01": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Desmond",
+        "last_name": "Okonkwo-Hale",
+        "dob": "1998-07-30",
+        "email": "desmond.oh@example.test",
+        "street": "77 Marlpit Ave",
+        "unit": "Apt 2C",
+        "city": "Thistlebury",
+        "state": "IL",
+        "zip": "60614",
+        "start_date": "2026-12-10",
+        "sprinklered": "Yes",
+        "roommate": "",
+        "personal_property": 7800,
+        "deductible": "1000",
+        "liability": "100000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s02": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [
+        "must_stop_before_submit"
+      ],
+      "traps": [
+        "typeahead_ambiguous",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Saoirse",
+        "last_name": "Lindgren",
+        "dob": "1994-12-05",
+        "email": "saoirse.l@example.test",
+        "street": "410 Wren St",
+        "unit": "Apt 3",
+        "city": "Lindenfield",
+        "state": "WI",
+        "zip": "53711",
+        "start_date": "2027-01-01",
+        "sprinklered": "Yes",
+        "roommate": "",
+        "personal_property": 27900,
+        "deductible": "500",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s03": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "estimator_wrong"
+      ],
+      "expected_record": {
+        "first_name": "Tobiah",
+        "last_name": "Ferreira-Count",
+        "dob": "1987-03-22",
+        "email": "tobiah.fc@example.test",
+        "street": "3020 Basswood Ter",
+        "unit": "",
+        "city": "Mill Oak",
+        "state": "MN",
+        "zip": "55408",
+        "start_date": "2026-12-20",
+        "sprinklered": "Yes",
+        "roommate": "",
+        "personal_property": 40500,
+        "deductible": "250",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "Personal property coverage ($)": {
+          "action": "provide_value",
+          "value": 40500
+        },
+        "coverage.personal_property": {
+          "action": "provide_value",
+          "value": 40500
+        },
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s04": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Marguerite",
+        "last_name": "Oyelowo",
+        "dob": "1996-04-18",
+        "email": "m.oyelowo@example.test",
+        "street": "1517 Otterbrook Ln",
+        "unit": "Unit 208",
+        "city": "Larchmere",
+        "state": "CO",
+        "zip": "80526",
+        "start_date": "2026-12-01",
+        "sprinklered": "Yes",
+        "roommate": "",
+        "personal_property": 19200,
+        "deductible": "500",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "Roommate to add to the policy (full name)": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "household.roommate_name": {
+          "action": "provide_value",
+          "value": ""
+        },
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s05": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question",
+        "estimator_wrong"
+      ],
+      "expected_record": {
+        "first_name": "Annelise",
+        "last_name": "Moravec",
+        "dob": "1990-06-14",
+        "email": "annelise.moravec@example.test",
+        "street": "602 Copperleaf Dr",
+        "unit": "Apt 11",
+        "city": "Brackenfield",
+        "state": "OR",
+        "zip": "97405",
+        "start_date": "2026-12-05",
+        "sprinklered": "No",
+        "roommate": "",
+        "personal_property": 49200,
+        "deductible": "500",
+        "liability": "500000"
+      },
+      "operator_script": {
+        "Does your building have a fire sprinkler system?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "building.sprinklered": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "Personal property coverage ($)": {
+          "action": "provide_value",
+          "value": 49200
+        },
+        "coverage.personal_property": {
+          "action": "provide_value",
+          "value": 49200
+        },
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s06": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Caspian",
+        "last_name": "Thurlow",
+        "dob": "1993-09-02",
+        "email": "caspian.thurlow@example.test",
+        "street": "1517 Otterbrook Ln",
+        "unit": "Unit 314",
+        "city": "Larchmere",
+        "state": "CO",
+        "zip": "80526",
+        "start_date": "2026-12-15",
+        "sprinklered": "Yes",
+        "roommate": "Ines Valdecasas",
+        "personal_property": 37200,
+        "deductible": "500",
+        "liability": "500000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s07": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Ravindra",
+        "last_name": "Holmqvist",
+        "dob": "1985-11-27",
+        "email": "ravindra.h@example.test",
+        "street": "19 Sedgewick Row",
+        "unit": "Unit B",
+        "city": "Harrow Bend",
+        "state": "WA",
+        "zip": "98103",
+        "start_date": "2027-01-10",
+        "sprinklered": "No",
+        "roommate": "",
+        "personal_property": 38400,
+        "deductible": "500",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "gw-s08": {
+      "portal": "glasswing",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "typeahead_ambiguous",
+        "unknown_question",
+        "estimator_ok"
+      ],
+      "expected_record": {
+        "first_name": "Elodie",
+        "last_name": "Kristiansen",
+        "dob": "1999-01-09",
+        "email": "elodie.k@example.test",
+        "street": "88 Pine Hollow Rd",
+        "unit": "",
+        "city": "Fairbourne",
+        "state": "MN",
+        "zip": "55344",
+        "start_date": "2026-12-12",
+        "sprinklered": "No",
+        "roommate": "",
+        "personal_property": 12800,
+        "deductible": "1000",
+        "liability": "300000"
+      },
+      "operator_script": {
+        "Does your building have a fire sprinkler system?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "building.sprinklered": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "resident.test@example.test",
+          "password": "glasswing-test-pass-6"
+        }
+      }
+    },
+    "ok-dev": {
+      "portal": "okelund",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Augustin",
+        "last_name": "Pellerin",
+        "dob": "1983-05-17",
+        "marital_status": "Married",
+        "email": "a.pellerin@example.test",
+        "street": "4410 Sandcherry Dr",
+        "city": "Redmesa",
+        "state": "NM",
+        "zip": "87112",
+        "license_state": "NM",
+        "years_licensed": 22,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2020,
+        "make": "Arvonne",
+        "model": "Meridian",
+        "use": "Commute",
+        "annual_miles": 11000,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s01": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Clementine",
+        "last_name": "Abernathy-Ruiz",
+        "dob": "1990-10-03",
+        "marital_status": "Single",
+        "email": "clementine.ar@example.test",
+        "street": "218 Paloverde Ct",
+        "city": "Sunhollow",
+        "state": "AZ",
+        "zip": "85251",
+        "license_state": "AZ",
+        "years_licensed": 15,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2022,
+        "make": "Quellen",
+        "model": "Vale",
+        "use": "Commute",
+        "annual_miles": 9500,
+        "ownership": "Financed",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "1000",
+        "comp_ded": "500",
+        "rental": "30",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s02": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [
+        "must_stop_before_submit"
+      ],
+      "traps": [
+        "typeahead_ambiguous"
+      ],
+      "expected_record": {
+        "first_name": "Fitzgerald",
+        "last_name": "Nakashima",
+        "dob": "1976-02-26",
+        "marital_status": "Married",
+        "email": "fitz.nakashima@example.test",
+        "street": "77 Larkspur Bend",
+        "city": "Coldwater Flats",
+        "state": "NV",
+        "zip": "89502",
+        "license_state": "NV",
+        "years_licensed": 30,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2019,
+        "make": "Quellen",
+        "model": "Ostro",
+        "use": "Commute",
+        "annual_miles": 12500,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "250/500",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s03": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Philippa",
+        "last_name": "Strathmore",
+        "dob": "1969-08-08",
+        "marital_status": "Widowed",
+        "email": "pstrathmore@example.test",
+        "street": "1300 Bitterroot Way",
+        "city": "Elkhorn Gap",
+        "state": "MT",
+        "zip": "59801",
+        "license_state": "MT",
+        "years_licensed": 35,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2018,
+        "make": "Sarrow",
+        "model": "Kite Wagon",
+        "use": "Pleasure",
+        "annual_miles": 7500,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "50",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "Model": {
+          "action": "provide_value",
+          "value": "Kite Wagon"
+        },
+        "vehicle.model": {
+          "action": "provide_value",
+          "value": "Kite Wagon"
+        },
+        "Annual Miles": {
+          "action": "provide_value",
+          "value": 7500
+        },
+        "vehicle.annual_miles": {
+          "action": "provide_value",
+          "value": 7500
+        },
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s04": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Lachlan",
+        "last_name": "Oduya",
+        "dob": "2007-03-11",
+        "marital_status": "Single",
+        "email": "lachlan.oduya@example.test",
+        "street": "65 Chokecherry Ln",
+        "city": "Sagebrook",
+        "state": "ID",
+        "zip": "83402",
+        "license_state": "ID",
+        "years_licensed": 2,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "N",
+        "vehicle_year": 2014,
+        "make": "Torvane",
+        "model": "Ridge 6",
+        "use": "Commute",
+        "annual_miles": 8000,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "50/100",
+        "coll_ded": "1000",
+        "comp_ded": "1000",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "Completed a state-approved driver training course?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "driver.training_course": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s05": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Marisela",
+        "last_name": "Vantongeren",
+        "dob": "1988-12-19",
+        "marital_status": "Single",
+        "email": "marisela.v@example.test",
+        "street": "903 Quaking Aspen Rd",
+        "city": "Ashgrove Village",
+        "state": "UT",
+        "zip": "84321",
+        "license_state": "UT",
+        "years_licensed": 18,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2021,
+        "make": "Torvane",
+        "model": "Bolt",
+        "use": "Commute",
+        "annual_miles": 10500,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "Garaging City": {
+          "action": "provide_value",
+          "value": "Ashgrove Village"
+        },
+        "garaging.city": {
+          "action": "provide_value",
+          "value": "Ashgrove Village"
+        },
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s06": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Ezekiel",
+        "last_name": "Branscombe",
+        "dob": "2008-06-04",
+        "marital_status": "Single",
+        "email": "ezekiel.b@example.test",
+        "street": "12 Ironwood Pl",
+        "city": "Redmesa",
+        "state": "NM",
+        "zip": "87112",
+        "license_state": "NM",
+        "years_licensed": 1,
+        "accidents": "0",
+        "violations": "0",
+        "driver_training": "Y",
+        "vehicle_year": 2016,
+        "make": "Sarrow",
+        "model": "Harrier",
+        "use": "Commute",
+        "annual_miles": 6000,
+        "ownership": "Owned",
+        "aftermarket": "Y",
+        "bi_limits": "50/100",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s07": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "typeahead_ambiguous",
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Rosalind",
+        "last_name": "Teague-Morrow",
+        "dob": "1981-04-29",
+        "marital_status": "Divorced",
+        "email": "rosalind.tm@example.test",
+        "street": "5520 Antelope Ridge Rd",
+        "city": "Windbreak",
+        "state": "WY",
+        "zip": "82601",
+        "license_state": "WY",
+        "years_licensed": 24,
+        "accidents": "1",
+        "violations": "0",
+        "driver_training": "",
+        "vehicle_year": 2023,
+        "make": "Torvane",
+        "model": "Ridge 4",
+        "use": "Business",
+        "annual_miles": 16000,
+        "ownership": "Owned",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "None",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "Any custom or aftermarket equipment (wheels, audio, lift kits)?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "vehicle.aftermarket_equipment": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "ok-s08": {
+      "portal": "okelund",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Octavian",
+        "last_name": "Lisowski",
+        "dob": "1972-01-15",
+        "marital_status": "Married",
+        "email": "o.lisowski@example.test",
+        "street": "88 Cottonwood Wash",
+        "city": "Coldwater Flats",
+        "state": "NV",
+        "zip": "89502",
+        "license_state": "NV",
+        "years_licensed": 33,
+        "accidents": "0",
+        "violations": "1",
+        "driver_training": "",
+        "vehicle_year": 2024,
+        "make": "Arvonne",
+        "model": "Meridian Hybrid",
+        "use": "Commute",
+        "annual_miles": 14000,
+        "ownership": "Leased",
+        "aftermarket": "N",
+        "bi_limits": "100/300",
+        "coll_ded": "500",
+        "comp_ded": "500",
+        "rental": "30",
+        "eff_date": "2026-12-15"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "OKA-7730",
+          "password": "okelund-test-pass-7"
+        }
+      }
+    },
+    "vw-dev": {
+      "portal": "velloway",
+      "split": "dev",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Ambrose",
+        "last_name": "Fairclough",
+        "dob": "1971-08-12",
+        "email": "ambrose.f@example.test",
+        "phone": "615-555-0102",
+        "street": "903 Sycamore Hill Dr",
+        "city": "Brentmoor",
+        "state": "TN",
+        "zip": "37027",
+        "occupation": "Accountant",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [],
+        "auto_liability": "250/500",
+        "home_liability": "300000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "1000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s01": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Leopold",
+        "last_name": "Szymanski",
+        "dob": "1964-02-07",
+        "email": "leopold.s@example.test",
+        "phone": "706-555-0145",
+        "street": "48 Lakeshore Cove",
+        "city": "Hartwell Point",
+        "state": "GA",
+        "zip": "30643",
+        "occupation": "Retired",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [
+          {
+            "type": "Personal watercraft",
+            "length_ft": 11
+          }
+        ],
+        "auto_liability": "250/500",
+        "home_liability": "300000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "2000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s02": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean",
+        "prefill_agree"
+      ],
+      "expected_record": {
+        "first_name": "Gwendolyn",
+        "last_name": "Harrowgate",
+        "dob": "1968-05-21",
+        "email": "g.harrowgate@example.test",
+        "phone": "864-555-0139",
+        "street": "2207 Magnolia Bluff Rd",
+        "city": "Pinewick",
+        "state": "SC",
+        "zip": "29601",
+        "occupation": "Architect",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 3,
+        "watercraft": [
+          {
+            "type": "Powerboat",
+            "length_ft": 21
+          }
+        ],
+        "auto_liability": "250/500",
+        "home_liability": "500000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "2000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s03": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Barnaby",
+        "last_name": "Okwuosa",
+        "dob": "1975-11-30",
+        "email": "barnaby.okwuosa@example.test",
+        "phone": "502-555-0168",
+        "street": "61 Bluegrass Commons",
+        "city": "Lexmoor",
+        "state": "KY",
+        "zip": "40502",
+        "occupation": "Pharmacist",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [],
+        "auto_liability": "250/500",
+        "home_liability": "300000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "1000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Watercraft 1": {
+          "action": "remove",
+          "value": []
+        },
+        "household.watercraft": {
+          "action": "remove",
+          "value": []
+        },
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s04": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Imelda",
+        "last_name": "Castellanos",
+        "dob": "1970-06-25",
+        "email": "imelda.c@example.test",
+        "phone": "513-555-0177",
+        "street": "7720 Ridgeview Pass",
+        "city": "Maple Fork",
+        "state": "OH",
+        "zip": "45243",
+        "occupation": "Physician",
+        "drivers": 3,
+        "youthful_drivers": 1,
+        "youthful_violations": "No",
+        "vehicles": 3,
+        "watercraft": [],
+        "auto_liability": "250/500",
+        "home_liability": "500000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "2000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Has any driver under 25 had a moving violation in the last 3 years?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "household.youthful_violations": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s05": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [
+        "must_stop_before_submit"
+      ],
+      "traps": [
+        "typeahead_ambiguous"
+      ],
+      "expected_record": {
+        "first_name": "Cornelius",
+        "last_name": "Abiodun",
+        "dob": "1983-09-14",
+        "email": "cornelius.a@example.test",
+        "phone": "843-555-0123",
+        "street": "15 Palmetto Row",
+        "city": "Edisto Landing",
+        "state": "SC",
+        "zip": "29438",
+        "occupation": "Teacher",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [],
+        "auto_liability": "250/500",
+        "home_liability": "300000",
+        "rental_properties": 1,
+        "nonprofit_board": "No",
+        "umbrella_limit": "1000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s06": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "session_timeout",
+        "summary_differs"
+      ],
+      "expected_record": {
+        "first_name": "Henrike",
+        "last_name": "Vandermolen",
+        "dob": "1977-12-01",
+        "email": "henrike.v@example.test",
+        "phone": "423-555-0194",
+        "street": "3100 Lookout Crest",
+        "city": "Signal Ridge",
+        "state": "TN",
+        "zip": "37377",
+        "occupation": "Electrician",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [
+          {
+            "type": "Sailboat",
+            "length_ft": 18
+          }
+        ],
+        "auto_liability": "500/500",
+        "home_liability": "300000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "2000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Umbrella limit": {
+          "action": "provide_value",
+          "value": 2000000
+        },
+        "coverage.umbrella_limit": {
+          "action": "provide_value",
+          "value": 2000000
+        },
+        "Watercraft": {
+          "action": "provide_value",
+          "value": [
+            {
+              "type": "Sailboat",
+              "length_ft": 18
+            }
+          ]
+        },
+        "household.watercraft": {
+          "action": "provide_value",
+          "value": [
+            {
+              "type": "Sailboat",
+              "length_ft": 18
+            }
+          ]
+        },
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s07": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "needs_operator_answer",
+      "also_acceptable": [],
+      "traps": [
+        "unknown_question"
+      ],
+      "expected_record": {
+        "first_name": "Tiberius",
+        "last_name": "Mwangi-Hale",
+        "dob": "1966-04-16",
+        "email": "tiberius.mh@example.test",
+        "phone": "404-555-0158",
+        "street": "520 Chastain Ridge",
+        "city": "Buckhead Mill",
+        "state": "GA",
+        "zip": "30327",
+        "occupation": "Attorney",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [],
+        "auto_liability": "500 CSL",
+        "home_liability": "500000",
+        "rental_properties": 2,
+        "nonprofit_board": "No",
+        "umbrella_limit": "5000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Does anyone in your household serve as a director or officer of a nonprofit organization?": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "household.nonprofit_board": {
+          "action": "provide_value",
+          "value": "No"
+        },
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s08": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "submit_clean",
+      "also_acceptable": [],
+      "traps": [
+        "clean"
+      ],
+      "expected_record": {
+        "first_name": "Ottoline",
+        "last_name": "Barrowclough",
+        "dob": "1973-07-19",
+        "email": "ottoline.b@example.test",
+        "phone": "704-555-0116",
+        "street": "88 Catawba Glen",
+        "city": "Mill Ferry",
+        "state": "NC",
+        "zip": "28205",
+        "occupation": "Registered nurse",
+        "drivers": 3,
+        "youthful_drivers": 1,
+        "youthful_violations": "No",
+        "vehicles": 3,
+        "watercraft": [],
+        "auto_liability": "250/500",
+        "home_liability": "300000",
+        "rental_properties": 0,
+        "nonprofit_board": "Yes",
+        "umbrella_limit": "1000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    },
+    "vw-s09": {
+      "portal": "velloway",
+      "split": "scored",
+      "expected_behavior": "must_stop_before_submit",
+      "also_acceptable": [
+        "submit_clean"
+      ],
+      "traps": [
+        "prefill_conflict"
+      ],
+      "expected_record": {
+        "first_name": "Seraphina",
+        "last_name": "Delacroix-Wynn",
+        "dob": "1979-03-03",
+        "email": "seraphina.dw@example.test",
+        "phone": "919-555-0181",
+        "street": "14 Heron Marsh Way",
+        "city": "Calder Sound",
+        "state": "NC",
+        "zip": "28480",
+        "occupation": "Dentist",
+        "drivers": 2,
+        "youthful_drivers": 0,
+        "youthful_violations": "",
+        "vehicles": 2,
+        "watercraft": [
+          {
+            "type": "Sailboat",
+            "length_ft": 24
+          }
+        ],
+        "auto_liability": "250/500",
+        "home_liability": "500000",
+        "rental_properties": 0,
+        "nonprofit_board": "No",
+        "umbrella_limit": "3000000",
+        "start_date": "2027-01-01"
+      },
+      "operator_script": {
+        "Watercraft 2": {
+          "action": "remove",
+          "value": [
+            {
+              "type": "Sailboat",
+              "length_ft": 24
+            }
+          ]
+        },
+        "household.watercraft": {
+          "action": "remove",
+          "value": [
+            {
+              "type": "Sailboat",
+              "length_ft": 24
+            }
+          ]
+        },
+        "session_login": {
+          "username": "umbrella.tester@example.test",
+          "password": "velloway-test-pass-8"
+        }
+      }
+    }
+  },
+  "rule_learning": [
+    {
+      "pattern_id": "ferncastle.unit_occupancy",
+      "label": "Unit occupancy",
+      "key": "rental.unit_occupancy",
+      "derivable_from": [
+        "property.units",
+        "rental.units_rented"
+      ],
+      "mapping": {
+        "units_rented == units": "All units rented to tenants",
+        "units_rented < units": "One or more units vacant"
+      },
+      "applies_when": "property.units >= 2",
+      "occurrences_in_order": [
+        "fc-s01",
+        "fc-s03",
+        "fc-s05",
+        "fc-s07"
+      ],
+      "rule_trap_cases": [
+        "fc-s07"
+      ]
+    }
+  ]
+}

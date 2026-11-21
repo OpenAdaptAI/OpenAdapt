@@ -1,0 +1,25 @@
+{
+  "case_id": "vw-dev",
+  "facts": {
+    "applicant.date_of_birth": "1971-08-12",
+    "applicant.email": "ambrose.f@example.test",
+    "applicant.first_name": "Ambrose",
+    "applicant.last_name": "Fairclough",
+    "applicant.occupation": "Accountant",
+    "applicant.phone": "615-555-0102",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 1000000,
+    "home.address_line1": "903 Sycamore Hill Dr",
+    "home.city": "Brentmoor",
+    "home.state": "TN",
+    "home.zip": "37027",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 2,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 300000
+  }
+}

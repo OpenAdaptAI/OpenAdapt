@@ -1,0 +1,26 @@
+{
+  "case_id": "fc-s07",
+  "facts": {
+    "applicant.email": "hvorme@example.test",
+    "applicant.first_name": "Henrietta",
+    "applicant.last_name": "Vasquez-Orme",
+    "applicant.phone": "215-555-0152",
+    "coverage.deductible": 2500,
+    "coverage.dwelling_limit": 612000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 500000,
+    "coverage.loss_of_rents": "12 months",
+    "property.address_line1": "71 Coopersmith Pl",
+    "property.city": "Marrow Falls",
+    "property.construction": "masonry noncombustible",
+    "property.has_mortgage": false,
+    "property.roof_year": 2012,
+    "property.square_feet": 3880,
+    "property.state": "PA",
+    "property.units": 4,
+    "property.year_built": 1949,
+    "property.zip": "19352",
+    "rental.monthly_rent": 1175,
+    "rental.units_rented": 3
+  }
+}
