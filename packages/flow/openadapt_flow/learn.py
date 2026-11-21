@@ -950,7 +950,7 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
     from openadapt_flow import learn_probe
 
-    learn_probe.add_parser(steps)
+    learn_probe.register_parser(steps)
     return p
 
 

@@ -203,9 +203,12 @@ contract, sends only the `GET` and `HEAD` requests you list as the agent,
 and reads again. No write is sent, so whatever the app moved is its own
 bookkeeping. The proposal follows the rules above: only the acting user's
 own rows, the exact columns, and never a column the probe's query strings,
-the parameters or a contract name. A `changed` move seen in any one round
-counts, because no round carried a task. An `added` row (a first-login row)
-is never admitted by the probe: its excuse names columns, not values, so it
+the parameters or a contract name. A `changed` move counts only when every
+round shows it (`--rounds`, at least two): per-request bookkeeping moves on
+every request, while an edit someone makes to the acting user's own row
+during one round does not, so it stays a stop. A round in which nothing
+moved means nothing is learned. An `added` row (a first-login row) is
+never admitted by the probe: its excuse names columns, not values, so it
 would also cover a row the agent adds for itself with other values. It is
 listed under `needs_approval` for `learn approve`. Every other row that
 moved stays a stop and is listed in `learn/probe_proposal.json`.
@@ -219,17 +222,23 @@ learned unless you name it (`--users`).
 `frame.learned.source: read_only_probe`, and leaves out of each contract
 any excuse for a column that contract names. It writes them only into a
 contract whose frame can see a lost update without the bookkeeping move:
-one whose every declared record is new (`count_new_only`), or one that
-reads the target's versions (`frame.versions`). In an update with no
+one whose every declared effect creates a new record (`count_new_only`;
+a create beside a `field_equals` update doesn't count), or one that reads
+the target's versions (`frame.versions`) on the surface of every other
+effect (its `target_surface`, when set). In an update with no
 version source, another user's edit that the agent's stale save reverts
 leaves nothing changed, and only the bookkeeping move stopped it, so such
 contracts keep stopping unless the probe can give them a version source.
 
 On PostgreSQL it can, for a contract whose write effects all read one
 surface, and whose read is one `SELECT ... FROM <table> t` (no other
-`FROM`) over the frame's own connection with the identity field taken from
-one column. The probe then writes `frame.row_versions` (table and key
-column) beside the excuse. At check time the verifier opens a read-only
+`FROM`, no join, `UNION`, `WITH`, subquery or second statement) over the
+frame's own connection with the identity field taken from one column. The
+probe then writes `frame.row_versions` (table, key column and target
+surface) beside the excuse. At check time the verifier derives the table
+and key again from the target surface's read and refuses a
+`frame.row_versions` that names another table or key (not checked), so a
+hand-written source can't point at a table nobody edits. At check time the verifier opens a read-only
 REPEATABLE READ transaction before it reads the baseline and keeps it open
 until the judge. That transaction still sees the target row's version from
 the baseline, and that version's `xmax` names the transaction that replaced
@@ -237,7 +246,9 @@ it. If it equals the current row's `xmin`, one transaction saved the
 target. Anything else means two or more did, and the frame is refuted as a
 lost update. A judge in another process, a failed read, or a replaced
 version whose `xmax` could be a shared lock naming another updater makes the
-frame not checked. A last-saved marker (`xmin` alone, `updated_at`,
+frame not checked. Only PostgreSQL's "has not been created yet" or "does no
+longer exist" answer means that `xmax` is a plain transaction id; any other
+error reading the lock leaves the frame not checked. A last-saved marker (`xmin` alone, `updated_at`,
 `ON UPDATE CURRENT_TIMESTAMP`) is not used: it reads the same after one
 save as after two. MySQL and MariaDB updates get no automatic source; they
 need `frame.versions` over a history table, or the database's change log.
