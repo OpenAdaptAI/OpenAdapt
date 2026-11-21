@@ -482,3 +482,34 @@ def test_the_dashboard_seal_vector_opens_here() -> None:
     assert _b64(public) == vector["run_public_key"]
     opened = sf.open_sealed_code(key, vector["request_id"], vector["sealed"])
     assert sf.normalize_code(opened) == vector["code"]
+
+
+def test_a_cached_runs_child_gets_the_url_with_its_run_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from openadapt_flow.integrations.agents import skills
+
+    monkeypatch.setenv(
+        sf.URL_ENV, "https://control.example/api/runners/runs/r/second-factor"
+    )
+    monkeypatch.setenv(sf.TOKEN_ENV, "run-token")
+    monkeypatch.setenv("UNRELATED_SECRET", "x")
+    seen: dict[str, Any] = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_client(target: Any) -> Any:
+        seen["env"] = dict(target.env)
+        raise Stop
+
+    import mcp.client.stdio as stdio
+
+    monkeypatch.setattr(stdio, "stdio_client", fake_client)
+    with pytest.raises(Stop):
+        asyncio.run(skills._call_skill(sys.executable, Path("server.py"), {}))
+    assert seen["env"][sf.URL_ENV].startswith("https://control.example/")
+    assert seen["env"][sf.TOKEN_ENV] == "run-token"
+    assert "UNRELATED_SECRET" not in seen["env"]

@@ -59,6 +59,7 @@ __all__ = [
     "obtain",
     "open_sealed_code",
     "runtime_value",
+    "source_env",
     "source_from_env",
     "timeout_from_env",
 ]
@@ -69,8 +70,17 @@ URL_ENV = "OPENADAPT_SECOND_FACTOR_URL"
 TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
 COMMAND_ENV = "OPENADAPT_SECOND_FACTOR_COMMAND"
 TIMEOUT_ENV = "OPENADAPT_SECOND_FACTOR_TIMEOUT_S"
-#: The operator configuration a run's child processes need for a source.
-SOURCE_ENV_KEYS = (URL_ENV, COMMAND_ENV, TIMEOUT_ENV)
+#: What a run's child processes need for a source: its configuration and,
+#: for the control plane, the run token that authorizes the request.
+SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV)
+
+
+def source_env(environ: Optional[Mapping[str, str]] = None) -> dict[str, str]:
+    """The set :data:`SOURCE_ENV_KEYS` of ``environ``, for a child process."""
+
+    environ = os.environ if environ is None else environ
+    return {key: environ[key] for key in SOURCE_ENV_KEYS if environ.get(key)}
+
 
 #: How long a step waits for a person by default, and the bounds an
 #: operator may set with :data:`TIMEOUT_ENV`.

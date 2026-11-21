@@ -66,7 +66,7 @@ first match wins.
 stderr every 20 seconds, so a supervisor that ends silent runs doesn't end
 one that is waiting for a person.
 
-A cached `openadapt wrap` run passes these three variables to the program's
+A cached `openadapt wrap` run passes these variables, and `OPENADAPT_RUNNER_TOKEN` when it is set, to the program's
 MCP server.
 
 ### The control-plane protocol
