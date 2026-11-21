@@ -76,7 +76,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "command", nargs=argparse.REMAINDER, help="-- COMMAND ... (the agent)"
     )
-    p.set_defaults(func=lambda a: _run(a, [x for x in a.command if x != "--"][:None]))
+    p.set_defaults(
+        func=lambda a: _run(a, a.command[1:] if a.command[:1] == ["--"] else a.command)
+    )
 
 
 def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
@@ -98,7 +100,8 @@ def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
         command,
         spec=spec,
         state=state,
-        task=args.task or default_task(),
+        task=args.task
+        or default_task(args.postgres or str(Path(args.sqlite).resolve())),
         secrets_=[args.postgres] if args.postgres else [],
         port=args.port,
     )

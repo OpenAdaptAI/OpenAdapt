@@ -824,6 +824,7 @@ def test_proxy_mcp_endpoint_needs_its_token_and_scrubs_the_child(
     tmp_path: Path,
 ) -> None:
     import httpx
+
     from openadapt_flow.txplan.proxy import McpServer, child_environment
 
     db = _users(tmp_path / "app.sqlite", n=5)
@@ -919,3 +920,30 @@ def test_proxy_query_refuses_a_write(tmp_path: Path) -> None:
     )
     assert is_error
     assert _all(db) == before
+
+
+def test_flow_cli_proxy_runs_the_command_with_scrubbed_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.__main__ import main as flow_main
+
+    db = _users(tmp_path / "app.sqlite", n=10)
+    out = tmp_path / "child.json"
+    child = (
+        "import json, os, sys; json.dump({k: os.environ.get(k) for k in "
+        "('OPENADAPT_MCP_URL', 'OPENADAPT_TASK', 'DATABASE_URL')}, open(sys.argv[1], 'w'))"
+    )
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:pw@h/db")
+    try:
+        code = flow_main(
+            ["proxy", "--sqlite", str(db), "--", sys.executable, "-c", child, str(out)]
+        )
+    except SystemExit as exc:
+        code = exc.code
+    assert code in (0, None)
+    got = json.loads(out.read_text())
+    assert (
+        got["OPENADAPT_MCP_URL"].startswith("http://127.0.0.1:")
+        and got["DATABASE_URL"] is None
+    )
+    assert got["OPENADAPT_TASK"].startswith("proxy-")
