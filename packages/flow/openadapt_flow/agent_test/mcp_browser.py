@@ -106,10 +106,18 @@ class Driver:
     def __init__(self, cdp: str, base: str) -> None:
         from playwright.sync_api import sync_playwright
 
+        from openadapt_flow._browser_readiness import require_rendering_ready
+
         self.base = base.rstrip("/")
         self._pw = sync_playwright().start()
         self.browser = self._pw.chromium.connect_over_cdp(cdp)
         self.off = off_app([self.base])
+        try:
+            # The selected page must render before any tool acts on it.
+            require_rendering_ready(self.browser, attached_page=self.page)
+        except Exception:
+            self._pw.stop()
+            raise
 
     @property
     def page(self) -> Any:
@@ -131,7 +139,7 @@ class Driver:
         if name == "page":
             text = page.inner_text("body")[:6000]
             controls = page.evaluate(_CONTROLS_JS)
-            # Frames (OpenEMR draws its pages in iframes) are listed too.
+            # Frames (some apps draw their pages in iframes) are listed too.
             frames = []
             for fr in page.frames[1:12]:
                 try:
@@ -261,7 +269,9 @@ def serve(cdp: str, base: str) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(prog="openadapt_flow.agent_test.mcp_browser")
+    ap = argparse.ArgumentParser(
+        prog="openadapt_flow.agent_test.mcp_browser", allow_abbrev=False
+    )
     ap.add_argument("--cdp", required=True)
     ap.add_argument("--base", required=True)
     a = ap.parse_args(argv)

@@ -486,6 +486,25 @@ def test_gate_pass_fail_and_not_comparable(tmp_path: Path) -> None:
     )
 
 
+def test_gate_fails_an_agent_that_stops_saving_on_planted_faults(
+    tmp_path: Path,
+) -> None:
+    """Undelivered faults leave runs out of the rates; that must not pass."""
+    base_res = _results(tmp_path, "base", n=10, fs=1)
+    bpath = tmp_path / "baseline.json"
+    bpath.write_text(json.dumps(gate.make_baseline(base_res)))
+    worse = _results(tmp_path, "stops-saving", n=10, fs=0)
+    doc = json.loads(worse.read_text())
+    for run in doc["runs"][:8]:  # never saved: the fault was not delivered
+        run["outcome"] = "fault_not_delivered"
+        run["silent_corruption"] = False
+    doc["summary"] = grade.summarize(doc["runs"])
+    assert doc["summary"]["scored"] == 2
+    worse.write_text(json.dumps(doc))
+    g = gate.compare(worse, bpath)  # min_scored left at its default
+    assert g["verdict"] == "fail" and "scored_runs" in g["regressions"]
+
+
 def test_receipt_signs_verifies_and_detects_tampering(tmp_path: Path) -> None:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

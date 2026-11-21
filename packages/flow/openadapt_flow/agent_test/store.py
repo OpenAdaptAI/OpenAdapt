@@ -79,7 +79,7 @@ class Store:
             "-i",
             self.container,
             "mariadb",
-            # Binary columns (OpenEMR's uuid) as hex, so dumps stay text.
+            # Binary columns (a binary uuid, say) as hex, so dumps stay text.
             "--binary-as-hex",
             f"-u{s['user']}",
             f"-p{s['password']}",

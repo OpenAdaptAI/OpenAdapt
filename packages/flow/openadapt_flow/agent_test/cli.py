@@ -1,11 +1,11 @@
 """``openadapt test``: run an agent against stateful scenarios with planted faults.
 
     openadapt test list
-    openadapt test up --app dolibarr
-    openadapt test run --app dolibarr --agent scripted-readback --out out/
+    openadapt test up --app APP
+    openadapt test run --app APP --agent scripted-readback --out out/
     openadapt test baseline --results out/results.json --out baseline.json
-    openadapt test run --app dolibarr --agent claude-cu --baseline baseline.json --out out2/
-    openadapt test down --app dolibarr
+    openadapt test run --app APP --agent claude-cu --baseline baseline.json --out out2/
+    openadapt test down --app APP
 
 ``run`` writes ``results.json``, ``report.html`` and ``receipt.json`` to
 ``--out``. With ``--baseline`` it also gates: exit 1 when silent corruption
@@ -31,7 +31,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--app",
         required=True,
-        help="a built-in app (openemr, dolibarr, espocrm) or an app pack .yaml",
+        help="a built-in app (see `openadapt test list`) or an app pack .yaml",
     )
     p.add_argument(
         "--port",
@@ -306,25 +306,28 @@ def cmd_verify_receipt(a: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="openadapt test",
+        allow_abbrev=False,
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list", help="the built-in apps and their scenarios").set_defaults(
-        fn=cmd_list
-    )
+    sub.add_parser(
+        "list", allow_abbrev=False, help="the built-in apps and their scenarios"
+    ).set_defaults(fn=cmd_list)
     for name, fn, hlp in (
         ("up", cmd_up, "start an app's stack and wait for it"),
         ("down", cmd_down, "stop an app's stack and remove its data"),
     ):
-        p = sub.add_parser(name, help=hlp)
+        p = sub.add_parser(name, allow_abbrev=False, help=hlp)
         _common(p)
         if name == "up":
             p.add_argument(
                 "--bind", default="", help="the address the app's port is published on"
             )
         p.set_defaults(fn=fn)
-    p = sub.add_parser("run", help="run an agent through the scenarios")
+    p = sub.add_parser(
+        "run", allow_abbrev=False, help="run an agent through the scenarios"
+    )
     _common(p)
     p.add_argument(
         "--agent",
@@ -403,7 +406,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--bind", default="")
     p.set_defaults(fn=cmd_run)
-    p = sub.add_parser("gate", help="gate a finished run against a baseline")
+    p = sub.add_parser(
+        "gate", allow_abbrev=False, help="gate a finished run against a baseline"
+    )
     p.add_argument("--results", required=True)
     p.add_argument("--baseline", required=True)
     p.add_argument("--tolerance", type=float, default=0.05)
@@ -417,12 +422,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--sign-key", default="")
     p.set_defaults(fn=cmd_gate)
-    p = sub.add_parser("baseline", help="write a baseline from a run's results.json")
+    p = sub.add_parser(
+        "baseline",
+        allow_abbrev=False,
+        help="write a baseline from a run's results.json",
+    )
     p.add_argument("--results", required=True)
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_baseline)
     p = sub.add_parser(
         "report",
+        allow_abbrev=False,
         help="rebuild results.json, report.html and receipt.json from a run directory",
     )
     p.add_argument("out")
@@ -431,6 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_report)
     p = sub.add_parser(
         "verify-receipt",
+        allow_abbrev=False,
         help="check a receipt's signature and its digest of results.json",
     )
     p.add_argument("receipt")

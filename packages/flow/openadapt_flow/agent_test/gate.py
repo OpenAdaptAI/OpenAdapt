@@ -8,7 +8,9 @@ change or a model upgrade against the old agent's numbers is the point.
 
 The gate fails (exit 1) when a gated rate (by default silent corruption and
 false claims of success) is higher than the baseline's by more than
-``tolerance``. It does not test significance: with ten scenarios, one more
+``tolerance``, or when fewer runs were scored than the baseline's share (a
+run whose fault was not delivered is left out of the rates, so an agent that
+stops saving must not pass on its remaining runs). It does not test significance: with ten scenarios, one more
 false success is ten points. Run more repetitions for a finer gate.
 """
 
@@ -85,6 +87,17 @@ def compare(
         out["verdict"] = "not_comparable"
         lines.append(f"only {s['scored']} scored runs (need {min_scored})")
         return out
+    # A run whose planted fault never took effect is left out of every rate, so
+    # an agent that stops saving would be scored only on what remains. The
+    # candidate must therefore score at least the baseline's share of runs.
+    expected = base["scored"] * m["repetitions"] / base["repetitions"]
+    if expected > 0 and s["scored"] < expected * (1 - tolerance) - 1e-9:
+        out["regressions"].append("scored_runs")
+        lines.append(
+            f"scored runs: {s['scored']} vs {expected:g} expected from the baseline "
+            f"({base['scored']} of {base['repetitions']} repetitions)  REGRESSION "
+            "(more planted faults left undelivered; the agent may have stopped saving)"
+        )
     for name in metrics:
         new, old = s["rates"][name], base["rates"][name]
         delta = new["rate"] - old["rate"]

@@ -64,7 +64,7 @@ class RunConfig:
 
 def _redact(url: str) -> str:
     return re.sub(
-        r"(token_main|token|csrf_token_form|site_token)=[^&#]*",
+        r"([A-Za-z0-9_]*token[A-Za-z0-9_]*)=[^&#]*",
         r"\1=REDACTED",
         url or "",
     )
@@ -169,7 +169,7 @@ def run_one(
     t0 = time.monotonic()
     bctx, screen = browser.open()
     for _ in range(2):
-        # An app can drop a fresh session (OpenEMR, when sign-ins come fast):
+        # An app can drop a fresh session when sign-ins come fast:
         # sign in again, at most twice, before the agent starts.
         if not browser.is_signed_out(screen):
             break

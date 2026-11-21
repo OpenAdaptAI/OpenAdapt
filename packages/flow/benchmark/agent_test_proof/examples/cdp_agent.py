@@ -1,6 +1,6 @@
 """A Browser-Use-style agent for `openadapt test`, with no model: the shape, not a strategy.
 
-    openadapt test run --app dolibarr --agent browser-use:path/to/cdp_agent.py
+    openadapt test run --app dolibarr --agent browser-use:benchmark/agent_test_proof/examples/cdp_agent.py
 
 It attaches to the harness's signed-in headless browser over the DevTools
 Protocol (``OPENADAPT_TEST_CDP_URL``), as a Browser-Use agent does with
@@ -17,6 +17,8 @@ import os
 
 from playwright.sync_api import sync_playwright
 
+from openadapt_flow._browser_readiness import require_rendering_ready
+
 
 def main() -> None:
     values = json.loads(os.environ["OPENADAPT_TEST_VALUES"])
@@ -26,6 +28,7 @@ def main() -> None:
         page = next(
             p for c in browser.contexts for p in c.pages if p.url.startswith(base)
         )
+        require_rendering_ready(browser, attached_page=page)
         if os.environ.get("OPENADAPT_TEST_APP") != "dolibarr":
             raise SystemExit("this example only knows Dolibarr's contact form")
         page.goto(base + "/contact/card.php?action=create")

@@ -1,7 +1,7 @@
 """Claude computer use and OpenAI computer use, on the scenario's screen.
 
-Both loops are the write leaderboard's adapters
-(``benchmark/fhir_medplum/leaderboard/agents``), with the model and its
+Both loops are the write leaderboard's adapters (under ``benchmark/``),
+with the model and its
 price as parameters and this harness's budget.
 """
 

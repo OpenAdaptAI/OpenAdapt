@@ -39,9 +39,9 @@ inputs:
     default: "0.05"
   min-scored:
     description: >-
-      Refuse the gate (fail) when fewer runs than this were scored. An agent
-      that stops saving has its faulted runs left out of the rates, so set this
-      near the scenario count times repetitions.
+      Refuse the gate (fail) when fewer runs than this were scored. The gate
+      also fails when the run scores a smaller share of its runs than the
+      baseline did, so an agent that stops saving fails even at the default.
     default: "1"
   spend-cap-usd:
     description: Model spend cap for the run.

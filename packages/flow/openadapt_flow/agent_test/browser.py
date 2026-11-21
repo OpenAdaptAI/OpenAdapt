@@ -281,15 +281,23 @@ class AppBrowser:
             raise SystemExit(
                 "OPENADAPT_TEST_CHROMIUM_EXECUTABLE must be chrome-headless-shell"
             )
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(
-            headless=True,
-            executable_path=exe,
-            args=[
-                f"--remote-debugging-port={self.cdp_port}",
-                "--remote-debugging-address=127.0.0.1",
-            ],
-        )
+        try:  # a browser that does not render is closed and refused
+            self._browser = launch_rendering_ready(
+                self._pw.chromium,
+                headless=True,
+                executable_path=exe,
+                args=[
+                    f"--remote-debugging-port={self.cdp_port}",
+                    "--remote-debugging-address=127.0.0.1",
+                ],
+            )
+        except Exception:
+            self._pw.stop()
+            self._pw = None
+            raise
         return self
 
     def close(self) -> None:

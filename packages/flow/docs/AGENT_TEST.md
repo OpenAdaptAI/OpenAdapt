@@ -77,7 +77,7 @@ thing read from your agent; the grade comes from the database.
 
 A Browser-Use agent attaches to the same browser:
 `Browser(cdp_url=os.environ["OPENADAPT_TEST_CDP_URL"])`.
-[`openadapt_flow/agent_test/examples/cdp_agent.py`](../openadapt_flow/agent_test/examples/cdp_agent.py)
+[`benchmark/agent_test_proof/examples/cdp_agent.py`](../benchmark/agent_test_proof/examples/cdp_agent.py)
 is a model-free example of the shape (Playwright `connect_over_cdp`).
 
 The MCP browser server (`python -m openadapt_flow.agent_test.mcp_browser`)
@@ -139,9 +139,11 @@ openadapt test gate --results run-b/results.json --baseline baseline.json --tole
 
 The gate fails (exit 1) when silent corruption or false success is higher
 than the baseline's by more than the tolerance. A run whose planted fault
-never took effect (the agent never saved) is left out of the rates, so an
-agent that stops saving could pass; `--min-scored` refuses (exit 2) a run
-with fewer scored runs than you set. It refuses (exit 2) a run
+never took effect (the agent never saved) is left out of the rates, so the
+gate also fails when the run scored a smaller share of its runs than the
+baseline did (beyond the tolerance): an agent that stops saving fails instead
+of passing on its remaining runs. `--min-scored` additionally refuses (exit 2)
+a run with fewer scored runs than you set. It refuses (exit 2) a run
 whose scenario pack, app pack or images differ from the baseline's. The
 agent may differ: that is what it compares. It does not test significance;
 with ten scenarios one more false success is ten points, so run more
