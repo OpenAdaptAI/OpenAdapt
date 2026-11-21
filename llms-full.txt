@@ -104,13 +104,14 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt demo quickstart --break-it
+uvx --python 3.12 openadapt@latest quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
-fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
-does the same.
+fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
+Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+then `openadapt quickstart --break-it` does the same. The browser runs hidden
+and progress shows in the terminal; add `--watch` to see the browser window.
 
 ### What it shows
 
@@ -584,6 +585,7 @@ improvising or retrying when something is off.
 | --- | --- | --- | --- |
 | Compile one or more demonstrations into a deterministic program | Released | Real app (OpenEMR referral, 62 timed runs) | `openadapt-flow record`, `compile`; [packages/flow](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md) |
 | Try the three acts on a real app: `openadapt quickstart --app openemr` runs the certified OpenEMR referral program in Docker, five referrals at once checked in OpenEMR's record, then a possible duplicate stopped before saving; without Docker or a clone it says so and exits 2 | On main ([#1431](https://github.com/OpenAdaptAI/OpenAdapt/pull/1431)) | Real app (local OpenEMR 8.0.0.3, synthetic patients) | `openadapt quickstart --app openemr`; [docs/quickstart](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/quickstart/README.md#on-a-real-app---app-openemr) |
+| Run the quickstart without taking over the screen: `uvx --python 3.12 openadapt@latest quickstart` keeps the browser hidden and shows progress in the terminal (`--watch` shows the window, `--open` opens the Seal page), runs a run whose starting screen never settles once more in a new folder and otherwise says why in plain words, and reruns itself with Python 3.12 under `uvx` on an unsupported Python. Flow's page settle hands a page that draws no frames (a covered headed window) to the screenshot check instead of waiting out its timeout | On main ([#2365](https://github.com/OpenAdaptAI/OpenAdapt/pull/2365)) | Unit tests; headless terminal captures at 80, 120 and 250 columns for Terminal.app, WezTerm and iTerm2 settings; a headed covered-window run is not reproduced here | `openadapt quickstart`; [openadapt/quickstart](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/quickstart/__init__.py), [_page_quiescence.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/backends/_page_quiescence.py) |
 | Classify common local edits without a person (select-all, Enter in a field or dropdown, an in-form tab, an informational dialog's dismiss), only when the recording's network capture shows no write and a runtime check confirms only the expected change | Released ([#1366](https://github.com/OpenAdaptAI/OpenAdapt/pull/1366)) | Synthetic; OpenEMR referral recording re-admitted offline (violations 12 to 1 under `permissive`) | [LOCAL_EDIT_CLASSIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/design/LOCAL_EDIT_CLASSIFICATION.md), `compiler/local_edit.py` |
 | Keep the empty search result a person confirmed through (a duplicate check's "No matches were found.") as an exact check after the click that opens the dialog and again right before Confirm, so a run whose dialog lists a match stops before the save; only fixed-vocabulary search-result statements shown once, never text with a name or search term, and a confirmation dialog without one is noted in `compile_notes.json` | On main | Real app frames (an OpenEMR referral recording, compiled offline) | `compiler/empty_result_guard.py` |
 | Mine that check in any language: induction keeps the one line a named dialog adds (not its title or buttons, not a question, no typed value or number) when two or more demonstrations whose typed values all differ show the same line, refuses when the demonstrations disagree on a mined check instead of copying the first one's, and qualification then needs a business-rule run that halts at it | On main | Synthetic (a search dialog recorded in Chromium by the real recorder, German statement, real OCR) | `compiler/empty_result_guard.py`, `compiler/induction.py` |
