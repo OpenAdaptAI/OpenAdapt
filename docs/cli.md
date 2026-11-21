@@ -64,7 +64,7 @@ saved record, and the run halts with transaction outcome
 `RECONCILIATION_REQUIRED`, so nothing is retried until a person checks the
 record.
 
-The engine runs on Python 3.10 through 3.12. On Python 3.13 or newer, pip
+The engine runs on Python 3.11 and 3.12. On Python 3.13 or newer, pip
 installs only the launcher and every engine command prints the fix:
 `uv tool install --python 3.12 openadapt`. The `uvx --python 3.12` form above
 needs no install step.

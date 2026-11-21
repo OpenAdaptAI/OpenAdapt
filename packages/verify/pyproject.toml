@@ -7,7 +7,7 @@ name = "openadapt-verify"
 version = "0.2.0"
 description = "Verify an agent's writes through an independent system-of-record read path"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "MIT"
 # Flow 3's base install is its verifier, ledger, journal and receipts without
 # the vision stack (NumPy, OpenCV, Pillow, RapidOCR), which is Flow's `vision`
@@ -57,7 +57,7 @@ core-metadata-version = "2.4"
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
@@ -85,8 +85,8 @@ override-dependencies = [
     "rapidocr-onnxruntime; python_version < '3'",
 ]
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]
 

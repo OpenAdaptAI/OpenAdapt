@@ -186,7 +186,7 @@ The sandbox has all three tools. With your own workflows, `run_workflow` appears
 
 ## Developer setup
 
-The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.10 to 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) records, replays, and checks the workflows.
+The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.11 or 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) records, replays, and checks the workflows.
 
 To see Flow on its own, install the OpenAdapt launcher with `pip install openadapt`, then run `openadapt flow tutorial` or `openadapt quickstart --break-it`.
 

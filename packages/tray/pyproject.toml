@@ -3,7 +3,7 @@ name = "openadapt-tray"
 version = "0.3.7"
 description = "Menu-bar and system-tray controls and status for OpenAdapt Desktop"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
     {name = "MLDSAI Inc.", email = "richard@mldsai.com"}
@@ -17,7 +17,6 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -84,7 +83,7 @@ packages = ["src/openadapt_tray"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 # No `select` on purpose: this project keeps ruff's FULL default rule set.
 # The residual after safe autofix was 91 findings in a 3.9k-line tree, which is
