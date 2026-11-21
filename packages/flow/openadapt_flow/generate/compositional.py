@@ -220,6 +220,59 @@ def _projection_alias(item: str) -> str:
     return _unquote_ident(tail)
 
 
+def _direct_physical_column(sql_expr: str) -> Optional[str]:
+    """Return the physical column name if ``sql_expr`` is a direct ``t.<col> [AS <alias>]``."""
+
+    # Strip trailing ``AS <alias>`` at depth 0 if present.
+    item = sql_expr.strip()
+    depth = 0
+    quote: Optional[str] = None
+    as_pos: Optional[int] = None
+    n = len(item)
+    i = 0
+    while i < n:
+        ch = item[i]
+        if quote is not None:
+            if ch == quote:
+                if i + 1 < n and item[i + 1] == quote:
+                    i += 2
+                    continue
+                quote = None
+            i += 1
+            continue
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif (
+            depth == 0
+            and item[i : i + 2].lower() == "as"
+            and i > 0
+            and item[i - 1].isspace()
+            and i + 2 < n
+            and item[i + 2].isspace()
+        ):
+            as_pos = i
+        i += 1
+    lhs = item[:as_pos].strip() if as_pos is not None else item
+    # Must be a simple ``<col>`` or ``<alias>.<col>`` with no operators/calls.
+    if any(ch in lhs for ch in " ()+-*/=<>|,'"):
+        return None
+    parts = lhs.split(".")
+    if len(parts) == 1:
+        col = _unquote_ident(parts[0])
+        return col or None
+    if len(parts) == 2:
+        tbl = _unquote_ident(parts[0])
+        col = _unquote_ident(parts[1])
+        return col if tbl and col else None
+    return None
+
+
 def _normalize_sql_ws(sql: str) -> str:
     return " ".join(sql.split())
 
@@ -401,10 +454,11 @@ def _compose_single_flavor(
     if not given <= all_variant_fields:
         return None
 
-    # Map every variant's direct param keys and classify invariant vs absent-field pins.
+    # Map every variant's direct param keys and physical columns.
     variant_param_keys: list[dict[str, set[str]]] = []
     all_param_match_keys: set[str] = set()
-    for v_fields, doc, _, _, _ in parsed_variants:
+    field_phys_cols: dict[str, set[str]] = {}
+    for v_fields, doc, _, proj_map, _ in parsed_variants:
         pmap: dict[str, set[str]] = {}
         for p in v_fields:
             # Decline SQL-computed literal-1 placements that admission cannot directly perturb.
@@ -415,11 +469,21 @@ def _compose_single_flavor(
                 return None
             pmap[p] = pkeys
             all_param_match_keys.update(pkeys)
+            for mk in pkeys:
+                phys = _direct_physical_column(proj_map.get(mk, ""))
+                if phys:
+                    field_phys_cols.setdefault(p, set()).add(phys)
         variant_param_keys.append(pmap)
 
-    # Identify ``empty__*`` keys owned by each optional field:
-    # an ``empty__*`` key belongs to field ``f`` if it is present in every variant
-    # omitting ``f`` and absent in every variant containing ``f``.
+    all_param_phys_cols: set[str] = (
+        set[str]().union(*field_phys_cols.values()) if field_phys_cols else set()
+    )
+
+    # Attribute each variant-dependent ``empty__*`` key unambiguously to one field:
+    # 1. Exact physical column binding (``empty__<phys_col>``) when unique to one field.
+    # 2. Otherwise, omission/inclusion signature ONLY when uniquely owned by one field.
+    # If an ``empty__*`` key varies across variants and its ownership cannot be
+    # distinguished between fields split by ``given``, decline (fail closed).
     all_empty_keys: set[str] = {
         str(mk)
         for _, doc, _, _, _ in parsed_variants
@@ -427,13 +491,22 @@ def _compose_single_flavor(
         if str(mk).startswith("empty__")
     }
     empty_keys_by_field: dict[str, dict[str, tuple[Any, Optional[str]]]] = {}
-    for f in sorted(all_variant_fields):
-        with_f = [item for item in parsed_variants if f in item[0]]
-        without_f = [item for item in parsed_variants if f not in item[0]]
-        if not with_f or not without_f:
+    shared_empty_keys: set[str] = set()
+    for ek in sorted(all_empty_keys):
+        in_all = all(
+            ek in (d["effects"][0].get("match") or {})
+            for _, d, _, _, _ in parsed_variants
+        )
+        if in_all:
+            shared_empty_keys.add(ek)
             continue
-        owned: dict[str, tuple[Any, Optional[str]]] = {}
-        for ek in sorted(all_empty_keys):
+
+        sig_candidates: list[str] = []
+        for f in sorted(all_variant_fields):
+            with_f = [item for item in parsed_variants if f in item[0]]
+            without_f = [item for item in parsed_variants if f not in item[0]]
+            if not with_f or not without_f:
+                continue
             in_all_without = all(
                 ek in (d["effects"][0].get("match") or {})
                 for _, d, _, _, _ in without_f
@@ -442,16 +515,37 @@ def _compose_single_flavor(
                 ek in (d["effects"][0].get("match") or {}) for _, d, _, _, _ in with_f
             )
             if in_all_without and not in_any_with:
-                # Require all variants omitting ``f`` to agree on the empty pin & SQL expr.
-                vals = [d["effects"][0]["match"][ek] for _, d, _, _, _ in without_f]
-                exprs = [pm.get(ek) for _, _, _, pm, _ in without_f]
-                if any(v != vals[0] for v in vals[1:]) or any(
-                    e != exprs[0] for e in exprs[1:]
-                ):
-                    return None
-                owned[ek] = (copy.deepcopy(vals[0]), exprs[0])
-        if owned:
-            empty_keys_by_field[f] = owned
+                sig_candidates.append(f)
+
+        if not sig_candidates:
+            return None  # unattributable empty pin -> fail closed
+
+        ek_col = ek[len("empty__") :]
+        phys_matches = [
+            f for f in sig_candidates if ek_col in field_phys_cols.get(f, set())
+        ]
+        if len(phys_matches) == 1:
+            owner = phys_matches[0]
+        elif len(sig_candidates) == 1:
+            owner = sig_candidates[0]
+        else:
+            # Co-occurring fields share this empty pin with no distinguishing physical
+            # column. Safe only if ``given`` includes all or omits all of them; if
+            # ``given`` splits the group, ownership is ambiguous -> decline.
+            in_given = [f for f in sig_candidates if f in given]
+            if in_given and len(in_given) < len(sig_candidates):
+                return None
+            owner = sig_candidates[0]
+
+        without_owner = [item for item in parsed_variants if owner not in item[0]]
+        vals = [d["effects"][0]["match"][ek] for _, d, _, _, _ in without_owner]
+        exprs = [pm.get(ek) for _, _, _, pm, _ in without_owner]
+        if any(v != vals[0] for v in vals[1:]) or any(e != exprs[0] for e in exprs[1:]):
+            return None
+        empty_keys_by_field.setdefault(owner, {})[ek] = (
+            copy.deepcopy(vals[0]),
+            exprs[0],
+        )
 
     # Every non-param, non-empty__ match key (invariant literal/constant/timestamp pins)
     # must agree across ALL source variants (manifest order never resolves conflicts).
@@ -473,16 +567,13 @@ def _compose_single_flavor(
             return None
     assert invariant_pins is not None
 
-    # Every unowned ``empty__*`` key (present in all variants) must also agree across all variants.
-    owned_empty_keys: set[str] = {
-        ek for mapping in empty_keys_by_field.values() for ek in mapping
-    }
+    # Every shared ``empty__*`` key (present in all variants) must also agree across all variants.
     shared_empty_pins: Optional[dict[str, tuple[Any, Optional[str]]]] = None
     for _, doc, _, proj_map, _ in parsed_variants:
         se = {
             str(mk): (copy.deepcopy(mv), proj_map.get(str(mk)))
             for mk, mv in (doc["effects"][0].get("match") or {}).items()
-            if str(mk).startswith("empty__") and str(mk) not in owned_empty_keys
+            if str(mk) in shared_empty_keys
         }
         if shared_empty_pins is None:
             shared_empty_pins = se
@@ -608,28 +699,47 @@ def _compose_single_flavor(
 
         # Shared bookkeeping on ``record`` = columns in EVERY variant's record target_fields
         # that are not owned by any task parameter.
+        all_known_param_cols = all_param_match_keys | all_param_phys_cols
         shared_rec_tf = (
             set.intersection(*(tf for _, tf in per_variant_rec_tf))
-            - all_param_match_keys
+            - all_known_param_cols
             if per_variant_rec_tf
             else set()
         )
         composed_rec_tf = set(shared_rec_tf)
         changed_given = given - identity_fields
+        omitted_changes = (all_variant_fields - identity_fields) - changed_given
         for p in sorted(changed_given):
             with_p = [tf for vf, tf in per_variant_rec_tf if p in vf]
             without_p = [tf for vf, tf in per_variant_rec_tf if p not in vf]
             if not with_p:
                 return None
             # Only grant write permission on columns that EVERY variant with ``p`` grants
-            # on the ``record`` surface (never granting read-only identity columns).
+            # on the ``record`` surface (never granting read-only identity columns or
+            # another parameter's columns).
             p_allowed = set.intersection(*with_p)
-            p_cols = param_match_keys.get(p, set()) & p_allowed
-            only_with_p = p_allowed - (
-                set[str]().union(*without_p) if without_p else set()
+            p_direct = (
+                param_match_keys.get(p, set()) | field_phys_cols.get(p, set())
+            ) & p_allowed
+            composed_rec_tf.update(p_direct)
+
+            # Additional non-param columns present exclusively when ``p`` is present:
+            # if an omitted field ``q`` always co-occurred with ``p``, ownership of
+            # such an extra column cannot be distinguished -> decline (fail closed).
+            extra_with_p = (
+                p_allowed
+                - (set[str]().union(*without_p) if without_p else set())
+                - all_known_param_cols
             )
-            composed_rec_tf.update(p_cols)
-            composed_rec_tf.update(only_with_p)
+            if extra_with_p:
+                co_occurring_omitted = [
+                    q
+                    for q in omitted_changes
+                    if all((p in vf) == (q in vf) for vf, _ in per_variant_rec_tf)
+                ]
+                if co_occurring_omitted:
+                    return None
+                composed_rec_tf.update(extra_with_p)
 
         tfs_by_surf: dict[str, list[str]] = dict(base_non_record_tfs or {})
         if composed_rec_tf:

@@ -684,3 +684,243 @@ def test_phone_rule_applied_before_admission_and_at_runtime(tmp_path: Path) -> N
     con2.close()
     res2 = verify_write(pending2)
     assert res2.outcome is Outcome.REFUTED, res2.reasons
+
+
+def test_splitting_co_occurring_pair_on_update_grants_only_requested_column(
+    tmp_path: Path,
+) -> None:
+    """When retained update variants change (notes, category) together or (status)
+    alone, requesting only ``notes`` must NOT grant write permission on ``category``,
+    and must decline if an unattributable extra column co-occurred with the pair."""
+    db = _create_db(tmp_path)
+    out = tmp_path / "contracts_pair_upd"
+    base_cols = [
+        "t.id AS id",
+        "t.name AS name",
+        "t.notes AS notes",
+        "t.category AS category",
+        "t.status AS status",
+        "t.updated_at AS updated_at",
+    ]
+    pair_upd = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={
+            "id": {"param": "id"},
+            "notes": {"param": "notes"},
+            "category": {"param": "category"},
+        },
+        count_new_only=False,
+        target_fields=["notes", "category", "updated_at"],
+    )
+    pair_found = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={
+            "id": {"param": "id"},
+            "notes": {"param": "notes"},
+            "category": {"param": "category"},
+        },
+        count_new_only=False,
+        target_fields=[],
+    )
+    status_upd = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={"id": {"param": "id"}, "status": {"param": "status"}},
+        count_new_only=False,
+        target_fields=["status", "updated_at"],
+    )
+    status_found = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={"id": {"param": "id"}, "status": {"param": "status"}},
+        count_new_only=False,
+        target_fields=[],
+    )
+    _write_yaml(out / "update_item" / "pair.update.yaml", pair_upd)
+    _write_yaml(out / "update_item" / "pair.found.yaml", pair_found)
+    _write_yaml(out / "update_item" / "status.update.yaml", status_upd)
+    _write_yaml(out / "update_item" / "status.found.yaml", status_found)
+    manifest_doc = {
+        "schema_version": gen.MANIFEST_SCHEMA,
+        "zero_touch": {"admitted": ["update_item"]},
+        "kinds": {
+            "update_item": {
+                "mode": "update",
+                "fields": {
+                    "identity": ["id"],
+                    "changes": ["notes", "category", "status"],
+                    "lists": [],
+                },
+                "variants": [
+                    {
+                        "fields": ["category", "id", "notes"],
+                        "update": "update_item/pair.update.yaml",
+                        "found": "update_item/pair.found.yaml",
+                    },
+                    {
+                        "fields": ["id", "status"],
+                        "update": "update_item/status.update.yaml",
+                        "found": "update_item/status.found.yaml",
+                    },
+                ],
+            }
+        },
+    }
+    manifest = out / "manifest.yaml"
+    manifest.write_text(yaml.safe_dump(manifest_doc, sort_keys=False), encoding="utf-8")
+
+    # Requesting only ``notes`` grants ONLY notes + shared updated_at, NOT category.
+    docs = compose_field_set_docs(
+        manifest, manifest_doc["kinds"]["update_item"], {"id", "notes"}, {}, ()
+    )
+    assert docs is not None
+    write_doc, _ = docs
+    assert set(write_doc["frame"]["target_fields_by_surface"]["record"]) == {
+        "notes",
+        "updated_at",
+    }
+
+    # End-to-end: mutating ``category`` alongside ``notes`` must REFUTE.
+    contract, params = gen.choose(manifest, "update_item", {"id": "1", "notes": "New"})
+    pending = begin_write(contract, params, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute("UPDATE item SET notes = 'New', category = 'Sneaky' WHERE id = 1")
+    con.commit()
+    con.close()
+    res = verify_write(pending)
+    assert res.outcome is Outcome.REFUTED, res.reasons
+
+    # Adding an unattributable extra column to the pair variant causes decline when split.
+    pair_upd["frame"]["target_fields"].append("extra_pair_col")
+    pair_upd["frame"]["target_fields_by_surface"]["record"].append("extra_pair_col")
+    _write_yaml(out / "update_item" / "pair.update.yaml", pair_upd)
+    assert (
+        compose_field_set_docs(
+            manifest, manifest_doc["kinds"]["update_item"], {"id", "notes"}, {}, ()
+        )
+        is None
+    )
+
+
+def test_splitting_co_occurring_pair_on_create_pins_only_omitted_column(
+    tmp_path: Path,
+) -> None:
+    """When retained create variants include both (notes, category) or neither,
+    requesting only ``notes`` drops ``empty__notes``, keeps ``empty__category``,
+    confirms a valid insert, and declines if an unattributable ``empty__aux``
+    pin co-occurred with the pair."""
+    db = _create_db(tmp_path)
+    out = tmp_path / "contracts_pair_create"
+    base_cols = [
+        "t.id AS id",
+        "t.name AS name",
+        "t.notes AS notes",
+        "t.category AS category",
+        "t.status AS status",
+    ]
+    empty_cat = "CASE WHEN t.category IS NULL OR t.category = '' THEN '1' ELSE '0' END AS empty__category"
+    empty_notes = "CASE WHEN t.notes IS NULL OR t.notes = '' THEN '1' ELSE '0' END AS empty__notes"
+
+    both_create = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={
+            "name": {"param": "name"},
+            "notes": {"param": "notes"},
+            "category": {"param": "category"},
+            "status": {"literal": "Open"},
+        },
+        count_new_only=True,
+    )
+    both_found = _record_contract(
+        db,
+        select_cols=base_cols,
+        match={
+            "name": {"param": "name"},
+            "notes": {"param": "notes"},
+            "category": {"param": "category"},
+            "status": {"literal": "Open"},
+        },
+        count_new_only=False,
+    )
+    neither_create = _record_contract(
+        db,
+        select_cols=[*base_cols, empty_notes, empty_cat],
+        match={
+            "name": {"param": "name"},
+            "empty__notes": {"literal": "1"},
+            "empty__category": {"literal": "1"},
+            "status": {"literal": "Open"},
+        },
+        count_new_only=True,
+    )
+    neither_found = _record_contract(
+        db,
+        select_cols=[*base_cols, empty_notes, empty_cat],
+        match={
+            "name": {"param": "name"},
+            "empty__notes": {"literal": "1"},
+            "empty__category": {"literal": "1"},
+            "status": {"literal": "Open"},
+        },
+        count_new_only=False,
+    )
+    _write_yaml(out / "create_item" / "both.create.yaml", both_create)
+    _write_yaml(out / "create_item" / "both.found.yaml", both_found)
+    _write_yaml(out / "create_item" / "neither.create.yaml", neither_create)
+    _write_yaml(out / "create_item" / "neither.found.yaml", neither_found)
+    manifest_doc = {
+        "schema_version": gen.MANIFEST_SCHEMA,
+        "zero_touch": {"admitted": ["create_item"]},
+        "kinds": {
+            "create_item": {
+                "mode": "create",
+                "fields": {
+                    "required": ["name"],
+                    "optional": ["notes", "category"],
+                    "lists": [],
+                },
+                "variants": [
+                    {
+                        "fields": ["category", "name", "notes"],
+                        "create": "create_item/both.create.yaml",
+                        "found": "create_item/both.found.yaml",
+                    },
+                    {
+                        "fields": ["name"],
+                        "create": "create_item/neither.create.yaml",
+                        "found": "create_item/neither.found.yaml",
+                    },
+                ],
+            }
+        },
+    }
+    manifest = out / "manifest.yaml"
+    manifest.write_text(yaml.safe_dump(manifest_doc, sort_keys=False), encoding="utf-8")
+
+    # Requesting only ``notes`` drops empty__notes and keeps empty__category.
+    contract, params = gen.choose(
+        manifest, "create_item", {"name": "Bolt", "notes": "M4"}
+    )
+    pending = begin_write(contract, params, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO item (name, notes, category, status) VALUES (?, ?, ?, ?)",
+        ("Bolt", "M4", None, "Open"),
+    )
+    con.commit()
+    con.close()
+    res = verify_write(pending)
+    assert res.outcome is Outcome.CONFIRMED, res.reasons
+
+    # Adding an unattributable empty__aux pin to ``neither`` causes decline when split.
+    neither_create["effects"][0]["match"]["empty__aux"] = {"literal": "1"}
+    _write_yaml(out / "create_item" / "neither.create.yaml", neither_create)
+    assert (
+        compose_field_set_docs(
+            manifest, manifest_doc["kinds"]["create_item"], {"name", "notes"}, {}, ()
+        )
+        is None
+    )
