@@ -246,7 +246,22 @@ through. Scrubbing here would **defeat the safety check**, not add safety.
 3. **In-flight PHI, treated as such.** The crop is PHI moving inside the trust
    boundary. Run the appliance HTTPS-only on the LAN, gate it with the bearer
    token (`VLM_SERVICE_TOKEN`), and keep it inside the same network zone as the
-   runners.
+   runners. Under the `regulated` execution profile the runner enforces the
+   transport: it wires an appliance or `grounding_model.base_url` only over
+   `https`, or over `http` to loopback, and prints why it refused any other URL.
+4. **Every frame sent off the box is on a local ledger.** Before each off-box
+   call the runner appends one line to `egress-ledger.jsonl` beside the run
+   directory (or the file `OPENADAPT_FLOW_EGRESS_LEDGER` names). The line holds
+   the frame's SHA-256 and size, the component, the destination host, the run,
+   the step and the time, and never pixels or text. The file is append-only,
+   mode `0600` and fsynced per line. If the line can't be written, the frame is
+   not sent and the component gives its fail-safe answer, so the step halts.
+   Halted runs are on the ledger too, because each line is written when its
+   frame is sent.
+5. **No fallback to another model.** When `grounding_model` is pinned and
+   can't be wired, the appliance grounder does not stand in for it. The
+   grounding rung stays off, and a target the deterministic rungs can't resolve
+   halts for a person.
 
 An operator auditing the appliance should confirm no reverse proxy, WSGI, or
 model-server logs the request body — that is the only way a crop could persist.
