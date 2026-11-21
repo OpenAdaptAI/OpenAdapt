@@ -14,7 +14,8 @@ This test pins what Flow's consumers import from any Flow module:
   not available to this test.
 
 Each entry is a module path, or a ``module:name`` pair for ``from module import
-name``. The snapshot is ``fixtures/consumer_import_surface.json``. Regenerate it
+name``. Imports by computed name (``importlib.import_module`` with a
+variable) and star imports are not collected. The snapshot is ``fixtures/consumer_import_surface.json``. Regenerate it
 after a deliberate change, and say why in the pull request:
 
     OPENADAPT_WRITE_CONSUMER_SURFACE=1 \\
@@ -25,9 +26,9 @@ Regeneration reads ``origin/main`` of the Cloud checkout and keeps the Cloud
 entries already pinned when no checkout is given. An entry is pinned unless it
 fails to import on this tree when the snapshot is written; entries that already fail
 (for example a guarded import of a name an older Flow had) are listed under
-``not_importable_when_written`` and are not checked. An entry that needs
-a third-party module this environment lacks (an optional extra) is skipped,
-not failed.
+``not_importable_when_written`` and are not checked. An entry that fails only
+because a module listed in ``OPTIONAL_MODULES`` (an optional extra or agent
+framework) is not installed is skipped; any other import error fails.
 """
 
 from __future__ import annotations
@@ -101,8 +102,61 @@ def _cloud(checkout: Path) -> set[str]:
     return entries
 
 
+# Top-level modules of Flow's optional extras and of the agent frameworks its
+# integrations wrap. An entry that fails only because one of these is not
+# installed is skipped; any other ImportError fails the entry, so a typo or a
+# new hard dependency cannot pass as an absent extra.
+OPTIONAL_MODULES = frozenset(
+    {
+        # extras in packages/flow/pyproject.toml
+        "anthropic",
+        "asn1crypto",
+        "cbor2",
+        "cv2",
+        "cwt",
+        "fastapi",
+        "gi",
+        "jinja2",
+        "keyring",
+        "matplotlib",
+        "mcp",
+        "mlx_vlm",
+        "objc",
+        "onnxruntime",
+        "openenv",
+        "pkcs11",
+        "playwright",
+        "rapidocr_onnxruntime",
+        "sigstore",
+        "skimage",
+        "starlette",
+        "transformers",
+        "uiautomation",
+        "uvicorn",
+        "win32api",
+        "win32con",
+        "win32gui",
+        "winrt",
+        "AppKit",
+        "ApplicationServices",
+        "Cocoa",
+        "Foundation",
+        "Quartz",
+        # agent frameworks behind openadapt_flow.integrations.agents
+        "agents",
+        "claude_agent_sdk",
+        "crewai",
+        "langchain_core",
+        "langgraph",
+        # optional OpenAdapt distributions
+        "openadapt_capture",
+        "openadapt_privacy",
+    }
+)
+
+
 class MissingDependency(Exception):
-    """A third-party module the entry needs is not installed here."""
+    """An optional module the entry needs is not installed here."""
 
 
 def _import(module: str) -> object:
@@ -110,9 +164,7 @@ def _import(module: str) -> object:
         return importlib.import_module(module)
     except ImportError as error:
         missing = (error.name or "").split(".")[0]
-        if missing and not missing.startswith("openadapt"):
-            # An optional extra (a browser driver, a console server) that this
-            # environment lacks. That says nothing about Flow's paths.
+        if missing in OPTIONAL_MODULES:
             raise MissingDependency(missing) from error
         raise
 
@@ -217,3 +269,18 @@ def test_importable_checks_names_and_submodules() -> None:
     assert importable("openadapt_flow:ir")
     assert not importable("openadapt_flow.ir:NoSuchName")
     assert not importable("openadapt_flow.no_such_module")
+
+
+@pytest.mark.parametrize("missing, skipped", [("mcp", True), ("yamll", False)])
+def test_only_listed_optional_modules_are_skipped(
+    monkeypatch: pytest.MonkeyPatch, missing: str, skipped: bool
+) -> None:
+    def absent(_module: str) -> object:
+        raise ModuleNotFoundError(f"No module named {missing!r}", name=missing)
+
+    monkeypatch.setattr(importlib, "import_module", absent)
+    if skipped:
+        with pytest.raises(MissingDependency):
+            importable("openadapt_flow.agent.mcp:serve")
+    else:
+        assert importable("openadapt_flow.agent.mcp:serve") is False
