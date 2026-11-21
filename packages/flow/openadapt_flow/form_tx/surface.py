@@ -158,6 +158,8 @@ def match_anchor_in_snapshot(
         ):
             candidates.append(ctrl)
 
+    candidates = collapse_radio_groups(candidates)
+
     if len(candidates) > 1 and anchor.label_patterns and anchor.name_or_id_patterns:
         both = [
             c
@@ -213,6 +215,53 @@ def match_text_pair_in_snapshot(
         )
     return matches[0] if matches else None
 
+def is_native_radio(ctrl: ObservedControl) -> bool:
+    """True for an ``<input type="radio">`` control."""
+    return ctrl.tag.casefold() == "input" and ctrl.input_type.casefold() == "radio"
+
+
+def radio_group_key(ctrl: ObservedControl) -> Optional[str]:
+    """The group a native radio belongs to, or ``None`` for any other control.
+
+    Radios sharing a ``name`` are one field. The key is the name plus the
+    sorted values of the group, so two same-named groups in different forms
+    with different choices stay apart.
+    """
+    if not is_native_radio(ctrl) or not ctrl.name_attr:
+        return None
+    values = ",".join(sorted(o.value for o in ctrl.options))
+    return f"radio:{ctrl.name_attr}|{values}"
+
+
+def collapse_radio_groups(
+    controls: Sequence[ObservedControl],
+) -> list[ObservedControl]:
+    """Represent each native radio group by one control.
+
+    The representative is the checked radio, so its ``current_value`` is the
+    group's answer; with none checked it is the first radio, whose
+    ``current_value`` is empty. Other controls keep their order.
+    """
+    groups: dict[str, list[ObservedControl]] = {}
+    for ctrl in controls:
+        key = radio_group_key(ctrl)
+        if key is not None:
+            groups.setdefault(key, []).append(ctrl)
+    out: list[ObservedControl] = []
+    seen: set[str] = set()
+    for ctrl in controls:
+        key = radio_group_key(ctrl)
+        if key is None:
+            out.append(ctrl)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        members = groups[key]
+        checked = [m for m in members if m.checked]
+        out.append(checked[0] if checked else members[0])
+    return out
+
 
 def compute_field_signature(ctrl: ObservedControl) -> str:
     """Stable value-free structural signature for an observed control."""
@@ -220,6 +269,10 @@ def compute_field_signature(ctrl: ObservedControl) -> str:
     label = collapse_whitespace(ctrl.label_text).casefold()
     kind = (ctrl.role or ctrl.input_type or ctrl.tag).casefold()
     name = (ctrl.name_attr or ctrl.id_attr).casefold()
+    if is_native_radio(ctrl) and ctrl.name_attr:
+        # Every radio of a group, checked or not, is the same field.
+        label = ""
+        name = ctrl.name_attr.casefold()
     # Strip volatile numeric render suffixes from dynamic server IDs while keeping field tokens
     stable_name = re.sub(r"\b\d+\b|_[0-9a-f]{6,}", "#", name)
     return f"{section}|{label}|{kind}|{stable_name}"
