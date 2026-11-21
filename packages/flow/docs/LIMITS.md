@@ -702,7 +702,7 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's own screens read in a separate signed-in
+or a file the system itself wrote; tier 1) or the application's own screens read in a separate signed-in
 session (tier 2): a record page in a separate browser (`ui_readback`), a
 relaunched desktop app or a second RDP session (`fresh_session`, tested on
 mocks only), or a look-up in a separate desktop, RDP or Citrix session

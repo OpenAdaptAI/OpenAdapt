@@ -1473,10 +1473,23 @@ profiles gate on the tier, never on prose:
 
 | Tier | Label | What it proves | Adapters |
 |---|---|---|---|
-| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
-| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; a plugin may also declare it |
+| 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`; `file`, `email`, `document`, `document-hash` with `artifact_producer: system_of_record` |
+| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; file kinds with `artifact_producer: separate_session`; a plugin may also declare it |
 | 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back; `desktop_readback` without its own sign-in |
-| 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |
+| 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface; file kinds with `artifact_producer` `acting_session` or unset |
+
+The file kinds (`file`, `email`, `document`, `document-hash`) are graded by
+who produced what `root` holds, not by being files
+(`runtime/effects/artifact_provenance.py`). A PDF the acting browser
+downloaded is the acting session's own copy, so a matching hash is still
+tier 4. Declare `artifact_producer: separate_session` when a separately
+signed-in session fetched the file, and `system_of_record` when the system
+wrote it without the acting session (an export job, an SFTP drop, the mail
+server's capture store). List the acting session's download and output
+folders in `acting_roots`: a `root` overlapping one, the user's Downloads
+folder or a Playwright download folder is graded tier 4 whatever is declared.
+Each verdict's `read_evidence.provenance` records the declared producer, the
+producer it was graded by and the check level.
 
 **Same-application screen read-back is a LOWER-CONFIDENCE consistency check,
 never independent system-of-record proof** -- an optimistic UI can paint
