@@ -26,6 +26,25 @@ def utf16_bytes(value: str) -> bytes:
     return value.encode("utf-16-le", errors="surrogatepass")
 
 
+class StructureEvidence(Enum):
+    NON_VALUE = "non_value"
+    OTHER_TYPE = "other_type"
+    VALUE_PRESENT = "value_present"
+    VALUE_UNKNOWN = "value_unknown"
+
+
+class EditEvidence(Enum):
+    PLAIN = "plain"
+    NO_HANDLE = "no_handle"
+    NON_EDIT = "non_edit"
+    CLASS_UNAVAILABLE = "class_unavailable"
+    STYLE_UNAVAILABLE = "style_unavailable"
+    OWNER_UNAVAILABLE = "owner_unavailable"
+    MASK_QUERY_UNAVAILABLE = "mask_query_unavailable"
+    PROTECTED = "protected"
+    UNAVAILABLE = "unavailable"
+
+
 class SensitivityStage(Enum):
     """Fixed guest-only diagnostics for the strict census; never provider data."""
 
@@ -42,6 +61,14 @@ class ValueUnavailable(Exception):
     """A specific absence of completeness evidence; never carries field text."""
 
     census_stage: SensitivityStage | None = None
+    structure_evidence: StructureEvidence | None = None
+    edit_evidence: EditEvidence | None = None
+
+    def native_edit_census_label(self) -> str:
+        structure, edit = self.structure_evidence, self.edit_evidence
+        if type(structure) is StructureEvidence and type(edit) is EditEvidence:
+            return f"sensitivity_native_edit/{structure.value}/{edit.value}"
+        return SensitivityStage.NATIVE_EDIT.value
 
 
 @dataclass(frozen=True)
@@ -161,18 +188,23 @@ class Win32TextReader:
         ES_PASSWORD, and EM_GETPASSWORDCHAR answers 0 within the timeout. Any
         other class, a failed call or a password character is False.
         """
+        return self._plain_edit_evidence(hwnd) is EditEvidence.PLAIN
+
+    def _plain_edit_evidence(self, hwnd: int) -> EditEvidence:
         self.owner(hwnd)
         name = ctypes.create_unicode_buffer(257)
         if not 0 < self._user.GetClassNameW(hwnd, name, 257) < 257:
-            return False
+            return EditEvidence.CLASS_UNAVAILABLE
         if not _edit_class(name.value):
-            return False
+            return EditEvidence.NON_EDIT
         # A zero GWL_STYLE is valid only when the call left no Win32 error.
         ctypes.set_last_error(0)
         style = self._user.GetWindowLongW(hwnd, -16)  # GWL_STYLE
-        if (style == 0 and ctypes.get_last_error() != 0) or style & ES_PASSWORD:
-            return False
-        return self._message(hwnd, EM_GETPASSWORDCHAR) == 0
+        if style == 0 and ctypes.get_last_error() != 0:
+            return EditEvidence.STYLE_UNAVAILABLE
+        if style & ES_PASSWORD or self._message(hwnd, EM_GETPASSWORDCHAR) != 0:
+            return EditEvidence.PROTECTED
+        return EditEvidence.PLAIN
 
     def read(self, owner: NativeOwner, *, guard: Callable[[], None]) -> NativeRead:
         def unchanged() -> None:
@@ -213,16 +245,38 @@ def _edit_class(name: str) -> bool:
 _PASSWORD_EVIDENCE: list[Any] = []
 
 
-def _native_plain_edit(control: Any) -> bool:
+def _native_edit_evidence(control: Any) -> EditEvidence:
     """Win32 evidence for a provider that does not support IsPassword."""
     hwnd = control.NativeWindowHandle
     if not _positive_int(hwnd):
-        return False
+        return EditEvidence.NO_HANDLE
     if not _PASSWORD_EVIDENCE:
         _PASSWORD_EVIDENCE.append(Win32TextReader())
     reader = _PASSWORD_EVIDENCE[0]
+    if type(reader) is Win32TextReader:
+        probe = getattr(reader, "_plain_edit_evidence", None)
+        if callable(probe):
+            try:
+                evidence = probe(hwnd)
+            except ValueUnavailable as exc:
+                # The native reader already distinguishes these failed calls.
+                # Never emit its exception or anything returned by a provider.
+                if exc.args == ("native_text_timeout_or_failure",):
+                    return EditEvidence.MASK_QUERY_UNAVAILABLE
+                if exc.args in (
+                    ("native_window_unavailable_or_not_unicode",),
+                    ("native_owner_unavailable",),
+                ):
+                    return EditEvidence.OWNER_UNAVAILABLE
+                return EditEvidence.UNAVAILABLE
+            return (
+                evidence if type(evidence) is EditEvidence else EditEvidence.UNAVAILABLE
+            )
+    # Readers with only the original boolean interface still use that proof.
     plain = getattr(reader, "plain_edit", None)
-    return callable(plain) and plain(hwnd) is True
+    if callable(plain) and plain(hwnd) is True:
+        return EditEvidence.PLAIN
+    return EditEvidence.UNAVAILABLE
 
 
 def _positive_int(value: object) -> bool:
@@ -299,27 +353,36 @@ _STRUCTURAL_TYPES = frozenset(
 )
 
 
-def _known_non_value_structure(control: Any, get_property: Callable[..., Any]) -> bool:
+def _structure_evidence(
+    control: Any, get_property: Callable[..., Any]
+) -> StructureEvidence:
     if control.ControlTypeName not in _STRUCTURAL_TYPES:
-        return False
+        return StructureEvidence.OTHER_TYPE
     available = get_property(30043, 1)  # UIA_IsValuePatternAvailablePropertyId
     if available is not False:
         if not is_uia_not_supported(available):
-            return False
+            if available is True:
+                return StructureEvidence.VALUE_PRESENT
+            return StructureEvidence.VALUE_UNKNOWN
         # A successful null ValuePattern is absence. Errors and malformed
         # answers cannot authorize even a caption.
-        if pattern_presence(control.Element.GetCurrentPattern(10002)) is not False:
-            return False
+        present = pattern_presence(control.Element.GetCurrentPattern(10002))
+        if present is True:
+            return StructureEvidence.VALUE_PRESENT
+        if present is not False:
+            return StructureEvidence.VALUE_UNKNOWN
     # The capability/type lookup was a provider call: recheck sensitivity
     # immediately before allowing the caller's structural metadata access.
     status = get_property(IS_PASSWORD_PROPERTY, 1)
     if status is False or is_uia_not_supported(status):
-        return True
+        return StructureEvidence.NON_VALUE
     raise ValueUnavailable("password_or_password_status_unavailable")
 
 
 def _require_non_sensitive(control: Any, *, structural: bool) -> None:
     stage = SensitivityStage.PROPERTY_QUERY
+    structure = None
+    edit = EditEvidence.UNAVAILABLE
     try:
         method = control.GetPropertyValueEx
         raw = method(IS_PASSWORD_PROPERTY, 1)
@@ -329,10 +392,13 @@ def _require_non_sensitive(control: Any, *, structural: bool) -> None:
             stage = SensitivityStage.PROVIDER_REFUSAL
         elif is_uia_not_supported(raw):
             stage = SensitivityStage.STRUCTURE_QUERY
-            if structural and _known_non_value_structure(control, method):
-                return
+            if structural:
+                structure = _structure_evidence(control, method)
+                if structure is StructureEvidence.NON_VALUE:
+                    return
             stage = SensitivityStage.NATIVE_EDIT
-            if _native_plain_edit(control):
+            edit = _native_edit_evidence(control)
+            if edit is EditEvidence.PLAIN:
                 stage = SensitivityStage.RECHECK
                 status = method(IS_PASSWORD_PROPERTY, 1)
                 if status is False or is_uia_not_supported(status):
@@ -347,6 +413,9 @@ def _require_non_sensitive(control: Any, *, structural: bool) -> None:
         pass
     error = ValueUnavailable("password_or_password_status_unavailable")
     error.census_stage = stage
+    if stage is SensitivityStage.NATIVE_EDIT:
+        error.structure_evidence = structure
+        error.edit_evidence = edit
     raise error
 
 

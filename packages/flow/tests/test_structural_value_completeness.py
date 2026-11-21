@@ -203,7 +203,7 @@ def test_unqualified_scope_and_name_only_sources_never_become_values(
         "sensitivity_missing_status",
         "sensitivity_unrecognized_status",
         "sensitivity_structure_query",
-        "sensitivity_native_edit",
+        "sensitivity_native_edit/other_type/unavailable",
         "sensitivity_recheck",
         "children_error",
         "depth_limit",
@@ -247,7 +247,13 @@ def test_census_trace_records_only_the_stopping_stage(monkeypatch, capsys, stage
         if stage == "sensitivity_structure_query":
             control.ControlTypeName = "PaneControl"
         monkeypatch.setattr(
-            native_value, "_native_plain_edit", lambda _: stage == "sensitivity_recheck"
+            native_value,
+            "_native_edit_evidence",
+            lambda _: (
+                native_value.EditEvidence.PLAIN
+                if stage == "sensitivity_recheck"
+                else native_value.EditEvidence.UNAVAILABLE
+            ),
         )
     elif stage == "children_error":
         control.GetChildren = fail
@@ -266,6 +272,105 @@ def test_census_trace_records_only_the_stopping_stage(monkeypatch, capsys, stage
     assert calls == original_calls
     assert capsys.readouterr().err.splitlines() == [
         f"[win-agent] strict census stop: {stage}"
+    ]
+
+
+@pytest.mark.parametrize(
+    "structure,edit",
+    [
+        ("other_type", "no_handle"),
+        ("value_present", "non_edit"),
+        ("value_unknown", "class_unavailable"),
+        ("other_type", "style_unavailable"),
+        ("value_present", "password_style"),
+        ("value_unknown", "password_char"),
+        ("other_type", "owner_error"),
+        ("value_present", "message_error"),
+    ],
+)
+def test_native_edit_census_reports_both_decisions(
+    monkeypatch, capsys, structure, edit
+):
+    import ctypes
+    import sys
+
+    from openadapt_flow.backends.win_agent import native_value
+    from tests.test_approval_form_fields import _UNSUPPORTED_PROPERTY
+
+    calls = []
+    reader_type = native_value.Win32TextReader
+    control = _Control(
+        "EditControl" if structure == "other_type" else "PaneControl",
+        value="private synthetic value",
+    )
+    control.AutomationId = "field"
+    window = _window(control)
+    perform = _agent(monkeypatch, window)
+    sys.modules["uiautomation"].GetRootControl = lambda: window
+
+    def property_value(prop, _):
+        calls.append(("property", prop))
+        if prop == native_value.IS_PASSWORD_PROPERTY:
+            return _UNSUPPORTED_PROPERTY
+        assert prop == 30043
+        return True if structure == "value_present" else object()
+
+    def owner(_):
+        calls.append("owner")
+        if edit == "owner_error":
+            raise native_value.ValueUnavailable("native_owner_unavailable")
+
+    def class_name(_, buffer, size):
+        calls.append("class")
+        if edit == "class_unavailable":
+            return 0
+        buffer.value = "Button" if edit == "non_edit" else "Edit"
+        return len(buffer.value)
+
+    def style(*_):
+        calls.append("style")
+        return native_value.ES_PASSWORD if edit == "password_style" else 0
+
+    def password_char(*_):
+        calls.append("password_char")
+        if edit == "message_error":
+            raise native_value.ValueUnavailable("native_text_timeout_or_failure")
+        return int(edit == "password_char")
+
+    control.GetPropertyValueEx = property_value
+    if edit == "no_handle":
+        control.NativeWindowHandle = 0
+    reader = object.__new__(reader_type)
+    reader.owner = owner
+    reader._user = SimpleNamespace(GetClassNameW=class_name, GetWindowLongW=style)
+    reader._message = password_char
+    monkeypatch.setattr(native_value, "Win32TextReader", reader_type)
+    monkeypatch.setattr(native_value, "_PASSWORD_EVIDENCE", [reader])
+    monkeypatch.setattr(ctypes, "set_last_error", lambda _: None, raising=False)
+    monkeypatch.setattr(
+        ctypes,
+        "get_last_error",
+        lambda: int(edit == "style_unavailable"),
+        raising=False,
+    )
+    request = {"locator": {"automation_id": "field"}}
+    monkeypatch.delenv("OAFLOW_AGENT_TRACE_CENSUS", raising=False)
+    refusal = perform("read", request)
+    assert refusal["reason"] == "not_unique" and not refusal["complete"]
+    assert capsys.readouterr().err == ""
+    original_calls = list(calls)
+    calls.clear()
+    monkeypatch.setenv("OAFLOW_AGENT_TRACE_CENSUS", "1")
+    assert perform("read", request) == refusal
+    assert calls == original_calls
+    outcome = {
+        "password_style": "protected",
+        "password_char": "protected",
+        "owner_error": "owner_unavailable",
+        "message_error": "mask_query_unavailable",
+    }.get(edit, edit)
+    assert capsys.readouterr().err.splitlines() == [
+        f"[win-agent] strict census stop: sensitivity_native_edit/{structure}/{outcome}"
     ]
 
 

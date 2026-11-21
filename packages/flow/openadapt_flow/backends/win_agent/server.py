@@ -1209,6 +1209,14 @@ def _find_candidates(
                 detail = getattr(error, "census_stage", None)
                 if type(detail) is getattr(native_api, "SensitivityStage", None):
                     stage = detail.value
+                    if detail is native_api.SensitivityStage.NATIVE_EDIT:
+                        label = getattr(
+                            native_api.ValueUnavailable,
+                            "native_edit_census_label",
+                            None,
+                        )
+                        if label is not None:
+                            stage = label(error)
             try:
                 print(
                     f"[win-agent] strict census stop: {stage}",
