@@ -220,12 +220,13 @@ def _run_address(browser: Any, inert: bool) -> tuple[Any, list[dict]]:
         ctx.close()
 
 
-def test_pick_that_keeps_the_leading_part_of_its_label_is_accepted(
+def test_pick_that_keeps_only_the_leading_part_of_its_label_stops(
     browser: Any,
 ) -> None:
+    # partial-match-as-match (#2448): a leading part is not the value.
     result, submissions = _run_address(browser, inert=False)
-    assert not result.halts, [h.message for h in result.halts]
-    assert submissions == [{"addr": "2210 Juniper Loop"}]
+    assert submissions == []
+    assert result.halts, result.what_happened
 
 
 def test_typed_text_left_in_the_input_is_not_taken_as_a_pick(browser: Any) -> None:

@@ -234,7 +234,8 @@ def test_receipt_signed_before_later_fields_still_verifies_as_older() -> None:
     old = {
         k: v
         for k, v in payload.model_dump(mode="json").items()
-        if k not in ("readback_not_checked_count", "readback_evidence")
+        if k
+        not in ("readback_not_checked_count", "readback_evidence", "covered_keys", "not_covered")
     }
     old_bytes = canonical_json_bytes(old)
     receipt = SignedFormTxReceipt(

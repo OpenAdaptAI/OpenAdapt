@@ -1577,7 +1577,7 @@ class FormReconciler:
                 session.record_write(
                     source="kept_matching",
                     dossier_key=binding.dossier_key,
-                    label=ctrl.label_text,
+                    label=_field_label(ctrl),
                     selector=ctrl.dom_selector,
                     in_popup_subroutine=in_popup_subroutine,
                     keep_existing=True,
