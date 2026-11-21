@@ -101,6 +101,8 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "Select",
     "Choose one",
     "Please choose",
+    "Choose",
+    "-- Choose one --",
 )
 
 
@@ -377,6 +379,24 @@ def _is_editable_combobox(ctrl: ObservedControl) -> bool:
         and not ctrl.readonly
         and not ctrl.disabled
     )
+
+
+def _is_leading_part_of_choice(shown: str, label: str, typed: str) -> bool:
+    """True when a pick left the leading part of its label in the input.
+
+    Some type-aheads put only the first part of the chosen suggestion in the
+    input ("2210 Juniper Loop" from "2210 Juniper Loop Apt 4, Brackenfield,
+    OR") and fill the rest into other fields. That counts only when the input
+    shows more than was typed, so text left over from typing never passes.
+    """
+    shown_n = collapse_whitespace(shown).casefold()
+    label_n = collapse_whitespace(label).casefold()
+    typed_n = collapse_whitespace(typed).casefold()
+    if not shown_n or shown_n == typed_n or len(shown_n) <= len(typed_n):
+        return False
+    if not label_n.startswith(shown_n) or len(label_n) == len(shown_n):
+        return False
+    return label_n[len(shown_n)] in " ,;-/("
 
 
 def _surface_action_halt(
@@ -929,6 +949,7 @@ class FormReconciler:
                         codec=codec,
                         dossier_key=dossier_key,
                         run_id=run_id,
+                        typed_query=typed_query,
                     )
                 return None
 
@@ -1015,6 +1036,7 @@ class FormReconciler:
         codec: FieldCodecSpec,
         dossier_key: Optional[str],
         run_id: str,
+        typed_query: str = "",
     ) -> Optional[FormHaltItem]:
         """Stop unless the type-ahead now holds the chosen suggestion.
 
@@ -1058,6 +1080,7 @@ class FormReconciler:
             and (
                 shown.casefold() in accepted
                 or values_equivalent(intended_value, live.current_value, codec)
+                or _is_leading_part_of_choice(shown, option.label, typed_query)
             )
         ):
             return None

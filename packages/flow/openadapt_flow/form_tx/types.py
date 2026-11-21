@@ -332,6 +332,8 @@ class FieldBindingSpec(BaseModel):
         "Select",
         "Choose one",
         "Please choose",
+        "Choose",
+        "-- Choose one --",
     )
     # Type-ahead comboboxes: type only this many leading characters of the
     # formatted value before reading suggestions. None types the whole value.
