@@ -13186,6 +13186,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_shadow(sub)
 
+    from openadapt_flow.cli_gate import register as _register_gate
+
+    _register_gate(sub)
+
     from openadapt_flow.cli_receipt import register as _register_receipt
 
     _register_receipt(sub)
@@ -13735,6 +13739,7 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.cli_no_outbound:_cmd_list",
         "openadapt_flow.cli_no_outbound:_cmd_remove",
         "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_gate:cmd_gate",
         "openadapt_flow.cli_receipt:cmd_anchor",
         "openadapt_flow.cli_receipt:cmd_keys_export",
         "openadapt_flow.cli_receipt:cmd_verify",

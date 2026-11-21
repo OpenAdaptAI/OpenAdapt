@@ -68,7 +68,7 @@ import os
 import re
 import secrets
 import struct
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from decimal import Context, Decimal, InvalidOperation
@@ -2120,11 +2120,20 @@ def diff(
     return out
 
 
-def settled_state(a: Snapshot, b: Snapshot) -> bool:
+def settled_state(
+    a: Snapshot, b: Snapshot, entity_scope: Optional[Collection[str]] = None
+) -> bool:
     """Do two reads taken after the save show the same database, apart from
     rows added to append-only tables (the app's logs, which the frame
     excuses)? An append-only table's existing rows must not change, and
-    every other table must be the same, as in :func:`same_state`."""
+    every other table must be the same, as in :func:`same_state`.
+
+    ``entity_scope`` (``frame.database.entity_tables``): a table outside it
+    may keep moving (a scheduler, a queue). Whatever it holds in the read
+    that is judged is logged, never a stop, so its motion doesn't keep the
+    database from settling. Its rows are still diffed against the baseline."""
+
+    from openadapt_flow.app_profiles import table_name
 
     if (a.objects, a.code_visible) != (b.objects, b.code_visible):
         return False
@@ -2132,6 +2141,8 @@ def settled_state(a: Snapshot, b: Snapshot) -> bool:
         return False
     for name, x in a.tables.items():
         y = b.tables[name]
+        if entity_scope is not None and table_name(name) not in entity_scope:
+            continue
         if (x.mode, x.schema, x.row_hash_format) != (
             y.mode,
             y.schema,
