@@ -1,0 +1,24 @@
+{
+  "case_id": "tb-s05",
+  "facts": {
+    "owner.first_name": "Thea",
+    "owner.last_name": "Vandermolen",
+    "owner.email": "thea.v@example.test",
+    "owner.phone": "773-555-0124",
+    "owner.zip": "60614",
+    "pet.name": "Biscuit",
+    "pet.species": "Dog",
+    "pet.breed": "Beagle",
+    "pet.mixed_breed": false,
+    "pet.weight": 27,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2020-04-11",
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$10,000",
+    "plan.reimbursement": "90%",
+    "plan.deductible": 250,
+    "plan.wellness": false,
+    "policy.start_date": "2026-12-20",
+    "pet.spay_neuter_date": "2026-02-10"
+  }
+}

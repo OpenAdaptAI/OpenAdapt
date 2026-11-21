@@ -1,0 +1,27 @@
+{
+  "case_id": "wf-s06",
+  "facts": {
+    "association.name": "Sablewood Flats Condominium Association",
+    "unit.street": "2400 W Sablewood Ave",
+    "unit.unit_number": "512",
+    "unit.city": "Spokane",
+    "unit.state": "WA",
+    "unit.zip": "99201",
+    "building.year_built": 2012,
+    "unit.floor": 5,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Imani",
+    "owner.last_name": "Okafor-Reyes",
+    "owner.date_of_birth": "1993-03-15",
+    "owner.email": "imani.or@example.test",
+    "owner.phone": "509-555-0102",
+    "coverage.personal_property": 35000,
+    "coverage.loss_assessment": 25000,
+    "coverage.water_backup": "$5,000",
+    "coverage.deductible": 500,
+    "policy.start_date": "2026-12-05",
+    "unit.square_feet": 980,
+    "unit.finish_level": "Upgraded"
+  }
+}

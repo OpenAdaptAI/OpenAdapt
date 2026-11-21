@@ -1,0 +1,24 @@
+{
+  "case_id": "tb-s02",
+  "facts": {
+    "owner.first_name": "Lena",
+    "owner.last_name": "Marchbank",
+    "owner.email": "lena.m@example.test",
+    "owner.phone": "919-555-0171",
+    "owner.zip": "27607",
+    "pet.name": "Otis",
+    "pet.species": "Dog",
+    "pet.breed": "Labrador Retriever",
+    "pet.mixed_breed": true,
+    "pet.weight": 64,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2020-10-01",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$20,000",
+    "plan.reimbursement": "80%",
+    "plan.deductible": 250,
+    "plan.wellness": false,
+    "policy.start_date": "2026-12-10"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s03",
+  "facts": {
+    "association.name": "Larch Hollow Condominium Association",
+    "unit.street": "1650 SW Larch Hollow Dr",
+    "unit.unit_number": "207",
+    "unit.city": "Beaverton",
+    "unit.state": "OR",
+    "unit.zip": "97005",
+    "building.year_built": 2001,
+    "unit.floor": 2,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Desmond",
+    "owner.last_name": "Achterberg",
+    "owner.date_of_birth": "1990-11-08",
+    "owner.email": "d.achterberg@example.test",
+    "owner.phone": "503-555-0167",
+    "coverage.improvements": 47000,
+    "coverage.personal_property": 40000,
+    "coverage.loss_assessment": 25000,
+    "coverage.water_backup": "$10,000",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-10"
+  }
+}

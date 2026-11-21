@@ -1,0 +1,25 @@
+{
+  "case_id": "tb-s09",
+  "facts": {
+    "owner.first_name": "Greta",
+    "owner.last_name": "Lindahl",
+    "owner.email": "greta.l@example.test",
+    "owner.phone": "612-555-0111",
+    "owner.zip": "55408",
+    "pet.name": "Fennel",
+    "pet.species": "Cat",
+    "pet.breed": "Maine Coon",
+    "pet.mixed_breed": false,
+    "pet.weight": 16,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2020-07-07",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$10,000",
+    "plan.reimbursement": "70%",
+    "plan.deductible": 250,
+    "plan.wellness": false,
+    "policy.start_date": "2026-12-08",
+    "pet.outdoor_minutes_per_day": 180
+  }
+}

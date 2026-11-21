@@ -1,0 +1,316 @@
+{
+  "wrenfield": {
+    "portal": "wrenfield",
+    "keys": {
+      "association.name": {
+        "type": "str"
+      },
+      "unit.street": {
+        "type": "str"
+      },
+      "unit.unit_number": {
+        "type": "str"
+      },
+      "unit.city": {
+        "type": "str"
+      },
+      "unit.state": {
+        "type": "enum",
+        "values": [
+          "OR",
+          "WA",
+          "ID",
+          "CA",
+          "NV"
+        ]
+      },
+      "unit.zip": {
+        "type": "str"
+      },
+      "building.year_built": {
+        "type": "int"
+      },
+      "unit.floor": {
+        "type": "int"
+      },
+      "unit.occupancy": {
+        "type": "enum",
+        "values": [
+          "Owner-occupied (primary residence)",
+          "Secondary or seasonal home",
+          "Rented to others"
+        ]
+      },
+      "unit.months_occupied_per_year": {
+        "type": "int"
+      },
+      "unit.tenant_lease_end": {
+        "type": "date"
+      },
+      "unit.wood_stove": {
+        "type": "bool"
+      },
+      "unit.square_feet": {
+        "type": "int"
+      },
+      "unit.finish_level": {
+        "type": "enum",
+        "values": [
+          "Builder grade",
+          "Upgraded",
+          "Custom luxury"
+        ]
+      },
+      "owner.first_name": {
+        "type": "str"
+      },
+      "owner.last_name": {
+        "type": "str"
+      },
+      "owner.date_of_birth": {
+        "type": "date"
+      },
+      "owner.email": {
+        "type": "str"
+      },
+      "owner.phone": {
+        "type": "phone"
+      },
+      "coverage.improvements": {
+        "type": "money"
+      },
+      "coverage.personal_property": {
+        "type": "money"
+      },
+      "coverage.loss_assessment": {
+        "type": "money"
+      },
+      "coverage.water_backup": {
+        "type": "enum",
+        "values": [
+          "Not included",
+          "$5,000",
+          "$10,000",
+          "$25,000"
+        ]
+      },
+      "coverage.deductible": {
+        "type": "money"
+      },
+      "policy.start_date": {
+        "type": "date"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "corvane": {
+    "portal": "corvane",
+    "keys": {
+      "policy.effective_date": {
+        "type": "date"
+      },
+      "rider.prior_insurance": {
+        "type": "enum",
+        "values": [
+          "None",
+          "Less than 6 months",
+          "6 months or more"
+        ]
+      },
+      "rider.first_name": {
+        "type": "str"
+      },
+      "rider.last_name": {
+        "type": "str"
+      },
+      "rider.date_of_birth": {
+        "type": "date"
+      },
+      "rider.phone": {
+        "type": "phone"
+      },
+      "rider.years_endorsed": {
+        "type": "int"
+      },
+      "rider.endorsement_date": {
+        "type": "date"
+      },
+      "rider.safety_course": {
+        "type": "bool"
+      },
+      "garaging.street": {
+        "type": "str"
+      },
+      "garaging.city": {
+        "type": "str"
+      },
+      "garaging.state": {
+        "type": "enum",
+        "values": [
+          "WA",
+          "OR",
+          "ID",
+          "MT",
+          "CA"
+        ]
+      },
+      "garaging.zip": {
+        "type": "str"
+      },
+      "motorcycles": {
+        "type": "list",
+        "item_keys": {
+          "vin": "str",
+          "year": "int",
+          "make": "str",
+          "model": "str",
+          "ownership": "enum",
+          "lienholder": "str"
+        },
+        "ownership_values": [
+          "Owned outright",
+          "Financed",
+          "Leased"
+        ]
+      },
+      "usage.mileage": {
+        "type": "int"
+      },
+      "usage.mileage_period": {
+        "type": "enum",
+        "values": [
+          "per year",
+          "per month"
+        ]
+      },
+      "coverage.liability_limits": {
+        "type": "enum",
+        "values": [
+          "25/50/25",
+          "50/100/50",
+          "100/300/100",
+          "250/500/100"
+        ]
+      },
+      "coverage.collision_deductible": {
+        "type": "money"
+      },
+      "coverage.comprehensive_deductible": {
+        "type": "money"
+      },
+      "coverage.cpe_amount": {
+        "type": "money"
+      },
+      "coverage.cpe_items": {
+        "type": "list",
+        "item_keys": {
+          "item": "str",
+          "value": "money"
+        }
+      },
+      "coverage.roadside": {
+        "type": "enum",
+        "values": [
+          "Not included",
+          "Roadside assistance",
+          "Roadside and trip interruption"
+        ]
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  },
+  "thistlebrook": {
+    "portal": "thistlebrook",
+    "keys": {
+      "owner.first_name": {
+        "type": "str"
+      },
+      "owner.last_name": {
+        "type": "str"
+      },
+      "owner.email": {
+        "type": "str"
+      },
+      "owner.phone": {
+        "type": "phone"
+      },
+      "owner.zip": {
+        "type": "str"
+      },
+      "pet.name": {
+        "type": "str"
+      },
+      "pet.species": {
+        "type": "enum",
+        "values": [
+          "Dog",
+          "Cat"
+        ]
+      },
+      "pet.breed": {
+        "type": "str"
+      },
+      "pet.mixed_breed": {
+        "type": "bool"
+      },
+      "pet.weight": {
+        "type": "int"
+      },
+      "pet.weight_unit": {
+        "type": "enum",
+        "values": [
+          "lb",
+          "kg"
+        ]
+      },
+      "pet.birth_date": {
+        "type": "date"
+      },
+      "pet.spayed_neutered": {
+        "type": "bool"
+      },
+      "pet.spay_neuter_date": {
+        "type": "date"
+      },
+      "pet.outdoor_minutes_per_day": {
+        "type": "int"
+      },
+      "pet.recent_illness": {
+        "type": "bool"
+      },
+      "pet.condition_notes": {
+        "type": "str"
+      },
+      "plan.annual_limit": {
+        "type": "enum",
+        "values": [
+          "$5,000",
+          "$10,000",
+          "$20,000",
+          "Unlimited"
+        ]
+      },
+      "plan.reimbursement": {
+        "type": "enum",
+        "values": [
+          "70%",
+          "80%",
+          "90%"
+        ]
+      },
+      "plan.deductible": {
+        "type": "money"
+      },
+      "plan.wellness": {
+        "type": "bool"
+      },
+      "policy.start_date": {
+        "type": "date"
+      }
+    },
+    "dates": "ISO 8601 (YYYY-MM-DD)",
+    "absent_key": "the fact is unknown; the intake never sends null or empty values"
+  }
+}

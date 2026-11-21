@@ -1,0 +1,32 @@
+{
+  "case_id": "cv-s03",
+  "facts": {
+    "policy.effective_date": "2026-12-15",
+    "rider.prior_insurance": "None",
+    "rider.first_name": "Talia",
+    "rider.last_name": "Ruusk",
+    "rider.date_of_birth": "1999-05-30",
+    "rider.phone": "208-555-0164",
+    "rider.years_endorsed": 2,
+    "garaging.street": "1520 N Cottler Ave",
+    "garaging.city": "Boise",
+    "garaging.state": "ID",
+    "garaging.zip": "83702",
+    "motorcycles": [
+      {
+        "vin": "VH4MR3109RE071266",
+        "year": 2024,
+        "make": "Vahlberg",
+        "model": "Marrow 310",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 3000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "25/50/25",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 0,
+    "coverage.roadside": "Not included"
+  }
+}

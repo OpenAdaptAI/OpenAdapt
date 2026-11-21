@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s10",
+  "facts": {
+    "association.name": "Copperline Station Lofts",
+    "unit.street": "410 S Copperline St",
+    "unit.unit_number": "6A",
+    "unit.city": "Boise",
+    "unit.state": "ID",
+    "unit.zip": "83702",
+    "building.year_built": 2010,
+    "unit.floor": 6,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Selin",
+    "owner.last_name": "Marchetti",
+    "owner.date_of_birth": "1989-08-25",
+    "owner.email": "selin.m@example.test",
+    "owner.phone": "208-555-0181",
+    "coverage.improvements": 52000,
+    "coverage.personal_property": 38000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-08"
+  }
+}

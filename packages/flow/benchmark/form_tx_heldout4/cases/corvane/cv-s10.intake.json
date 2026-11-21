@@ -1,0 +1,33 @@
+{
+  "case_id": "cv-s10",
+  "facts": {
+    "policy.effective_date": "2026-12-03",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Benedikt",
+    "rider.last_name": "Saarinen",
+    "rider.date_of_birth": "1983-02-14",
+    "rider.phone": "253-555-0172",
+    "rider.years_endorsed": 8,
+    "rider.safety_course": true,
+    "garaging.street": "6120 Rowan Crest Ln",
+    "garaging.city": "Fircrest",
+    "garaging.state": "WA",
+    "garaging.zip": "98466",
+    "motorcycles": [
+      {
+        "vin": "KS9CL5003RA884210",
+        "year": 2024,
+        "make": "Kessin",
+        "model": "Coil 500",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 4500,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "50/100/50",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 0,
+    "coverage.roadside": "Not included"
+  }
+}

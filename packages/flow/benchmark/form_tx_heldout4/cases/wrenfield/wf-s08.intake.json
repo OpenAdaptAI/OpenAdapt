@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s08",
+  "facts": {
+    "association.name": "Harrowgate Towers Condominium",
+    "unit.street": "700 Harrowgate Blvd",
+    "unit.unit_number": "1804",
+    "unit.city": "Vancouver",
+    "unit.state": "WA",
+    "unit.zip": "98660",
+    "building.year_built": 2019,
+    "unit.floor": 18,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": false,
+    "owner.first_name": "Noor",
+    "owner.last_name": "Haddad-Pryce",
+    "owner.date_of_birth": "1984-01-22",
+    "owner.email": "noor.hp@example.test",
+    "owner.phone": "360-555-0126",
+    "coverage.improvements": 70000,
+    "coverage.personal_property": 60000,
+    "coverage.loss_assessment": 50000,
+    "coverage.water_backup": "$10,000",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2026-12-18"
+  }
+}

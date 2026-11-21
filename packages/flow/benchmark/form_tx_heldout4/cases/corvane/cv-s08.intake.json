@@ -1,0 +1,34 @@
+{
+  "case_id": "cv-s08",
+  "facts": {
+    "policy.effective_date": "2026-12-08",
+    "rider.prior_insurance": "Less than 6 months",
+    "rider.first_name": "Priyanka",
+    "rider.last_name": "Wolde",
+    "rider.date_of_birth": "1990-12-19",
+    "rider.phone": "206-555-0193",
+    "rider.years_endorsed": 5,
+    "rider.safety_course": true,
+    "garaging.street": "2205 Brenner Ave N",
+    "garaging.city": "Seattle",
+    "garaging.state": "WA",
+    "garaging.zip": "98103",
+    "motorcycles": [
+      {
+        "vin": "SM2RV1205MC388460",
+        "year": 2021,
+        "make": "Strand Motorworks",
+        "model": "Raven 1200",
+        "ownership": "Leased",
+        "lienholder": "Pinecrest Motor Leasing"
+      }
+    ],
+    "usage.mileage": 6500,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "250/500/100",
+    "coverage.collision_deductible": 250,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 1800,
+    "coverage.roadside": "Roadside and trip interruption"
+  }
+}

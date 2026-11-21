@@ -1,0 +1,25 @@
+{
+  "case_id": "tb-s03",
+  "facts": {
+    "owner.first_name": "Farid",
+    "owner.last_name": "Oyelaran",
+    "owner.email": "farid.o@example.test",
+    "owner.phone": "614-555-0137",
+    "owner.zip": "43215",
+    "pet.name": "Pepper",
+    "pet.species": "Cat",
+    "pet.breed": "Domestic Longhair",
+    "pet.mixed_breed": false,
+    "pet.weight": 9,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2023-03-22",
+    "pet.spayed_neutered": true,
+    "pet.recent_illness": false,
+    "plan.annual_limit": "$10,000",
+    "plan.reimbursement": "80%",
+    "plan.deductible": 100,
+    "plan.wellness": true,
+    "policy.start_date": "2026-12-15",
+    "pet.outdoor_minutes_per_day": 20
+  }
+}

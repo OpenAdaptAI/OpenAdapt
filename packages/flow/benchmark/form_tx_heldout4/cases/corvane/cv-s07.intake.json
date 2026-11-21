@@ -1,0 +1,50 @@
+{
+  "case_id": "cv-s07",
+  "facts": {
+    "policy.effective_date": "2027-01-10",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Joaquin",
+    "rider.last_name": "Esterly",
+    "rider.date_of_birth": "1975-04-04",
+    "rider.phone": "503-555-0186",
+    "rider.years_endorsed": 20,
+    "rider.safety_course": false,
+    "garaging.street": "4120 NE Saltry Dr",
+    "garaging.city": "Portland",
+    "garaging.state": "OR",
+    "garaging.zip": "97212",
+    "motorcycles": [
+      {
+        "vin": "AR7BN8806JB905531",
+        "year": 2018,
+        "make": "Ardent Cycle Co.",
+        "model": "Benton 880",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 5500,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "100/300/100",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.roadside": "Roadside assistance",
+    "coverage.cpe_items": [
+      {
+        "item": "Touring fairing",
+        "value": 2200
+      },
+      {
+        "item": "Gel seat",
+        "value": 650
+      },
+      {
+        "item": "LED lighting kit",
+        "value": 480
+      },
+      {
+        "item": "Luggage rack",
+        "value": 390
+      }
+    ]
+  }
+}

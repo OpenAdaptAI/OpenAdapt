@@ -1,0 +1,25 @@
+{
+  "case_id": "tb-s01",
+  "facts": {
+    "owner.first_name": "Rowan",
+    "owner.last_name": "Pettigrew",
+    "owner.email": "rowan.p@example.test",
+    "owner.phone": "303-555-0119",
+    "owner.zip": "80211",
+    "pet.name": "Mochi",
+    "pet.species": "Dog",
+    "pet.breed": "French Bulldog",
+    "pet.mixed_breed": false,
+    "pet.weight": 24,
+    "pet.weight_unit": "lb",
+    "pet.birth_date": "2022-06-18",
+    "pet.spayed_neutered": false,
+    "pet.recent_illness": true,
+    "plan.annual_limit": "$5,000",
+    "plan.reimbursement": "90%",
+    "plan.deductible": 500,
+    "plan.wellness": true,
+    "policy.start_date": "2026-12-05",
+    "pet.condition_notes": "Ear infection, treated in March 2026"
+  }
+}

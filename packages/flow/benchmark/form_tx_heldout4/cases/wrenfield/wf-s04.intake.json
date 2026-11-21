@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s04",
+  "facts": {
+    "association.name": "Millrace Commons Owners Association",
+    "unit.street": "980 Millrace Way",
+    "unit.unit_number": "B5",
+    "unit.city": "Eugene",
+    "unit.state": "OR",
+    "unit.zip": "97401",
+    "building.year_built": 1998,
+    "unit.floor": 1,
+    "unit.wood_stove": false,
+    "owner.first_name": "Lucia",
+    "owner.last_name": "Ferreira-Hale",
+    "owner.date_of_birth": "1968-06-19",
+    "owner.email": "lucia.fh@example.test",
+    "owner.phone": "541-555-0133",
+    "coverage.improvements": 30000,
+    "coverage.personal_property": 15000,
+    "coverage.loss_assessment": 10000,
+    "coverage.water_backup": "Not included",
+    "coverage.deductible": 2500,
+    "policy.start_date": "2026-12-20",
+    "unit.tenant_lease_end": "2027-06-30"
+  }
+}

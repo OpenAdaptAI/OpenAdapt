@@ -1,0 +1,33 @@
+{
+  "case_id": "cv-dev",
+  "facts": {
+    "policy.effective_date": "2026-12-01",
+    "rider.prior_insurance": "6 months or more",
+    "rider.first_name": "Rafe",
+    "rider.last_name": "Duquesne",
+    "rider.date_of_birth": "1985-03-11",
+    "rider.phone": "206-555-0114",
+    "rider.years_endorsed": 9,
+    "rider.safety_course": true,
+    "garaging.street": "4417 Alder Crest Ave",
+    "garaging.city": "Seattle",
+    "garaging.state": "WA",
+    "garaging.zip": "98118",
+    "motorcycles": [
+      {
+        "vin": "AR7TL1272MB300982",
+        "year": 2021,
+        "make": "Ardent Cycle Co.",
+        "model": "Tallis 1250",
+        "ownership": "Owned outright"
+      }
+    ],
+    "usage.mileage": 5000,
+    "usage.mileage_period": "per year",
+    "coverage.liability_limits": "100/300/100",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 250,
+    "coverage.cpe_amount": 1500,
+    "coverage.roadside": "Roadside assistance"
+  }
+}

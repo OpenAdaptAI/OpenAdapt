@@ -1,0 +1,28 @@
+{
+  "case_id": "wf-s05",
+  "facts": {
+    "association.name": "Juniper Ridge Terrace Condominiums",
+    "unit.street": "61 NE Juniper Ridge Ln",
+    "unit.unit_number": "9",
+    "unit.city": "Bend",
+    "unit.state": "OR",
+    "unit.zip": "97701",
+    "building.year_built": 2015,
+    "unit.floor": 2,
+    "unit.occupancy": "Secondary or seasonal home",
+    "unit.wood_stove": true,
+    "owner.first_name": "Hollis",
+    "owner.last_name": "Brandvold",
+    "owner.date_of_birth": "1958-12-02",
+    "owner.email": "hollis.b@example.test",
+    "owner.phone": "541-555-0171",
+    "coverage.personal_property": 20000,
+    "coverage.loss_assessment": 1000,
+    "coverage.water_backup": "$5,000",
+    "coverage.deductible": 1000,
+    "policy.start_date": "2027-02-01",
+    "unit.months_occupied_per_year": 4,
+    "unit.square_feet": 1100,
+    "unit.finish_level": "Builder grade"
+  }
+}

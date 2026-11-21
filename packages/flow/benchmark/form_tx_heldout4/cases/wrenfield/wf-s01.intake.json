@@ -1,0 +1,26 @@
+{
+  "case_id": "wf-s01",
+  "facts": {
+    "association.name": "Fennimore Court Condominiums",
+    "unit.street": "455 Fennimore Ct",
+    "unit.unit_number": "12",
+    "unit.city": "Salem",
+    "unit.state": "OR",
+    "unit.zip": "97301",
+    "building.year_built": 1994,
+    "unit.floor": 2,
+    "unit.occupancy": "Owner-occupied (primary residence)",
+    "unit.wood_stove": true,
+    "owner.first_name": "Tobias",
+    "owner.last_name": "Venn",
+    "owner.date_of_birth": "1979-09-03",
+    "owner.email": "t.venn@example.test",
+    "owner.phone": "971-555-0188",
+    "coverage.improvements": 38000,
+    "coverage.personal_property": 30000,
+    "coverage.loss_assessment": 1000,
+    "coverage.water_backup": "$5,000",
+    "coverage.deductible": 500,
+    "policy.start_date": "2026-12-01"
+  }
+}
