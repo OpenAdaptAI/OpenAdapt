@@ -1,0 +1,30 @@
+{
+  "case_id": "cv-s04",
+  "facts": {
+    "first_name": "Philippa",
+    "last_name": "Ourednik",
+    "date_of_birth": "1979-02-11",
+    "email": "pippa.ourednik@example.test",
+    "phone": "828-555-0108",
+    "marital_status": "Married",
+    "spouse_name": "Anselm Ourednik",
+    "property_street": "17 Sourwood Hollow",
+    "property_city": "Weaverville",
+    "property_state": "NC",
+    "property_zip": "28787",
+    "year_built": 2006,
+    "square_feet": 2410,
+    "construction": "Frame",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2021,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": true,
+    "lender_name": "Ashgrove Mortgage Company",
+    "lender_clause_address": "PO Box 4477, Asheville NC 28801",
+    "loan_number": "AMC-339-10284",
+    "dwelling_limit": 482000,
+    "personal_liability": 500000,
+    "deductible": 2500,
+    "effective_date": "2027-02-14"
+  }
+}

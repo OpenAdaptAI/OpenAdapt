@@ -1,0 +1,29 @@
+{
+  "case_id": "cv-s05",
+  "facts": {
+    "first_name": "Teodora",
+    "last_name": "Kallistrom",
+    "date_of_birth": "1990-10-05",
+    "email": "teodora.k@example.test",
+    "phone": "253-555-0186",
+    "marital_status": "Single",
+    "property_street": "3302 N Verrall St",
+    "property_city": "Tacoma",
+    "property_state": "WA",
+    "property_zip": "98407",
+    "year_built": 1931,
+    "square_feet": 1490,
+    "construction": "Frame",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2017,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": false,
+    "lender_name": "Brightwater Federal Credit Union",
+    "lender_clause_address": "PO Box 2210, Tacoma WA 98401",
+    "loan_number": "BFCU-4471902",
+    "dwelling_limit": 296000,
+    "personal_liability": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-03-01"
+  }
+}

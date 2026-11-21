@@ -1,0 +1,27 @@
+{
+  "case_id": "pb-s04",
+  "facts": {
+    "first_name": "Leocadia",
+    "last_name": "Marchetti-Oyelaran",
+    "date_of_birth": "1988-03-12",
+    "email": "leocadia.mo@example.test",
+    "garaging_zip": "33914",
+    "boat_year": 2021,
+    "boat_make": "Kestrel Bay Boatworks",
+    "boat_model": "Gulfline 28 Dual Console",
+    "length_ft": 28,
+    "engine_type": "Outboard",
+    "engine_count": "Twin",
+    "total_horsepower": 400,
+    "agreed_hull_value": 142000,
+    "storage": "Dry stack or rack storage",
+    "navigation_area": "Coastal waters up to 75 miles offshore",
+    "safety_course": true,
+    "losses_3yr": 0,
+    "financing": "Financed",
+    "lienholder": "Caloosa Coast Bank",
+    "liability_limit": 500000,
+    "deductible": 2500,
+    "effective_date": "2027-03-20"
+  }
+}

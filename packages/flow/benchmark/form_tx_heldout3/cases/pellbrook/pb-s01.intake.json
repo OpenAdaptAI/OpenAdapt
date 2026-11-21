@@ -1,0 +1,27 @@
+{
+  "case_id": "pb-s01",
+  "facts": {
+    "first_name": "Odalys",
+    "last_name": "Fenwright",
+    "date_of_birth": "1983-01-29",
+    "email": "odalys.fenwright@example.test",
+    "garaging_zip": "29464",
+    "boat_year": 2022,
+    "boat_make": "Osprey Point",
+    "boat_model": "Marsh Hen 21 CC",
+    "length_ft": 21,
+    "engine_type": "Outboard",
+    "engine_count": "Single",
+    "total_horsepower": 150,
+    "agreed_hull_value": 48200,
+    "storage": "Dry stack or rack storage",
+    "navigation_area": "Coastal waters within 25 miles of shore",
+    "safety_course": true,
+    "losses_3yr": 0,
+    "financing": "Financed",
+    "lienholder": "Saltmeadow Marine Finance",
+    "liability_limit": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-04-15"
+  }
+}

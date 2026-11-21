@@ -1,0 +1,31 @@
+{
+  "case_id": "cv-s08",
+  "facts": {
+    "first_name": "Yusra",
+    "last_name": "Delacroix-Mbeki",
+    "date_of_birth": "1984-11-08",
+    "email": "yusra.dm@example.test",
+    "phone": "937-555-0123",
+    "marital_status": "Single",
+    "property_street": "5120 Fernhollow Pl",
+    "property_city": "Centerville",
+    "property_state": "OH",
+    "property_zip": "45459",
+    "year_built": 2002,
+    "square_feet": 2050,
+    "construction": "Masonry veneer",
+    "roof_material": "Asphalt shingle",
+    "roof_year": 2022,
+    "occupancy": "Owner-occupied primary residence",
+    "dogs_on_premises": true,
+    "lender_name": "Quarrystone Home Lending",
+    "lender_clause_address": "PO Box 81130, Dayton OH 45401",
+    "loan_number": "QHL-6612034",
+    "dwelling_limit": 418000,
+    "personal_liability": 300000,
+    "deductible": 1000,
+    "effective_date": "2027-02-28",
+    "dog_breeds": "Beagle",
+    "dog_bite_history": "No"
+  }
+}
