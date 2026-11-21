@@ -79,6 +79,9 @@ def _radio(key: str, name: str) -> FieldBindingSpec:
         anchor=_name(name),
         control_kind=ControlKind.RADIO_GROUP,
         codec=BOOL,
+        # Radios with no label element give options with an empty label; the
+        # default placeholder list ("") would drop every option.
+        placeholder_values=("-- Select --",),
     )
 
 
@@ -285,7 +288,7 @@ COBALT_PACK = FormPack(
         _label("vehicle.make", "Make", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.model", "Model", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.annual_miles", "Estimated annual mileage", codec=INT),
-        _label("vehicle.commute_miles_one_way", "One-way commute \(miles\)", codec=INT),
+        _label("vehicle.commute_miles_one_way", r"One-way commute \(miles\)", codec=INT),
         _label("garaging.zip", "Garaging ZIP code"),
         _label("garaging.city", "Garaging city", ControlKind.PORTAL_COMBOBOX, EXACT),
         _label("vehicle.lienholder", "Lienholder or lessor name"),
