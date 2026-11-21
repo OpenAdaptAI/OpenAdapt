@@ -62,6 +62,7 @@ import { rekorLiveMatch, rekorSearchUrl } from '../lib/rekorLive.mjs'
 import { frameOfStep, litAt, nextHighlight, replayFrames } from '../lib/sealReplay.mjs'
 import { authorizedLine as authorizedWords, checkGithubIdentity } from '../lib/runAuthorization.mjs'
 import { runDate } from '../lib/sealDates.mjs'
+import { safeHref } from '../lib/safeFileHref.mjs'
 import { sealOutcomeLine } from '../lib/sealOutcome.mjs'
 import SealArt from './SealArt.jsx'
 import HashLine from './HashLine.jsx'
@@ -93,7 +94,6 @@ const reasonText = (reason) =>
           : 'The check failed.')
 
 // A host-given file link: a relative path or an https URL, never a javascript: URI.
-const safeHref = (href) => (typeof href === 'string' && /^(?:https:\/\/|\/|\.{0,2}\/|[\w.-]+$)/.test(href) ? href : null)
 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`
 // Required effect predicates can check record cardinality or individual fields.
 // Their count describes checks, never a count of fields or separate reads.
@@ -305,6 +305,7 @@ export default function SealPage({ seal: page, host = {} }) {
     const [witness, setWitness] = useState(null)
     const [live, setLive] = useState(null)
     const [change, setChange] = useState(null)
+    const [anotherOpen, setAnotherOpen] = useState(false)
     const [selected, setSelected] = useState(null)
     const [hovered, setHovered] = useState(null)
     const [focusIndex, setFocusIndex] = useState(0)
@@ -889,10 +890,12 @@ export default function SealPage({ seal: page, host = {} }) {
                             </p>
                             <p className={s.signer} data-signer={signer.state}>
                                 <span>{signer.text}</span>
-                                {legacy ? <span className={s.older}>older format · {seal.schema.replace(/^openadapt\./, '')}</span> : null}
                             </p>
                             {tampered && verdict === 'fails' ? (
                                 <div className={s.changed} data-changed="">
+                                    <p className={s.changeHead}>
+                                        <b>This changed copy fails:</b> {change.field === 'model_calls' ? 'model calls' : 'outcome'} {change.from} → {change.to}. The receipt no longer matches.
+                                    </p>
                                     <p className={s.change}>
                                         Changed in a copy of the {change.target === 'seal' ? 'receipt' : 'report'}: <code>{change.field}</code>{' '}
                                         <del>{change.from}</del> → <ins>{change.to}</ins>.
@@ -902,9 +905,11 @@ export default function SealPage({ seal: page, host = {} }) {
                                         <button type="button" className={s.primary} onClick={() => verify(null)} disabled={busy}>
                                             Restore
                                         </button>
+                                        <button type="button" className={s.ghost} aria-expanded={anotherOpen} aria-controls="receipt-changes" onClick={() => setAnotherOpen((o) => !o)}>
+                                            Try another change
+                                        </button>
                                     </div>
-                                    <div className={s.another} role="group" aria-label="Try another change">
-                                        <span className={s.anotherHead}>Try another change</span>
+                                    <div id="receipt-changes" className={s.another} role="group" aria-label="Other changes" hidden={!anotherOpen}>
                                         {tamper
                                             .filter((t) => t.id !== change.id)
                                             .map((t) => (
@@ -927,7 +932,15 @@ export default function SealPage({ seal: page, host = {} }) {
                                     Verify
                                 </button>
                                 {tampered && verdict === 'fails' ? null : (
-                                    <button type="button" className={s.ghost} onClick={() => verify(tamper[0])} disabled={busy || !tamper.length}>
+                                    <button
+                                        type="button"
+                                        className={s.ghost}
+                                        onClick={() => {
+                                            setAnotherOpen(false)
+                                            verify(tamper[0])
+                                        }}
+                                        disabled={busy || !tamper.length}
+                                    >
                                         Try changing it
                                     </button>
                                 )}
@@ -1119,6 +1132,11 @@ export default function SealPage({ seal: page, host = {} }) {
                         </section>
 
                         <section id="seal-panel-raw" role="tabpanel" aria-labelledby="seal-tab-raw" hidden={viewTab !== 'raw'} className={s.panel}>
+                            {legacy ? (
+                                <p className={s.older} data-format="">
+                                    Format: {seal.schema.replace(/^openadapt\./, '')}, still verifies
+                                </p>
+                            ) : null}
                             <RecordTable seal={seal} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />
                             {commands ? (
                                 <>
