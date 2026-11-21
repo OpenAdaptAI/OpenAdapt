@@ -354,6 +354,8 @@ class WindowsBackend:
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], dict[str, Optional[str]]]
         ] = None
+        self._keyboard_lease_client: Any = None
+        self._keyboard_lease_enabled: Optional[bool] = None
         self._guarded_keyboard: Optional[
             tuple[tuple[int, int], dict[str, Optional[str]]]
         ] = None
@@ -1118,6 +1120,22 @@ class WindowsBackend:
             return None
         return dict(window)
 
+    def focus_identity(self) -> Optional[dict[str, Any]]:
+        """Passive native focused-target evidence, without reading its value.
+
+        This intentionally uses a native namespace instead of browser DOM id
+        counts, so the compiler cannot turn it into a browser focus condition.
+        """
+        from openadapt_flow.native_focus import from_native_candidate
+
+        response = self._post_typed_read("/uia/focused-target", {})
+        if not response.available or response.payload is None:
+            return None
+        target = from_native_candidate(response.payload.get("target"))
+        return (
+            None if target is None else {"native_focus": target.model_dump(mode="json")}
+        )
+
     def element_identity_at(self, x: int, y: int) -> Optional[dict]:
         """Return the UIA identity of the element under (x, y), or None.
 
@@ -1572,12 +1590,42 @@ class WindowsBackend:
     def cancel_guarded_coordinate(self) -> None:
         self._guarded_coordinate = None
 
+    def _focused_keyboard_leases(self) -> Any:
+        if self._keyboard_lease_enabled is None:
+            self._keyboard_lease_enabled = (
+                "native_keyboard_lease_v1" in self.agent_capabilities()
+            )
+        if not self._keyboard_lease_enabled:
+            return None
+        if self._keyboard_lease_client is None:
+            from openadapt_flow.backends.windows_keyboard_lease import (
+                NativeKeyboardLeaseClient,
+            )
+
+            def post(path: str, data: dict[str, Any]) -> Any:
+                return self._session.post(
+                    f"{self.server_url}{path}", json=data, **self._request_kwargs()
+                )
+
+            def before_input() -> None:
+                if self._qualification_input_guard is not None:
+                    self._qualification_input_guard()
+
+            self._keyboard_lease_client = NativeKeyboardLeaseClient(post, before_input)
+        return self._keyboard_lease_client
+
     def guarded_keyboard_frame(self) -> bytes:
-        return self.screenshot()
+        leases = self._focused_keyboard_leases()
+        return leases.frame() if leases is not None else self.screenshot()
 
     def arm_guarded_keyboard(self, x: int, y: int) -> None:
         """Bind the resolved focused element and live context before identity."""
 
+        leases = self._focused_keyboard_leases()
+        if leases is not None:
+            self._guarded_keyboard = None
+            leases.arm(int(x), int(y))
+            return
         self.cancel_guarded_keyboard()
         point = (int(x), int(y))
         width, height = self.viewport
@@ -1589,6 +1637,8 @@ class WindowsBackend:
 
     def cancel_guarded_keyboard(self) -> None:
         self._guarded_keyboard = None
+        if self._keyboard_lease_client is not None:
+            self._keyboard_lease_client.cancel()
 
     @staticmethod
     def _guarded_receipt(
@@ -1706,12 +1756,56 @@ class WindowsBackend:
         )
         return self._guarded_receipt(response, "physical_drag")
 
+    def editable_value_observation(
+        self, x: int | None = None, y: int | None = None
+    ) -> dict[str, Any] | None:
+        """Exact non-password editable value from the bound actual native focus.
+
+        Empty is observed. Missing/ambiguous/unreadable/changed values are None;
+        this never substitutes an accessible Name or a truncated prefix.
+        """
+        if (x is None) != (y is None):
+            return None
+        if "native_editable_value_v2" not in self.agent_capabilities():
+            return None
+        leases = self._focused_keyboard_leases()
+        if leases is None:
+            return None
+        return leases.editable_value_observation(
+            (int(x), int(y)) if x is not None and y is not None else None
+        )
+
+    def text_value_at(self, x: int, y: int) -> Optional[str]:
+        observed = self.editable_value_observation(x, y)
+        return observed["value"] if observed is not None else None
+
+    def focused_text_value(self) -> Optional[str]:
+        observed = self.editable_value_observation()
+        return observed["value"] if observed is not None else None
+
+    def native_keyboard_lease_available(self) -> bool:
+        return self._focused_keyboard_leases() is not None
+
+    def guarded_keyboard_target_fingerprint(self) -> Optional[str]:
+        leases = self._focused_keyboard_leases()
+        return leases.target_fingerprint() if leases is not None else None
+
     def type_text_guarded(
         self,
         text: str,
         *,
         expected_frame_sha256: str,
     ) -> ActionDeliveryReceipt:
+        leases = self._focused_keyboard_leases()
+        if leases is not None:
+            return leases.deliver(
+                {
+                    "action": "type_text",
+                    "text": text,
+                    "interval_s": self._type_interval_s,
+                },
+                expected_frame_sha256,
+            )
         pending = self._guarded_keyboard
         self._guarded_keyboard = None
         if pending is None:
@@ -1740,6 +1834,11 @@ class WindowsBackend:
         *,
         expected_frame_sha256: str,
     ) -> ActionDeliveryReceipt:
+        leases = self._focused_keyboard_leases()
+        if leases is not None:
+            return leases.deliver(
+                {"action": "press", "keys": normalize_chord(key)}, expected_frame_sha256
+            )
         pending = self._guarded_keyboard
         self._guarded_keyboard = None
         if pending is None:
