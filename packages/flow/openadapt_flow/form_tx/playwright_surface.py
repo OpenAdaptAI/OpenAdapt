@@ -1823,9 +1823,11 @@ class PlaywrightFormSurface:
             ) from exc
 
         try:
+            # A child window is its own page: the parent's frame routing (which
+            # names the frame that holds the main form) does not apply to it.
             child_surface = PlaywrightFormSurface(
                 popup_page,
-                self._ui_profile,
+                self._ui_profile.model_copy(update={"frame_path_patterns": ()}),
                 base_origin=self._base_origin,
                 keepalive_mutation_guard=self._keepalive_mutation_guard,
                 ignored_mutation_paths=self._ignored_mutation_paths,
