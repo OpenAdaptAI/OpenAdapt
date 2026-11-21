@@ -44,9 +44,23 @@ def main():
                 page.goto(base + lg["path"]); sign_in(page, lg["username"], lg["password"])
             page.goto(base + spec.entry_path); page.wait_for_load_state(); page.wait_for_timeout(500)
             dump(page, "start")
+            main = page
             for i, st in enumerate(steps):
                 if st[0] == "snap":
                     dump(page, f"step{i}"); continue
+                if st[0] == "main":
+                    page = main; continue
+                if st[0] == "text":
+                    for f in page.frames:
+                        try: print(f"## TEXT {f.url}\n" + f.locator("body").inner_text()[:3000])
+                        except Exception as e: print("text err", e)
+                    continue
+                if st[0] == "popup_click":
+                    fr = next(f for f in page.frames if st[1] in f.url)
+                    with page.context.expect_page() as info:
+                        fr.locator(st[2]).first.click()
+                    page = info.value; page.wait_for_load_state(); page.wait_for_timeout(500)
+                    continue
                 fr = next(f for f in page.frames if st[1] in f.url)
                 loc = fr.locator(st[2]).first
                 if st[0] == "fill": loc.fill(str(st[3]))
