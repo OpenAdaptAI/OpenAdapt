@@ -641,9 +641,15 @@ def execute_job(
         _CURRENT.job_id = None
 
 
-def _refused(job: ByocJob, code: str, detail: str, **extra: Any) -> ExecutionResult:
+def _refused(code: str, detail: str, **extra: Any) -> ExecutionResult:
     return ExecutionResult(
-        "failed", {}, None, job.report_ref(), detail, error_code=code, **extra
+        status="failed",
+        metrics={},
+        halt=None,
+        report_ref=None,
+        error=detail,
+        error_code=code,
+        **extra,
     )
 
 
@@ -662,7 +668,7 @@ def _execute_job(
         job.ensure_governed(require_run_token=require_run_token)
         _assert_managed_authority_is_pinned(job, settings)
     except ByocGovernanceError as exc:
-        return _refused(job, "governance_refused", str(exc))
+        return _refused("governance_refused", str(exc))
     admission = job.program_admission()
     if admission is not None and (
         admission["public_key_hex"] not in settings.pinned_admission_keys()
@@ -670,27 +676,23 @@ def _execute_job(
         # The control plane can name an admission key, but only this machine's
         # own configuration decides which admitters it trusts.
         return _refused(
-            job,
             "admission_key_not_pinned",
             "the program's admission key is not pinned in trusted_admission_keys",
         )
     if admission is not None and admission.get("admission_mode") == "admitter_key":
         if not settings.admission_key_dir:
             return _refused(
-                job,
                 "admission_registry_required",
                 "admitter jobs require current local public trust",
             )
     if admission is None and not settings.qualification_authority_file:
         return _refused(
-            job,
             "qualification_authority_unavailable",
             "qualified jobs need independent local context",
         )
     if not _grounding_env_available(job):
         gm = job.grounding_model
         return _refused(
-            job,
             "grounding_unavailable",
             f"org requires grounding model {gm.model or gm.provider!r} but its "
             f"api key env {gm.api_key_env!r} is not set on this connector",
@@ -700,7 +702,7 @@ def _execute_job(
             job.secrets_ref or settings.default_secrets_ref
         )
     except SecretStoreError as exc:
-        return _refused(job, "secrets_unavailable", str(exc))
+        return _refused("secrets_unavailable", str(exc))
     if on_secrets is not None and secret_env:
         on_secrets(list(secret_env.values()))
     signers_json: Optional[str] = None
@@ -711,7 +713,7 @@ def _execute_job(
             )
         except OSError:
             return _refused(
-                job, "signers_unavailable", "qualification signer registry unreadable"
+                "signers_unavailable", "qualification signer registry unreadable"
             )
 
     with tempfile.TemporaryDirectory(prefix="oa-byoc-") as tmp:
@@ -739,7 +741,6 @@ def _execute_job(
             bundle_dir = bundle_scratch
         except Exception as exc:  # storage failure: fail closed
             return _refused(
-                job,
                 "bundle_fetch_failed",
                 f"customer-storage bundle fetch failed: {type(exc).__name__}",
             )
@@ -754,7 +755,6 @@ def _execute_job(
                 or not readback_sha256
             ):
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "the archive is not an admitted program with a read-back check",
                     verified_bundle_sha256=observed_sha256,
@@ -764,7 +764,6 @@ def _execute_job(
                 != admission["admission_sha256"]
             ):
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "the archive's admission is not the dispatched one",
                     verified_bundle_sha256=observed_sha256,
@@ -784,7 +783,6 @@ def _execute_job(
                 _verify_program_reference(job, bundle_dir, key_dir)
             except Exception:
                 return _refused(
-                    job,
                     "program_admission_refused",
                     "signed program or current local principal refused",
                     verified_bundle_sha256=observed_sha256,
@@ -797,7 +795,6 @@ def _execute_job(
                 )
             except Exception:
                 return _refused(
-                    job,
                     "qualification_authority_refused",
                     "local qualification context refused",
                     verified_bundle_sha256=observed_sha256,
@@ -878,14 +875,12 @@ def _execute_job(
             )
             if job_cancelled(job.lease_job_id):
                 return _refused(
-                    job,
                     "cancelled_by_control_plane",
                     "cancelled before the governed child started",
                     verified_bundle_sha256=observed_sha256,
                 )
         except Exception as exc:
             return _refused(
-                job,
                 "child_invocation_failed",
                 f"governed child invocation failed: {type(exc).__name__}",
                 verified_bundle_sha256=observed_sha256,
@@ -895,7 +890,6 @@ def _execute_job(
             outcome = runner(argv, run_dir, child_env)
         except _ChildNotStarted as exc:
             return _refused(
-                job,
                 "child_invocation_failed",
                 f"governed child did not start: {exc}",
                 verified_bundle_sha256=observed_sha256,

@@ -883,11 +883,15 @@ def test_local_diagnostic_keeps_child_output_and_refusal_off_the_wire(
         "halt" if phase in {"no_report", "missing_target"} else "failed"
     )
     sidecar = report.with_name(report.name + ".connector-diagnostics")
-    if phase == "no_report":
+    callback = cp.callbacks[0]["body"]
+    if phase in {"before_child", "no_report"}:
         assert not report.exists()
-        callback = cp.callbacks[0]["body"]
         assert callback["report_path"] is None
         assert "report_sha256" not in callback["metrics"]
+    else:
+        assert callback["report_path"] == payload["storage"]["report_ref"]
+        stored_digest = hashlib.sha256(report.read_bytes()).hexdigest()
+        assert callback["metrics"]["report_sha256"] == stored_digest
     assert marker.encode() not in sidecar.read_bytes()
     assert crypto.is_encrypted(sidecar.read_bytes())
     if os.name == "posix":
