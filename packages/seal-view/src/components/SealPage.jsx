@@ -265,8 +265,10 @@ export default function SealPage({ seal: page, host = {} }) {
         chrome = true,
         map = {},
         // Who signed it, as the host knows from its pinned keys: 'this_computer'
-        // (a run folder's own key, the default for local-seal/v1) or 'demo'.
-        signer: signerRole = 'this_computer',
+        // only when the host checked against this computer's own key, or 'demo'.
+        // Trust-label class: no claim the host didn't make, so the default
+        // names no signer.
+        signer: signerRole = null,
         // Screenshots are never part of a receipt; a host shows them only from a local run folder.
         mediaNote = "From this computer's run folder: not part of the receipt, never uploaded",
     } = host
@@ -736,7 +738,9 @@ export default function SealPage({ seal: page, host = {} }) {
             : verdict === 'valid'
               ? demo
                   ? { state: 'demo', text: 'Demo key: checks only in this demo' }
-                  : { state: 'signed', text: 'Signed by this computer' }
+                  : signerRole === 'this_computer'
+                    ? { state: 'signed', text: 'Signed by this computer' }
+                    : { state: 'signed', text: 'Signed by a pinned key' }
               : UNKNOWN_SIGNER.has(result?.reason)
                 ? { state: 'unknown', text: 'Not verified: unknown signer' }
                 : verdict === 'fails'
