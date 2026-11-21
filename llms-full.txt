@@ -2423,7 +2423,7 @@ automation into an independently certified transaction system.
   plaintext `report.json`. `seal verify`, `inspect report-run`, the receipt
   page and the quickstart read encrypted runs. The receipt page embeds the
   report, so beside an encrypted run it is logged as a plaintext copy.
-- Core dependencies: `cryptography>=50` (HPKE) and `keyring`.
+- Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
 
 ### Features
 

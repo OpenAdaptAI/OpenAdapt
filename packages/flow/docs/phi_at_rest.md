@@ -153,7 +153,7 @@ then on the viewer key (Touch ID or Windows Hello, on hardware) opens them.
 | macOS | Secure Enclave runtime key; Secure Enclave viewer key with Touch ID | Interface and test double only; **not built**, pending a check on real hardware |
 | Windows | TPM key through the Platform Crypto Provider; Windows Hello viewer key | Interface and test double only; **not built**, pending a check on real hardware |
 | Linux | TPM2 key | Interface only; **not built** |
-| Everywhere today | A software P-256 key in the OS keychain through `keyring` (macOS Keychain, Windows Credential Manager with DPAPI, Linux Secret Service), else a 0600 file with a warning | Built; `at-rest status` labels it `software` |
+| Everywhere today | A software P-256 key in the OS keychain through `keyring` (macOS Keychain, Windows Credential Manager with DPAPI, Linux Secret Service), else a 0600 file with a warning. `pip install openadapt` includes `keyring`; a bare `openadapt-flow` needs the `keychain` extra | Built; `at-rest status` labels it `software` |
 
 A software key protects against a copied disk, backup or ticket attachment,
 not against code running as you. `require_hardware_device_key: true` in the

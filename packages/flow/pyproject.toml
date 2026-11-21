@@ -57,10 +57,6 @@ dependencies = [
     # 50 brings HPKE (RFC 9180), which wraps each encrypted set's data key
     # (docs/phi_at_rest.md, openadapt_flow.key_hierarchy).
     "cryptography>=50.0",
-    # Encryption at rest is on by default. Where this computer has no secure
-    # hardware key, its software device key lives in the OS keychain through
-    # keyring (MIT). Imported lazily, only on the encryption path.
-    "keyring>=24",
     # The portable contracts (request, result and receipt models). They live
     # in openadapt-types, which depends only on pydantic, so a consumer of the
     # models never installs this package's vision stack; openadapt_flow.contracts
