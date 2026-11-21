@@ -44,6 +44,7 @@ from urllib.parse import urlsplit
 
 from loguru import logger
 
+from openadapt_desktop.chrome_profile import dispatch_handlers as chrome_profile_handlers
 from openadapt_desktop.config import EngineConfig
 from openadapt_desktop.private_fs import ensure_private_dir
 
@@ -436,6 +437,7 @@ class EngineDispatcher:
             "shadow_scan": self.shadow_scan,
             # Unencrypted patient data on this computer (Flow's ledger).
             "at_rest_status": self.at_rest_status,
+            **chrome_profile_handlers(self.config.data_dir),  # window wire only
         }
 
     # ------------------------------------------------------- shadow mode
