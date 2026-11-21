@@ -303,41 +303,6 @@ def card_text(doc: Mapping[str, Any]) -> str:
     )
 
 
-def _shown_path(path: Path) -> Path:
-    """``path`` relative to the current folder when it is inside it."""
-    try:
-        return path.resolve().relative_to(Path.cwd().resolve())
-    except ValueError:
-        return path
-
-
-#: The answers to the publish question that print the full card first.
-SHOW_ANSWERS = ("show", "s", "--show")
-
-
-def card_summary(doc: Mapping[str, Any], path: Path) -> str:
-    """Four short lines on what the card holds, for the quickstart's question.
-
-    ``path`` is the ``public-seal.json`` with the exact bytes; answering
-    ``show`` prints the full card before the question is asked again.
-    """
-    card = doc.get("card") or {}
-    facts = [
-        str(card.get("program_name") or "unnamed program"),
-        str(card.get("outcome") or "unknown outcome"),
-        f"{card.get('steps_ok', '?')} of {card.get('steps_total', '?')} steps",
-        f"{card.get('model_calls', '?')} model calls",
-    ]
-    return "\n".join(
-        [
-            "  " + " \u00b7 ".join(facts),
-            "  Also: the step strip, check counts, digests and the hour it ran",
-            "  Not included: inputs, typed values, screenshots or record contents",
-            f'  Full JSON: {path} (type "show" to print it)',
-        ]
-    )
-
-
 # -- publishing ---------------------------------------------------------------
 
 
@@ -603,17 +568,12 @@ def publish(
     say: Callable[[str], None] = print,
     transport: Optional[Transport] = None,
     command: Callable[[str], str] = lambda rest: f"openadapt {rest}",
-    brief: bool = False,
 ) -> Optional[str]:
     """Build, show, ask, upload. Returns the link, or None when nothing was sent.
 
     The exact card is always printed before anything is asked or sent;
     ``yes`` skips the question, never the card. Raises :class:`PublishError`
     with an exit code for each refusal.
-
-    ``brief`` (the quickstart's question) prints :func:`card_summary` and the
-    path of the exact bytes instead; answering ``show`` at the question
-    prints the full card and asks again. It never applies with ``yes``.
     """
     run_dir = Path(run_dir)
     origin = endpoint(endpoint_value)
@@ -623,22 +583,7 @@ def publish(
         say(f"To take it down: {command(f'seal unpublish {_quote(run_dir)}')}")
         return str(existing["url"])
     doc = build(run_dir, names=names, github=github, provenance=provenance)
-    brief = brief and not yes and not dry_run
-    say(
-        card_summary(doc, _shown_path(run_dir / "public-seal.json"))
-        if brief
-        else card_text(doc)
-    )
-    if brief:
-        plain_ask = ask
-
-        def ask(prompt: str) -> str:
-            while True:
-                answer = plain_ask(prompt)
-                if answer.strip().lower() not in SHOW_ANSWERS:
-                    return answer
-                say(card_text(doc))
-
+    say(card_text(doc))
     if dry_run:
         say(f"Dry run: wrote {run_dir / 'public-seal.json'}. Nothing was uploaded.")
         return None
@@ -671,7 +616,6 @@ __all__ = [
     "Response",
     "Transport",
     "build",
-    "card_summary",
     "card_text",
     "check_link",
     "consent",

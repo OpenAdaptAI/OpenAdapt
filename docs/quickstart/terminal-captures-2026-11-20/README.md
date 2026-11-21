@@ -17,3 +17,7 @@ Paths under the run folder read `<cwd>`, and the stub's port reads `<stub>`.
 
 `python-3.14-rerun.txt` shows the launcher on Python 3.14 under `uvx` rerunning the command on
 3.12. The command is `flow --version`, which opens no browser.
+
+The short "Put this Seal online?" summary in the `after-*` captures came from an earlier head of
+#2365. That change moved to #2357, which lists every uploaded field before consent. #2365 leaves the
+publish prompt as it is on main.

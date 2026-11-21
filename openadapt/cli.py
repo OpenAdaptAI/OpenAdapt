@@ -924,7 +924,10 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say("Put this Seal online? What would be uploaded:")
+        say(
+            "Put this Seal online? This is the exact summary that would be "
+            f"uploaded ({run_dir / 'public-seal.json'}):"
+        )
         try:
             publish(
                 run_dir,
@@ -933,7 +936,6 @@ def _quickstart_publish_offer():
                 say=say,
                 provenance="synthetic-tutorial",
                 command=_hint,
-                brief=True,
             )
         except PublishError as exc:
             say(str(exc))
@@ -2170,12 +2172,6 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="write and print public-seal.json; upload nothing",
-    )
-    parser.add_argument(
-        "--show",
-        dest="dry_run",
-        action="store_true",
-        help="print the full card that would be uploaded and exit (same as --dry-run)",
     )
     parser.add_argument(
         "--github",

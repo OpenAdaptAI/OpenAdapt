@@ -25,10 +25,6 @@
   drawn under them only where the terminal answers an image-protocol query
   (iTerm2, Kitty, Ghostty). WezTerm drew blank rows for it and gets the text
   unless `OPENADAPT_INLINE_IMAGES=iterm2` is set.
-- The "Put this Seal online?" question shows four lines on what would be
-  uploaded and the path of the full JSON instead of printing the JSON.
-  Answering `show` prints the full card and asks again; the default is still
-  No. `openadapt seal publish --show` prints the full card and uploads nothing.
 - `openadapt quickstart` no longer prints that it is also available as
   `openadapt demo quickstart`.
 - The documented first command is `uvx --python 3.12 openadapt@latest

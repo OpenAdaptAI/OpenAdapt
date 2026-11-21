@@ -694,7 +694,7 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     ]
 
 
-def test_the_quickstart_offer_shows_a_short_summary_then_asks_once(
+def test_the_quickstart_offer_shows_the_card_then_asks_once(
     make_run, tmp_path, monkeypatch
 ):
     run = make_run()
@@ -710,47 +710,16 @@ def test_the_quickstart_offer_shows_a_short_summary_then_asks_once(
     )
     asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
     assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
-    # A few lines, not the JSON: what it holds, what it leaves out, and
-    # where the exact bytes are.
-    said = "\n".join(line for kind, line in events[: asks[0]] if kind == "say")
-    assert "{" not in said
-    lines = said.splitlines()
-    assert lines[0] == "Put this Seal online? What would be uploaded:"
-    assert len(lines) <= 5
-    assert "Not included: inputs, typed values, screenshots" in said
-    assert f"Full JSON: {run / 'public-seal.json'}" in said
+    # The exact card that would be uploaded is printed before the question.
     card = json.loads((run / "public-seal.json").read_text())["card"]
+    shown = [
+        json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
+    ]
+    assert shown and shown[0]["card"] == card
     assert card["provenance"] == "synthetic-tutorial"
     assert events[-1] == ("say", "Not published.")
     assert not (run / "seal.publish.json").exists()
     # Only the status check was sent; a No uploads nothing.
-    assert [r[0] for r in transport.requests] == ["GET"]
-
-
-def test_show_at_the_quickstart_question_prints_the_full_card(
-    make_run, tmp_path, monkeypatch
-):
-    run = make_run()
-    _terminal(monkeypatch)
-    transport = Recorder(_status(True))
-    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
-    events: list[tuple[str, str]] = []
-    answers = iter(["show", "n"])
-    cli._quickstart_publish_offer()(
-        run,
-        lambda line: events.append(("say", line)),
-        lambda q: events.append(("ask", q)) or next(answers),
-    )
-    asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
-    assert len(asks) == 2
-    card = json.loads((run / "public-seal.json").read_text())["card"]
-    shown = [
-        json.loads(line)
-        for kind, line in events[asks[0] : asks[1]]
-        if kind == "say" and line.startswith("{")
-    ]
-    assert shown and shown[0]["card"] == card
-    assert events[-1] == ("say", "Not published.")
     assert [r[0] for r in transport.requests] == ["GET"]
 
 
