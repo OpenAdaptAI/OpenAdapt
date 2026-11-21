@@ -62,9 +62,10 @@ unqualified**: the appliance validation measured it non-functional at native
 frames are downscaled below ~1024px first) and ~12.5% false-rescue on
 genuinely-ambiguous in-progress screens (a `"Saving…"` read as saved). See
 [docs/LIMITS.md](../LIMITS.md) for the measured trap-set numbers before
-relying on it. Because of that false-rescue rate, the replayer never asks the
-oracle about a step that can change a record (see the drift-oracle entry
-below).
+relying on it. Because of that false-rescue rate, a "yes" never clears a
+failed postcondition: it is a hint shown to the person who reviews the halt,
+and the replayer doesn't ask at all about a step that can change a record (see
+the drift-oracle entry below).
 
 ## Fail-safe behaviour (mandatory)
 
@@ -199,9 +200,11 @@ handles into the `Replayer`.
   tier can only veto; a down appliance means more halts, never a wrong click.
 - **Drift-oracle postcondition** (`RemoteStateVerifier`): after deterministic
   checks and one settle retry fail, the replayer asks the verifier only about
-  render-drift-sensitive `text_present` and `region_stable` conditions. Only a
-  confident `yes` rescues the condition. A `no`, `uncertain`, error, or appliance
-  outage keeps the failure. Every call and rescue is recorded in the run result.
+  render-drift-sensitive `text_present` and `region_stable` conditions. The
+  answer never clears the failure: the step halts and goes to a person, and a
+  confident `yes` is recorded on the step (`postcondition_drift_rescues`) and
+  printed as a hint that the failure may be render drift. Every call is
+  recorded in the run result and counted as a model call.
   The replayer does not ask at all on an irreversible or effect-bearing step
   (the same steps the run gate treats as consequential, plus steps waiting for
   risk review). There a failed check stays failed. Unless the workflow has its
