@@ -343,3 +343,20 @@ def test_unpublish_forgets_the_seal(tmp_path):
     deleted = lambda *_a: Response(204, {}, b"")  # noqa: E731
     seal_publish.unpublish(run, origin=ORIGIN, transport=deleted)
     assert seal_claim.read_index(tmp_path / "seal-home") == []
+
+
+def test_openadapt_login_is_a_command_that_reaches_flow_login(monkeypatch):
+    from click.testing import CliRunner
+
+    seen: list = []
+
+    def fake_run_flow(argv):
+        seen.append(argv)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli, "_run_flow", fake_run_flow)
+    result = CliRunner().invoke(
+        cli.main, ["login", "--no-browser", "--host", "https://x.test"]
+    )
+    assert result.exit_code == 0
+    assert seen == [["login", "--no-browser", "--host", "https://x.test"]]
