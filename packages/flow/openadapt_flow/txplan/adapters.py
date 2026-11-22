@@ -333,7 +333,7 @@ def column_digests(
 # when the catalog shows nothing that could write outside the frame. Coverage
 # is decided from the catalog, never by reading a function body: a trigger,
 # rule, user function, user type or user cast reachable from the frame caps
-# the write, unless it is a trigger an operator reviewed (by digest).
+# the write.
 
 #: PostgreSQL's FirstNormalObjectId: every object with a lower oid came with
 #: the server (initdb); anything at or above it was created afterwards, in
@@ -489,61 +489,32 @@ _PG_ATTACHED = (
 )
 
 
-def pg_trigger_digests(cur: Any) -> dict[str, str]:
-    """``{trigger name: sha256}`` for every user trigger on a frame relation:
-    the digest a pack lists in ``reviewed_triggers``."""
-    cur.execute(
-        "SELECT t.tgname, pg_get_triggerdef(t.oid, true), "
-        "pg_get_functiondef(t.tgfoid) FROM pg_trigger t "
-        f"WHERE NOT t.tgisinternal AND t.tgrelid IN ({_PG_FRAME})"
-    )
-    return {
-        str(name): hashlib.sha256(f"{tdef}\n{fdef}".encode()).hexdigest()
-        for name, tdef, fdef in cur.fetchall()
-    }
-
-
-def pg_function_digests(cur: Any) -> dict[str, Optional[str]]:
-    """``{signature: sha256}`` for every user function in the database (None
-    for an aggregate or window function, which has no definition to review).
-    A trigger's helpers leave no pg_depend edge, so a reviewed trigger counts
-    only while every user function is reviewed too."""
-    cur.execute(
-        "SELECT p.oid::regprocedure::text, p.prokind, CASE WHEN p.prokind IN "
-        "('f', 'p') THEN pg_get_functiondef(p.oid) END FROM pg_proc p "
-        f"WHERE p.oid >= {_PG_USER_OID}"
-    )
-    return {
-        f"function {sig}": (
-            hashlib.sha256(f"function\n{fdef}".encode()).hexdigest() if fdef else None
-        )
-        for sig, _kind, fdef in cur.fetchall()
-    }
-
-
 def _pg_fingerprint(cur: Any) -> str:
-    """Every user catalog row that could change what a write runs, by oid
-    and row version (xmin): any CREATE OR REPLACE, in this transaction or
-    committed by another one, gives a new version."""
+    """The catalog rows that decide what a write on the frame runs, by oid and
+    row version (xmin): triggers and rules on frame relations, user casts,
+    event triggers, and the user types of the frame's columns. Any CREATE OR
+    REPLACE of one gives a new version. Unrelated DDL (another session's temp
+    table) is not in it."""
     cur.execute(
-        "SELECT 'p', oid::text, xmin::text FROM pg_proc "
-        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
         "SELECT 't', oid::text, xmin::text FROM pg_trigger "
-        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
+        f"WHERE tgrelid IN ({_PG_FRAME}) UNION ALL "
         "SELECT 'r', oid::text, xmin::text FROM pg_rewrite "
-        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
-        "SELECT 'e', oid::text, xmin::text FROM pg_event_trigger UNION ALL "
+        f"WHERE ev_class IN ({_PG_FRAME}) UNION ALL "
         "SELECT 'c', oid::text, xmin::text FROM pg_cast "
         f"WHERE oid >= {_PG_USER_OID} UNION ALL "
-        "SELECT 'y', oid::text, xmin::text FROM pg_type "
-        f"WHERE oid >= {_PG_USER_OID}"
+        "SELECT 'e', oid::text, xmin::text FROM pg_event_trigger UNION ALL "
+        "SELECT 'y', t.oid::text, t.xmin::text FROM pg_type t "
+        "JOIN pg_namespace n ON n.oid = t.typnamespace "
+        f"WHERE t.oid >= {_PG_USER_OID} AND n.nspname NOT LIKE 'pg_temp%%' "
+        "AND n.nspname NOT LIKE 'pg_toast%%' AND t.oid IN (SELECT a.atttypid "
+        f"FROM pg_attribute a WHERE a.attrelid IN ({_PG_FRAME}) AND a.attnum > 0)"
     )
     return hashlib.sha256(
         json.dumps(sorted(map(list, cur.fetchall())), default=str).encode()
     ).hexdigest()
 
 
-def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
+def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
     gaps: set[str] = set()
     cur.execute("SELECT current_schema(), current_schemas(false)::text[]")
     schema, path = cur.fetchone()
@@ -585,16 +556,14 @@ def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("user_cast_or_operator")
-    # Triggers on frame relations: covered only when reviewed, by digest, and
-    # only while every user function in the database is reviewed too (a
-    # helper a trigger calls leaves no pg_depend edge).
-    digests = pg_trigger_digests(cur)
-    if set(digests.values()) - set(reviewed):
+    # Any user trigger on a frame relation: what it runs (helpers, views it
+    # reads, objects made and dropped mid-write) can't be bounded from here.
+    cur.execute(
+        "SELECT count(*) FROM pg_trigger t "
+        f"WHERE NOT t.tgisinternal AND t.tgrelid IN ({_PG_FRAME})"
+    )
+    if int(cur.fetchone()[0]):
         gaps.add("trigger")
-    elif digests and any(
-        d is None or d not in reviewed for d in pg_function_digests(cur).values()
-    ):
-        gaps.add("trigger_helper_unreviewed")
     # Everything else attached to a frame relation, and what it depends on.
     cur.execute(
         "SELECT a.classid::regclass::text, a.objid::bigint, "
@@ -744,36 +713,25 @@ def mysql_grants_visible(grants: Sequence[str], db: str) -> bool:
     return {"SELECT", "TRIGGER"} <= held
 
 
-def mysql_trigger_digests(cur: Any) -> dict[str, str]:
-    """``{trigger name: sha256}`` of every trigger in the database (table,
-    timing, event and body): the digest a pack lists in ``reviewed_triggers``."""
+def _mysql_fingerprint(cur: Any) -> str:
+    """The database's triggers and routines, as they read now."""
     cur.execute(
         "SELECT trigger_name, event_object_table, action_timing, "
         "event_manipulation, action_statement FROM information_schema.triggers "
         "WHERE trigger_schema = DATABASE()"
     )
-    return {
-        str(row[0]): hashlib.sha256(
-            "\n".join(str(x or "") for x in row[1:]).encode()
-        ).hexdigest()
-        for row in cur.fetchall()
-    }
-
-
-def _mysql_fingerprint(cur: Any) -> str:
-    """The database's triggers and routines, as they read now."""
-    triggers = mysql_trigger_digests(cur)
+    triggers = sorted(map(list, cur.fetchall()))
     cur.execute(
         "SELECT routine_name, routine_type, last_altered FROM "
         "information_schema.routines WHERE routine_schema = DATABASE()"
     )
     routines = sorted(map(list, cur.fetchall()))
     return hashlib.sha256(
-        json.dumps([sorted(triggers.items()), routines], default=str).encode()
+        json.dumps([triggers, routines], default=str).encode()
     ).hexdigest()
 
 
-def _mysql_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
+def _mysql_scope_gaps(cur: Any, sql: str) -> list[str]:
     gaps: set[str] = set()
     cur.execute("SELECT DATABASE()")
     db = str(cur.fetchone()[0] or "")
@@ -788,9 +746,13 @@ def _mysql_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("foreign_data")
-    # Any trigger in the database (it runs with its definer's rights and can
-    # reach tables and databases this account can't see), unless reviewed.
-    if set(mysql_trigger_digests(cur).values()) - set(reviewed):
+    # Any trigger in the database: it runs with its definer's rights and can
+    # reach tables and databases this account can't see.
+    cur.execute(
+        "SELECT count(*) FROM information_schema.triggers "
+        "WHERE trigger_schema = DATABASE()"
+    )
+    if int(cur.fetchone()[0]):
         gaps.add("trigger")
     cur.execute(
         "SELECT count(*) FROM information_schema.routines "
@@ -1311,7 +1273,7 @@ class SqlAdapter:
             # refusing it.
             cur.execute("SAVEPOINT oa_scope")
             try:
-                gaps = _pg_scope_gaps(cur, sql, self.system.reviewed_triggers)
+                gaps = _pg_scope_gaps(cur, sql)
                 fp = _pg_fingerprint(cur)
             except Exception:  # noqa: BLE001 - unreadable: capped, not refused
                 cur.execute("ROLLBACK TO SAVEPOINT oa_scope")
@@ -1320,26 +1282,14 @@ class SqlAdapter:
             return gaps, fp
         try:
             return (
-                _mysql_scope_gaps(cur, sql, self.system.reviewed_triggers),
+                _mysql_scope_gaps(cur, sql),
                 _mysql_fingerprint(cur),
             )
         except Exception:  # noqa: BLE001 - unreadable: capped, not refused
             return ["scope_unreadable"], None
 
     def scope_before(self, cur: Any, sql: str = "") -> tuple[list[str], Optional[str]]:
-        """The inventory before the write, in its transaction. On PostgreSQL it
-        also tries to hold the user functions still (``FOR SHARE`` on their
-        pg_proc rows, which needs a privileged account); the comparison after
-        the write is what counts either way."""
-        if self.system.dialect == "postgresql":
-            cur.execute("SAVEPOINT oa_lock")
-            try:
-                cur.execute(
-                    f"SELECT oid FROM pg_proc WHERE oid >= {_PG_USER_OID} FOR SHARE"
-                )
-                cur.execute("RELEASE SAVEPOINT oa_lock")
-            except Exception:  # noqa: BLE001 - not allowed: compare instead
-                cur.execute("ROLLBACK TO SAVEPOINT oa_lock")
+        """The inventory before the write, in its transaction."""
         return self._scope_read(cur, sql)
 
     def scope_gaps(
@@ -1366,31 +1316,6 @@ class SqlAdapter:
         if fp is not None and bfp is not None and fp != bfp:
             out.add("scope_changed")
         return sorted(out)
-
-    def trigger_digests(self) -> dict[str, str]:
-        """The digests an operator reviews and lists in ``reviewed_triggers``:
-        each trigger, and on PostgreSQL every user function in the database
-        (a reviewed trigger counts only while all of them are listed)."""
-        con = self.connect()
-        try:
-            cur = con.cursor()
-            self._begin(cur)
-            try:
-                if self.system.dialect == "postgresql":
-                    out = {
-                        f"trigger {k}": v for k, v in pg_trigger_digests(cur).items()
-                    }
-                    for sig, d in pg_function_digests(cur).items():
-                        if d is not None:
-                            out[sig] = d
-                    return out
-                if self.system.dialect == "mysql":
-                    return mysql_trigger_digests(cur)
-                return {}
-            finally:
-                con.rollback()
-        finally:
-            con.close()
 
     def not_covered(
         self, write: Mapping[str, Any], result: Optional[Mapping[str, Any]]

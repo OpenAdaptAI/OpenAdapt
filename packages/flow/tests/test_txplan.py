@@ -1664,3 +1664,24 @@ def test_an_undo_that_only_cancels_held_writes_is_stopped(tmp_path: Path, rest) 
     report = json.loads((Path(undo["run_dir"]) / "report.json").read_text())
     assert report["success"] is True
     assert 5 in store.records
+
+
+def test_a_cancel_with_collateral_in_the_frame_still_needs_reconciliation(
+    tmp_path: Path, rest
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, holdback=60))
+    plan = _go(ctx, "T-cancel-c", [_delete(5)])
+    engine.apply_plan(ctx, plan["digest"])
+    store.add(title="someone else's", amount=1)  # a change the plan didn't make
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert undo["outcome"] == "RECONCILIATION_REQUIRED", undo
+
+
+def test_a_repeat_cancel_is_stopped_again(tmp_path: Path, rest) -> None:
+    _, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, holdback=60))
+    plan = _go(ctx, "T-cancel-r", [_delete(5)])
+    engine.apply_plan(ctx, plan["digest"])
+    assert engine.undo_plan(ctx, plan["digest"])["outcome"] == "STOPPED"
+    assert engine.undo_plan(ctx, plan["digest"])["outcome"] == "STOPPED"

@@ -1647,9 +1647,15 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             else "RECONCILIATION_REQUIRED"
         )
         values = set(per_write.values())
-        if "cancelled" in values and values <= {"cancelled", "not_this_plan"}:
-            # Only held writes, cancelled: nothing was ever sent, so the plan
-            # stopped with nothing written. That is certain, not unverified.
+        if (
+            "cancelled" in values
+            and values <= {"cancelled", "not_this_plan"}
+            and not collateral
+        ):
+            # Only held writes, cancelled (now, or by an earlier cancel or
+            # undo): nothing was ever sent, so the plan stopped with nothing
+            # written. That is certain, not unverified. With collateral in the
+            # frame it stays RECONCILIATION_REQUIRED.
             outcome = "STOPPED"
         approval = state.approval_record(digest)
         run = _write_run(
