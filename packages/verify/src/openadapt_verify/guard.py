@@ -128,3 +128,24 @@ def checked_write(
             write_attempted=block.write_attempted,
             write_receipt=write_receipt,
         )
+
+
+from openadapt_verify.commit_firewall import (  # noqa: E402
+    CommitBlockedError,
+    CommitGuard,
+    CommitResult,
+    async_verify_commit,
+    commit_guard,
+    verify_commit,
+)
+
+__all__ = [
+    "CommitBlockedError",
+    "CommitGuard",
+    "CommitResult",
+    "async_verify_commit",
+    "checked_write",
+    "commit_guard",
+    "verified",
+    "verify_commit",
+]
