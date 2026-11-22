@@ -15,9 +15,9 @@ step, applied in memory on the device before anything is written:
 * Anything that does not parse that way (HTML, plain text, binary, a cut
   body, a multipart body that carries a file) keeps only its length, its
   content type and a keyed hash of the whole body. JSON is parsed only from
-  a body labelled JSON or unlabelled (``application/octet-stream``, the wire
-  tap's type for a missing header); JSON-looking text in any other type is
-  opaque.
+  a body labelled JSON (``application/json``, ``*/*+json``) or with no
+  content type at all; JSON-looking text in any other type, including an
+  explicit ``application/octet-stream``, is opaque.
 * URL query values are treated the same way, because a ``GET`` form puts the
   person's input there. Path segments are kept (see "Not covered").
 
@@ -30,7 +30,9 @@ equal hashes, so "the value sent was the value read back" stays checkable.
 Not covered: URL path segments (``/patients/1234``) and JSON object keys
 that look like ordinary field names are kept as written. A key that does not
 look like a field name (spaces, punctuation, over 64 characters) is hashed
-like a value. Header values are handled by the credential redaction only.
+like a value. Header values are handled by the credential redaction only,
+except URL-valued HAR headers (``Location``, ``Referer``), whose query is
+minimized like any URL.
 
 Stdlib only (no ``openadapt_flow`` import), so the wire tap and the
 recorder load it without changing their import cost.
@@ -193,6 +195,24 @@ class BodyMinimizer:
         out.update(result)
         return out
 
+    def opaque(
+        self, raw: bytes, content_type: str = "", *, truncated: bool = False
+    ) -> Optional[dict[str, Any]]:
+        """Size, type and keyed hash of ``raw`` as sent (bytes, undecoded);
+        nothing of its content. None for an empty body."""
+        if not raw:
+            return None
+        out: dict[str, Any] = {
+            "schema": MINIMIZED_SCHEMA,
+            "bytes": len(raw),
+            "content_type": (content_type or "").split(";")[0].strip().lower(),
+            "hmac": self.tag(bytes(raw)),
+            "format": "opaque",
+        }
+        if truncated:
+            out["truncated"] = True
+        return out
+
     def _parse(
         self, data: bytes, ctype: str, full_type: str
     ) -> Optional[tuple[str, dict[str, Any]]]:
@@ -208,11 +228,9 @@ class BodyMinimizer:
                 return None
             fields, _files = parsed
             return "form", self.pairs(fields)
-        # JSON only when labelled JSON or unlabelled: octet-stream is the wire
-        # tap's type for a missing header. HTML and text stay opaque.
-        json_type = ctype in ("", "application/octet-stream") or ctype.endswith(
-            ("/json", "+json")
-        )
+        # JSON only when labelled JSON or unlabelled (no content type at
+        # all). An explicit octet-stream, HTML or text body stays opaque.
+        json_type = ctype == "" or ctype.endswith(("/json", "+json"))
         if json_type and text.lstrip().startswith(_JSON_START):
             try:
                 document = json.loads(text)
@@ -350,7 +368,8 @@ def minimize_har(har: Mapping[str, Any], minimizer: BodyMinimizer) -> dict[str, 
     Request ``postData.text`` (or ``params``) and response ``content.text``
     become empty and the minimized description goes in
     ``_openadapt_minimized`` beside them. Request URLs, ``queryString``
-    values, ``redirectURL``, ``Location`` headers and page titles are
+    values, ``redirectURL``, URL-valued headers (``Location``, ``Referer``,
+    ``Content-Location``, ``Refresh``) and page titles are
     minimized like any other URL. Every entry is minimized on its own, so a
     raw entry added to an already minimized HAR is minimized too, and a body
     minimized before is re-checked against this policy's fields. Wire-tap
@@ -388,6 +407,7 @@ def _minimize_har_entry(entry: dict[str, Any], minimizer: BodyMinimizer) -> None
                     keep_blank_values=True,
                 )
             ]
+        _minimize_url_headers(request, minimizer)
         post = request.get("postData")
         if isinstance(post, dict):
             kept_values += _minimize_har_body(
@@ -397,12 +417,7 @@ def _minimize_har_entry(entry: dict[str, Any], minimizer: BodyMinimizer) -> None
     if isinstance(response, dict):
         if isinstance(response.get("redirectURL"), str):
             response["redirectURL"] = minimizer.url(response["redirectURL"])
-        for header in response.get("headers") or []:
-            if (
-                isinstance(header, dict)
-                and str(header.get("name", "")).lower() == "location"
-            ):
-                header["value"] = minimizer.url(header.get("value"))
+        _minimize_url_headers(response, minimizer)
         content = response.get("content")
         if isinstance(content, dict):
             kept_values += _minimize_har_body(
@@ -422,6 +437,18 @@ def _minimize_har_entry(entry: dict[str, Any], minimizer: BodyMinimizer) -> None
                     else minimizer.tag(value)
                 )
         entry["_tx"] = out
+
+
+#: Headers whose value is a URL, so a query in it is minimized like one.
+_URL_HEADERS = frozenset({"location", "content-location", "referer", "refresh"})
+
+
+def _minimize_url_headers(side: dict[str, Any], minimizer: BodyMinimizer) -> None:
+    for header in side.get("headers") or []:
+        if isinstance(header, dict) and (
+            str(header.get("name", "")).lower() in _URL_HEADERS
+        ):
+            header["value"] = minimizer.url(header.get("value"))
 
 
 def _minimize_har_body(
@@ -536,7 +563,27 @@ def minimize_line(line: Mapping[str, Any], minimizer: BodyMinimizer) -> dict[str
             str(out.get("response_type") or ""),
             truncated=bool(out.get("response_truncated")),
         )
-    return out
+    # The capture measured and hashed each body as sent, before decoding,
+    # redaction or truncation: those, not the redacted text's, describe it.
+    for key, digest_key in (
+        ("body_minimized", DIGEST_REQUEST),
+        ("response_minimized", DIGEST_RESPONSE),
+    ):
+        digest = out.pop(digest_key, None)
+        if isinstance(out.get(key), dict) and isinstance(digest, Mapping):
+            out[key] = {**out[key], **digest}
+    return strip_private(out)
+
+
+#: In-memory keys of a capture line: the size and keyed hash of a body as
+#: sent. Never written under these names (:func:`strip_private`).
+DIGEST_REQUEST = "_request_digest"
+DIGEST_RESPONSE = "_response_digest"
+
+
+def strip_private(line: Mapping[str, Any]) -> dict[str, Any]:
+    """``line`` without its in-memory-only keys (those starting with ``_``)."""
+    return {k: v for k, v in line.items() if not str(k).startswith("_")}
 
 
 def parse_multipart(

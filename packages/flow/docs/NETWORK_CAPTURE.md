@@ -71,17 +71,30 @@ memory and writes only what the recording declared
   (a birth date) can't be recovered by trying candidates.
 - **Opaque:** HTML, plain text, binary, a cut body or form, or a
   multipart body with a file keeps only its length, content type and hash.
-  JSON is parsed only from a body labelled JSON or unlabelled
-  (`application/octet-stream`); JSON-looking text of any other type is
-  opaque.
+  JSON is parsed only from a body labelled JSON or with no content type;
+  JSON-looking text of any other type, including an explicit
+  `application/octet-stream`, is opaque. Length and hash are taken from the
+  body's bytes as sent, before decoding, redaction or cutting.
 
 So `form`, `body` and `response_text` are replaced by `form_minimized`,
 `body_minimized` and `response_minimized`, each `{"kept": [[path, value]],
 "withheld": [[path, hash]]}` (bodies also carry `format`, `bytes`,
 `content_type` and a whole-body `hmac`), and `url`, `frame_url` and
 `location` have undeclared query values hashed (also a query in the
-fragment, `#/search?q=...`, and a bare search term, `?term`). Not minimized: URL path
-segments (`/patients/1234`) and JSON keys that look like field names.
+fragment, `#/search?q=...`, and a bare search term, `?term`). The
+recording's starting URL in `meta.json` (`app_url`) gets the same
+treatment, under the same key. Not minimized: URL path segments
+(`/patients/1234`) and JSON keys that look like field names.
+
+Every response that is not a static asset is described: a binary or other
+non-text response (a PDF, a download) and a url-encoded response get a
+`response_minimized` too. A binary body is never written as text, raw mode
+included.
+
+A saved wire-tap HAR is minimized the same way, including URL-valued
+headers (`Location`, `Referer`, `Content-Location`, `Refresh`). A HAR that
+is marked minimized but has a body with other text or form `params` is
+refused when loaded (`load_har`, `from_har`).
 
 Readers find no body in a minimized file and propose nothing from it: no
 API step, no undo proposal, no record check from the app's reads. Record

@@ -688,9 +688,9 @@ def _build_har_entry(
         }
         for k, v in request_headers
     ]
-    req_mime = (
-        _get_header(request_headers, "content-type") or "application/octet-stream"
-    )
+    # "" for a missing header, so it stays apart from an explicit
+    # octet-stream (whose body capture minimization never parses).
+    req_mime = _get_header(request_headers, "content-type") or ""
     req_obj: dict[str, Any] = {
         "method": method,
         "url": _mask_if_needed(url, secrets),
@@ -721,9 +721,7 @@ def _build_har_entry(
         }
         for k, v in response_headers
     ]
-    resp_mime = (
-        _get_header(response_headers, "content-type") or "application/octet-stream"
-    )
+    resp_mime = _get_header(response_headers, "content-type") or ""
     resp_text, resp_encoding = _encode_har_body(resp_bytes, response_headers, secrets)
     content_obj: dict[str, Any] = {
         "size": len(resp_bytes),
@@ -2017,14 +2015,34 @@ def load_har(
 
 
 def _restore_minimized_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
-    """A minimized entry with each body replaced by its kept JSON fields."""
+    """A minimized entry with each body replaced by its kept JSON fields.
+
+    A document marked minimized must be minimized throughout: a body that
+    carries any text other than its own kept fields, or form ``params``, is
+    raw data under the marker and the whole document is refused.
+    """
     from openadapt_flow.capture_privacy import HAR_FIELD, restore_kept_json
 
     out = json.loads(json.dumps(entry))
     for side, key in (("request", "postData"), ("response", "content")):
         container = (out.get(side) or {}).get(key)
-        if isinstance(container, dict) and isinstance(container.get(HAR_FIELD), dict):
-            container["text"] = restore_kept_json(container[HAR_FIELD]).decode("utf-8")
+        if not isinstance(container, dict):
+            continue
+        descriptor = container.get(HAR_FIELD)
+        kept = (
+            restore_kept_json(descriptor).decode("utf-8")
+            if isinstance(descriptor, dict)
+            else ""
+        )
+        text = container.get("text")
+        if (text not in (None, "", kept)) or container.get("params"):
+            raise ValueError(
+                "Invalid HAR payload: marked minimized, but an entry's body "
+                "is not minimized"
+            )
+        container.pop("encoding", None)
+        if isinstance(descriptor, dict):
+            container["text"] = kept
     return out
 
 

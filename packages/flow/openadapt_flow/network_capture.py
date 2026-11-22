@@ -114,7 +114,7 @@ class NetworkCapture:
         keep_fields: Iterable[str] = (),
         bodies: str = "minimized",
     ) -> None:
-        from openadapt_flow.capture_privacy import BODY_MODES
+        from openadapt_flow.capture_privacy import BODY_MODES, BodyMinimizer
 
         if bodies not in BODY_MODES:
             raise ValueError(f"bodies must be one of {BODY_MODES}, not {bodies!r}")
@@ -124,6 +124,12 @@ class NetworkCapture:
         # whether anything else of a body reaches disk (only "raw", sealed).
         self._keep_fields = frozenset(keep_fields) - self._secret_names
         self._bodies = bodies
+        # One hash key for the whole capture, made now and held only in
+        # memory, so each body is sized and hashed as sent (raw bytes).
+        self._minimizer = BodyMinimizer(
+            {f for f in self._keep_fields if not SECRET_NAME.search(f)},
+            withhold=self._secret_names,
+        )
         # Cookie values the browser sent or a response set, and Authorization
         # values, kept in memory only so they can be withheld wherever a page
         # echoes one. Never written.
@@ -248,16 +254,33 @@ class NetworkCapture:
             )
             if headers.get("location"):
                 line["location"] = headers["location"]
-            if _TEXT_MIME.search(line["response_type"]):
-                try:
-                    body = response.body()
-                except Exception:  # noqa: BLE001 - redirect or evicted body
-                    body = b""
-                if len(body) > MAX_RESPONSE_BYTES:
-                    line["response_truncated"] = True
-                    body = body[:MAX_RESPONSE_BYTES]
-                line["response_text"] = body.decode("utf-8", errors="replace")
+            try:
+                body = response.body()
+            except Exception:  # noqa: BLE001 - redirect or evicted body
+                body = b""
+            if body:
+                self._response_body(line, body)
         self._append(line)
+
+    def _response_body(self, line: dict[str, Any], body: bytes) -> None:
+        """Text, JSON and form responses as text (redacted, then minimized
+        unless raw); any other or undecodable body as its size and hash."""
+        from openadapt_flow.capture_privacy import DIGEST_RESPONSE
+
+        rtype = line["response_type"]
+        truncated = len(body) > MAX_RESPONSE_BYTES
+        if truncated:
+            line["response_truncated"] = True
+        line[DIGEST_RESPONSE] = self._digest(body)
+        text = None
+        if _TEXT_MIME.search(rtype) or rtype == _FORM:
+            text = _utf8(body[:MAX_RESPONSE_BYTES], cut=truncated)
+        if text is None:
+            line["response_minimized"] = self._minimizer.opaque(
+                body, rtype, truncated=truncated
+            )
+        else:
+            line["response_text"] = text
 
     def _request_line(self, request: Any) -> dict[str, Any]:
         try:
@@ -299,30 +322,49 @@ class NetworkCapture:
         except Exception:  # noqa: BLE001 - binary or unavailable body
             raw = None
         if raw:
-            if len(raw) > MAX_REQUEST_BYTES:
-                line["request_truncated"] = True
-                raw = raw[:MAX_REQUEST_BYTES]
-            text = raw.decode("utf-8", errors="replace")
-            if content_type == "application/x-www-form-urlencoded":
-                line["form"] = [
-                    list(p) for p in up.parse_qsl(text, keep_blank_values=True)
-                ]
-            elif content_type.startswith("multipart/"):
-                parsed = None
-                if content_type == "multipart/form-data" and not line.get(
-                    "request_truncated"
-                ):
-                    parsed = parse_multipart(raw, headers.get("content-type") or "")
-                if parsed is None:
-                    # An attached file, or a body that isn't plain form data.
-                    line["body_omitted"] = "multipart"
-                else:
-                    line["form"], files = parsed
-                    if files:
-                        line["multipart_files"] = files
-            else:
-                line["body"] = text
+            self._request_body(line, bytes(raw), content_type, headers)
         return line
+
+    def _digest(self, raw: bytes) -> dict[str, Any]:
+        """Size and keyed hash of a whole body as sent."""
+        return {"bytes": len(raw), "hmac": self._minimizer.tag(raw)}
+
+    def _request_body(
+        self,
+        line: dict[str, Any],
+        full: bytes,
+        content_type: str,
+        headers: dict[str, str],
+    ) -> None:
+        from openadapt_flow.capture_privacy import DIGEST_REQUEST
+
+        truncated = len(full) > MAX_REQUEST_BYTES
+        if truncated:
+            line["request_truncated"] = True
+        raw = full[:MAX_REQUEST_BYTES]
+        line[DIGEST_REQUEST] = self._digest(full)
+        text = _utf8(raw, cut=truncated)
+        parsed = None
+        if content_type.startswith("multipart/"):
+            if content_type == "multipart/form-data" and not truncated:
+                parsed = parse_multipart(raw, headers.get("content-type") or "")
+            if parsed is None:
+                # An attached file, or a body that isn't plain form data.
+                line["body_omitted"] = "multipart"
+        if text is None or (content_type.startswith("multipart/") and not parsed):
+            # Binary, or a multipart body with a file: its size and hash as
+            # sent, nothing of its content.
+            line["body_minimized"] = self._minimizer.opaque(
+                full, content_type, truncated=truncated
+            )
+        elif content_type == _FORM:
+            line["form"] = [list(p) for p in up.parse_qsl(text, keep_blank_values=True)]
+        elif parsed is not None:
+            line["form"], files = parsed
+            if files:
+                line["multipart_files"] = files
+        else:
+            line["body"] = text
 
     def _append(self, line: dict[str, Any]) -> None:
         with self._lock:
@@ -353,11 +395,9 @@ class NetworkCapture:
         path = Path(recording_dir) / NETWORK_FILE
         lines = self.lines(t0_monotonic)
         if self._bodies != cp.RAW:
-            minimizer = cp.BodyMinimizer(
-                {f for f in self._keep_fields if not SECRET_NAME.search(f)},
-                withhold=self._secret_names,
-            )
-            lines = [cp.minimize_line(line, minimizer) for line in lines]
+            lines = [cp.minimize_line(line, self._minimizer) for line in lines]
+        else:
+            lines = [cp.strip_private(line) for line in lines]
         header = {"schema": SCHEMA, "exchanges": len(lines), "bodies": self._bodies}
         text = json.dumps(header) + "\n"
         text += "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines)
@@ -372,6 +412,31 @@ class NetworkCapture:
         # Sealed in memory when the recording is encrypted.
         sealed_set.write_bytes(path, data)
         return path
+
+    def minimize_url(self, url: Any) -> Any:
+        """``url`` under this capture's policy: undeclared query values
+        hashed (same key as ``network.jsonl``) unless bodies are raw. For
+        the recording's ``meta.json`` ``app_url``."""
+        from openadapt_flow.capture_privacy import RAW
+
+        return url if self._bodies == RAW else self._minimizer.url(url)
+
+
+_FORM = "application/x-www-form-urlencoded"
+
+
+def _utf8(data: bytes, *, cut: bool = False) -> Optional[str]:
+    """``data`` as UTF-8 text, or None when it isn't (a binary body).
+
+    ``cut``: the body was truncated, so up to three trailing bytes may be
+    a character split by the cut, and are dropped.
+    """
+    for drop in range(4 if cut else 1):
+        try:
+            return data[: len(data) - drop].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+    return None
 
 
 def raw_plaintext_allowed(path: Path | str) -> bool:

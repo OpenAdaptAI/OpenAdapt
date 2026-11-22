@@ -145,6 +145,11 @@ def test_nonsecret_text_and_binary_remain_usable():
     assert kind == "base64"
     assert base64.b64decode(encoded, validate=True) == body
     entry = _entry(SECRETS[0], b'{"id":"17","status":"saved"}')
+    # Explicit octet-stream is opaque once minimized; labelled JSON keeps id.
+    opaque = load_har(dump_har({"log": {"entries": [entry]}}))["log"]["entries"][0]
+    assert opaque["response"]["status"] == 200
+    assert opaque["response"]["content"]["text"] == ""
+    entry["response"]["content"]["mimeType"] = "application/json"
     out = load_har(dump_har({"log": {"entries": [entry]}}))
     record = out["log"]["entries"][0]
     assert record["response"]["status"] == 200

@@ -595,3 +595,348 @@ def test_raw_network_write_never_falls_back_to_plaintext(
         nc.require_raw_ready(tmp_path)
     monkeypatch.setenv(at_rest.OPT_OUT_ENV, "test: synthetic data")
     nc.require_raw_ready(tmp_path)
+
+
+# -- second review: the four blockers left open after eb95a37dd ------------------
+
+
+def _capture(**kw: Any) -> tuple[nc.NetworkCapture, Any, Any]:
+    ctx = _Context()
+    cap = nc.NetworkCapture(ctx, keep_fields=("note", "id"), **kw).start()
+    return cap, ctx.handlers["requestfinished"], ctx.handlers["requestfailed"]
+
+
+def _rows(tmp_path: Path) -> list[dict[str, Any]]:
+    text = (tmp_path / nc.NETWORK_FILE).read_text()
+    return [json.loads(line) for line in text.splitlines()[1:]]
+
+
+def _multipart(boundary: str, filename: str, payload: bytes) -> bytes:
+    return (
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="note"\r\n\r\nok\r\n'
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="scan"; filename="{filename}"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        + payload
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+
+
+def _opaque_bodies() -> list[tuple[str, bytes, str, bytes, str]]:
+    """(method, request body, request type, response body, response type)."""
+    binary = b"\xff\xfe" + PATIENT.encode("utf-16-le") + b"\x00\x81" + MRN.encode()
+    return [
+        ("POST", b"\xff\xfe", "application/octet-stream", b"", "text/html"),
+        ("POST", binary, "application/octet-stream", b"", "text/html"),
+        ("GET", b"", "", b"%PDF-1.7\n\xe2\xe3" + DIAGNOSIS.encode(), "application/pdf"),
+        (
+            "POST",
+            _multipart("bX", "chart.bin", b"\x89" + DOB.encode()),
+            "multipart/form-data; boundary=bX",
+            b"",
+            "text/html",
+        ),
+    ]
+
+
+def test_binary_and_file_bodies_are_measured_and_hashed_as_sent(
+    tmp_path: Path,
+) -> None:
+    """#10: size and hash come from the original bytes; binary responses and
+    multipart files get a descriptor; nothing of their content is kept."""
+    cap, finished, _ = _capture()
+    for method, body, rtype, resp, resp_type in _opaque_bodies():
+        finished(
+            _Request(
+                "http://app.test/upload",
+                method,
+                body or None,
+                rtype,
+                _Response(200, resp_type, resp),
+            )
+        )
+    cap.write(tmp_path, t0_monotonic=0.0)
+    assert _leaks(tmp_path) == []
+    rows = _rows(tmp_path)
+    for row, (_, body, rtype, resp, _) in zip(rows, _opaque_bodies()):
+        assert not any(k.startswith("_") for k in row)
+        if body:
+            desc = row["body_minimized"]
+            assert desc["format"] == "opaque"
+            assert desc["bytes"] == len(body)
+            assert desc["hmac"] == cap._minimizer.tag(body)
+            assert "body" not in row and "form" not in row
+        if resp:
+            desc = row["response_minimized"]
+            assert desc["format"] == "opaque"
+            assert desc["bytes"] == len(resp)
+            assert desc["hmac"] == cap._minimizer.tag(resp)
+    assert rows[0]["body_minimized"]["bytes"] == 2  # not 6 replacement bytes
+    assert rows[3]["body_omitted"] == "multipart"
+
+
+def test_text_bodies_report_the_size_and_hash_sent_not_the_redacted_text(
+    tmp_path: Path,
+) -> None:
+    cap, finished, _ = _capture(secret_names={"pin"})
+    body = json.dumps({"note": "ok", "pin": "pin-Quokka", "dx": DIAGNOSIS}).encode()
+    big = ("x" * nc.MAX_REQUEST_BYTES + DIAGNOSIS).encode()
+    for payload in (body, big):
+        finished(
+            _Request(
+                "http://app.test/save",
+                "POST",
+                payload,
+                "application/json",
+                _Response(204, "text/html", b""),
+            )
+        )
+    cap.write(tmp_path, t0_monotonic=0.0)
+    assert _leaks(tmp_path) == []
+    assert "Quokka" not in (tmp_path / nc.NETWORK_FILE).read_text()
+    saved, cut = (row["body_minimized"] for row in _rows(tmp_path))
+    assert saved["bytes"] == len(body) and saved["hmac"] == cap._minimizer.tag(body)
+    assert ["note", "ok"] in saved["kept"]
+    assert cut["truncated"] and cut["bytes"] == len(big)
+    assert cut["hmac"] == cap._minimizer.tag(big)
+
+
+def test_url_encoded_responses_are_captured_and_minimized(tmp_path: Path) -> None:
+    cap, finished, _ = _capture()
+    finished(
+        _Request(
+            "http://app.test/lookup",
+            "GET",
+            None,
+            None,
+            _Response(
+                200,
+                "application/x-www-form-urlencoded",
+                f"id=51&dx={quote_plus(DIAGNOSIS)}".encode(),
+            ),
+        )
+    )
+    cap.write(tmp_path, t0_monotonic=0.0)
+    assert _leaks(tmp_path) == []
+    desc = _rows(tmp_path)[0]["response_minimized"]
+    assert desc["format"] == "form" and ["id", "51"] in desc["kept"]
+    assert [n for n, _ in desc["withheld"]] == ["dx"]
+
+
+def test_raw_mode_keeps_binary_bodies_out_and_writes_valid_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Raw mode has no in-memory keys to trip ``json.dumps`` (an error path
+    that would lose the capture) and writes binary bodies as descriptors."""
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "test: synthetic data")
+    cap, finished, _ = _capture(bodies="raw")
+    for method, body, rtype, resp, resp_type in _opaque_bodies():
+        finished(
+            _Request(
+                "http://app.test/u",
+                method,
+                body or None,
+                rtype,
+                _Response(200, resp_type, resp),
+            )
+        )
+    cap.write(tmp_path, t0_monotonic=0.0)
+    rows = _rows(tmp_path)
+    assert not any(k.startswith("_") for row in rows for k in row)
+    assert rows[0]["body_minimized"]["bytes"] == 2 and "body" not in rows[0]
+    assert rows[2]["response_minimized"]["format"] == "opaque"
+    assert _leaks(tmp_path) == []  # binary content is never kept, even raw
+
+
+def _recorder_backend() -> Any:
+    class Backend:
+        viewport = (320, 200)
+
+        def screenshot(self) -> bytes:
+            return b""
+
+    return Backend()
+
+
+def test_recording_meta_app_url_query_is_minimized(tmp_path: Path) -> None:
+    """#6: the starting URL in meta.json gets the capture's query policy, so
+    no plaintext copy of an undeclared query value sits beside network.jsonl."""
+    from openadapt_flow.recorder import Recorder
+
+    cap, finished, _ = _capture()
+    url = f"http://app.test/search?q={quote_plus(PATIENT)}&id=51#/r?dob={DOB}"
+    rec = Recorder(
+        _recorder_backend(), tmp_path / "rec", app_url=url, network_capture=cap
+    )
+    finished(_Request(url, "GET", None, None, _Response(200, "text/html", b"")))
+    out = rec.finish()
+    assert _leaks(out) == []
+    meta = json.loads((out / "meta.json").read_text())
+    assert "id=51" in meta["app_url"]
+    assert meta["app_url"] == _rows(out)[0]["url"]  # same key as network.jsonl
+    assert urlsplit_host(meta["app_url"]) == "app.test"
+    plain = Recorder(_recorder_backend(), tmp_path / "plain", app_url=url).finish()
+    assert json.loads((plain / "meta.json").read_text())["app_url"] == url
+
+
+def urlsplit_host(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(url).hostname or ""
+
+
+def test_explicit_octet_stream_json_is_opaque_and_unlabelled_json_parses(
+    tmp_path: Path,
+) -> None:
+    """#4: JSON is parsed only when labelled JSON or with no type at all; the
+    wire tap records a missing header as "" so the two stay apart."""
+    m = cp.BodyMinimizer(("id",))
+    body = json.dumps({"id": PATIENT}).encode()
+    out = m.body(body, "application/octet-stream")
+    assert out is not None and out["format"] == "opaque"
+    assert PATIENT not in json.dumps(out)
+    unlabelled = m.body(json.dumps({"id": "51"}).encode(), "")
+    assert unlabelled is not None and ["id", "51"] in unlabelled["kept"]
+
+    from openadapt_flow.tx.wire_tap import WirePolicy
+
+    tap = SessionWireTap("http://app.test", policy=WirePolicy(max_mutations=None))
+    tap.record_exchange(
+        method="POST",
+        url="http://app.test/api/a",
+        request_body=json.dumps({"id": MRN}).encode(),
+        response_status=201,
+        response_body=json.dumps({"id": PATIENT}).encode(),
+        request_headers={"Content-Type": "application/octet-stream"},
+        response_headers={"Content-Type": "application/octet-stream"},
+    )
+    tap.record_exchange(
+        method="POST",
+        url="http://app.test/api/b",
+        request_body=b'{"note": "x"}',
+        response_status=201,
+        response_body=b'{"id": "52"}',
+    )
+    path = tap.save_har(tmp_path / "s.har")
+    assert _leaks(tmp_path) == []
+    entries = load_har(path)["log"]["entries"]
+    assert entries[0]["response"]["content"][cp.HAR_FIELD]["format"] == "opaque"
+    assert entries[1]["response"]["content"]["mimeType"] == ""
+    replay = SessionWireTap.from_har(path, policy=WirePolicy(max_mutations=None))
+    ids = [m.extracted_entity_id for m in replay.summary().mutations]
+    assert ids == [None, "52"]  # live read "PATIENT" from the octet-stream body
+
+
+def test_marked_har_with_a_raw_body_is_refused_on_load(tmp_path: Path) -> None:
+    """#2: a document marked minimized must be minimized in every entry."""
+    good = load_har(dump_har(_tap()))
+    assert load_har(load_har(good)) == load_har(good)  # a reload still loads
+    raw_entry = json.loads(json.dumps(_tap().export_har()))["log"]["entries"][0]
+
+    def doctored(change: Any) -> dict[str, Any]:
+        doc = json.loads(dump_har(_tap()))
+        change(doc["log"]["entries"])
+        return doc
+
+    cases = [
+        lambda e: e.append(raw_entry),  # an entry with no descriptor
+        lambda e: e[0]["request"]["postData"].update(text=json.dumps({"n": PATIENT})),
+        lambda e: e[1]["response"]["content"].update(
+            text=base64.b64encode(PATIENT.encode()).decode(), encoding="base64"
+        ),
+        lambda e: e[0]["request"]["postData"].update(
+            params=[{"name": "dx", "value": DIAGNOSIS}]
+        ),
+    ]
+    for change in cases:
+        doc = doctored(change)
+        for source in (doc, json.dumps(doc), json.dumps(doc).encode()):
+            with pytest.raises(ValueError) as err:
+                load_har(source)
+            assert not any(v in str(err.value) for v in PHI)
+            with pytest.raises(ValueError):
+                SessionWireTap.from_har(source)
+
+
+def test_url_valued_har_headers_are_minimized(tmp_path: Path) -> None:
+    tap = SessionWireTap("http://app.test")
+    search = f"http://app.test/s?q={quote_plus(PATIENT)}"
+    tap.record_exchange(
+        method="GET",
+        url="http://app.test/chart",
+        request_headers={"Referer": search},
+        response_status=200,
+        response_headers={"Content-Location": search, "Refresh": f"0; url={search}"},
+        response_body=b"",
+    )
+    tap.save_har(tmp_path / "s.har")
+    assert _leaks(tmp_path) == []
+
+
+def test_no_phi_reaches_disk_on_error_and_debug_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every capture path, with DEBUG logging to a file in the scanned tree:
+    failed requests, refused raw writes, refused loads and raw exports."""
+    import logging
+
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV, raising=False)
+    handler = logging.FileHandler(tmp_path / "debug.log")
+    root = logging.getLogger()
+    old_level = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+    try:
+        cap, finished, failed = _capture()
+        failed(
+            _Request(
+                f"http://app.test/s?q={quote_plus(PATIENT)}",
+                "POST",
+                json.dumps({"dx": DIAGNOSIS, "mrn": MRN}).encode(),
+                "application/json",
+                None,
+            )
+        )
+        for method, body, rtype, resp, resp_type in _opaque_bodies():
+            finished(
+                _Request(
+                    "http://app.test/u",
+                    method,
+                    body or None,
+                    rtype,
+                    _Response(200, resp_type, resp),
+                )
+            )
+        (tmp_path / "rec").mkdir()
+        cap.write(tmp_path / "rec", t0_monotonic=0.0)
+        raw_cap, raw_finished, _ = _capture(bodies="raw")
+        raw_finished(
+            _Request(
+                "http://app.test/x",
+                "POST",
+                DOB.encode(),
+                "text/plain",
+                _Response(200, "text/plain", PATIENT.encode()),
+            )
+        )
+        (tmp_path / "raw").mkdir()
+        with pytest.raises(at_rest.AtRestRefused) as refused:
+            raw_cap.write(tmp_path / "raw", t0_monotonic=0.0)
+        assert not any(v in str(refused.value) for v in PHI)
+        with pytest.raises(ValueError):
+            dump_har(_tap(), raw_bodies=True)
+        _tap().save_har(tmp_path / "s.har")
+        doc = json.loads(dump_har(_tap()))
+        doc["log"]["entries"][0]["request"]["postData"]["text"] = PATIENT
+        with pytest.raises(ValueError):
+            load_har(doc)
+        dump_har(_tap(), tmp_path / "again.har")
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(old_level)
+        handler.close()
+    assert not (tmp_path / "raw" / nc.NETWORK_FILE).exists()
+    assert _leaks(tmp_path) == []

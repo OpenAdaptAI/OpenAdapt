@@ -27,7 +27,12 @@
   policy's id and version fields. `--capture-network-bodies raw` (and
   `raw_bodies=True`) keeps the redacted bodies, which API step and undo
   proposals need, and is refused unless the recording is encrypted or
-  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext.
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext. Binary
+  bodies, files and non-text responses are sized and hashed from their
+  bytes as sent; the recording's `app_url` query is minimized too; an
+  explicit `application/octet-stream` body is never parsed as JSON (a
+  missing content type still is); and `load_har` refuses a HAR marked
+  minimized that carries a raw body.
 
 ## v3.4.0 (2026-11-21)
 
