@@ -41,6 +41,17 @@ class SandboxSafetyError(ValueError):
     """Raised when sandbox certification targets a non-loopback origin without opt-in."""
 
 
+class InductionRefused(ValueError):
+    """The trace never shows a record at its own URL, so no lens is proposed.
+
+    A lens reads the target record back at its item route. A trace in which no
+    response carries a record whose id is the last segment of the request path
+    gives no evidence for that route; a route invented from naming patterns
+    would read the wrong thing (a search endpoint, a query API) and look like a
+    lens.
+    """
+
+
 _STATIC_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".js",
@@ -558,6 +569,150 @@ def _pick_id_field_from_record(
     return None
 
 
+@dataclass(frozen=True)
+class _EffectRoutes:
+    """Route roles taken from what each request did, not from its method name.
+
+    An *item* exchange returns one record whose id equals the last path
+    segment. A mutation on an item path is an update, whatever its method. A
+    mutation elsewhere whose response is a record with an id first seen there
+    is a create, whatever its method. Both observations come from the trace
+    itself, so an app that creates with ``PUT`` and updates with ``POST`` gets
+    the same lens shape as one that does the reverse.
+    """
+
+    parent: tuple[str, ...]
+    id_field: str
+    records_key: Optional[str]
+    members: frozenset[int]
+    updates: tuple[_HarExchange, ...]
+    create: Optional[_HarExchange]
+    delete: Optional[_HarExchange]
+
+
+def _canonical_value(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _record_id(rec: Mapping[str, Any], field_name: str) -> Optional[str]:
+    val = rec.get(field_name)
+    if isinstance(val, bool) or not isinstance(val, (str, int)):
+        return None
+    text = str(val)
+    return text or None
+
+
+def _shows_item_route(scoped: list[_HarExchange]) -> bool:
+    """True when some 2xx response is one record served at its own URL."""
+    for ex in scoped:
+        if ex.method not in {"GET", "POST", "PUT", "PATCH"} or len(ex.segments) < 2:
+            continue
+        rec, _ = _unwrap_single_record(ex.resp_json)
+        if rec is None:
+            continue
+        for cand in _ID_CANDIDATE_KEYS:
+            if _record_id(rec, cand) == ex.segments[-1]:
+                return True
+    return False
+
+
+def _infer_effect_routes(scoped: list[_HarExchange]) -> Optional[_EffectRoutes]:
+    """Find the entity route whose roles the trace's effects establish."""
+    groups: dict[tuple[tuple[str, ...], str], list[tuple[_HarExchange, str]]] = {}
+    wrappers: dict[tuple[tuple[str, ...], str], Optional[str]] = {}
+    for ex in scoped:
+        if ex.method not in {"GET", "POST", "PUT", "PATCH"} or len(ex.segments) < 2:
+            continue
+        rec, wrapper = _unwrap_single_record(ex.resp_json)
+        if rec is None:
+            continue
+        for cand in _ID_CANDIDATE_KEYS:
+            rid = _record_id(rec, cand)
+            if rid is not None and ex.segments[-1] == rid:
+                key = (ex.segments[:-1], cand)
+                groups.setdefault(key, []).append((ex, rid))
+                wrappers.setdefault(key, wrapper)
+                break
+
+    def _find_create(
+        id_field: str, members: list[tuple[_HarExchange, str]]
+    ) -> Optional[_HarExchange]:
+        known_ids = {rid for _, rid in members}
+        first_seen: dict[str, int] = {}
+        for ex, rid in members:
+            first_seen.setdefault(rid, ex.seq)
+        for ex in scoped:
+            if ex.method not in {"POST", "PUT", "PATCH"}:
+                continue
+            rec, _ = _unwrap_single_record(ex.resp_json)
+            if rec is None:
+                continue
+            created = _record_id(rec, id_field)
+            if (
+                created is not None
+                and created in known_ids
+                and ex.segments[-1:] != (created,)
+                and ex.seq < first_seen[created]
+            ):
+                return ex
+        return None
+
+    # An entity needs a write the trace shows: an update on the item route,
+    # or a create whose record the trace then reads at that route.
+    best_key: Optional[tuple[tuple[str, ...], str]] = None
+    best_score: tuple[int, int, int, int] = (0, 0, 0, -1)
+    best_create: Optional[_HarExchange] = None
+    for key, members in groups.items():
+        n_mut = sum(1 for ex, _ in members if ex.method != "GET")
+        n_read = sum(1 for ex, _ in members if ex.method == "GET")
+        create_ex = _find_create(key[1], members)
+        if n_mut == 0 and create_ex is None:
+            continue
+        score = (
+            n_mut,
+            int(create_ex is not None),
+            n_read,
+            max(ex.seq for ex, _ in members),
+        )
+        if score > best_score:
+            best_key, best_score, best_create = key, score, create_ex
+    if best_key is None:
+        return None
+
+    parent, id_field = best_key
+    members = groups[best_key]
+    create = best_create
+
+    delete = next(
+        (
+            ex
+            for ex in scoped
+            if ex.method == "DELETE"
+            and ex.segments[:-1] == parent
+            and len(ex.segments) == len(parent) + 1
+        ),
+        None,
+    )
+    updates = tuple(ex for ex, _ in members if ex.method != "GET")
+    member_seqs = {ex.seq for ex, _ in members}
+    if create is not None:
+        member_seqs.add(create.seq)
+    if delete is not None:
+        member_seqs.add(delete.seq)
+    for ex in scoped:
+        if ex.method == "GET" and ex.segments == parent:
+            member_seqs.add(ex.seq)
+    return _EffectRoutes(
+        parent=parent,
+        id_field=id_field,
+        records_key=wrappers[best_key],
+        members=frozenset(member_seqs),
+        updates=updates,
+        create=create,
+        delete=delete,
+    )
+
+
 def _looks_like_metadata_or_volatile(key: str, value: Any) -> bool:
     if _VOLATILE_NAME_RE.search(key):
         return True
@@ -614,8 +769,16 @@ def induce_lens_from_har(
     entity_name: Optional[str] = None,
     intended_inputs: Optional[Mapping[str, Any]] = None,
     llm_proposer: Optional[Callable[[Mapping[str, Any]], EntityLensSpec]] = None,
+    allow_unobserved_item_route: bool = False,
 ) -> EntityLensSpec:
-    """Compile an ``EntityLensSpec`` from 1-2 browser/HTTP HAR 1.2 traces."""
+    """Compile an ``EntityLensSpec`` from 1-2 browser/HTTP HAR 1.2 traces.
+
+    A trace that never shows a record at its own URL raises
+    ``InductionRefused``. ``allow_unobserved_item_route=True`` instead
+    proposes an item route from the collection path; use it only when the
+    lens is then certified on a sandbox, whose probes read the guessed route
+    back and fail if it serves a different record.
+    """
     exchanges = _parse_har_exchanges(har)
 
     if llm_proposer is not None:
@@ -649,6 +812,20 @@ def induce_lens_from_har(
         origin_counts[ex.origin] = origin_counts.get(ex.origin, 0) + 1
     base_url = max(origin_counts.items(), key=lambda kv: kv[1])[0]
     scoped = [ex for ex in exchanges if ex.origin == base_url]
+    effect = _infer_effect_routes(scoped)
+    if effect is None and not allow_unobserved_item_route:
+        raise InductionRefused(
+            "no write the trace can attribute to a record: no update on a URL "
+            "ending in the returned record's id, and no create whose record "
+            "is then served at such a URL"
+            if _shows_item_route(scoped)
+            else "no item route in the trace: no response carries a record "
+            "whose id is the last segment of its request path"
+        )
+    if effect is not None:
+        # Learn only from the entity's own exchanges, so records of another
+        # collection that share an id never feed its codecs or snapshots.
+        scoped = [ex for ex in scoped if ex.seq in effect.members]
 
     # Step 1: Identify collection_path, id_field, item wrapper, and observed entity IDs.
     detected_id_field: Optional[str] = None
@@ -722,6 +899,10 @@ def induce_lens_from_har(
                 if row_id_cand:
                     detected_id_field = row_id_cand
                     break
+    if effect is not None:
+        collection_segments = effect.parent
+        detected_id_field = effect.id_field
+        item_records_key = effect.records_key
     id_field: str = detected_id_field or "id"
 
     collection_path = (
@@ -796,12 +977,40 @@ def induce_lens_from_har(
         else None
     )
 
+    if effect is not None:
+        observed_updates = list(effect.updates)
+        observed_create = effect.create
+        observed_delete = effect.delete
+        if effect.create is not None:
+            create_method = effect.create.method
+            assert create_method in {"POST", "PUT", "PATCH"}
+            create_endpoint = EndpointTemplate(
+                method=create_method,  # type: ignore[arg-type]
+                path_template=effect.create.path,
+                records_key=item_records_key,
+                id_field=id_field,
+                etag_header=effective_etag,
+            )
+        delete_endpoint = (
+            EndpointTemplate(
+                method="DELETE",
+                path_template=item_path_template,
+                id_field=id_field,
+                etag_header=effective_etag,
+            )
+            if effect.delete is not None
+            else None
+        )
+
     write_mode: WriteMode
     if observed_updates:
         last_upd = observed_updates[-1]
-        upd_method: Literal["PUT", "PATCH"] = (
-            "PATCH" if last_upd.method == "PATCH" else "PUT"
-        )
+        upd_method: Literal["POST", "PUT", "PATCH"]
+        if effect is not None:
+            assert last_upd.method in {"POST", "PUT", "PATCH"}
+            upd_method = last_upd.method  # type: ignore[assignment]
+        else:
+            upd_method = "PATCH" if last_upd.method == "PATCH" else "PUT"
         write_endpoint = EndpointTemplate(
             method=upd_method,
             path_template=item_path_template,
@@ -941,7 +1150,16 @@ def induce_lens_from_har(
         user_supplied_keys.update(_flatten_record(intended_inputs).keys())
 
     create_defaults_list: list[str] = []
-    for ex in post_creates:
+    # Only a metadata name makes a field volatile on sight. A field that merely
+    # holds a timestamp stays in the frame unless the trace shows the server
+    # changing it (the snapshot comparison below).
+    pending_volatile: list[str] = []
+    creates_seen = (
+        ([effect.create] if effect.create is not None else [])
+        if effect is not None
+        else post_creates
+    )
+    for ex in creates_seen:
         rec, _ = _unwrap_single_record(ex.resp_json)
         if rec is None:
             continue
@@ -950,13 +1168,22 @@ def induce_lens_from_har(
         for path, val in flat_resp.items():
             if path == id_field or path in flat_req:
                 continue
-            if _looks_like_metadata_or_volatile(path, val):
+            if _VOLATILE_NAME_RE.search(path):
                 if path not in volatile_list:
                     volatile_list.append(path)
+            elif _looks_like_metadata_or_volatile(path, val):
+                if path not in pending_volatile:
+                    pending_volatile.append(path)
             elif path not in create_defaults_list:
                 create_defaults_list.append(path)
 
     null_empty_paths: list[str] = []
+    requested_values: set[tuple[str, str]] = set()
+    for ex in scoped:
+        if ex.method in {"POST", "PUT", "PATCH"} and ex.req_data:
+            for req_path, req_val in _flatten_record(ex.req_data).items():
+                requested_values.add((req_path, _canonical_value(req_val)))
+
     for _eid, history in entity_snapshots.items():
         for idx in range(1, len(history)):
             prev_rec = _flatten_record(history[idx - 1][1])
@@ -976,17 +1203,31 @@ def induce_lens_from_har(
                         null_empty_paths.append(path)
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
-                # changed it, or server metadata key not in user-supplied fields.
-                if _looks_like_metadata_or_volatile(path, new_val):
+                # changed it, or server metadata key not in user-supplied fields. A
+                # value some write in the trace asked for is the user's edit, not a
+                # server change, so it never makes the field volatile.
+                if (
+                    _looks_like_metadata_or_volatile(path, new_val)
+                    and (
+                        path,
+                        _canonical_value(new_val),
+                    )
+                    not in requested_values
+                ):
                     if path not in volatile_list:
                         volatile_list.append(path)
                 elif (
-                    curr_ex.method in {"PUT", "PATCH"}
+                    curr_ex.method in {"POST", "PUT", "PATCH"}
+                    and (effect is None or curr_ex in effect.updates)
                     and path not in flat_req
                     and path in user_supplied_keys
                     and new_val in ("", 0, None, False, [], {})
                 ):
                     write_mode = "replace"
+
+    for path in pending_volatile:
+        if path not in volatile_list and path not in create_defaults_list:
+            create_defaults_list.append(path)
 
     # Step 6: Induce field_codecs from request->response, request->subsequent GET,
     # and intended_inputs->stored record.
@@ -1205,7 +1446,7 @@ def _extract_single_entity(
 def _resolve_create_endpoint(lens: EntityLensSpec) -> EndpointTemplate:
     if lens.create_endpoint is not None:
         return lens.create_endpoint
-    if lens.write_endpoint.method == "POST":
+    if lens.write_mode == "create":
         return lens.write_endpoint
     base_path = re.sub(r"/\{[^/}]+\}/?$", "", lens.get_one.path_template) or "/"
     return EndpointTemplate(
@@ -1418,6 +1659,20 @@ def _pick_wrong_wire_value(
     return "__wrong_wire_value__"
 
 
+def _probe_inconclusive(candidate: EntityLensSpec) -> EntityLensSpec:
+    """Fail safe when the probe could not create or read back its own record.
+
+    Without a probe, nothing says whether the update route patches or replaces.
+    A full-record write keeps every other field under either semantics, while
+    a partial write can clear them on a replace route. So an update lens the
+    probe could not check is returned in ``replace`` mode, never left as an
+    unverified ``patch``.
+    """
+    if candidate.write_mode == "create":
+        return candidate
+    return candidate.model_copy(update={"write_mode": "replace"})
+
+
 def probe_put_semantics(
     candidate: EntityLensSpec,
     *,
@@ -1440,11 +1695,11 @@ def probe_put_semantics(
             candidate, seed, auth_headers=auth_headers, created_ids=created_ids
         )
         if eid is None:
-            return candidate
+            return _probe_inconclusive(candidate)
 
         status, etag_0, r0 = _read_one_entity(candidate, eid, auth_headers=auth_headers)
         if status < 200 or status >= 300 or r0 is None:
-            return candidate
+            return _probe_inconclusive(candidate)
 
         codecs = dict(candidate.field_codecs)
         volatile_list = list(candidate.volatile_fields)
@@ -1466,11 +1721,20 @@ def probe_put_semantics(
                 if inferred is not None:
                     codecs[path] = inferred
 
+        # A field whose name says it is server metadata is volatile at once. A
+        # field that only looks like a timestamp (``due_date``, ``start_date``)
+        # stays pending: it becomes volatile only if the probe sees it change
+        # across a write that carried its old value. A volatile field leaves
+        # the frame, so guessing from its name would hide a clobbered date.
+        pending_volatile: list[str] = []
         for path, val in flat_r0.items():
             if path != candidate.id_field and path not in user_keys:
-                if _looks_like_metadata_or_volatile(path, val):
+                if _VOLATILE_NAME_RE.search(path):
                     if path not in volatile_list:
                         volatile_list.append(path)
+                elif _looks_like_metadata_or_volatile(path, val):
+                    if path not in volatile_list and path not in pending_volatile:
+                        pending_volatile.append(path)
                 elif path not in create_defaults_list:
                     create_defaults_list.append(path)
 
@@ -1504,7 +1768,7 @@ def probe_put_semantics(
                                 codecs[u_path] = inferred
         elif (
             candidate.write_mode != "create"
-            and candidate.write_endpoint.method in {"PUT", "PATCH"}
+            and candidate.write_endpoint.method in {"POST", "PUT", "PATCH"}
             and sample_update
         ):
             first_key = next(iter(sample_update.keys()))
@@ -1607,6 +1871,10 @@ def probe_put_semantics(
                     ).items():
                         codecs.setdefault(path, codec)
 
+        for path in pending_volatile:
+            if path not in volatile_list and path not in create_defaults_list:
+                create_defaults_list.append(path)
+
         identity_fields = list(candidate.identity_fields)
         if not identity_fields:
             volatile_set = set(volatile_list)
@@ -1695,7 +1963,7 @@ def certify_lens_on_sandbox(
         # Fallback if custom candidate had empty identity_fields and refine_quirks=False.
         return {}
 
-    is_create_only = lens.write_mode == "create" or lens.write_endpoint.method == "POST"
+    is_create_only = lens.write_mode == "create"
 
     try:
         # ------------------------------------------------------------------
@@ -1993,11 +2261,11 @@ def certify_lens_on_sandbox(
                     ]
                     if untouched_business_keys:
                         probe_delta = dict(sample_update)
-                        clobber_key = untouched_business_keys[0]
+                        clobber_keys = untouched_business_keys
                     else:
                         first_upd_k = next(iter(sample_update.keys()))
                         probe_delta = {first_upd_k: sample_update[first_upd_k]}
-                        fallback_keys = [
+                        clobber_keys = [
                             k
                             for k in sample_record.keys()
                             if k != lens.id_field
@@ -2005,18 +2273,20 @@ def certify_lens_on_sandbox(
                             and k in r0
                             and not _VOLATILE_NAME_RE.search(k)
                         ]
-                        clobber_key = fallback_keys[0] if fallback_keys else ""
 
-                    if clobber_key:
-                        w_url = _format_endpoint_url(
-                            lens.base_url, lens.write_endpoint, entity_id=eid_3
-                        )
-                        w_hdrs = dict(auth_headers or {})
-                        if etag0 and lens.write_endpoint.etag_header:
-                            w_hdrs["If-Match"] = etag0
-
-                        # First attempt raw unmerged partial payload; if server preserves frame
-                        # (PATCH), explicitly inject a wiped untouched field on the wire.
+                    w_url = _format_endpoint_url(
+                        lens.base_url, lens.write_endpoint, entity_id=eid_3
+                    )
+                    w_hdrs = dict(auth_headers or {})
+                    if etag0 and lens.write_endpoint.etag_header:
+                        w_hdrs["If-Match"] = etag0
+                    p3_detail = "fault not delivered: the server refused every clobber"
+                    # A server may refuse the fault itself (a required field cannot
+                    # be emptied). Only a clobber that actually landed tests the
+                    # judge, so try the untouched fields until one lands.
+                    for clobber_key in clobber_keys:
+                        # First attempt raw unmerged partial payload; if server preserves
+                        # frame (PATCH), explicitly inject a wiped untouched field.
                         wst, _, _ = _http_json(
                             lens.write_endpoint.method,
                             w_url,
@@ -2045,23 +2315,29 @@ def certify_lens_on_sandbox(
                                 headers=w_hdrs,
                             )
 
-                        st1, _, r1 = _read_one_entity(
+                        st1, etag_1, r1 = _read_one_entity(
                             lens, eid_3, auth_headers=auth_headers
                         )
-                        if 200 <= st1 < 300 and r1 is not None:
-                            verdict = active_judge.evaluate(
-                                r0,
-                                r1,
-                                probe_delta,
-                                volatile_fields=lens.volatile_fields,
-                                field_codecs=lens.field_codecs,
-                            )
-                            p3_reject = not verdict.passed
-                            p3_detail = (
-                                f"Rejected clobbered frame field {clobber_key!r}"
-                                if p3_reject
-                                else f"FALSE ACCEPT: ignored clobbered field {clobber_key!r}"
-                            )
+                        if etag_1 and lens.write_endpoint.etag_header:
+                            w_hdrs["If-Match"] = etag_1
+                        if not (200 <= st1 < 300 and r1 is not None):
+                            continue
+                        if r1.get(clobber_key) == r0.get(clobber_key):
+                            continue
+                        verdict = active_judge.evaluate(
+                            r0,
+                            r1,
+                            probe_delta,
+                            volatile_fields=lens.volatile_fields,
+                            field_codecs=lens.field_codecs,
+                        )
+                        p3_reject = not verdict.passed
+                        p3_detail = (
+                            f"Rejected clobbered frame field {clobber_key!r}"
+                            if p3_reject
+                            else f"FALSE ACCEPT: ignored clobbered field {clobber_key!r}"
+                        )
+                        break
         probes.append(
             CertificationProbeResult(
                 probe_name="fault_partial_clobber",
@@ -2304,6 +2580,7 @@ def certify_lens_on_sandbox(
 
 __all__ = [
     "DefaultFrameAndIntentJudge",
+    "InductionRefused",
     "SandboxSafetyError",
     "apply_field_codec",
     "certify_lens_on_sandbox",

@@ -1,7 +1,9 @@
 # Countersigned Seals
 
-A Seal is a receipt that OpenAdapt Cloud signed with an Ed25519 key
-(`openadapt.seal-signature/v1`). It says who made a statement about one write.
+A Cloud Seal (older format) is an Execute receipt that OpenAdapt Cloud signed
+with an Ed25519 key (`openadapt.seal-signature/v1`). Like every receipt, it is
+a statement about one run, not one write; see [RECEIPTS.md](RECEIPTS.md).
+It says who made the statement.
 It does not say when the statement existed, and it can't let a holder prove a
 patient's MRN to an auditor without publishing it. `openadapt-flow countersign`
 adds both, plus a dossier file for disputes:
