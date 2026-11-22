@@ -44,7 +44,7 @@ env:
     --exclude-path '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude)/'
     --exclude-path 'CHANGELOG\.md$'
     --exclude-path '/\.github/'
-    --exclude-path '^\./capabilities/'
+    --exclude-path '(^|/)capabilities/'
     './**/*.md'
 
 jobs:
