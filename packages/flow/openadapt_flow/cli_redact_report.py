@@ -10,6 +10,7 @@ from typing import Any
 
 
 def _cmd_redact_report(args: argparse.Namespace) -> int:
+    from openadapt_flow.agent_guard.ledger_row import export_scrubbed
     from openadapt_flow.report_redaction import (
         RedactionPolicyError,
         RedactRunError,
@@ -17,6 +18,12 @@ def _cmd_redact_report(args: argparse.Namespace) -> int:
         redact_run,
     )
 
+    # A guarded run's private diff: a scrubbed copy, written next to it.
+    scrubbed = export_scrubbed(Path(args.run_dir))
+    if scrubbed is not None:
+        print(f"scrubbed guard diff: {scrubbed}", file=sys.stderr)
+        if not (Path(args.run_dir) / "report.json").is_file():
+            return 0
     try:
         policy = load_policy(Path(args.policy) if args.policy else None)
         result = redact_run(Path(args.run_dir), policy)

@@ -153,7 +153,28 @@ class CommitGuard:
         events_path: Optional[Path] = None,
         clock: Callable[[], float] = time.monotonic,
         scope: Optional[Any] = None,
+        readback: Optional[Any] = None,
+        ledger_dir: Optional[Path] = None,
+        ledger_row: bool = True,
     ) -> None:
+        from openadapt_flow.agent_guard.readback import VerifyRunReadback
+
+        #: How a save is read back (:class:`~.readback.ReadbackProvider`).
+        self.readback = readback if readback is not None else VerifyRunReadback()
+        #: Where ``guard_ledger_row.json`` goes; None: no row. A guard with no
+        #: store of its own (no ``state_dir``) and no events file writes none.
+        self.ledger_dir = (
+            (
+                ledger_dir
+                or (
+                    events_path.parent
+                    if events_path
+                    else getattr(guarded, "state_dir", None)
+                )
+            )
+            if ledger_row
+            else None
+        )
         self.guarded = guarded
         #: The task's :class:`~openadapt_flow.teach_scope.TeachScope`: reads
         #: to an undeclared origin are blocked, and a save is read against
@@ -262,7 +283,17 @@ class CommitGuard:
         held_at: float,
         screen: Optional[str],
     ) -> None:
-        shot = self.page.screenshot() if self.guarded.approval == "each_item" else None
+        from openadapt_flow.agent_guard.approval_fields import card_for_request
+
+        asked = self.guarded.approval == "each_item" or guard.source_check == "hold"
+        # What a person checks with no write adapter: the form as it is at
+        # the hold, its picture and its values, read at the same moment.
+        shot = self.page.screenshot() if asked else None
+        read_controls = getattr(self.page, "form_controls", None)
+        controls = read_controls() if asked and callable(read_controls) else None
+        guard.approval_card = card_for_request(
+            guard, request, self.scope, controls=controls
+        )
         commit = guard.commit(screenshot_png=shot, screen_text=screen, wait_s=0.0)
         if commit.status == "waiting_for_approval":
             self._waiting = (guard, request, held_at)
@@ -285,6 +316,8 @@ class CommitGuard:
         self.summary.hold_ms.append(hold_ms)
         if guard is not None and guard.approval is not None:
             self.page.clear_notice()  # the "waiting for a person" notice
+        if guard is not None and hasattr(self.readback, "before_send"):
+            self.readback.before_send(self.task, guard)
         self.page.continue_request(request.request_id)
         self._log(request, "save", "continued", hold_ms=hold_ms)
 
@@ -346,7 +379,7 @@ class CommitGuard:
                 commit = guard.commit(wait_s=0.0)
             except GuardRefused as exc:
                 self._waiting = None
-                self._refuse(request, "save", held_at, exc.code, exc.message)
+                self._refuse(request, "save", held_at, exc.code, exc.message, guard)
                 return
             if commit.status == "go":
                 self._waiting = None
@@ -361,9 +394,13 @@ class CommitGuard:
         self._read_back(save)
 
     def _read_back(self, save: _Save) -> None:
+        from openadapt_flow.agent_guard import readback
+        from openadapt_flow.agent_guard.ledger_row import row_after_read_back
+
         started = self._clock()
+        read = None
         if save.guard is not None:
-            self.result = save.guard.confirm()
+            self.result, read = readback.confirm(self.readback, self.task, save.guard)
             verdict = self.result.verdict
             self.summary.receipt_path = self.result.receipt_path
             message = self.result.what_to_do
@@ -371,6 +408,15 @@ class CommitGuard:
             verdict, message = self._observe_read_back(save)
         self.summary.readback_ms = round((self._clock() - started) * 1000.0, 1)
         self.summary.verdict = verdict.value
+        row_after_read_back(
+            self.ledger_dir,
+            task=self.task,
+            guard=save.guard,
+            read=read,
+            verdict=verdict,
+            hold_ms=self.summary.hold_ms[-1] if self.summary.hold_ms else None,
+            receipt=self.observed,
+        )
         if verdict is GuardVerdict.VERIFIED:
             # Nothing on the page: a verified run 1 is recorded as the app
             # drew it, so run 2 never expects the guard's notice.
@@ -442,6 +488,7 @@ class CommitGuard:
                 code,
                 "the save is not the one the task declared (another record, "
                 "field or value)",
+                scope=True,
             )
             return
         if self.observe_only:
@@ -465,6 +512,9 @@ class CommitGuard:
         held_at: float,
         code: str,
         message: str,
+        guard: Optional[Guard] = None,
+        *,
+        scope: bool = False,
     ) -> None:
         if self.observe_only:
             self.summary.would_block.append({"code": code})
@@ -504,9 +554,19 @@ class CommitGuard:
             content_type=content_type,
             headers={GUARD_HEADER: f"blocked; code={code}"},
         )
-        self.summary.blocked.append(
-            {"code": code, "hold_ms": round((self._clock() - held_at) * 1000.0, 1)}
-        )
+        hold_ms = round((self._clock() - held_at) * 1000.0, 1)
+        self.summary.blocked.append({"code": code, "hold_ms": hold_ms})
+        if self.ledger_dir is not None:
+            from openadapt_flow.agent_guard.ledger_row import write_refusal_row
+
+            write_refusal_row(
+                self.ledger_dir,
+                task=self.task,
+                guard=guard,
+                code=code,
+                hold_ms=hold_ms,
+                scope=scope,
+            )
         self._log(request, kind, "blocked", code=code)
         self.page.notify(
             f"OpenAdapt blocked this save: {message}. {what}", level="error"

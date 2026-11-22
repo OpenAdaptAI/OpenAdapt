@@ -1,0 +1,23 @@
+{
+  "actions_count": 41,
+  "ended_at": "2026-11-20T10:02:30Z",
+  "executor_label": "browser-use",
+  "gate_events": [
+    {
+      "at": "2026-11-20T10:02:00Z",
+      "kind": "held",
+      "reason": "consequential_click"
+    }
+  ],
+  "model": {
+    "calls": 12,
+    "cost_source": "metered",
+    "cost_usd": 0.231,
+    "input_tokens": 48000,
+    "output_tokens": 2100
+  },
+  "schema": "openadapt.flight-run/v1",
+  "started_at": "2026-11-20T10:00:00Z",
+  "task_id": "flight-task-0001",
+  "timeline_path": "timeline.jsonl"
+}
