@@ -440,21 +440,21 @@ def _commands_stopped_on_signal(active: bool) -> Iterator[None]:
     from openadapt_flow.wrap.process import stop_running_commands
 
     main_thread = threading.current_thread() is threading.main_thread()
-    previous: dict[int, Any] = {}
+    previous: dict[signal.Signals, Any] = {}
 
     def on_signal(signum: int, frame: Any) -> None:
         stop_running_commands()
         raise KeyboardInterrupt
 
     if main_thread:
-        for signum in (signal.SIGINT, signal.SIGTERM):
-            previous[signum] = signal.signal(signum, on_signal)
+        for caught in (signal.SIGINT, signal.SIGTERM):
+            previous[caught] = signal.signal(caught, on_signal)
     try:
         yield
     finally:
         stop_running_commands()
-        for signum, handler in previous.items():
-            signal.signal(signum, handler)
+        for caught, handler in previous.items():
+            signal.signal(caught, handler)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
