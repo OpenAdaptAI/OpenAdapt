@@ -1,0 +1,54 @@
+# Gitea through its REST API, checked against its activity feed.
+# Measured (benchmark/api_scoped/RESULTS.md): the feed records issue and
+# comment creates and issue closes and reopens. It does not record title or
+# body edits, so an edit is confirmed by read-back alone and a collateral
+# edit of another issue's text can't be seen here.
+schema_version: openadapt.tx/v1
+systems:
+  - name: gitea
+    kind: rest
+    base_url_env: GITEA_URL
+    auth: {header: Authorization, prefix: "token ", value_env: GITEA_TOKEN}
+    audit:
+      pattern: activity_feed
+      path: /api/v1/users/{actor}/activities/feeds
+      params: {only-performed-by: "true"}
+      paging: {kind: page, param: page, size_param: limit, size: 50}
+      fields:
+        id: id
+        at: created
+        actor: act_user.login
+        resource:
+          parts: [{path: repo.full_name}, {path: content, regex: "^(\\d+)\\|"}]
+          sep: "#"
+        action: op_type
+      actions:
+        create: [create_issue, comment_issue, create_pull_request, comment_pull, create_repo, push_tag, publish_release]
+        update: [close_issue, reopen_issue, close_pull_request, reopen_pull_request, merge_pull_request, rename_repo, transfer_repo]
+        delete: [delete_tag, delete_branch]
+        read: [star_repo, watch_repo]
+      logs: [create, update]
+      actor: {path: /api/v1/user, field: login}
+      lag: {attempts: 10, wait_s: 0.3, settle_s: 0.5}
+    collections:
+      - name: issue
+        id_field: number
+        list: {path: /api/v1/repos/oa-writer/lab/issues}
+        read: {path: "/api/v1/repos/oa-writer/lab/issues/{id}"}
+        create: {method: POST, path: /api/v1/repos/oa-writer/lab/issues, id_from: number}
+        update: {method: PATCH, path: "/api/v1/repos/oa-writer/lab/issues/{id}"}
+        scoped:
+          audit_ref: "oa-writer/lab#{id}"
+          identity: [title]
+          volatile: [updated_at, closed_at, comments, user.*, assignee, assignees, labels, milestone, pull_request, repository.*]
+          codecs: {body: null_empty}
+          # The feed shows a close or reopen, not an edit of the text.
+          logged_fields: [state]
+      - name: comment
+        list: {path: "/api/v1/repos/oa-writer/lab/issues/comments"}
+        read: {path: "/api/v1/repos/oa-writer/lab/issues/comments/{id}"}
+        create: {method: POST, path: "/api/v1/repos/oa-writer/lab/issues/{issue}/comments"}
+        scoped:
+          # A comment shows in the feed as a change to its issue.
+          audit_ref: "oa-writer/lab#{issue}"
+          volatile: [updated_at]
