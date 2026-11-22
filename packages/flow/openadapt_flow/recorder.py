@@ -61,6 +61,7 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
+from openadapt_flow import at_rest as _at_rest
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     Backend,
@@ -227,7 +228,7 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = _at_rest.POLICY,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
         event_clock: Optional[list[float]] = None,
@@ -272,6 +273,11 @@ class Recorder:
         # sealed set that is finalized (indexed) when the recording finishes.
         self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
         self._finalize_on_finish = finalize_on_finish
+        # Encrypted by default (the at-rest policy decides); an explicit
+        # ``None`` is plaintext that strict mode refuses and the ledger records.
+        encryption_key = _at_rest.new_artifact_key(
+            encryption_key, "a recording", self._dir
+        )
         if encryption_key:
             self._sealed_writer = _sealed.SealedSetWriter(
                 self._dir, "recording", encryption_key

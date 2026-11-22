@@ -1932,6 +1932,44 @@ def _coarse_status_for_outcome(
     raise HostedError("report contains an unknown execution outcome")
 
 
+def _sealed_client_run_id(run_path: Path, id_path: Path) -> str:
+    """The client run id of an encrypted run directory, kept in its sealed
+    index (a random UUID, so a structural file), never as a stray plaintext
+    file the set's readers would refuse. Created once, under its own lock,
+    so a retry reports the same id."""
+    import hashlib
+    import uuid
+
+    from openadapt_flow import at_rest, sealed_set
+    from openadapt_flow.sealed_maintenance import mutation_lock
+
+    # Its own lock (a private folder per run path), not the set's: the
+    # sealed write below takes the set's lock itself.
+    lock_dir = (
+        at_rest._home()
+        / "locks"
+        / (
+            "report-run-id-"
+            + hashlib.sha256(os.fsencode(os.path.abspath(run_path))).hexdigest()[:32]
+        )
+    )
+    try:
+        at_rest._private_dir(lock_dir.parent)
+        at_rest._private_dir(lock_dir)
+        with mutation_lock(lock_dir):
+            if sealed_set.is_file(id_path):
+                raw = sealed_set.read_text(id_path)
+                parsed = str(UUID(raw.strip()))
+                if raw not in {parsed, f"{parsed}\n"}:
+                    raise ValueError("run report id is not canonical")
+                return parsed
+            fresh = str(uuid.uuid4())
+            sealed_set.write_text(id_path, fresh + "\n")
+            return fresh
+    except (OSError, ValueError) as exc:  # a SealedSetError is a ValueError
+        raise HostedError("run report id is unreadable or invalid") from exc
+
+
 def _client_run_id(run_path: Path) -> str:
     """The stable, client-generated UUID for this run directory.
 
@@ -1943,6 +1981,10 @@ def _client_run_id(run_path: Path) -> str:
     import uuid
 
     id_path = run_path / _RUN_REPORT_ID_FILE
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(run_path):
+        return _sealed_client_run_id(run_path, id_path)
 
     def read_existing(metadata: os.stat_result) -> str:
         """Read one exact existing entry, allowing its creator to finish.
@@ -2445,7 +2487,8 @@ def report_run(
             f"report.json exceeds the {_MAX_RUN_REPORT_BYTES}-byte reporting limit"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        # The bytes already read (decrypted in memory for an encrypted run).
+        report = RunReport.model_validate_json(report_bytes.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise HostedError("report.json is unreadable or invalid") from exc
 

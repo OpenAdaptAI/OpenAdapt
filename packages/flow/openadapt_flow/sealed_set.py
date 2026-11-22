@@ -270,6 +270,11 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
         "a random per-run capability secret (no recorded data)",
     ),
     FileKind(".attended_action.lease", "structural", "an action lease marker"),
+    FileKind(
+        ".report_run_id",
+        "structural",
+        "the random UUID that makes reporting this run to Cloud idempotent",
+    ),
     FileKind("*.lock", "structural", "a lock file"),
     # The receipt files stay readable without the key: they hold signatures,
     # outcomes, counts and SHA-256 digests over the plaintext report.json,
@@ -972,6 +977,21 @@ def _new_v3(
     return header, V3Key(dek, set_id, bucket)
 
 
+def preflight_new(kind: str, passphrase: Optional[str]) -> None:
+    """Refuse, before a capture starts, a new set :func:`_new_v3` would
+    refuse at sealing time (organization recipients, archive and backlog,
+    hardware key). Makes no record."""
+    from openadapt_flow import key_hierarchy as kh
+
+    try:
+        policy = kh.load_policy()
+        if _explicit_passphrase(passphrase) and policy.mode != "org":
+            return
+        kh.preflight(policy)
+    except kh.KeyHierarchyError as exc:
+        raise SealedSetError(f"Not recording an encrypted {kind}: {exc}") from exc
+
+
 class SealedSetWriter:
     """Write a sealed set file by file, ciphertext only, then finalize it.
 
@@ -1310,6 +1330,37 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
                 + " (The local key did not open it.)"
             ) from exc
         raise
+
+
+def store_passphrase_of(writer: "SealedSetWriter") -> Optional[str]:
+    """:func:`store_passphrase` of an open writer's set."""
+    key = getattr(writer, "_key", None)
+    return key.store_passphrase if isinstance(key, V3Key) else None
+
+
+def store_passphrase(run_dir: Path | str) -> Optional[str]:
+    """The passphrase for another store's containers inside a version 3 run
+    (durable checkpoints, approvals, transition evidence), or None when
+    ``run_dir`` is not one.
+
+    It is derived from the set's data key, so it is the same for every
+    process and every leg of a run, and a shred of the set's bucket makes
+    those containers unreadable everywhere, backups included. Only the
+    header is opened (and authenticated), so a run that has not been
+    finalized yet, such as one paused mid-leg, still resolves it. A shredded
+    set, or one no key here opens, refuses: nothing falls back to the
+    long-lived local passphrase.
+    """
+    base = _abs(run_dir)
+    writer = active_writer(base)
+    if writer is not None:
+        return store_passphrase_of(writer)
+    if not is_sealed(base):
+        return None
+    header = read_header(base)
+    if header.get("version") != ENVELOPE_VERSION:
+        return None
+    return _open_v3(header).store_passphrase
 
 
 def _configured(kind: str) -> bool:
@@ -1672,6 +1723,7 @@ __all__ = [
     "V3Key",
     "key_record_of",
     "shred",
+    "store_passphrase",
     "HEADER",
     "LIBRARY_FILES",
     "RECORDING_ENV_KEY",

@@ -45,6 +45,16 @@ def default_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     at_rest._reset_for_tests()
 
 
+def _legacy_recording(rec_dir: Path) -> Path:
+    """A plaintext recording an earlier version made. Making it now is a
+    recorded plaintext write (encryption_key=None); that ledger line belongs
+    to the setup, not to the command under test."""
+    rec = _recording(rec_dir, key=None)
+    at_rest.ledger_path().unlink(missing_ok=True)
+    at_rest._reset_for_tests()
+    return rec
+
+
 def _ledger(home: Path) -> list[dict]:
     path = home / at_rest.LEDGER_NAME
     if not path.exists():
@@ -143,7 +153,7 @@ def test_unsealed_write_names_the_path_or_refuses(
 def test_a_plaintext_recording_compiles_to_a_sealed_bundle_by_default(
     default_mode: Path, tmp_path: Path
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)  # made before the default
+    rec = _legacy_recording(tmp_path / "rec")  # made before the default
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     _assert_ciphertext_only(tmp_path / "b")
     assert sealed_set.read_header(tmp_path / "b")["version"] == 3
@@ -154,7 +164,7 @@ def test_a_plaintext_recording_compiles_to_a_sealed_bundle_by_default(
 def test_strict_mode_compiles_a_plaintext_recording_to_a_sealed_bundle(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)  # made before strict mode
+    rec = _legacy_recording(tmp_path / "rec")  # made before strict mode
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     _assert_ciphertext_only(tmp_path / "b")
@@ -167,7 +177,7 @@ def test_compile_under_the_opt_out_stays_plaintext(
     default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv(at_rest.OPT_OUT_ENV, "fixtures")
-    rec = _recording(tmp_path / "rec", key=None)
+    rec = _legacy_recording(tmp_path / "rec")
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     assert (tmp_path / "b" / "workflow.json").is_file()
     assert any(e["purpose"] == "a compiled bundle" for e in _ledger(default_mode))
@@ -387,7 +397,10 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
         replayer.run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir)
     except Exception:  # noqa: BLE001 - no app is listening; the key is what counts
         pass
-    assert replayer.checkpoint_key == at_rest.local_key()
+    # A version 3 run keys its checkpoints from its own data key (a shred
+    # reaches them), not from the long-lived local passphrase.
+    assert replayer.checkpoint_key == sealed_set.store_passphrase(run_dir)
+    assert replayer.checkpoint_key != at_rest.local_key()
     store = CheckpointStore(run_dir, key=replayer.checkpoint_key)
     marker = secrets.token_hex(16)
     probe = run_dir / "checkpoints" / "probe.json"
@@ -400,9 +413,14 @@ def test_default_mode_checkpoints_are_encrypted_on_disk(
     restored = store._read_json(probe)
     assert restored is not None
     assert Workflow.model_validate(restored).name == marker
-    wrong_store = CheckpointStore(run_dir, key="synthetic-wrong-checkpoint-key")
+    # Any key a caller passes is replaced by the run's own.
+    assert CheckpointStore(run_dir, key="synthetic-wrong-key").key == store.key
     with pytest.raises(crypto.DecryptionError):
-        wrong_store._read_json(probe)
+        crypto.decrypt_bytes(
+            probe.with_name("probe.json.enc").read_bytes(),
+            at_rest.local_key(),
+            aad=crypto.CHECKPOINT_AAD,
+        )
 
 
 def test_a_recording_only_key_reads_back_from_the_environment(

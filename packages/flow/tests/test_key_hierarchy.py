@@ -883,3 +883,58 @@ def test_a_registry_policy_the_account_cannot_read_is_an_error(monkeypatch) -> N
     monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", ["HKLM\\SOFTWARE\\Denied"])
     with pytest.raises(kh.KeyHierarchyError, match="can't be read"):
         kh.load_policy()
+
+
+def test_a_v3_runs_checkpoints_are_keyed_to_the_run_and_die_with_it(
+    home, tmp_path, monkeypatch
+) -> None:
+    import shutil
+
+    from pydantic import BaseModel
+
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    class Bindings(BaseModel):
+        typed: str
+
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    local = at_rest.local_key()
+    store = CheckpointStore(run, key=local)  # whatever key the caller resolved
+    assert store.key == sealed_set.store_passphrase_of(writer) != local
+    (run / "checkpoints").mkdir()
+    written = store._write_model(
+        run / "checkpoints" / "s1.json", Bindings(typed=TYPED.decode())
+    )
+    sealed = written.read_bytes()
+    assert TYPED not in sealed
+    with pytest.raises(crypto.CryptoError):  # the long-lived key never opens it
+        crypto.decrypt_bytes(sealed, local, aad=crypto.CHECKPOINT_AAD)
+    writer.write("report.json", TYPED)
+    writer.finalize(adopt_external=True)
+    backup = root.parent / "backup"
+    shutil.copytree(run, backup)
+    sealed_set.shred(run)
+    # Organization mode: the backup's header names a bucket whose every
+    # tracked key copy is gone, so its checkpoints are gone too.
+    with pytest.raises(sealed_set.SealedSetError):
+        CheckpointStore(backup, key=local)
+
+
+def test_a_checkpoint_store_without_a_key_encrypts_by_default(home) -> None:
+    from pydantic import BaseModel
+
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    class Bindings(BaseModel):
+        typed: str
+
+    root, _keychain = home
+    plain = root.parent / "plain-run"
+    plain.mkdir()
+    written = CheckpointStore(plain)._write_model(
+        plain / "s1.json", Bindings(typed=TYPED.decode())
+    )
+    assert written.name.endswith(".enc") and TYPED not in written.read_bytes()

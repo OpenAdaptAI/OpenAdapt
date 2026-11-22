@@ -45,12 +45,15 @@ from __future__ import annotations
 import functools
 import importlib.util
 import json
+import os
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, ContextManager, Optional, Protocol
+
+from openadapt_flow.at_rest import POLICY as _POLICY
 
 # Platforms where openadapt-capture's window-scoped capture is implemented
 # (openadapt_capture.window_capture.resolve_window / capture_window). Kept in
@@ -246,7 +249,7 @@ def _wait_for_stop(stop: Optional[Callable[[], bool]]) -> None:
 
 #: ``encryption_key=POLICY``: decide from the at-rest policy, as ``record``
 #: does (encrypted by default; strict mode holds the raw capture back).
-POLICY: object = object()
+POLICY: object = _POLICY
 
 
 def record_desktop_capture(
@@ -343,8 +346,9 @@ def record_desktop_capture(
         # backstop.
         _require_capture_extra()
 
-    if encryption_key is POLICY:
-        encryption_key = _policy_key(out_dir)
+    # Every policy decision is made here, before the recorder starts: the raw
+    # capture session is plaintext while it records, whatever key is given.
+    encryption_key = _policy_key(out_dir, encryption_key)
     if encryption_key and capture_dir is not None:
         # The raw session would sit outside the private staging folder that
         # is deleted after sealing, and stay plaintext. Refuse before recording.
@@ -353,6 +357,12 @@ def record_desktop_capture(
             "recording: the raw capture session would be left in plaintext at "
             f"{capture_dir}. Nothing was recorded. Omit capture_dir."
         )
+    if encryption_key:
+        # Organization policy (recipients, archive, backlog, hardware key) is
+        # checked before anything is captured, not first at sealing time.
+        from openadapt_flow import sealed_set
+
+        sealed_set.preflight_new("recording", encryption_key)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     final_dir = out_dir
@@ -392,22 +402,58 @@ def record_desktop_capture(
         if staging is None:
             return recording
         _seal_recording(Path(recording), final_dir, encryption_key)  # type: ignore[arg-type]
-        return final_dir
-    finally:
+    except BaseException:
         if staging is not None:
-            import shutil
+            left = _remove_staging(staging)
+            if left:
+                print(
+                    f"ERROR: the plaintext capture staging at {staging} could "
+                    f"not be fully deleted ({', '.join(left[:3])}). Delete it "
+                    "by hand: it can hold patient data.",
+                    file=sys.stderr,
+                )
+        raise
+    left = _remove_staging(staging)
+    if left:
+        # The recording is sealed, but plaintext survived beside it: that is
+        # not a successful encrypted recording.
+        raise RuntimeError(
+            f"record: the recording is sealed at {final_dir}, but its plaintext "
+            f"capture staging at {staging} could not be deleted "
+            f"({', '.join(left[:3])}). Delete it by hand: it can hold patient data."
+        )
+    return final_dir
 
-            shutil.rmtree(staging, ignore_errors=True)
+
+def _remove_staging(staging: Path) -> list[str]:
+    """Delete the private plaintext staging folder; the paths that survived."""
+    import shutil
+
+    failed: list[str] = []
+
+    def note(_func: Any, path: str, _exc: Any) -> None:
+        failed.append(path)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(staging, onexc=note)
+    else:  # pragma: no cover - Python 3.10 and 3.11
+        shutil.rmtree(staging, onerror=note)
+    if os.path.lexists(staging) and not failed:
+        failed.append(str(staging))
+    return failed
 
 
-def _policy_key(out_dir: Path | str) -> Optional[str]:
-    from openadapt_flow import at_rest, sealed_set
+def _policy_key(out_dir: Path | str, explicit: Optional[str] | object) -> Optional[str]:
+    """The key for a desktop recording, from the policy or the caller.
+
+    Strict mode refuses any desktop capture (its raw session is plaintext
+    while it records), whether or not a key was passed. An explicit ``None``
+    is a plaintext recording, recorded in the ledger."""
+    from openadapt_flow import at_rest
 
     if at_rest.strict():
         at_rest.unsealed_write("a desktop raw capture session", str(out_dir))
-    if not at_rest.seal_new("a desktop recording", out_dir):
-        return None
-    return sealed_set.recording_key()
+    return at_rest.new_artifact_key(explicit, "a desktop recording", out_dir)
 
 
 def _seal_recording(plain: Path, dest: Path, key: str) -> None:

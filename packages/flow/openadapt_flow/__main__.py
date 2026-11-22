@@ -13883,7 +13883,10 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
                 "patient data encrypted, and this one writes files outside an "
                 "encrypted set. Nothing was run."
             )
-        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
+        if (
+            command in _SEALED_READY_COMMANDS
+            and command not in _STRICT_SELF_SEALING | _at_rest_cli.READ_ONLY
+        ):
             # These keep sealed input sealed; given plaintext input they
             # re-save or write beside it in plaintext. So every directory
             # they are given must already be encrypted.
@@ -14183,53 +14186,55 @@ def main(
         return 2
     from openadapt_flow import at_rest
 
-    _at_rest_cli.apply_no_encrypt(args, _cmd_record)
-    try:
-        _unsealed_output_check(args)
-    except (at_rest.AtRestRefused, ValueError) as exc:
-        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
-        return 2
-    try:
-        # Inject only after the ordinary input/output argument guards. This
-        # object is not a CLI flag, path exemption or serialized capability.
-        if record_check_proof_source is not None:
-            args._record_check_proof_source = record_check_proof_source
-        code = args.func(args)
-        if getattr(args, "command", None) in ("run", "replay"):
-            # Terminal handlers sign receipts. Keep the old Seal here for one release.
-            from openadapt_flow.receipt_record import after_run_notes
+    # --no-encrypt holds for this command only: an application that calls
+    # main() in-process gets the environment back however the command ends.
+    with _at_rest_cli.no_encrypt_scope(args, _cmd_record):
+        try:
+            _unsealed_output_check(args)
+        except (at_rest.AtRestRefused, ValueError) as exc:
+            print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+            return 2
+        try:
+            # Inject only after the ordinary input/output argument guards. This
+            # object is not a CLI flag, path exemption or serialized capability.
+            if record_check_proof_source is not None:
+                args._record_check_proof_source = record_check_proof_source
+            code = args.func(args)
+            if getattr(args, "command", None) in ("run", "replay"):
+                # Terminal handlers sign receipts. Keep the old Seal here for one release.
+                from openadapt_flow.receipt_record import after_run_notes
 
-            run_dir = getattr(args, "run_dir", None)
-            folder = Path(run_dir) if run_dir else None
-            for note in after_run_notes(folder, include_receipt=False):
-                print(note, file=sys.stderr)
-        return code
-    except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
-        # A sealed bundle or encrypted recording that is missing its key,
-        # was changed after sealing, or holds an unknown file, or a write
-        # strict mode refuses: fail closed.
-        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
-        return 2
-    except BrowserSupportMissing as exc:
-        # Missing optional browser support is a setup decision, not a crash.
-        print(f"Browser setup required:\n{exc}", file=sys.stderr)
-        return 2
-    except Exception as exc:
-        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+                run_dir = getattr(args, "run_dir", None)
+                folder = Path(run_dir) if run_dir else None
+                for note in after_run_notes(folder, include_receipt=False):
+                    print(note, file=sys.stderr)
+            return code
+        except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
+            # A sealed bundle or encrypted recording that is missing its key,
+            # was changed after sealing, or holds an unknown file, or a write
+            # strict mode refuses: fail closed.
+            print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+            return 2
+        except BrowserSupportMissing as exc:
+            # Missing optional browser support is a setup decision, not a crash.
+            print(f"Browser setup required:\n{exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
 
-        if not isinstance(exc, KnownIdAdmissionHalt):
-            if _private_input(args):
-                # A traceback would quote what the command read from sealed
-                # input: name the kind of error only.
-                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
-                return 1
-            raise
-        # The configured known-ID list may not be used: halt before any step
-        # runs, with the named reason.
-        print(
-            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
-        )
-        return 3
+            if not isinstance(exc, KnownIdAdmissionHalt):
+                if _private_input(args):
+                    # A traceback would quote what the command read from sealed
+                    # input: name the kind of error only.
+                    print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                    return 1
+                raise
+            # The configured known-ID list may not be used: halt before any step
+            # runs, with the named reason.
+            print(
+                f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+            )
+            return 3
 
 
 if __name__ == "__main__":

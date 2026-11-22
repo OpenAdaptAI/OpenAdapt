@@ -109,10 +109,21 @@ def write_sealed_reads(report: Any, receipt_json: Path | str) -> Optional[Path]:
     out = Path(receipt_json).parent / "records.json"
     import json
 
-    from openadapt_flow import sealed_set
+    from openadapt_flow import at_rest, sealed_set
 
     # The values read are record data: encrypted when written beside an
-    # encrypted run (a "*" run file), plaintext otherwise.
+    # encrypted run (a "*" run file). Anywhere else they would be plaintext,
+    # which only the recorded opt-out allows; strict and default modes refuse.
+    if not sealed_set.is_sealed_path(out) and not at_rest.plaintext_allowed(
+        f"the field values a run read (records.json) at {out}"
+    ):
+        raise at_rest.AtRestRefused(
+            at_rest.refusal(
+                f"the field values this run read at {out}",
+                "that folder is not an encrypted run directory",
+            )
+            + " Or write the receipt into the encrypted run directory."
+        )
     sealed_set.write_text(
         out, json.dumps([r.model_dump(mode="json") for r in sealed], indent=2) + "\n"
     )

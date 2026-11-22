@@ -87,6 +87,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import at_rest as _at_rest
 from openadapt_flow import choice_capture as _choice_capture
 from openadapt_flow import recorder_document as _documents
 from openadapt_flow import sealed_set as _sealed
@@ -2334,7 +2335,7 @@ class InteractiveRecorder:
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
         capture_network: bool = False,
-        encryption_key: Optional[str] = None,
+        encryption_key: Optional[str] | object = _at_rest.POLICY,
         event_clock: Optional[list[float]] = None,
     ) -> None:
         self._url = url

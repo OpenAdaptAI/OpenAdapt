@@ -18,6 +18,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 RECOVERY_WARNING = (
     "Anyone with this code can open every recording and run on this computer, "
@@ -139,13 +140,18 @@ def _cmd_shred(args: argparse.Namespace) -> int:
 
 
 #: Commands that read sealed input without decrypting it to disk:
-#: ``inspect report-run`` reads the report in memory; ``shred`` touches keys.
+#: ``inspect report-run`` and ``local-seal verify`` read the report in
+#: memory; ``shred`` touches keys.
 SEALED_READY: frozenset[str] = frozenset(
     {
         "openadapt_flow.__main__:_cmd_report_run",
         "openadapt_flow.cli_at_rest:_cmd_shred",
+        "openadapt_flow.cli_local_seal:_cmd_verify",
     }
 )
+#: Sealed-ready commands that write nothing, so strict mode runs them on
+#: plaintext input too (verifying a receipt over a plaintext run).
+READ_ONLY: frozenset[str] = frozenset({"openadapt_flow.cli_local_seal:_cmd_verify"})
 #: Commands that write no recorded data.
 STRICT_SAFE: frozenset[str] = frozenset(
     {
@@ -204,17 +210,22 @@ def add_no_encrypt(p: argparse.ArgumentParser) -> None:
     )
 
 
-def apply_no_encrypt(args: argparse.Namespace, record_func: object) -> None:
-    """``compile/run/replay --no-encrypt``: this process writes plaintext, with
-    the one-line warning and the ledger line at the first write. ``record``
-    handles its own flag."""
+def no_encrypt_scope(args: argparse.Namespace, record_func: object) -> Any:
+    """``compile/run/replay --no-encrypt``: this command writes plaintext, with
+    the one-line warning and the ledger line at the first write. The opt-out
+    lasts for the ``with`` block only (and the children it starts), so a
+    later command in the same process is encrypted again. ``record`` handles
+    its own flag."""
+    from contextlib import nullcontext
+
     from openadapt_flow import at_rest
 
     if (
         getattr(args, "no_encrypt", False)
         and getattr(args, "func", None) is not record_func
     ):
-        at_rest.opt_out_for_this_process("--no-encrypt")
+        return at_rest.opted_out("--no-encrypt")
+    return nullcontext()
 
 
 def note_plaintext_recording(artifact: str, out: object) -> None:

@@ -255,18 +255,28 @@ def run_with_output(
             if _sealed.active_writer(run_path) is None and not downgraded:
                 if not at_rest.plaintext_allowed("a run directory"):
                     at_rest.unsealed_write("a run directory", run_dir)
-                if replayer.checkpoint_key is None:
-                    # Durable checkpoints can still be encrypted here.
-                    from openadapt_flow import crypto as _crypto
+            if replayer.checkpoint_key is None:
+                # A plaintext run directory (including a downgraded one)
+                # still encrypts its durable checkpoints, unless the opt-out
+                # is on (recorded).
+                from openadapt_flow import crypto as _crypto
 
-                    replayer.checkpoint_key = _crypto.resolve_key(None)
+                replayer.checkpoint_key = (
+                    _sealed.store_passphrase(run_path)
+                    or _crypto.resolve_key(None)
+                )
             return replayer._run_unsealed(workflow, **kwargs)
-        if replayer.checkpoint_key is None:
-            # A sealed bundle's run keeps its durable state under the same key.
-            replayer.checkpoint_key = passphrase
         writer = _sealed.SealedSetWriter(
             run_path, "run", passphrase, resume=_sealed.is_sealed(run_path)
         )
+        bound = _sealed.store_passphrase_of(writer)
+        if bound is not None:
+            # A version 3 run keeps its durable state under a key derived
+            # from its own data key, so shredding the run reaches it too.
+            replayer.checkpoint_key = bound
+        elif replayer.checkpoint_key is None:
+            # An older sealed run keeps its durable state under the same key.
+            replayer.checkpoint_key = passphrase
         _sealed.register_writer(writer)
         try:
             report = replayer._run_unsealed(workflow, **kwargs)

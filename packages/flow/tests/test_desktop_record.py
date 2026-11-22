@@ -1184,3 +1184,121 @@ def test_direct_desktop_capture_follows_the_encryption_policy(
             announce=False,
         )
     assert not (tmp_path / "raw").exists()
+
+
+def _plain_convert(cap_dir: Path, out_dir: Path, *, params=None) -> Path:
+    (Path(cap_dir) / "capture.db").write_bytes(b"raw synthetic session")
+    (Path(out_dir) / "events.jsonl").write_text('{"text": "typed value"}\n')
+    (Path(out_dir) / "meta.json").write_text("{}")
+    return Path(out_dir)
+
+
+def test_strict_mode_refuses_direct_capture_whatever_key_is_passed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The raw session is plaintext while it records: strict mode refuses it
+    before the recorder starts, with an explicit key, None, or the default."""
+    from openadapt_flow import at_rest
+
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for key in ("an-explicit-key", None, at_rest.POLICY):
+        log: list = []
+        with pytest.raises(at_rest.AtRestRefused):
+            record_desktop_capture(
+                tmp_path / "rec",
+                recorder_factory=_make(log),
+                convert=_plain_convert,
+                stop=lambda: True,
+                announce=False,
+                encryption_key=key,
+            )
+        assert log == []  # the recorder never started
+
+
+def test_an_explicit_none_key_is_recorded_in_the_ledger(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import at_rest
+
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV, raising=False)
+    at_rest._reset_for_tests()
+    out = record_desktop_capture(
+        tmp_path / "rec",
+        recorder_factory=_make([]),
+        convert=_plain_convert,
+        stop=lambda: True,
+        announce=False,
+        encryption_key=None,
+    )
+    lines = at_rest.ledger_path().read_text().splitlines()
+    assert any(str(out) in line and "encryption_key=None" in line for line in lines)
+
+
+def test_organization_policy_is_checked_before_capture_starts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import base64
+    import json
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from openadapt_flow import at_rest
+    from openadapt_flow import key_hierarchy as kh
+
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV, raising=False)
+    monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", [])
+    org = ec.generate_private_key(ec.SECP256R1()).public_key()
+    spki = org.public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    (tmp_path / "unmounted").mkdir()
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "schema": kh.POLICY_SCHEMA,
+                "mode": "org",
+                "recipients": [
+                    {
+                        "role": "org",
+                        "type": kh.HPKE_P256,
+                        "public_key": base64.b64encode(spki).decode(),
+                    }
+                ],
+                "key_archive": str(tmp_path / "unmounted"),
+                "max_unarchived": 0,
+            }
+        )
+    )
+    monkeypatch.setenv(kh.POLICY_ENV, str(policy))
+    monkeypatch.setenv(kh.TRUST_USER_POLICY_ENV, "1")
+    log: list = []
+    with pytest.raises(Exception, match="not reachable"):
+        record_desktop_capture(
+            tmp_path / "rec",
+            recorder_factory=_make(log),
+            convert=_plain_convert,
+            stop=lambda: True,
+            announce=False,
+        )
+    assert log == []
+
+
+def test_a_capture_staging_that_survives_is_not_a_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import desktop_record
+
+    monkeypatch.setattr(
+        desktop_record, "_remove_staging", lambda staging: [str(staging / "capture.db")]
+    )
+    with pytest.raises(RuntimeError, match="could not be deleted"):
+        record_desktop_capture(
+            tmp_path / "rec",
+            recorder_factory=_make([]),
+            convert=_plain_convert,
+            stop=lambda: True,
+            announce=False,
+            encryption_key="a-deployment-key-for-tests",
+        )

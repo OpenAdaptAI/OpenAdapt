@@ -50,8 +50,9 @@ import stat
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Final, Optional
+from typing import Final, Iterator, Optional
 
 from openadapt_flow.private_file import open_binary
 
@@ -114,14 +115,24 @@ def encrypt_setting() -> bool:
     raise ValueError(f"{ENCRYPT_ENV} takes 1 or 0, not {value!r}")
 
 
-def opt_out_for_this_process(source: str) -> None:
-    """Turn encryption off for this process and its children (``--no-encrypt``).
-
-    The one-line warning and the ledger line follow at the first write.
-    """
+@contextmanager
+def opted_out(source: str) -> Iterator[None]:
+    """Turn encryption off for one command (``--no-encrypt``): in this
+    process and the children it starts, until the block ends, however it
+    ends. The one-line warning and the ledger line follow at the first
+    write."""
+    saved = {name: os.environ.get(name) for name in (ENCRYPT_ENV, OPT_OUT_ENV)}
     os.environ[ENCRYPT_ENV] = "0"
-    if not (os.environ.get(OPT_OUT_ENV) or "").strip():
+    if not (saved[OPT_OUT_ENV] or "").strip():
         os.environ[OPT_OUT_ENV] = source
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def explicit_key() -> bool:
@@ -765,6 +776,59 @@ def seal_new(artifact: str, path: Path | str) -> bool:
         return True
     unsealed_write(artifact, path)
     return False
+
+
+#: ``encryption_key=POLICY``, the default of the library recording entry
+#: points: decide from the at-rest policy, as ``record`` does (encrypted by
+#: default; plaintext only under the recorded opt-out).
+POLICY: Final[object] = object()
+
+
+def plaintext_by_caller(artifact: str, path: Path | str) -> None:
+    """A library caller passed ``encryption_key=None``: ``artifact`` at
+    ``path`` is written in plaintext. Strict mode refuses before anything is
+    written; otherwise stderr names it and a ledger line records it (once
+    per artifact and path in a process), never silently."""
+    if strict():
+        raise AtRestRefused(
+            f"Not writing {artifact} at {path} in plaintext "
+            f"(encryption_key=None): {MODE_ENV}=strict refuses plaintext. "
+            "Nothing was written."
+        )
+    purpose = f"{artifact} at {path}"
+    reason = opt_out_reason()
+    if reason is not None:
+        record_plaintext(purpose, reason)
+        return
+    _record(
+        purpose,
+        "the caller passed encryption_key=None",
+        path=str(path),
+        warning=(
+            f"WARNING: writing {artifact} in plaintext at {path}: the caller "
+            "turned encryption off (encryption_key=None). It can hold patient "
+            f"data. Set {MODE_ENV}=strict to refuse instead."
+        ),
+    )
+
+
+def new_artifact_key(
+    explicit: Optional[str] | object, artifact: str, path: Path | str
+) -> Optional[str]:
+    """The key for a new recording a library entry point writes: the
+    caller's key; under :data:`POLICY`, the policy's (None, plaintext, only
+    under the recorded opt-out); an explicit ``None`` is plaintext through
+    :func:`plaintext_by_caller` (refused in strict mode, else recorded)."""
+    if explicit is POLICY:
+        if not seal_new(artifact, path):
+            return None
+        from openadapt_flow import sealed_set
+
+        return sealed_set.recording_key()
+    if not explicit:
+        plaintext_by_caller(artifact, path)
+        return None
+    return str(explicit)
 
 
 def seals_by_default() -> bool:

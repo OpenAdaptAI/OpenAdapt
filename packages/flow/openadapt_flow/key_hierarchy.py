@@ -823,6 +823,41 @@ def bucket_lock() -> Iterator[None]:
                 _bucket_depth.n = 0
 
 
+def _device_for(policy: Policy) -> tuple[Unwrapper, Unwrapper]:
+    device = device_keys(create=True)
+    assert device is not None
+    runtime, viewer = device
+    if policy.require_hardware_device_key and (
+        is_software(runtime) or is_software(viewer)
+    ):
+        raise KeyHierarchyError(
+            "the policy requires a hardware device key, and this computer has "
+            "only a software key. Nothing was written."
+        )
+    return runtime, viewer
+
+
+def preflight(policy: Optional[Policy] = None) -> None:
+    """Refuse now what :func:`new_bucket` would refuse later, without making
+    a record: for a capture whose raw session is plaintext while it records,
+    so a policy that won't let it be sealed stops it before it starts."""
+    policy = policy or load_policy()
+    _device_for(policy)
+    if policy.records != "archive":
+        return
+    try:
+        _archive_root(policy.key_archive)
+        return
+    except KeyHierarchyError as exc:
+        unreachable = exc
+    if unarchived_count() + 1 > policy.max_unarchived:
+        raise KeyHierarchyError(
+            f"{unreachable}; {unarchived_count()} encrypted sets are waiting for "
+            f"it and the policy allows {policy.max_unarchived}. Nothing was "
+            "recorded."
+        )
+
+
 def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
     """A fresh bucket for one sealed set, wrapped to the policy's recipients.
 
@@ -834,16 +869,7 @@ def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
     is refused before anything is written.
     """
     policy = policy or load_policy()
-    device = device_keys(create=True)
-    assert device is not None
-    runtime, viewer = device
-    if policy.require_hardware_device_key and (
-        is_software(runtime) or is_software(viewer)
-    ):
-        raise KeyHierarchyError(
-            "the policy requires a hardware device key, and this computer has "
-            "only a software key. Nothing was written."
-        )
+    runtime, viewer = _device_for(policy)
     private = ec.generate_private_key(ec.SECP256R1())
     bucket_id = secrets.token_hex(16)
     secret = _scalar(private)
