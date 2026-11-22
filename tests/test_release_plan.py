@@ -164,17 +164,30 @@ def test_the_workflow_runs_on_main_after_packages_on_a_schedule_and_on_dispatch(
     jobs = workflow["jobs"]
     assert "release_plan.py" in jobs["plan"]["steps"][-1]["run"]
     assert jobs["plan"]["permissions"] == {"contents": "read", "actions": "read"}
-    # Only the publish job may mint a PyPI token, in the package's environment.
+    # Only the publish job may mint a PyPI token, in the package's environment;
+    # publish-mcp-registry mints a separate GitHub OIDC token (no PyPI env)
+    # strictly for packages that ship a server.json MCP Registry manifest.
     assert jobs["publish"]["environment"]["name"] == "pypi-${{ matrix.package }}"
     assert jobs["publish"]["permissions"] == {"id-token": "write"}
+    assert "environment" not in jobs["publish-mcp-registry"]
+    assert jobs["publish-mcp-registry"]["permissions"] == {
+        "contents": "read",
+        "id-token": "write",
+    }
     for name, job in jobs.items():
-        if name != "publish":
+        if name not in {"publish", "publish-mcp-registry"}:
             assert "id-token" not in (job.get("permissions") or {}), name
 
 
 def test_each_package_chain_gates_on_its_own_legs() -> None:
     jobs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]
-    for name in ("build", "preflight-github", "publish", "publish-github"):
+    for name in (
+        "build",
+        "preflight-github",
+        "publish",
+        "publish-github",
+        "publish-mcp-registry",
+    ):
         assert jobs[name]["strategy"]["fail-fast"] is False, name
 
     def downloads(job: str) -> set[str]:
@@ -187,6 +200,11 @@ def test_each_package_chain_gates_on_its_own_legs() -> None:
     assert "preflight-${{ matrix.package }}" in downloads("publish")
     assert "dist-${{ matrix.package }}" in downloads("publish")
     assert "preflight-${{ matrix.package }}" in downloads("publish-github")
+    assert "preflight-${{ matrix.package }}" in downloads("publish-mcp-registry")
+    mcp_runs = "\n".join(
+        step.get("run", "") for step in jobs["publish-mcp-registry"]["steps"]
+    )
+    assert "login github-oidc" in mcp_runs and '"$MCP_PUBLISHER" publish' in mcp_runs
     runs = "\n".join(step.get("run", "") for step in jobs["publish-github"]["steps"])
     # It tags only what PyPI serves, at the built (or already tagged) commit.
     assert "pypi_dist.py compare" in runs and "pypi_dist.py fetch" in runs

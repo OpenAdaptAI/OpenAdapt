@@ -2,20 +2,20 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.OpenAdaptAI/openadapt-agent",
   "title": "OpenAdapt: your agent decides, OpenAdapt enters it and checks it saved",
-  "description": "Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.",
-  "websiteUrl": "https://docs.openadapt.ai",
+  "description": "Verified local desktop & browser automation with read-back checks and signed receipts. Zero egress.",
+  "websiteUrl": "https://openadapt.ai/proof",
   "repository": {
     "url": "https://github.com/OpenAdaptAI/OpenAdapt",
     "source": "github",
     "subfolder": "packages/agent"
   },
-  "version": "2.2.2",
+  "version": "2.2.3",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "openadapt-agent",
-      "version": "2.2.2",
+      "version": "2.2.3",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
