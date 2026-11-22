@@ -205,11 +205,20 @@ def test_every_credential_the_verifier_reads_is_withheld_from_the_command(tmp_pa
         "  frame:\n"
         "    database:\n"
         "      read: {sql_password_env: DB_PASSWORD, dsn_env: [DB_DSN]}\n"
-        "  auth: {basic_env: APP_BASIC}\n",
+        "  auth: {basic_env: APP_BASIC}\n"
+        "  api: {secret_env: {token: SOR_API_TOKEN, key: SOR_API_KEY}}\n",
         encoding="utf-8",
     )
     names = verify_env_names(verify)
-    assert names == {"APP_URL", "APP_TOKEN", "DB_PASSWORD", "DB_DSN", "APP_BASIC"}
+    assert names == {
+        "APP_URL",
+        "APP_TOKEN",
+        "DB_PASSWORD",
+        "DB_DSN",
+        "APP_BASIC",
+        "SOR_API_TOKEN",
+        "SOR_API_KEY",
+    }
     env = child_environment(
         {
             "PATH": "/bin",
@@ -219,6 +228,8 @@ def test_every_credential_the_verifier_reads_is_withheld_from_the_command(tmp_pa
             "APP_BASIC": "u:p",
             "DB_DSN": "postgres://x",
             "APP_URL": "http://127.0.0.1",
+            "SOR_API_TOKEN": "sor-token",
+            "SOR_API_KEY": "sor-key",
         },
         names,
     )
@@ -310,3 +321,64 @@ def test_a_signal_to_openadapt_ends_the_wrapped_command_group(tmp_path, how):
     parent.send_signal(getattr(signal, how))
     parent.wait(timeout=30)
     assert _wait_gone(grandchild)
+
+
+def test_a_deduped_rerun_says_how_to_run_again(monkeypatch, capsys):
+    def task(args, parser, *, command_agent=None, replay_only=False):
+        t = _Task(command_agent, {"verified": False})
+        t.call = lambda request_id, values: {  # type: ignore[method-assign]
+            "verified": False,
+            "replayed": True,
+            "request_id": request_id,
+        }
+        return t
+
+    monkeypatch.setattr(cli, "_task", task)
+    cli.main(["--task", "t.json", "--param", "note=x", "--", "my-agent"])
+    err = capsys.readouterr().err
+    assert "already ran" in err and "pass a new --request-id" in err
+    # A named request that replays is the caller's choice: no notice.
+    cli.main(["--task", "t.json", "--request-id", "r1", "--", "my-agent"])
+    assert "already ran" not in capsys.readouterr().err
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="process groups")
+@pytest.mark.parametrize("how", ["SIGTERM", "SIGINT"])
+def test_a_signal_during_a_browser_tool_call_still_ends_the_command(tmp_path, how):
+    # The real path: the command runs on serve_while's worker thread, and the
+    # main thread is inside a browser tool call whose error handling keeps
+    # the interrupt (serve_while hands every exception back to the caller).
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    pid_file = tmp_path / "grandchild.pid"
+    driver = tmp_path / "driver.py"
+    driver.write_text(
+        "import sys, time\n"
+        "from concurrent.futures import Future\n"
+        "from types import SimpleNamespace\n"
+        "from openadapt_flow.integrations.agents.skills import BrowserTools\n"
+        "from openadapt_flow.wrap import cli\n"
+        "from openadapt_flow.wrap.process import _run_group\n"
+        "tools = BrowserTools(SimpleNamespace())\n"
+        "def work():\n"
+        "    tools._jobs.put((lambda: time.sleep(600), Future()))\n"
+        f"    _run_group([sys.executable, '-c', {_group_script(pid_file)!r}], {{}}, 600)\n"
+        "with cli._commands_stopped_on_signal(True):\n"
+        "    tools.serve_while(work)\n",
+        encoding="utf-8",
+    )
+    parent = subprocess.Popen(
+        [sys.executable, str(driver)], env=dict(os.environ), stderr=subprocess.PIPE
+    )
+    deadline = time.monotonic() + 30
+    while not pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.5)  # let the main thread enter the tool call
+    grandchild = int(pid_file.read_text())
+    parent.send_signal(getattr(signal, how))
+    assert _wait_gone(grandchild)
+    parent.wait(timeout=30)

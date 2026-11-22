@@ -114,7 +114,8 @@ def verify_env_names(verify: Any) -> frozenset[str]:
 
     That is each ``${NAME}`` (or ``${NAME:-default}``) reference anywhere in
     the file, and each value of a key ending in ``_env`` (for example
-    ``sql_password_env`` or ``basic_env``). An unreadable file raises, so a
+    ``sql_password_env``, ``basic_env``, or every value of a
+    ``secret_env: {slot: VAR}`` map). An unreadable file raises, so a
     wrapped command never starts with credentials that could not be checked.
     """
 
@@ -127,7 +128,14 @@ def verify_env_names(verify: Any) -> frozenset[str]:
         if isinstance(node, Mapping):
             for key, value in node.items():
                 if isinstance(key, str) and key.endswith("_env"):
-                    values = value if isinstance(value, (list, tuple)) else [value]
+                    # One name, a list of names, or a map such as
+                    # ``secret_env: {slot: VAR}``: every value is a variable.
+                    if isinstance(value, Mapping):
+                        values = list(value.values())
+                    elif isinstance(value, (list, tuple)):
+                        values = list(value)
+                    else:
+                        values = [value]
                     names.update(v for v in values if isinstance(v, str) and v)
                 walk(value)
         elif isinstance(node, (list, tuple)):
@@ -159,7 +167,9 @@ def request_id_for(task: str, command: Sequence[str], values: Mapping[str, str])
 
 #: Wrapped commands still running, so a signal to OpenAdapt ends them too.
 _RUNNING: set["subprocess.Popen[Any]"] = set()
-_RUNNING_LOCK = threading.Lock()
+# Re-entrant: the CLI's signal handlers call stop_running_commands() on the
+# main thread, which may already hold the lock when the signal arrives.
+_RUNNING_LOCK = threading.RLock()
 
 
 def stop_running_commands() -> None:

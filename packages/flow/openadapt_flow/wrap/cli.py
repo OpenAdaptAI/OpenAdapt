@@ -428,8 +428,10 @@ def _commands_stopped_on_signal(active: bool) -> Iterator[None]:
     """End the wrapped command's process group on Ctrl-C, SIGTERM or any exit.
 
     The command runs in its own session, so a terminal's Ctrl-C and a SIGTERM
-    sent to OpenAdapt never reach it. SIGTERM is turned into an interrupt
-    here, and every exit from this block stops what is still running.
+    sent to OpenAdapt never reach it. The handlers stop the group themselves
+    before raising: the main thread may be inside a browser tool call whose
+    error handling keeps the interrupt from reaching this block, and the
+    command must still end. Every exit from this block stops what is left.
     """
 
     if not active:
@@ -437,20 +439,22 @@ def _commands_stopped_on_signal(active: bool) -> Iterator[None]:
         return
     from openadapt_flow.wrap.process import stop_running_commands
 
-    previous = None
     main_thread = threading.current_thread() is threading.main_thread()
+    previous: dict[int, Any] = {}
 
-    def on_term(signum: int, frame: Any) -> None:
+    def on_signal(signum: int, frame: Any) -> None:
+        stop_running_commands()
         raise KeyboardInterrupt
 
     if main_thread:
-        previous = signal.signal(signal.SIGTERM, on_term)
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            previous[signum] = signal.signal(signum, on_signal)
     try:
         yield
     finally:
         stop_running_commands()
-        if main_thread and previous is not None:
-            signal.signal(signal.SIGTERM, previous)
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -488,9 +492,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
 
     agent = None
+    derived_id = False
     try:
         values = _params(args.param)
-        if not args.serve and not args.request_id:
+        derived_id = not args.serve and not args.request_id
+        if derived_id:
             from openadapt_flow.wrap.process import request_id_for
 
             # Never random: asking for the same run again must dedupe.
@@ -560,6 +566,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if derived_id and result.get("replayed") is True:
+        # The default dedupes; say so instead of replaying silently.
+        print(
+            f"openadapt wrap: request {args.request_id} already ran with this "
+            "task, command and inputs; this is its earlier result and nothing "
+            "ran again. To run it again, pass a new --request-id",
+            file=sys.stderr,
+        )
     print(json.dumps(result, sort_keys=True))
     exit_code = getattr(agent, "exit_code", None)
     if isinstance(exit_code, int) and exit_code != 0:
