@@ -148,22 +148,25 @@ def _runtime_scope(tier: int) -> dict:
 
 
 def _verify_run_scope(tier: VerificationTier, tmp_path) -> dict:
-    from tests.test_verify_run import AGENT_RECORD, PARAMS, _fake_cfg, _FakeVerifier
-
     from openadapt_flow.runtime.effects import adapter as adapter_mod
     from openadapt_flow.runtime.effects.adapter import register_verifier_factory
+    from tests.test_verify_run import AGENT_RECORD, PARAMS, _fake_cfg, _FakeVerifier
 
     saved = dict(adapter_mod._REGISTRY)
     try:
         register_verifier_factory(
             "fake-ladder", lambda cfg, params: _FakeVerifier(tier), replace=True
         )
+        cfg = _fake_cfg("fake-ladder", minimum_effect_strength="independent_session")
+        baseline = tmp_path / f"baseline-{int(tier)}.json"
+        verify_run_mod.capture_baseline(cfg, PARAMS, baseline)
         result = verify_run_mod.verify_run(
-            _fake_cfg("fake-ladder", minimum_effect_strength="independent_session"),
+            cfg,
             params=PARAMS,
             run_record=AGENT_RECORD,
             authorization_ref="ticket-0000-test",
-            private_dir=tmp_path,
+            baseline_path=baseline,
+            private_dir=tmp_path / f"private-{int(tier)}",
         )
     finally:
         adapter_mod._REGISTRY.clear()
@@ -296,7 +299,9 @@ def test_block_must_agree_with_the_predicate_outcome() -> None:
     )
     shown = build_evidence_scope(CheckLevel.REOPENED, read_back_at=T)
     assert (
-        predicate_evidence_scope_problem({"outcome": "VERIFIED", "evidence_scope": shown})
+        predicate_evidence_scope_problem(
+            {"outcome": "VERIFIED", "evidence_scope": shown}
+        )
         == "evidence_scope_outcome"
     )
     for broken in (
@@ -376,16 +381,17 @@ def test_run_receipt_states_its_evidence_scope(checked_how, word, basis) -> None
     assert "read_back_at" not in scope
     assert "read_back_time" in scope["not_covered"]
     # Same level, word and basis as the runtime and verify-run paths.
-    assert _key(scope) == _key(_runtime_scope(to_verification_tier(
-        CheckLevel.from_label(checked_how)
-    )))
+    assert _key(scope) == _key(
+        _runtime_scope(to_verification_tier(CheckLevel.from_label(checked_how)))
+    )
 
 
 def test_run_receipt_never_says_verified_below_level_3() -> None:
     predicate = _statement(_run_report("reopened"))
     assert predicate["outcome"] == "UNKNOWN"
     assert predicate["reason_code"] == "below_verified_level"
-    assert predicate["evidence_scope"]["word"] == "RECORDED"
+    # A confirmed level 2 re-read is SHOWN, never VERIFIED.
+    assert predicate["evidence_scope"]["word"] == "SHOWN"
 
 
 def test_run_receipt_without_a_readback_block_keeps_its_old_shape() -> None:

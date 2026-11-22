@@ -134,8 +134,10 @@ def build_statement(
     elif outcome == "VERIFIED" and len(every_line) > r.MAX_LINES:
         outcome, reason = "UNKNOWN", "too_many_writes"
     scope = _evidence_scope(report, outcome)
-    if scope is None and outcome == "VERIFIED" and isinstance(
-        report.get("readback"), Mapping
+    if (
+        scope is None
+        and outcome == "VERIFIED"
+        and isinstance(report.get("readback"), Mapping)
     ):
         # Receipts say VERIFIED only on a level 3 or 4 read (check_level).
         outcome, reason = "UNKNOWN", "below_verified_level"
@@ -220,9 +222,7 @@ def _evidence_scope(
         scope = evidence_scope_for_run(readback, outcome)
     except ValueError:
         return None
-    if predicate_evidence_scope_problem(
-        {"outcome": outcome, "evidence_scope": scope}
-    ):
+    if predicate_evidence_scope_problem({"outcome": outcome, "evidence_scope": scope}):
         return None
     return scope
 

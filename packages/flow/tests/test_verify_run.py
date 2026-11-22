@@ -413,6 +413,13 @@ def _fake_cfg(kind: str, **extra) -> VerifyConfig:
     return VerifyConfig.model_validate(doc)
 
 
+def _fake_baseline(cfg: VerifyConfig, tmp_path: Path) -> Path:
+    """A baseline from the fake verifier, so the frame is judged."""
+    path = tmp_path / "baseline.json"
+    capture_baseline(cfg, PARAMS, path)
+    return path
+
+
 def test_separate_session_read_is_level_3_and_verified_when_the_contract_allows(
     clean_registry, tmp_path
 ):
@@ -426,7 +433,8 @@ def test_separate_session_read_is_level_3_and_verified_when_the_contract_allows(
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
-        private_dir=tmp_path,
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
     )
     receipt = result["receipt"]
     assert receipt["effect_verdict"] == "CONFIRMED"
@@ -458,12 +466,14 @@ def test_separate_session_read_below_a_system_of_record_minimum_is_not_verified(
         "fake-session",
         lambda cfg, params: _FakeVerifier(VerificationTier.INDEPENDENT_SESSION),
     )
+    cfg = _fake_cfg("fake-session")
     result = verify_run(
-        _fake_cfg("fake-session"),
+        cfg,
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
-        private_dir=tmp_path,
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
     )
     receipt = result["receipt"]
     assert receipt["outcome"] == "reconciliation_required"
@@ -485,13 +495,19 @@ def test_tier_1_receipt_cannot_borrow_the_separate_session_rule(
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
-        private_dir=tmp_path,
+        baseline_path=_fake_baseline(cfg, tmp_path),
+        private_dir=tmp_path / "private",
     )["receipt"]
     # Without the block, a level 3 VERIFIED receipt is refused offline.
     old_shape = {k: v for k, v in receipt.items() if k != "evidence_scope"}
-    assert verify_run_mod.receipt_problem(old_shape) == "verified_without_independent_readback"
+    assert (
+        verify_run_mod.receipt_problem(old_shape)
+        == "verified_without_independent_readback"
+    )
     # A block whose word disagrees with the outcome is refused.
-    wrong = dict(receipt, evidence_scope=dict(receipt["evidence_scope"], word="RECORDED"))
+    wrong = dict(
+        receipt, evidence_scope=dict(receipt["evidence_scope"], word="RECORDED")
+    )
     wrong["evidence_scope"].pop("basis")
     assert verify_run_mod.receipt_problem(wrong) == "evidence_scope"
 

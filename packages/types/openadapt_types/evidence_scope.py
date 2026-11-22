@@ -130,9 +130,7 @@ class EvidenceScopeV1(_Closed):
     basis: Optional[Basis] = None
     wire: WireScope
     read_back_at: Optional[StrictStr] = Field(default=None, pattern=_ISO_SECONDS)
-    recheck_window_s: Optional[StrictInt] = Field(
-        default=None, ge=0, le=_MAX_RECHECK_S
-    )
+    recheck_window_s: Optional[StrictInt] = Field(default=None, ge=0, le=_MAX_RECHECK_S)
     not_covered: list[NotCovered] = Field(min_length=2, max_length=7)
 
     @model_validator(mode="after")
@@ -273,4 +271,3 @@ def with_evidence_scope(
     if problem is not None:
         raise ValueError(f"evidence scope refused: {problem}")
     return out
-

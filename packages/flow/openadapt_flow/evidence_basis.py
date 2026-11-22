@@ -40,9 +40,7 @@ __all__ = [
 SQL_KINDS = frozenset({"sql"})
 
 
-def basis_for_tier(
-    tier: Optional[int], kinds: Iterable[str] = ()
-) -> Optional[Basis]:
+def basis_for_tier(tier: Optional[int], kinds: Iterable[str] = ()) -> Optional[Basis]:
     """The basis of a confirmed check at Flow ``tier`` by verifiers ``kinds``.
 
     None for tiers 3 and 4, for no tier, and for any unknown tier.

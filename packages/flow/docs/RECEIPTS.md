@@ -29,7 +29,18 @@ changes the run's exit code and calls no model.
   (`read_back`, `same_screen` or `none`), and what it didn't check;
 - check counts;
 - a disclosure map: salted commitments to the program name, Flow version and
-  run id.
+  run id;
+- an evidence scope (`evidence_scope`, `openadapt.evidence-scope/v1`): the
+  check level the weakest save reached, the receipt word (`VERIFIED` only at
+  level 3, a separate session, or level 4, the system of record, and then
+  with its basis; otherwise `SHOWN` or `RECORDED`), the wire the run watched,
+  and what the evidence did not cover. It always lists server-side async and
+  outbound effects, and, because a run report has no per-read time yet,
+  `read_back_time`. `VERIFIED` means the read-back showed the value when it
+  ran, not that it persisted. A run whose saves were checked below level 3
+  gets `UNKNOWN` (`below_verified_level`), never `VERIFIED`. Receipts written
+  before this field, and a `VERIFIED` run whose report has no `readback`
+  block (it made no save), have no evidence scope and still verify.
 
 **A receipt and its public card never contain screenshots, typed values,
 URLs or page text.** Evidence files, screenshots included, appear only by

@@ -54,7 +54,9 @@ _CACHE_STATUS_HEADERS = (
 _CACHE_HIT_WORDS = ("hit", "stale", "revalidated", "updating")
 
 
-def served_from_cache(headers: Optional[Mapping[str, str]], status: Optional[int]) -> bool:
+def served_from_cache(
+    headers: Optional[Mapping[str, str]], status: Optional[int]
+) -> bool:
     """True when the response may have come from a cache (fails closed)."""
 
     if status == 304:

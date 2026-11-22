@@ -79,8 +79,8 @@ from openadapt_types.evidence_scope import (
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.complete_read import CompleteReadProvider
-from openadapt_flow.evidence_basis import level_and_basis
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.evidence_basis import level_and_basis
 from openadapt_flow.fault_gate import (
     AdmissionPolicy,
     CoverageRecord,
@@ -4201,8 +4201,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     if scope_problem is not None:
         return scope_problem
     if outcome in ("verified", "rolled_back_verified") and (
-        receipt["effect_verdict"] != "CONFIRMED"
-        or not _verified_read(receipt)
+        receipt["effect_verdict"] != "CONFIRMED" or not _verified_read(receipt)
     ):
         return "verified_without_independent_readback"
     if (
