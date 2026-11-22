@@ -337,7 +337,7 @@ def _run_report(checked_how, outcome="VERIFIED"):
         "started_at": "2026-11-21T12:34:56Z",
         "execution_outcome": outcome,
         "model_calls": 0,
-        "results": [{"step_id": "save", "ok": True}],
+        "results": [],
     }
     if checked_how is not None:
         report["readback"] = {
