@@ -148,3 +148,22 @@ def test_the_guard_stops_a_refresh_that_would_drop_a_hand_edit(
     page.write_text("| a |\n| hand-added |\n", "utf-8")
     assert mod.guard() == 1
     assert "| hand-added |" in capsys.readouterr().err
+
+
+def test_the_guard_passes_a_page_that_matches_its_sources(mod, tmp_path, monkeypatch):
+    # Regenerated without updating the stamp: nothing would be dropped.
+    page, stamp = tmp_path / "CAPABILITIES.md", tmp_path / "stamp"
+    monkeypatch.setattr(mod, "OUT", page)
+    monkeypatch.setattr(mod, "STAMP", stamp)
+    monkeypatch.setattr(mod, "assemble", lambda: "| a |\n| b |\n")
+    page.write_text("| a |\n| b |\n", "utf-8")
+    stamp.write_text(mod._stamp("| a |\n"), "utf-8")
+    assert mod.guard() == 0
+
+
+def test_editor_and_os_leftovers_are_ignored(mod, tmp_path):
+    root = _section(
+        tmp_path, {"0010-a.md": "| a | 1 |\n", ".DS_Store": "x", "0010-a.md~": "y"}
+    )
+    (root / ".DS_Store").write_text("x", "utf-8")
+    assert "| a | 1 |" in mod.assemble(root)

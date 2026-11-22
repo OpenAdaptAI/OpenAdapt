@@ -70,7 +70,8 @@ jobs:
           python3 scripts/build_llms_full.py --check
 
           prefix="bot/refresh-generated-"
-          open_prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 50 \
+          open_prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --author "app/github-actions" --limit 100 \
             --json number,headRefName,body \
             --jq "map(select(.headRefName | startswith(\"$prefix\")))")"
 

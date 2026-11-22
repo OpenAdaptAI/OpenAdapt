@@ -78,6 +78,11 @@ def _rel(path: Path) -> Path:
     return path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
 
 
+def _visible(path: Path) -> bool:
+    """Skip what editors and the OS leave behind (.DS_Store, foo.md~, .swp)."""
+    return not path.name.startswith((".", "__")) and not path.name.endswith("~")
+
+
 def _numbered(paths, pattern: re.Pattern[str]) -> list[Path]:
     found = []
     for path in paths:
@@ -92,12 +97,18 @@ def _numbered(paths, pattern: re.Pattern[str]) -> list[Path]:
 
 
 def sections(root: Path = SOURCES) -> list[Path]:
-    return _numbered((p for p in root.iterdir() if p.is_dir()), _SECTION_DIR)
+    return _numbered(
+        (p for p in root.iterdir() if p.is_dir() and _visible(p)), _SECTION_DIR
+    )
 
 
 def rows(section: Path) -> list[str]:
     """Return a section's table rows, in order, each checked to be one row."""
-    files = (p for p in section.iterdir() if p.is_file() and p.name != SECTION)
+    files = (
+        p
+        for p in section.iterdir()
+        if p.is_file() and p.name != SECTION and _visible(p)
+    )
     lines = []
     for path in _numbered(files, _ROW_FILE):
         text = path.read_text("utf-8")
@@ -236,7 +247,12 @@ def guard() -> int:
     page = OUT.read_text("utf-8")
     if STAMP.exists() and STAMP.read_text("utf-8") == _stamp(page):
         return 0
-    sources = set(assemble().splitlines())
+    assembled = assemble()
+    if page == assembled:
+        # Regenerated outside this script (or the stamp was not updated):
+        # the page matches its sources, so the refresh drops nothing.
+        return 0
+    sources = set(assembled.splitlines())
     extra = [line for line in page.splitlines() if line not in sources]
     print(
         "CAPABILITIES.md was changed by something other than "
