@@ -2131,15 +2131,39 @@ def flight(command_ctx: click.Context) -> None:
     machine, blocks other egress on macOS, logs its actions and writes
     flight.json. Every argument passes to
     `openadapt flow flight`; its options are listed by
-    `openadapt flight --help`.
+    `openadapt flight --help`. With an openadapt-flow older than 3.5.0 it
+    says so and exits 4.
     """
     if "flight" not in _flow_verbs():
-        click.echo(
-            "Error: the installed openadapt-flow has no flight command.", err=True
+        installed = _installed_flow_version()
+        needs = (
+            f"openadapt flight needs openadapt-flow >= {FLIGHT_MIN_FLOW} "
+            f"(installed: {installed}). Upgrade with: pip install --upgrade openadapt"
         )
-        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
-        sys.exit(2)
+        if any(arg in ("-h", "--help") for arg in command_ctx.args):
+            # Help is always there; it says what is missing.
+            click.echo(command_ctx.get_help())
+            click.echo("\n" + needs)
+            return
+        click.echo("Error: " + needs, err=True)
+        sys.exit(FLIGHT_ENGINE_TOO_OLD_EXIT)
     _run_flow(["flight", *_flight_argv(list(command_ctx.args))])
+
+
+#: The first openadapt-flow release with the flight verb.
+FLIGHT_MIN_FLOW = "3.5.0"
+#: Exit status of `openadapt flight` when the installed Flow has no flight
+#: verb (not argparse's 2, which means a bad option).
+FLIGHT_ENGINE_TOO_OLD_EXIT = 4
+
+
+def _installed_flow_version() -> str:
+    from importlib import metadata
+
+    try:
+        return metadata.version("openadapt-flow")
+    except metadata.PackageNotFoundError:
+        return "not installed"
 
 
 def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
