@@ -263,7 +263,312 @@ def build() -> dict[str, dict]:
     add("unknown-schema", "A correctly signed statement of a predicate type this verifier doesn't know.",
         unknown_schema, {"ok": False, "reason": "unknown_schema",
                          "signer_lines": [r.refusal_line("unknown_schema")]})
+    _confirmation_vectors(add)
+    _handoff_vectors(vectors)
+    _canonical_vectors(vectors)
+    _chain_vectors(vectors)
     return vectors
+
+
+def _chain_vectors(vectors) -> None:
+    """Follow-up chains: an original receipt sent, then acknowledged, then recorded."""
+    sent, sent_openings = _confirmed("sent")
+    original = r.sign_statement(sent, [signer("this_computer")])
+
+    def update(state, sequence, of=original, by="this_computer"):
+        st, _ = _confirmed(state, salt=_salts())
+        confirmations = st["predicate"]["confirmations"]
+        return r.sign_statement(
+            r.follow_up_statement(of, sequence, confirmations), [signer(by)]
+        )
+
+    ack, recorded = update("acknowledged", 1), update("recorded_as_intended", 2)
+    ok_lines = [
+        "Sent to the other party, not confirmed",
+        "Update 1: Acknowledged by the other party",
+        "Update 2: Confirmed in the other party's system",
+    ]
+
+    def put(name, description, updates, expected):
+        vectors[name] = {
+            "description": description,
+            "registry": "registry.json",
+            "chain": {"original": original, "updates": updates},
+            "expected": expected,
+        }
+
+    put("chain-valid", "An original receipt and two follow-ups, in order.",
+        [ack, recorded], {"ok": True, "reason": None, "lines": ok_lines})
+    another = _confirmed("sent")[0]
+    another["predicate"]["model_calls"] = 1  # a different receipt
+    other = r.sign_statement(another, [signer("this_computer")])
+    put("chain-wrong-original", "A follow-up that names another receipt's payload.",
+        [update("acknowledged", 1, of=other)], {"ok": False, "reason": "wrong_original", "lines": []})
+    put("chain-out-of-sequence", "Two follow-ups whose sequence numbers skip.",
+        [ack, update("recorded_as_intended", 3)], {"ok": False, "reason": "out_of_sequence", "lines": []})
+    put("chain-different-signer", "A follow-up signed by another registered key, not the original's.",
+        [update("acknowledged", 1, by="customer_key")], {"ok": False, "reason": "different_signer", "lines": []})
+    payload = base64.b64decode(recorded["payload"]).replace(
+        b'"state":"recorded_as_intended"', b'"state":"recorded_differently"', 1
+    )
+    put("chain-tampered", "The second follow-up edited after signing.",
+        [ack, dict(recorded, payload=base64.b64encode(payload).decode())],
+        {"ok": False, "reason": "update_refused", "lines": []})
+    empty = r.follow_up_statement(original, 1, [])
+    raw = r.canonical_json(empty).encode()
+    unsigned_rules = {
+        "payloadType": r.PAYLOAD_TYPE,
+        "payload": base64.b64encode(raw).decode(),
+        "signatures": [{"keyid": IDS["this_computer"], "sig": base64.b64encode(KEYS["this_computer"].sign(r.pae(r.PAYLOAD_TYPE, raw))).decode()}],
+    }
+    put("chain-empty", "A signed follow-up that carries no confirmation: refused.",
+        [unsigned_rules], {"ok": False, "reason": "update_refused", "lines": []})
+
+
+#: A synthetic report with floats, nesting, unicode and unsorted keys.
+REPORT = {
+    "run_id": "run-1",
+    "execution_outcome": "VERIFIED",
+    "est_model_cost_usd": 0.0,
+    "total_ms": 20303.5,
+    "ratio": 1e-7,
+    "big": 1e21,
+    "zeta": [3, 2.5, None, True],
+    "note": "caf\u00e9 \u2014 line\nnext",
+    "alpha": {"b": 1, "a": -0.5},
+}
+
+JCS_CASES = [
+    0.0, 1.0, -0.5, 4.5, 1e-7, 1e-6, 1e20, 1e21, 123.456, 2**53 - 1,
+    "caf\u00e9\n\t\"q\"", {"b": [1, {"d": 0.1, "c": None}], "a": "x"},
+    {"\u20ac": 1, "\U0001f600": 2, "z": 3},
+    {"\uffff": 1, "\U0001f600": 2},
+]
+
+
+def _canonical_vectors(vectors) -> None:
+    file_bytes = (json.dumps(REPORT, indent=2) + "\n").encode()
+    st = statement("STOPPED")
+    st["subject"] = [
+        {"name": "report.json", "digest": {"sha256": hashlib.sha256(file_bytes).hexdigest()}},
+        {"name": "report.canonical", "digest": {"sha256": r.report_canonical_sha256(REPORT)}},
+    ]
+    vectors["report-canonical"] = {
+        "description": (
+            "A receipt naming both report digests: the file's bytes (report.json) "
+            "and the RFC 8785 canonical JSON (report.canonical)."
+        ),
+        "registry": "registry.json",
+        "document": r.sign_statement(st, [signer("this_computer")]),
+        "report": REPORT,
+        "report_file": base64.b64encode(file_bytes).decode(),
+        "expected": {
+            "ok": True,
+            "reason": None,
+            "outcome": "STOPPED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "disclosed": {},
+            "report_canonical": r.jcs(REPORT),
+            "report_canonical_sha256": r.report_canonical_sha256(REPORT),
+            "file_matches": "report.json",
+            "canonical_matches": "report.canonical",
+        },
+    }
+    vectors["jcs"] = {
+        "description": "RFC 8785 canonical JSON cases (input as JSON, expected canonical text).",
+        "cases": [{"input": c, "canonical": r.jcs(c)} for c in JCS_CASES],
+    }
+
+
+HANDOFF = b'{"referral":"synthetic","status":"sent"}'
+
+
+def _handoff_vectors(vectors) -> None:
+    def put(name, description, document, expected, openings=None, received=None):
+        vectors[name] = {
+            "description": description,
+            "registry": "registry.json",
+            "document": document,
+            **({"openings": openings} if openings is not None else {}),
+            **({"received": base64.b64encode(received).decode()} if received is not None else {}),
+            "expected": expected,
+        }
+
+    values = {
+        "approval.principal": "person:pr-" + "cd" * 8,
+        "approval.scope": hashlib.sha256(b"synthetic approval scope").hexdigest(),
+        "approval.approved_at": "2026-11-20T23:30:00Z",
+    }
+    commitments, openings = r.make_openings(values, salt=_salts())
+    st = statement("VERIFIED")
+    st["subject"].append(
+        {
+            "name": "payload",
+            "digest": {"sha256": hashlib.sha256(HANDOFF).hexdigest()},
+            "media_type": "application/json",
+        }
+    )
+    st["predicate"]["approval"] = {
+        "mode": "each_item",
+        "approver_kind": "person",
+        "commitments": {k.split(".", 1)[1]: v for k, v in commitments.items()},
+    }
+    env = r.sign_statement(st, [signer("this_computer")])
+    ok = {
+        "ok": True,
+        "reason": None,
+        "outcome": "VERIFIED",
+        "demo": False,
+        "signer_lines": ["Signed by this computer"],
+        "approval_line": "Approved by a person: each item",
+    }
+    put("payload-bound", "A handoff receipt bound to the bytes the receiver got, with a person's approval.",
+        env, {**ok, "payload_bound": True, "disclosed": {k: v["value"] for k, v in openings.items()}},
+        r.private_openings(env, openings), HANDOFF)
+    put("payload-mismatch", "The receiver got different bytes from the payload the receipt signed.",
+        env, {"ok": False, "reason": "payload_mismatch", "signer_lines": [r.refusal_line("payload_mismatch")]},
+        None, HANDOFF.replace(b"sent", b"done"))
+    plain = r.sign_statement(statement("VERIFIED"), [signer("this_computer")])
+    put("payload-missing", "Handed-off bytes checked against a receipt that names no payload.",
+        plain, {"ok": False, "reason": "payload_not_bound", "signer_lines": [r.refusal_line("payload_not_bound")]},
+        None, HANDOFF)
+    put("approval-public-card", "The public card of an approved handoff: the mode and approver kind show; who, what and when stay committed.",
+        r.public_card(env, openings, reveal=[]), {**ok, "disclosed": {}})
+    put("approval-none", "A receipt with no approval block says so.",
+        plain, {**ok, "approval_line": "No approval recorded", "disclosed": {}})
+    gate = statement("VERIFIED")
+    gate["predicate"]["approval"] = {"mode": "not_gated", "approver_kind": "none", "commitments": {}}
+    put("approval-not-gated", "A run started from the customer's own software, recorded as not gated.",
+        r.sign_statement(gate, [signer("this_computer")]),
+        {**ok, "approval_line": "Not gated: no approval was required for these writes", "disclosed": {}})
+
+
+_STATES = {
+    "recorded_as_intended": ("portal_read_back", "read_back", 0),
+    "recorded_differently": ("api", "read_back", 1),
+    "acknowledged": ("acknowledgment_message", "acknowledgment", 0),
+    "sent": ("acknowledgment_message", "none", 0),
+}
+
+
+def _confirmed(state: str, reason=None, salt=None):
+    """A VERIFIED statement whose step-4 write has one counterparty confirmation."""
+    method, strength, differing = _STATES[state]
+    field = "dob:" + hashlib.sha256(b"synthetic field value").hexdigest()
+    values = {
+        "confirmations.0.counterparty": "ehr:cp-" + "ab" * 8,
+        "confirmations.0.observed_at": "2026-11-20T23:41:07Z",
+        "confirmations.0.field.0": field + (":differs" if differing else ""),
+    }
+    if reason is not None:
+        values["confirmations.0.reason"] = reason
+    commitments, openings = r.make_openings(values, salt=salt or _salts())
+    st = statement("VERIFIED")
+    st["predicate"]["confirmations"] = [
+        {
+            "kind": "counterparty_confirmation",
+            "for_step": 4,
+            "system_kind": "ehr",
+            "read_method": method,
+            "state": state,
+            "strength": strength,
+            "differing_count": differing,
+            "commitments": {k.split(".", 2)[2]: v for k, v in commitments.items()},
+        }
+    ]
+    return st, openings
+
+
+def _confirmation_vectors(add) -> None:
+    lines = {
+        "recorded_as_intended": "Confirmed in the other party's system at 2026-11-20T23:41:07Z",
+        "recorded_differently": "Recorded differently in the other party's system at 2026-11-20T23:41:07Z: 1 field differs",
+        "acknowledged": "Acknowledged by the other party at 2026-11-20T23:41:07Z",
+        "sent": "Sent to the other party at 2026-11-20T23:41:07Z, not confirmed",
+    }
+    for state, line in lines.items():
+        st, openings = _confirmed(state)
+        env = r.sign_statement(st, [signer("this_computer")])
+        add(
+            f"confirmation-{state.replace('_', '-')}",
+            f"A counterparty confirmation in state {state}, with its private openings.",
+            env,
+            {
+                "ok": True,
+                "reason": None,
+                "outcome": "VERIFIED",
+                "demo": False,
+                "signer_lines": ["Signed by this computer"],
+                "confirmation_lines": [line],
+                "independent": [_STATES[state][0] in r.INDEPENDENT_READS],
+                "disclosed": {k: v["value"] for k, v in openings.items()},
+            },
+            r.private_openings(env, openings),
+        )
+    st, openings = _confirmed("recorded_as_intended")
+    env = r.sign_statement(st, [signer("this_computer")])
+    payload = base64.b64decode(env["payload"]).replace(
+        b'"state":"recorded_as_intended"', b'"state":"recorded_differently"', 1
+    )
+    tampered = dict(env, payload=base64.b64encode(payload).decode())
+    add(
+        "confirmation-tampered",
+        "A confirmation's state edited after signing.",
+        tampered,
+        {"ok": False, "reason": "bad_signature", "signer_lines": [r.refusal_line("bad_signature")]},
+    )
+    card = r.public_card(env, {}, reveal=[])
+    add(
+        "confirmation-public-redaction",
+        "The public card of a confirmed receipt: state and strength show; the counterparty, time, fields and reason stay committed.",
+        card,
+        {
+            "ok": True,
+            "reason": None,
+            "outcome": "VERIFIED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "confirmation_lines": ["Confirmed in the other party's system"],
+            "independent": [True],
+            "disclosed": {},
+        },
+    )
+    leaky = copy.deepcopy(card)
+    leaky["openings"]["confirmations.0.counterparty"] = openings["confirmations.0.counterparty"]
+    add(
+        "confirmation-public-not-allowed",
+        "A card that opens the counterparty, which isn't on the allow-list.",
+        leaky,
+        {"ok": False, "reason": "disclosure_not_allowed", "signer_lines": [r.refusal_line("disclosure_not_allowed")]},
+    )
+    st, openings = _confirmed("sent", reason="no_answer_by_deadline")
+    env = r.sign_statement(st, [signer("this_computer")])
+    add(
+        "confirmation-reason-no-answer",
+        "A sent handoff with reason no_answer_by_deadline (committed; shown only from the private openings).",
+        env,
+        {
+            "ok": True,
+            "reason": None,
+            "outcome": "VERIFIED",
+            "demo": False,
+            "signer_lines": ["Signed by this computer"],
+            "confirmation_lines": ["Sent to the other party at 2026-11-20T23:41:07Z, not confirmed"],
+            "independent": [False],
+            "disclosed": {k: v["value"] for k, v in openings.items()},
+        },
+        r.private_openings(env, openings),
+    )
+    st, openings = _confirmed("recorded_as_intended", reason="receiver_unreachable")
+    env = r.sign_statement(st, [signer("this_computer")])
+    add(
+        "confirmation-reason-inconsistent",
+        "recorded_as_intended with reason receiver_unreachable: refused when the openings are read.",
+        env,
+        {"ok": False, "reason": "inconsistent", "signer_lines": [r.refusal_line("inconsistent")]},
+        r.private_openings(env, openings),
+    )
 
 
 def main() -> None:
