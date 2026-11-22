@@ -69,7 +69,17 @@ A collection's `scoped:` block gives:
 - how its records appear in the log (`audit_ref`, for example `Patient/{id}`),
 - the fields that identify the record a create makes (`identity`),
 - an optional idempotency marker with a search for it, or a conditional-create
-  header,
+  header. A search answer is parsed strictly, closed by default: the pack's
+  declared `search_empty` shape is checked on every answer, each step of
+  `search_items` must resolve (a `*` step needs a list, each element exactly
+  one object), every record needs a usable id (a non-empty string or an
+  int), and a `total`, when present, must be an int equal to the records
+  returned. The items field may be absent only on an answer that reports
+  `total: 0` or, for a pack that declares `search_empty`, matches it.
+  Anything else is an error, never an empty result.
+  A FHIR searchset Bundle leaves `entry` out when nothing matched, so
+  Medplum's pack declares `search_empty: {equals: {resourceType: Bundle,
+  type: searchset}, absent: ["link[relation=next]"]}`,
 - paths the server sets itself (`volatile`),
 - per-field codecs, and
 - `logged_fields`, when the log records only some updates (a feed that shows
