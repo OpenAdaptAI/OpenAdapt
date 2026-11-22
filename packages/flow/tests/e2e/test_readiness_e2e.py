@@ -103,7 +103,11 @@ def agent_main() -> int:
     plan = json.loads(Path(os.environ["READINESS_E2E_PLAN"]).read_text())[
         os.environ["OPENADAPT_TASK_ID"]
     ]
-    assert os.environ["OPENADAPT_TASK"].strip()
+    task = os.environ["OPENADAPT_TASK"]
+    # The task names its record (``readiness import`` adds it), so the agent
+    # can tell which of the listed patients to open.
+    named = [pid for pid, name in PATIENTS.items() if name in task and pid in task]
+    assert named == [plan["true_patient"]], (named, task)
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(os.environ["OPENADAPT_GUARD_CDP_URL"])
         base = os.environ["OPENADAPT_GUARD_PAGE_URL"].split("?")[0].split("#")[0]
@@ -259,7 +263,17 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             app.writes = 0
 
         plan = tmp_path / "plan.json"
-        plan.write_text(json.dumps({_episode(i)["task_id"]: _agent_plan(i) for i in range(n)}))
+        plan.write_text(json.dumps({
+            _episode(i)["task_id"]: {**_agent_plan(i), "true_patient": _episode(i)["patient"]}
+            for i in range(n)
+        }))
+        for i in range(n):
+            given = json.loads(
+                (tmp_path / "episodes" / _episode(i)["task_id"] / "inputs.json").read_text()
+            )
+            assert given["inputs"]["record_name"] == PATIENTS[_episode(i)["patient"]]
+            assert given["inputs"]["record_patient_id"] == _episode(i)["patient"]
+            assert "record_name" in given["instruction"]
         monkeypatch.setenv("READINESS_E2E_PLAN", str(plan))
         launcher = SubprocessLauncher(
             [sys.executable, str(Path(__file__).resolve())],

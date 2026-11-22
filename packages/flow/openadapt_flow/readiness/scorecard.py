@@ -42,7 +42,7 @@ import statistics
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from openadapt_flow.readiness.runner import SCOPE_STATEMENT
+from openadapt_flow.readiness.runner import SCOPE_STATEMENT, scope_failure
 
 __all__ = ["REPLAY_STATE", "SCORECARD_SCHEMA", "build_scorecard", "render_html", "write_scorecard"]
 
@@ -140,12 +140,13 @@ def build_scorecard(
     task_type = check_task_type(task_type)
     cases = list(cases_doc.get("cases") or [])
     status = [c["status"] for c in cases]
-    out_of_scope = sum(
-        1
-        for c in cases
-        if c["status"] == "NOT_CHECKED" and c.get("reason") in ("extra_target", "egress_refused")
-    )
-    failed_scope = status.count("FAILED_SCOPE") + out_of_scope
+    def _not_checked(reason: str) -> int:
+        return sum(
+            1 for c in cases if c["status"] == "NOT_CHECKED" and c.get("reason") == reason
+        )
+
+    extra_target, egress_refused = _not_checked("extra_target"), _not_checked("egress_refused")
+    failed_scope = status.count("FAILED_SCOPE") + extra_target + egress_refused
     field_errors = []
     for case in cases:
         if case["status"] == "WRONG_RECORD":
@@ -203,7 +204,11 @@ def build_scorecard(
         "task_type": task_type,
         "mode": mode,
         "replay_state": REPLAY_STATE.get(mode, mode),
-        "scope_statement": SCOPE_STATEMENT,
+        "scope_statement": (
+            SCOPE_STATEMENT
+            if landed == 0 and failed_scope == 0
+            else scope_failure(landed, failed_scope, extra_target, egress_refused, len(cases))
+        ),
         "cases_total": len(cases),
         "matched": matched,
         "mismatched": status.count("MISMATCHED") + status.count("WRONG_RECORD"),
@@ -334,7 +339,7 @@ def render_html(card: Mapping[str, Any], cases_doc: Mapping[str, Any]) -> str:
         f"<title>Readiness Scorecard</title><style>{CSS}</style></head><body>"
         f"<h1>Readiness Scorecard: {html.escape(card['agent_label'])}</h1>"
         f"<p class=mute>{html.escape(card['generated_at'])}. {html.escape(card['replay_state'])}</p>"
-        f"<p class=mute>Scope: {html.escape(card['scope_statement'])}</p>"
+        f"<p class={'mute' if card['scope_ok'] else 'bad'}>Scope: {html.escape(card['scope_statement'])}</p>"
         f"<p class=mute>Task type: {html.escape(card['task_type'])}. Model traffic: "
         f"{html.escape(card['egress']['mode'])}"
         f"{'' if card['egress']['enforced'] else ' (not enforced by the OS block)'}.</p>"

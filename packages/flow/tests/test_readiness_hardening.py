@@ -352,3 +352,60 @@ def test_a_negative_estimate_reads_minus_dollars() -> None:
     assert card["savings"]["est_value_usd"] == -0.75
     page = render_html(card, doc)
     assert "-$0.75 (estimate)" in page and "$-0.75" not in page
+
+
+# -- round 3: the scope line and the target record --------------------------------------
+
+
+def test_a_failed_scope_card_says_what_failed_not_the_claim() -> None:
+    from openadapt_flow.readiness.runner import SCOPE_STATEMENT, SCOPE_STATEMENT_MAX
+
+    assert len(SCOPE_STATEMENT) <= SCOPE_STATEMENT_MAX
+    clean = compare_case(_ref(type="Triage"), _run(), _proposed(type="Triage"),
+                         before_screen=SCREEN, held=[_held(0)])
+    extra = compare_case(_ref(type="Triage"), _run(extra_target_writes=1),
+                         _proposed(type="Triage"), before_screen=SCREEN, held=[_held(0)])
+    landed = compare_case(_ref(type="Triage"), _run(landed_writes=1),
+                          _proposed(type="Triage"), before_screen=SCREEN)
+    assert build_scorecard({"cases": [clean]})["scope_statement"] == SCOPE_STATEMENT
+    doc = {"cases": [clean, extra, landed]}
+    card = build_scorecard(doc)
+    statement = card["scope_statement"]
+    assert card["scope_ok"] is False
+    assert statement != SCOPE_STATEMENT and "left any tab" not in statement
+    assert statement.startswith("Scope failed in 2 of 3 case(s)")
+    assert "1 write(s) reached the app" in statement and "couldn't vouch" in statement
+    assert len(statement) <= SCOPE_STATEMENT_MAX
+    page = render_html(card, doc)
+    assert "left any tab" not in page and statement.replace("'", "&#x27;") in page
+    many = build_scorecard({"cases": [landed] * 30 + [extra] * 30})
+    assert len(many["scope_statement"]) <= SCOPE_STATEMENT_MAX
+
+
+def test_import_names_the_target_record_in_the_inputs() -> None:
+    from openadapt_flow.readiness.reference import task_inputs
+
+    raw = {"instruction": "Add the note and save.", "inputs": {"note": "n"}}
+    got = task_inputs(raw, {"patient_id": "p1", "name": "Jane Sample"})
+    assert got["inputs"] == {"note": "n", "record_patient_id": "p1",
+                             "record_name": "Jane Sample"}
+    assert got["instruction"].startswith("Add the note and save.")
+    assert got["instruction"].endswith(
+        "Work on the record identified by the inputs record_patient_id, record_name.")
+    assert got["record_keys"] == ["record_patient_id", "record_name"]
+    # The person's own input of that name wins; it is not a program parameter to drop.
+    own = task_inputs({**raw, "inputs": {"record_name": "Jane S."}}, {"name": "Jane Sample"})
+    assert own["inputs"] == {"record_name": "Jane S."} and own["record_keys"] == []
+    off = task_inputs({**raw, "record_in_inputs": False}, {"name": "Jane Sample"})
+    assert off == {"instruction": "Add the note and save.", "inputs": {"note": "n"}}
+
+
+def test_a_program_gets_no_parameter_for_the_record_inputs(tmp_path: Path) -> None:
+    from openadapt_flow.readiness.launcher import LaunchJob, ProgramLauncher
+
+    job = LaunchJob(task_id="t-00000001", instruction="x",
+                    inputs={"note": "n", "record_name": "Jane Sample"},
+                    cdp_url="http://127.0.0.1:9", page_url="http://127.0.0.1/",
+                    run_dir=tmp_path, record_keys=("record_name",))
+    argv = ProgramLauncher(tmp_path / "bundle", egress=None).argv(job)
+    assert "note=n" in argv and not any("Jane" in a for a in argv)

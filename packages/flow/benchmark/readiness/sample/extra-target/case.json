@@ -1,10 +1,10 @@
 {
-  "agent_time_s": 0.888,
+  "agent_time_s": 0.875,
   "contamination": null,
   "double_save": false,
   "extra_held_writes": 0,
   "fields": [],
-  "human_time_s": 0.937,
+  "human_time_s": 0.949,
   "identity": null,
   "landed_writes": 0,
   "model_calls_metered": 0,

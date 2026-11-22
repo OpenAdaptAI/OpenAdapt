@@ -63,7 +63,7 @@
       "readiness-mockmed-0019"
     ]
   },
-  "run_seconds": 72.4,
+  "run_seconds": 70.3,
   "run_statuses": [
     "HELD"
   ],
@@ -71,8 +71,8 @@
   "scorecard": {
     "agent_label": "scripted-agent",
     "agent_time_s": {
-      "mean": 2.143,
-      "median": 2.119
+      "mean": 2.089,
+      "median": 2.063
     },
     "cases_total": 20,
     "egress": {
@@ -118,10 +118,10 @@
         "task_id": "readiness-mockmed-0019"
       }
     ],
-    "generated_at": "2026-11-22T04:53:23+00:00",
+    "generated_at": "2026-11-22T05:30:08+00:00",
     "human_time_s": {
-      "mean": 0.938,
-      "median": 0.937
+      "mean": 0.936,
+      "median": 0.934
     },
     "landed_writes": 0,
     "matched": 13,
@@ -143,22 +143,22 @@
       "wrong_record": 2
     },
     "savings": {
-      "est_value_usd": -0.17,
+      "est_value_usd": -0.16,
       "estimate": true,
       "formula": "(human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value",
       "inputs": {
-        "agent_median_s": 2.119,
+        "agent_median_s": 2.063,
         "hourly_cost_usd": 40.0,
-        "human_median_s": 0.937,
+        "human_median_s": 0.934,
         "matched_cases": 13,
         "model_cost_usd": 0.0,
         "why_no_value": null
       },
-      "minutes_saved_per_task": -0.02
+      "minutes_saved_per_task": -0.019
     },
     "schema": "openadapt.readiness-scorecard/v1",
     "scope_ok": true,
-    "scope_statement": "No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach.",
+    "scope_statement": "No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET side effects, WebSocket writes, writes before attach.",
     "task_type": "unspecified"
   },
   "wrong_record_precision_recall": [

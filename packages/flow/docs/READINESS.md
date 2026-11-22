@@ -20,8 +20,14 @@ already do, how often would it have saved exactly what they saved?
 Scope of the hold, as the scorecard states it:
 
 > No non-GET request to the app origin left any tab, popup, browser context
-> or worker, except listed sign-in requests. Not covered: GET requests with
-> side effects, WebSocket writes, writes before attach.
+> or worker, except listed sign-in requests. Not covered: GET side effects,
+> WebSocket writes, writes before attach.
+
+That is the statement of a clean run. When `scope_ok` is false, the
+scorecard's `scope_statement` (and the page) says what failed instead, for
+example "Scope failed in 2 of 20 case(s): 1 write(s) reached the app; 1
+case(s) had a tab, popup, context or worker the hold couldn't vouch for.
+Not a clean shadow run." Both stay under 200 characters.
 
 That is what is checked; it is not a claim that the run had no effect on
 the app. A case the hold can't vouch for outside the guarded tab is
@@ -107,6 +113,15 @@ Output per episode, under `EPISODES/<task_id>/`:
   human_fields: [{name, value}], human_source, human_started_at,
   human_saved_at, human_duration_s, withheld_fields, save}`.
 - `inputs.json` (0600): the instruction and the inputs the candidate gets.
+  The record the guard checks (`expected_record`) is added to the inputs as
+  plain fields, `record_<name>` (for example `record_patient_id` and
+  `record_name`), unless the task's inputs already have that key, and the
+  instruction ends with "Work on the record identified by the inputs
+  record_patient_id, record_name." Without it, a candidate on an app that
+  lists several records can't know which one to open. `"record_in_inputs":
+  false` in `task.json` turns it off. `record_keys` lists the added keys;
+  a compiled program gets no `--param` for them. A proxy that pseudonymizes
+  text sees these values like any other input.
 - `guard_task.json`, `openadapt.guard-task/v1`, with the intended fields by
   name only, so the commit guard reads it unchanged.
 
