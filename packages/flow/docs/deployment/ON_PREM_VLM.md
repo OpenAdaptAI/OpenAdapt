@@ -259,9 +259,10 @@ through. Scrubbing here would **defeat the safety check**, not add safety.
    Halted runs are on the ledger too, because each line is written when its
    frame is sent.
 5. **No fallback to another model.** When `grounding_model` is pinned and
-   can't be wired, the appliance grounder does not stand in for it. The
-   grounding rung stays off, and a target the deterministic rungs can't resolve
-   halts for a person.
+   can't be wired, the appliance grounder does not stand in for it. A pinned
+   section must name its `model`; an empty one is refused, never given a
+   default. The grounding rung stays off, and a target the deterministic rungs
+   can't resolve halts for a person.
 
 An operator auditing the appliance should confirm no reverse proxy, WSGI, or
 model-server logs the request body — that is the only way a crop could persist.

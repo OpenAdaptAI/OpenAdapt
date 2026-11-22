@@ -799,8 +799,8 @@ class GroundingModelConfig(BaseModel):
     #: Root URL of an ``openai_compatible`` endpoint (``/chat/completions`` is
     #: appended). Required for ``openai_compatible``; ignored for ``anthropic``.
     base_url: str = ""
-    #: The vision-capable model id to request. For ``anthropic`` an empty value
-    #: uses the shipped default; for ``openai_compatible`` it is required.
+    #: The vision-capable model id to request. Required for both providers: an
+    #: enabled section with no model is refused, never given a default.
     model: str = ""
     #: NAME of the environment variable holding the API key (never the key
     #: itself). Empty => no auth header sent (a loopback vLLM/Ollama needs none);
@@ -1683,9 +1683,17 @@ def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
     api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
 
     if provider == "anthropic":
-        from openadapt_flow.runtime.grounder import _DEFAULT_MODEL, AnthropicGrounder
+        from openadapt_flow.runtime.grounder import AnthropicGrounder
 
-        model = (cfg.model or "").strip() or _DEFAULT_MODEL
+        model = (cfg.model or "").strip()
+        if not model:
+            # A pinned grounding model must name its model: an empty value
+            # never silently becomes the shipped default.
+            print(
+                "grounding_model.provider 'anthropic' requires a model; "
+                "replaying FULLY LOCAL."
+            )
+            return None
         try:
             client = None
             if api_key:
@@ -1819,15 +1827,17 @@ def build_replayer(
         if not ok:
             print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
             appliance = None
-    regulated = (
-        getattr(governed_authorization, "execution_profile", None) == "regulated"
-    )
+    # Regulated if either the authorization or the deployment names it.
+    regulated = "regulated" in {
+        getattr(governed_authorization, "execution_profile", None),
+        getattr(runtime_config, "profile", None),
+    }
     if appliance is not None and regulated:
-        from openadapt_flow.runtime.model_transport import regulated_transport_refusal
+        from openadapt_flow.model_transport import regulated_transport_refusal
 
-        refusal = regulated_transport_refusal(
-            os.environ.get("OPENADAPT_FLOW_VLM_URL", "")
-        )
+        # The URL the appliance client actually sends to.
+        sent_to = getattr(getattr(appliance, "client", None), "_base_url", "")
+        refusal = regulated_transport_refusal(sent_to or "")
         if refusal is not None:
             print(f"Regulated profile: {refusal}; the appliance is NOT wired.")
             appliance = None
@@ -1862,7 +1872,7 @@ def build_replayer(
                     print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
                     wire = False
             if wire and regulated and (grounding_cfg.base_url or "").strip():
-                from openadapt_flow.runtime.model_transport import (
+                from openadapt_flow.model_transport import (
                     regulated_transport_refusal,
                 )
 
