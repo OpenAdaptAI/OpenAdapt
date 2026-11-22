@@ -13388,43 +13388,28 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
 
     missing = [
-        name
-        for name in ("fastapi", "uvicorn", "openadapt_types")
-        if find_spec(name) is None
+        n for n in ("fastapi", "uvicorn", "openadapt_types") if find_spec(n) is None
     ]
     if missing:
         raise SystemExit(
             f"serve-execute needs {', '.join(missing)} — install the "
             "execute extra:  pip install 'openadapt-flow[execute]'"
         )
-    from openadapt_flow.execute import SELF_SIGNED_NOTICE
-    from openadapt_flow.execute.app import serve
-    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+    from openadapt_flow.execute.app import run_serve_execute
 
-    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
-    store = ExecuteService(
-        data_dir,
-        token=args.token,
-        seed_mockmed=bool(args.seed_mockmed),
-        deployment=getattr(args, "config", None),
-    )
-    print("openadapt-flow reference Execute")
-    print(f"  http://{args.host}:{args.port}")
-    print(f"  data dir     {data_dir}")
-    print(f"  token        {store.token}")
-    print("  issuer       self_signed")
-    print(f"  fingerprint  {store.fingerprint}")
-    print(f"  {SELF_SIGNED_NOTICE}")
+    seeded = ()
     if args.seed_mockmed:
-        print("  seeded MockMed admissions (ok + banner-lie)")
-    serve(
-        data_dir,
+        from openadapt_flow.mockmed.execute_seed import demo_admissions
+
+        seeded = demo_admissions()
+    return run_serve_execute(
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         host=args.host,
         port=args.port,
-        token=store.token,
-        service=store,
+        token=args.token,
+        seed_admissions=seeded,
+        deployment=getattr(args, "config", None),
     )
-    return 0
 
 
 def _cmd_serve_reward(args: argparse.Namespace) -> int:
