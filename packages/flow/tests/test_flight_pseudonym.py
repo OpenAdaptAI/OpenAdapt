@@ -337,9 +337,11 @@ def _screen() -> bytes:
 
 
 def test_the_same_name_gets_the_same_token_in_text_and_on_screen(tmp_path, provider):
+    # The scrubber check first: under CI without Presidio or tesseract it
+    # skips with the reason; anywhere else their absence fails.
+    scrubber = _real_scrubber()
     import pytesseract
 
-    scrubber = _real_scrubber()
     png = _screen()
     assert NAME in pytesseract.image_to_string(Image.open(io.BytesIO(png)))
     proxy = _proxy(tmp_path, provider, scrubber=scrubber)

@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v0.31.0 (2026-11-21)
+
+### Features
+
+- **guard**: approval card values beside the source, ReadbackProvider seam, per-save ledger row
+- **desktop**: The stop queue now lists exception cards from any run on this
+  computer that asked a person (a one-time code prompt, an unexpected dialog,
+  a sign-in partway through, a stall, a possible duplicate, an ambiguous
+  record, a task it can't finish), not only Desktop's own runs. Each card is
+  answered on its own, here or on a paired phone, and the answer is signed
+  with the same approver key as other stop answers. Requires Flow with the
+  exception registry (#2494). The Flow 2.4.1 that Desktop runs has no
+  registry yet, so the queue shows exception cards only from runs of a newer
+  Flow on this computer.
+
+### Bug Fixes
+
+- **guard**: The phone's approval card for an agent's save no longer says
+  "exactly what will be saved" when OpenAdapt could not read the values the
+  save sends. It shows the task's value beside each sent value, flags a
+  difference, and says plainly when the sent values were not read or checked.
+  With no write adapter it shows the value on screen when the agent asked,
+  beside the task's, with a difference flagged. The on-screen values and the
+  source and task columns need a Flow release that includes #2492. Desktop
+  still runs Flow 2.4.1: until then an agent's save says its values were not
+  checked and never "exactly", and a compiled program's save keeps its
+  wording.
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes

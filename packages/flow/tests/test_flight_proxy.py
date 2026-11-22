@@ -569,3 +569,30 @@ def test_the_real_presidio_scrubber_removes_a_name_from_text_and_from_the_screen
     after = Image.open(io.BytesIO(base64.b64decode(data)))
     assert after.size == image.size
     assert "Smith" not in pytesseract.image_to_string(after)
+
+
+def test_with_no_ocr_an_image_is_never_sent(tmp_path, provider, monkeypatch):
+    """Runs everywhere (no tesseract needed): when OCR can't run, a request
+    with a screenshot is refused and the provider gets nothing."""
+    from openadapt_flow.flight import scrub
+
+    def no_ocr(image):
+        raise ImportError("No module named 'pytesseract'")
+
+    monkeypatch.setattr(scrub, "_tesseract_words", no_ocr)
+    timeline = Timeline(tmp_path / "run", task_id="t", executor_label="x")
+    proxy = FlightProxy(
+        timeline,
+        upstreams={"anthropic": provider.url},
+        scrubber=FakeScrubber(),  # the default OCR, which now can't run
+    ).start()
+    try:
+        status, raw = _post(
+            proxy.base_url("anthropic") + "/v1/messages",
+            _anthropic_body(_png()),
+            {"x-api-key": KEY},
+        )
+    finally:
+        proxy.stop()
+    assert status == 502 and b"not sent" in raw
+    assert provider.requests == [] and provider.received_bytes() == b""

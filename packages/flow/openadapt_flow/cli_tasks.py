@@ -60,6 +60,7 @@ FLOW_NAMES = {
     "disambiguate": "compile --disambiguate",
     "emit-mcp": "workflow emit-mcp",
     "emit-skill": "workflow emit-skill",
+    "exceptions": "approve exceptions",
     "explain": "inspect explain",
     "fleet": "services fleet",
     "flight": "run --flight",
@@ -121,6 +122,7 @@ FLOW_NAMES = {
     "variants": "compile --variants",
     "verify-run": "verify effect",
     "visualize": "inspect visualize",
+    "wrap-dispatch": "run --dispatch",
 }
 
 

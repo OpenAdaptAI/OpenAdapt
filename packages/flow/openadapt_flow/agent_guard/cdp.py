@@ -295,6 +295,28 @@ class CdpGuardPage:
             if isinstance(item, list) and len(item) == 2
         ]
 
+    def form_controls(self) -> Optional[list[dict[str, Any]]]:
+        """The form controls' values and labels at this moment
+        (:data:`~.screen_values.READ_CONTROLS_JS`), or None when unreadable."""
+
+        from openadapt_flow.agent_guard.screen_values import (
+            READ_CONTROLS_JS,
+            controls_from,
+        )
+
+        try:
+            out = self.cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "functionDeclaration": _call(READ_CONTROLS_JS),
+                    "executionContextId": self._context_id(),
+                    "returnByValue": True,
+                },
+            )
+        except Exception:  # noqa: BLE001 - unreadable: the card says so
+            return None
+        return controls_from((out.get("result") or {}).get("value"))
+
     def screenshot(self) -> Optional[bytes]:
         try:
             out = self.cdp.send("Page.captureScreenshot", {"format": "png"})
