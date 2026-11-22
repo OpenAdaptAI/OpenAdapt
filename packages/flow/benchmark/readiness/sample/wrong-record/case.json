@@ -1,5 +1,5 @@
 {
-  "agent_time_s": 2.098,
+  "agent_time_s": 2.047,
   "contamination": null,
   "double_save": false,
   "extra_held_writes": 0,
@@ -23,7 +23,7 @@
       "proposed": "Synthetic note 16 for review"
     }
   ],
-  "human_time_s": 0.933,
+  "human_time_s": 0.936,
   "identity": {
     "code": "identity_mismatch",
     "ok": false

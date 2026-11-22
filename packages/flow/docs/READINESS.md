@@ -287,6 +287,18 @@ refused_requests`, the flight recorder's summary) and the proxy's scrubbed
 record in `egress/`; `run.json` gets `egress` (that summary with the
 session's mode, `refused` and `reason`).
 
+The proxy replaces each personal value with a run token (`[PERSON_1]`, the
+same token in text and on screenshots) and turns the token back into the
+real value in the candidate's tool inputs, so the candidate types the real
+value. The map lives in `egress/pseudonyms.json` in the task's run folder
+(0600, real values in plaintext) and never leaves it: nothing readiness
+writes (cases, scorecard) reads `egress/`, and `readiness/export.py` copies
+files out of a run folder only by allowlist (`run.json`, `egress.json`,
+`usage.json`, the scorecard, and with `include_values` the case and the
+proposed write, each checked against its allowed keys). An unknown file, a
+directory or an unexpected key is left behind; the committed samples are
+written through it.
+
 The OS block exists on macOS only, so outside macOS every `--egress` mode
 refuses to run. The scrubber also hides personal data from the candidate
 (the model can't read a name it must check); task success with scrubbing on

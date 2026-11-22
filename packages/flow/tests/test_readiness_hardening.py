@@ -409,3 +409,64 @@ def test_a_program_gets_no_parameter_for_the_record_inputs(tmp_path: Path) -> No
                     run_dir=tmp_path, record_keys=("record_name",))
     argv = ProgramLauncher(tmp_path / "bundle", egress=None).argv(job)
     assert "note=n" in argv and not any("Jane" in a for a in argv)
+
+
+# -- round 4: nothing outside the allowlist leaves the run folder -------------------------
+
+PLANTED = "Zyxwv Qtest"
+SAMPLES = Path(__file__).resolve().parents[1] / "benchmark" / "readiness"
+
+
+def test_export_copies_only_the_allowlist(tmp_path: Path) -> None:
+    from openadapt_flow.readiness.export import export_task
+
+    runs = tmp_path / "runs"
+    task = runs / "case-0001"
+    (task / "egress").mkdir(parents=True)
+    (task / "egress" / "pseudonyms.json").write_text(json.dumps({"[PERSON_1]": PLANTED}))
+    (task / "pseudonyms.json").write_text(json.dumps({"[PERSON_1]": PLANTED}))
+    (task / "stray.txt").write_text(PLANTED)
+    (task / "agent.log").write_text(PLANTED)
+    (task / "before_screen.txt").write_text(PLANTED)
+    (task / "usage.json").write_text(json.dumps({"calls": 1, "note": PLANTED}))
+    run = _run(model_cost_usd=0.0, model_cost_source="metered",
+               usage={"calls": 1, "cost_usd": 0.0, "extra": PLANTED})
+    (task / "run.json").write_text(json.dumps({"schema": "openadapt.readiness-task-run/v1",
+                                               "task_id": "case-0001", **run}))
+    (task / "egress.json").write_text(json.dumps(
+        {"mode": "scrubbed", "enforced": True, "model_calls": 1, "cost_usd": 0.0,
+         "cost_source": "metered", "refused_requests": 0}))
+    case = compare_case(_ref(type="Triage"), run, _proposed(type="Triage"),
+                        before_screen=SCREEN, held=[_held(0)])
+    doc = {"cases": [case]}
+    write_case_files(doc, runs)
+    card_dir = tmp_path / "card"
+    card_dir.mkdir()
+    (card_dir / "scorecard.json").write_text(json.dumps(build_scorecard(doc)))
+    out = tmp_path / "export"
+    result = export_task(task, out, include_values=True,
+                         extra={"scorecard.json": card_dir / "scorecard.json"})
+    assert sorted(result["copied"]) == ["case.json", "egress.json", "run.json",
+                                        "scorecard.json"]
+    left = " ".join(result["left"])
+    for name in ("egress", "pseudonyms.json", "stray.txt", "agent.log",
+                 "before_screen.txt", "usage.json"):
+        assert name in left, (name, left)
+    for path in out.rglob("*"):
+        assert PLANTED not in path.read_text(), path
+    assert PLANTED not in json.dumps(doc)
+    # Without values, case files stay behind too.
+    bare = export_task(task, tmp_path / "bare")
+    assert "case.json" not in bare["copied"]
+
+
+def test_committed_samples_hold_no_patient_names_or_pseudonym_maps() -> None:
+    from tests.e2e.test_readiness_e2e import PATIENTS
+
+    files = [p for p in SAMPLES.rglob("*.json")]
+    assert files
+    for path in files:
+        text = path.read_text()
+        assert "pseudonyms" not in path.name, path
+        for name in [*PATIENTS.values(), PLANTED]:
+            assert name not in text, (path, name)
