@@ -13179,48 +13179,32 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+    from openadapt_flow.cli_fleet import register_fleet_parser
+    from openadapt_flow.cli_receipt import register as _register_receipt
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
     from openadapt_flow.cli_rollback import register as _register_rollback
+    from openadapt_flow.cli_shadow import register as _register_shadow
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+    from openadapt_flow.learn import register as _register_learn
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     _register_rollback(sub)
-
-    from openadapt_flow.cli_shadow import register as _register_shadow
-
     _register_shadow(sub)
-
-    from openadapt_flow.cli_receipt import register as _register_receipt
-
     _register_receipt(sub)
-
-    from openadapt_flow.learn import register as _register_learn
-
     _register_learn(sub)
-
-    from openadapt_flow.cli_reconcile import register as _register_reconcile
-
     _register_reconcile(sub)
-
-    from openadapt_flow.cli_cleanup import register as _register_cleanup
-
     _register_cleanup(sub)
-
-    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
-
     _add_jit_parser(sub)
-
-    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-
     _add_compile_agent_parser(sub)
-
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
-
     _add_guard_parser(sub)
-
-    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
-
     _add_hooks_parser(sub)
-
-    from openadapt_flow.cli_fleet import register_fleet_parser
-
+    _add_plan_parser(sub)
+    _add_proxy_parser(sub)
     register_fleet_parser(sub)
 
     # After any other ``handoff`` verbs: it adds ``list`` to the same group.
@@ -13407,43 +13391,28 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
 
     missing = [
-        name
-        for name in ("fastapi", "uvicorn", "openadapt_types")
-        if find_spec(name) is None
+        n for n in ("fastapi", "uvicorn", "openadapt_types") if find_spec(n) is None
     ]
     if missing:
         raise SystemExit(
             f"serve-execute needs {', '.join(missing)} — install the "
             "execute extra:  pip install 'openadapt-flow[execute]'"
         )
-    from openadapt_flow.execute import SELF_SIGNED_NOTICE
-    from openadapt_flow.execute.app import serve
-    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+    from openadapt_flow.execute.app import run_serve_execute
 
-    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
-    store = ExecuteService(
-        data_dir,
-        token=args.token,
-        seed_mockmed=bool(args.seed_mockmed),
-        deployment=getattr(args, "config", None),
-    )
-    print("openadapt-flow reference Execute")
-    print(f"  http://{args.host}:{args.port}")
-    print(f"  data dir     {data_dir}")
-    print(f"  token        {store.token}")
-    print("  issuer       self_signed")
-    print(f"  fingerprint  {store.fingerprint}")
-    print(f"  {SELF_SIGNED_NOTICE}")
+    seeded = ()
     if args.seed_mockmed:
-        print("  seeded MockMed admissions (ok + banner-lie)")
-    serve(
-        data_dir,
+        from openadapt_flow.mockmed.execute_seed import demo_admissions
+
+        seeded = demo_admissions()
+    return run_serve_execute(
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         host=args.host,
         port=args.port,
-        token=store.token,
-        service=store,
+        token=args.token,
+        seed_admissions=seeded,
+        deployment=getattr(args, "config", None),
     )
-    return 0
 
 
 def _cmd_serve_reward(args: argparse.Namespace) -> int:
