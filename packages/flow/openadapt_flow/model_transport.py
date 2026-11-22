@@ -39,3 +39,18 @@ def regulated_transport_refusal(url: str) -> Optional[str]:
     if parts.scheme == "http":
         return f"the model endpoint {host} is cleartext http off this machine"
     return f"the model endpoint scheme {parts.scheme!r} is not https"
+
+
+def built_endpoint(component: object) -> str:
+    """The URL a built model client actually sends to, or ``""`` if unknown.
+
+    Reads the constructed object, not the configuration, so a URL the client
+    library takes from its own environment (``ANTHROPIC_BASE_URL``) is seen.
+    """
+
+    for holder in (component, getattr(component, "_client", None)):
+        for name in ("_url", "_base_url", "base_url"):
+            url = getattr(holder, name, None)
+            if url:
+                return str(url)
+    return ""

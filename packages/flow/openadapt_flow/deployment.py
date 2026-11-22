@@ -1871,24 +1871,32 @@ def build_replayer(
                 if not ok:
                     print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
                     wire = False
-            if wire and regulated and (grounding_cfg.base_url or "").strip():
+            if wire:
+                model_grounder = build_model_grounder(grounding_cfg)
+            if model_grounder is not None and (regulated or phi_on):
                 from openadapt_flow.model_transport import (
+                    built_endpoint,
                     regulated_transport_refusal,
                 )
 
-                refusal = regulated_transport_refusal(grounding_cfg.base_url)
-                if refusal is not None:
-                    print(f"Regulated profile: {refusal}; replaying FULLY LOCAL.")
-                    wire = False
-            if wire:
-                model_grounder = build_model_grounder(grounding_cfg)
-                if model_grounder is not None:
-                    print(
-                        "Model grounder wired: "
-                        f"{type(model_grounder).__name__} "
-                        f"(provider={grounding_cfg.provider}). WARNING: "
-                        "screenshots WILL leave the box for this run."
+                # Check the URL the built client sends to, not the config.
+                sent_to = built_endpoint(model_grounder)
+                refusal = regulated_transport_refusal(sent_to) if regulated else None
+                if refusal is None and phi_on:
+                    ok, reason = phi_grounding_endpoint_allowed(
+                        _host_of(sent_to), allowlist=allowlist, attested=attested
                     )
+                    refusal = None if ok else reason
+                if refusal is not None:
+                    print(f"Model grounder refused: {refusal}; replaying FULLY LOCAL.")
+                    model_grounder = None
+            if model_grounder is not None:
+                print(
+                    "Model grounder wired: "
+                    f"{type(model_grounder).__name__} "
+                    f"(provider={grounding_cfg.provider}). WARNING: "
+                    "screenshots WILL leave the box for this run."
+                )
 
     # The configured model grounder takes precedence as the VLM fallback; the
     # on-prem appliance grounder is used only when no model is pinned. A pinned
