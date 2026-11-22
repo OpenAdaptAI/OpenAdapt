@@ -143,9 +143,8 @@ class LeftTheApp(RuntimeError):
 
 
 def _shown_url(url: Any) -> str:
-    """A page URL without its query string, which can hold session tokens
-    (OpenEMR's ``token_main``). The path and fragment stay: they say where the
-    agent is."""
+    """A page URL without its query string, which can hold session tokens.
+    The path and fragment stay: they say where the agent is."""
 
     parts = urlsplit(str(url or ""))
     if not parts.scheme:
