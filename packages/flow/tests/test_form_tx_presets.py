@@ -134,6 +134,18 @@ def _secondary_role_qualifiers() -> object:
     return pack_compiler._SECONDARY_ROLE_QUALIFIERS
 
 
+def _true_tokens() -> object:
+    from openadapt_flow.form_tx import codecs
+
+    return codecs._TRUTHY_TOKENS
+
+
+def _false_tokens() -> object:
+    from openadapt_flow.form_tx import codecs
+
+    return codecs._FALSY_TOKENS
+
+
 #: word list: (current value, the commit before the move, file, constant)
 MOVED_WORDS = {
     "primary_entity_kinds": (
@@ -147,6 +159,18 @@ MOVED_WORDS = {
         "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
         "packages/flow/openadapt_flow/form_tx/pack_compiler.py",
         "_SECONDARY_ROLE_QUALIFIERS",
+    ),
+    "true_tokens": (
+        _true_tokens,
+        "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
+        "packages/flow/openadapt_flow/form_tx/codecs.py",
+        "_TRUTHY_TOKENS",
+    ),
+    "false_tokens": (
+        _false_tokens,
+        "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
+        "packages/flow/openadapt_flow/form_tx/codecs.py",
+        "_FALSY_TOKENS",
     ),
 }
 
@@ -241,3 +265,48 @@ def test_a_domain_schema_can_override_the_role_qualifiers() -> None:
         ctrl, spec, open_domain.role_qualifiers()
     )
     assert allowed > 0
+
+
+def test_a_codec_can_override_the_yes_no_words() -> None:
+    from openadapt_flow.form_tx.codecs import (
+        CodecValueError,
+        format_for_text_entry,
+        normalize_with_codec,
+        values_equivalent,
+    )
+    from openadapt_flow.form_tx.types import FieldCodecSpec, FormCodecKind
+
+    default = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO)
+    assert normalize_with_codec("Yes", default) == "yes"
+    with pytest.raises(CodecValueError):
+        normalize_with_codec("Ja", default)
+    assert format_for_text_entry(True, default) == "Yes"
+
+    german = FieldCodecSpec(
+        kind=FormCodecKind.BOOLEAN_YES_NO,
+        true_tokens=("Ja", "j"),
+        false_tokens=("Nein", "n"),
+    )
+    assert normalize_with_codec(" ja ", german) == "yes"
+    assert normalize_with_codec("NEIN", german) == "no"
+    with pytest.raises(CodecValueError):
+        normalize_with_codec("yes", german)
+    assert values_equivalent(True, "Ja", german)
+    assert format_for_text_entry(True, german) == "Ja"
+    assert format_for_text_entry(False, german) == "Nein"
+
+    both = FieldCodecSpec(
+        kind=FormCodecKind.BOOLEAN_YES_NO, true_tokens=("x",), false_tokens=("x",)
+    )
+    with pytest.raises(CodecValueError):
+        normalize_with_codec("x", both)
+
+
+def test_an_unset_yes_no_override_is_not_dumped() -> None:
+    from openadapt_flow.form_tx.types import FieldCodecSpec, FormCodecKind
+
+    spec = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO)
+    assert "true_tokens" not in spec.model_dump(mode="json")
+    assert FieldCodecSpec.model_validate(spec.model_dump(mode="json")) == spec
+    set_ = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO, true_tokens=("ja",))
+    assert set_.model_dump(mode="json")["true_tokens"] == ["ja"]

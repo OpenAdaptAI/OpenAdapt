@@ -10,8 +10,9 @@ import calendar
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
+from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.types import (
     FieldCodecSpec,
     FormCodecKind,
@@ -54,8 +55,10 @@ _CURRENCY_RE = re.compile(
     r"^(?P<unit>[$€£₹])?\s*(?P<amount>[+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{1,2})?)$"
 )
 _PHONE_RE = re.compile(r"^\+?[0-9 ()\t.-]+$")
-_TRUTHY_TOKENS = frozenset({"yes", "y", "true", "1"})
-_FALSY_TOKENS = frozenset({"no", "n", "false", "0"})
+#: The default yes/no texts (data: ``presets/words/true_tokens.json`` and
+#: ``false_tokens.json``). A codec may replace them.
+_TRUTHY_TOKENS = frozenset(load_words("true_tokens"))
+_FALSY_TOKENS = frozenset(load_words("false_tokens"))
 
 
 class CodecValueError(ValueError):
@@ -194,17 +197,37 @@ def normalize_currency_cents(raw: Any) -> int:
         raise CodecValueError(f"Invalid currency amount: {raw!r}") from exc
 
 
-def normalize_boolean_yes_no(raw: Any) -> str:
-    """Normalize boolean/yes-no values strictly to ``'yes'`` or ``'no'``."""
+def normalize_boolean_yes_no(
+    raw: Any,
+    true_tokens: Optional[Sequence[str]] = None,
+    false_tokens: Optional[Sequence[str]] = None,
+) -> str:
+    """Normalize boolean/yes-no values strictly to ``'yes'`` or ``'no'``.
+
+    ``true_tokens`` and ``false_tokens`` replace the default texts (a codec's
+    override); a text in both is ambiguous and raises.
+    """
+    truthy = (
+        _TRUTHY_TOKENS
+        if true_tokens is None
+        else frozenset(collapse_whitespace(t).lower() for t in true_tokens)
+    )
+    falsy = (
+        _FALSY_TOKENS
+        if false_tokens is None
+        else frozenset(collapse_whitespace(t).lower() for t in false_tokens)
+    )
     if isinstance(raw, bool):
         return "yes" if raw else "no"
     if isinstance(raw, int) and raw in (0, 1):
         return "yes" if raw == 1 else "no"
     if isinstance(raw, str):
         tok = collapse_whitespace(raw).lower()
-        if tok in _TRUTHY_TOKENS:
+        if tok in truthy and tok in falsy:
+            raise CodecValueError(f"Ambiguous boolean/yes-no value: {raw!r}")
+        if tok in truthy:
             return "yes"
-        if tok in _FALSY_TOKENS:
+        if tok in falsy:
             return "no"
     raise CodecValueError(f"Ambiguous boolean/yes-no value: {raw!r}")
 
@@ -246,7 +269,7 @@ def normalize_with_codec(value: Any, spec: FieldCodecSpec) -> Any:
             raise CodecValueError("Currency unit contradicts the field contract")
         return normalize_currency_cents(value)
     if kind == FormCodecKind.BOOLEAN_YES_NO:
-        return normalize_boolean_yes_no(value)
+        return normalize_boolean_yes_no(value, spec.true_tokens, spec.false_tokens)
     if kind == FormCodecKind.ENUM_MAP:
         probe = collapse_whitespace(str(value)).casefold()
         matches: list[str] = []
@@ -337,7 +360,11 @@ def format_for_text_entry(intended_value: Any, spec: FieldCodecSpec) -> str:
             return f"{sign}{whole}"
         return f"{sign}{whole}.{minor:02d}"
     if spec.kind == FormCodecKind.BOOLEAN_YES_NO:
-        return "Yes" if normalize_boolean_yes_no(intended_value) == "yes" else "No"
+        yes = normalize_with_codec(intended_value, spec) == "yes"
+        if spec.true_tokens and spec.false_tokens:
+            # A codec with its own words types its own first word.
+            return spec.true_tokens[0] if yes else spec.false_tokens[0]
+        return "Yes" if yes else "No"
     if spec.kind in (FormCodecKind.PHONE_DIGITS, FormCodecKind.INTEGER):
         return str(normalize_with_codec(intended_value, spec))
     if isinstance(intended_value, (int, float)):

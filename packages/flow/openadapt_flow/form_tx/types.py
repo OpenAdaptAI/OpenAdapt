@@ -14,7 +14,7 @@ import json
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
@@ -253,6 +253,23 @@ class FieldCodecSpec(BaseModel):
     date_order: Literal["YMD", "MDY", "DMY"] = "YMD"
     currency_symbol: Optional[Literal["$", "€", "£", "₹"]] = None
     enum_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    # Overrides of the default yes/no texts (``presets/words/true_tokens.json``
+    # and ``false_tokens.json``) for a ``boolean_yes_no`` codec. None keeps
+    # the default. Typed entry uses the first word of each list when both
+    # are set.
+    true_tokens: Optional[tuple[str, ...]] = None
+    false_tokens: Optional[tuple[str, ...]] = None
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_overrides(self, handler: Any) -> Any:
+        # An unset override is not written, so a pack made before these
+        # fields existed dumps (and hashes) exactly as before.
+        data = handler(self)
+        if isinstance(data, dict):
+            for name in ("true_tokens", "false_tokens"):
+                if data.get(name) is None:
+                    data.pop(name, None)
+        return data
 
 
 class FieldAnchorSpec(BaseModel):

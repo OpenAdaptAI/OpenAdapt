@@ -1,0 +1,11 @@
+{
+  "schema": "openadapt.form-word-list/v1",
+  "name": "false_tokens",
+  "about": "Texts a yes/no field reads as no (compared case-folded, whitespace collapsed). A codec may give its own list.",
+  "words": [
+    "no",
+    "n",
+    "false",
+    "0"
+  ]
+}
