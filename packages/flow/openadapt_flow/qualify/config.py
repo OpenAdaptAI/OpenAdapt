@@ -359,7 +359,7 @@ class RecordConfig(BaseModel):
     match: list[str] = Field(default_factory=list)
     fields: dict[str, FieldValue] = Field(default_factory=dict)
     #: The record field that must be unique per write (idempotency key), or a
-    #: list of fields that are unique together, such as OpenEMR's
+    #: list of fields that are unique together, such as a composite key
     #: ``[lname, fname, DOB]``. A list (even of one field) is a composite key:
     #: it also counts records that were already there, so the verifier's read
     #: must cover the key (see :func:`composite_key_read_problems`).

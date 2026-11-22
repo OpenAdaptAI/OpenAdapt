@@ -1,0 +1,2 @@
+{"decision": "continued", "event": "request", "hold_ms": 13.5, "kind": "save", "method": "POST", "origin": "http://127.0.0.1:64839", "path_sha256": "a01c22910e2962c5", "resource_type": "XHR", "t": 3.843}
+{"event": "read_back", "t": 3.951, "verdict": "VERIFIED"}

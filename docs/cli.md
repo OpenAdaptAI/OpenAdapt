@@ -17,7 +17,7 @@ installed `openadapt-flow` engine.
 Run `<task> --help` to see its arguments or related operations. For example:
 
 ```bash
-openadapt demo quickstart --break-it
+openadapt quickstart --break-it
 openadapt verify effect --help
 openadapt inspect lint bundle
 openadapt run --replay bundle --run-dir run
@@ -57,8 +57,9 @@ uv fetches Python 3.12 for the run. With `openadapt` installed, run
 
 `openadapt demo tutorial` is the command that writes a `VERIFIED` receipt. It
 runs the bundled synthetic MockMed workflow from recording through an
-independently verified Standard-profile result. `openadapt demo quickstart --break-it`
-is the halt demo. It reruns the same certified bundle against a backend that
+independently verified Standard-profile result. `openadapt quickstart --break-it`
+(also `openadapt demo quickstart --break-it`; with uv, `uvx --python 3.12
+openadapt@latest quickstart --break-it`) is the halt demo. It reruns the same certified bundle against a backend that
 rejects the write after the app shows success. The independent read finds no
 saved record, and the run halts with transaction outcome
 `RECONCILIATION_REQUIRED`, so nothing is retried until a person checks the

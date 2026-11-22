@@ -393,3 +393,43 @@ def test_code_kept_in_its_type_checking_branch_passes(
 
     assert result.ok, (result.missing, result.new_bodies)
     assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 0
+
+
+def test_a_module_turned_into_a_package_is_a_move(repo: Path) -> None:
+    # git sees replayer.py -> replayer/__init__.py as a rename; the deleted
+    # module must still be compared, and the package's code read as moved.
+    _git(repo, "rm", "-q", f"{PKG}/replayer.py")
+    _write(
+        repo,
+        f"{PKG}/replayer/__init__.py",
+        BASE.replace(
+            "LIMIT = 3\n\n\ndef helper(x):\n    return x + LIMIT\n",
+            "from openadapt_demo.replayer.models import LIMIT, helper  # noqa: F401\n",
+        ),
+    )
+    _write(
+        repo,
+        f"{PKG}/replayer/models.py",
+        "LIMIT = 3\n\n\ndef helper(x):\n    return x + LIMIT\n",
+    )
+    _git(repo, "add", "-A")
+
+    result = _verify(repo)
+
+    assert result.ok, (result.missing, result.new_bodies)
+    assert result.moved >= 2
+
+
+def test_a_package_init_is_named_as_its_package() -> None:
+    assert (
+        verify_moved_code._module_name(
+            "packages/flow/openadapt_flow/qualification/__init__.py"
+        )
+        == "openadapt_flow.qualification"
+    )
+    assert (
+        verify_moved_code._module_name(
+            "packages/flow/openadapt_flow/qualification/models.py"
+        )
+        == "openadapt_flow.qualification.models"
+    )
