@@ -66,7 +66,7 @@ runs:
         INSTALL_MODE: ${{ inputs.install-mode }}
       run: |
         set -euo pipefail
-        python -m pip install --quiet --disable-pip-version-check --require-hashes -r "${ACTION_PATH}/requirements.lock.txt"
+        python -m pip install --quiet --disable-pip-version-check --require-hashes -r "${ACTION_PATH}/requirements.txt"
 
     - name: Verify OpenAdapt Seal offline
       id: verify
