@@ -25,7 +25,7 @@ clean writes.
 |---|---|---|
 | Clean writes stopped | 0 of 400 | 0 of 400 |
 | Clean writes with a receipt | 400 | 400 |
-| Seconds per write, median (p95) | 0.06 (0.08) | 0.07 (0.59) |
+| Seconds per write, median (p95) | 0.06 (0.07) | 0.07 (0.59) |
 | Wrong value, create | 50 of 50 stopped (`wrong_value`) | 50 of 50 |
 | Wrong value, update or edit | 50 of 50 | 50 of 50 |
 | Duplicate create (the executor sends it twice, without the guard) | 50 of 50 (`duplicate_write`) | 50 of 50 |
@@ -74,6 +74,13 @@ request as these results:
   layers [medplum.compose.override.yml](medplum.compose.override.yml) on the
   shared Medplum compose file to raise it; other Medplum benches keep the
   defaults.
+
+Which code produced each file: the Medplum rows were rerun live at commit
+`6ad9f6fb` (the strict search parser and the bench-only quota override, the
+final code in this pull request; same counts as the first run). The Gitea rows
+are from commit `5680f814`; the later changes touch only the marker search and
+the Medplum lab, and Gitea's pack declares no marker search, so its path is
+unchanged.
 
 The raw rows are in [results/medplum.json](results/medplum.json) and
 [results/gitea.json](results/gitea.json). Each row has its outcome, codes,
