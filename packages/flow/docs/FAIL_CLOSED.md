@@ -129,8 +129,12 @@ M10) may move REFUTED to NOT_CHECKED, because the refutation it removed is no
 longer known, but never to HELD. A site whose order puts an unread result
 below a refuted one says so in `precedence` with the reason in
 `notes["precedence"]` (a test enforces the note). `verify_run`'s folds and
-`receipt_record._line` do: an effect that wasn't read may have landed, so the
-run says "check the record" rather than "refuted" (C7).
+`receipt_record._line` do, and keep doing so by decision: when an effect may
+have landed unseen, reconciliation beats an assumed refutation. A run with
+one refuted effect and one unread effect is INDETERMINATE ("check the
+record"), because the unread write may have happened; reporting it as
+REFUTED would invite a retry or a plain failure over a change that may be in
+the store (C7).
 
 M13, a trust-source swap, waits for the signer vectors (follow-up 5).
 
@@ -210,9 +214,25 @@ argument, or a string passed to the spec factory given to `register(...)`;
 any other quoted word in a spec file doesn't count.
 
 The baseline was measured again on this branch after merging main at
-`9b6956be3`, because main had gained folds after the first measurement. For
-every kind the branch's count is at or below a clean `origin/main` measured
-with the same detector, so no kind's allowance rose above main's.
+`9b6956be3`, because main had gained folds after the first measurement. The
+method: `git archive origin/main` of `packages/flow/openadapt_flow`,
+`openadapt`, `scripts/ci` and the outcome vocabulary into an empty folder;
+`scan(load_config(), root=<that folder>)` there and on this branch with the
+same detector and config; a per-kind comparison of the two totals; then the
+branch's per-file counts written as the baseline. For every kind the branch's
+count is at or below clean main's, so no kind's allowance rose above main's:
+
+| Kind | Clean main | This branch |
+|---|---|---|
+| says_success | 92 | 89 |
+| cmp_literal | 732 | 724 |
+| bool_fold | 209 | 201 |
+| swallow | 805 | 805 |
+| swallow_wide | 377 | 377 |
+| slice_count | 40 | 40 |
+| else_success | 3 | 3 |
+| says_unchanged | 32 | 30 |
+| empty_change_set | 40 | 40 |
 
 To add verdict code, put it in a `@verdict_site` with a spec; the ratchet
 doesn't count inside one.

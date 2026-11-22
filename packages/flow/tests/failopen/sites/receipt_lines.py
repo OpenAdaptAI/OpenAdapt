@@ -70,7 +70,8 @@ register(
         precedence=(Status.NOT_CHECKED, Status.REFUTED),
         notes={
             "precedence": "a line is refuted only when every declared effect "
-            "was read; an unread one may have landed, so it outranks a refutation"
+            "was read: when an effect may have landed unseen, reconciliation "
+            "beats an assumed refutation (C7; FAIL_CLOSED.md P6)"
         },
         seeds=lambda: [
             Seed(_write(_read("h1"), _read("h2")), True, "two writes, both confirmed"),

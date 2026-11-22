@@ -22,8 +22,10 @@ C, R, I = "confirmed", "refuted", "indeterminate"
 #: plain "refuted".
 _UNREAD_FIRST = (Status.NOT_CHECKED, Status.REFUTED)
 _PRECEDENCE_NOTE = (
-    "an unread effect outranks a refuted one: it may have changed something, "
-    "so the run is INDETERMINATE (check the record), not REFUTED"
+    "an unread effect outranks a refuted one: when an effect may have landed "
+    "unseen, reconciliation beats an assumed refutation, so the run is "
+    "INDETERMINATE (check the record), not REFUTED, which would invite a "
+    "retry over a write that may be in the store (C7; FAIL_CLOSED.md P6)"
 )
 
 _LEVEL = {
