@@ -1,0 +1,49 @@
+{
+  "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+  },
+  "effect_receipt_sha256": "8957d9ecfe576f4cbf6977b8a619723085f32a09aaa193c42aeb1e19ec4e3bc1",
+  "execution_outcome": "VERIFIED",
+  "executor": {
+    "agent": "claude-code",
+    "kind": "agent"
+  },
+  "finished_at": "2026-11-21T06:36:04Z",
+  "hold_key": "97599bd236bca88b93e6a296cc962499d60fd1130bbb4cd49ca76348c17dda80",
+  "model_calls": 0,
+  "outcome": "VERIFIED",
+  "outcome_envelope": {
+    "passed_contracts": {
+      "authorization": 1,
+      "effect": 1
+    },
+    "required_contracts": {
+      "authorization": 1,
+      "effect": 1
+    }
+  },
+  "reasons": [],
+  "results": [
+    {
+      "actuation": "api",
+      "effect_approved_unverified": false,
+      "effect_contract_hashes": [
+        "399e0f8a9ece0febeeee0c1d687a67e6832ab2c639f4b92460c93039f1b1f6ce"
+      ],
+      "effect_field_checks": [
+        "delta"
+      ],
+      "effect_verified": true,
+      "ok": true
+    }
+  ],
+  "run_id": "hk-52984979eabaa0ad",
+  "schema_version": "openadapt.hook-report/v1",
+  "started_at": "2026-11-21T06:36:03Z",
+  "system": "clinic-db",
+  "verifier_outcome": "CONFIRMED",
+  "workflow_name": "clinic-db.add-note",
+  "write": "add-note"
+}
