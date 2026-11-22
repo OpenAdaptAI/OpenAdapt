@@ -49,6 +49,7 @@ this module must not depend on `openadapt_flow.vision`.
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import time
@@ -467,21 +468,19 @@ class Recorder:
 
         The agent's text is discarded (it never has the code), unless it is a
         declared input, which is refused: a code field takes only a code. The
-        event names :data:`ONE_TIME_CODE_PARAM` and holds no value.
+        handoff (:mod:`openadapt_flow.runtime.second_factor_step`) binds the
+        field, masks it on screen, asks, re-checks and types once. The event
+        names :data:`ONE_TIME_CODE_PARAM` and holds no value.
         """
         from openadapt_flow import second_factor
+        from openadapt_flow.backends.one_time_field import one_time_field_for
+        from openadapt_flow.runtime.second_factor_step import DeliveryLedger, Handoff
 
         if text in (self._credential_inputs or {}):
             raise CredentialFieldError(
                 "a one-time code field takes only a code from a person, not a "
                 "declared input; nothing was typed"
             )
-        try:
-            code = second_factor.obtain("code", "recording") or ""
-        except second_factor.SecondFactorRefused as refused:
-            raise CredentialFieldError(
-                f"a one-time code field needs a code from a person ({refused})"
-            ) from None
         event.pop("text", None)
         event.update(
             param=ONE_TIME_CODE_PARAM,
@@ -492,7 +491,18 @@ class Recorder:
         )
         self._credential_fields.append((self._active_surface, "one-time-code", region))
         self.last_type_withheld = True
-        self._record(event, lambda: self._backend.type_text(code))
+        ledger = self.__dict__.setdefault("_second_factor_ledger", DeliveryLedger())
+        handoff = Handoff(one_time_field_for(self._backend), ledger)
+
+        def deliver() -> None:
+            try:
+                handoff.deliver_code("recording", key=f"recording:{self._i}")
+            except second_factor.SecondFactorRefused as refused:
+                raise CredentialFieldError(
+                    f"a one-time code field needs a code from a person ({refused})"
+                ) from None
+
+        self._record(event, deliver)
 
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
@@ -1027,7 +1037,7 @@ class Recorder:
         structural_before = self._structural_state()
         # Who has the focus before and after a key press, for a key that moves
         # the focus and changes nothing visible (the ``focus_on``
-        # postcondition). Key events only.
+        # postcondition), and the receiving target of native text input.
         focus_before = self._focus_identity(event)
         # Structured identity of the clicked target (DOM / a11y text), when
         # the backend exposes it: captured on the BEFORE frame, before the
@@ -1151,13 +1161,12 @@ class Recorder:
             quiet_before=quiet_before,
         )
         if focus_before is not None:
+            # Preserve the actual input target even when the input navigates
+            # or closes the window and its after-focus is no longer readable.
+            event = {**event, "focus_before": focus_before}
             focus_after = self._focus_identity(event)
             if focus_after is not None:
-                event = {
-                    **event,
-                    "focus_before": focus_before,
-                    "focus_after": focus_after,
-                }
+                event = {**event, "focus_after": focus_after}
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
@@ -1578,18 +1587,18 @@ class Recorder:
         return census if isinstance(census, dict) else None
 
     def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
-        """The focused element's identity around a key event, if readable."""
+        """The focused element before/after keyboard input, if readable."""
 
-        if event.get("kind") not in ("key", "hotkey"):
+        if event.get("kind") not in ("type", "key", "hotkey"):
             return None
         reader = getattr(self._backend, "focus_identity", None)
         if not callable(reader):
             return None
         try:
             value = reader()
+            return copy.deepcopy(value) if isinstance(value, dict) else None
         except Exception:
             return None
-        return value if isinstance(value, dict) else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.

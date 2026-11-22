@@ -32,7 +32,7 @@ def next_steps(
     keep: Optional[str] = None,
     shadow: Optional[Callable[[], Optional[str]]] = None,
     offer_publish: Optional[
-        Callable[[Path, Callable[[str], None], Callable[[str], str]], bool]
+        Callable[[list[Path], Callable[[str], None], Callable[[str], str]], bool]
     ] = None,
 ) -> Callable[[Outcome], NextSteps]:
     """The finale's commands, spelled by the launcher's ``hint`` helper.
@@ -41,14 +41,14 @@ def next_steps(
     check (run once, at the finale) for an older ``openadapt`` on PATH.
     ``offer_publish`` is given only in a terminal outside CI, with an engine
     that can build public Seals. At the finale it asks once whether to put
-    the Seal online, and only when Cloud says hosted Seals are live. Otherwise
-    the finale says nothing about publishing.
+    the checked and stopped runs' Seals online. The offer appears only
+    when Cloud accepts hosted Seals.
     """
 
     def build(outcome: Outcome) -> NextSteps:
         verify = None
         if outcome.seal is not None:
-            verify = hint(f"seal verify {quote(display_path(outcome.root))}")
+            verify = hint(f"verify {quote(display_path(outcome.root))}")
         if agent_serves_tutorial:
             agent = hint("agent serve --allow-run")
         else:
@@ -57,9 +57,7 @@ def next_steps(
             )
         return NextSteps(
             verify=verify,
-            verify_run=lambda run_dir: hint(
-                f"seal verify {quote(display_path(run_dir))}"
-            ),
+            verify_run=lambda run_dir: hint(f"verify {quote(display_path(run_dir))}"),
             record=hint(
                 f"flow record --backend web --url {YOUR_APP_URL} --out my-task"
             ),
@@ -82,11 +80,14 @@ def run_quickstart(
     stream: Optional[IO[str]] = None,
     interactive: Optional[bool] = None,
     openemr: Optional[Path] = None,
+    open_seal: bool = False,
 ) -> Outcome:
     """Run the quickstart into ``root`` and print it to ``stream``.
 
     ``openemr`` is a clone's ``packages/flow`` folder: the three acts then run
-    on OpenEMR in Docker instead of the bundled MockMed.
+    on OpenEMR in Docker instead of the bundled MockMed. ``open_seal``
+    (``--open``) opens the Seal page in the browser at the end; otherwise the
+    finale only prints a link to it.
     """
 
     from openadapt.quickstart.engine import FlowEngine, display_available, open_page
@@ -115,9 +116,14 @@ def run_quickstart(
                 break_it=break_it,
                 interactive=interactive,
                 verbose=verbose,
-                # Only when this output is the terminal a person is reading:
-                # a captured or redirected stream never opens a browser.
-                open_page=open_page if _shown(stream, display_available) else None,
+                # Only on request (--open), and only when this output is the
+                # terminal a person is reading: a captured or redirected
+                # stream never opens a browser.
+                open_page=(
+                    open_page
+                    if open_seal and _shown(stream, display_available)
+                    else None
+                ),
             )
         finally:
             close = getattr(view, "close", None)

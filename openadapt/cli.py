@@ -35,7 +35,7 @@ import sys
 from contextlib import contextmanager
 from importlib import import_module
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import click
 
@@ -133,6 +133,22 @@ class _FlowFirstGroup(click.Group):
         ):
             click.echo(group_help(ctx.command_path, root_name), nl=False)
             ctx.exit()
+        if (
+            not ctx.resilient_parsing
+            and root_name == "verify"
+            and len(raw) > 1
+            and not raw[1].startswith("-")
+            and raw[1] not in _verify_operations(self.commands.get("verify"))
+            and (
+                Path(raw[1]).exists()
+                or "/" in raw[1]
+                or raw[1].endswith((".json", ".cbor"))
+                or _is_seal_link(raw[1])
+            )
+        ):
+            # `openadapt verify <file|folder|link>` checks a receipt; the
+            # verify subcommands (serve, ledger, effect, ...) are never paths.
+            raw = ["receipt", "verify", *raw[1:]]
         args = translate(raw, set(self.commands), normalize)
         name = normalize(args[0]) if args and normalize else (args[0] if args else "")
         command = self.commands.get(name)
@@ -200,7 +216,9 @@ def main():
     training/evaluation commands are research.
 
     \b
-    Quick Start (Python 3.10-3.12):
+    Quick Start (uv fetches Python 3.12 if needed):
+        uvx --python 3.12 openadapt@latest quickstart
+    Or, on Python 3.10-3.12:
         python -m pip install --upgrade openadapt
         openadapt quickstart
 
@@ -342,9 +360,42 @@ class _LauncherSpellingStream:
         return getattr(self._stream, name)
 
 
+def _is_login(argv: list[str]) -> bool:
+    """``login`` or ``setup login``, not its help."""
+    if argv[:1] == ["login"]:
+        rest = argv[1:]
+    elif argv[:2] == ["setup", "login"]:
+        rest = argv[2:]
+    else:
+        return False
+    return not any(token in ("-h", "--help") for token in rest)
+
+
+def _option_values(argv: list[str], name: str) -> Optional[list[str]]:
+    """Every value of a repeatable ``--name VALUE`` option, or None."""
+    values = []
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            values.append(argv[index + 1])
+        elif token.startswith(name + "="):
+            values.append(token[len(name) + 1 :])
+    return values or None
+
+
+def _option_value(argv: list[str], name: str) -> Optional[str]:
+    """The value of ``--name VALUE`` or ``--name=VALUE`` in ``argv``, if any."""
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            return argv[index + 1]
+        if token.startswith(name + "="):
+            return token[len(name) + 1 :]
+    return None
+
+
 def _invoke_flow(argv: list[str]) -> int:
     """Invoke the canonical engine once and return its exit code."""
     if not _python_supported():
+        _rerun_with_supported_python()
         _echo_python_remedy()
         return 1
     try:
@@ -365,6 +416,17 @@ def _invoke_flow(argv: list[str]) -> int:
         alias_context = suppress_alias_notices()
     with alias_context:
         _correct_released_flow_x11_sonames()
+        if _is_login(argv):
+            code = int(flow_main(argv))
+            if code == 0:
+                from openadapt.seal_claim import after_login
+
+                after_login(
+                    _option_value(argv, "--host"),
+                    destination_kind=_option_value(argv, "--destination-kind"),
+                    trusted_hosts=_option_values(argv, "--trusted-host"),
+                )
+            return code
         if argv[:1] != ["tutorial"]:
             return int(flow_main(argv))
         # The tutorial is the first-run path and ends by printing next steps.
@@ -399,6 +461,15 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # classifiers, and the CI guard matrix in step.
 _SUPPORTED_PYTHON = ((3, 10), (3, 12))
 
+#: The documented first command: the newest launcher, on a Python the engine
+#: supports, with nothing installed first. tests/test_quickstart_command.py
+#: keeps README.md, llms.txt and the docs on exactly this spelling.
+QUICKSTART_COMMAND = "uvx --python 3.12 openadapt@latest quickstart"
+
+#: Set on the rerun under Python 3.12, so a rerun that still lands on an
+#: unsupported Python prints the fix instead of running again.
+_PYTHON_RERUN_ENV = "OPENADAPT_PYTHON_RERUN"
+
 
 def _host_platform() -> str:
     return sys.platform
@@ -420,11 +491,12 @@ def _python_fix() -> str:
             "OpenAdaptAI/OpenAdapt/main/packages/flow/scripts/install.sh"
         )
     return (
-        "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
-        "have it:\n"
+        "Run it with uv, which downloads Python 3.12 if you don't have it:\n"
+        f"  {QUICKSTART_COMMAND}\n"
+        "No uv yet? Install it first:\n"
         f"{installer}"
-        "  uv tool install --python 3.12 openadapt\n"
-        f"Then run: openadapt quickstart{script}"
+        "To keep OpenAdapt installed: uv tool install --python 3.12 openadapt"
+        f"{script}"
     )
 
 
@@ -489,8 +561,59 @@ def _require_supported_python() -> None:
     with the remedy instead of an ImportError or a misleading reinstall hint.
     """
     if not _python_supported():
+        _rerun_with_supported_python()
         _echo_python_remedy()
         raise click.exceptions.Exit(1)
+
+
+def _rerun_command() -> Optional[tuple[list[str], str]]:
+    """Under ``uvx`` on an unsupported Python: the same command on 3.12.
+
+    Returns the argv to run and its shell spelling, or None when this isn't a
+    ``uvx`` run, uv can't be found, or this already is the rerun. The rerun
+    pins this launcher's own release (``openadapt@X.Y.Z``) so it runs the
+    same version; a development build reruns ``openadapt@latest``.
+    """
+    import shutil
+
+    if os.environ.get(_PYTHON_RERUN_ENV) or not _under_uvx():
+        return None
+    uv = os.environ.get("UV") or shutil.which("uv")
+    if not uv:
+        return None
+    pin = __version__ if re.fullmatch(r"\d+\.\d+\.\d+", __version__) else "latest"
+    spec = ["--python", "3.12", f"openadapt@{pin}", *sys.argv[1:]]
+    shown = " ".join(["uvx", *(_shell_quote(part) for part in spec)])
+    return [uv, "tool", "run", *spec], shown
+
+
+def _rerun_with_supported_python() -> None:
+    """Rerun this command with Python 3.12 under ``uvx``; return if it can't.
+
+    ``uvx openadapt@latest quickstart`` on Python 3.13 or newer installs only
+    the launcher (the engine needs 3.10 to 3.12). uv can fetch 3.12 itself,
+    so the same command runs again with ``--python 3.12`` and its exit code
+    becomes this one's. Elsewhere this returns and the caller prints the fix.
+    """
+    import subprocess
+
+    rerun = _rerun_command()
+    if rerun is None:
+        return
+    argv, shown = rerun
+    current = "{}.{}".format(*_python_minor())
+    click.echo(
+        f"Python {current} can't run the OpenAdapt engine (it needs 3.10 to "
+        f"3.12), so this runs it with Python 3.12:\n  {shown}",
+        err=True,
+    )
+    try:
+        code = subprocess.call(argv, env={**os.environ, _PYTHON_RERUN_ENV: "1"})
+    except OSError:
+        return
+    except KeyboardInterrupt:
+        code = 130
+    raise click.exceptions.Exit(code)
 
 
 # openadapt-agent 2.0.1 requires `serve --bundles`. The bundle-free
@@ -567,6 +690,8 @@ _QUICKSTART_OPTIONS = frozenset(
     {
         "--out",
         "--app",
+        "--watch",
+        "--open",
         "--headless",
         "--no-break",
         "--verbose",
@@ -671,9 +796,21 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     ),
 )
 @click.option(
-    "--headless",
+    "--watch",
     is_flag=True,
-    help="Hide the browser. It is shown by default when a display is available.",
+    help=(
+        "Show the browser window while it runs. By default the browser is "
+        "hidden and progress shows in the terminal."
+    ),
+)
+@click.option(
+    "--open",
+    "open_seal",
+    is_flag=True,
+    help=(
+        "Open your Seal page in the browser at the end. By default the "
+        "finale prints a link to it."
+    ),
 )
 @click.option(
     "--no-break",
@@ -694,18 +831,24 @@ def _quickstart_root(out: Optional[Path]) -> Path:
         "--out) and exit. Runs nothing."
     ),
 )
+# --headed is the older spelling of --watch. --headless was the opt-out when
+# the window showed by default; hidden is the default now, so it changes
+# nothing and is kept so older commands still run.
 @click.option("--headed", is_flag=True, hidden=True)
+@click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
 @click.pass_context
 def quickstart(
     command_ctx: click.Context,
     out: Optional[Path],
     app: str,
-    headless: bool,
+    watch: bool,
+    open_seal: bool,
     no_break: bool,
     verbose: bool,
     more: bool,
     headed: bool,
+    headless: bool,
     break_it: bool,
 ) -> None:
     """Show a task once, run it, then watch it catch a save that didn't happen.
@@ -722,7 +865,8 @@ def quickstart(
     chart, where the program stops before saving. It runs from a clone of the
     repository and needs Docker; without either it says so and exits 2.
 
-    Other flags of the engine tutorial (for example --guided or
+    The browser runs hidden, so nothing takes over the screen; --watch shows
+    its window. Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
     if more:
@@ -737,13 +881,12 @@ def quickstart(
         # Engine-owned flags (--guided, --interactive-record, and future
         # engine additions) run the engine's own tutorial, as before. So does
         # a Flow older than the pieces the three-act quickstart uses.
-        _engine_tutorial(root, out is None, headed, break_it, command_ctx.args)
+        _engine_tutorial(root, out is None, watch or headed, break_it, command_ctx.args)
         return
 
     from openadapt.quickstart import next_steps, run_quickstart
-    from openadapt.quickstart.engine import display_available
 
-    visible = not headless and (headed or display_available())
+    visible = _watch_window(watch or headed)
     steps = next_steps(
         _hint,
         _shell_quote,
@@ -761,6 +904,7 @@ def quickstart(
                 verbose=verbose,
                 steps=steps,
                 openemr=openemr,
+                open_seal=open_seal,
             )
     except KeyboardInterrupt:
         click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
@@ -782,6 +926,26 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _watch_window(watch: bool) -> bool:
+    """Whether the quickstart shows its browser window (``--watch`` only).
+
+    Linux without X11 or Wayland has nowhere to show a window, so the run
+    stays hidden there and says so instead of failing to start the browser.
+    """
+    if not watch:
+        return False
+    if _host_platform().startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        click.echo(
+            "No display here (DISPLAY and WAYLAND_DISPLAY are unset), so the "
+            "browser stays hidden.",
+            err=True,
+        )
+        return False
+    return True
 
 
 def _public_seals_available() -> bool:
@@ -806,12 +970,12 @@ def _quickstart_publish_offer():
     if not _public_seals_available():
         return None
 
-    def offer(run_dir: Path, say, ask) -> bool:
+    def offer(run_dirs: list[Path] | Path, say, ask) -> bool:
         from openadapt.seal_publish import (
             PublishError,
             endpoint,
             hosted_seals_live,
-            publish,
+            publish_quickstart,
         )
 
         try:
@@ -819,19 +983,10 @@ def _quickstart_publish_offer():
                 return False
         except PublishError:
             return False
-        say(
-            "Put this Seal online? This is the exact summary that would be "
-            f"uploaded ({run_dir / 'public-seal.json'}):"
-        )
+        if isinstance(run_dirs, Path):
+            run_dirs = [run_dirs]
         try:
-            publish(
-                run_dir,
-                interactive=True,
-                ask=ask,
-                say=say,
-                provenance="synthetic-tutorial",
-                command=_hint,
-            )
+            publish_quickstart(run_dirs, ask=ask, say=say, command=_hint)
         except PublishError as exc:
             say(str(exc))
         except (KeyboardInterrupt, EOFError):
@@ -959,16 +1114,18 @@ def _engine_tutorial(
 
 
 def _hint(rest: str) -> str:
-    """Spell an ``openadapt`` command the way it reaches this same version.
+    """Spell an ``openadapt`` command so it works as printed.
 
     Under ``uvx`` this process runs from a throwaway environment in uv's cache,
     so the shell may have no ``openadapt`` or an older one that lacks the verb.
-    Repeat the ``uvx`` form there; otherwise keep the plain command.
+    Repeat the ``uvx`` form there, with ``openadapt@latest`` so it reaches the
+    newest release (this one or later) and this Python's version; otherwise
+    keep the plain command.
     """
 
     if _under_uvx():
         major, minor = sys.version_info[:2]
-        return f"uvx --python {major}.{minor} openadapt {rest}"
+        return f"uvx --python {major}.{minor} openadapt@latest {rest}"
     return f"openadapt {rest}"
 
 
@@ -1436,6 +1593,26 @@ for _verb, _help in (
 
 
 @main.command(
+    "login",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def login(command_ctx: click.Context) -> None:
+    """Sign in to OpenAdapt Cloud: `openadapt login` (same as `setup login`).
+
+    Every argument passes to `openadapt-flow login` unchanged. After a
+    successful sign-in, Seals this computer published are claimed into your
+    workspace when Cloud supports it.
+    """
+    _require_supported_python()
+    _run_flow(["login", *command_ctx.args])
+
+
+@main.command(
     "pull",
     context_settings={
         "ignore_unknown_options": True,
@@ -1859,6 +2036,27 @@ def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, 
 
 
 @main.command(
+    "hooks",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def hooks(command_ctx: click.Context) -> None:
+    """Check a coding agent's writes to declared systems of record."""
+    _require_supported_python()
+    hooks_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.hooks.cli",))
+    if hooks_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no hooks command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(hooks_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "wrap",
     context_settings={
         "ignore_unknown_options": True,
@@ -1908,7 +2106,131 @@ def agent(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "receipt",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def receipt(command_ctx: click.Context) -> None:
+    """Check, view and share a run's receipt: `openadapt receipt verify <file|folder|link>`.
+
+    A receipt is a signed, itemized record of one run: what it changed, how
+    each change was checked, and who signed it. It doesn't grade the run.
+    `verify` (also `openadapt verify`) prints who signed it and fails closed
+    on an unknown key, schema or role; older formats still verify. `view
+    RUN_DIR` writes the run's offline page and opens it. `publish [RUN_DIR]`
+    uploads the run's public card (counts, outcomes and digests only) after
+    you say yes; `unpublish RUN_DIR` takes it down. `keys pin` pins
+    OpenAdapt Cloud's keys after a person confirms them.
+    """
+    _require_supported_python()
+    args = list(command_ctx.args)
+    if args[:1] in ([], ["-h"], ["--help"]):
+        click.echo(command_ctx.get_help())
+        sys.exit(0 if args else 2)
+    if args[0] == "verify":
+
+        def agent(argv: list[str]) -> int:
+            agent_main = _optional_engine_entrypoint(
+                command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+            )
+            if agent_main is None:
+                click.echo(
+                    "Not verified: this openadapt-agent can't check that format."
+                )
+                return 1
+            return int(agent_main(argv) or 0)
+
+        sys.exit(_verify_receipts(args[1:], agent))
+    if args[0] == "view":
+        sys.exit(_view_sealed_runs(args[1:]))
+    if args[0] == "publish":
+        sys.exit(_publish_seal(args[1:]))
+    if args[0] == "unpublish":
+        sys.exit(_unpublish_seal(args[1:]))
+    if args[0] == "keys":
+        agent_main = _optional_engine_entrypoint(
+            command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+        )
+        if agent_main is None:
+            click.echo("Error: this openadapt-agent cannot pin keys.", err=True)
+            sys.exit(1)
+        sys.exit(int(agent_main(["seal", *args]) or 0))
+    raise click.UsageError(
+        f"No such receipt command '{args[0]}'. Use verify, view, publish, "
+        "unpublish or keys."
+    )
+
+
+def _verify_operations(group: Optional[click.Command]) -> set[str]:
+    """`openadapt verify` subcommands and operations: never read as a path."""
+    from openadapt.cli_tasks import FLOW_NAMES, NATIVE_ROUTES
+
+    names = {
+        route.split()[1]
+        for route in FLOW_NAMES.values()
+        if route.startswith("verify ") and len(route.split()) > 1
+    }
+    names |= {path[1] for path in NATIVE_ROUTES if path[0] == "verify"}
+    names |= set(getattr(group, "commands", {}) or {})
+    return names
+
+
+def _verify_receipts(argv: list[str], agent: Callable[[list[str]], int]) -> int:
+    """`openadapt verify <file|folder|link> [--keys FILE]`: any receipt, any format."""
+    if not argv or any(arg in ("-h", "--help") for arg in argv):
+        click.echo(
+            "Usage: openadapt verify <file|folder|link> [--keys FILE]\n\n"
+            "Checks a receipt and prints who signed it. Fails closed on an "
+            "unknown key, schema or role. Older formats (seal.json, public "
+            "Seals, run summaries, write and tx receipts) still verify, "
+            "labelled older format. --keys pins an openadapt.receipt-keys/v1 "
+            "registry beside this computer's own key."
+        )
+        return 0 if argv else 2
+    target, rest = argv[0], argv[1:]
+    keys = None
+    if "--keys" in rest:
+        at = rest.index("--keys")
+        if at + 1 >= len(rest):
+            raise click.UsageError("--keys needs a FILE")
+        keys = Path(rest[at + 1])
+        rest = rest[:at] + rest[at + 2 :]
+    try:
+        from openadapt.receipt_verify import verify_path
+    except ImportError:  # pragma: no cover - ships with the launcher
+        click.echo("This install has no receipt verifier.", err=True)
+        return 1
+
+    try:
+        return verify_path(
+            target,
+            keys=keys,
+            extra=rest,
+            say=click.echo,
+            invoke_flow=_invoke_flow,
+            invoke_agent=agent,
+            legacy_folder=_verify_sealed_runs,
+            legacy_link=_verify_seal_link,
+            is_link=_is_seal_link,
+        )
+    except ImportError:
+        click.echo(
+            "Not verified: this openadapt-flow or openadapt-types is too old to "
+            "check receipts. Upgrade with: pip install --upgrade openadapt"
+        )
+        return 1
+    except (OSError, ValueError) as exc:
+        click.echo(f"Not verified: {exc}")
+        return 1
+
+
+@main.command(
     "seal",
+    hidden=True,
     context_settings={
         "ignore_unknown_options": True,
         "allow_extra_args": True,
@@ -1926,7 +2248,8 @@ def seal(command_ctx: click.Context) -> None:
     [RUN_DIR]` uploads the run's public Seal (counts, outcomes and digests
     only) after you say yes and prints its link; `openadapt seal unpublish
     RUN_DIR` takes it down, and `openadapt seal verify <link>` checks a hosted
-    Seal's signature here. Also `openadapt seal keys pin` to pin Cloud's Seal
+    Seal's signature here. `openadapt seal claim` puts the Seals you published
+    in your Cloud workspace after `openadapt login` (login does it for you). Also `openadapt seal keys pin` to pin Cloud's Seal
     keys after a person confirms them. Every other argument passes to
     `openadapt-agent seal` unchanged.
     """
@@ -1938,6 +2261,8 @@ def seal(command_ctx: click.Context) -> None:
         sys.exit(_publish_seal(args[1:]))
     if args[:1] == ["unpublish"]:
         sys.exit(_unpublish_seal(args[1:]))
+    if args[:1] == ["claim"]:
+        sys.exit(_claim_seals(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and _is_seal_link(args[1]):
         sys.exit(_verify_seal_link(args[1], args[2:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
@@ -2041,10 +2366,10 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
             "and the hour the run started, signed by this computer's Seal key. "
             "It never holds inputs, typed values, screenshots or record "
             "contents. The program name is left out unless you pass --names "
-            "(the synthetic tutorial includes it). The exact card is printed "
-            "first, and nothing is uploaded until you say yes: at the prompt, "
-            "or with --yes when there is no terminal. --yes skips the "
-            "question, not the printed card."
+            "(the synthetic tutorial includes it). The preview lists every field; "
+            "--show prints the exact upload. Seals signed by the same key have the same public "
+            "key ID. Confirm at the prompt, or pass --yes to publish without "
+            "a prompt."
         ),
         allow_abbrev=False,
     )
@@ -2064,7 +2389,12 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="write and print public-seal.json; upload nothing",
+        help="preview all public fields and write public-seal.json; upload nothing",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="write the exact upload bytes to standard output and exit without publishing",
     )
     parser.add_argument(
         "--github",
@@ -2124,7 +2454,7 @@ def _ask_line(prompt: str) -> str:
 
 def _publish_seal(argv: list[str]) -> int:
     """`openadapt seal publish [RUN_DIR]`."""
-    from openadapt.seal_publish import PublishError, publish
+    from openadapt.seal_publish import PublishError, build, public_bytes, publish
 
     options = _seal_publish_parser().parse_args(argv)
     run_dir = options.run_dir or _newest_sealed_run()
@@ -2138,6 +2468,10 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(f"Not published: {run_dir} has no seal.json.", err=True)
         return 2
     try:
+        if options.show:
+            doc = build(run_dir, names=options.names, github=options.github)
+            click.get_binary_stream("stdout").write(public_bytes(doc))
+            return 0
         publish(
             run_dir,
             yes=options.yes,
@@ -2154,6 +2488,73 @@ def _publish_seal(argv: list[str]) -> int:
         click.echo(str(exc), err=True)
         return exc.exit_code
     return 0
+
+
+def _claim_seals(argv: list[str]) -> int:
+    """`openadapt seal claim [RUN_DIR...]`: claim published Seals into your workspace."""
+    from openadapt.seal_claim import claim_published, claims_live
+    from openadapt.seal_publish import host_of, urllib_transport
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal claim",
+        description=(
+            "Claim the Seals this computer published into the Cloud workspace "
+            "you signed in to with `openadapt login`, so they show on the "
+            "dashboard. The proof is a signature by this computer's Seal key; "
+            "the delete token is never sent. `openadapt login` does this for "
+            "you. Name run folders (or a quickstart folder) to include Seals "
+            "published by an older openadapt."
+        ),
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "run_dirs", nargs="*", type=Path, help="published run folders to include"
+    )
+    parser.add_argument("--host", default=None, help="the Cloud you signed in to")
+    parser.add_argument(
+        "--destination-kind",
+        default=None,
+        help="as for `openadapt login`: the trust class of --host",
+    )
+    parser.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="as for `openadapt login`: an allowlisted customer origin",
+    )
+    options = parser.parse_args(argv)
+    try:
+        from openadapt_flow.hosted import HostedError, resolve_host, resolve_token
+    except ImportError:
+        click.echo("This openadapt-flow cannot sign in to Cloud.", err=True)
+        return 1
+    from openadapt.seal_claim import check_destination
+
+    try:
+        origin = resolve_host(options.host)
+        check_destination(
+            origin,
+            destination_kind=options.destination_kind,
+            trusted_hosts=options.trusted_host,
+        )
+        token = resolve_token(None, host=origin)
+    except HostedError as exc:
+        click.echo(f"Not claimed: {exc}", err=True)
+        click.echo(f"Sign in first: {_hint('login')}", err=True)
+        return 1
+    if not claims_live(origin, transport=urllib_transport):
+        click.echo(f"{host_of(origin)} does not take Seal claims yet.", err=True)
+        return 1
+    try:
+        return claim_published(
+            origin,
+            token,
+            run_dirs=[p.expanduser() for p in options.run_dirs],
+            transport=urllib_transport,
+        )
+    except Exception as exc:  # noqa: BLE001 - e.g. no Seal key on this computer
+        click.echo(f"Not claimed: {type(exc).__name__}: {exc}", err=True)
+        return 1
 
 
 def _unpublish_seal(argv: list[str]) -> int:
@@ -2204,14 +2605,30 @@ def _is_seal_link(value: str) -> bool:
     return parse_link(value) is not None
 
 
+REQUIRE_PINNED = "--require-pinned"
+
+
 def _verify_seal_link(url: str, extra: list[str]) -> int:
     """`openadapt seal verify <link>`: fetch a hosted Seal and check it here."""
     from openadapt.seal_publish import PublishError, check_link, urllib_transport
 
+    pinned = None
+    if extra == [REQUIRE_PINNED]:
+        # The unified verify: a link's key must be pinned here, like a file's.
+        from openadapt.receipt_verify import _registry
+
+        def pinned(key_id: str) -> bool:
+            return any(
+                k.key_id == key_id and k.status == "active" for k in _registry(None)
+            )
+
+        extra = []
     if extra:
         raise click.UsageError("A Seal link takes no other options.")
     try:
-        return check_link(url, transport=urllib_transport, say=click.echo)
+        return check_link(
+            url, transport=urllib_transport, say=click.echo, pinned=pinned
+        )
     except PublishError as exc:
         click.echo(str(exc), err=True)
         return exc.exit_code

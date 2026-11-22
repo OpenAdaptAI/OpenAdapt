@@ -1,14 +1,17 @@
 """Ask a person for a sign-in's second factor while the run waits.
 
-A program step can declare ``Step.one_time``:
+A program step whose action is ``second_factor`` names its kind in
+``Step.one_time``. The action is its own enum value so a runtime that predates
+it refuses to load the bundle instead of running the step as something else:
 
-- ``"code"``: a TYPE step into a one-time-code field (a code sent by SMS or
-  email, or shown by an authenticator app). The program never holds a value.
-  When the step runs, the configured source supplies one code; the runtime
-  types it and drops it. It is never stored, logged or written to a report.
-- ``"approval"``: a WAIT step at a push-approval prompt. The source tells a
-  person to approve the sign-in on their own device, and the run continues
-  once they say they did. The next step still checks the screen.
+- ``"code"``: type one code into the focused one-time-code field (a code sent
+  by SMS or email, or shown by an authenticator app). The program never holds
+  a value. When the step runs, the configured source supplies one code; the
+  runtime types it once and drops it. It is never stored, logged, shown to a
+  model or written to a report (:mod:`openadapt_flow.runtime.second_factor_step`).
+- ``"approval"``: wait at a push-approval prompt. The source tells a person to
+  approve the sign-in on their own device, and the run continues once they
+  say they did. The next step still checks the screen.
 
 Sources, from the environment, first match wins:
 
@@ -21,15 +24,15 @@ Sources, from the environment, first match wins:
   manager's one-time-code command). It is run as
   ``<command> code|approval <step id>`` with no shell. Exit 0 prints the code
   (or confirms the approval), exit 3 means the person declined.
+- The run's own terminal, when it has one (stdin and stderr are both a TTY
+  and ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``): the person types
+  the code, which is not echoed, or presses Enter after approving
+  (:mod:`openadapt_flow.second_factor_terminal`). A run with no terminal (a
+  service, a hosted sandbox, an MCP server, CI) never prompts.
 
-- The terminal, when the run has one (stdin and stderr are both a TTY and
-  ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``): the person types the
-  code, which is not echoed, or presses Enter after approving.
-
-A run with no terminal (a service, a hosted sandbox, an MCP server) never
-prompts. With no source, or when the source fails, times out or declines, the step
-stops before anything is typed, with one closed code from
-:data:`REFUSAL_CODES`.
+With no source, or when the source fails, times out, answers after the
+deadline or declines, the step stops before anything is typed, with one closed
+code from :data:`REFUSAL_CODES`.
 """
 
 from __future__ import annotations
@@ -52,19 +55,20 @@ __all__ = [
     "ONE_TIME_CODE_MARKER",
     "ONE_TIME_CODE_PARAM",
     "REFUSAL_CODES",
+    "PROMPT_ENV",
     "SOURCE_ENV_KEYS",
     "TIMEOUT_ENV",
     "URL_ENV",
     "CommandSource",
     "HttpSource",
+    "OneTimeCode",
     "SecondFactorRefused",
-    "TerminalSource",
     "check_step_shape",
+    "delivers_input",
     "has_one_time_steps",
     "normalize_code",
     "obtain",
     "open_sealed_code",
-    "runtime_value",
     "source_env",
     "source_from_env",
     "timeout_from_env",
@@ -76,18 +80,28 @@ URL_ENV = "OPENADAPT_SECOND_FACTOR_URL"
 TOKEN_ENV = "OPENADAPT_RUNNER_TOKEN"
 COMMAND_ENV = "OPENADAPT_SECOND_FACTOR_COMMAND"
 TIMEOUT_ENV = "OPENADAPT_SECOND_FACTOR_TIMEOUT_S"
-#: ``off`` stops an interactive run from asking at its terminal.
+#: ``off`` (or ``0``, ``false``) stops an interactive run from asking at its
+#: terminal.
 PROMPT_ENV = "OPENADAPT_SECOND_FACTOR_PROMPT"
-#: What a run's child processes need for a source: its configuration and,
-#: for the control plane, the run token that authorizes the request.
+#: Every variable a source reads. :func:`source_env` forwards only the ones
+#: the selected source uses.
 SOURCE_ENV_KEYS = (URL_ENV, TOKEN_ENV, COMMAND_ENV, TIMEOUT_ENV, PROMPT_ENV)
 
 
 def source_env(environ: Optional[Mapping[str, str]] = None) -> dict[str, str]:
-    """The set :data:`SOURCE_ENV_KEYS` of ``environ``, for a child process."""
+    """What a run's child process needs for the selected source, and no more.
+
+    The run token goes only with the control-plane URL that uses it; a command
+    source or an unconfigured run passes no token to the child.
+    """
 
     environ = os.environ if environ is None else environ
-    return {key: environ[key] for key in SOURCE_ENV_KEYS if environ.get(key)}
+    keys = [TIMEOUT_ENV, PROMPT_ENV]
+    if (environ.get(URL_ENV) or "").strip():
+        keys += [URL_ENV, TOKEN_ENV]
+    elif (environ.get(COMMAND_ENV) or "").strip():
+        keys.append(COMMAND_ENV)
+    return {key: environ[key] for key in keys if environ.get(key)}
 
 
 #: How long a step waits for a person by default, and the bounds an
@@ -101,15 +115,22 @@ DECLINED_EXIT_CODE = 3
 #: ends a silent run must not end one that is waiting for a person).
 HEARTBEAT_S = 20.0
 
+#: Closed refusal codes. All but ``second_factor_unverified`` stop before
+#: anything is typed; that one stops after the single delivery when the field
+#: does not read back the code's length (it is never typed again).
 REFUSAL_CODES = (
     "second_factor_unavailable",
     "second_factor_timeout",
     "second_factor_declined",
     "second_factor_invalid",
+    "second_factor_unbound",
+    "second_factor_unverified",
 )
 
-#: The param a one-time code step names. It is not a task input or a secret
-#: parameter, so no call and no vault supplies it.
+#: The action value of a second-factor step (``ir.ActionKind.SECOND_FACTOR``).
+ACTION = "second_factor"
+#: The param a recorded one-time code event names. It is not a task input or
+#: a secret parameter, so no call and no vault supplies it.
 ONE_TIME_CODE_PARAM = "one_time_code"
 #: What a capture agent types into a one-time-code field; the recorder
 #: discards it and types the code a person supplies.
@@ -119,15 +140,19 @@ REQUEST_SCHEMA = "openadapt.second-factor-request/v1"
 SEAL_INFO = b"openadapt.second-factor/v1:"
 
 # Codes people get are short runs of digits or letters; some are shown in
-# groups ("123 456", "ABC-123"). Spaces and hyphens are dropped.
+# groups ("123 456", "ABC-123"). Spaces and hyphens between groups are
+# dropped. A line break inside the answer is refused: two codes on two lines
+# are not one longer code.
 _CODE = re.compile(r"[A-Za-z0-9]{4,16}\Z")
+_GROUP_SEPARATORS = re.compile(r"[ \u00a0-]")
+_LINE_BREAK = re.compile(r"[\r\n\v\f\x1c-\x1e\x85\u2028\u2029]")
 _STEP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{7,63}\Z")
 _LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class SecondFactorRefused(RuntimeError):
-    """The step cannot get its second factor; nothing was typed.
+    """The step cannot get or deliver its second factor.
 
     ``code`` is one of :data:`REFUSAL_CODES`. The message never carries a
     code value or a source's output.
@@ -138,6 +163,37 @@ class SecondFactorRefused(RuntimeError):
             raise ValueError(f"unknown second-factor refusal {code!r}")
         self.code = code
         super().__init__(f"{code}: {detail}")
+
+
+class OneTimeCode:
+    """A code a person supplied, usable once.
+
+    Its ``repr`` and ``str`` never show the value, it cannot be pickled or
+    copied, and :meth:`consume` hands the value out exactly once.
+    """
+
+    __slots__ = ("_value", "length")
+
+    def __init__(self, value: str) -> None:
+        self._value: Optional[str] = value
+        self.length = len(value)
+
+    def __repr__(self) -> str:
+        return "OneTimeCode(<withheld>)"
+
+    __str__ = __repr__
+
+    def __reduce__(self) -> Any:
+        raise TypeError("a one-time code cannot be pickled or copied")
+
+    def consume(self) -> str:
+        value, self._value = self._value, None
+        if value is None:
+            raise RuntimeError("this one-time code was already used")
+        return value
+
+    def discard(self) -> None:
+        self._value = None
 
 
 @dataclass(frozen=True)
@@ -165,7 +221,10 @@ def normalize_code(raw: object) -> str:
 
     if not isinstance(raw, str):
         raise SecondFactorRefused("second_factor_invalid", "the code is not text")
-    code = re.sub(r"[\s-]", "", raw)
+    line = raw.strip()
+    if _LINE_BREAK.search(line):
+        raise SecondFactorRefused("second_factor_invalid", "the code must be one line")
+    code = _GROUP_SEPARATORS.sub("", line)
     if not _CODE.fullmatch(code):
         raise SecondFactorRefused(
             "second_factor_invalid",
@@ -204,10 +263,10 @@ def source_from_env(env: Optional[Mapping[str, str]] = None) -> Optional[Source]
     command = (env.get(COMMAND_ENV) or "").strip()
     if command:
         return CommandSource(command)
-    if (env.get(PROMPT_ENV) or "").strip().lower() not in ("off", "0", "false"):
-        terminal = TerminalSource.open()
-        if terminal is not None:
-            return terminal
+    from openadapt_flow.second_factor_terminal import PROMPT_OFF, TerminalSource
+
+    if (env.get(PROMPT_ENV) or "").strip().lower() not in PROMPT_OFF:
+        return TerminalSource.open()
     return None
 
 
@@ -218,8 +277,13 @@ def obtain(
     source: Optional[Source] = None,
     env: Optional[Mapping[str, str]] = None,
     heartbeat: Optional[Callable[[], None]] = None,
-) -> Optional[str]:
-    """Get one second factor for ``step_id``. See the module docstring."""
+    clock: Callable[[], float] = time.monotonic,
+) -> Optional[OneTimeCode]:
+    """Get one second factor for ``step_id``. See the module docstring.
+
+    The deadline is checked again when the source returns, whatever the
+    source: an answer that arrives after it is a timeout, and is dropped.
+    """
 
     if kind not in ("code", "approval"):
         raise ValueError(f"unknown second-factor kind {kind!r}")
@@ -231,33 +295,82 @@ def obtain(
         raise SecondFactorRefused(
             "second_factor_unavailable",
             "this sign-in asks for a second factor and no source is set "
-            f"({URL_ENV} or {COMMAND_ENV}); nothing was typed",
+            f"({URL_ENV} or {COMMAND_ENV}, or a terminal); nothing was typed",
         )
     beat = heartbeat or _stderr_heartbeat()
+    started = clock()
     value = chosen.obtain(Request(kind, step_id, timeout_s), heartbeat=beat)
+    if clock() - started > timeout_s:
+        raise _late(timeout_s)
     if kind == "approval":
         return None
-    return normalize_code(value)
+    return OneTimeCode(normalize_code(value))
+
+
+def _late(timeout_s: float) -> SecondFactorRefused:
+    return SecondFactorRefused(
+        "second_factor_timeout",
+        f"no second factor within {timeout_s:g} s; nothing was typed",
+    )
+
+
+#: The only fields a second-factor step may set. Every other field (an
+#: anchor, text, a param, an API binding, effects, a dialog response...) must
+#: keep its default, so nothing can route the step around the handoff.
+_STEP_FIELDS = frozenset(
+    {
+        "id",
+        "intent",
+        "action",
+        "one_time",
+        "field_label",
+        "expect",
+        "risk",
+        "risk_explanation",
+        "risk_review_required",
+        "wait_until",
+        "guard",
+        "timeout_s",
+        "identity_armed",
+        "identity_unarmed_reason",
+        "identifier_crop_missing_reason",
+        "surface",
+        "submit_binding_unbound_reason",
+    }
+)
 
 
 def check_step_shape(step: Any) -> Any:
-    """``ir.Step``'s validator for ``one_time``; returns the step or raises."""
+    """``ir.Step``'s validator for ``one_time``; returns the step or raises.
 
-    if step.one_time == "code" and not (
-        step.action.value == "type" and step.secret and step.param and step.text is None
-    ):
+    ``one_time`` is set exactly on ``second_factor`` steps, and such a step
+    sets no field outside :data:`_STEP_FIELDS`.
+    """
+
+    second = step.action.value == ACTION
+    if second != (step.one_time is not None):
         raise ValueError(
-            "a one-time code step is a secret TYPE step that names its param "
-            "and carries no text"
+            "a second_factor step names its kind in one_time, and no other "
+            "step sets one_time"
         )
-    if step.one_time == "approval" and (
-        step.action.value != "wait"
-        or step.secret
-        or step.param is not None
-        or step.text is not None
-    ):
-        raise ValueError("a one-time approval step is a WAIT with no input")
+    if not second:
+        return step
+    for name, field in type(step).model_fields.items():
+        if name in _STEP_FIELDS:
+            continue
+        default = field.get_default(call_default_factory=True)
+        if getattr(step, name) != default:
+            raise ValueError(
+                f"a second_factor step takes no {name}: the code or approval "
+                "comes only from a person"
+            )
     return step
+
+
+def delivers_input(step: Any) -> bool:
+    """Whether a second-factor step types (a code), not only waits."""
+
+    return step.action.value == ACTION and step.one_time == "code"
 
 
 def has_one_time_steps(workflow: Any) -> bool:
@@ -270,7 +383,7 @@ def has_one_time_steps(workflow: Any) -> bool:
         for state in (getattr(graph, "states", None) or {}).values():
             if getattr(state, "step", None) is not None:
                 steps.append(state.step)
-    return any(getattr(step, "one_time", None) for step in steps)
+    return any(getattr(step.action, "value", None) == ACTION for step in steps)
 
 
 def _stderr_heartbeat() -> Callable[[], None]:
@@ -287,84 +400,6 @@ def _stderr_heartbeat() -> Callable[[], None]:
             )
 
     return beat
-
-
-# -- terminal source ---------------------------------------------------------
-
-
-class TerminalSource:
-    """Ask the person at the run's own terminal (no echo for a code)."""
-
-    def __init__(self, tty_in: Any, tty_out: Any) -> None:
-        self._in = tty_in
-        self._out = tty_out
-
-    @classmethod
-    def open(cls) -> Optional["TerminalSource"]:
-        try:
-            if not (sys.stdin.isatty() and sys.stderr.isatty()):
-                return None
-        except (AttributeError, ValueError):
-            return None
-        return cls(sys.stdin, sys.stderr)
-
-    def _ask(self, prompt: str, *, hidden: bool, timeout_s: float) -> Optional[str]:
-        import getpass
-        import threading
-
-        answer: list[Optional[str]] = [None]
-
-        def read() -> None:
-            try:
-                if hidden:
-                    answer[0] = getpass.getpass(prompt, stream=self._out)
-                else:
-                    self._out.write(prompt)
-                    self._out.flush()
-                    answer[0] = self._in.readline()
-            except (EOFError, OSError, KeyboardInterrupt):
-                answer[0] = None
-
-        reader = threading.Thread(target=read, daemon=True)
-        reader.start()
-        reader.join(timeout_s)
-        if reader.is_alive():
-            self._out.write("\n")
-            raise SecondFactorRefused(
-                "second_factor_timeout",
-                f"no second factor within {timeout_s:g} s; nothing was typed",
-            )
-        if answer[0] is None:
-            raise SecondFactorRefused(
-                "second_factor_unavailable", "the terminal closed; nothing was typed"
-            )
-        return answer[0]
-
-    def obtain(
-        self, request: Request, *, heartbeat: Callable[[], None]
-    ) -> Optional[str]:
-        if request.kind == "approval":
-            reply = self._ask(
-                "Approve the sign-in on your device, then press Enter "
-                "(type n and Enter to decline): ",
-                hidden=False,
-                timeout_s=request.timeout_s,
-            )
-            if (reply or "").strip().lower() in ("n", "no"):
-                raise SecondFactorRefused(
-                    "second_factor_declined", "the person declined; nothing was typed"
-                )
-            return None
-        reply = self._ask(
-            "Sign-in code (not shown; leave empty to decline): ",
-            hidden=True,
-            timeout_s=request.timeout_s,
-        )
-        if not (reply or "").strip():
-            raise SecondFactorRefused(
-                "second_factor_declined", "the person declined; nothing was typed"
-            )
-        return reply
 
 
 # -- command source ----------------------------------------------------------
@@ -547,7 +582,13 @@ class HttpSource:
         request_id = self._create(request, _b64url(public))
         while True:
             heartbeat()
+            if self._clock() >= deadline:
+                raise _late(request.timeout_s)
             state, sealed = self._poll(request_id)
+            # A poll can block; an answer that lands after the deadline is
+            # dropped, never accepted.
+            if self._clock() >= deadline:
+                raise _late(request.timeout_s)
             if state == "answered":
                 if request.kind != "code":
                     raise SecondFactorRefused(
@@ -564,13 +605,9 @@ class HttpSource:
                 raise SecondFactorRefused(
                     "second_factor_declined", "the person declined; nothing was typed"
                 )
-            if state in ("expired", "consumed") or self._clock() >= deadline:
-                raise SecondFactorRefused(
-                    "second_factor_timeout",
-                    f"no second factor within {request.timeout_s:g} s; "
-                    "nothing was typed",
-                )
-            self._sleep(self.poll_interval_s)
+            if state in ("expired", "consumed"):
+                raise _late(request.timeout_s)
+            self._sleep(min(self.poll_interval_s, max(0.0, deadline - self._clock())))
 
     def _create(self, request: Request, public_key: str) -> str:
         body = {
@@ -623,19 +660,3 @@ class HttpSource:
         ):
             return "pending", None
         return str(state), data.get("sealed")
-
-
-def runtime_value(step: Any, result: Any = None) -> tuple[str, Optional[str]]:
-    """The replayer's hook: ``(code, None)``, or ``("", refusal message)``.
-
-    An approval returns ``("", None)`` once confirmed. A refusal marks the
-    step result a governed refusal; its message starts with the closed code.
-    """
-
-    try:
-        value = obtain(step.one_time, step.id)
-    except SecondFactorRefused as refused:
-        if result is not None:
-            result.failure_category = "governed_refusal"
-        return "", f"Step '{step.id}' ({step.intent}) {refused}"
-    return value or "", None

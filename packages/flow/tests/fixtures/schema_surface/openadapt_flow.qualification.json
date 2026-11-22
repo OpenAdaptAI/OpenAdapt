@@ -1,0 +1,4465 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "ActionRiskClassification": {
+   "validation": {
+    "$defs": {
+     "ActionRiskClass": {
+      "enum": [
+       "unknown",
+       "read_only",
+       "state_changing",
+       "consequential",
+       "irreversible"
+      ],
+      "title": "ActionRiskClass",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Operator-reviewed business risk for one executable action.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "classification": {
+      "$ref": "#/$defs/ActionRiskClass"
+     },
+     "explanation": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Explanation",
+      "type": "string"
+     },
+     "operator_confirmed": {
+      "default": false,
+      "title": "Operator Confirmed",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "step_id",
+     "classification",
+     "explanation"
+    ],
+    "title": "ActionRiskClassification",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "ActionRiskClass": {
+      "enum": [
+       "unknown",
+       "read_only",
+       "state_changing",
+       "consequential",
+       "irreversible"
+      ],
+      "title": "ActionRiskClass",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Operator-reviewed business risk for one executable action.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "classification": {
+      "$ref": "#/$defs/ActionRiskClass"
+     },
+     "explanation": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Explanation",
+      "type": "string"
+     },
+     "operator_confirmed": {
+      "default": false,
+      "title": "Operator Confirmed",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "step_id",
+     "classification",
+     "explanation"
+    ],
+    "title": "ActionRiskClassification",
+    "type": "object"
+   }
+  },
+  "EffectVerificationPolicy": {
+   "validation": {
+    "$defs": {
+     "VerificationTier": {
+      "description": "Strength of evidence for a declared business effect.\n\nLower values are stronger. These numbers are a persisted wire value; use\n:attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)\nto compare with Seal tiers or show the strength to a person. Verifiers\nadvertise strength explicitly; callers never infer it from class names,\nsubstrate labels, or prose.",
+      "enum": [
+       1,
+       2,
+       3,
+       4
+      ],
+      "title": "VerificationTier",
+      "type": "integer"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Evidence strength assigned to one exact actuation-path effect.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "actuation_path": {
+      "default": "gui",
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "effect_index": {
+      "minimum": 0,
+      "title": "Effect Index",
+      "type": "integer"
+     },
+     "effect_contract_hash": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Effect Contract Hash",
+      "type": "string"
+     },
+     "tier": {
+      "$ref": "#/$defs/VerificationTier"
+     }
+    },
+    "required": [
+     "step_id",
+     "effect_index",
+     "effect_contract_hash",
+     "tier"
+    ],
+    "title": "EffectVerificationPolicy",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "VerificationTier": {
+      "description": "Strength of evidence for a declared business effect.\n\nLower values are stronger. These numbers are a persisted wire value; use\n:attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)\nto compare with Seal tiers or show the strength to a person. Verifiers\nadvertise strength explicitly; callers never infer it from class names,\nsubstrate labels, or prose.",
+      "enum": [
+       1,
+       2,
+       3,
+       4
+      ],
+      "title": "VerificationTier",
+      "type": "integer"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Evidence strength assigned to one exact actuation-path effect.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "actuation_path": {
+      "default": "gui",
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "effect_index": {
+      "minimum": 0,
+      "title": "Effect Index",
+      "type": "integer"
+     },
+     "effect_contract_hash": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Effect Contract Hash",
+      "type": "string"
+     },
+     "tier": {
+      "$ref": "#/$defs/VerificationTier"
+     }
+    },
+    "required": [
+     "step_id",
+     "effect_index",
+     "effect_contract_hash",
+     "tier"
+    ],
+    "title": "EffectVerificationPolicy",
+    "type": "object"
+   }
+  },
+  "EnvironmentBoundary": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Application/environment scope in which the qualification is valid.",
+    "properties": {
+     "target_kind": {
+      "enum": [
+       "web",
+       "windows",
+       "macos",
+       "linux",
+       "rdp",
+       "citrix"
+      ],
+      "title": "Target Kind",
+      "type": "string"
+     },
+     "application": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Application",
+      "type": "string"
+     },
+     "application_identity": {
+      "anyOf": [
+       {
+        "maxLength": 320,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Application Identity"
+     },
+     "application_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Application Version",
+      "type": "string"
+     },
+     "environment_observer_id": {
+      "anyOf": [
+       {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Environment Observer Id"
+     },
+     "environment_observer_contract_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Environment Observer Contract Sha256"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     },
+     "runtime_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Runtime Version",
+      "type": "string"
+     },
+     "required_capabilities": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Required Capabilities",
+      "type": "array"
+     }
+    },
+    "required": [
+     "target_kind",
+     "application",
+     "application_version",
+     "environment_digest",
+     "runtime_version"
+    ],
+    "title": "EnvironmentBoundary",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "EvidenceRef": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Local or customer-controlled evidence reference; never evidence content.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "run_report",
+       "identity",
+       "effect",
+       "case_input",
+       "fault_receipt",
+       "fault_mutation",
+       "fault_campaign",
+       "other"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+     },
+     "relative_path": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Relative Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "sha256",
+     "relative_path"
+    ],
+    "title": "EvidenceRef",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Local or customer-controlled evidence reference; never evidence content.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "run_report",
+       "identity",
+       "effect",
+       "case_input",
+       "fault_receipt",
+       "fault_mutation",
+       "fault_campaign",
+       "other"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+     },
+     "relative_path": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Relative Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "sha256",
+     "relative_path"
+    ],
+    "title": "EvidenceRef",
+    "type": "object"
+   }
+  },
+  "IdentityPolicy": {
+   "validation": {
+    "$defs": {
+     "IdentityEnforcement": {
+      "description": "Whether the policy names shipped runtime behavior or future intent.",
+      "enum": [
+       "canonical_ladder",
+       "signal_quorum"
+      ],
+      "title": "IdentityEnforcement",
+      "type": "string"
+     },
+     "IdentityEvidenceSource": {
+      "enum": [
+       "structured",
+       "identifier_region",
+       "captured_context",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentityEvidenceSource",
+      "type": "string"
+     },
+     "IdentityMatchMode": {
+      "enum": [
+       "exact",
+       "normalized"
+      ],
+      "title": "IdentityMatchMode",
+      "type": "string"
+     },
+     "IdentityNormalizer": {
+      "description": "Explicit, bounded transforms permitted for a normalized comparison.",
+      "enum": [
+       "unicode_nfkc",
+       "casefold",
+       "collapse_whitespace",
+       "strip_punctuation"
+      ],
+      "title": "IdentityNormalizer",
+      "type": "string"
+     },
+     "IdentitySignalKey": {
+      "description": "Closed, PHI-free semantic keys for qualified identity evidence.",
+      "enum": [
+       "subject_name",
+       "record_id",
+       "secondary_identifier",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentitySignalKey",
+      "type": "string"
+     },
+     "IdentitySignalPolicy": {
+      "additionalProperties": false,
+      "description": "How one semantic identity signal is compared using retained evidence.",
+      "properties": {
+       "key": {
+        "$ref": "#/$defs/IdentitySignalKey"
+       },
+       "source": {
+        "$ref": "#/$defs/IdentityEvidenceSource"
+       },
+       "match": {
+        "$ref": "#/$defs/IdentityMatchMode",
+        "default": "exact"
+       },
+       "normalizers": {
+        "items": {
+         "$ref": "#/$defs/IdentityNormalizer"
+        },
+        "title": "Normalizers",
+        "type": "array"
+       },
+       "region": {
+        "anyOf": [
+         {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Region"
+       },
+       "extract_pattern": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional explicit regular expression with one named 'value' group. For structured/context text, only that field participates in the identity vote; the semantic key alone never extracts a value.",
+        "title": "Extract Pattern"
+       },
+       "expected_value": {
+        "anyOf": [
+         {
+          "maxLength": 320,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Qualified PHI-free identifier expected from a dedicated application/session/workflow-state runtime observer.",
+        "title": "Expected Value"
+       },
+       "params": {
+        "description": "Explicit workflow parameters whose whole demonstrated values are replaced before comparison. No implicit substring inference occurs.",
+        "items": {
+         "type": "string"
+        },
+        "title": "Params",
+        "type": "array"
+       }
+      },
+      "required": [
+       "key",
+       "source"
+      ],
+      "title": "IdentitySignalPolicy",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Quorum policy for one canonical Flow action.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "enforcement": {
+      "$ref": "#/$defs/IdentityEnforcement",
+      "default": "signal_quorum"
+     },
+     "signals": {
+      "items": {
+       "$ref": "#/$defs/IdentitySignalPolicy"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "quorum": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Quorum",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "step_id"
+    ],
+    "title": "IdentityPolicy",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "IdentityEnforcement": {
+      "description": "Whether the policy names shipped runtime behavior or future intent.",
+      "enum": [
+       "canonical_ladder",
+       "signal_quorum"
+      ],
+      "title": "IdentityEnforcement",
+      "type": "string"
+     },
+     "IdentityEvidenceSource": {
+      "enum": [
+       "structured",
+       "identifier_region",
+       "captured_context",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentityEvidenceSource",
+      "type": "string"
+     },
+     "IdentityMatchMode": {
+      "enum": [
+       "exact",
+       "normalized"
+      ],
+      "title": "IdentityMatchMode",
+      "type": "string"
+     },
+     "IdentityNormalizer": {
+      "description": "Explicit, bounded transforms permitted for a normalized comparison.",
+      "enum": [
+       "unicode_nfkc",
+       "casefold",
+       "collapse_whitespace",
+       "strip_punctuation"
+      ],
+      "title": "IdentityNormalizer",
+      "type": "string"
+     },
+     "IdentitySignalKey": {
+      "description": "Closed, PHI-free semantic keys for qualified identity evidence.",
+      "enum": [
+       "subject_name",
+       "record_id",
+       "secondary_identifier",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentitySignalKey",
+      "type": "string"
+     },
+     "IdentitySignalPolicy": {
+      "additionalProperties": false,
+      "description": "How one semantic identity signal is compared using retained evidence.",
+      "properties": {
+       "key": {
+        "$ref": "#/$defs/IdentitySignalKey"
+       },
+       "source": {
+        "$ref": "#/$defs/IdentityEvidenceSource"
+       },
+       "match": {
+        "$ref": "#/$defs/IdentityMatchMode",
+        "default": "exact"
+       },
+       "normalizers": {
+        "items": {
+         "$ref": "#/$defs/IdentityNormalizer"
+        },
+        "title": "Normalizers",
+        "type": "array"
+       },
+       "region": {
+        "anyOf": [
+         {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Region"
+       },
+       "extract_pattern": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional explicit regular expression with one named 'value' group. For structured/context text, only that field participates in the identity vote; the semantic key alone never extracts a value.",
+        "title": "Extract Pattern"
+       },
+       "expected_value": {
+        "anyOf": [
+         {
+          "maxLength": 320,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Qualified PHI-free identifier expected from a dedicated application/session/workflow-state runtime observer.",
+        "title": "Expected Value"
+       },
+       "params": {
+        "description": "Explicit workflow parameters whose whole demonstrated values are replaced before comparison. No implicit substring inference occurs.",
+        "items": {
+         "type": "string"
+        },
+        "title": "Params",
+        "type": "array"
+       }
+      },
+      "required": [
+       "key",
+       "source"
+      ],
+      "title": "IdentitySignalPolicy",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Quorum policy for one canonical Flow action.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "enforcement": {
+      "$ref": "#/$defs/IdentityEnforcement",
+      "default": "signal_quorum"
+     },
+     "signals": {
+      "items": {
+       "$ref": "#/$defs/IdentitySignalPolicy"
+      },
+      "title": "Signals",
+      "type": "array"
+     },
+     "quorum": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Quorum",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "step_id"
+    ],
+    "title": "IdentityPolicy",
+    "type": "object"
+   }
+  },
+  "IdentitySignalPolicy": {
+   "validation": {
+    "$defs": {
+     "IdentityEvidenceSource": {
+      "enum": [
+       "structured",
+       "identifier_region",
+       "captured_context",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentityEvidenceSource",
+      "type": "string"
+     },
+     "IdentityMatchMode": {
+      "enum": [
+       "exact",
+       "normalized"
+      ],
+      "title": "IdentityMatchMode",
+      "type": "string"
+     },
+     "IdentityNormalizer": {
+      "description": "Explicit, bounded transforms permitted for a normalized comparison.",
+      "enum": [
+       "unicode_nfkc",
+       "casefold",
+       "collapse_whitespace",
+       "strip_punctuation"
+      ],
+      "title": "IdentityNormalizer",
+      "type": "string"
+     },
+     "IdentitySignalKey": {
+      "description": "Closed, PHI-free semantic keys for qualified identity evidence.",
+      "enum": [
+       "subject_name",
+       "record_id",
+       "secondary_identifier",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentitySignalKey",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "How one semantic identity signal is compared using retained evidence.",
+    "properties": {
+     "key": {
+      "$ref": "#/$defs/IdentitySignalKey"
+     },
+     "source": {
+      "$ref": "#/$defs/IdentityEvidenceSource"
+     },
+     "match": {
+      "$ref": "#/$defs/IdentityMatchMode",
+      "default": "exact"
+     },
+     "normalizers": {
+      "items": {
+       "$ref": "#/$defs/IdentityNormalizer"
+      },
+      "title": "Normalizers",
+      "type": "array"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Region"
+     },
+     "extract_pattern": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Optional explicit regular expression with one named 'value' group. For structured/context text, only that field participates in the identity vote; the semantic key alone never extracts a value.",
+      "title": "Extract Pattern"
+     },
+     "expected_value": {
+      "anyOf": [
+       {
+        "maxLength": 320,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Qualified PHI-free identifier expected from a dedicated application/session/workflow-state runtime observer.",
+      "title": "Expected Value"
+     },
+     "params": {
+      "description": "Explicit workflow parameters whose whole demonstrated values are replaced before comparison. No implicit substring inference occurs.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Params",
+      "type": "array"
+     }
+    },
+    "required": [
+     "key",
+     "source"
+    ],
+    "title": "IdentitySignalPolicy",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "IdentityEvidenceSource": {
+      "enum": [
+       "structured",
+       "identifier_region",
+       "captured_context",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentityEvidenceSource",
+      "type": "string"
+     },
+     "IdentityMatchMode": {
+      "enum": [
+       "exact",
+       "normalized"
+      ],
+      "title": "IdentityMatchMode",
+      "type": "string"
+     },
+     "IdentityNormalizer": {
+      "description": "Explicit, bounded transforms permitted for a normalized comparison.",
+      "enum": [
+       "unicode_nfkc",
+       "casefold",
+       "collapse_whitespace",
+       "strip_punctuation"
+      ],
+      "title": "IdentityNormalizer",
+      "type": "string"
+     },
+     "IdentitySignalKey": {
+      "description": "Closed, PHI-free semantic keys for qualified identity evidence.",
+      "enum": [
+       "subject_name",
+       "record_id",
+       "secondary_identifier",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentitySignalKey",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "How one semantic identity signal is compared using retained evidence.",
+    "properties": {
+     "key": {
+      "$ref": "#/$defs/IdentitySignalKey"
+     },
+     "source": {
+      "$ref": "#/$defs/IdentityEvidenceSource"
+     },
+     "match": {
+      "$ref": "#/$defs/IdentityMatchMode",
+      "default": "exact"
+     },
+     "normalizers": {
+      "items": {
+       "$ref": "#/$defs/IdentityNormalizer"
+      },
+      "title": "Normalizers",
+      "type": "array"
+     },
+     "region": {
+      "anyOf": [
+       {
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         },
+         {
+          "type": "integer"
+         }
+        ],
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Region"
+     },
+     "extract_pattern": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Optional explicit regular expression with one named 'value' group. For structured/context text, only that field participates in the identity vote; the semantic key alone never extracts a value.",
+      "title": "Extract Pattern"
+     },
+     "expected_value": {
+      "anyOf": [
+       {
+        "maxLength": 320,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Qualified PHI-free identifier expected from a dedicated application/session/workflow-state runtime observer.",
+      "title": "Expected Value"
+     },
+     "params": {
+      "description": "Explicit workflow parameters whose whole demonstrated values are replaced before comparison. No implicit substring inference occurs.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Params",
+      "type": "array"
+     }
+    },
+    "required": [
+     "key",
+     "source"
+    ],
+    "title": "IdentitySignalPolicy",
+    "type": "object"
+   }
+  },
+  "QualificationActionTarget": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "One exact workflow action and actuation path exercised by a case.",
+    "properties": {
+     "step_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Step Id",
+      "type": "string"
+     },
+     "actuation_path": {
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "step_id",
+     "actuation_path"
+    ],
+    "title": "QualificationActionTarget",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "One exact workflow action and actuation path exercised by a case.",
+    "properties": {
+     "step_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Step Id",
+      "type": "string"
+     },
+     "actuation_path": {
+      "enum": [
+       "gui",
+       "api"
+      ],
+      "title": "Actuation Path",
+      "type": "string"
+     }
+    },
+    "required": [
+     "step_id",
+     "actuation_path"
+    ],
+    "title": "QualificationActionTarget",
+    "type": "object"
+   }
+  },
+  "QualificationCase": {
+   "validation": {
+    "$defs": {
+     "EvidenceRef": {
+      "additionalProperties": false,
+      "description": "Local or customer-controlled evidence reference; never evidence content.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "run_report",
+         "identity",
+         "effect",
+         "case_input",
+         "fault_receipt",
+         "fault_mutation",
+         "fault_campaign",
+         "other"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Sha256",
+        "type": "string"
+       },
+       "relative_path": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Relative Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "sha256",
+       "relative_path"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+     },
+     "QualificationActionTarget": {
+      "additionalProperties": false,
+      "description": "One exact workflow action and actuation path exercised by a case.",
+      "properties": {
+       "step_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "Step Id",
+        "type": "string"
+       },
+       "actuation_path": {
+        "enum": [
+         "gui",
+         "api"
+        ],
+        "title": "Actuation Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "step_id",
+       "actuation_path"
+      ],
+      "title": "QualificationActionTarget",
+      "type": "object"
+     },
+     "QualificationCaseKind": {
+      "enum": [
+       "representative",
+       "ambiguity",
+       "wrong_identity",
+       "stale_identity",
+       "weak_effect",
+       "missing_effect"
+      ],
+      "title": "QualificationCaseKind",
+      "type": "string"
+     },
+     "QualificationCaseResult": {
+      "additionalProperties": false,
+      "description": "One runner-produced result for a qualification case.",
+      "properties": {
+       "case_id": {
+        "title": "Case Id",
+        "type": "string"
+       },
+       "project_id": {
+        "title": "Project Id",
+        "type": "string"
+       },
+       "project_revision": {
+        "minimum": 1,
+        "title": "Project Revision",
+        "type": "integer"
+       },
+       "project_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Project Contract Sha256",
+        "type": "string"
+       },
+       "workflow_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Workflow Contract Sha256",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "runtime_version": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Runtime Version",
+        "type": "string"
+       },
+       "runner_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Runner Id",
+        "type": "string"
+       },
+       "runner_capabilities": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Runner Capabilities",
+        "type": "array"
+       },
+       "status": {
+        "enum": [
+         "passed",
+         "failed",
+         "blocked"
+        ],
+        "title": "Status",
+        "type": "string"
+       },
+       "observed_outcome": {
+        "$ref": "#/$defs/QualificationOutcome"
+       },
+       "campaign_id_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Campaign Id Sha256"
+       },
+       "case_input_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Case Input Sha256"
+       },
+       "run_id_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Run Id Sha256"
+       },
+       "evidence": {
+        "items": {
+         "$ref": "#/$defs/EvidenceRef"
+        },
+        "title": "Evidence",
+        "type": "array"
+       },
+       "detail_code": {
+        "anyOf": [
+         {
+          "maxLength": 128,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Detail Code"
+       },
+       "completed_at": {
+        "title": "Completed At",
+        "type": "string"
+       },
+       "attestation_key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Attestation Key Id",
+        "type": "string"
+       },
+       "attestation_signature": {
+        "default": "",
+        "title": "Attestation Signature",
+        "type": "string"
+       }
+      },
+      "required": [
+       "case_id",
+       "project_id",
+       "project_revision",
+       "project_contract_sha256",
+       "workflow_contract_sha256",
+       "environment_contract_sha256",
+       "environment_digest",
+       "runtime_version",
+       "runner_id",
+       "status",
+       "observed_outcome",
+       "attestation_key_id"
+      ],
+      "title": "QualificationCaseResult",
+      "type": "object"
+     },
+     "QualificationOutcome": {
+      "enum": [
+       "verified",
+       "completed_unverified",
+       "halted",
+       "failed",
+       "rolled_back"
+      ],
+      "title": "QualificationOutcome",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "A representative or deterministic fault case.\n\n``input_ref`` names a customer-controlled parameter fixture.  Parameter\nvalues and secrets do not enter the qualification project.",
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/$defs/QualificationCaseKind"
+     },
+     "description": {
+      "default": "",
+      "maxLength": 512,
+      "title": "Description",
+      "type": "string"
+     },
+     "input_ref": {
+      "anyOf": [
+       {
+        "maxLength": 256,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Input Ref"
+     },
+     "runtime_input_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Runtime Input Sha256"
+     },
+     "action_targets": {
+      "items": {
+       "$ref": "#/$defs/QualificationActionTarget"
+      },
+      "title": "Action Targets",
+      "type": "array"
+     },
+     "fault_target": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/QualificationActionTarget"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "expected_outcome": {
+      "$ref": "#/$defs/QualificationOutcome"
+     },
+     "required": {
+      "default": true,
+      "title": "Required",
+      "type": "boolean"
+     },
+     "results": {
+      "items": {
+       "$ref": "#/$defs/QualificationCaseResult"
+      },
+      "title": "Results",
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "expected_outcome"
+    ],
+    "title": "QualificationCase",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "QualificationCaseResult": {
+   "validation": {
+    "$defs": {
+     "EvidenceRef": {
+      "additionalProperties": false,
+      "description": "Local or customer-controlled evidence reference; never evidence content.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "run_report",
+         "identity",
+         "effect",
+         "case_input",
+         "fault_receipt",
+         "fault_mutation",
+         "fault_campaign",
+         "other"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Sha256",
+        "type": "string"
+       },
+       "relative_path": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Relative Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "sha256",
+       "relative_path"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+     },
+     "QualificationOutcome": {
+      "enum": [
+       "verified",
+       "completed_unverified",
+       "halted",
+       "failed",
+       "rolled_back"
+      ],
+      "title": "QualificationOutcome",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "One runner-produced result for a qualification case.",
+    "properties": {
+     "case_id": {
+      "title": "Case Id",
+      "type": "string"
+     },
+     "project_id": {
+      "title": "Project Id",
+      "type": "string"
+     },
+     "project_revision": {
+      "minimum": 1,
+      "title": "Project Revision",
+      "type": "integer"
+     },
+     "project_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Project Contract Sha256",
+      "type": "string"
+     },
+     "workflow_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Workflow Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     },
+     "runtime_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Runtime Version",
+      "type": "string"
+     },
+     "runner_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Runner Id",
+      "type": "string"
+     },
+     "runner_capabilities": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Runner Capabilities",
+      "type": "array"
+     },
+     "status": {
+      "enum": [
+       "passed",
+       "failed",
+       "blocked"
+      ],
+      "title": "Status",
+      "type": "string"
+     },
+     "observed_outcome": {
+      "$ref": "#/$defs/QualificationOutcome"
+     },
+     "campaign_id_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Campaign Id Sha256"
+     },
+     "case_input_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Case Input Sha256"
+     },
+     "run_id_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Run Id Sha256"
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/$defs/EvidenceRef"
+      },
+      "title": "Evidence",
+      "type": "array"
+     },
+     "detail_code": {
+      "anyOf": [
+       {
+        "maxLength": 128,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Detail Code"
+     },
+     "completed_at": {
+      "title": "Completed At",
+      "type": "string"
+     },
+     "attestation_key_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Attestation Key Id",
+      "type": "string"
+     },
+     "attestation_signature": {
+      "default": "",
+      "title": "Attestation Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "case_id",
+     "project_id",
+     "project_revision",
+     "project_contract_sha256",
+     "workflow_contract_sha256",
+     "environment_contract_sha256",
+     "environment_digest",
+     "runtime_version",
+     "runner_id",
+     "status",
+     "observed_outcome",
+     "attestation_key_id"
+    ],
+    "title": "QualificationCaseResult",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "QualificationCertification": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Last persisted qualification decision.",
+    "properties": {
+     "project_revision": {
+      "title": "Project Revision",
+      "type": "integer"
+     },
+     "project_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Project Contract Sha256",
+      "type": "string"
+     },
+     "workflow_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Workflow Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Contract Sha256",
+      "type": "string"
+     },
+     "policy_name": {
+      "title": "Policy Name",
+      "type": "string"
+     },
+     "policy_contract_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Policy Contract Sha256"
+     },
+     "policy_contract": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Policy Contract"
+     },
+     "passed": {
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "report_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Report Sha256",
+      "type": "string"
+     },
+     "case_evidence_contract_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Case Evidence Contract Sha256"
+     },
+     "execution_profile": {
+      "default": "standard",
+      "enum": [
+       "standard",
+       "regulated"
+      ],
+      "title": "Execution Profile",
+      "type": "string"
+     },
+     "certified_at": {
+      "title": "Certified At",
+      "type": "string"
+     },
+     "lookup_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Lookup Sha256"
+     }
+    },
+    "required": [
+     "project_revision",
+     "project_contract_sha256",
+     "workflow_contract_sha256",
+     "environment_contract_sha256",
+     "policy_name",
+     "passed",
+     "report_sha256"
+    ],
+    "title": "QualificationCertification",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "QualificationProject": {
+   "validation": {
+    "$defs": {
+     "ActionRiskClass": {
+      "enum": [
+       "unknown",
+       "read_only",
+       "state_changing",
+       "consequential",
+       "irreversible"
+      ],
+      "title": "ActionRiskClass",
+      "type": "string"
+     },
+     "ActionRiskClassification": {
+      "additionalProperties": false,
+      "description": "Operator-reviewed business risk for one executable action.",
+      "properties": {
+       "step_id": {
+        "title": "Step Id",
+        "type": "string"
+       },
+       "classification": {
+        "$ref": "#/$defs/ActionRiskClass"
+       },
+       "explanation": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Explanation",
+        "type": "string"
+       },
+       "operator_confirmed": {
+        "default": false,
+        "title": "Operator Confirmed",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "step_id",
+       "classification",
+       "explanation"
+      ],
+      "title": "ActionRiskClassification",
+      "type": "object"
+     },
+     "EffectVerificationPolicy": {
+      "additionalProperties": false,
+      "description": "Evidence strength assigned to one exact actuation-path effect.",
+      "properties": {
+       "step_id": {
+        "title": "Step Id",
+        "type": "string"
+       },
+       "actuation_path": {
+        "default": "gui",
+        "enum": [
+         "gui",
+         "api"
+        ],
+        "title": "Actuation Path",
+        "type": "string"
+       },
+       "effect_index": {
+        "minimum": 0,
+        "title": "Effect Index",
+        "type": "integer"
+       },
+       "effect_contract_hash": {
+        "pattern": "^sha256:[a-f0-9]{64}$",
+        "title": "Effect Contract Hash",
+        "type": "string"
+       },
+       "tier": {
+        "$ref": "#/$defs/VerificationTier"
+       }
+      },
+      "required": [
+       "step_id",
+       "effect_index",
+       "effect_contract_hash",
+       "tier"
+      ],
+      "title": "EffectVerificationPolicy",
+      "type": "object"
+     },
+     "EnvironmentBoundary": {
+      "additionalProperties": false,
+      "description": "Application/environment scope in which the qualification is valid.",
+      "properties": {
+       "target_kind": {
+        "enum": [
+         "web",
+         "windows",
+         "macos",
+         "linux",
+         "rdp",
+         "citrix"
+        ],
+        "title": "Target Kind",
+        "type": "string"
+       },
+       "application": {
+        "maxLength": 256,
+        "minLength": 1,
+        "title": "Application",
+        "type": "string"
+       },
+       "application_identity": {
+        "anyOf": [
+         {
+          "maxLength": 320,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Application Identity"
+       },
+       "application_version": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Application Version",
+        "type": "string"
+       },
+       "environment_observer_id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Environment Observer Id"
+       },
+       "environment_observer_contract_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Environment Observer Contract Sha256"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "runtime_version": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Runtime Version",
+        "type": "string"
+       },
+       "required_capabilities": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Required Capabilities",
+        "type": "array"
+       }
+      },
+      "required": [
+       "target_kind",
+       "application",
+       "application_version",
+       "environment_digest",
+       "runtime_version"
+      ],
+      "title": "EnvironmentBoundary",
+      "type": "object"
+     },
+     "EvidenceRef": {
+      "additionalProperties": false,
+      "description": "Local or customer-controlled evidence reference; never evidence content.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "run_report",
+         "identity",
+         "effect",
+         "case_input",
+         "fault_receipt",
+         "fault_mutation",
+         "fault_campaign",
+         "other"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Sha256",
+        "type": "string"
+       },
+       "relative_path": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Relative Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "sha256",
+       "relative_path"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+     },
+     "IdentityEnforcement": {
+      "description": "Whether the policy names shipped runtime behavior or future intent.",
+      "enum": [
+       "canonical_ladder",
+       "signal_quorum"
+      ],
+      "title": "IdentityEnforcement",
+      "type": "string"
+     },
+     "IdentityEvidenceSource": {
+      "enum": [
+       "structured",
+       "identifier_region",
+       "captured_context",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentityEvidenceSource",
+      "type": "string"
+     },
+     "IdentityMatchMode": {
+      "enum": [
+       "exact",
+       "normalized"
+      ],
+      "title": "IdentityMatchMode",
+      "type": "string"
+     },
+     "IdentityNormalizer": {
+      "description": "Explicit, bounded transforms permitted for a normalized comparison.",
+      "enum": [
+       "unicode_nfkc",
+       "casefold",
+       "collapse_whitespace",
+       "strip_punctuation"
+      ],
+      "title": "IdentityNormalizer",
+      "type": "string"
+     },
+     "IdentityPolicy": {
+      "additionalProperties": false,
+      "description": "Quorum policy for one canonical Flow action.",
+      "properties": {
+       "step_id": {
+        "title": "Step Id",
+        "type": "string"
+       },
+       "enforcement": {
+        "$ref": "#/$defs/IdentityEnforcement",
+        "default": "signal_quorum"
+       },
+       "signals": {
+        "items": {
+         "$ref": "#/$defs/IdentitySignalPolicy"
+        },
+        "title": "Signals",
+        "type": "array"
+       },
+       "quorum": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Quorum",
+        "type": "integer"
+       }
+      },
+      "required": [
+       "step_id"
+      ],
+      "title": "IdentityPolicy",
+      "type": "object"
+     },
+     "IdentitySignalKey": {
+      "description": "Closed, PHI-free semantic keys for qualified identity evidence.",
+      "enum": [
+       "subject_name",
+       "record_id",
+       "secondary_identifier",
+       "application",
+       "session",
+       "workflow_state"
+      ],
+      "title": "IdentitySignalKey",
+      "type": "string"
+     },
+     "IdentitySignalPolicy": {
+      "additionalProperties": false,
+      "description": "How one semantic identity signal is compared using retained evidence.",
+      "properties": {
+       "key": {
+        "$ref": "#/$defs/IdentitySignalKey"
+       },
+       "source": {
+        "$ref": "#/$defs/IdentityEvidenceSource"
+       },
+       "match": {
+        "$ref": "#/$defs/IdentityMatchMode",
+        "default": "exact"
+       },
+       "normalizers": {
+        "items": {
+         "$ref": "#/$defs/IdentityNormalizer"
+        },
+        "title": "Normalizers",
+        "type": "array"
+       },
+       "region": {
+        "anyOf": [
+         {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           },
+           {
+            "type": "integer"
+           }
+          ],
+          "type": "array"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Region"
+       },
+       "extract_pattern": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Optional explicit regular expression with one named 'value' group. For structured/context text, only that field participates in the identity vote; the semantic key alone never extracts a value.",
+        "title": "Extract Pattern"
+       },
+       "expected_value": {
+        "anyOf": [
+         {
+          "maxLength": 320,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "description": "Qualified PHI-free identifier expected from a dedicated application/session/workflow-state runtime observer.",
+        "title": "Expected Value"
+       },
+       "params": {
+        "description": "Explicit workflow parameters whose whole demonstrated values are replaced before comparison. No implicit substring inference occurs.",
+        "items": {
+         "type": "string"
+        },
+        "title": "Params",
+        "type": "array"
+       }
+      },
+      "required": [
+       "key",
+       "source"
+      ],
+      "title": "IdentitySignalPolicy",
+      "type": "object"
+     },
+     "JudgmentCaseProvenanceV1": {
+      "additionalProperties": false,
+      "description": "The bounded origin of a local case, without an unbounded rationale.",
+      "properties": {
+       "source": {
+        "enum": [
+         "demonstration",
+         "counterfactual",
+         "policy_review",
+         "fault"
+        ],
+        "title": "Source",
+        "type": "string"
+       },
+       "source_ref_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Ref Sha256",
+        "type": "string"
+       },
+       "reviewer_role": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "Reviewer Role",
+        "type": "string"
+       },
+       "reviewer_principal_ref_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Reviewer Principal Ref Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "source",
+       "source_ref_sha256",
+       "reviewer_role",
+       "reviewer_principal_ref_sha256"
+      ],
+      "title": "JudgmentCaseProvenanceV1",
+      "type": "object"
+     },
+     "JudgmentCaseV1": {
+      "additionalProperties": false,
+      "description": "One reviewed example or counterfactual for a typed decision state.\n\n``automatic_rule`` names a reviewed rule and a finite compiled option. It\nnever embeds an expression, prompt, natural-language reason, or generated\nexecutable program. The runtime continues to use ``BusinessDecisionSpec``.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.judgment-case/v1",
+        "default": "openadapt.judgment-case/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "Id",
+        "type": "string"
+       },
+       "decision": {
+        "$ref": "#/$defs/JudgmentDecisionBindingV1"
+       },
+       "fact_schema_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Fact Schema Sha256",
+        "type": "string"
+       },
+       "facts": {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "boolean"
+          },
+          {
+           "type": "integer"
+          },
+          {
+           "type": "number"
+          },
+          {
+           "type": "string"
+          }
+         ]
+        },
+        "title": "Facts",
+        "type": "object"
+       },
+       "local_evidence": {
+        "items": {
+         "$ref": "#/$defs/LocalEvidenceRefV1"
+        },
+        "minItems": 1,
+        "title": "Local Evidence",
+        "type": "array"
+       },
+       "review_note_ref": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/LocalEvidenceRefV1"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "provenance": {
+        "$ref": "#/$defs/JudgmentCaseProvenanceV1"
+       },
+       "disposition": {
+        "$ref": "#/$defs/JudgmentDisposition"
+       },
+       "reviewed_rule_id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Reviewed Rule Id"
+       },
+       "option_id": {
+        "anyOf": [
+         {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Option Id"
+       },
+       "contrast_case_ids": {
+        "default": [],
+        "items": {
+         "type": "string"
+        },
+        "title": "Contrast Case Ids",
+        "type": "array"
+       }
+      },
+      "required": [
+       "id",
+       "decision",
+       "fact_schema_sha256",
+       "facts",
+       "local_evidence",
+       "provenance",
+       "disposition"
+      ],
+      "title": "JudgmentCaseV1",
+      "type": "object"
+     },
+     "JudgmentDecisionBindingV1": {
+      "additionalProperties": false,
+      "description": "Exact executable decision revision that a local case describes.",
+      "properties": {
+       "graph_id": {
+        "pattern": "^(?:__program__|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$",
+        "title": "Graph Id",
+        "type": "string"
+       },
+       "state_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "State Id",
+        "type": "string"
+       },
+       "workflow_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Workflow Contract Sha256",
+        "type": "string"
+       },
+       "decision_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Decision Contract Sha256",
+        "type": "string"
+       }
+      },
+      "required": [
+       "graph_id",
+       "state_id",
+       "workflow_contract_sha256",
+       "decision_contract_sha256"
+      ],
+      "title": "JudgmentDecisionBindingV1",
+      "type": "object"
+     },
+     "JudgmentDisposition": {
+      "enum": [
+       "automatic_rule",
+       "human_node",
+       "more_evidence_required"
+      ],
+      "title": "JudgmentDisposition",
+      "type": "string"
+     },
+     "JudgmentFactFieldV1": {
+      "additionalProperties": false,
+      "description": "One typed local fact. Values have no implied policy meaning.",
+      "properties": {
+       "type": {
+        "$ref": "#/$defs/JudgmentFactType"
+       },
+       "allowed_values": {
+        "default": [],
+        "items": {
+         "type": "string"
+        },
+        "title": "Allowed Values",
+        "type": "array"
+       }
+      },
+      "required": [
+       "type"
+      ],
+      "title": "JudgmentFactFieldV1",
+      "type": "object"
+     },
+     "JudgmentFactSchemaBindingV1": {
+      "additionalProperties": false,
+      "description": "One fact schema bound to one exact graph decision node.",
+      "properties": {
+       "graph_id": {
+        "pattern": "^(?:__program__|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$",
+        "title": "Graph Id",
+        "type": "string"
+       },
+       "state_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "State Id",
+        "type": "string"
+       },
+       "fact_schema": {
+        "$ref": "#/$defs/JudgmentFactSchemaV1"
+       }
+      },
+      "required": [
+       "graph_id",
+       "state_id",
+       "fact_schema"
+      ],
+      "title": "JudgmentFactSchemaBindingV1",
+      "type": "object"
+     },
+     "JudgmentFactSchemaV1": {
+      "additionalProperties": false,
+      "description": "The closed fact vocabulary for one decision state.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.judgment-fact-schema/v1",
+        "default": "openadapt.judgment-fact-schema/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "fields": {
+        "additionalProperties": {
+         "$ref": "#/$defs/JudgmentFactFieldV1"
+        },
+        "minProperties": 1,
+        "title": "Fields",
+        "type": "object"
+       }
+      },
+      "required": [
+       "fields"
+      ],
+      "title": "JudgmentFactSchemaV1",
+      "type": "object"
+     },
+     "JudgmentFactType": {
+      "enum": [
+       "boolean",
+       "integer",
+       "number",
+       "string",
+       "enum"
+      ],
+      "title": "JudgmentFactType",
+      "type": "string"
+     },
+     "LocalEvidenceRefV1": {
+      "additionalProperties": false,
+      "description": "A local artifact reference. No remote URL or artifact body is allowed.",
+      "properties": {
+       "relative_path": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Relative Path",
+        "type": "string"
+       },
+       "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Sha256",
+        "type": "string"
+       },
+       "kind": {
+        "enum": [
+         "frame",
+         "recording",
+         "report",
+         "document",
+         "system_read"
+        ],
+        "title": "Kind",
+        "type": "string"
+       }
+      },
+      "required": [
+       "relative_path",
+       "sha256",
+       "kind"
+      ],
+      "title": "LocalEvidenceRefV1",
+      "type": "object"
+     },
+     "PixelsOnlyPass": {
+      "additionalProperties": false,
+      "description": "The qualification pass run with structure lookups disabled.",
+      "properties": {
+       "role": {
+        "enum": [
+         "gate",
+         "informational"
+        ],
+        "title": "Role",
+        "type": "string"
+       },
+       "cases": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Cases",
+        "type": "array"
+       },
+       "trials_run": {
+        "minimum": 0,
+        "title": "Trials Run",
+        "type": "integer"
+       },
+       "trials_passed": {
+        "minimum": 0,
+        "title": "Trials Passed",
+        "type": "integer"
+       },
+       "failures": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 200,
+        "title": "Failures",
+        "type": "array"
+       }
+      },
+      "required": [
+       "role",
+       "trials_run",
+       "trials_passed"
+      ],
+      "title": "PixelsOnlyPass",
+      "type": "object"
+     },
+     "QualificationActionTarget": {
+      "additionalProperties": false,
+      "description": "One exact workflow action and actuation path exercised by a case.",
+      "properties": {
+       "step_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "Step Id",
+        "type": "string"
+       },
+       "actuation_path": {
+        "enum": [
+         "gui",
+         "api"
+        ],
+        "title": "Actuation Path",
+        "type": "string"
+       }
+      },
+      "required": [
+       "step_id",
+       "actuation_path"
+      ],
+      "title": "QualificationActionTarget",
+      "type": "object"
+     },
+     "QualificationCase": {
+      "additionalProperties": false,
+      "description": "A representative or deterministic fault case.\n\n``input_ref`` names a customer-controlled parameter fixture.  Parameter\nvalues and secrets do not enter the qualification project.",
+      "properties": {
+       "id": {
+        "title": "Id",
+        "type": "string"
+       },
+       "kind": {
+        "$ref": "#/$defs/QualificationCaseKind"
+       },
+       "description": {
+        "default": "",
+        "maxLength": 512,
+        "title": "Description",
+        "type": "string"
+       },
+       "input_ref": {
+        "anyOf": [
+         {
+          "maxLength": 256,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Input Ref"
+       },
+       "runtime_input_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Runtime Input Sha256"
+       },
+       "action_targets": {
+        "items": {
+         "$ref": "#/$defs/QualificationActionTarget"
+        },
+        "title": "Action Targets",
+        "type": "array"
+       },
+       "fault_target": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/QualificationActionTarget"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null
+       },
+       "expected_outcome": {
+        "$ref": "#/$defs/QualificationOutcome"
+       },
+       "required": {
+        "default": true,
+        "title": "Required",
+        "type": "boolean"
+       },
+       "results": {
+        "items": {
+         "$ref": "#/$defs/QualificationCaseResult"
+        },
+        "title": "Results",
+        "type": "array"
+       }
+      },
+      "required": [
+       "id",
+       "kind",
+       "expected_outcome"
+      ],
+      "title": "QualificationCase",
+      "type": "object"
+     },
+     "QualificationCaseKind": {
+      "enum": [
+       "representative",
+       "ambiguity",
+       "wrong_identity",
+       "stale_identity",
+       "weak_effect",
+       "missing_effect"
+      ],
+      "title": "QualificationCaseKind",
+      "type": "string"
+     },
+     "QualificationCaseResult": {
+      "additionalProperties": false,
+      "description": "One runner-produced result for a qualification case.",
+      "properties": {
+       "case_id": {
+        "title": "Case Id",
+        "type": "string"
+       },
+       "project_id": {
+        "title": "Project Id",
+        "type": "string"
+       },
+       "project_revision": {
+        "minimum": 1,
+        "title": "Project Revision",
+        "type": "integer"
+       },
+       "project_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Project Contract Sha256",
+        "type": "string"
+       },
+       "workflow_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Workflow Contract Sha256",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "environment_digest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Digest",
+        "type": "string"
+       },
+       "runtime_version": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Runtime Version",
+        "type": "string"
+       },
+       "runner_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Runner Id",
+        "type": "string"
+       },
+       "runner_capabilities": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Runner Capabilities",
+        "type": "array"
+       },
+       "status": {
+        "enum": [
+         "passed",
+         "failed",
+         "blocked"
+        ],
+        "title": "Status",
+        "type": "string"
+       },
+       "observed_outcome": {
+        "$ref": "#/$defs/QualificationOutcome"
+       },
+       "campaign_id_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Campaign Id Sha256"
+       },
+       "case_input_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Case Input Sha256"
+       },
+       "run_id_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Run Id Sha256"
+       },
+       "evidence": {
+        "items": {
+         "$ref": "#/$defs/EvidenceRef"
+        },
+        "title": "Evidence",
+        "type": "array"
+       },
+       "detail_code": {
+        "anyOf": [
+         {
+          "maxLength": 128,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Detail Code"
+       },
+       "completed_at": {
+        "title": "Completed At",
+        "type": "string"
+       },
+       "attestation_key_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Attestation Key Id",
+        "type": "string"
+       },
+       "attestation_signature": {
+        "default": "",
+        "title": "Attestation Signature",
+        "type": "string"
+       }
+      },
+      "required": [
+       "case_id",
+       "project_id",
+       "project_revision",
+       "project_contract_sha256",
+       "workflow_contract_sha256",
+       "environment_contract_sha256",
+       "environment_digest",
+       "runtime_version",
+       "runner_id",
+       "status",
+       "observed_outcome",
+       "attestation_key_id"
+      ],
+      "title": "QualificationCaseResult",
+      "type": "object"
+     },
+     "QualificationCertification": {
+      "additionalProperties": false,
+      "description": "Last persisted qualification decision.",
+      "properties": {
+       "project_revision": {
+        "title": "Project Revision",
+        "type": "integer"
+       },
+       "project_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Project Contract Sha256",
+        "type": "string"
+       },
+       "workflow_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Workflow Contract Sha256",
+        "type": "string"
+       },
+       "environment_contract_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Environment Contract Sha256",
+        "type": "string"
+       },
+       "policy_name": {
+        "title": "Policy Name",
+        "type": "string"
+       },
+       "policy_contract_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Policy Contract Sha256"
+       },
+       "policy_contract": {
+        "anyOf": [
+         {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Policy Contract"
+       },
+       "passed": {
+        "title": "Passed",
+        "type": "boolean"
+       },
+       "report_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Report Sha256",
+        "type": "string"
+       },
+       "case_evidence_contract_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Case Evidence Contract Sha256"
+       },
+       "execution_profile": {
+        "default": "standard",
+        "enum": [
+         "standard",
+         "regulated"
+        ],
+        "title": "Execution Profile",
+        "type": "string"
+       },
+       "certified_at": {
+        "title": "Certified At",
+        "type": "string"
+       },
+       "lookup_sha256": {
+        "anyOf": [
+         {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Lookup Sha256"
+       }
+      },
+      "required": [
+       "project_revision",
+       "project_contract_sha256",
+       "workflow_contract_sha256",
+       "environment_contract_sha256",
+       "policy_name",
+       "passed",
+       "report_sha256"
+      ],
+      "title": "QualificationCertification",
+      "type": "object"
+     },
+     "QualificationOutcome": {
+      "enum": [
+       "verified",
+       "completed_unverified",
+       "halted",
+       "failed",
+       "rolled_back"
+      ],
+      "title": "QualificationOutcome",
+      "type": "string"
+     },
+     "QualifiedBusinessDecisionContextCard": {
+      "additionalProperties": false,
+      "description": "One reviewed static context item for a mobile decision.",
+      "properties": {
+       "context_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Context Id",
+        "type": "string"
+       },
+       "kind": {
+        "enum": [
+         "policy",
+         "precedent",
+         "relationship",
+         "capacity",
+         "timing",
+         "risk",
+         "other_reviewed"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 120,
+        "minLength": 1,
+        "title": "Label",
+        "type": "string"
+       },
+       "value": {
+        "maxLength": 500,
+        "minLength": 1,
+        "title": "Value",
+        "type": "string"
+       }
+      },
+      "required": [
+       "context_id",
+       "kind",
+       "label",
+       "value"
+      ],
+      "title": "QualifiedBusinessDecisionContextCard",
+      "type": "object"
+     },
+     "QualifiedBusinessDecisionDelivery": {
+      "additionalProperties": false,
+      "description": "Reviewed mobile-delivery contract for one exact graph decision.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualified-business-decision-delivery/v1",
+        "default": "openadapt.qualified-business-decision-delivery/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "graph_id": {
+        "pattern": "^(?:__program__|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})$",
+        "title": "Graph Id",
+        "type": "string"
+       },
+       "state_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "State Id",
+        "type": "string"
+       },
+       "decision_contract_sha256": {
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Decision Contract Sha256",
+        "type": "string"
+       },
+       "decision_contract_revision": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Decision Contract Revision",
+        "type": "integer"
+       },
+       "presentation_ref": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Presentation Ref",
+        "type": "string"
+       },
+       "presentation_revision": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Presentation Revision",
+        "type": "integer"
+       },
+       "egress_review_digest": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Egress Review Digest",
+        "type": "string"
+       },
+       "review_contract_digest": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Review Contract Digest",
+        "type": "string"
+       },
+       "category": {
+        "anyOf": [
+         {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Category"
+       },
+       "title": {
+        "anyOf": [
+         {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Title"
+       },
+       "role_label": {
+        "anyOf": [
+         {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Role Label"
+       },
+       "why_judgment_needed": {
+        "anyOf": [
+         {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Why Judgment Needed"
+       },
+       "context_cards": {
+        "default": [],
+        "items": {
+         "$ref": "#/$defs/QualifiedBusinessDecisionContextCard"
+        },
+        "maxItems": 16,
+        "title": "Context Cards",
+        "type": "array"
+       },
+       "option_copy": {
+        "additionalProperties": {
+         "$ref": "#/$defs/QualifiedBusinessDecisionOptionCopy"
+        },
+        "title": "Option Copy",
+        "type": "object"
+       },
+       "reason_codes": {
+        "default": [],
+        "items": {
+         "enum": [
+          "institutional_knowledge_required",
+          "policy_exception",
+          "competing_priorities",
+          "relationship_context",
+          "capacity_constraint",
+          "temporal_context",
+          "risk_acceptance",
+          "other_reviewed"
+         ],
+         "type": "string"
+        },
+        "maxItems": 8,
+        "title": "Reason Codes",
+        "type": "array"
+       },
+       "policy_ref": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Policy Ref",
+        "type": "string"
+       },
+       "policy_revision": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Policy Revision",
+        "type": "integer"
+       },
+       "role_refs": {
+        "additionalProperties": {
+         "type": "string"
+        },
+        "maxProperties": 16,
+        "minProperties": 1,
+        "title": "Role Refs",
+        "type": "object"
+       },
+       "authorized_route_refs": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 16,
+        "minItems": 1,
+        "title": "Authorized Route Refs",
+        "type": "array"
+       },
+       "registration_route_ref": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Registration Route Ref",
+        "type": "string"
+       },
+       "answer_issuer_key_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Answer Issuer Key Id",
+        "type": "string"
+       },
+       "required_authn": {
+        "enum": [
+         "local_enterprise_identity",
+         "aal2",
+         "webauthn"
+        ],
+        "title": "Required Authn",
+        "type": "string"
+       },
+       "relay_capability_digest": {
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "title": "Relay Capability Digest",
+        "type": "string"
+       },
+       "qualification_issuer_key_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Qualification Issuer Key Id",
+        "type": "string"
+       },
+       "task_issuer_key_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Task Issuer Key Id",
+        "type": "string"
+       },
+       "receipt_issuer_key_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "title": "Receipt Issuer Key Id",
+        "type": "string"
+       }
+      },
+      "required": [
+       "graph_id",
+       "state_id",
+       "decision_contract_sha256",
+       "presentation_ref",
+       "egress_review_digest",
+       "review_contract_digest",
+       "policy_ref",
+       "role_refs",
+       "authorized_route_refs",
+       "registration_route_ref",
+       "answer_issuer_key_id",
+       "required_authn",
+       "relay_capability_digest",
+       "qualification_issuer_key_id",
+       "task_issuer_key_id",
+       "receipt_issuer_key_id"
+      ],
+      "title": "QualifiedBusinessDecisionDelivery",
+      "type": "object"
+     },
+     "QualifiedBusinessDecisionOptionCopy": {
+      "additionalProperties": false,
+      "description": "Optional reviewed detail for one already-declared finite option.",
+      "properties": {
+       "detail": {
+        "anyOf": [
+         {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Detail"
+       },
+       "consequence": {
+        "anyOf": [
+         {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Consequence"
+       }
+      },
+      "title": "QualifiedBusinessDecisionOptionCopy",
+      "type": "object"
+     },
+     "QualifiedEntityLabel": {
+      "additionalProperties": false,
+      "description": "An optional local presentation label for one qualified step.\n\nQualification and execution do not require this label. Reviewed labels can\ncross a remote boundary. A custom label remains local and remote consumers\nreceive its signed neutral ``record`` or ``item`` fallback.",
+      "properties": {
+       "step_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "title": "Step Id",
+        "type": "string"
+       },
+       "label": {
+        "examples": [
+         "patient record",
+         "insurance claim",
+         "record"
+        ],
+        "maxLength": 63,
+        "minLength": 1,
+        "title": "Label",
+        "type": "string",
+        "x-openadapt-reviewed-remote-options": [
+         "patient record",
+         "member record",
+         "insurance claim",
+         "loan application",
+         "customer account",
+         "service request",
+         "case",
+         "order",
+         "invoice",
+         "document",
+         "record",
+         "item"
+        ]
+       },
+       "fallback": {
+        "enum": [
+         "record",
+         "item"
+        ],
+        "title": "Fallback",
+        "type": "string"
+       }
+      },
+      "required": [
+       "step_id",
+       "label",
+       "fallback"
+      ],
+      "title": "QualifiedEntityLabel",
+      "type": "object"
+     },
+     "QualifiedLookup": {
+      "additionalProperties": false,
+      "description": "What a qualification's lookups ran on, kept in the qualification project.\n\n``capabilities_used`` is read from the run reports of the signed cases.\n``surface`` is the deployment surface the qualification was for.",
+      "properties": {
+       "schema_version": {
+        "const": "openadapt.qualified-lookup/v1",
+        "default": "openadapt.qualified-lookup/v1",
+        "title": "Schema Version",
+        "type": "string"
+       },
+       "surface": {
+        "enum": [
+         "local",
+         "remote_in_session",
+         "remote_display"
+        ],
+        "title": "Surface",
+        "type": "string"
+       },
+       "target_kind": {
+        "maxLength": 32,
+        "minLength": 1,
+        "title": "Target Kind",
+        "type": "string"
+       },
+       "structure_offered": {
+        "title": "Structure Offered",
+        "type": "boolean"
+       },
+       "capabilities_used": {
+        "items": {
+         "enum": [
+          "pixels",
+          "structure"
+         ],
+         "type": "string"
+        },
+        "minItems": 1,
+        "title": "Capabilities Used",
+        "type": "array"
+       },
+       "pixels_only": {
+        "$ref": "#/$defs/PixelsOnlyPass"
+       }
+      },
+      "required": [
+       "surface",
+       "target_kind",
+       "structure_offered",
+       "capabilities_used",
+       "pixels_only"
+      ],
+      "title": "QualifiedLookup",
+      "type": "object"
+     },
+     "RequalificationCondition": {
+      "additionalProperties": false,
+      "description": "A bounded condition that invalidates this qualification.",
+      "properties": {
+       "kind": {
+        "enum": [
+         "workflow_changed",
+         "application_version_changed",
+         "environment_changed",
+         "identity_policy_changed",
+         "effect_policy_changed",
+         "runtime_version_changed",
+         "expiry",
+         "operator_requested"
+        ],
+        "title": "Kind",
+        "type": "string"
+       },
+       "description": {
+        "default": "",
+        "maxLength": 512,
+        "title": "Description",
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind"
+      ],
+      "title": "RequalificationCondition",
+      "type": "object"
+     },
+     "VerificationTier": {
+      "description": "Strength of evidence for a declared business effect.\n\nLower values are stronger. These numbers are a persisted wire value; use\n:attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)\nto compare with Seal tiers or show the strength to a person. Verifiers\nadvertise strength explicitly; callers never infer it from class names,\nsubstrate labels, or prose.",
+      "enum": [
+       1,
+       2,
+       3,
+       4
+      ],
+      "title": "VerificationTier",
+      "type": "integer"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Versioned qualification configuration sealed inside a Flow bundle.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-project/v1",
+      "default": "openadapt.qualification-project/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "project_id": {
+      "title": "Project Id",
+      "type": "string"
+     },
+     "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+     },
+     "previous_revision_sha256": {
+      "anyOf": [
+       {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Previous Revision Sha256"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     },
+     "environment": {
+      "$ref": "#/$defs/EnvironmentBoundary"
+     },
+     "surface_environments": {
+      "additionalProperties": {
+       "$ref": "#/$defs/EnvironmentBoundary"
+      },
+      "title": "Surface Environments",
+      "type": "object"
+     },
+     "minimum_effect_tier": {
+      "$ref": "#/$defs/VerificationTier",
+      "default": 3
+     },
+     "action_classifications": {
+      "additionalProperties": {
+       "$ref": "#/$defs/ActionRiskClassification"
+      },
+      "title": "Action Classifications",
+      "type": "object"
+     },
+     "identity_policies": {
+      "additionalProperties": {
+       "$ref": "#/$defs/IdentityPolicy"
+      },
+      "title": "Identity Policies",
+      "type": "object"
+     },
+     "effect_policies": {
+      "items": {
+       "$ref": "#/$defs/EffectVerificationPolicy"
+      },
+      "title": "Effect Policies",
+      "type": "array"
+     },
+     "entity_labels": {
+      "additionalProperties": {
+       "$ref": "#/$defs/QualifiedEntityLabel"
+      },
+      "title": "Entity Labels",
+      "type": "object"
+     },
+     "judgment_fact_schemas": {
+      "items": {
+       "$ref": "#/$defs/JudgmentFactSchemaBindingV1"
+      },
+      "title": "Judgment Fact Schemas",
+      "type": "array"
+     },
+     "judgment_cases": {
+      "items": {
+       "$ref": "#/$defs/JudgmentCaseV1"
+      },
+      "title": "Judgment Cases",
+      "type": "array"
+     },
+     "business_decision_deliveries": {
+      "items": {
+       "$ref": "#/$defs/QualifiedBusinessDecisionDelivery"
+      },
+      "title": "Business Decision Deliveries",
+      "type": "array"
+     },
+     "cases": {
+      "items": {
+       "$ref": "#/$defs/QualificationCase"
+      },
+      "title": "Cases",
+      "type": "array"
+     },
+     "exclusions": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Exclusions",
+      "type": "array"
+     },
+     "requalification_conditions": {
+      "items": {
+       "$ref": "#/$defs/RequalificationCondition"
+      },
+      "title": "Requalification Conditions",
+      "type": "array"
+     },
+     "trusted_runner_keys": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "title": "Trusted Runner Keys",
+      "type": "object"
+     },
+     "trusted_fault_driver_keys": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "title": "Trusted Fault Driver Keys",
+      "type": "object"
+     },
+     "lookup": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/QualifiedLookup"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     },
+     "last_certification": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/QualificationCertification"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null
+     }
+    },
+    "required": [
+     "environment"
+    ],
+    "title": "QualificationProject",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": true,
+    "type": "object"
+   }
+  },
+  "QualificationRefusal": {
+   "validation": {
+    "$defs": {
+     "QualificationRefusalCode": {
+      "enum": [
+       "project_missing",
+       "action_classification_missing",
+       "action_classification_unconfirmed",
+       "action_classification_conflict",
+       "step_identity_unarmed",
+       "identity_policy_missing",
+       "identity_policy_unenforced",
+       "identity_signals_not_independent",
+       "identity_signal_unavailable",
+       "effect_contract_missing",
+       "effect_policy_missing",
+       "effect_contract_changed",
+       "effect_tier_insufficient",
+       "high_risk_screen_only",
+       "representative_case_missing",
+       "representative_action_uncovered",
+       "fault_case_missing",
+       "fault_action_uncovered",
+       "case_input_unbound",
+       "case_target_invalid",
+       "case_not_passed",
+       "case_evidence_missing",
+       "case_evidence_unverified",
+       "case_attestation_invalid",
+       "case_workflow_changed",
+       "case_environment_changed",
+       "case_runtime_changed",
+       "case_capability_missing",
+       "judgment_case_binding_invalid",
+       "judgment_case_conflict",
+       "judgment_case_contrast_missing",
+       "judgment_case_more_evidence_required",
+       "judgment_case_evidence_unverified",
+       "business_decision_delivery_invalid",
+       "policy_violation",
+       "subroutine_not_admitted"
+      ],
+      "title": "QualificationRefusalCode",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Stable, machine-readable reason certification was refused.",
+    "properties": {
+     "code": {
+      "$ref": "#/$defs/QualificationRefusalCode"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     },
+     "case_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Case Id"
+     },
+     "details": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "boolean"
+        }
+       ]
+      },
+      "title": "Details",
+      "type": "object"
+     }
+    },
+    "required": [
+     "code",
+     "path",
+     "message"
+    ],
+    "title": "QualificationRefusal",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "QualificationRefusalCode": {
+      "enum": [
+       "project_missing",
+       "action_classification_missing",
+       "action_classification_unconfirmed",
+       "action_classification_conflict",
+       "step_identity_unarmed",
+       "identity_policy_missing",
+       "identity_policy_unenforced",
+       "identity_signals_not_independent",
+       "identity_signal_unavailable",
+       "effect_contract_missing",
+       "effect_policy_missing",
+       "effect_contract_changed",
+       "effect_tier_insufficient",
+       "high_risk_screen_only",
+       "representative_case_missing",
+       "representative_action_uncovered",
+       "fault_case_missing",
+       "fault_action_uncovered",
+       "case_input_unbound",
+       "case_target_invalid",
+       "case_not_passed",
+       "case_evidence_missing",
+       "case_evidence_unverified",
+       "case_attestation_invalid",
+       "case_workflow_changed",
+       "case_environment_changed",
+       "case_runtime_changed",
+       "case_capability_missing",
+       "judgment_case_binding_invalid",
+       "judgment_case_conflict",
+       "judgment_case_contrast_missing",
+       "judgment_case_more_evidence_required",
+       "judgment_case_evidence_unverified",
+       "business_decision_delivery_invalid",
+       "policy_violation",
+       "subroutine_not_admitted"
+      ],
+      "title": "QualificationRefusalCode",
+      "type": "string"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Stable, machine-readable reason certification was refused.",
+    "properties": {
+     "code": {
+      "$ref": "#/$defs/QualificationRefusalCode"
+     },
+     "path": {
+      "title": "Path",
+      "type": "string"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "step_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Step Id"
+     },
+     "case_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Case Id"
+     },
+     "details": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "boolean"
+        }
+       ]
+      },
+      "title": "Details",
+      "type": "object"
+     }
+    },
+    "required": [
+     "code",
+     "path",
+     "message"
+    ],
+    "title": "QualificationRefusal",
+    "type": "object"
+   }
+  },
+  "QualificationReport": {
+   "validation": {
+    "$defs": {
+     "QualificationRefusal": {
+      "additionalProperties": false,
+      "description": "Stable, machine-readable reason certification was refused.",
+      "properties": {
+       "code": {
+        "$ref": "#/$defs/QualificationRefusalCode"
+       },
+       "path": {
+        "title": "Path",
+        "type": "string"
+       },
+       "message": {
+        "title": "Message",
+        "type": "string"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       },
+       "case_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Case Id"
+       },
+       "details": {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "integer"
+          },
+          {
+           "type": "boolean"
+          }
+         ]
+        },
+        "title": "Details",
+        "type": "object"
+       }
+      },
+      "required": [
+       "code",
+       "path",
+       "message"
+      ],
+      "title": "QualificationRefusal",
+      "type": "object"
+     },
+     "QualificationRefusalCode": {
+      "enum": [
+       "project_missing",
+       "action_classification_missing",
+       "action_classification_unconfirmed",
+       "action_classification_conflict",
+       "step_identity_unarmed",
+       "identity_policy_missing",
+       "identity_policy_unenforced",
+       "identity_signals_not_independent",
+       "identity_signal_unavailable",
+       "effect_contract_missing",
+       "effect_policy_missing",
+       "effect_contract_changed",
+       "effect_tier_insufficient",
+       "high_risk_screen_only",
+       "representative_case_missing",
+       "representative_action_uncovered",
+       "fault_case_missing",
+       "fault_action_uncovered",
+       "case_input_unbound",
+       "case_target_invalid",
+       "case_not_passed",
+       "case_evidence_missing",
+       "case_evidence_unverified",
+       "case_attestation_invalid",
+       "case_workflow_changed",
+       "case_environment_changed",
+       "case_runtime_changed",
+       "case_capability_missing",
+       "judgment_case_binding_invalid",
+       "judgment_case_conflict",
+       "judgment_case_contrast_missing",
+       "judgment_case_more_evidence_required",
+       "judgment_case_evidence_unverified",
+       "business_decision_delivery_invalid",
+       "policy_violation",
+       "subroutine_not_admitted"
+      ],
+      "title": "QualificationRefusalCode",
+      "type": "string"
+     },
+     "VerificationTier": {
+      "description": "Strength of evidence for a declared business effect.\n\nLower values are stronger. These numbers are a persisted wire value; use\n:attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)\nto compare with Seal tiers or show the strength to a person. Verifiers\nadvertise strength explicitly; callers never infer it from class names,\nsubstrate labels, or prose.",
+      "enum": [
+       1,
+       2,
+       3,
+       4
+      ],
+      "title": "VerificationTier",
+      "type": "integer"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Qualification coverage and certification decision.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-report/v1",
+      "default": "openadapt.qualification-report/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "workflow_name": {
+      "title": "Workflow Name",
+      "type": "string"
+     },
+     "workflow_contract_sha256": {
+      "title": "Workflow Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Environment Contract Sha256"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "project_revision": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Revision"
+     },
+     "policy_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Policy Name"
+     },
+     "passed": {
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "action_count": {
+      "title": "Action Count",
+      "type": "integer"
+     },
+     "state_changing_action_count": {
+      "title": "State Changing Action Count",
+      "type": "integer"
+     },
+     "consequential_action_count": {
+      "title": "Consequential Action Count",
+      "type": "integer"
+     },
+     "identity_covered_action_count": {
+      "title": "Identity Covered Action Count",
+      "type": "integer"
+     },
+     "effect_required_action_count": {
+      "title": "Effect Required Action Count",
+      "type": "integer"
+     },
+     "effect_covered_action_count": {
+      "title": "Effect Covered Action Count",
+      "type": "integer"
+     },
+     "minimum_effect_tier": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/VerificationTier"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "case_count": {
+      "title": "Case Count",
+      "type": "integer"
+     },
+     "passed_case_count": {
+      "title": "Passed Case Count",
+      "type": "integer"
+     },
+     "refusals": {
+      "items": {
+       "$ref": "#/$defs/QualificationRefusal"
+      },
+      "title": "Refusals",
+      "type": "array"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "workflow_name",
+     "workflow_contract_sha256",
+     "environment_contract_sha256",
+     "project_id",
+     "project_revision",
+     "policy_name",
+     "passed",
+     "action_count",
+     "state_changing_action_count",
+     "consequential_action_count",
+     "identity_covered_action_count",
+     "effect_required_action_count",
+     "effect_covered_action_count",
+     "minimum_effect_tier",
+     "case_count",
+     "passed_case_count"
+    ],
+    "title": "QualificationReport",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "QualificationRefusal": {
+      "additionalProperties": false,
+      "description": "Stable, machine-readable reason certification was refused.",
+      "properties": {
+       "code": {
+        "$ref": "#/$defs/QualificationRefusalCode"
+       },
+       "path": {
+        "title": "Path",
+        "type": "string"
+       },
+       "message": {
+        "title": "Message",
+        "type": "string"
+       },
+       "step_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Step Id"
+       },
+       "case_id": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "default": null,
+        "title": "Case Id"
+       },
+       "details": {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "integer"
+          },
+          {
+           "type": "boolean"
+          }
+         ]
+        },
+        "title": "Details",
+        "type": "object"
+       }
+      },
+      "required": [
+       "code",
+       "path",
+       "message"
+      ],
+      "title": "QualificationRefusal",
+      "type": "object"
+     },
+     "QualificationRefusalCode": {
+      "enum": [
+       "project_missing",
+       "action_classification_missing",
+       "action_classification_unconfirmed",
+       "action_classification_conflict",
+       "step_identity_unarmed",
+       "identity_policy_missing",
+       "identity_policy_unenforced",
+       "identity_signals_not_independent",
+       "identity_signal_unavailable",
+       "effect_contract_missing",
+       "effect_policy_missing",
+       "effect_contract_changed",
+       "effect_tier_insufficient",
+       "high_risk_screen_only",
+       "representative_case_missing",
+       "representative_action_uncovered",
+       "fault_case_missing",
+       "fault_action_uncovered",
+       "case_input_unbound",
+       "case_target_invalid",
+       "case_not_passed",
+       "case_evidence_missing",
+       "case_evidence_unverified",
+       "case_attestation_invalid",
+       "case_workflow_changed",
+       "case_environment_changed",
+       "case_runtime_changed",
+       "case_capability_missing",
+       "judgment_case_binding_invalid",
+       "judgment_case_conflict",
+       "judgment_case_contrast_missing",
+       "judgment_case_more_evidence_required",
+       "judgment_case_evidence_unverified",
+       "business_decision_delivery_invalid",
+       "policy_violation",
+       "subroutine_not_admitted"
+      ],
+      "title": "QualificationRefusalCode",
+      "type": "string"
+     },
+     "VerificationTier": {
+      "description": "Strength of evidence for a declared business effect.\n\nLower values are stronger. These numbers are a persisted wire value; use\n:attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)\nto compare with Seal tiers or show the strength to a person. Verifiers\nadvertise strength explicitly; callers never infer it from class names,\nsubstrate labels, or prose.",
+      "enum": [
+       1,
+       2,
+       3,
+       4
+      ],
+      "title": "VerificationTier",
+      "type": "integer"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Qualification coverage and certification decision.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-report/v1",
+      "default": "openadapt.qualification-report/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "workflow_name": {
+      "title": "Workflow Name",
+      "type": "string"
+     },
+     "workflow_contract_sha256": {
+      "title": "Workflow Contract Sha256",
+      "type": "string"
+     },
+     "environment_contract_sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Environment Contract Sha256"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "project_revision": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Revision"
+     },
+     "policy_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Policy Name"
+     },
+     "passed": {
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "action_count": {
+      "title": "Action Count",
+      "type": "integer"
+     },
+     "state_changing_action_count": {
+      "title": "State Changing Action Count",
+      "type": "integer"
+     },
+     "consequential_action_count": {
+      "title": "Consequential Action Count",
+      "type": "integer"
+     },
+     "identity_covered_action_count": {
+      "title": "Identity Covered Action Count",
+      "type": "integer"
+     },
+     "effect_required_action_count": {
+      "title": "Effect Required Action Count",
+      "type": "integer"
+     },
+     "effect_covered_action_count": {
+      "title": "Effect Covered Action Count",
+      "type": "integer"
+     },
+     "minimum_effect_tier": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/VerificationTier"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "case_count": {
+      "title": "Case Count",
+      "type": "integer"
+     },
+     "passed_case_count": {
+      "title": "Passed Case Count",
+      "type": "integer"
+     },
+     "refusals": {
+      "items": {
+       "$ref": "#/$defs/QualificationRefusal"
+      },
+      "title": "Refusals",
+      "type": "array"
+     },
+     "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "workflow_name",
+     "workflow_contract_sha256",
+     "environment_contract_sha256",
+     "project_id",
+     "project_revision",
+     "policy_name",
+     "passed",
+     "action_count",
+     "state_changing_action_count",
+     "consequential_action_count",
+     "identity_covered_action_count",
+     "effect_required_action_count",
+     "effect_covered_action_count",
+     "minimum_effect_tier",
+     "case_count",
+     "passed_case_count"
+    ],
+    "title": "QualificationReport",
+    "type": "object"
+   }
+  },
+  "QualifiedEntityLabel": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "An optional local presentation label for one qualified step.\n\nQualification and execution do not require this label. Reviewed labels can\ncross a remote boundary. A custom label remains local and remote consumers\nreceive its signed neutral ``record`` or ``item`` fallback.",
+    "properties": {
+     "step_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Step Id",
+      "type": "string"
+     },
+     "label": {
+      "examples": [
+       "patient record",
+       "insurance claim",
+       "record"
+      ],
+      "maxLength": 63,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string",
+      "x-openadapt-reviewed-remote-options": [
+       "patient record",
+       "member record",
+       "insurance claim",
+       "loan application",
+       "customer account",
+       "service request",
+       "case",
+       "order",
+       "invoice",
+       "document",
+       "record",
+       "item"
+      ]
+     },
+     "fallback": {
+      "enum": [
+       "record",
+       "item"
+      ],
+      "title": "Fallback",
+      "type": "string"
+     }
+    },
+    "required": [
+     "step_id",
+     "label",
+     "fallback"
+    ],
+    "title": "QualifiedEntityLabel",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "An optional local presentation label for one qualified step.\n\nQualification and execution do not require this label. Reviewed labels can\ncross a remote boundary. A custom label remains local and remote consumers\nreceive its signed neutral ``record`` or ``item`` fallback.",
+    "properties": {
+     "step_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Step Id",
+      "type": "string"
+     },
+     "label": {
+      "examples": [
+       "patient record",
+       "insurance claim",
+       "record"
+      ],
+      "maxLength": 63,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string",
+      "x-openadapt-reviewed-remote-options": [
+       "patient record",
+       "member record",
+       "insurance claim",
+       "loan application",
+       "customer account",
+       "service request",
+       "case",
+       "order",
+       "invoice",
+       "document",
+       "record",
+       "item"
+      ]
+     },
+     "fallback": {
+      "enum": [
+       "record",
+       "item"
+      ],
+      "title": "Fallback",
+      "type": "string"
+     }
+    },
+    "required": [
+     "step_id",
+     "label",
+     "fallback"
+    ],
+    "title": "QualifiedEntityLabel",
+    "type": "object"
+   }
+  },
+  "RequalificationCondition": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "A bounded condition that invalidates this qualification.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "workflow_changed",
+       "application_version_changed",
+       "environment_changed",
+       "identity_policy_changed",
+       "effect_policy_changed",
+       "runtime_version_changed",
+       "expiry",
+       "operator_requested"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "description": {
+      "default": "",
+      "maxLength": 512,
+      "title": "Description",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "title": "RequalificationCondition",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "A bounded condition that invalidates this qualification.",
+    "properties": {
+     "kind": {
+      "enum": [
+       "workflow_changed",
+       "application_version_changed",
+       "environment_changed",
+       "identity_policy_changed",
+       "effect_policy_changed",
+       "runtime_version_changed",
+       "expiry",
+       "operator_requested"
+      ],
+      "title": "Kind",
+      "type": "string"
+     },
+     "description": {
+      "default": "",
+      "maxLength": 512,
+      "title": "Description",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "title": "RequalificationCondition",
+    "type": "object"
+   }
+  }
+ }
+}

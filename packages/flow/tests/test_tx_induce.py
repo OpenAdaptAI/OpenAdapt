@@ -31,6 +31,7 @@ import pytest
 
 from openadapt_flow.tx.induce import (
     DefaultFrameAndIntentJudge,
+    InductionRefused,
     SandboxSafetyError,
     certify_lens_on_sandbox,
     induce_lens_from_har,
@@ -885,9 +886,9 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
             time.sleep(0.005)
 
     bg_thread = threading.Thread(target=_background_inserter, daemon=True)
+    rows_before = normalizing_server.count_rows()
     bg_thread.start()
     try:
-        rows_before = normalizing_server.count_rows()
         pack = certify_lens_on_sandbox(
             candidate,
             sample_record={
@@ -907,6 +908,7 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
         stop_bg.set()
         bg_thread.join(timeout=3.0)
 
+    assert not bg_thread.is_alive(), "background inserts did not finish"
     assert bg_counter["inserted"] >= 1
     assert pack.lens.write_mode == "patch"
     assert pack.sensitivity == 1.0
@@ -1127,9 +1129,12 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         },
     )
     create_only_har = {"log": {"version": "1.2", "entries": [h_post]}}
+    with pytest.raises(InductionRefused):
+        induce_lens_from_har(create_only_har)
     create_lens = induce_lens_from_har(
         create_only_har,
         intended_inputs={"title": "Massachusetts"},
+        allow_unobserved_item_route=True,
     )
     assert create_lens.write_mode == "create"
     assert create_lens.get_one.path_template == "/api/tasks/{id}"

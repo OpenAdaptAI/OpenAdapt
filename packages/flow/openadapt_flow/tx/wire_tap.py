@@ -23,7 +23,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, NamedTuple, Optional, cast
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
@@ -89,12 +89,19 @@ def _utc_now_iso() -> str:
 
 
 def _normalize_origin(url_or_origin: str) -> str:
-    parts = urlsplit(url_or_origin.strip())
-    if not parts.scheme or not parts.netloc:
+    try:
+        parts = urlsplit(url_or_origin.strip())
+        if not parts.scheme or not parts.netloc:
+            return ""
+        scheme = parts.scheme.lower()
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        # A malformed port or bracketed host is no origin at all.
         return ""
-    scheme = parts.scheme.lower()
-    host = (parts.hostname or "").lower()
-    port = parts.port
+    if ":" in host:
+        # Keep IPv6 brackets so a port can never read as part of the address.
+        host = f"[{host}]"
     if (
         port is None
         or (scheme == "http" and port == 80)
@@ -102,6 +109,59 @@ def _normalize_origin(url_or_origin: str) -> str:
     ):
         return f"{scheme}://{host}"
     return f"{scheme}://{host}:{port}"
+
+
+def relay_redirect_location(
+    location: str,
+    *,
+    request_url: str,
+    allowed_origins: frozenset[str],
+    rewrite_from_origin: Optional[str] = None,
+    rewrite_to_origin: Optional[str] = None,
+) -> Optional[str]:
+    """Return the ``Location`` to relay for a same-origin redirect, else ``None``.
+
+    Reverse-proxy mode only: the client's next request comes back through the
+    tap, so every hop is checked again. Browser route mode refuses redirects.
+
+    The tap never follows a redirect itself. It hands a redirect back to the
+    client only when the target, resolved against the request URL, stays on an
+    allowed origin, so the next request passes through the tap again. A
+    protocol-relative or absolute target on any other origin is refused.
+    ``rewrite_from_origin``/``rewrite_to_origin`` map an absolute upstream
+    target onto the tap's own origin in reverse-proxy mode.
+    """
+    raw = location or ""
+    # Validate the header exactly as received. Browsers drop tabs and newlines
+    # inside a URL and read a backslash as a slash, so refuse any space,
+    # control character or backslash rather than guess how a client reads it.
+    if not raw or any(ord(ch) <= 0x20 or ord(ch) == 0x7F or ch == "\\" for ch in raw):
+        return None
+    try:
+        resolved = urljoin(request_url, raw)
+        origin = _normalize_origin(resolved)
+        parts = urlsplit(raw)
+    except ValueError:
+        return None
+    if not origin or origin not in allowed_origins:
+        return None
+    # Only a plain path relays as written. Anything with a scheme or an
+    # authority, including ``///host`` that urlsplit reads as a path but a
+    # browser reads as a host, is relayed only as the URL checked here,
+    # rebuilt on the tap's own origin.
+    if not parts.scheme and not parts.netloc and not raw.startswith("//"):
+        return raw
+    if rewrite_from_origin is None or rewrite_to_origin is None:
+        return None
+    if origin != rewrite_from_origin:
+        return None
+    target = urlsplit(resolved)
+    rewritten = rewrite_to_origin.rstrip("/") + (target.path or "/")
+    if target.query:
+        rewritten += "?" + target.query
+    if target.fragment:
+        rewritten += "#" + target.fragment
+    return rewritten
 
 
 class _ResolvedTarget(NamedTuple):
@@ -1208,7 +1268,9 @@ class SessionWireTap:
             ):
                 return "secret_in_url"
 
-        if target_origin and target_origin not in self._allowed_origins:
+        # A target with no parseable origin (for example an invalid port) is
+        # never forwarded: an empty origin must not skip the allowlist.
+        if not target_origin or target_origin not in self._allowed_origins:
             return "disallowed_origin"
 
         if not is_mutation:
@@ -1537,12 +1599,24 @@ class SessionWireTap:
             resp_body = resp.read()
             resp_headers = list(resp.msg.items())
             if 300 <= resp.status < 400:
-                return (
-                    502,
-                    "Bad Gateway",
-                    [("Content-Type", "application/json")],
-                    b'{"error":"redirect_refused"}',
+                relayed = self._relayable_location(
+                    _get_header(resp_headers, "location"),
+                    request_url=(
+                        f"{self._upstream_scheme}://{self._upstream_netloc}"
+                        f"{target_path}"
+                    ),
                 )
+                if relayed is None:
+                    return (
+                        502,
+                        "Bad Gateway",
+                        [("Content-Type", "application/json")],
+                        b'{"error":"redirect_refused"}',
+                    )
+                resp_headers = [
+                    (k, relayed if k.lower() == "location" else v)
+                    for k, v in resp_headers
+                ]
             return (
                 resp.status,
                 resp.reason or _status_text(resp.status),
@@ -1566,6 +1640,22 @@ class SessionWireTap:
                 conn.close()
             except Exception:
                 pass
+
+    def _relayable_location(self, location: str, *, request_url: str) -> Optional[str]:
+        """Same-origin redirect target as the reverse-proxy client must see it."""
+        with self._lock:
+            tap_origin = (
+                _normalize_origin(self._bound_base_url) if self._bound_base_url else ""
+            )
+        if not tap_origin:
+            return None
+        return relay_redirect_location(
+            location,
+            request_url=request_url,
+            allowed_origins=frozenset({self._upstream_origin}),
+            rewrite_from_origin=self._upstream_origin,
+            rewrite_to_origin=tap_origin,
+        )
 
     def _proxy_http_exchange(
         self,
@@ -1756,6 +1846,9 @@ class SessionWireTap:
             if callable(fetch_fn) and callable(fulfill_fn):
                 fetched = fetch_fn(max_redirects=0)
                 resp_status, resp_headers, resp_body = _extract_route_response(fetched)
+                # Playwright runs this handler only for the first URL of a
+                # redirect chain, so a relayed redirect would leave later hops
+                # unchecked. Refuse every redirect in this mode.
                 if resp_status is not None and 300 <= resp_status < 400:
                     self._finalize_request(
                         ticket,
