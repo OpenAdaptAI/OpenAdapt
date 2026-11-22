@@ -317,6 +317,9 @@ class GuardedSave:
     config_only: bool = False
     #: A roster head from the deployment config the roster must extend.
     config_head: Optional[tuple[int, str]] = None
+    #: Show each field's value now, the value saved and its source on the
+    #: approval card (:mod:`openadapt_flow.agent_guard.approval_fields`).
+    approval_fields: bool = True
 
     def __post_init__(self) -> None:
         if self.approval not in APPROVAL_MODES:
@@ -422,6 +425,9 @@ class Guard:
     source_check: Optional[str] = None
     source_held_fields: list[str] = field(default_factory=list)
     result: Optional[GuardResult] = None
+    #: The approval card's rows (``approval_fields.ApprovalCard``); built at
+    #: the first approval request when unset.
+    approval_card: Any = field(default=None, repr=False)
     _request: Any = field(default=None, repr=False)
     _approver: Optional[dict[str, str]] = field(default=None, repr=False)
     _policy_ref: str = field(default="", repr=False)
@@ -518,6 +524,7 @@ class Guard:
         reason: Optional[str] = None,
         screen_text: Optional[str] = None,
     ) -> Optional[CommitResult]:
+        from openadapt_flow.agent_guard.approval_fields import write_sources
         from openadapt_flow.approval_mode.approver import DEFAULT_APPROVER_POLICY
         from openadapt_flow.approval_mode.item_approval import (
             ItemApprovalRefused,
@@ -544,6 +551,7 @@ class Guard:
                     "a person approves this save; commit needs the screenshot "
                     "they will be shown",
                 )
+            card = self._card()
             try:
                 # Person-only, pinned before anything is asked; the agent that
                 # started this guard is recorded so it can never answer it.
@@ -566,6 +574,7 @@ class Guard:
                             if self.source_check == "hold"
                             else ""
                         )
+                        + (card.intent_note() if card is not None else "")
                     ),
                     mode=ApprovalMode.EACH_ITEM,
                     bundle_content_digest=None,
@@ -573,7 +582,10 @@ class Guard:
                     frame_png=screenshot_png,
                     form_state=("dom", "sha256:" + _sha256_hex(self.task.params)),
                     provenance=self._provenance(reason, screen_text),
+                    fields=card.fields if card is not None else None,
                 )
+                if card is not None:
+                    write_sources(self.dir, self._request, card)
             except ItemApprovalRefused as exc:
                 self._save("refused_approval", reason=exc.code)
                 raise GuardRefused(exc.code, str(exc)) from exc
@@ -594,6 +606,16 @@ class Guard:
                 approval_request_sha256=request.digest(),
                 approval_run_dir=str(self.dir),
             )
+        if answer is not None:
+            # A verified answer, either way: who decided goes on the record
+            # (and the ledger row), a decline as much as an approval.
+            self._approver = {
+                "kind": "person",
+                "id": answer.approver_id
+                or (answer.attestation.signer if answer.attestation else None)
+                or "unauthenticated-person",
+                "policy_ref": self._policy_ref,
+            }
         if answer is None or answer.decision != "approve":
             reason = code or "declined"
             self._save("declined", reason=reason)
@@ -611,14 +633,14 @@ class Guard:
             "decided_by": answer.decided_by,
             "route": answer.route,
         }
-        self._approver = {
-            "kind": "person",
-            "id": answer.approver_id
-            or (answer.attestation.signer if answer.attestation else None)
-            or "unauthenticated-person",
-            "policy_ref": self._policy_ref,
-        }
         return None
+
+    def _card(self) -> Any:
+        if self.approval_card is None and self.owner.approval_fields:
+            from openadapt_flow.agent_guard.approval_fields import build_card
+
+            self.approval_card = build_card(self.task, self.owner.verify)
+        return self.approval_card
 
     def _provenance(
         self, reason: Optional[str], screen_text: Optional[str]

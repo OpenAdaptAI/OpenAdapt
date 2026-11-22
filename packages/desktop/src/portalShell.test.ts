@@ -375,6 +375,45 @@ describe("the card shows what will be saved", () => {
     expect(q("#evidence")!.classList).toContain("big");
   });
 
+  it("an agent's save whose values Flow couldn't read never says exactly", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "not read" }],
+          sources: [
+            { label: "note", source: null, status: "no_source", differs: false, intended: "Triage note", held_differs: false },
+          ],
+          values_checked: false,
+          explanation: "OpenAdapt could not read the values this save will send, so they were not checked before saving.",
+        },
+      }),
+    );
+    await boot();
+    const card = q("#card")!.textContent!;
+    expect(card).not.toMatch(/exactly/i);
+    expect(card).toContain("Task says: Triage note");
+    expect(card).toContain("were not checked before saving");
+  });
+
+  it("flags a held value that differs from the task's", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "Another note" }],
+          sources: [
+            { label: "note", source: null, status: "no_source", differs: false, intended: "Triage note", held_differs: true },
+          ],
+          values_checked: true,
+        },
+      }),
+    );
+    await boot();
+    const dd = q(".fields dd")!.textContent!;
+    expect(dd).toContain("Another note");
+    expect(dd).toContain("Differs");
+    expect(dd).toContain("Task says: Triage note");
+  });
+
   it("drops a malformed field list as a whole rather than show part of it", async () => {
     onlySave(saveDetail({ presentation: { fields: [...FIELDS, { label: "Amount", after: 142 }] } }));
     await boot();
