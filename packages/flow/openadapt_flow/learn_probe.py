@@ -265,11 +265,16 @@ def propose(
                     "an added row: its excuse names columns, not values, so a "
                     "person approves it (learn approve)"
                 )
-            elif len(controls) < len(eps):
+            elif len(controls) < len(eps) or not all(
+                c.get("has_database") and c.get("frame") in ("held", "refuted")
+                for c in controls
+            ):
+                # A control window whose frame wasn't read shows nothing,
+                # which is no evidence that nothing moved.
                 e["why_not"] = (
-                    "no control window without requests for every round: "
-                    "nothing shows the move comes from the request, so a "
-                    "person approves it (learn approve)"
+                    "no readable control window without requests for every "
+                    "round: nothing shows the move comes from the request, "
+                    "so a person approves it (learn approve)"
                 )
             elif any(
                 (str(e.get("table")), str(c)) in background

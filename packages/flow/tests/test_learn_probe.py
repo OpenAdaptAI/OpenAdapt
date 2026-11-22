@@ -526,3 +526,22 @@ def test_unscoped_versions_over_two_surfaces_do_not_cover_updates() -> None:
     one = NS(config=NS(frame=NS(versions=versions),
                        effects=[update("primary"), update("primary")]))  # fmt: skip
     assert learn_probe._sees_its_own_harm(one) is True
+
+
+def test_an_unreadable_control_window_excuses_nothing_automatically(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A control window whose frame read failed lists no moves; that is no
+    evidence the actor's row stays still without a request."""
+
+    c = Contract.from_dict(note_contract(engine), name="note")
+    eps = learn_probe.probe(
+        c, {"title": "Probe note", "body": "x"}, kind="add_note", actor=ACTOR,
+        send=first_once(engine), workdir=tmp_path / "probe", idle=lambda _s: None,
+    )  # fmt: skip
+    for e in eps:
+        if e.get("control"):
+            e.update(frame="not_checked", has_database=False, moves=[])
+    proposal = learn_probe.propose(eps, users(engine))
+    assert excuses_of(proposal) == []
+    assert proposal["kinds"]["read_only_probe"]["needs_approval"]
