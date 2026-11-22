@@ -257,6 +257,7 @@ def _tabbed_pack(*, revisit: bool, first_revisit: bool = True) -> FormPack:
         )
 
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-tabbed",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -390,6 +391,7 @@ def _unbound_pack(*, declare_paperless: bool, declare_client: bool = True) -> Fo
             )
         )
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-unbound",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -535,6 +537,7 @@ document.getElementById('next').onclick = () => {
 
 def _step_pack() -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-step",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -591,6 +594,7 @@ _RADIOS = """
 
 def _radio_pack(*, defaults: tuple[str, ...]) -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-radios",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -723,6 +727,7 @@ def test_split_date_and_sentence_quote_number_read_back(
     s.pages["/"] = _DATE_FORM
     keys = ("applicant.dob_day", "applicant.dob_month", "applicant.dob_year")
     pack = FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-date",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -886,6 +891,7 @@ def test_one_question_at_a_time_in_the_same_control_advances(
     s, base = site
     s.pages["/"] = _ONE_AT_A_TIME
     pack = FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-ask",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -949,6 +955,7 @@ def test_bound_field_shown_with_no_intake_value(
     s, base = site
     s.pages["/"] = _SHOWN_BLANK
     pack = FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-shown-blank",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
@@ -1018,6 +1025,7 @@ def test_review_page_value_that_differs_stops_before_submit(
     s, base = site
     s.pages["/"] = _REVIEW
     pack = FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="test-review",
         domain_schema="test.quote/v1",
         ui_profile_id=_PROFILE.profile_id,
