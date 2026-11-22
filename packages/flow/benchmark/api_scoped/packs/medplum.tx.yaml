@@ -51,5 +51,7 @@ systems:
           condition_header: {If-None-Exist: "identifier=urn:openadapt:idempotency|{marker}"}
           search: "/fhir/R4/Patient?identifier=urn:openadapt:idempotency|{marker}"
           search_items: entry.*.resource
-          search_empty: {path: resourceType, equals: Bundle}
+          search_empty:
+            equals: {resourceType: Bundle, type: searchset}
+            absent: ["link[relation=next]"]
           volatile: ["meta", "meta.*"]

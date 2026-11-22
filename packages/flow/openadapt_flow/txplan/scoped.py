@@ -276,21 +276,30 @@ def _search(
     if scoped.search_items and not isinstance(got, Mapping):
         raise AdapterError("the marker search did not return an object")
     head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
+    total = got.get("total") if isinstance(got, Mapping) else None
+    if total is not None and (type(total) is not int or total < 0):
+        # Missing-evidence class: a total that isn't a count can't say
+        # how many records matched.
+        raise AdapterError("the marker search total is not a count")
+    if head and head in got and not isinstance(got[head], (list, Mapping)):
+        raise AdapterError(f"the marker search {head} is not a list")
     empty = scoped.search_empty
-    # The declared empty shape counts only when the answer claims no matches:
-    # one that reports a total above zero but carries no items is partial,
-    # never empty.
+    # The declared empty shape counts only when the answer claims no matches,
+    # holds every declared value and has none of the absent paths (a next
+    # link means a later page): a partial answer is never empty.
     declared_empty = (
-        bool(empty)
-        and got.get("total") in (None, 0)
-        and any(
-            str(v) == str(empty.get("equals"))
-            for v in pick(got, str(empty.get("path", "")))
+        empty is not None
+        and total in (None, 0)
+        and all(
+            any(str(v) == want for v in pick(got, path))
+            for path, want in empty.equals.items()
         )
+        and not any(pick(got, path) for path in empty.absent)
     )
-    if head and head not in got and got.get("total") != 0 and not declared_empty:
+    if head and head not in got and total != 0 and not declared_empty:
         # Missing-evidence class: no results field is not an empty result,
-        # unless the response says it matched nothing (total 0).
+        # unless the response says it matched nothing (total 0) or has the
+        # pack's declared empty shape.
         raise AdapterError(f"the marker search has no {head}")
     if not scoped.search_items and not isinstance(got, list):
         raise AdapterError("the marker search did not return a list")
@@ -300,12 +309,16 @@ def _search(
     found = [
         str(x.get(id_field))
         for x in items
-        if isinstance(x, Mapping) and x.get(id_field) is not None
+        if isinstance(x, Mapping) and x.get(id_field) not in (None, "")
     ]
-    total = got.get("total") if isinstance(got, Mapping) else None
+    if len(found) != len(items):
+        # Missing-evidence class: every returned item must name its record;
+        # an item without one may be the write already landed, so it never
+        # reads as absent, and every item counts toward a duplicate.
+        raise AdapterError("a marker search item has no usable id")
     if not found and isinstance(total, int) and total > 0:
-        # Missing-evidence class: an answer that says it matched something
-        # but returns no usable record is partial, never "not found".
+        # An answer that says it matched something but returns no record is
+        # partial, never "not found".
         raise AdapterError("the marker search reports matches it did not return")
     return found
 

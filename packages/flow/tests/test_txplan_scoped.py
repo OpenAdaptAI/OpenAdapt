@@ -903,18 +903,28 @@ def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
 
 def test_a_marker_search_without_its_results_is_not_empty() -> None:
     from openadapt_flow.txplan.adapters import AdapterError
-    from openadapt_flow.txplan.scoped import _search
     from openadapt_flow.txplan.audit import ScopedCollection
+    from openadapt_flow.txplan.scoped import _search
 
-    scoped = ScopedCollection.model_validate(
+    base = {
+        "audit_ref": "item/{id}",
+        "identity": ["title"],
+        "marker": {"ext": "{marker}"},
+        "search": "/s?m={marker}",
+    }
+    scoped = ScopedCollection.model_validate({**base, "search_items": "items"})
+    # Pack-shaped FHIR: entry.*.resource, with the declared empty shape.
+    fhir = ScopedCollection.model_validate(
         {
-            "audit_ref": "item/{id}",
-            "identity": ["title"],
-            "marker": {"ext": "{marker}"},
-            "search": "/s?m={marker}",
-            "search_items": "items",
+            **base,
+            "search_items": "entry.*.resource",
+            "search_empty": {
+                "equals": {"resourceType": "Bundle", "type": "searchset"},
+                "absent": ["link[relation=next]"],
+            },
         }
     )
+    undeclared = fhir.model_copy(update={"search_empty": None})
 
     class Adapter:
         def __init__(self, body):
@@ -923,29 +933,46 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
                 base_url="http://x",
             )
 
-    with pytest.raises(AdapterError):
-        _search(Adapter({"error": "busy"}), scoped, "m1", "id")
-    assert _search(Adapter({"total": 0}), scoped, "m1", "id") == []
-    # A FHIR searchset Bundle leaves entry out when nothing matched: empty
-    # only when the pack declares that shape.
+    def run(body, pack):
+        return _search(Adapter(body), pack, "m1", "id")
+
+    def refused(body, pack):
+        with pytest.raises(AdapterError):
+            run(body, pack)
+
     bundle = {"resourceType": "Bundle", "type": "searchset"}
-    with pytest.raises(AdapterError):
-        _search(Adapter(bundle), scoped, "m1", "id")
-    fhir = scoped.model_copy(
-        update={"search_empty": {"path": "resourceType", "equals": "Bundle"}}
+    patient = {"resource": {"resourceType": "Patient", "id": "p1"}}
+    # Empty: only the declared shape, or an explicit total 0.
+    assert run(bundle, fhir) == []
+    assert run({**bundle, "total": 0}, fhir) == []
+    assert run({"total": 0}, scoped) == []
+    refused(bundle, undeclared)
+    refused({"error": "busy"}, scoped)
+    # The declared shape never hides a partial answer.
+    refused({**bundle, "total": 1}, fhir)  # reports a match it doesn't return
+    refused({**bundle, "total": 1, "entry": []}, fhir)
+    refused({**bundle, "total": "1"}, fhir)  # a total that isn't a count
+    refused({**bundle, "total": 1.0}, fhir)
+    refused({**bundle, "type": "history"}, fhir)  # not a search answer
+    refused({**bundle, "type": "batch-response"}, fhir)
+    refused(
+        {**bundle, "link": [{"relation": "next", "url": "http://x/s?page=2"}]}, fhir
     )
-    assert _search(Adapter(bundle), fhir, "m1", "id") == []
-    with pytest.raises(AdapterError):
-        _search(Adapter({"resourceType": "OperationOutcome"}), fhir, "m1", "id")
-    # A Bundle that says it matched something but carries no entries is partial.
-    with pytest.raises(AdapterError):
-        _search(Adapter({**bundle, "total": 1}), fhir, "m1", "id")
-    # The same with an empty entry list, and for an undeclared shape.
-    with pytest.raises(AdapterError):
-        _search(Adapter({**bundle, "total": 1, "entry": []}), fhir, "m1", "id")
-    with pytest.raises(AdapterError):
-        _search(Adapter({"items": [], "total": 2}), scoped, "m1", "id")
-    assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
+    refused({**bundle, "entry": None}, fhir)
+    refused({"resourceType": "OperationOutcome"}, fhir)
+    # Every returned item must name its record, and each counts.
+    refused({**bundle, "entry": [{"resource": {"resourceType": "Patient"}}]}, fhir)
+    refused(
+        {**bundle, "entry": [patient, {"resource": {"resourceType": "Patient"}}]}, fhir
+    )
+    refused({"items": [{"title": "no id"}]}, scoped)
+    assert run({**bundle, "entry": [patient]}, fhir) == ["p1"]
+    assert run({"items": [{"id": 3}]}, scoped) == ["3"]
+    # search_empty without search_items is refused when the pack loads.
+    with pytest.raises(ValueError):
+        ScopedCollection.model_validate(
+            {**base, "search_empty": {"equals": {"resourceType": "Bundle"}}}
+        )
 
 
 def test_activity_feed_resource_from_two_parts() -> None:

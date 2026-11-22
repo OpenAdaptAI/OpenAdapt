@@ -228,6 +228,13 @@ class AuditSource(_Closed):
     skew_s: float = Field(default=2.0, ge=0, le=600)
 
 
+class SearchEmpty(_Closed):
+    """The declared shape of an empty search answer with no items field."""
+
+    equals: dict[str, str] = Field(min_length=1)
+    absent: list[str] = Field(default_factory=list)
+
+
 class ScopedCollection(_Closed):
     """``collections[].scoped``: resource-scoped verification of one collection."""
 
@@ -243,10 +250,11 @@ class ScopedCollection(_Closed):
     search: Optional[str] = None
     search_items: str = ""
     #: How an empty search answer looks when it leaves the items field out
-    #: (a FHIR searchset Bundle omits ``entry`` when nothing matched):
-    #: ``{"path": "resourceType", "equals": "Bundle"}``. Without it, a
-    #: missing items field is an error, never an empty result.
-    search_empty: Optional[dict[str, str]] = None
+    #: (a FHIR searchset Bundle omits ``entry`` when nothing matched). Every
+    #: ``equals`` path must hold its value and every ``absent`` path must be
+    #: missing (a next link means a later page). Without it, a missing items
+    #: field is an error, never an empty result.
+    search_empty: Optional[SearchEmpty] = None
     #: A server-side guard on create, as one header (FHIR ``If-None-Exist``).
     condition_header: Optional[dict[str, str]] = None
     #: Fields that name the record a create makes (an issue's title, a
@@ -270,6 +278,12 @@ class ScopedCollection(_Closed):
     logged_fields: Optional[list[str]] = None
     readback_attempts: int = Field(default=6, ge=1, le=100)
     readback_wait_s: float = Field(default=0.5, ge=0, le=30)
+
+    @model_validator(mode="after")
+    def _search_empty_needs_items(self) -> "ScopedCollection":
+        if self.search_empty is not None and not self.search_items:
+            raise ValueError("search_empty needs search_items (an object answer)")
+        return self
 
 
 # -- events --------------------------------------------------------------------

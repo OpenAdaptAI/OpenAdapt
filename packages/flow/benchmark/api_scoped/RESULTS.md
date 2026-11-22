@@ -66,11 +66,14 @@ request as these results:
 - Medplum answers an empty search with a Bundle that leaves `entry` out. Since
   #2437, a search answer without its items field is an error rather than an
   empty result, so the first write's marker search failed closed. The pack now
-  declares that shape (`search_empty: {path: resourceType, equals: Bundle}`).
-  Any other answer missing its items field is still an error.
+  declares that shape (a searchset Bundle with no next link). Any other
+  answer missing its items field is still an error, as is an item with no
+  usable id or a reported match the answer doesn't return.
 - Medplum's default per-user FHIR quota (50,000 units a minute) was spent by
-  audit-log reads within seconds, and a 429 stopped the bench. The lab's
-  compose file raises it for this loopback lab only.
+  audit-log reads within seconds, and a 429 stopped the bench. This bench
+  layers [medplum.compose.override.yml](medplum.compose.override.yml) on the
+  shared Medplum compose file to raise it; other Medplum benches keep the
+  defaults.
 
 The raw rows are in [results/medplum.json](results/medplum.json) and
 [results/gitea.json](results/gitea.json). Each row has its outcome, codes,

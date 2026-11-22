@@ -72,6 +72,7 @@ class MedplumLab:
             server_port=MEDPLUM_PORT,
             app_port=MEDPLUM_APP_PORT,
             project="oa-api-scoped-medplum",
+            overrides=(HERE / "medplum.compose.override.yml",),
         )
         self.base = self.fx.base_url
 
