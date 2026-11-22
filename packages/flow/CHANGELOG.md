@@ -19,6 +19,28 @@
 
 ### Features
 
+- A sign-in that asks for a second factor (a code by text message or email,
+  an authenticator code, or a push approval) no longer has to stop the
+  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
+  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
+  for a hosted or customer-run runner's control plane, or a local
+  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
+  field must be an empty `autocomplete="one-time-code"` input, and the page
+  is made to draw it as dots. After the answer the same field must still have
+  focus and be empty. The code is then filled once into that element, never
+  retried, and kept nowhere: not in a model's page listing, a screenshot, a
+  log, a receipt or the recording. No source, an answer after the deadline, a
+  decline, a multi-line or malformed answer, a field that changed while the
+  person answered, an API binding on the step, or a backend that can't bind
+  the field stops the step before typing, with a closed `second_factor_*`
+  code. The action is new, so an older runtime refuses the bundle instead of
+  skipping an approval. Over the control plane the code is sealed in the
+  person's browser to a one-step P-256 key, and a cached run's child process
+  gets the run token only with the control-plane URL. The wrap recorder turns
+  a field marked `autocomplete="one-time-code"` into such a step. A code-only
+  form's submit counts as a sign-in only once, right after a
+  username-and-password sign-in. A field split into one box per character
+  is refused. See docs/SECOND_FACTOR.md.
 - Effect locations (`openadapt.effect-location/v1`,
   `openadapt_flow/effect_location/`): the place a careful person would look
   again to see an intended value, stored as pack data. Each record holds the

@@ -92,6 +92,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       release: ${{ steps.plan.outputs.release }}
+      mcp_registry: ${{ steps.plan.outputs.mcp_registry }}
       any: ${{ steps.plan.outputs.any }}
     steps:
       - name: Require main
@@ -560,3 +561,79 @@ jobs:
               --repo "$GITHUB_REPOSITORY"
           done
           echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
+
+  publish-mcp-registry:
+    name: publish ${{ matrix.project }} ${{ matrix.version }} to MCP Registry
+    needs: [plan, preflight-github, publish]
+    if: ${{ !cancelled() && needs.plan.outputs.mcp_registry != '[]' && needs.plan.outputs.mcp_registry != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.mcp_registry) }}
+    permissions:
+      contents: read
+      id-token: write # OIDC for `mcp-publisher login github-oidc`
+    steps:
+      - name: Checkout the exact published commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.commit }}
+          persist-credentials: false
+
+      - name: Require this package's hosting checks
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preflight-${{ matrix.package }}
+          path: preflight/
+
+      - name: Wait for the PyPI package to be installable
+        env:
+          PROJECT: ${{ matrix.project }}
+          VERSION: ${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          url="https://pypi.org/pypi/${PROJECT}/${VERSION}/json"
+          for attempt in $(seq 1 20); do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$url")"
+            if [ "$code" = "200" ]; then
+              echo "${PROJECT} ${VERSION} is live on PyPI."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: PyPI returned ${code} for ${PROJECT} ${VERSION}; waiting 15s..."
+            sleep 15
+          done
+          echo "::error::${PROJECT} ${VERSION} did not appear on PyPI in time." \
+               "The MCP registry validates package existence, so it would reject" \
+               "this publish. Check the PyPI publish job." >&2
+          exit 1
+
+      - name: Install the pinned mcp-publisher CLI
+        id: mcp-publisher
+        run: |
+          set -euo pipefail
+          archive=/tmp/mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error \
+            https://github.com/modelcontextprotocol/registry/releases/download/v1.8.13/mcp-publisher_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "7a708f418788d962a1ca3d6744d4cf86ed95f790d33c7abf562916ff83be61d2  $archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp mcp-publisher
+          cli=/tmp/mcp-publisher
+          test -x "$cli"
+          echo "path=$cli" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to the MCP Registry (OIDC)
+        env:
+          MCP_PUBLISHER: ${{ steps.mcp-publisher.outputs.path }}
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          "$MCP_PUBLISHER" login github-oidc
+
+      - name: Publish server.json to the MCP Registry
+        env:
+          MCP_PUBLISHER: ${{ steps.mcp-publisher.outputs.path }}
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          "$MCP_PUBLISHER" publish
