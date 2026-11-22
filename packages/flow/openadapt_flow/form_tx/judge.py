@@ -845,6 +845,24 @@ class SummaryJudge:
                 observations.setdefault(rb.dossier_key, set()).add(
                     f"text|{pair.source}|{pair.section_text}|{pair.label}"
                 )
+        # A split date shown once is one observation for each of its parts.
+        for sd in summary_check.split_date_readbacks:
+            date_seen: Optional[str] = None
+            try:
+                oc = match_anchor_in_snapshot(
+                    sd.anchor, snapshot, include_readonly=True
+                )
+                if oc is not None:
+                    date_seen = oc.dom_selector
+                else:
+                    tp = match_text_pair_in_snapshot(sd.anchor, snapshot)
+                    if tp is not None:
+                        date_seen = f"text|{tp.source}|{tp.section_text}|{tp.label}"
+            except AmbiguousAnchorError:
+                continue
+            if date_seen is not None:
+                for k in (sd.day_key, sd.month_key, sd.year_key):
+                    observations.setdefault(k, set()).add(date_seen)
         evaluated_subjects = read_subjects(writes, active_resolutions)
         verdicts.extend(
             uncovered_subject_verdicts(
