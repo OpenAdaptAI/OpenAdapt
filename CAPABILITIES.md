@@ -423,6 +423,7 @@ A test fails when a command has no file or this list is out of date.
 - `jit`
 - `known-ids`
 - `lint`
+- `onboard`: Synthesize and planted-fault-qualify a verification pack for any system of record.
 - `propose-qualification`
 - `qualify`
 - `scaffold-verifier`

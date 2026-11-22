@@ -11,7 +11,6 @@ from typing import Any
 
 import yaml
 
-from openadapt_flow.onboard.engine import onboard_pack, synthesize_pack
 from openadapt_flow.onboard.types import CleanWriteCase, OnboardSpec
 
 
@@ -61,6 +60,8 @@ def _load_clean_writes(path: str | Path) -> list[CleanWriteCase]:
 
 
 def _cmd_onboard(args: argparse.Namespace) -> int:
+    from openadapt_flow.onboard.engine import onboard_pack, synthesize_pack
+
     try:
         spec = OnboardSpec.load(args.spec)
     except (OSError, ValueError, KeyError) as exc:
