@@ -101,3 +101,11 @@ def test_an_unlisted_observed_code_is_unknown() -> None:
     ]
     assert before._observed(odd) == "present"
     assert verify_run._observed(_plan(odd), odd) == "unknown"
+
+
+def test_an_unplanned_verdict_beside_a_refuted_one_is_unknown() -> None:
+    got = [
+        SimpleNamespace(observed_effect="absent"),
+        SimpleNamespace(observed_effect="present"),
+    ]
+    assert verify_run._observed(["0"], got) == "unknown"

@@ -310,8 +310,15 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
             counts["says_unchanged"] += 1
         elif (
             isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id in ("all", "any")
+            and (
+                (isinstance(node.func, ast.Name) and node.func.id in ("all", "any"))
+                or (
+                    # ``builtins.all(...)``
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr in ("all", "any")
+                    and getattr(node.func.value, "id", "") == "builtins"
+                )
+            )
             and node.args
             and any(fold_names.search(n) for n in _names(node.args[0]))
         ):
@@ -366,7 +373,12 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
         sliced = any(
             isinstance(n, ast.Subscript)
             and isinstance(n.slice, ast.Slice)
-            and n.slice.lower is None
+            and (
+                n.slice.lower is None
+                or (
+                    isinstance(n.slice.lower, ast.Constant) and n.slice.lower.value == 0
+                )
+            )
             and n.slice.upper is not None
             for n in ast.walk(stmt)
         )
@@ -409,16 +421,22 @@ def _empty_change_set(node: ast.AST, names: "re.Pattern[str]") -> bool:
         and isinstance(node.ops[0], (ast.Eq, ast.Is))
     ):
         left, right = node.left, node.comparators[0]
-        empty = (
-            (isinstance(right, ast.Constant) and right.value == 0)
-            or (isinstance(right, (ast.List, ast.Tuple, ast.Set)) and not right.elts)
-            or (
-                isinstance(right, ast.Call)
-                and getattr(right.func, "id", "") in ("set", "list", "tuple", "dict")
-                and not right.args
+
+        def empty(expr: ast.AST) -> bool:
+            return (
+                (isinstance(expr, ast.Constant) and expr.value == 0)
+                or (isinstance(expr, (ast.List, ast.Tuple, ast.Set)) and not expr.elts)
+                or (
+                    isinstance(expr, ast.Call)
+                    and getattr(expr.func, "id", "") in ("set", "list", "tuple", "dict")
+                    and not expr.args
+                )
             )
+
+        # Either side: ``0 == len(changes)`` is the same test.
+        return (empty(right) and about_changes(left)) or (
+            empty(left) and about_changes(right)
         )
-        return empty and about_changes(left)
     return False
 
 

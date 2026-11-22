@@ -3027,7 +3027,11 @@ def _observed(planned: Sequence[str], verdicts: Sequence[EffectVerdict]) -> str:
     settled = settle(obligations, results)
     if settled.passes:
         return "present"
-    if not settled.refuted or settled.total != len(settled.held) + len(settled.refuted):
+    if (
+        not settled.refuted
+        or settled.unexpected
+        or settled.total != len(settled.held) + len(settled.refuted)
+    ):
         return "unknown"  # something planned was not read, or not planned
     seen = {v.observed_effect for v in verdicts}
     if "conflicting" in seen or seen == {"absent", "present"}:

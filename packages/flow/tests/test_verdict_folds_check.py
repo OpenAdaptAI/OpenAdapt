@@ -99,11 +99,30 @@ def test_a_closed_handler_is_not_counted(tmp_path: Path, handler: str) -> None:
         "deleted == []",
         "not any(c for c in diffs)",
         "frame.changes == set()",
+        "0 == len(changes)",
+        "[] == deleted",
     ],
 )
 def test_a_nothing_changed_test_is_counted(tmp_path: Path, expr: str) -> None:
     src = f"def f(changes, collateral, deleted, diffs, frame):\n    return {expr}\n"
     assert _count(tmp_path, src).get("empty_change_set") == 1
+
+
+@pytest.mark.parametrize(
+    "src, kind",
+    [
+        (
+            "def f(lines):\n    return sum(1 for x in lines[0:256] if x)\n",
+            "slice_count",
+        ),
+        (
+            "import builtins\ndef f(results):\n    return builtins.all(r.ok for r in results)\n",
+            "bool_fold",
+        ),
+    ],
+)
+def test_a_spelled_out_form_is_counted(tmp_path: Path, src: str, kind: str) -> None:
+    assert _count(tmp_path, src).get(kind) == 1
 
 
 def test_a_file_that_does_not_parse_fails_the_check(tmp_path: Path) -> None:
