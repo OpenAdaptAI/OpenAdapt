@@ -1571,11 +1571,11 @@ def test_a_database_undo_with_an_open_scope_is_not_a_verified_rollback(
     ctx = _ctx(_spec(tmp_path, db=db))
     plan = _go(ctx, "T-su", [_sql_update(3, balance=99.5)])
     assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
-    _open_scope(monkeypatch, "trigger_not_local")
+    _open_scope(monkeypatch, "trigger")
     undo = engine.undo_plan(ctx, plan["digest"])
     assert _rows(db) == before  # the undo ran
     assert undo["outcome"] == "COMPLETED_UNVERIFIED", undo
-    assert undo["tx"]["not_covered"] == ["trigger_not_local"]
+    assert undo["tx"]["not_covered"] == ["trigger"]
 
 
 def test_a_repeat_rest_undo_keeps_the_first_undos_cap(tmp_path: Path, rest) -> None:

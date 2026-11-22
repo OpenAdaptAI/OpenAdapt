@@ -99,40 +99,49 @@ refused).
 **Closed write scope.** Row counts can't show everything. A `TRUNCATE` resets
 them, a foreign table or `dblink` writes from another backend, and MySQL
 lists only the triggers the account holds the `TRIGGER` privilege for. So a
-SQL write is `VERIFIED` only when the adapter can list everything that could
-write outside the frame, inside the write's own transaction, and the list is
-empty. If the list can't be read, or isn't empty, the write still goes
-through, but its outcome is at best `COMPLETED_UNVERIFIED`. The apply report
-gives the reasons in `tx.not_covered`, and the plan shows them under each
-write before approval. The reasons are fixed codes and never name a table,
-trigger or schema.
+SQL write is `VERIFIED` only when the catalog, read inside the write's own
+transaction, shows nothing that could write outside the frame. Coverage is
+decided from the catalog alone: no function body is read to decide that it
+is harmless. If the catalog can't be read, or shows an open item, the write
+still goes through, but its outcome is at best `COMPLETED_UNVERIFIED`. The
+apply report gives the reasons in `tx.not_covered`, and the plan shows them
+under each write before approval. The reasons are fixed codes and never name
+a table, trigger or schema.
+
+On PostgreSQL, an object is user-defined when its oid is at least 16384
+(`FirstNormalObjectId`), whatever its namespace, `pg_catalog` included.
 
 | Code | Open item |
 |---|---|
-| `foreign_data` | PostgreSQL: any foreign data wrapper, foreign server or foreign table in the database. MySQL: a `FEDERATED`, `CONNECT` or `SPIDER` table |
-| `remote_link` | PostgreSQL: the `dblink` or `postgres_fdw` extension |
-| `search_path_open` | PostgreSQL: the search path holds more than the current schema, so an unqualified name can resolve elsewhere |
-| `rule` | PostgreSQL: a rewrite rule on a relation in the schema |
-| `user_operator` | PostgreSQL: an operator outside `pg_catalog` (its function could write anywhere) |
-| `user_function_default` | PostgreSQL: a column default, a check constraint, a row-level security policy or an index expression that calls a function outside `pg_catalog` |
-| `trigger_not_local` | PostgreSQL: a trigger function not in SQL or PL/pgSQL, `SECURITY DEFINER`, or with its own settings |
-| `truncate`, `dynamic_sql`, `copy`, `other_schema` | A trigger body, a trigger's `WHEN` condition or the planned statement uses `TRUNCATE`, `EXECUTE`, `COPY`, or names another schema |
-| `user_function`, `system_function_with_effects` | A trigger body or the planned statement calls a function outside `pg_catalog`, or a system function with effects (`lo_*`, `set_config`, `pg_*`, sequences). On MySQL, any call to a function that isn't a known built-in |
-| `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove `TRIGGER` (or `ALL`) on every frame table. A wildcard grant counts only for the name it spells. A role grant or a partial revoke proves nothing |
-| `routine_call`, `other_qualifier` | MySQL: a trigger body uses `CALL` or prepared SQL, or a qualifier other than `NEW`, `OLD` or the current database |
-| `body_unparsed` | A body with a quote the check can't close |
+| `trigger` | A trigger on a frame relation (PostgreSQL), or any trigger in the database (MySQL), that isn't listed in `reviewed_triggers` with its current digest |
+| `rule` | PostgreSQL: a rewrite rule on a frame relation (a view's own `_RETURN` rule runs only when the view is read) |
+| `user_function`, `user_type`, `other_relation`, `user_object` | PostgreSQL: a user-defined function, type, relation outside the schema, or other object reachable through `pg_depend` from a frame relation or from its defaults, checks, indexes or policies; or a column whose type is user-defined (a domain, an extension type; an enum is allowed). `user_function` also covers a user function the planned statement reaches, as `EXPLAIN (VERBOSE)` resolves it, views expanded |
+| `system_function_with_effects` | PostgreSQL: a built-in that runs SQL given as text (`query_to_xml` and the other `*_to_xml` functions, `ts_stat`) or acts outside the frame's rows (`lo_*`, `set_config`, `pg_*`, `dblink*`), in the planned statement or a default, check, index or policy expression |
+| `other_schema` | PostgreSQL: the planned statement reads or writes a relation in another schema |
+| `truncate`, `planned_ddl` | PostgreSQL: the planned statement is `TRUNCATE` or other DDL. `DROP ... CASCADE` and event triggers reach past the frame |
+| `event_trigger`, `user_cast_or_operator`, `foreign_data`, `remote_link` | PostgreSQL, anywhere in the database: an enabled event trigger; a user-defined cast or operator; a foreign data wrapper, server or table; the `dblink` or `postgres_fdw` extension. `foreign_data` on MySQL: a `FEDERATED`, `CONNECT` or `SPIDER` table |
+| `search_path_open` | PostgreSQL: the search path holds more than the current schema |
+| `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove database-level (or global) `SELECT` and `TRIGGER`. Table-level grants don't count, because a table the account can't list can hold a trigger it can't see. A wildcard grant counts only for the name it spells; a role grant or a partial revoke proves nothing |
+| `routine` | MySQL: a stored routine in the database |
+| `user_function` (MySQL) | The planned statement calls a function that isn't a known built-in. MySQL has no catalog resolution for a statement, so this one is read from the text |
 | `scope_unreadable` | A catalog read failed. On PostgreSQL it runs under a savepoint, so the write's transaction survives |
-| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send |
+| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send (PostgreSQL and MySQL; SQLite has nothing to list) |
 
-A trigger in SQL or PL/pgSQL that writes only the frame's schema and calls
-only built-in functions leaves the list empty, so the write can still be
-`VERIFIED`. The check reads text: it allows only what it recognizes, so an
-unusual but harmless body can cap a write, and an extension that adds
-operators (PostGIS, `citext`) caps every write on that database. SQLite has
-nothing to list: ATTACH is refused, and the connection registers no
-functions. Not listed yet: functions reached through a domain's check
-constraint or a column type's input function. MySQL table-level grants are
-checked against the tables the account can list.
+**Reviewed triggers.** Many applications keep triggers, so a trigger can be
+reviewed instead. `SqlAdapter.trigger_digests()` gives each trigger's sha256:
+on PostgreSQL the trigger definition (its `WHEN` condition included) and its
+function's definition; on MySQL the trigger's table, timing, event and body.
+After reading them, an operator lists the digests in the system's
+`reviewed_triggers`. A listed trigger counts as covered only while its digest
+still matches, so an edited function caps writes again. The review covers the
+trigger and its own function, not the functions that one calls: reviewing a
+trigger means reviewing what it reaches.
+
+A database with no triggers, rules, user functions or user types around the
+frame, and a plain search path, gives an empty list, so its writes can be
+`VERIFIED`. An extension that adds operators or casts (PostGIS, `citext`) caps
+every write on its database. SQLite has nothing to list: ATTACH is refused,
+and the connection registers no functions.
 
 An app that other
 clients also write to needs the read-back: the apply-time diff check refuses
@@ -246,8 +255,10 @@ are two kinds of evidence:
   run, because a refused probe can be logged like a write of the record:
   record the probe in the pack instead.
 
-A replace update or a delete on a route with no precondition, or with one
-that has no evidence, is at best `COMPLETED_UNVERIFIED` (`confirmed_not_covered`,
+A stored result (a replay, an adoption, a retry) counts the evidence only
+when that send recorded it (`precondition_enforced`); an entry from before
+this rule is capped. A replace update or a delete on a route with no
+precondition, or with one that has no evidence, is at best `COMPLETED_UNVERIFIED` (`confirmed_not_covered`,
 `released_unconditional`; `tx.not_covered` holds `unconditional_write` or
 `precondition_unproven`), because a lost update can't be ruled out.
 
@@ -268,7 +279,9 @@ that the read-back didn't find. Either one makes the outcome
   an enforced precondition is not a verified undo: when it reads back
   correctly, the plan ends `COMPLETED_UNVERIFIED` (`undone_not_covered`,
   `unconditional_undo`), never `ROLLED_BACK`. A SQL undo gets the same
-  closed write-scope check as an apply.
+  closed write-scope check as an apply. The gaps are kept with the undone
+  entry: a second `undo` on the plan reports them again, and an undo run that
+  had nothing left to undo is never `ROLLED_BACK`.
 - Held writes are cancelled.
 - After compensating, it reads each record back. A create must be gone. An
   update or delete must equal its baseline.

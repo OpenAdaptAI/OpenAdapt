@@ -45,16 +45,17 @@ another caller, are outside what it can see. Every one of those plants
 landed: the server accepted each side write.
 
 Every planted fault was a real write. A plant counts as a detection only when
-it landed; none failed to land in this run. The oracle confirmed that the
-wrong-value, partial-write and duplicate-create faults landed. Medplum's
-oracle reads Postgres directly, and Gitea's reads as a site administrator,
-and the verifier never reads through either one. The collateral,
-duplicate-update and duplicate-comment faults were checked by the server
-accepting each extra write.
+it landed. All of them landed except Medplum's duplicate updates: the server
+refused every second PUT (412), so that row has no landed plant to count
+(see the rerun below). The oracle confirmed that the wrong-value,
+partial-write and duplicate-create faults landed. Medplum's oracle reads
+Postgres directly, and Gitea's reads as a site administrator, and the
+verifier never reads through either one. The collateral and duplicate-comment
+faults were checked by the server accepting each extra write.
 
 Zero stops in 400 clean writes bounds the false-stop rate at about 0.75%
-(95%, rule of three) on each system. 50 of 50 per exposed fault class bounds
-the miss rate at about 6% (95%) per class. On Gitea, 100 of the 400 clean
+(95%, rule of three) on each system. 50 of 50 per exposed fault class that
+landed bounds the miss rate at about 6% (95%) per class. On Gitea, 100 of the 400 clean
 writes were title edits, which the feed doesn't record. Those were confirmed
 by read-back alone (`log_does_not_record_update`). On Medplum, 41 clean
 updates set a value the record already held (`no_change_update`), so no log
@@ -69,9 +70,9 @@ changes nothing ([probe_precondition.py](probe_precondition.py), output in
 [results/medplum_precondition_probe.json](results/medplum_precondition_probe.json)).
 The pack now sends the read's `ETag` as `If-Match` on update and delete and
 records that probe as its evidence. The Medplum column above is from the
-rerun at commit `80c3da70`: 400 of 400 clean writes `VERIFIED`, and every
-exposed fault class stopped as before, with one change. In the duplicate
-update plant, the executor sends the PUT twice; the second now carries a
+rerun at commit RERUN_SHA: 400 of 400 clean writes `VERIFIED`, and every
+exposed fault class that landed stopped, 50 of 50. In the duplicate update
+plant, the executor sends the PUT twice; the second now carries a
 stale version and the server refuses it, so the duplicate never lands and
 the row has no landed plants to count. Its receipt reads `HALTED`
 (`stale_baseline`) although the first PUT landed; that is an artifact of the
@@ -97,7 +98,7 @@ the same pull request as those results:
   defaults.
 
 Which code produced each file: the Medplum rows were rerun live at commit
-`80c3da70` (#2529, enforced preconditions and the closed write-scope check).
+RERUN_SHA (#2529, enforced preconditions and the catalog write-scope check).
 Before that they were from commit `6ad9f6fb`. The Gitea rows
 are from commit `5680f814`; the later changes touch only the marker search and
 the Medplum lab, and Gitea's pack declares no marker search, so its path is
