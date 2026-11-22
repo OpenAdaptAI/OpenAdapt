@@ -420,12 +420,18 @@ class Contract:
     def null_unsafe_params(self) -> dict[str, str]:
         """Each parameter that may not be ``None``, with where it is used.
 
-        A null binds only in an effect's ``match``, ``new_records`` and
-        ``value``, where it must equal a stored null. Anywhere else (a query
-        or path parameter, an idempotency or composite key, a read-back
-        field, the frame) a null has no value to send or compare, so
+        A null binds in an effect's ``match``, ``new_records`` and ``value``,
+        where it must equal a stored null, and in a SQL verifier's
+        ``sql_query_params`` when every placeholder occurrence in
+        ``sql_query`` is a provably null-safe exact column equality in
+        ``WHERE``/``ON``/``HAVING`` (rewritten to ``IS NULL`` or bound to
+        ``IS NOT DISTINCT FROM`` / ``<=>``). Anywhere else (other query or
+        path parameters, an idempotency or composite key, a read-back field,
+        the frame) a null has no value to send or compare, so
         :func:`begin_write` refuses it before anything is read.
         """
+
+        from openadapt_flow.runtime.effects.sql import sql_param_is_null_safe
 
         found: dict[str, str] = {}
 
@@ -440,9 +446,39 @@ class Contract:
                 for item in value:
                     walk(item, where)
 
+        def walk_verifier(body: Any, where: str) -> None:
+            if not isinstance(body, Mapping):
+                walk(body, where)
+                return
+            is_sql = body.get("kind") == "sql"
+            sql_query = body.get("sql_query") if is_sql else None
+            for key, item in body.items():
+                if key == "surfaces" and isinstance(item, Mapping):
+                    for surface_name, surface_body in item.items():
+                        walk_verifier(surface_body, f"{where}.surfaces.{surface_name}")
+                elif key == "candidates" and isinstance(item, (list, tuple)):
+                    for idx, candidate in enumerate(item):
+                        walk_verifier(candidate, f"{where}.candidates[{idx}]")
+                elif (
+                    key == "sql_query_params"
+                    and is_sql
+                    and isinstance(sql_query, str)
+                    and isinstance(item, Mapping)
+                ):
+                    for qk, expr in item.items():
+                        if isinstance(qk, str) and sql_param_is_null_safe(
+                            sql_query, qk
+                        ):
+                            continue
+                        walk(expr, f"{where}.sql_query_params.{qk}")
+                else:
+                    walk(item, f"{where}.{key}" if key != where else where)
+
         dumped = self.config.model_dump(mode="json")
         for section, body in dumped.items():
-            if section != "effects":
+            if section == "verifier":
+                walk_verifier(body, section)
+            elif section != "effects":
                 walk(body, section)
         for index, effect in enumerate(dumped.get("effects") or []):
             for key, body in effect.items():

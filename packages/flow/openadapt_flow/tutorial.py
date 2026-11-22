@@ -736,6 +736,11 @@ def _run_tutorial_stages(
         system_of_record_records=record_count,
     )
 
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    # The signed receipt, for any outcome; the run summary below is separate.
+    receipt_after_run(run_dir)
+
     if emit_receipt:
         # One rail, one rule: the shareable artifact is the SUCCESS rail, and
         # only a VERIFIED run may use it -- exactly what ``report-run``
@@ -743,14 +748,14 @@ def _run_tutorial_stages(
         # success and must not be dressed as one.
         if report.execution_outcome != "VERIFIED":
             say(
-                "[5/5] No receipt: the shareable artifact is the success rail, "
+                "[5/5] No run summary: the shareable artifact is the success rail, "
                 f"and this run is {report.execution_outcome}. The run's own "
                 "evidence is in REPORT.md."
             )
         else:
             from openadapt_flow.receipt import _build_tutorial_receipt, write_receipt
 
-            say("[5/5] Emit the local run receipt")
+            say("[5/5] Write the run summary")
             receipt = _build_tutorial_receipt(report)
             result.receipt_paths = write_receipt(receipt, run_dir)
 
