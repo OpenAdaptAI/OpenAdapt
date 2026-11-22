@@ -152,24 +152,48 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
-_URL = re.compile(r"(?i)\b(?:https?|wss?|ftp|file)://[^\s\"'<>()\[\]{}]+")
+#: A URL runs to the next space, quote or angle bracket. Brackets and
+#: parentheses don't end it: a query such as ``?name=[Jane`` is cut whole.
+_URL = re.compile(r"(?i)\b(?:https?|wss?|ftp|file)://[^\s\"'<>]+")
+#: Trailing punctuation given back to the text when a URL has no query.
+_URL_TAIL = ".,;:!)]}"
+
+
+def _split_url(url: str) -> tuple[str, int, int]:
+    """(kept prefix, end of the removed part, end of the URL) for ``url``.
+
+    The kept prefix is the origin (``scheme://host[:port]``), or
+    ``scheme://`` when the authority holds credentials. Everything from the
+    path on is removed; with no ``?`` or ``#``, trailing punctuation that
+    closes the sentence is kept as text."""
+    from urllib.parse import urlsplit
+
+    end = len(url)
+    if "?" not in url and "#" not in url:
+        while end > 0 and url[end - 1] in _URL_TAIL:
+            end -= 1
+    try:
+        parts = urlsplit(url[:end])
+        origin = f"{parts.scheme}://{parts.netloc}"
+    except ValueError:
+        return "", end, len(url)
+    if "@" in parts.netloc:  # credentials in the authority
+        return f"{parts.scheme}://", end, len(url)
+    return origin, end, len(url)
 
 
 def _cut_url(match: re.Match[str]) -> str:
-    from urllib.parse import urlsplit
-
     url = match.group(0)
-    try:
-        parts = urlsplit(url)
-        origin = f"{parts.scheme}://{parts.netloc}"
-    except ValueError:
-        return "<URL>"
-    if "@" in parts.netloc:  # credentials in the authority
-        return f"{parts.scheme}://<URL>"
-    rest = url[len(origin) :]
+    origin, end, total = _split_url(url)
+    tail = url[end:total]
+    if not origin:
+        return "<URL>" + tail
+    rest = url[len(origin) : end]
+    if origin.endswith("://"):
+        return origin + "<URL>" + tail
     if rest in ("", "/"):
         return url
-    return origin + "/<path removed>"
+    return origin + "/<path removed>" + tail
 
 
 def scrub_urls(text: str) -> str:
@@ -366,10 +390,13 @@ def detect(
     for m in _URL.finditer(text):
         # A URL in a screenshot (an address bar): its path and query can
         # carry record ids and names. Request text has its URLs cut first.
-        cut = _cut_url(m)
-        if cut != m.group(0):
-            origin = cut.split("/<path removed>")[0]
-            found.append((m.start() + len(origin), m.end(), "URL", 1))
+        if "<path removed>" in m.group(0) or m.group(0).endswith("<URL>"):
+            continue
+        origin, end, _total = _split_url(m.group(0))
+        if m.start() + len(origin) < m.start() + end and m.group(0)[
+            len(origin) : end
+        ] not in ("", "/"):
+            found.append((m.start() + len(origin), m.start() + end, "URL", 1))
     pieces = [p for p in piece_spans(text) if p != (0, len(text))]
     if whole:
         pieces.insert(0, (0, len(text)))
@@ -397,10 +424,14 @@ def detect(
             # An entity never runs across a line break.
             for m in re.finditer(r"[^\n]+", piece[s:e]):
                 found.append((ps + s + m.start(), ps + s + m.end(), k, 2))
-    protected = [m.span() for m in _PROTECTED.finditer(text)]
-    found = [
-        f for f in found if not any(f[0] < pe and ps < f[1] for ps, pe in protected)
-    ]
+    # Tokens, placeholders and cut URL paths are cut out of a span that
+    # touches them; the rest of the span is still scrubbed.
+    protected: list[Span] = [(*m.span(), "") for m in _PROTECTED.finditer(text)]
+    # A URL's origin is the app's address, kept on purpose (see _cut_url).
+    for m in _URL.finditer(text):
+        origin = _split_url(m.group(0))[0]
+        if origin and not origin.endswith("://"):
+            protected.append((m.start(), m.start() + len(origin), ""))
     # Higher-ranked spans (values already in the map, then patterns, then
     # NER) are taken whole; a lower-ranked span keeps only the parts no
     # taken span covers. Every detected character stays covered, and a
@@ -410,7 +441,7 @@ def detect(
     taken: list[Span] = []
     for s, e, k, _rank in found:
         parts = [(s, e)]
-        for ts, te, _ in taken:
+        for ts, te, _ in protected + taken:
             parts = [
                 piece
                 for ps, pe in parts
@@ -781,11 +812,52 @@ _RESULT_TYPES = {
 }
 
 
+#: A string at least this long, all base64, is an encoded payload.
+_BLOB_MIN = 256
+_BASE64 = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
+_IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x00*")
+
+
+def _base64_blob(value: str) -> Optional[bytes]:
+    """The decoded bytes when ``value`` is a long base64 string, else None."""
+    if len(value) < _BLOB_MIN:
+        return None
+    compact = "".join(value.split())
+    if not _BASE64.fullmatch(compact):
+        return None
+    try:
+        if "-" in compact or "_" in compact:
+            return base64.urlsafe_b64decode(compact + "=" * (-len(compact) % 4))
+        return base64.b64decode(compact + "=" * (-len(compact) % 4), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _is_image(data: bytes) -> bool:
+    if data.startswith(_IMAGE_MAGIC):
+        return True
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+
 def _b64(data: str) -> bytes:
     try:
         return base64.b64decode(data, validate=True)
     except (binascii.Error, ValueError):
         raise ScrubRefused("an image's base64 data could not be decoded") from None
+
+
+def _mime_png(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """Name PNG as the type of a ``data`` field that became a scrubbed PNG."""
+    data = after.get("data")
+    if (
+        isinstance(data, str)
+        and data != before.get("data")
+        and data.startswith("iVBORw0KGgo")
+    ):
+        for key in ("mimeType", "mime_type", "media_type"):
+            if key in after:
+                after[key] = "image/png"
+    return after
 
 
 def scrub_request(
@@ -815,6 +887,16 @@ def scrub_request(
             if value[5:].lower().startswith("image/"):
                 return data_url(value)
             raise ScrubRefused("a non-image data URL can't be scrubbed")
+        blob = _base64_blob(value)
+        if blob is not None:
+            # A screenshot in another shape (an MCP image item's data, a raw
+            # base64 PNG in a tool result or in JSON text): scrubbed as an
+            # image. Any other encoded payload can't be read, so it refuses.
+            if not _is_image(blob):
+                raise ScrubRefused(
+                    "a base64 payload that is not an image can't be scrubbed"
+                )
+            return base64.b64encode(image(blob)).decode("ascii")
         if image_slot and value.lower().startswith(("http://", "https://")):
             raise ScrubRefused("an image by URL can't be scrubbed before it is sent")
         out = scrub.text(value)
@@ -871,7 +953,7 @@ def scrub_request(
                     url = url.get("url")
                 if not (isinstance(url, str) and url.startswith("data:image/")):
                     raise ScrubRefused(f"a {kind} by reference can't be scrubbed")
-            return {k: payload(v, k) for k, v in node.items()}
+            return _mime_png(node, {k: payload(v, k) for k, v in node.items()})
         return number(node)
 
     def structural(node: Any, key: Optional[str], parent_type: Any = None) -> Any:
@@ -921,6 +1003,8 @@ def scrub_request(
         if kind in ("input_file", "file"):
             raise ScrubRefused("a file input can't be scrubbed")
         tool_call = kind in _TOOL_CALL_TYPES or key == "function"
+        # A Chat Completions image_url object has no type of its own.
+        kind = kind or ("image_url" if key == "image_url" else None)
         out: dict[str, Any] = {}
         for k, v in node.items():
             if k in _PROTOCOL_KEYS or (k == "name" and tool_call):
@@ -935,7 +1019,7 @@ def scrub_request(
                 out[k] = arguments(v)
             else:
                 out[k] = structural(v, k, kind)
-        return out
+        return _mime_png(node, out)
 
     if not isinstance(body, dict):
         return structural(body, None)

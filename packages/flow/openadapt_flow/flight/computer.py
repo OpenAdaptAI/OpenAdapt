@@ -156,6 +156,45 @@ SAFE_LABELS_ENV = "OPENADAPT_FLIGHT_SAFE_LABELS"
 OCR_BOX_PAD_PX = 3
 _EDGE_MARKS = " \t\n\r.,:;!?'\"()[]{}<>«»‹›←→↑↓⟵⟶…*·•|-–—_/\\"
 _GATE_KIND = {"allow": "allowed", "hold": "held", "refuse": "refused"}
+#: Keys and combinations that move focus, scroll, close or copy, and
+#: activate nothing.
+SAFE_KEYS: frozenset[str] = frozenset(
+    {
+        "Tab",
+        "Shift+Tab",
+        "Escape",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "PageUp",
+        "PageDown",
+        "Home",
+        "End",
+        "Control+c",
+        "Meta+c",
+        "Control+a",
+        "Meta+a",
+        "Control+f",
+        "Meta+f",
+    }
+)
+#: Keys that only edit text: safe in a focused text field, held elsewhere
+#: (Delete on a focused list row can delete the record).
+FIELD_KEYS: frozenset[str] = frozenset(
+    {"Backspace", "Delete", "Control+x", "Meta+x", "Control+v", "Meta+v"}
+)
+_TEXT_ROLES = {"textbox", "searchbox", "textarea", "multiline", "combobox"}
+
+
+def _combo(op: Any) -> str:
+    key = str(op.key)
+    if len(key) == 1:
+        key = key.lower()
+    mods = sorted(str(m) for m in (op.modifiers or ()))
+    return "+".join([*mods, key])
+
+
 _COMMIT_KEYS = {"Enter", "Space"}
 _SAVE_MODIFIERS = {"Control", "Meta"}
 
@@ -346,11 +385,47 @@ def classify(
         {k: v for k, v in asdict(op).items() if v is not None and v != ()} for op in ops
     )
     pointer_op = None
+    drag_op = None
+    field_keys: list[str] = []
+    typed = False
     key_reason: Optional[str] = None
     enter_like = False
+
+    def held(reason: str) -> Classification:
+        return Classification(True, kind, None, None, None, "none", reason, op_dicts)
+
     for op in ops:
         if op.kind in ("click", "double_click"):
             pointer_op = op
+        elif op.kind == "right_click":
+            pass  # opens a context menu; the item clicked next is gated
+        elif op.kind == "drag":
+            drag_op = op
+        elif (
+            op.kind in ("press", "hotkey")
+            and op.key not in _COMMIT_KEYS
+            and not (
+                op.kind == "hotkey"
+                and str(op.key).lower() == "s"
+                and _SAVE_MODIFIERS & set(op.modifiers)
+            )
+        ):
+            combo = _combo(op)
+            if combo in SAFE_KEYS:
+                continue
+            if combo in FIELD_KEYS or (op.kind == "press" and len(str(op.key)) == 1):
+                field_keys.append(combo)
+                continue
+            return held(
+                f"the key {combo!r} is not known to be safe (unknown counts as commit)"
+            )
+        elif (
+            op.kind == "hotkey"
+            and op.key in _COMMIT_KEYS
+            and set(op.modifiers or ()) - {"Shift"}
+        ):
+            # Ctrl/Cmd+Enter submits a form even from a text area.
+            return held(f"the key {_combo(op)!r} can submit the focused form")
         elif op.kind in ("press", "hotkey") and op.key in _COMMIT_KEYS:
             key_reason = f"the {op.key} key can commit the focused control"
             enter_like = enter_like or op.key == "Enter"
@@ -372,23 +447,14 @@ def classify(
         elif op.kind == "type" and op.text and ("\n" in op.text or "\r" in op.text):
             key_reason = "typed text that ends a line can commit the focused control"
             enter_like = True
-    if pointer_op is None and key_reason is None:
-        return Classification(False, kind, None, None, None, "none", "", op_dicts)
-    if pointer_op is not None:
-        x, y = pointer_op.x, pointer_op.y
-        if x is None or y is None:
-            x, y = pointer if pointer is not None else (None, None)
-        if x is None or y is None:
-            return Classification(
-                True,
-                kind,
-                None,
-                None,
-                None,
-                "none",
-                "the pointer position is unknown (unknown counts as commit)",
-                op_dicts,
-            )
+        elif op.kind == "type":
+            typed = True
+        elif op.kind in ("observe", "wait", "scroll"):
+            pass
+        else:
+            return held(f"a {op.kind!r} action is not known to be safe")
+
+    def read_target(x: int, y: int) -> tuple[Optional[str], str]:
         label, source = None, "none"
         if label_at is not None:
             try:
@@ -411,6 +477,78 @@ def classify(
             except Exception:  # noqa: BLE001 - an unreadable target is unknown
                 label = None
             source = "ocr" if label else "none"
+        return label, source
+
+    if drag_op is not None:
+        # A drag presses on one target and releases on another; either can
+        # be a button. Both ends must be known to be safe.
+        ends = [(drag_op.x, drag_op.y), (drag_op.end_x, drag_op.end_y)]
+        for ex, ey in ends:
+            if ex is None or ey is None:
+                return held("a drag end is unknown (unknown counts as commit)")
+            label, source = read_target(int(ex), int(ey))
+            if not label_is_safe(label, safe_labels, roles=source == "accessibility"):
+                return Classification(
+                    True,
+                    kind,
+                    int(ex),
+                    int(ey),
+                    label,
+                    source,
+                    f"a drag end reads {label!r}, which is not a known-safe control",
+                    op_dicts,
+                )
+    if (field_keys or typed) and key_reason is None and pointer_op is None:
+        focused = None
+        if focused_label is not None:
+            try:
+                focused = focused_label() or None
+            except Exception:  # noqa: BLE001
+                focused = None
+        role = split_role(focused)[0] if focused else None
+        text_field = role in _TEXT_ROLES
+        if field_keys and not text_field:
+            return Classification(
+                True,
+                kind,
+                None,
+                None,
+                focused,
+                "accessibility" if focused else "none",
+                f"the key {field_keys[0]!r} outside a text field "
+                f"(focused {focused!r}) is not known to be safe",
+                op_dicts,
+            )
+        if typed and focused and not text_field:
+            # Typed text reaches a focused button too: a space presses it.
+            return Classification(
+                True,
+                kind,
+                None,
+                None,
+                focused,
+                "accessibility",
+                f"typing while {focused!r} has focus can press it",
+                op_dicts,
+            )
+    if pointer_op is None and key_reason is None:
+        return Classification(False, kind, None, None, None, "none", "", op_dicts)
+    if pointer_op is not None:
+        x, y = pointer_op.x, pointer_op.y
+        if x is None or y is None:
+            x, y = pointer if pointer is not None else (None, None)
+        if x is None or y is None:
+            return Classification(
+                True,
+                kind,
+                None,
+                None,
+                None,
+                "none",
+                "the pointer position is unknown (unknown counts as commit)",
+                op_dicts,
+            )
+        label, source = read_target(int(x), int(y))
         verb = label_is_commit(label)
         if label is None:
             reason = (
@@ -903,7 +1041,7 @@ class GatedComputerCall:
     ``on_held='raise'`` raises :class:`ActionHeld` instead.
     """
 
-    _ACTIONS = ("click", "double_click", "keypress", "type")
+    _ACTIONS = ("click", "double_click", "drag", "keypress", "type")
 
     def __init__(
         self,
@@ -976,16 +1114,20 @@ class GatedComputerCall:
         self, x: int, y: int, button: str = "left", *args: Any, **kwargs: Any
     ) -> Any:
         raw = {"type": "click", "x": x, "y": y, "button": button}
-        if button not in ("left",):
-            # A right, wheel or back click opens or navigates; it saves nothing.
-            self._keeper._record(
-                raw,
-                Classification(False, "click", x, y, None, "none", ""),
-                "performed",
-                None,
-            )
-            return self._inner.click(x, y, button, *args, **kwargs)
+        # Every button goes through the gate: a right click opens a menu
+        # and passes; a button the translators don't know is held.
         return self._gated("click", raw, x, y, button, *args, **kwargs)
+
+    def drag(self, path: Any, *args: Any, **kwargs: Any) -> Any:
+        points = [
+            {"x": p["x"], "y": p["y"]}
+            if isinstance(p, dict)
+            else {"x": p[0], "y": p[1]}
+            for p in path
+        ]
+        return self._gated(
+            "drag", {"type": "drag", "path": points}, path, *args, **kwargs
+        )
 
     def double_click(self, x: int, y: int, *args: Any, **kwargs: Any) -> Any:
         return self._gated(
