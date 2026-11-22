@@ -183,6 +183,7 @@ def _pack() -> FormPack:
         _binding("property.roof_material", "Roof material", ControlKind.SELECT),
     )
     return FormPack(
+        commit_url_patterns=("/submit",),
         pack_id="text-readback-test",
         domain_schema="test.quote/v1",
         ui_profile_id="text-readback-test",
