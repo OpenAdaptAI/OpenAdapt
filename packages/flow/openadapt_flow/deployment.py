@@ -692,6 +692,8 @@ class EffectsConfig(BaseModel):
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
+        if not data.get("local_state"):
+            data.pop("local_state", None)
         return data
 
     @model_validator(mode="after")
@@ -2354,6 +2356,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # ``local_state`` defaults to an empty list; omit it unless configured so
+    # existing verifier identities stay unchanged.
+    for holder in [config, *(config.get("candidates") or [])]:
+        if isinstance(holder, dict) and not holder.get("local_state"):
+            holder.pop("local_state", None)
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
