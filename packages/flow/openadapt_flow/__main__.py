@@ -13208,6 +13208,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_proxy_parser(sub)
     register_fleet_parser(sub)
 
+    # After any other ``handoff`` verbs: it adds ``list`` to the same group.
+    from openadapt_flow.cli_handoff_list import register_handoff_list
+
+    register_handoff_list(sub)
+
     parser.add_task_help()
     return parser
 

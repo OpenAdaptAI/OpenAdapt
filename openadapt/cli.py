@@ -1630,6 +1630,10 @@ for _verb, _help in (
     ("record", "Record a workflow. Uses the same options as flow record."),
     ("compile", "Compile a recording. Uses the same options as flow compile."),
     ("run", "Run a bundle with its checks. Uses the same options as flow run."),
+    (
+        "handoff",
+        "Handoffs to other parties: what they recorded, and who follows up.",
+    ),
 ):
     main.add_command(
         _FlowAliasCommand(

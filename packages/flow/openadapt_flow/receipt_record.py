@@ -443,8 +443,12 @@ def write_receipt_record(
     flow_version: Optional[str] = None,
     env: Optional[Mapping[str, str]] = None,
     expected_report: Optional["RunReport"] = None,
+    handoff_ledgers: Sequence[Any] = (),
 ) -> dict[str, Any]:
     """Write ``receipt.json`` and ``receipt.private.json`` for a finished run.
+
+    ``handoff_ledgers`` (``openadapt_flow.handoffs.HandoffLedger``): the run's
+    handoffs in them go on the receipt as counterparty confirmation lines.
 
     Idempotent: an existing receipt over the same report bytes is kept. A
     receipt over different bytes is never silently replaced.
@@ -453,7 +457,13 @@ def write_receipt_record(
 
     with mutation_lock(run_dir):
         return _write_locked(
-            Path(run_dir), signer, home, flow_version, env, expected_report
+            Path(run_dir),
+            signer,
+            home,
+            flow_version,
+            env,
+            expected_report,
+            handoff_ledgers,
         )
 
 
@@ -464,6 +474,7 @@ def _write_locked(
     flow_version: Optional[str],
     env: Optional[Mapping[str, str]],
     expected_report: Optional["RunReport"],
+    handoff_ledgers: Sequence[Any] = (),
 ) -> dict[str, Any]:
     from openadapt_types import receipt as r
 
@@ -500,7 +511,8 @@ def _write_locked(
         )
     if not isinstance(report, dict):
         raise ReceiptRecordError("report_unreadable", "report.json is not an object")
-    if report.get("transaction_outcome") == "SAVED_AWAITING_CHECK":
+    awaiting = report.get("transaction_outcome") == "SAVED_AWAITING_CHECK"
+    if awaiting and not handoff_ledgers:
         raise ReceiptRecordError("readback_pending")
     digest = hashlib.sha256(raw).hexdigest()
     if flow_version is None:
@@ -517,6 +529,25 @@ def _write_locked(
         run_dir=run_dir,
         evidence_key=evidence_key,
     )
+    placed: list[Any] = []
+    if handoff_ledgers:
+        from openadapt_flow.handoffs.line import (
+            attach_confirmations,
+            handoffs_for_run,
+            place,
+        )
+
+        handoffs = handoffs_for_run(report, list(handoff_ledgers), run_dir)
+        if handoffs:
+            try:
+                placed = place(statement, handoffs)
+                statement, openings = attach_confirmations(
+                    statement, openings, handoffs
+                )
+            except ValueError as exc:
+                raise ReceiptRecordError("handoff_unplaceable", str(exc)) from exc
+    if awaiting:
+        statement = _awaiting_counterparty(statement, placed)
     kid = r.key_id(chosen.public_raw())
     entry = chosen.registry_entry()
     registry = [r.RoleKey(kid, entry["public_key"], "this_computer")]
@@ -587,6 +618,10 @@ def _write_locked(
     _write(private, r.private_openings(envelope, openings), private=True)
     _write(out, envelope)
     write_public_card(run_dir, envelope, openings)
+    if placed:
+        from openadapt_flow.handoffs.followup import record_signed
+
+        record_signed(run_dir, RECEIPT_FILE, placed)
     return envelope
 
 
@@ -645,6 +680,39 @@ def write_public_card(
     return path
 
 
+AWAITING_REASON = "awaiting_counterparty"
+
+
+def _awaiting_counterparty(
+    statement: dict[str, Any], placed: Sequence[Any]
+) -> dict[str, Any]:
+    """A receipt for a run whose only unsettled writes are handoffs that went
+    out and await the other party (permissive-default guarded).
+
+    Allowed only when every unverified write line is a declared handoff line
+    still in the ``sent`` state; anything else refuses ``readback_pending``.
+    The outcome is never VERIFIED: it is UNKNOWN with reason
+    ``awaiting_counterparty``, and follow-ups record the settlement."""
+    lines = statement["predicate"].get("lines", [])
+    pending = [line for line in lines if line["check"] != "confirmed"]
+    sent_steps = {h.step for h in placed if h.step is not None and h.state == "sent"}
+    if (
+        not pending
+        or any(line["check"] == "refuted" for line in pending)
+        or any(line["step"] not in sent_steps for line in pending)
+    ):
+        raise ReceiptRecordError("readback_pending")
+    predicate = statement["predicate"]
+    return {
+        **statement,
+        "predicate": {
+            **predicate,
+            "outcome": "UNKNOWN",
+            "reason_code": AWAITING_REASON,
+        },
+    }
+
+
 def save_settled_report(run_dir: Path, report: "RunReport") -> "RunReport":
     """Save the final read-back before issuing the pooled item's opted-in receipt."""
     report.save(run_dir)
@@ -677,10 +745,15 @@ def receipt_after_run(
     if not (Path(run_dir) / "report.json").is_file():
         return None
     try:
+        from openadapt_flow.handoffs.registry import ledgers_for
         from openadapt_flow.offline_seal import seal_home
 
         write_receipt_record(
-            Path(run_dir), home=seal_home(env), env=env, expected_report=expected_report
+            Path(run_dir),
+            home=seal_home(env),
+            env=env,
+            expected_report=expected_report,
+            handoff_ledgers=ledgers_for(env),
         )
     except ImportError:
         return "receipt not written: openadapt-types is older than 0.25"
