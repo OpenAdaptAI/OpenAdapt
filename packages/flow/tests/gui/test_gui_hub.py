@@ -158,7 +158,7 @@ def test_emr_hub_replays_each_section_and_reads_completion_from_the_hub(page) ->
         assert before.status is Status.REFUTED
         for spec, value in zip(specs, ("Latex", "Drug E 2 mg")):
             out = run_section(act, spec, _fill_with(value), sections=specs, run_id="r1")
-            assert out.held, out.result.reason
+            assert out.held, out.reason
         verdict = judge_hub_screen(
             act.observe(), specs, ["allergies", "medications"], run_id="r1"
         )
@@ -195,7 +195,7 @@ def test_emr_hub_section_that_does_not_complete_stops(
         ACT[:] = [act]
         page.goto(f"{app.origin}/chart")
         out = run_section(act, specs[0], _fill_with(value), sections=specs, run_id="r2")
-    assert out.result.status is status and reason in out.result.reason
+    assert out.status is status and reason in out.reason
 
 
 # -- SaaS onboarding checklist: form dialogs are never confirmations -----------------
@@ -251,7 +251,7 @@ def test_saas_dialog_with_a_field_is_a_form_even_when_it_says_confirm(page) -> N
             page.evaluate(f"{dlg}.hidden=true")
         ACT[:] = [act]
         out = run_section(act, section, _fill_with("Acme Test Co"), run_id="r3")
-        assert out.held, out.result.reason
+        assert out.held, out.reason
     assert app.state["company"] == "Acme Test Co"
 
 
@@ -362,7 +362,7 @@ def test_desktop_prefs_ok_that_saves_nothing_is_refuted() -> None:
     out = run_section(
         app, specs[0], lambda s, d: app.set_text("dlg:val", "x"), sections=specs
     )
-    assert out.result.status is Status.REFUTED and "saving wrote 0" in out.result.reason
+    assert out.status is Status.REFUTED and "saving wrote 0" in out.reason
 
 
 def test_judge_hub_never_passes_empty_unread_or_unplanned() -> None:

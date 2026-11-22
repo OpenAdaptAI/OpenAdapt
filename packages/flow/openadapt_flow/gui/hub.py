@@ -290,15 +290,20 @@ def expected_writes(sections: Sequence[SectionSpec], planned: Iterable[str]) -> 
 
 @dataclass(frozen=True)
 class SectionOutcome:
+    """How one section went. ``status`` is HELD only when :func:`judge_hub`
+    held for the section on a fresh read of the hub (``verdict``)."""
+
     section_id: str
-    result: Result
+    status: Status
+    reason: str
     opened: bool = False
     saved: bool = False
     hub: Optional[Screen] = None
+    verdict: Optional[HubVerdict] = None
 
     @property
     def held(self) -> bool:
-        return self.result.status is Status.HELD
+        return self.status is Status.HELD
 
 
 def run_section(
@@ -315,13 +320,10 @@ def run_section(
     ``fill`` gets the screen with the dialog open and the dialog. It must
     act only inside that dialog."""
 
-    subject = Subject(
-        run_id=run_id, surface="gui", key=section.section_id, field="section"
-    )
     sid = section.section_id
 
     def stop(reason: str, **kw: Any) -> SectionOutcome:
-        return SectionOutcome(sid, Result.not_checked(subject, reason), **kw)
+        return SectionOutcome(sid, Status.NOT_CHECKED, reason, **kw)
 
     hub = actuator.observe()
     if hub.dialogs:
@@ -382,7 +384,6 @@ def run_section(
     actuator.click(save.handle)
     w2 = actuator.write_count()
     after = actuator.observe()
-    obs = Observed(after, complete=after.complete)
     if after.dialogs:
         errors = [c.error for c in after.controls if c.error] or list(after.errors)
         reason = (
@@ -390,39 +391,27 @@ def run_section(
             if errors
             else "the dialog did not close"
         )
-        return SectionOutcome(
-            sid, Result.refuted(subject, obs, reason), True, False, after
-        )
-    if w1 is None or w2 is None or w2 - w1 != section.save_writes:
-        got = "unknown" if w1 is None or w2 is None else w2 - w1
+        return SectionOutcome(sid, Status.REFUTED, reason, True, False, after)
+    if w1 is None or w2 is None:
         return SectionOutcome(
             sid,
-            Result.refuted(
-                subject,
-                obs,
-                f"saving wrote {got}; the demo wrote {section.save_writes}",
-            ),
+            Status.NOT_CHECKED,
+            "the save's writes were not counted",
             True,
             True,
             after,
         )
+    if w2 - w1 != section.save_writes:
+        reason = f"saving wrote {w2 - w1}; the demo wrote {section.save_writes}"
+        return SectionOutcome(sid, Status.REFUTED, reason, True, True, after)
     verdict = judge_hub_screen(after, (section,), [sid], run_id=run_id)
-    if verdict.status is Status.HELD:
-        return SectionOutcome(
-            sid, Result.held(subject, obs, "the card shows done"), True, True, after
-        )
     reading = card_reading(after, section)
-    if verdict.status is Status.REFUTED:
-        return SectionOutcome(
-            sid, Result.refuted(subject, obs, reading.reason), True, True, after
-        )
-    return SectionOutcome(
-        sid,
-        Result.not_checked(subject, reading.reason or "not read"),
-        True,
-        True,
-        after,
+    reason = (
+        "the card shows done"
+        if verdict.status is Status.HELD
+        else (reading.reason or "the card was not read")
     )
+    return SectionOutcome(sid, verdict.status, reason, True, True, after, verdict)
 
 
 # -- from a demonstration ----------------------------------------------------------
