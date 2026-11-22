@@ -19,9 +19,14 @@ already do, how often would it have saved exactly what they saved?
 
 Scope of the hold, as the scorecard states it:
 
-> No non-GET request to the app origin left the browser except listed
-> sign-in requests. Not covered: GET requests with side effects, WebSocket
-> writes, other tabs, writes before attach.
+> No non-GET request to the app origin left any tab, popup, browser context
+> or worker, except listed sign-in requests. Not covered: GET requests with
+> side effects, WebSocket writes, writes before attach.
+
+That is what is checked; it is not a claim that the run had no effect on
+the app. A case the hold can't vouch for outside the guarded tab is
+`NOT_CHECKED` with reason `extra_target` and turns `scope_ok` false (see
+[Other tabs, popups, contexts and workers](#other-tabs-popups-contexts-and-workers)).
 
 ## Commands
 
@@ -36,11 +41,22 @@ openadapt-flow readiness run --episodes episodes --out runs \
     --not-save POST:/login
 openadapt-flow readiness compare --episodes episodes --runs runs --out card
 openadapt-flow readiness report --cases card/cases.json --out card \
-    --hourly-cost 38
+    --hourly-cost 38 --task-type encounter-note
 ```
 
 `run` takes `--program BUNDLE` instead of `--agent-cmd` for a compiled
 program.
+
+A signed-in session across tasks: `--storage-state FILE` loads a Playwright
+storage state (cookies and local storage, for example saved once with
+`context.storage_state(path=...)` after a person signed in) into every
+task's browser context, and `--keep-session` carries the state at the end of
+each task into the next one, so a person signs in and passes 2FA once, not
+once per task. The carried state lives in `RUNS/.session/` (mode 0600) and
+is removed when the run ends. Each task still gets its own browser, hold,
+target gate and run folder. Local storage is carried too: an app that keeps
+drafts there can carry one task's draft into the next, which the
+contamination check reads like any prefilled form.
 
 ## Reference episodes (`import`)
 
@@ -139,10 +155,56 @@ repeated form name, a file part, or a body the browser didn't expose is
 `"uncompared"` and has no value.
 
 The runner, per episode: runs `--reset-cmd`, starts a headless Chromium with
-a DevTools port, opens one tab at `--app-url`, attaches the hold over CDP
-(every request of that tab is paused), and starts the candidate. It stops
-the candidate before it lets go of the tab, so a retried save can't land
-once requests are no longer paused. One tab, one task, one guard session.
+a DevTools port, opens one tab at `--app-url` (service workers blocked in its
+context), attaches the hold over CDP (every request of that tab is paused),
+turns on the target gate, and starts the candidate. It stops the candidate
+before it lets go of the tab, so a retried save can't land once requests are
+no longer paused. One task, one browser, one guard session.
+
+### Other tabs, popups, contexts and workers
+
+The candidate gets the browser-wide DevTools endpoint, so it can open a
+second tab or popup (`window.open`, a `target=_blank` form,
+`Target.createTarget`), a page in a new browser context, or a worker, and
+send a write from there. The target gate (`readiness/targets.py`) covers
+them:
+
+- **A browser-level request hold.** `Fetch.enable` on the browser target
+  pauses every request of every target other than the guarded tab (new tabs
+  and popups, pages in new browser contexts, service workers, shared
+  workers) and hands it to the same shadow hold: reads to the app go on,
+  other origins are refused, writes are held and refused. It is on before
+  the candidate starts. Dedicated workers of the guarded tab are paused by
+  the tab's own session.
+- **Auto-attach.** `Target.setAutoAttach` with `waitForDebuggerOnStart` and
+  `flatten` on the browser target pauses each new target until the gate has
+  seen it. The gate keeps a count of new targets by type (no URLs) and does
+  not resume a type it hasn't shown to be held (anything but a page, an
+  iframe, a worker, a service worker or a shared worker).
+
+Auto-attach alone does not stop a write: a candidate that calls
+`Target.createTarget` and then `Runtime.evaluate` on the new target over its
+own DevTools session runs the page's `fetch` before the gate resumes it. In
+the adversarial test, with auto-attach and no browser-level hold, 5 of 6
+routes landed a write in the app's store; with the hold, none did.
+
+The case is `NOT_CHECKED` with reason `extra_target` (counted in
+`failed_scope`, `scope_ok` false) when a write came from any target other
+than the guarded tab (it was held, but the identity check reads the guarded
+tab, so the write can't be checked), a target was left paused because its
+type isn't covered, the gate lost its DevTools connection (Chromium then
+lets paused requests go on), or no gate ran (a run folder from before the
+gate existed). A second tab that only read is not a failure. `run.json`
+records `target_gate: {extra_targets, ungated_targets, gate_lost, errors}`
+and `extra_target_writes`; the task's status is `EXTRA_TARGET`.
+
+Service workers: Playwright's `service_workers="block"` on the guarded
+context makes `navigator.serviceWorker.register` a no-op; it is a page
+script, so the browser-level hold is what holds a service worker's requests
+(tested in a context the candidate made). The candidate's own `Fetch`
+interception runs before the gate's: a candidate that rewrites a request
+(for example a `GET` into a `POST`) is seen rewritten by the hold, which
+then refuses it.
 
 Defence in depth: the page the hold acts through counts every non-GET
 request to the app's origin that still went on. One such request makes that
@@ -190,6 +252,14 @@ person's saved values for at least half of the compared fields, the case is
 `NOT_COMPARABLE` and is never counted as matched. When no such screen was
 read, the case is `NOT_COMPARABLE` too.
 
+What the check reads (`before_screen.txt`, mode 0600): the first screen text
+on which the task's record showed, plus the first value seen in each form
+control (`<input>`, `<select>`, `<textarea>`, a contenteditable element; not
+password, hidden or file inputs) from then until the first write was held.
+A form that opens later already filled in is seen; a field the agent typed
+into was first seen empty. The identity check never reads form values, so a
+name typed into a search box does not count as the record being open.
+
 The scorecard header names the mode.
 
 ## Comparison (`compare`)
@@ -200,17 +270,40 @@ Per field: `matched`, `mismatched` (both values are kept), `missing`,
 `uncompared`.
 
 Normalisation: null equals empty text; surrounding and repeated whitespace
-is ignored; numbers compare by decimal value; an ISO date equals the same
-date at midnight. A lens's field codecs apply on top. Case is not folded.
+is ignored; an ISO date equals the same date at midnight. A lens's field
+codecs apply on top. Case is not folded.
 
-Case status, in order: `NOT_CHECKED` (not run, timed out, no write held),
-`FAILED_SCOPE`, `WRONG_RECORD` (the identity check failed, or a record field
-in the write names another record), `NOT_COMPARABLE`, `MISMATCHED` (any
-mismatched, missing or extra field), `NOT_CHECKED` (an uncompared field),
-`MATCHED`. A case is `MATCHED` only when identity passed, every field the
+Numbers compare by decimal value (`12.50` equals `12.5`) only when both are
+plain amounts: digits with at most one decimal point and an optional `-`, no
+exponent, no leading `+`, no leading zero before another digit, at most 9
+digits before the point, and a field name that doesn't look like an
+identifier (one with a word such as id, mrn, zip, postal, phone, account,
+ssn, npi, code, number, no, ref or card in it, like `patient_id`, `zipCode`
+or `account_no`). Everything else is compared as exact text after the
+whitespace trim, so `02134` is not `2134`, `007` is not `7` and `1e3` is not
+`1000`. Record fields (`expected_record`) are always exact text.
+
+Extra held writes: the hold keeps every write the candidate sent. Any held
+write besides the proposed one (a second PATCH, a DELETE, a write to another
+record, the same save twice, a lock before the save) makes the case
+`MISMATCHED` with reason `extra_held_writes`, since the person made one
+save. An app that sends a lock or an autosave as well as the save never
+matches, by design: fail closed.
+
+Case status, in order: `NOT_CHECKED` (not run), `FAILED_SCOPE`,
+`NOT_CHECKED` with reason `extra_target`, `NOT_CHECKED` (timed out, no write
+held), `WRONG_RECORD` (the identity check failed, or a record field in the
+write names another record), `NOT_COMPARABLE`, `MISMATCHED` (any mismatched,
+missing or extra field, or an extra held write), `NOT_CHECKED` (an
+uncompared field), `MATCHED`. A case is `MATCHED` only when identity passed, every field the
 person saved matched, no undeclared field was sent, and it is comparable.
 
-`cases.json` holds values and is written 0600.
+`cases.json` holds values and is written 0600. `compare` also writes each
+case as `case.json` (`openadapt.readiness-case/v1`, 0600) into its task's run
+folder, identical to its entry in `cases.json`.
+
+No guard ledger row (`guard_ledger_row.json`) is written for a shadow hold:
+nothing was saved.
 
 ## The scorecard (`report`)
 
@@ -218,19 +311,24 @@ person saved matched, no undeclared field was sent, and it is comparable.
 values:
 
 ```
-{schema, generated_at, agent_label, mode, replay_state, scope_statement,
- cases_total, matched, mismatched, not_comparable, not_checked,
- failed_scope, scope_ok,
+{schema, generated_at, agent_label, task_type, mode, replay_state,
+ scope_statement, cases_total, matched, mismatched, not_comparable,
+ not_checked, failed_scope, scope_ok,
  risks: {wrong_record, out_of_scope_request, double_save, undeclared_field},
  field_errors: [{task_id, field, kind}],
  agent_time_s: {median, mean}, human_time_s: {median, mean},
- model_cost_usd: {total, per_task, unknown_count},
+ model_cost_usd: {total, per_task, unknown_count, source},
+ egress: {mode, enforced, model_calls},
  savings: {formula, minutes_saved_per_task, est_value_usd, estimate, inputs},
  landed_writes}
 ```
 
 `mismatched` includes wrong-record cases; `not_checked` includes
-`FAILED_SCOPE` cases. `double_save` counts cases where the same write (same
+`FAILED_SCOPE` cases. `failed_scope` counts `FAILED_SCOPE` cases and
+`extra_target` cases; `scope_ok` is true only when it is 0 and no write
+reached the app. `task_type` is `--task-type` (a lowercase identifier) or
+`unspecified`. `model_cost_usd.source` is `metered`, `reported` (from the
+agent's own `usage.json`) or `unknown`. `double_save` counts cases where the same write (same
 method, path and fields) was sent more than once.
 
 The savings estimate is shown with its formula:
@@ -256,11 +354,14 @@ been run through `readiness` yet; that is the next evidence step.
 ## Limits
 
 - What the scope statement says is not covered: GET requests with side
-  effects, WebSocket writes, other tabs, writes sent before the hold
-  attached.
+  effects, WebSocket writes, writes sent before the hold attached.
+- A write from another tab, popup, context or worker is held but not
+  compared: its case is `extra_target`.
+- Out-of-process iframes of the guarded tab were not exercised by the
+  adversarial test (MockMed has none).
 - A save whose body is not form or JSON is `uncompared`, so its case is never
   `MATCHED`.
 - The program path takes field names from the form's labels; it was
   exercised by unit tests only in this release.
-- Contamination detection reads screen text, not form controls: values that
-  only appear inside inputs are not seen.
+- Contamination detection reads screen text and form control values, but
+  not values drawn on a canvas or inside a closed shadow root.

@@ -71,7 +71,7 @@ _READ_FORM_VALUES = """
       }
     } else if (tag === 'select') {
       const opts = Array.from(el.selectedOptions || []);
-      value = opts.map(o => (o.text && o.text !== o.value) ? o.value + ' ' + o.text : o.value).join('\n');
+      value = opts.map(o => (o.text && o.text !== o.value) ? o.value + ' ' + o.text : o.value).join(String.fromCharCode(10));
     } else if (tag === 'textarea') {
       value = el.value || '';
     } else if (el.isContentEditable) {

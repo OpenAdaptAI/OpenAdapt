@@ -27,7 +27,23 @@ Asserted:
 
 `results.json` is written by the test with `OPENADAPT_WRITE_EVIDENCE=1`.
 
+`tests/e2e/test_readiness_adversarial_e2e.py` runs an adversarial agent
+on the same app, one route per task, each trying to POST an encounter from
+outside the guarded tab: a `target=_blank` form, `window.open` then `fetch`
+from the popup, `Target.createTarget` on the browser endpoint then
+`Runtime.evaluate` at once (the race against the hold attaching), a page in
+a new browser context, a shared worker and a dedicated worker. Asserted, in
+the app's own write counter and store: no write landed; every route reached
+the hold (a held record per task); every route outside the tab is
+`NOT_CHECKED` with reason `extra_target`; `scope_ok` is false. With the
+browser-level hold turned off and auto-attach left on, 5 of the 6 routes
+landed a write. The same file covers a service worker in a context the
+agent made (held, on a small test app with its own POST counter), a session
+carried across tasks with `keep_session`, and form values read from a real
+page.
+
 Not shown here: contamination on a live screen (MockMed's record header
-doesn't show saved encounters; the unit tests cover it), the compiled-program
-path (unit tests only), and any real model. Running a real computer-use
-agent through `readiness run` is the next evidence step.
+doesn't show saved encounters; the unit tests cover a form that opens
+prefilled), out-of-process iframes, the compiled-program path (unit tests
+only), and any real model. Running a real computer-use agent through
+`readiness run` is the next evidence step.
