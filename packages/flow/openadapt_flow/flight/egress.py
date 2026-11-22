@@ -259,14 +259,17 @@ class ScrubbedEgress:
             def local_text(text: str) -> str:
                 return scrub_outbound_text(text, scrubber) or ""
 
-            timeline = Timeline(
-                self.run_dir / "egress",
-                task_id=self.run_dir.name,
-                executor_label="agent",
-                scrub_image=None,
-                scrub_text=local_text if scrubber is not None else None,
-                scrub_record={"mode": "on" if self.scrub else "off"},
-            )
+            try:
+                timeline = Timeline(
+                    self.run_dir / "egress",
+                    task_id=self.run_dir.name,
+                    executor_label="agent",
+                    scrub_image=None,
+                    scrub_text=local_text if scrubber is not None else None,
+                    scrub_record={"mode": "on" if self.scrub else "off"},
+                )
+            except Exception as exc:  # noqa: BLE001 - e.g. strict at-rest mode
+                raise EgressRefused(f"nothing was started: {exc}") from None
             self._timeline = timeline
         try:
             self._proxy = FlightProxy(
