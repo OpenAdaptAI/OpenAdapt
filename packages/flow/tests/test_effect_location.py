@@ -484,3 +484,30 @@ def test_unknown_kinds_load_and_judge_not_checked() -> None:
     data = {**loc().to_dict(), "codec": {"kind": "future_kind"}}
     future = EffectLocation.from_dict(data)
     assert status(future, reading("Ada Byron")) == "not_checked"
+
+
+def test_every_result_carries_a_listed_code() -> None:
+    from openadapt_flow.effect_location.evaluator import CODES
+
+    cases = [
+        (loc(), reading("Ada Byron"), "shown"),
+        (loc(), reading("Grace"), "mismatch"),
+        (loc(), reading(), "not_found"),
+        (loc(), reading("Ada Byron", "Ada Byron"), "count_mismatch"),
+        (loc(), reading(matches=[{"text": 3}]), "unreadable"),
+        (loc(), reading("Ada Byron", error="x"), "read_failed"),
+        (loc(), reading("Ada Byron", complete=False), "partial"),
+        (loc(), None, "not_read"),
+        (loc(codec=Codec("guess")), reading("Ada Byron"), "bad_record"),
+        (loc(baseline={"name": "Ada Byron"}), reading("Ada Byron"), "same_as_baseline"),
+    ]
+    for location, r, code in cases:
+        got = evaluate(location, r, run_id=RUN).results[0].code
+        assert got == code and got in CODES, (code, got)
+    stale = evaluate_all(
+        {"name": "Ada Byron"},
+        [loc(expected={"name": "G"})],
+        [reading("Ada Byron")],
+        run_id=RUN,
+    )
+    assert stale.results[0].code == "stale_record"

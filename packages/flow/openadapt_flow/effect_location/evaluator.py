@@ -41,6 +41,7 @@ from openadapt_flow.effect_location.record import (
 )
 
 __all__ = [
+    "CODES",
     "HELD",
     "NOT_CHECKED",
     "REFUTED",
@@ -54,6 +55,32 @@ __all__ = [
 #: The verdict kernel's three statuses (``openadapt_flow.verdict.Status``).
 KeyStatus = Literal["held", "refuted", "not_checked"]
 HELD, REFUTED, NOT_CHECKED = get_args(KeyStatus)
+
+#: Every ``KeyResult.code``. Only ``shown`` holds; only ``mismatch`` refutes.
+CODES = frozenset(
+    {
+        "shown",
+        "mismatch",
+        "bad_record",
+        "other_run",
+        "read_failed",
+        "bad_reading",
+        "start_not_met",
+        "not_found",
+        "count_mismatch",
+        "no_expected",
+        "bad_expected",
+        "bad_baseline",
+        "unreadable",
+        "partial",
+        "same_as_baseline",
+        "no_location",
+        "not_read",
+        "duplicate_location",
+        "stale_record",
+        "plan_conflict",
+    }
+)
 
 #: The check level a start condition reaches.
 LEVEL_OF_START: dict[Start, CheckLevel] = {
@@ -81,6 +108,9 @@ class KeyResult:
     word: Optional[str] = None
     locations: tuple[str, ...] = ()
     shown: tuple[str, ...] = ()
+    #: Why, for code: one of :data:`CODES`. Callers branch on this, never
+    #: on ``reason``, which is for people.
+    code: str = ""
 
 
 @dataclass(frozen=True)
@@ -165,31 +195,39 @@ def _basis(start: Start, claimed: Optional[str]) -> Optional[str]:
 def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyResult]:
     """Each of ``loc``'s keys judged from one reading."""
 
-    def nc(reason: str, shown: tuple[str, ...] = ()) -> dict[str, KeyResult]:
+    def nc(code: str, reason: str, shown: tuple[str, ...] = ()) -> dict[str, KeyResult]:
         return {
-            k: KeyResult(k, NOT_CHECKED, reason, locations=(loc.id,), shown=shown)
+            k: KeyResult(
+                k, NOT_CHECKED, reason, locations=(loc.id,), shown=shown, code=code
+            )
             for k in loc.keys
         }
 
     problem = _shape_problem(loc)
     if problem:
-        return nc(problem)
+        return nc("bad_record", problem)
     if not run_id or reading.run_id != run_id:
-        return nc("the reading belongs to another run")
+        return nc("other_run", "the reading belongs to another run")
     if reading.error is not None:
-        return nc("the read failed")
+        return nc("read_failed", "the read failed")
     if not isinstance(reading.complete, bool):
-        return nc("the reading does not say whether it was complete")
+        return nc("bad_reading", "the reading does not say whether it was complete")
     wanted = _start(loc.start)
     got = _start(reading.start)
     if got is None or wanted is None or LEVEL_OF_START[got] < LEVEL_OF_START[wanted]:
-        return nc("the reading did not start where the location requires")
+        return nc(
+            "start_not_met", "the reading did not start where the location requires"
+        )
     found = len(reading.matches)
     if found == 0:
-        return nc("the location was not found")
+        return nc("not_found", "the location was not found")
     shown_all = tuple(str(m.get("text", "")) for m in reading.matches)
     if found != loc.expected_count:
-        return nc(f"found {found} times, expected {loc.expected_count}", shown_all)
+        return nc(
+            "count_mismatch",
+            f"found {found} times, expected {loc.expected_count}",
+            shown_all,
+        )
     decoded = [decode(loc.codec, m, loc.keys) for m in reading.matches]
     out: dict[str, KeyResult] = {}
     level = LEVEL_OF_START[got]
@@ -197,11 +235,12 @@ def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyR
     for key in loc.keys:
         codec = _codec_for(loc, key)
 
-        def result(status: str, reason: str) -> KeyResult:
+        def result(status: str, code: str, reason: str) -> KeyResult:
             return KeyResult(
                 key,
                 status,
                 reason,
+                code=code,
                 level=level if status == HELD else CheckLevel.UNCHECKED,
                 basis=basis if status == HELD else None,
                 locations=(loc.id,),
@@ -209,13 +248,17 @@ def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyR
             )
 
         if key not in loc.expected:
-            out[key] = result(NOT_CHECKED, "the location has no expected value")
+            out[key] = result(
+                NOT_CHECKED, "no_expected", "the location has no expected value"
+            )
             continue
         try:
             want = canonical(codec, loc.expected[key])
         except CodecError:
             out[key] = result(
-                NOT_CHECKED, "the expected value is not in the codec's form"
+                NOT_CHECKED,
+                "bad_expected",
+                "the expected value is not in the codec's form",
             )
             continue
         values = [d.get(key) for d in decoded]
@@ -224,31 +267,38 @@ def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyR
         ]
         if wrong:
             # A partial read can refute: it showed a different value.
-            out[key] = result(REFUTED, "the location shows a different value")
+            out[key] = result(
+                REFUTED, "mismatch", "the location shows a different value"
+            )
             continue
         if any(
             isinstance(v, CodecError) or key not in d for v, d in zip(values, decoded)
         ):
-            out[key] = result(NOT_CHECKED, "the displayed text could not be read")
+            out[key] = result(
+                NOT_CHECKED, "unreadable", "the displayed text could not be read"
+            )
             continue
         if reading.complete is not True:
-            out[key] = result(NOT_CHECKED, "the read was partial")
+            out[key] = result(NOT_CHECKED, "partial", "the read was partial")
             continue
         if loc.baseline is not None and key in loc.baseline:
             try:
                 before = canonical(codec, loc.baseline[key])
             except CodecError:
                 out[key] = result(
-                    NOT_CHECKED, "the baseline is not in the codec's form"
+                    NOT_CHECKED,
+                    "bad_baseline",
+                    "the baseline is not in the codec's form",
                 )
                 continue
             if _same(before, want):
                 out[key] = result(
                     NOT_CHECKED,
+                    "same_as_baseline",
                     "the value was already shown before, so the read cannot show the change",
                 )
                 continue
-        out[key] = result(HELD, "the location shows the expected value")
+        out[key] = result(HELD, "shown", "the location shows the expected value")
     return out
 
 
@@ -262,13 +312,29 @@ def _combine(key: str, results: Sequence[KeyResult]) -> KeyResult:
     locs = tuple(dict.fromkeys(loc for r in results for loc in r.locations))
     shown = tuple(s for r in results for s in r.shown)
     if not results:
-        return KeyResult(key, NOT_CHECKED, "no effect location shows this value")
+        return KeyResult(
+            key, NOT_CHECKED, "no effect location shows this value", code="no_location"
+        )
     refuted = [r for r in results if r.status == REFUTED]
     if refuted:
-        return KeyResult(key, REFUTED, refuted[0].reason, locations=locs, shown=shown)
+        return KeyResult(
+            key,
+            REFUTED,
+            refuted[0].reason,
+            locations=locs,
+            shown=shown,
+            code=refuted[0].code,
+        )
     open_ = [r for r in results if r.status != HELD]
     if open_:
-        return KeyResult(key, NOT_CHECKED, open_[0].reason, locations=locs, shown=shown)
+        return KeyResult(
+            key,
+            NOT_CHECKED,
+            open_[0].reason,
+            locations=locs,
+            shown=shown,
+            code=open_[0].code,
+        )
     weakest = min(results, key=lambda r: r.level)
     bases = {r.basis for r in results if r.level == weakest.level}
     basis = bases.pop() if len(bases) == 1 else None
@@ -279,6 +345,7 @@ def _combine(key: str, results: Sequence[KeyResult]) -> KeyResult:
         level=weakest.level,
         basis=basis,
         word=_compat.word(weakest.level, basis, confirmed=True),
+        code=weakest.code,
         locations=locs,
         shown=shown,
     )
@@ -343,6 +410,7 @@ def evaluate_all(
                         NOT_CHECKED,
                         "two locations share this id",
                         locations=(loc.id,),
+                        code="duplicate_location",
                     )
                 )
             continue
@@ -351,7 +419,11 @@ def evaluate_all(
             for k in relevant:
                 judged[k].append(
                     KeyResult(
-                        k, NOT_CHECKED, "the location was not read", locations=(loc.id,)
+                        k,
+                        NOT_CHECKED,
+                        "the location was not read",
+                        locations=(loc.id,),
+                        code="not_read",
                     )
                 )
             continue
@@ -370,6 +442,7 @@ def evaluate_all(
                         "the location expects a different value than the plan",
                         locations=(loc.id,),
                         shown=r.shown,
+                        code="stale_record",
                     )
                 judged[k].append(r)
 
@@ -377,7 +450,12 @@ def evaluate_all(
     for key in planned:
         if key in conflicted:
             results.append(
-                KeyResult(key, NOT_CHECKED, "the plan has two values for this key")
+                KeyResult(
+                    key,
+                    NOT_CHECKED,
+                    "the plan has two values for this key",
+                    code="plan_conflict",
+                )
             )
         else:
             results.append(_combine(key, judged[key]))
