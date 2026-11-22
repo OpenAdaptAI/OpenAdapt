@@ -2,6 +2,13 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+- New `a2a` extra for `openadapt-agent serve --a2a`, the A2A (Agent2Agent)
+  protocol adapter in openadapt-flow (docs/A2A.md). `--handoffs` adds
+  `get_handoff` and `verify_handoff`. Both need an openadapt-flow that has
+  them.
+
 ## v2.2.2 (2026-11-14)
 
 - Accept `openadapt-flow` 3.x. Flow 3 moved its vision stack to the `vision`
