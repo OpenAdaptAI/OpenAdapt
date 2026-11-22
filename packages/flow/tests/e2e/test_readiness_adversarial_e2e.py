@@ -177,9 +177,6 @@ pytestmark = pytest.mark.timeout(900)
 
 
 def _chromium_or_skip() -> None:
-    from tests.e2e.test_readiness_e2e import _egress_block_or_skip
-
-    _egress_block_or_skip()
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
 
@@ -205,12 +202,13 @@ def _episodes(tmp_path: Path, app: Any, n: int) -> tuple[str, Path]:
 
 
 def _launcher() -> Any:
-    from openadapt_flow.readiness.launcher import EgressOptions, SubprocessLauncher
+    from openadapt_flow.readiness.launcher import SubprocessLauncher
+    from tests.e2e.test_readiness_e2e import egress_options
 
     return SubprocessLauncher(
         [sys.executable, str(Path(__file__).resolve())],
         label="adversarial-agent",
-        egress=EgressOptions(mode="blocked"),
+        egress=egress_options(),
     )
 
 
@@ -273,7 +271,10 @@ def test_no_route_around_the_hold_lands_a_write(
         assert run["target_gate"]["gate_lost"] is False
         assert run["target_gate"]["ungated_targets"] == {}
 
+    from openadapt_flow.readiness.compare import write_case_files
+
     cases = compare_runs(episodes, tmp_path / "runs")
+    write_case_files(cases, tmp_path / "runs")
     by_route = {plan[c["task_id"]]["route"]: c for c in cases["cases"]}
     for route in OUTSIDE_THE_TAB:
         assert (by_route[route]["status"], by_route[route]["reason"]) == (
@@ -284,6 +285,13 @@ def test_no_route_around_the_hold_lands_a_write(
     assert card["failed_scope"] == len(OUTSIDE_THE_TAB)
     assert card["scope_ok"] is False
     assert card["matched"] == 0
+    if os.environ.get("OPENADAPT_WRITE_EVIDENCE") == "1":
+        from openadapt_flow.readiness.scorecard import write_scorecard
+        from tests.e2e.test_readiness_e2e import write_sample
+
+        write_scorecard(cases, tmp_path / "card")
+        task = next(t for t, item in plan.items() if item["route"] == "create_target")
+        write_sample(tmp_path / "runs", task, tmp_path / "card", "extra-target")
 
 
 def test_a_service_worker_in_a_new_context_is_held(tmp_path: Path) -> None:
@@ -467,3 +475,130 @@ def test_form_values_are_read_from_a_real_page(tmp_path: Path) -> None:
     for expected in ("02134", "Triage", "b Beta", "Cough, 3 days"):
         assert expected in joined, (expected, values)
     assert "hunter2" not in joined and "Consult" not in joined
+
+
+def test_negative_control_auto_attach_alone_loses_the_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same agent with the browser-level hold turned off (auto-attach
+    left on): writes land in the app's store. This is why the browser-level
+    hold, not auto-attach, is the gate."""
+
+    _chromium_or_skip()
+    from benchmark.agent_guard.app import serve
+    from openadapt_flow.readiness import targets
+    from openadapt_flow.readiness.cdp_wire import CdpWire, browser_ws_url
+    from openadapt_flow.readiness.runner import RunnerConfig, run_episodes
+    from tests.e2e.test_readiness_e2e import _episode
+
+    def start_without_the_hold(self: Any) -> Any:
+        self.wire = CdpWire(browser_ws_url(self.endpoint), self._on_event)
+        existing = self.wire.send("Target.getTargets", {}).get("targetInfos") or []
+        self._baseline = {str(t.get("targetId")) for t in existing}
+        self.wire.send(
+            "Target.setAutoAttach",
+            {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True},
+        )
+        self._started = True
+        return self
+
+    monkeypatch.setattr(targets.TargetGate, "start", start_without_the_hold)
+    app = serve(tmp_path / "app.sqlite")
+    landed: list[int] = []
+    try:
+        app_url, episodes = _episodes(tmp_path, app, len(ROUTES))
+
+        def reset() -> None:
+            landed.append(app.writes)
+            app.writes = 0
+            app.store.reset()
+
+        plan = {
+            _episode(i)["task_id"]: {**_episode(i), "route": route}
+            for i, route in enumerate(ROUTES)
+        }
+        (tmp_path / "plan.json").write_text(json.dumps(plan))
+        monkeypatch.setenv("READINESS_ADV_PLAN", str(tmp_path / "plan.json"))
+        cfg = RunnerConfig(app_url=app_url, screen_selector="#patient-banner",
+                           timeout_s=60.0, linger_s=0.5, reset=reset)
+        run_episodes(episodes, tmp_path / "runs", _launcher(), cfg)
+        landed.append(app.writes)
+    finally:
+        app.stop()
+    by_route = dict(zip(ROUTES, landed[1:]))
+    print("negative control, writes landed per route:", by_route)
+    assert by_route["create_target"] >= 1 and by_route["new_context"] >= 1, by_route
+    assert by_route["worker"] == 0  # held by the tab's own session either way
+
+
+def test_a_real_claude_loop_under_scrubbed_egress_on_mockmed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``claude_cu_agent.py`` on MockMed under ``--egress scrubbed``, with the
+    real scrubber and a loopback stand-in for the Anthropic API. The proxy
+    meters the calls, the task is not refused, and the planted patient name
+    in the instruction never reaches the stand-in."""
+
+    _chromium_or_skip()
+    from openadapt_flow.flight.egress import egress_block_available
+    from openadapt_flow.flight.scrub import ScrubberUnavailable, require_scrubber
+
+    if not egress_block_available()[0]:
+        pytest.skip("scrubbed egress needs the OS egress block (macOS)")
+    try:
+        require_scrubber()
+    except ScrubberUnavailable as exc:
+        pytest.skip(f"the scrubber can't run here: {exc}")
+    from benchmark.agent_guard.app import serve
+    from openadapt_flow.readiness.compare import compare_runs
+    from openadapt_flow.readiness.launcher import EgressOptions, SubprocessLauncher
+    from openadapt_flow.readiness.runner import RunnerConfig, run_episodes
+    from openadapt_flow.readiness.scorecard import build_scorecard
+    from tests.fixtures.flight.fake_provider import FakeProvider, anthropic_click
+
+    fake = FakeProvider(model="claude-sonnet-5-5").start()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    fake.anthropic_turns = [
+        [anthropic_click(200, 200)],
+        [{"type": "text", "text": "RESULT: NOT DONE stub upstream"}],
+    ]
+    app = serve(tmp_path / "app.sqlite")
+    try:
+        app_url, episodes = _episodes(tmp_path, app, 1)
+        inputs_path = next(episodes.glob("*/inputs.json"))
+        inputs = json.loads(inputs_path.read_text())
+        inputs["instruction"] = "For Jane Sample: " + inputs["instruction"]
+        inputs_path.write_text(json.dumps(inputs))
+        agent = Path(__file__).resolve().parents[2] / "benchmark" / "readiness" / "claude_cu_agent.py"
+        launcher = SubprocessLauncher(
+            [sys.executable, str(agent)], label="claude-cu-stub",
+            egress=EgressOptions(mode="scrubbed", spend_cap_usd=0.5,
+                                 upstreams={"anthropic": fake.url}),
+        )
+        cfg = RunnerConfig(app_url=app_url, screen_selector="#patient-banner",
+                           timeout_s=120.0, linger_s=0.5, reset=app.store.reset)
+        manifest = run_episodes(episodes, tmp_path / "runs", launcher, cfg)
+        assert app.writes == 0
+    finally:
+        app.stop()
+        fake.stop()
+    task_id = manifest["tasks"][0]["task_id"]
+    run_dir = tmp_path / "runs" / task_id
+    run = json.loads((run_dir / "run.json").read_text())
+    egress = json.loads((run_dir / "egress.json").read_text())
+    log = (run_dir / "agent.log").read_text()
+    assert egress["mode"] == "scrubbed" and egress["enforced"] is True, (egress, log)
+    assert egress["model_calls"] == 2, (egress, log)
+    assert egress["cost_source"] == "metered" and egress["cost_usd"] > 0
+    assert run["egress"]["refused"] is False, run["egress"]
+    assert run["model_cost_source"] == "metered"
+    assert run["usage"]["calls"] == 2  # the agent's own count agrees
+    assert len(fake.requests) == 2
+    card = build_scorecard(compare_runs(episodes, tmp_path / "runs"))
+    assert card["egress"] == {"mode": "scrubbed", "enforced": True, "model_calls": 2}
+    assert card["model_cost_usd"]["source"] == "metered"
+    if b"Jane Sample" in fake.received_bytes():
+        # Open finding (flight recorder scrubber): the real scrubber removes
+        # this name from a short string but not from the computer-use
+        # preamble plus task text, so it reached the stand-in upstream.
+        pytest.xfail("the scrubber missed the planted name in the long prompt text")

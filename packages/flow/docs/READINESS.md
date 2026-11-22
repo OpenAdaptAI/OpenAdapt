@@ -185,8 +185,10 @@ them:
 Auto-attach alone does not stop a write: a candidate that calls
 `Target.createTarget` and then `Runtime.evaluate` on the new target over its
 own DevTools session runs the page's `fetch` before the gate resumes it. In
-the adversarial test, with auto-attach and no browser-level hold, 5 of 6
-routes landed a write in the app's store; with the hold, none did.
+the adversarial test's negative control (auto-attach on, browser-level hold
+off), 5 of the 6 routes landed a write in the app's store (all but the
+dedicated worker, which the tab's own session holds); with the hold, none
+did.
 
 The case is `NOT_CHECKED` with reason `extra_target` (counted in
 `failed_scope`, `scope_ok` false) when a write came from any target other
@@ -406,6 +408,17 @@ been run through `readiness` yet; that is the next evidence step.
   compared: its case is `extra_target`.
 - Out-of-process iframes of the guarded tab were not exercised by the
   adversarial test (MockMed has none).
+- The browser runs outside the OS egress block (only the candidate's process
+  is inside it). The hold refuses non-GET requests to other origins, but a
+  `GET` to another origin from the page goes on, so a candidate could carry
+  what is on screen out through the browser (an image URL, a navigation).
+- Scrubbing is the flight recorder's. In the scrubbed smoke test on MockMed
+  (`test_a_real_claude_loop_under_scrubbed_egress_on_mockmed`) the real
+  scrubber removed a planted patient name from a short string but not from
+  the computer-use preamble plus task text, so the name reached the stand-in
+  upstream; the test records this as an expected failure until the scrubber
+  catches it. Don't run `--egress scrubbed` on real records on the strength
+  of the scrubber alone.
 - A save whose body is not form or JSON is `uncompared`, so its case is never
   `MATCHED`.
 - The program path takes field names from the form's labels; it was

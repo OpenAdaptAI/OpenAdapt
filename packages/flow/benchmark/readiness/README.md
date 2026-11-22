@@ -25,7 +25,11 @@ Asserted:
 - no case with an uncompared field is counted as matched;
 - `scorecard.json` holds none of the notes or patient names.
 
-`results.json` is written by the test with `OPENADAPT_WRITE_EVIDENCE=1`.
+`results.json` is written by the test with `OPENADAPT_WRITE_EVIDENCE=1`, as
+is `sample/`: one matched, one mismatched and one `extra_target` task's
+`run.json`, `case.json`, `egress.json`, `usage.json` (and
+`proposed_write.json`) with that run's `scorecard.json`, for the consumers'
+join tests (J1, J2). All values in them are synthetic.
 
 `tests/e2e/test_readiness_adversarial_e2e.py` runs an adversarial agent
 on the same app, one route per task, each trying to POST an encounter from

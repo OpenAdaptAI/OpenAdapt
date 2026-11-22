@@ -37,6 +37,23 @@ FIELD_ERRORS = {
 }
 WRONG_RECORD = {16: "next", 19: "next"}
 EVIDENCE = Path(__file__).resolve().parents[2] / "benchmark" / "readiness" / "results.json"
+#: One task's run folder and the scorecard, for the join tests of the
+#: consumers (J1, J2); written with OPENADAPT_WRITE_EVIDENCE=1.
+SAMPLE = EVIDENCE.parent / "sample"
+SAMPLE_FILES = ("run.json", "case.json", "egress.json", "proposed_write.json", "usage.json")
+
+
+def write_sample(runs: Path, task_id: str, card_dir: Path, name: str) -> None:
+    """Copy one task's run files and the scorecard into ``sample/<name>/``."""
+
+    import shutil
+
+    target = SAMPLE / name
+    target.mkdir(parents=True, exist_ok=True)
+    for file in SAMPLE_FILES:
+        if (runs / task_id / file).is_file():
+            shutil.copyfile(runs / task_id / file, target / file)
+    shutil.copyfile(card_dir / "scorecard.json", target / "scorecard.json")
 
 
 def _episode(i: int) -> dict[str, Any]:
@@ -106,7 +123,7 @@ def agent_main() -> int:
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "model": None,
-                "cost_usd": None,
+                "cost_usd": 0.0,
             }
         )
     )
@@ -125,16 +142,18 @@ import pytest  # noqa: E402
 pytestmark = pytest.mark.timeout(1200)
 
 
-def _egress_block_or_skip() -> None:
-    from openadapt_flow.flight.egress import egress_block_available
+def egress_options() -> Any:
+    """``--egress blocked`` where the OS egress block exists (macOS); else
+    None, so the hold is still tested where the block isn't (Linux CI). The
+    egress checks run only with the block."""
 
-    ok, why = egress_block_available()
-    if not ok:
-        pytest.skip(f"the scripted agent runs with --egress blocked: {why}")
+    from openadapt_flow.flight.egress import egress_block_available
+    from openadapt_flow.readiness.launcher import EgressOptions
+
+    return EgressOptions(mode="blocked") if egress_block_available()[0] else None
 
 
 def _chromium_or_skip() -> None:
-    _egress_block_or_skip()
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
 
@@ -214,8 +233,8 @@ def _record_people(app_url: str, src: Path, n: int) -> None:
 def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _chromium_or_skip()
     from benchmark.agent_guard.app import serve
-    from openadapt_flow.readiness.compare import compare_runs
-    from openadapt_flow.readiness.launcher import EgressOptions, SubprocessLauncher
+    from openadapt_flow.readiness.compare import compare_runs, write_case_files
+    from openadapt_flow.readiness.launcher import SubprocessLauncher
     from openadapt_flow.readiness.reference import import_episodes
     from openadapt_flow.readiness.runner import RunnerConfig, run_episodes
     from openadapt_flow.readiness.scorecard import write_scorecard
@@ -245,7 +264,7 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         launcher = SubprocessLauncher(
             [sys.executable, str(Path(__file__).resolve())],
             label="scripted-agent",
-            egress=EgressOptions(mode="blocked"),
+            egress=(egress := egress_options()),
         )
         cfg = RunnerConfig(
             app_url=app_url,
@@ -266,6 +285,7 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert set(statuses.values()) == {"HELD"}, statuses
 
         cases = compare_runs(tmp_path / "episodes", tmp_path / "runs")
+        assert write_case_files(cases, tmp_path / "runs") == n
         card = write_scorecard(cases, tmp_path / "card", hourly_cost=40.0)
     finally:
         app.stop()
@@ -303,17 +323,22 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     for name in PATIENTS.values():
         assert name not in text
     assert card["model_cost_usd"]["unknown_count"] == 0
-    assert card["model_cost_usd"]["source"] == "metered"
     assert card["model_cost_usd"]["total"] == 0.0
-    assert card["egress"] == {"mode": "blocked", "enforced": True, "model_calls": 0}
     assert card["task_type"] == "unspecified"
     assert card["savings"]["est_value_usd"] is not None
-    for i in range(n):
-        run_dir = tmp_path / "runs" / _episode(i)["task_id"]
-        egress = json.loads((run_dir / "egress.json").read_text())
-        assert egress["model_calls"] == 0 and egress["enforced"] is True
+    if egress is not None:
+        assert card["model_cost_usd"]["source"] == "metered"
+        assert card["egress"] == {"mode": "blocked", "enforced": True, "model_calls": 0}
+        for i in range(n):
+            run_dir = tmp_path / "runs" / _episode(i)["task_id"]
+            summary = json.loads((run_dir / "egress.json").read_text())
+            assert summary["model_calls"] == 0 and summary["enforced"] is True
+    else:
+        assert card["egress"]["mode"] == "unscrubbed"  # no proxy ran: said so
 
     if os.environ.get("OPENADAPT_WRITE_EVIDENCE") == "1":
+        write_sample(tmp_path / "runs", _episode(0)["task_id"], tmp_path / "card", "matched")
+        write_sample(tmp_path / "runs", _episode(1)["task_id"], tmp_path / "card", "mismatched")
         EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
         EVIDENCE.write_text(
             json.dumps(
