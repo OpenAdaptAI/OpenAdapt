@@ -1,0 +1,28 @@
+{
+  "card_id": "sha256:14f96152fe836e5777795a069b35df054608625cb077460726dc280e2f417b40",
+  "choices": [
+    {
+      "consequence": "You type the code in the live browser yourself. The run then goes on from the same screen. OpenAdapt never sees the code.",
+      "id": "done_by_person",
+      "label": "I entered the code in the browser"
+    },
+    {
+      "consequence": "Nothing is saved. The run moves to the next item.",
+      "id": "skip",
+      "label": "Skip this item"
+    },
+    {
+      "consequence": "Nothing more is saved. The whole run stops.",
+      "id": "abort",
+      "label": "Stop the run"
+    }
+  ],
+  "deadline_at": "2026-11-22T02:42:02.700707Z",
+  "kind": "second_factor",
+  "opened_at": "2026-11-22T02:41:59.700707Z",
+  "run_ref": "e2e-run",
+  "schema": "openadapt.exception-card/v1",
+  "screenshot_ref": null,
+  "summary": "The sign-in for <PERSON> (<DATE_TIME>, MRN <US_BANK_NUMBER>) wants a code",
+  "task_id": "note-intake"
+}

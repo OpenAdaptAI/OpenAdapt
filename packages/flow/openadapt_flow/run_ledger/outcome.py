@@ -102,9 +102,10 @@ TRANSACTION_OUTCOME_REASON: dict[str, str] = {
 EXECUTION_OUTCOME_REASON: dict[str, str] = {
     "VERIFIED": "readback_verified",
     "COMPLETED_UNVERIFIED": "completed_unverified",
-    # A halt says the run stopped; it doesn't say whether before the write.
+    # A halt or a failure says the run stopped; neither says whether before
+    # the write, so neither is "no write" without more evidence.
     "HALTED": "write_unconfirmed",
-    "FAILED": "crashed_no_write",
+    "FAILED": "write_unconfirmed",
     "ROLLED_BACK": "rolled_back",
 }
 
@@ -135,13 +136,16 @@ EFFECT_VERDICT_REASON: dict[str, str] = {
     "INDETERMINATE": "reconciliation_required",
 }
 
-#: ``openadapt_flow.agent.runner.RunOutcome.status``.
+#: ``openadapt_flow.agent.runner.RunOutcome.status``. A timeout or an error
+#: can come after a request went out, and the status alone doesn't say it
+#: didn't: UNKNOWN, not FAILED. The ``*_no_write`` reasons are only for a
+#: source that also shows nothing was sent (the agent guard's own events).
 AGENT_RUN_STATUS_REASON: dict[str, str] = {
     "success": "completed_unverified",
     "halt": "write_unconfirmed",
     "refused": "policy_rejected_no_write",
-    "timeout": "timed_out_no_write",
-    "error": "crashed_no_write",
+    "timeout": "write_unconfirmed",
+    "error": "write_unconfirmed",
 }
 
 #: Wrap / SkillCache ``status`` codes that decide on their own
@@ -159,6 +163,39 @@ WRAP_STATUS_REASON: dict[str, str] = {
 }
 
 
+#: Guard refusal codes (``summary.json`` ``blocked[].code``) where the
+#: approval was not given and no person said no: nobody answered in time.
+#: The save was blocked, so nothing was written; a person still has to act.
+_APPROVAL_NOT_GIVEN = frozenset(
+    {"request_expired", "approval_wait_timed_out", "approval_required"}
+)
+#: Guard refusal codes where the guard itself could not do its job (P5's
+#: ``agent_guard.ledger_row._FAILED_CODES`` and the approval plumbing). The
+#: save was blocked before it was sent.
+_GUARD_COULD_NOT_CHECK = frozenset(
+    {
+        "baseline_unreadable",
+        "screenshot_required",
+        "wrong_state",
+        "task_invalid",
+        "task_unreadable",
+        "readback_provider_failed",
+        "already_answered",
+        "answer_fields_invalid",
+        "answer_malformed",
+        "answer_unreadable",
+        "approver_root_changed",
+        "frame_digest_mismatch",
+        "frame_unreadable",
+        "initiator_changed",
+        "request_unknown",
+        "store_unsafe",
+        "approval_not_authenticated_person",
+        "approval_request_unwritable",
+    }
+)
+
+
 def _guard_block_reason(code: str) -> Optional[str]:
     """A save the guard blocked (``summary.json`` ``blocked[].code``)."""
 
@@ -174,8 +211,14 @@ def _guard_block_reason(code: str) -> Optional[str]:
         "approval_already_used",
     ):
         return "save_blocked_double_save"
-    if code in ("declined", "approval_declined") or code.startswith("approval_"):
+    if code == "declined":
+        # P5 writes ``declined`` only for a readable answer that isn't
+        # "approve": a person said no. Not a catch (skeptic #16).
+        return "person_declined"
+    if code in _APPROVAL_NOT_GIVEN:
         return "approval_declined"
+    if code in _GUARD_COULD_NOT_CHECK:
+        return "policy_rejected_no_write"
     return None
 
 
@@ -214,17 +257,143 @@ def outcome_reason(table: dict[str, str], value: object) -> str:
     return table.get(value.upper(), table.get(value, "unmapped_outcome"))
 
 
+#: P1 readiness ``case.json`` ``status`` (``openadapt.readiness-case/v1``,
+#: ``readiness/compare.py CASE_STATUSES``). A shadow run holds every save,
+#: so nothing it proposed was written: never VERIFIED. A person's save is the
+#: real one, so a match is ESCALATED (a person did the step), and a mismatch
+#: or a wrong record is the error the shadow caught. ``FAILED_SCOPE`` means a
+#: write reached the app anyway: UNKNOWN, since nothing read it back.
+#: ``NOT_CHECKED`` is refined by :func:`shadow_reason`.
+READINESS_CASE_REASON: dict[str, str] = {
+    "MATCHED": "shadow_matched",
+    "MISMATCHED": "shadow_field_mismatch",
+    "WRONG_RECORD": "shadow_wrong_record",
+    "NOT_COMPARABLE": "shadow_not_compared",
+    "NOT_CHECKED": "shadow_not_compared",
+    "FAILED_SCOPE": "shadow_write_landed",
+}
+
+#: P1 ``run.json`` ``status`` for a run that proposed nothing
+#: (``readiness/runner.py``). ``TIMEOUT`` and ``NO_WRITE_HELD`` are set only
+#: after the shadow guard counted the saves that reached the app, so with
+#: ``landed_writes == 0`` they are failures with evidence that nothing was
+#: written. ``AGENT_ERROR`` is the default before the guard counted anything:
+#: its ``landed_writes: 0`` is not evidence, so it is UNKNOWN.
+READINESS_RUN_NO_WRITE_REASON: dict[str, str] = {
+    "TIMEOUT": "timed_out_no_write",
+    "NO_WRITE_HELD": "agent_gave_up",
+    "AGENT_ERROR": "write_unconfirmed",
+}
+
+
+def shadow_reason(
+    case_status: Optional[str], run_status: Optional[str], landed_writes: Optional[int]
+) -> str:
+    """The reason for one shadow run (J1).
+
+    ``landed_writes`` is P1's count of saves that reached the app (``None``
+    when unknown). A landed write wins: something was saved and nothing read
+    it back. A missing ``case.json`` is never a match.
+    """
+
+    if case_status == "FAILED_SCOPE" or (landed_writes or 0) > 0:
+        return "shadow_write_landed"
+    if case_status in ("MISMATCHED", "WRONG_RECORD"):
+        # The proposal was held, so the error the shadow caught stands even
+        # when the landed count is unknown.
+        return READINESS_CASE_REASON[case_status]
+    if landed_writes is None:
+        return "shadow_not_compared"
+    if (
+        case_status in (None, "NOT_CHECKED")
+        and run_status in READINESS_RUN_NO_WRITE_REASON
+    ):
+        return READINESS_RUN_NO_WRITE_REASON[str(run_status)]
+    if case_status is None:
+        return "shadow_not_compared"
+    return outcome_reason(READINESS_CASE_REASON, case_status)
+
+
+#: P7 fallback ``status`` (``wrap/fallback.py``) on ``path: agent_fallback``.
+#: ``None`` means the reason depends on the record check (see
+#: :func:`fallback_reason`).
+FALLBACK_STATUS_REASON: dict[str, Optional[str]] = {
+    "VERIFIED": None,
+    "GATE_REFUSED": None,
+    "COST_CAP_EXCEEDED": None,
+    # A save went through without the gate's approval.
+    "GATE_NOT_PROVED": "self_approved",
+    "RECONCILIATION_REQUIRED": "reconciliation_required",
+    # The agent was never started; the program's proved pre-effect halt
+    # stands and a person picks the task up.
+    "FALLBACK_GATE_UNATTENDED": None,
+    "FALLBACK_NO_AGENT": None,
+    "FALLBACK_COST_UNBOUNDED": None,
+    "FALLBACK_REQUEST_REUSED": None,
+}
+_FALLBACK_NOT_STARTED = (
+    "FALLBACK_GATE_UNATTENDED",
+    "FALLBACK_NO_AGENT",
+    "FALLBACK_COST_UNBOUNDED",
+    "FALLBACK_REQUEST_REUSED",
+)
+
+
+def fallback_reason(
+    status: object,
+    *,
+    verified: bool,
+    nothing_written: bool,
+    something_written: bool,
+    program_halted_before_effect: bool,
+) -> str:
+    """The reason for one P7 fallback run (J5). ``verified`` is P7's own
+    rule (a passed record check and every gate approved by the person);
+    ``nothing_written`` / ``something_written`` come from the cache's record
+    check of the task's record."""
+
+    if not isinstance(status, str) or status not in FALLBACK_STATUS_REASON:
+        return (
+            "readback_refuted"
+            if something_written and not verified
+            else ("unmapped_outcome")
+        )
+    fixed = FALLBACK_STATUS_REASON[status]
+    if fixed is not None:
+        return fixed
+    if status == "VERIFIED":
+        return "readback_verified" if verified else "self_approved"
+    if status == "GATE_REFUSED":
+        # The person at the gate said no. With the record check showing no
+        # write, it is a decline, not a catch (skeptic #16).
+        return "person_declined" if nothing_written else "write_unconfirmed"
+    if status == "COST_CAP_EXCEEDED":
+        return "policy_rejected_no_write" if nothing_written else "write_unconfirmed"
+    if status in _FALLBACK_NOT_STARTED:
+        return (
+            "halted_before_effect"
+            if program_halted_before_effect
+            else "write_unconfirmed"
+        )
+    return "unmapped_outcome"
+
+
 __all__ = [
     "AGENT_RUN_STATUS_REASON",
     "EFFECT_VERDICT_REASON",
     "EXECUTE_OUTCOME_REASON",
     "EXECUTION_OUTCOME_REASON",
+    "FALLBACK_STATUS_REASON",
     "GUARD_VERDICT_REASON",
+    "READINESS_CASE_REASON",
+    "READINESS_RUN_NO_WRITE_REASON",
     "Signal",
     "TRANSACTION_OUTCOME_REASON",
     "WRAP_STATUS_REASON",
     "decide",
+    "fallback_reason",
     "guard_block_reason",
+    "shadow_reason",
     "outcome_reason",
     "tier_reason",
     "verified_or_tier",

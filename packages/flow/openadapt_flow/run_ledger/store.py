@@ -3,11 +3,16 @@
 Layout under ``$OPENADAPT_HOME/ledger`` (default ``~/.openadapt/ledger``)::
 
     rows.jsonl                      one entry per line (mode 0600)
+    ../exceptions/<run_ref>/        P6's exception cards and answers (read)
     private/<row_id>/ledger.private.json   that row's values (mode 0600)
     .lock                           serialises add
 
 Each ``rows.jsonl`` line is ``{"row": <openadapt.run-ledger/v1>, "run_digest":
-..., "run_ref": ..., "added_at": ...}``. ``run_digest`` hashes the source
+..., "run_ref": ..., "added_at": ..., "declared_fields": [...]}``.
+``declared_fields`` lists the field names the run's own task, verify or
+readiness reference config declares; ``ledger export`` and ``push`` let only
+those field names past the scrubber check (an entry without the key exempts
+nothing). ``run_digest`` hashes the source
 files (paths and bytes); ``run_ref`` hashes the run's resolved path, so a run
 whose files change later (an approval answered after the first ``add``) gets
 a new row and :meth:`LedgerStore.latest` keeps the newest one per run. A
@@ -25,6 +30,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import secrets
 import tempfile
 import uuid
@@ -54,6 +60,8 @@ from openadapt_flow.run_ledger.collect import (
 from openadapt_flow.run_ledger.outcome import Signal, decide
 
 PRIVATE_SCHEMA = "openadapt.run-ledger-private/v1"
+#: P6's run reference (``openadapt_types.exception_card.RUN_REF_PATTERN``).
+_RUN_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _LABEL_DEFAULT = "unspecified"
 
 
@@ -222,10 +230,18 @@ def build_row(
     task_type: Optional[str] = None,
     task_id: Optional[str] = None,
     collected: Optional[Collected] = None,
+    exceptions: Optional[Path] = None,
 ) -> tuple[RunLedgerRowV1, PrivateSidecar, str]:
-    """One row for ``run``, its private sidecar, and the run digest."""
+    """One row for ``run``, its private sidecar, and the run digest.
 
-    collected = collected if collected is not None else collect(Path(run))
+    ``exceptions`` is the run's P6 folder (``$OPENADAPT_HOME/exceptions/
+    <run_ref>``), read beside the run."""
+
+    collected = (
+        collected
+        if collected is not None
+        else collect(Path(run), exceptions=exceptions)
+    )
     contributions = collected.contributions
     signals: list[Signal] = [s for c in contributions for s in c.signals]
     ids = list(dict.fromkeys(t for c in contributions for t in c.task_ids))
@@ -373,13 +389,33 @@ class LedgerStore:
     def rows(self) -> list[RunLedgerRowV1]:
         return [RunLedgerRowV1.model_validate(e["row"]) for e in self.entries()]
 
-    def latest(self) -> list[RunLedgerRowV1]:
-        """The newest row per (task_id, run), in the order they were added."""
+    def latest_entries(self) -> list[dict[str, Any]]:
+        """The newest entry per (task_id, run), in the order they were added."""
 
         keep: dict[tuple[str, str], dict[str, Any]] = {}
         for entry in self.entries():
             keep[(entry["row"]["task_id"], entry.get("run_ref", ""))] = entry
-        return [RunLedgerRowV1.model_validate(e["row"]) for e in keep.values()]
+        return list(keep.values())
+
+    def latest(self) -> list[RunLedgerRowV1]:
+        """The newest row per (task_id, run), in the order they were added."""
+
+        return [RunLedgerRowV1.model_validate(e["row"]) for e in self.latest_entries()]
+
+    def exceptions_dir(self, run: Path, run_ref: Optional[str]) -> Optional[Path]:
+        """P6's folder for this run: ``exceptions/<run_ref>`` beside the
+        ledger. P6's run reference is the operator's ``--run-ref`` (or a
+        random ``mcp-...``), not something a run directory names, so it is
+        given explicitly; without it, a folder named exactly like the run
+        directory is used when one exists."""
+
+        base = self.root.parent / "exceptions"
+        if run_ref is not None:
+            if not _RUN_REF.match(run_ref):
+                raise ValueError("a run reference is letters, digits, '.', '_' or '-'")
+            return base / run_ref
+        guess = base / Path(run).resolve().name
+        return guess if _RUN_REF.match(guess.name) and guess.is_dir() else None
 
     def find(self, row_id: str) -> Optional[RunLedgerRowV1]:
         for entry in self.entries():
@@ -414,9 +450,18 @@ class LedgerStore:
         *,
         task_type: Optional[str] = None,
         task_id: Optional[str] = None,
+        run_ref: Optional[str] = None,
+        config: tuple[Path | str, ...] = (),
     ) -> AddResult:
         run = Path(run)
-        row, sidecar, digest = build_row(run, task_type=task_type, task_id=task_id)
+        collected = collect(
+            run,
+            exceptions=self.exceptions_dir(run, run_ref),
+            config=tuple(Path(c) for c in config),
+        )
+        row, sidecar, digest = build_row(
+            run, task_type=task_type, task_id=task_id, collected=collected
+        )
         run_ref = hashlib.sha256(str(run.resolve()).encode("utf-8")).hexdigest()
         with self._locked():
             entries = self.entries()
@@ -436,6 +481,7 @@ class LedgerStore:
                     "run_digest": digest,
                     "run_ref": run_ref,
                     "added_at": _now(),
+                    "declared_fields": sorted(collected.declared_fields),
                 }
             )
             body = "".join(json.dumps(e, sort_keys=True) + "\n" for e in entries)

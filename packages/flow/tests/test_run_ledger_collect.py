@@ -333,28 +333,9 @@ def test_unknown_usage_is_null_not_zero():
 
 
 def test_intervals_from_contract_sources():
-    row, _, _ = build_row(FIXTURES / "exception_2fa")
-    assert [i.kind for i in row.human.intervals] == ["second_factor"]
-    assert row.human.intervention_s == 180.0
-    row, _, _ = build_row(FIXTURES / "exception_open")
-    assert row.human.intervention_s is None
-    row, _, _ = build_row(FIXTURES / "guard_row_ok")
-    assert row.human.intervention_s == 45.0
     row, _, _ = build_row(FIXTURES / "task_ledger_question")
     assert [i.kind for i in row.human.intervals] == ["question"]
     assert row.human.intervention_s == 120.0
-
-
-def test_shadow_fields_and_values_are_kept_apart():
-    row, private, _ = build_row(FIXTURES / "shadow_mismatch")
-    assert [(f.name, f.check) for f in row.fields_written] == [
-        ("note", "differs"),
-        ("visit_code", "matched"),
-    ]
-    assert row.fields_differing == 1
-    assert "Synthetic follow-up" not in json.dumps(row.to_json())
-    assert private.fields["note"]["saved"] == "Synthetic follow-up in three weeks"
-    assert "-Synthetic follow-up in two weeks" in private.fields["note"]["diff"]
 
 
 def test_flight_times_and_label():

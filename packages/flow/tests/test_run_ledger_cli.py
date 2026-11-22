@@ -25,7 +25,23 @@ FIXTURE_VALUES = (
     "Synthetic final text",
     "Synthetic summary",
     "Synthetic question text",
+    # Copies of the agent-control-plane pieces' real (synthetic) artifacts.
+    "Synthetic note 00 for review",
+    "Synthetic note 16 for review",
+    "Agent guard benchmark triage note",
+    "Jane Sample",
+    "Triage",
 )
+
+
+def _run_fixtures() -> list[Path]:
+    """Every fixture that is a run (not a config folder or a P6 home)."""
+
+    return sorted(
+        p
+        for p in FIXTURES.iterdir()
+        if p.is_dir() and not p.name.endswith("_config") and p.name != "exceptions_home"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -47,13 +63,19 @@ class _PassThrough:
 
 
 def _add_all(capsys: pytest.CaptureFixture[str]) -> None:
-    for fixture in sorted(p for p in FIXTURES.iterdir() if p.is_dir()):
-        assert main(["ledger", "add", str(fixture), "--task-type", "intake"]) == 0
+    for fixture in _run_fixtures():
+        extra = []
+        config = FIXTURES / f"{fixture.name}_config"
+        for path in sorted(config.iterdir()) if config.is_dir() else []:
+            extra += ["--config", str(path)]
+        assert (
+            main(["ledger", "add", str(fixture), "--task-type", "intake", *extra]) == 0
+        )
     capsys.readouterr()
 
 
 def test_add_dedupes_and_writes_private_files(capsys, home):
-    run = FIXTURES / "shadow_mismatch"
+    run = FIXTURES / "shadow_mismatched"
     assert main(["ledger", "add", str(run)]) == 0
     first = capsys.readouterr().out
     assert "CAUGHT_ERROR (shadow_field_mismatch)" in first and "added" in first
@@ -67,22 +89,42 @@ def test_add_dedupes_and_writes_private_files(capsys, home):
     assert rows_mode == 0o600 and side_mode == 0o600
     assert store.root == home / "ledger"
     # The run directory is never written to.
-    assert sorted(p.name for p in run.iterdir()) == ["proposed_write.json"]
+    assert sorted(p.name for p in run.iterdir()) == [
+        "case.json",
+        "guard_events.jsonl",
+        "guard_ledger_row.json",
+        "proposed_write.json",
+        "run.json",
+        "usage.json",
+    ]
 
 
-def test_a_changed_run_gets_a_new_row_and_summary_keeps_the_newest(tmp_path, capsys):
+def test_a_changed_run_gets_a_new_row_and_summary_keeps_the_newest(
+    tmp_path, home, capsys
+):
+    # P6's real expired card: the answer has no decided_at, so the time is
+    # unknown; once a decision time is there, the newest row carries it.
     run = tmp_path / "run"
-    shutil.copytree(FIXTURES / "exception_open", run)
-    assert main(["ledger", "add", str(run)]) == 0
-    answer = run / "exceptions" / "answer-card-0002.json"
+    run.mkdir()
+    folder = home / "exceptions" / "e2e-expired"
+    shutil.copytree(FIXTURES / "exceptions_home" / "exceptions" / "e2e-expired", folder)
+    assert main(["ledger", "add", str(run), "--run-ref", "e2e-expired"]) == 0
+    assert LedgerStore().rows()[0].human.intervention_s is None
+    (answer,) = folder.glob("answer-*.json")
     doc = json.loads(answer.read_text())
-    doc["decided_at"] = "2026-11-20T13:12:00Z"
+    doc["decided_at"] = "2026-11-22T02:43:59.700707Z"
     answer.write_text(json.dumps(doc))
-    assert main(["ledger", "add", str(run)]) == 0
+    assert main(["ledger", "add", str(run), "--run-ref", "e2e-expired"]) == 0
     store = LedgerStore()
     assert len(store.rows()) == 2
     (latest,) = store.latest()
     assert latest.human.intervention_s == 120.0
+
+
+def test_a_bad_run_ref_is_refused(capsys):
+    run = FIXTURES / "flight_held"
+    assert main(["ledger", "add", str(run), "--run-ref", "../x"]) == 2
+    assert "run reference" in capsys.readouterr().err
 
 
 def test_bad_task_type_is_refused(capsys):
@@ -97,18 +139,19 @@ def test_bad_task_type_is_refused(capsys):
 
 
 def test_list_show_and_values_only_on_request(capsys):
-    assert main(["ledger", "add", str(FIXTURES / "shadow_mismatch")]) == 0
+    assert main(["ledger", "add", str(FIXTURES / "shadow_wrong_record")]) == 0
     capsys.readouterr()
     assert main(["ledger", "list"]) == 0
     listed = capsys.readouterr().out
     row_id = listed.split()[0]
-    assert "shadow_field_mismatch" in listed
+    assert "shadow_wrong_record" in listed
     assert main(["ledger", "show", row_id]) == 0
     plain = capsys.readouterr().out
-    assert "Synthetic follow-up" not in plain
+    assert "Synthetic note 16" not in plain and '"p3"' not in plain
     assert main(["ledger", "show", row_id, "--show-values"]) == 0
     shown = json.loads(capsys.readouterr().out)
-    assert shown["values"]["note"]["saved"] == "Synthetic follow-up in three weeks"
+    assert shown["values"]["patient_id"]["intended"] == "p3"
+    assert shown["values"]["patient_id"]["saved"] == "p2"
     assert main(["ledger", "show", "../../etc/passwd"]) == 2
 
 
@@ -117,11 +160,7 @@ def test_summary_counts_and_unknowns(capsys):
     assert main(["ledger", "summary", "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     counts = report["outcomes"]
-    assert (
-        sum(counts.values())
-        == report["rows"]
-        == len([p for p in FIXTURES.iterdir() if p.is_dir()])
-    )
+    assert sum(counts.values()) == report["rows"] == len(_run_fixtures())
     assert counts["VERIFIED"] >= 3 and counts["CAUGHT_ERROR"] >= 4
     assert counts["UNKNOWN"] >= 4 and counts["ESCALATED"] >= 5
     assert counts["FAILED"] >= 1
@@ -159,7 +198,7 @@ def test_export_refuses_a_value_that_reached_a_label(tmp_path, capsys):
             {
                 "schema": "openadapt.proposed-write/v1",
                 "task_id": "SYN-0042-ALPHA",
-                "fields": [{"name": "ref", "proposed": "SYN-0042-ALPHA", "saved": "x"}],
+                "fields": [{"name": "ref", "parse": "json", "value": "SYN-0042-ALPHA"}],
             }
         )
     )
@@ -207,7 +246,7 @@ def test_push_is_refused_offline_with_no_key(monkeypatch, capsys):
 
 
 def test_push_sends_the_row_minus_sources(monkeypatch, capsys):
-    assert main(["ledger", "add", str(FIXTURES / "shadow_mismatch")]) == 0
+    assert main(["ledger", "add", str(FIXTURES / "shadow_mismatched")]) == 0
     sent: list[tuple[str, dict, dict]] = []
 
     def poster(url: str, headers: dict, payload: dict) -> int:

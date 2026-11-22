@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, get_args
 
 import pytest
@@ -167,3 +169,29 @@ def test_fields_differing_counts_every_differing_field() -> None:
             fields_written=[{"name": "note", "check": "differs"}],
             fields_differing=0,
         )
+
+
+# -- J6: the push payload Cloud ingests ------------------------------------------------
+
+#: Real ``openadapt-flow ledger push --dry-run`` output over synthetic runs
+#: (shadow, guarded, declined, not-saved, refused fallback, halted program).
+#: The Cloud dashboard (openadapt-cloud#551) copies this file as its fixture.
+J6_EXAMPLES = Path(__file__).parent / "fixtures" / "agent_run_summary_v1_examples.jsonl"
+
+
+def test_the_j6_examples_validate_against_the_model_and_its_json_schema() -> None:
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = AgentRunSummaryV1.model_json_schema(by_alias=True)
+    validator = jsonschema.Draft202012Validator(schema)
+    lines = J6_EXAMPLES.read_text(encoding="utf-8").splitlines()
+    assert lines
+    nulls = 0
+    for line in lines:
+        payload = json.loads(line)
+        validator.validate(payload)
+        AgentRunSummaryV1.model_validate(payload)
+        assert payload["schema"] == "openadapt.agent-run-summary/v1"
+        assert "sources" not in payload
+        nulls += payload["model"]["calls"] is None
+    # Unknown values travel as null.
+    assert nulls >= 1

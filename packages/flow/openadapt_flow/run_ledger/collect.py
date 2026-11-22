@@ -36,13 +36,12 @@ Main-branch sources and what each one can't tell (also in
   tokens and cost, whether the agent finished, gate refusals.
   ``summary``, ``final_text`` and per-call ``actions`` are never read.
 
-Contract-only sources, produced by sibling pieces: ``proposed_write.json``
-(``openadapt.proposed-write/v1``), ``scorecard.json``
-(``openadapt.readiness-scorecard/v1``), ``flight.json``
+Sources produced by the agent-control-plane pieces: ``flight.json``
 (``openadapt.flight-run/v1``), ``guard_ledger_row.json``
-(``openadapt.guard-ledger-row/v1``) and ``exceptions/answer-*.json``
-(``openadapt.exception-answer/v1``). Their collectors read exactly the keys
-``docs/RUN_LEDGER.md`` lists.
+(``openadapt.guard-ledger-row/v1``), a lone ``proposed_write.json``, and,
+in :mod:`openadapt_flow.run_ledger.readers`, readiness shadow run
+directories, P7 fallback results and P6's exception folders. Their
+collectors read exactly the keys ``docs/RUN_LEDGER.md`` lists.
 """
 
 from __future__ import annotations
@@ -80,7 +79,6 @@ ITEM_APPROVAL_REQUEST_SCHEMA = "openadapt.item-approval-request/v1"
 ITEM_APPROVAL_ANSWER_SCHEMA = "openadapt.item-approval-answer/v1"
 TASK_LEDGER_SCHEMA = "openadapt.task-ledger/v1"
 PROPOSED_WRITE_SCHEMA = "openadapt.proposed-write/v1"
-SCORECARD_SCHEMA = "openadapt.readiness-scorecard/v1"
 FLIGHT_SCHEMA = "openadapt.flight-run/v1"
 GUARD_LEDGER_ROW_SCHEMA = "openadapt.guard-ledger-row/v1"
 EXCEPTION_ANSWER_SCHEMA = "openadapt.exception-answer/v1"
@@ -155,6 +153,9 @@ class Contribution:
     inputs: Optional[dict[str, Any]] = None
     readback_tiers: list[str] = field(default_factory=list)
     receipt_digest: Optional[str] = None
+    #: Field names the run's own task, verify or readiness reference config
+    #: declares (``ledger export`` lets only these past the scrubber check).
+    declared_fields: set[str] = field(default_factory=set)
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
     duration_s: Optional[float] = None
@@ -369,9 +370,23 @@ def collect_effect_receipt(path: Path) -> Contribution:
         reason = verified_or_tier(tier if isinstance(tier, str) else None)
     out.signal(reason)
     effect = outcome_reason(EFFECT_VERDICT_REASON, receipt.get("effect_verdict"))
-    if effect == "readback_refuted":
+    if effect == "readback_refuted" and _store_shows_a_write(doc):
+        # The guard's rule (``guard._verdict``): REFUTED only when the store
+        # shows a write. An absent effect after a halt before the effect, or
+        # a save that never landed, is the outcome's call, not a catch.
         out.signal(effect)
     return out
+
+
+def _store_shows_a_write(doc: Mapping[str, Any]) -> bool:
+    evidence = doc.get("evidence")
+    readback = evidence.get("readback") if isinstance(evidence, dict) else None
+    rows = readback.get("effects") if isinstance(readback, dict) else None
+    return any(
+        isinstance(row, dict)
+        and row.get("observed_effect") in ("present", "conflicting")
+        for row in rows or []
+    )
 
 
 # -- compiled runs ------------------------------------------------------------------
@@ -559,12 +574,13 @@ def collect_agent_run_record(path: Path) -> Contribution:
 def collect_item_approvals(folder: Path) -> Contribution:
     """``item-approval/request-<id>.json`` and ``answer-<id>.json``.
 
-    One interval per request, from the request's ``created_at`` to the
-    answer's ``answered_at``. A request with no answer is still open: the row's
-    intervention time is then unknown, and the run is ESCALATED
-    (``approval_held``). A declined save is ``approval_declined``. A ledger
-    question (``workflow_name`` ``openadapt.task-ledger.question``) is a
-    ``question`` interval.
+        One interval per request, from the request's ``created_at`` to the
+        answer's ``answered_at``. A request with no answer is still open: the row's
+        intervention time is then unknown, and the run is ESCALATED
+        (``approval_held``). A declined save is ``person_declined`` (ESCALATED,
+    not a catch). A ledger
+        question (``workflow_name`` ``openadapt.task-ledger.question``) is a
+        ``question`` interval.
     """
 
     name = "item_approval"
@@ -617,7 +633,8 @@ def collect_item_approvals(folder: Path) -> Contribution:
         elif decided is None:
             out.signal("approval_held")
         elif decision != "approve":
-            out.signal("approval_declined")
+            # A signed answer that isn't "approve": a person said no.
+            out.signal("person_declined")
     return out
 
 
@@ -712,9 +729,11 @@ def collect_compile_agent(path: Path) -> Contribution:
     out.ended_at = _epoch(agent.get("finished_at"))
     out.duration_s = _float(agent.get("wall_seconds")) or _float(doc.get("seconds"))
     for gate in doc.get("gates") or []:
-        if isinstance(gate, dict) and str(gate.get("decision", "")).startswith(
-            "refused"
-        ):
+        decision = str(gate.get("decision", "")) if isinstance(gate, dict) else ""
+        if decision == "refused_by_hold":
+            # The person at the gate said no: a decline, not a catch.
+            out.signal("person_declined")
+        elif decision.startswith("refused"):
             out.signal("gate_refused")
     if agent.get("finished") is True:
         out.signal("readback_verified", "model")
@@ -727,12 +746,13 @@ def collect_compile_agent(path: Path) -> Contribution:
 
 
 def collect_proposed_write(path: Path) -> Contribution:
-    """``proposed_write.json`` (``openadapt.proposed-write/v1``), shadow mode.
+    """A lone ``proposed_write.json`` (``openadapt.proposed-write/v1``), read
+    outside a readiness run directory.
 
-    Reads ``task_id`` and ``fields: [{name, proposed, saved}]``: what the
-    candidate would have saved and what the person saved. A missing ``saved``
-    is ``not_checked``. Values go to the private sidecar only. Nothing was
-    written by the candidate, so a full match is ``halted_before_effect``.
+    Reads ``task_id`` and ``fields[].name`` / ``value``. Nothing compared it
+    with what the person saved (that is ``case.json``, read with the run
+    directory), so every field is ``not_checked`` and the run is
+    ``shadow_not_compared``. Values go to the private sidecar only.
     """
 
     name = "proposed_write"
@@ -743,7 +763,7 @@ def collect_proposed_write(path: Path) -> Contribution:
     refused = _schema_check(doc, "schema", PROPOSED_WRITE_SCHEMA, name, path)
     if refused is not None:
         return refused
-    out = Contribution(name, files=[path])
+    out = Contribution(name, files=[path], executor_kind="agent")
     if (tid := _task_id(doc.get("task_id"))) is not None:
         out.task_ids.append(tid)
     for item in doc.get("fields") or []:
@@ -753,45 +773,9 @@ def collect_proposed_write(path: Path) -> Contribution:
         ):
             out.signal("source_unreadable")
             continue
-        proposed = item.get("proposed")
-        if "saved" not in item:
-            check = "not_checked"
-        else:
-            check = "matched" if item["saved"] == proposed else "differs"
-        out.fields[fname] = _worse(out.fields.get(fname), check)
-        out.private_fields[fname] = {"intended": proposed, "saved": item.get("saved")}
-    out.fields_differing = sum(1 for c in out.fields.values() if c == "differs")
-    if out.fields_differing:
-        out.signal("shadow_field_mismatch")
-    elif out.fields and all(c == "matched" for c in out.fields.values()):
-        out.signal("halted_before_effect")
-    else:
-        out.signal("completed_unverified")
-    return out
-
-
-def collect_scorecard(path: Path, task_ids: Iterable[str]) -> Contribution:
-    """``scorecard.json`` (``openadapt.readiness-scorecard/v1``).
-
-    A scorecard covers many tasks. Only ``tasks: [{task_id, matched}]`` is
-    read, and only the entry for this run's task; ``matched: false`` is a
-    shadow-mode mismatch.
-    """
-
-    name = "scorecard"
-    try:
-        doc = _read_json(path)
-    except _Unreadable:
-        return _refused(name, path, "source_unreadable")
-    refused = _schema_check(doc, "schema", SCORECARD_SCHEMA, name, path)
-    if refused is not None:
-        return refused
-    out = Contribution(name, files=[path])
-    wanted = set(task_ids)
-    for entry in doc.get("tasks") or []:
-        if isinstance(entry, dict) and entry.get("task_id") in wanted:
-            if entry.get("matched") is False:
-                out.signal("shadow_field_mismatch")
+        out.fields[fname] = "not_checked"
+        out.private_fields[fname] = {"intended": item.get("value"), "saved": None}
+    out.signal("shadow_not_compared")
     return out
 
 
@@ -851,13 +835,15 @@ def collect_flight(path: Path) -> Contribution:
 
 
 def collect_guard_ledger_row(path: Path) -> Contribution:
-    """``guard_ledger_row.json`` (``openadapt.guard-ledger-row/v1``).
+    """``guard_ledger_row.json`` (``openadapt.guard-ledger-row/v1``, P5, J3).
 
-    Reads ``task_id``, ``verdict``, ``fields_checked`` (a list of names, or a
-    count), ``fields_differing``, ``approval_opened_at``,
-    ``approval_decided_at`` and ``readback_tier``. ``diff_path`` and
-    ``approver_kind`` aren't read. When some fields differ but the row doesn't
-    say which, each named field is ``not_checked`` and the count stands.
+    Reads ``task_id``, ``fields_checked`` and ``fields_differing`` (lists of
+    names), ``approval_opened_at``, ``approval_decided_at`` and
+    ``readback_tier``. ``verdict`` is a bucket name P5 chose and is never a
+    bucket source here: the guard's ``summary.json`` and the read-back
+    decide. A differing field is the read-back's field diff, a catch.
+    ``approver_kind``, ``hold_ms`` and ``diff_path`` have no place in the row
+    and aren't read.
     """
 
     name = "guard_ledger_row"
@@ -871,13 +857,22 @@ def collect_guard_ledger_row(path: Path) -> Contribution:
     out = Contribution(name, files=[path])
     if (tid := _task_id(doc.get("task_id"))) is not None:
         out.task_ids.append(tid)
-    differing = _int(doc.get("fields_differing")) or 0
-    out.fields_differing = differing
+    differing_raw = doc.get("fields_differing")
+    differing = (
+        {n for n in map(_field_name, differing_raw or []) if n}
+        if isinstance(differing_raw, list)
+        else set()
+    )
     checked = doc.get("fields_checked")
-    if isinstance(checked, list):
-        for item in checked:
-            if (fname := _field_name(item)) is not None:
-                out.fields[fname] = "matched" if differing == 0 else "not_checked"
+    for fname in (
+        [n for n in map(_field_name, checked or []) if n]
+        if isinstance(checked, list)
+        else []
+    ):
+        out.fields[fname] = "differs" if fname in differing else "matched"
+    for fname in differing:
+        out.fields[fname] = "differs"
+    out.fields_differing = len(differing)
     tier = doc.get("readback_tier")
     if tier in _TIER_RANK:
         out.readback_tiers.append(str(tier))
@@ -886,17 +881,15 @@ def collect_guard_ledger_row(path: Path) -> Contribution:
         out.intervals.append(
             Interval("approval", opened, _stamp(doc.get("approval_decided_at")), key="")
         )
-    reason = outcome_reason(GUARD_VERDICT_REASON, doc.get("verdict"))
-    if reason == "readback_verified":
-        reason = verified_or_tier(tier if isinstance(tier, str) else None)
-    out.signal(reason)
     if differing:
         out.signal("readback_refuted")
     return out
 
 
 def collect_exception_answer(path: Path) -> Contribution:
-    """``exceptions/answer-<id>.json`` (``openadapt.exception-answer/v1``).
+    """``answer-<id>.json`` (``openadapt.exception-answer/v1``) from P6's
+    ``$OPENADAPT_HOME/exceptions/<run_ref>/`` (read through
+    :func:`openadapt_flow.run_ledger.readers.collect_exception_folder`).
 
     Reads ``kind``, ``opened_at`` and ``decided_at``; ``answer`` isn't read. A
     ``second_factor`` kind is a second-factor interval, anything else an
@@ -1000,8 +993,17 @@ def _dispatch(path: Path) -> Optional[Contribution]:
         return collect_flight(path)
     if name == "guard_ledger_row.json":
         return collect_guard_ledger_row(path)
-    if parent == "exceptions" and name.startswith("answer-") and name.endswith(".json"):
-        return collect_exception_answer(path)
+    if name == "result.json":
+        from openadapt_flow.run_ledger.readers import (
+            collect_fallback_result,
+            is_dispatch_result,
+        )
+
+        try:
+            doc = _read_json(path)
+        except _Unreadable:
+            return None
+        return collect_fallback_result(path) if is_dispatch_result(doc) else None
     if parent == "jobs" and name.endswith(".json"):
         if _has_schema(path, "schema_version", "openadapt.task-ledger/"):
             return collect_task_ledger(path)
@@ -1018,10 +1020,23 @@ class Collected:
 
     root: Path
     contributions: list[Contribution]
+    #: Field names the run's guard task or verify.yaml declares.
+    config_fields: set[str] = field(default_factory=set)
+    #: Config files named with ``ledger add --config``, outside the run.
+    config_paths: list[Path] = field(default_factory=list)
+
+    @property
+    def declared_fields(self) -> set[str]:
+        """Every field name the run's own config declares (finding a)."""
+
+        names = set(self.config_fields)
+        for contribution in self.contributions:
+            names |= contribution.declared_fields
+        return names
 
     @property
     def files(self) -> list[Path]:
-        seen: dict[Path, None] = {}
+        seen: dict[Path, None] = dict.fromkeys(self.config_paths)
         for contribution in self.contributions:
             for path in contribution.files:
                 seen.setdefault(path, None)
@@ -1049,38 +1064,98 @@ class Collected:
         return outer.hexdigest()
 
 
-def collect(run: Path) -> Collected:
-    """Every source in ``run`` (a run directory or one file)."""
+def _skipped(files: list[Path], run: Path) -> tuple[list[Path], list[Path]]:
+    """Files no collector reads on their own, and readiness shadow run dirs.
+
+    A readiness run directory is read as one source (J1); nothing else in it
+    is dispatched. A P7 fallback ``result.json`` speaks for the agent run
+    under its ``run/`` folder (J5), so those files aren't read again.
+    """
+
+    from openadapt_flow.run_ledger.readers import is_dispatch_result, is_shadow_run
+
+    shadows = sorted(
+        {p.parent for p in files if p.name == "run.json" and is_shadow_run(p.parent)}
+    )
+    covered = list(shadows)
+    for path in files:
+        if path.name == "result.json" and (path.parent / "run").is_dir():
+            try:
+                doc = _read_json(path)
+            except _Unreadable:
+                continue
+            if is_dispatch_result(doc):
+                covered.append(path.parent / "run")
+    kept = [p for p in files if not any(p.is_relative_to(folder) for folder in covered)]
+    return kept, shadows
+
+
+def collect(
+    run: Path,
+    *,
+    exceptions: Optional[Path] = None,
+    config: Iterable[Path] = (),
+) -> Collected:
+    """Every source in ``run`` (a run directory or one file), plus P6's
+    exception folder for the run when ``exceptions`` names one. ``config``
+    names the run's guard task or ``verify.yaml`` when they live outside the
+    run directory (their field names are the ones ``ledger export`` may
+    let through)."""
+
+    from openadapt_flow.run_ledger.readers import (
+        collect_exception_folder,
+        collect_shadow_run,
+        config_files,
+        declared_fields,
+    )
 
     run = Path(run)
+    config = [Path(c) for c in config]
     contributions: list[Contribution] = []
     approvals: set[Path] = set()
-    scorecards: list[Path] = []
-    for path in _files(run):
+    found = _files(run)
+    files, shadows = _skipped(found, run)
+    for folder in shadows:
+        contributions.append(collect_shadow_run(folder))
+    for path in files:
         if path.parent.name == "item-approval" and path.name.startswith("request-"):
             approvals.add(path.parent)
             continue
-        if path.name == "scorecard.json":
-            scorecards.append(path)
-            continue
         contribution = _dispatch(path)
-        if (
-            contribution is None
-            and path == run
-            and _has_schema(path, "schema", "openadapt-agent.run/")
-        ):
-            # One wrap run record named directly, wherever it was copied.
-            contribution = collect_agent_run_record(path)
+        if contribution is None and path == run:
+            from openadapt_flow.run_ledger.readers import (
+                collect_fallback_result,
+                is_dispatch_result,
+            )
+
+            try:
+                doc = _read_json(path)
+            except _Unreadable:
+                doc = None
+            if isinstance(doc, dict) and str(doc.get("schema", "")).startswith(
+                "openadapt-agent.run/"
+            ):
+                # One wrap run record named directly, wherever it was copied.
+                contribution = collect_agent_run_record(path)
+            elif is_dispatch_result(doc):
+                # A wrap-dispatch envelope saved with --result FILE.
+                contribution = collect_fallback_result(path)
         if contribution is not None:
             contributions.append(contribution)
     for folder in sorted(approvals):
         contribution = collect_item_approvals(folder)
         if contribution.files:
             contributions.append(contribution)
-    task_ids = [tid for c in contributions for tid in c.task_ids]
-    for path in scorecards:
-        contributions.append(collect_scorecard(path, task_ids))
-    return Collected(root=run, contributions=contributions)
+    if exceptions is not None:
+        contribution = collect_exception_folder(exceptions)
+        if contribution is not None:
+            contributions.append(contribution)
+    return Collected(
+        root=run,
+        contributions=contributions,
+        config_fields=declared_fields([*config_files(files), *config]),
+        config_paths=[p for p in config if p.is_file()],
+    )
 
 
 __all__ = [
@@ -1100,6 +1175,5 @@ __all__ = [
     "collect_proposed_write",
     "collect_run_receipt",
     "collect_run_report",
-    "collect_scorecard",
     "collect_task_ledger",
 ]

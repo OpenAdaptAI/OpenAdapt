@@ -76,10 +76,12 @@ class RunLedgerOutcome(str, Enum):
 
     #: An independent read-back verified the save and no hold is pending.
     VERIFIED = "VERIFIED"
-    #: The run stopped for a person, or a person did the step.
+    #: The run stopped for a person, a person declined it, or a person did
+    #: the step (a shadow run: the person's own save is the real one).
     ESCALATED = "ESCALATED"
     #: A check caught a wrong save: refuted read-back, blocked save, or a
-    #: shadow-mode field mismatch.
+    #: shadow-mode field mismatch or wrong record. A person declining an
+    #: approval is not a catch on its own.
     CAUGHT_ERROR = "CAUGHT_ERROR"
     #: Crashed, timed out or gave up, with no evidence of a write.
     FAILED = "FAILED"
@@ -101,12 +103,14 @@ RunLedgerOutcomeReason = Literal[
     "readback_verified",
     # ESCALATED
     "approval_held",
+    "person_declined",
     "approval_declined",
     "question_asked",
     "exception_card",
     "second_factor",
     "halted_before_effect",
     "gate_held",
+    "shadow_matched",
     # CAUGHT_ERROR
     "readback_refuted",
     "save_blocked_wrong_record",
@@ -114,6 +118,7 @@ RunLedgerOutcomeReason = Literal[
     "save_blocked_double_save",
     "save_blocked_out_of_scope",
     "gate_refused",
+    "shadow_wrong_record",
     "shadow_field_mismatch",
     # FAILED
     "crashed_no_write",
@@ -123,7 +128,9 @@ RunLedgerOutcomeReason = Literal[
     "canceled_no_write",
     "policy_rejected_no_write",
     # UNKNOWN
+    "shadow_write_landed",
     "completed_unverified",
+    "shadow_not_compared",
     "reconciliation_required",
     "screen_readback_only",
     "lost_reply",
@@ -149,18 +156,21 @@ _U = RunLedgerOutcome.UNKNOWN
 RUN_LEDGER_REASON_OUTCOME: Mapping[str, RunLedgerOutcome] = {
     "readback_verified": _V,
     "approval_held": _E,
+    "person_declined": _E,
     "approval_declined": _E,
     "question_asked": _E,
     "exception_card": _E,
     "second_factor": _E,
     "halted_before_effect": _E,
     "gate_held": _E,
+    "shadow_matched": _E,
     "readback_refuted": _C,
     "save_blocked_wrong_record": _C,
     "save_blocked_other_origin": _C,
     "save_blocked_double_save": _C,
     "save_blocked_out_of_scope": _C,
     "gate_refused": _C,
+    "shadow_wrong_record": _C,
     "shadow_field_mismatch": _C,
     "crashed_no_write": _F,
     "timed_out_no_write": _F,
@@ -168,7 +178,9 @@ RUN_LEDGER_REASON_OUTCOME: Mapping[str, RunLedgerOutcome] = {
     "platform_failed": _F,
     "canceled_no_write": _F,
     "policy_rejected_no_write": _F,
+    "shadow_write_landed": _U,
     "completed_unverified": _U,
+    "shadow_not_compared": _U,
     "reconciliation_required": _U,
     "screen_readback_only": _U,
     "lost_reply": _U,

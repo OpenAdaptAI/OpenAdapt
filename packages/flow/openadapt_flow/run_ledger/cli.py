@@ -1,6 +1,7 @@
 """``openadapt-flow ledger``: one accounting row per run, for any executor.
 
-    openadapt-flow ledger add RUN_DIR [--task-type T] [--task-id ID]
+    openadapt-flow ledger add RUN_DIR [--task-type T] [--task-id ID] [--run-ref REF]
+                       [--config TASK_OR_VERIFY_FILE ...]
     openadapt-flow ledger list [--json]
     openadapt-flow ledger show ROW_ID [--show-values]
     openadapt-flow ledger summary [--since ISO] [--task-type T] [--json]
@@ -56,6 +57,19 @@ def register(sub: argparse._SubParsersAction) -> None:
     add.add_argument("run", help="Run directory (or one run record file)")
     add.add_argument("--task-type", default=None, help="Operator label, e.g. intake")
     add.add_argument("--task-id", default=None, help="Override the task id")
+    add.add_argument(
+        "--run-ref",
+        default=None,
+        help="The run's exception-queue reference (exceptions serve --run-ref); "
+        "default: a folder named like RUN_DIR, if any",
+    )
+    add.add_argument(
+        "--config",
+        action="append",
+        default=[],
+        help="The run's guard task JSON or verify.yaml, when not in RUN_DIR; "
+        "its field names may leave in export and push (repeatable)",
+    )
     add.set_defaults(func=cmd_add)
 
     lst = verbs.add_parser("list", help="List rows", allow_abbrev=False)
@@ -129,7 +143,13 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"ledger add: {run} does not exist", file=sys.stderr)
         return 2
     try:
-        result = _store(args).add(run, task_type=args.task_type, task_id=args.task_id)
+        result = _store(args).add(
+            run,
+            task_type=args.task_type,
+            task_id=args.task_id,
+            run_ref=args.run_ref,
+            config=tuple(args.config),
+        )
     except ValidationError as exc:
         bad = sorted({str(e["loc"][0]) for e in exc.errors() if e.get("loc")})
         print(
@@ -137,6 +157,9 @@ def cmd_add(args: argparse.Namespace) -> int:
             + ", ".join(bad or ["row"]),
             file=sys.stderr,
         )
+        return 2
+    except ValueError as exc:  # a --run-ref that isn't a run reference
+        print(f"ledger add: {exc}", file=sys.stderr)
         return 2
     row = result.row
     state = "added" if result.added else "already in the ledger"
@@ -310,13 +333,19 @@ def outbound_lines(
     2. When a text scrubber is given, each label (task id, task type,
        executor label, field names) must come back from it unchanged; a label
        the scrubber would rewrite looks like personal data and is refused.
+       The one exemption is a field name the run's own task, verify or
+       readiness reference config declared (kept beside the row at ``add``
+       time): Presidio rewrites the name ``patient_id``, but a declared name
+       is a form's identifier, not a value.
     """
 
     from openadapt_types.run_ledger import AgentRunSummaryV1, RunLedgerRowV1
 
     values = store.sidecar_values()
     lines: list[str] = []
-    for row in store.latest():
+    for entry in store.latest_entries():
+        row = RunLedgerRowV1.model_validate(entry["row"])
+        declared = set(entry.get("declared_fields") or [])
         doc = row.summary().to_json() if summary else row.to_json()
         model = AgentRunSummaryV1 if summary else RunLedgerRowV1
         allowed = {f.alias or name for name, f in model.model_fields.items()}
@@ -325,6 +354,10 @@ def outbound_lines(
         model.model_validate(doc)
         if scrubber is not None:
             for where, label in _label_values(doc):
+                if where == "fields_written.name" and label in declared:
+                    # A field name the run's own task, verify or readiness
+                    # config declares (``patient_id``): a name, not a value.
+                    continue
                 try:
                     scrubbed = scrubber.scrub_text(label)
                 except Exception as exc:  # a scrubber that can't run refuses

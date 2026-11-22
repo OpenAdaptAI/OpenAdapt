@@ -1,8 +1,0 @@
-{
-  "answer": "code-entered",
-  "card_id": "card-0001",
-  "decided_at": "2026-11-20T13:03:00Z",
-  "kind": "second_factor",
-  "opened_at": "2026-11-20T13:00:00Z",
-  "schema": "openadapt.exception-answer/v1"
-}

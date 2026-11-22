@@ -7,6 +7,7 @@ upgrades a deterministic refutation.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -60,8 +61,11 @@ EXECUTION = {
     "FAILED": F,
     "ROLLED_BACK": U,
 }
+# A failure, a timeout or an error can come after a request went out: with
+# no evidence that nothing was sent they are UNKNOWN, not FAILED (skeptic #13).
+EXECUTION["FAILED"] = U
 GUARD = {"VERIFIED": V, "REFUTED": C, "RECONCILIATION_REQUIRED": U}
-AGENT_STATUS = {"success": U, "halt": U, "refused": F, "timeout": F, "error": F}
+AGENT_STATUS = {"success": U, "halt": U, "refused": F, "timeout": U, "error": U}
 
 
 def _bucket(reason: str) -> str:
@@ -115,8 +119,13 @@ def test_an_unmapped_outcome_is_unknown_never_another_bucket() -> None:
         ("already_committed", "save_blocked_double_save"),
         ("needs_reconciliation", "save_blocked_double_save"),
         ("save_waiting_for_person", "save_blocked_double_save"),
-        ("declined", "approval_declined"),
-        ("baseline_unreadable", "unmapped_outcome"),
+        # A person said no: ESCALATED, not a catch (skeptic #16).
+        ("declined", "person_declined"),
+        ("request_expired", "approval_declined"),
+        ("approval_wait_timed_out", "approval_declined"),
+        ("baseline_unreadable", "policy_rejected_no_write"),
+        ("answer_malformed", "policy_rejected_no_write"),
+        ("approval_something_new", "unmapped_outcome"),
     ],
 )
 def test_guard_block_codes(code: str, reason: str) -> None:
@@ -154,12 +163,7 @@ def test_refuted_readback_plus_model_looks_fine_is_caught_error(tmp_path: Path) 
     """A deterministic refutation and an agent that says it's done."""
 
     run = tmp_path / "run"
-    run.mkdir()
-    (run / "guard_ledger_row.json").write_text(
-        (FIXTURES / "guard_row_ok" / "guard_ledger_row.json")
-        .read_text()
-        .replace('"VERIFIED"', '"REFUTED"')
-    )
+    shutil.copytree(FIXTURES / "guard_wrong_value", run)
     (run / "agent_ledger.json").write_text(
         (FIXTURES / "agent_only_finished" / "agent_ledger.json").read_text()
     )
@@ -173,15 +177,27 @@ def test_refuted_readback_plus_model_looks_fine_is_caught_error(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("fixture", "outcome", "reason"),
     [
-        ("shadow_mismatch", C, "shadow_field_mismatch"),
-        ("shadow_match", E, "halted_before_effect"),
-        ("shadow_scorecard", C, "shadow_field_mismatch"),
+        # J1: P1 readiness run directories. Never VERIFIED.
+        ("shadow_matched", E, "shadow_matched"),
+        ("shadow_mismatched", C, "shadow_field_mismatch"),
+        ("shadow_wrong_record", C, "shadow_wrong_record"),
+        ("shadow_no_case", U, "shadow_not_compared"),
+        ("shadow_egress", E, "shadow_matched"),
         ("flight_held", E, "gate_held"),
         ("flight_refused", C, "gate_refused"),
-        ("guard_row_diff", C, "readback_refuted"),
-        ("guard_row_ok", V, "readback_verified"),
-        ("exception_2fa", E, "second_factor"),
-        ("exception_open", E, "exception_card"),
+        # J3: P5 guarded saves; summary.json and the read-back decide.
+        ("guard_approved_ok", V, "readback_verified"),
+        ("guard_declined", E, "person_declined"),
+        ("guard_no_persist", U, "reconciliation_required"),
+        ("guard_wrong_value", C, "readback_refuted"),
+        ("guard_wrong_patient", C, "save_blocked_wrong_record"),
+        # J5: P7 fallback results.
+        ("fallback_verified", V, "readback_verified"),
+        ("fallback_refused", E, "person_declined"),
+        ("dispatch_envelope_verified.json", V, "readback_verified"),
+        ("dispatch_envelope_refused.json", E, "person_declined"),
+        # A program's halt before the save: the absent effect isn't a catch.
+        ("compiled_halted_receipt", E, "halted_before_effect"),
         ("unknown_schema", U, "schema_unrecognised"),
         ("compiled_verified", V, "readback_verified"),
         ("compiled_screen", U, "screen_readback_only"),
@@ -205,8 +221,8 @@ def test_an_empty_run_is_unknown_no_sources(tmp_path: Path) -> None:
 
 
 def test_conflicting_task_ids_are_unknown(tmp_path: Path) -> None:
-    for name in ("guard_row_ok", "flight_held"):
-        src = next((FIXTURES / name).glob("*.json"))
-        (tmp_path / src.name).write_text(src.read_text())
+    for name in ("guard_declined", "flight_held"):
+        for src in (FIXTURES / name).glob("*.json"):
+            (tmp_path / src.name).write_text(src.read_text())
     row, _, _ = build_row(tmp_path)
     assert row.outcome_reason == "task_id_conflict"
