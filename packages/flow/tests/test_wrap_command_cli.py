@@ -342,6 +342,27 @@ def test_a_deduped_rerun_says_how_to_run_again(monkeypatch, capsys):
     assert "already ran" not in capsys.readouterr().err
 
 
+def test_an_interrupted_earlier_attempt_never_suggests_a_new_request_id_first(
+    monkeypatch, capsys
+):
+    def task(args, parser, *, command_agent=None, replay_only=False):
+        t = _Task(command_agent, {"verified": False})
+        t.call = lambda request_id, values: {  # type: ignore[method-assign]
+            "verified": False,
+            "replayed": True,
+            "status": "RECONCILIATION_REQUIRED",
+            "request_id": request_id,
+        }
+        return t
+
+    monkeypatch.setattr(cli, "_task", task)
+    cli.main(["--task", "t.json", "--param", "note=x", "--", "my-agent"])
+    err = capsys.readouterr().err
+    assert "the earlier attempt may have saved" in err
+    assert "check the record in the app before rerunning" in err
+    assert "already ran" not in err and "To run it again" not in err
+
+
 @pytest.mark.skipif(__import__("os").name != "posix", reason="process groups")
 @pytest.mark.parametrize("how", ["SIGTERM", "SIGINT"])
 def test_a_signal_during_a_browser_tool_call_still_ends_the_command(tmp_path, how):

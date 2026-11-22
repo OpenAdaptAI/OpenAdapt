@@ -107,7 +107,9 @@ seconds) ends the whole group, and so do Ctrl-C and SIGTERM sent to
 the task, the command and its inputs, so asking for the same run again
 dedupes instead of saving twice. A deduped run prints its earlier result and
 says so on stderr; to run it again (for example after a failure), pass a new
-`--request-id`.
+`--request-id`. If the earlier attempt was interrupted and may have saved
+(`RECONCILIATION_REQUIRED`), check the record in the app first: a new
+`--request-id` then could save twice.
 
 When the command exits, the endpoint closes. Then the run goes through the
 same record check, proposed checks, canary and admission as any

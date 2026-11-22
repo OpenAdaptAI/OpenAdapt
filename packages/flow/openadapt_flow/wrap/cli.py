@@ -566,7 +566,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    if derived_id and result.get("replayed") is True:
+    if derived_id and result.get("status") == "RECONCILIATION_REQUIRED":
+        # An earlier attempt was interrupted after it may have saved: a new
+        # request ID now could save twice, so the record comes first.
+        print(
+            f"openadapt wrap: request {args.request_id} has an unfinished "
+            "earlier attempt; the earlier attempt may have saved; check the "
+            "record in the app before rerunning with a new --request-id",
+            file=sys.stderr,
+        )
+    elif derived_id and result.get("replayed") is True:
         # The default dedupes; say so instead of replaying silently.
         print(
             f"openadapt wrap: request {args.request_id} already ran with this "
