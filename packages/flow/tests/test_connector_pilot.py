@@ -56,7 +56,7 @@ from openadapt_flow.connector.storage import InMemoryCustomerStorage
 from tests.connector_v3_fixtures import build_program_case
 
 CANARY_RECORD = "ZQX-CANARY-RECORD-7731"
-CANARY_SECRET = "ZQX-CANARY-SECRET-p4ssw0rd"
+CANARY_LOCAL_ENV_MARKER = "ZQX-CANARY-LOCAL-MARKER-9941"
 CANARY_PARAM = "ZQX-CANARY-PARAM-ALICE"
 TOKEN = "oaconn_" + "d" * 64
 
@@ -229,7 +229,7 @@ def _leaky_report() -> dict:
             {
                 "step_id": "s2",
                 "ok": False,
-                "error": f"saw {CANARY_RECORD} and {CANARY_SECRET}",
+                "error": f"saw {CANARY_RECORD} and {CANARY_LOCAL_ENV_MARKER}",
             },
         ],
         "ocr": CANARY_RECORD,
@@ -242,7 +242,7 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     secrets_dir = tmp_path / "secrets"
     secrets_dir.mkdir()
     secret_file = secrets_dir / "notes-reader.env"
-    secret_file.write_text(f"NOTES_PASSWORD={CANARY_SECRET}\n")
+    secret_file.write_text(f"NOTES_PASSWORD={CANARY_LOCAL_ENV_MARKER}\n")
     os.chmod(secret_file, 0o600)
     plane = RecordingPlane()
     plane.jobs.append(
@@ -264,7 +264,9 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     def runner(argv, run_dir: Path, child_env) -> RunOutcome:
         seen_env.update(child_env)
         if outcome_kind == "child_crash":
-            raise RuntimeError(f"crashed holding {CANARY_RECORD} {CANARY_SECRET}")
+            raise RuntimeError(
+                f"crashed holding {CANARY_RECORD} {CANARY_LOCAL_ENV_MARKER}"
+            )
         report = _leaky_report()
         (run_dir / "report.json").write_text(json.dumps(report))
         return RunOutcome(returncode=1, report=report)
@@ -280,12 +282,12 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
     )
     assert rc == 0
     # The secret reached only the governed child.
-    assert seen_env.get("NOTES_PASSWORD") == CANARY_SECRET
+    assert seen_env.get("NOTES_PASSWORD") == CANARY_LOCAL_ENV_MARKER
     # The run reported and acked.
     paths = [r.url.path for r in plane.requests]
     assert "/api/internal/run-callback" in paths and "/api/connector/ack" in paths
     sent = plane.all_bytes() + (tmp_path / "egress.jsonl").read_bytes()
-    for canary in (CANARY_RECORD, CANARY_SECRET, CANARY_PARAM):
+    for canary in (CANARY_RECORD, CANARY_LOCAL_ENV_MARKER, CANARY_PARAM):
         assert canary.encode() not in sent, canary
     # The PHI-bearing report stayed in customer storage.
     if outcome_kind == "halt_report":
@@ -354,13 +356,15 @@ def test_ack_and_poll_guards():
 
 def test_serialize_refuses_any_encoding_of_a_secret():
     with pytest.raises(egress.EgressViolation):
-        egress.serialize_checked({"run_id": CANARY_SECRET}, [CANARY_SECRET])
+        egress.serialize_checked(
+            {"run_id": CANARY_LOCAL_ENV_MARKER}, [CANARY_LOCAL_ENV_MARKER]
+        )
     import base64
 
-    encoded = base64.b64encode(CANARY_SECRET.encode()).decode()
+    encoded = base64.b64encode(CANARY_LOCAL_ENV_MARKER.encode()).decode()
     with pytest.raises(egress.EgressViolation):
-        egress.serialize_checked({"x": encoded}, [CANARY_SECRET])
-    assert egress.serialize_checked({"run_id": "r1"}, [CANARY_SECRET])
+        egress.serialize_checked({"x": encoded}, [CANARY_LOCAL_ENV_MARKER])
+    assert egress.serialize_checked({"run_id": "r1"}, [CANARY_LOCAL_ENV_MARKER])
 
 
 # --------------------------------------------------------------------------
