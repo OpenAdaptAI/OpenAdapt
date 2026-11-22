@@ -252,10 +252,14 @@ class _ActiveJobs:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.futures: dict[str, Future[dict[str, Any]]] = {}
+        #: Jobs about to be submitted: listed before ``pool.submit`` so a stop
+        #: signal between the submit and the future's registration still
+        #: reaches the job through shutdown's ``cancel_job``.
+        self.pending: set[str] = set()
 
     def ids(self) -> list[str]:
         with self.lock:
-            return list(self.futures)
+            return list(self.futures) + sorted(self.pending - set(self.futures))
 
     def reap(self, log: Callable[[str], None]) -> int:
         done = 0
@@ -397,6 +401,7 @@ def run_loop(
             persist_token=persist_token,
             persist_pending=persist_pending,
             heartbeat_s=heartbeat_s,
+            stop_requested=stop_requested,
         )
 
 
@@ -412,6 +417,7 @@ def _run_loop(
     persist_token: Optional[TokenPersister] = None,
     persist_pending: Optional[TokenPersister] = None,
     heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
 ) -> int:
     """Poll -> execute -> callback -> ack until interrupted.
 
@@ -511,6 +517,8 @@ def _run_loop(
             job = _job_from_envelope(client, envelope)
             if job is None or not job.lease_job_id:
                 continue
+            with active.lock:
+                active.pending.add(job.lease_job_id)
             fut = pool.submit(
                 handle_job,
                 client,
@@ -522,6 +530,7 @@ def _run_loop(
             )
             with active.lock:
                 active.futures[job.lease_job_id] = fut
+                active.pending.discard(job.lease_job_id)
     except KeyboardInterrupt:  # operator Ctrl-C or service stop
         log("[connector] interrupted; exiting")
     finally:
