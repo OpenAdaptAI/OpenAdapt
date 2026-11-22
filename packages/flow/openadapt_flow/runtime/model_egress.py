@@ -93,6 +93,9 @@ class EgressRecorder:
         run_dir = Path(run_dir)
         self.ledger_path = Path(override) if override else run_dir.parent / LEDGER_NAME
         self.run_ref = run_id or run_dir.name
+        # Counts a raised step never drained belong to the aborted run (its
+        # frames are on the ledger); they never land on this run's first step.
+        self._pending = dict.fromkeys(self._pending, 0)
 
     def admit(self, kind: str, component: Any, *frames: bytes) -> bool:
         """Record a frame about to leave the box. False means: don't send."""
@@ -141,9 +144,7 @@ class EgressRecorder:
         if component is None:
             return None
         if isinstance(component, FallbackGrounder):
-            return FallbackGrounder(
-                [self.wrap(kind, g) for g in component._grounders]
-            )
+            return FallbackGrounder([self.wrap(kind, g) for g in component._grounders])
         off_box = component_may_egress(component)
         if kind == "identity_vlm":
             return _IdentityVLM(self, component, off_box)

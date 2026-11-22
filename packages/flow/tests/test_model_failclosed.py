@@ -324,6 +324,19 @@ def test_unavailable_pinned_model_never_falls_back_to_appliance(wiring, monkeypa
     assert not isinstance(wiring.get("fallback"), RemoteGrounder)
 
 
+def test_empty_pinned_model_is_refused_not_defaulted(wiring, monkeypatch, capsys):
+    from openadapt_flow.deployment import build_model_grounder
+
+    cfg = GroundingModelConfig(enabled=True, provider="anthropic", model="  ")
+    assert build_model_grounder(cfg) is None
+    assert "requires a model" in capsys.readouterr().out
+
+    # Wired through build_replayer: no default model, and no appliance either.
+    monkeypatch.setenv("OPENADAPT_FLOW_VLM_URL", "https://vlm.internal:8443")
+    _build(runtime_config=RuntimeSection(grounding_model=cfg), phi_mode=False)
+    assert wiring.get("fallback") is None
+
+
 def test_regulated_profile_keeps_tls_and_loopback_appliances(wiring, monkeypatch):
     for url in ("https://10.20.30.40:8443", "http://127.0.0.1:8000"):
         wiring.clear()
@@ -359,7 +372,7 @@ def test_regulated_profile_keeps_tls_and_loopback_appliances(wiring, monkeypatch
     ],
 )
 def test_regulated_transport_rule(url, allowed):
-    from openadapt_flow.runtime.model_transport import regulated_transport_refusal
+    from openadapt_flow.model_transport import regulated_transport_refusal
 
     assert (regulated_transport_refusal(url) is None) is allowed
 
@@ -471,3 +484,65 @@ def test_in_process_identity_vlm_counts_as_local(monkeypatch, tmp_path):
     assert Replayer._result_model_calls(result) == 0
     assert Replayer._result_local_model_calls(result) == 1
     assert rp._egress.entries == []
+
+
+# --------------------------------------------------------------------------
+# 3, receipt side. The model-call rule is split by placement.
+# --------------------------------------------------------------------------
+
+
+def _receipt_report(*, model_calls, local_model_calls, network):
+    from tests.test_run_receipt import _report
+
+    base = _report()
+    classes = list(base.outcome_envelope.evidence_classes)
+    if model_calls:
+        classes = sorted({*classes, "model"})
+    report = _report(
+        model_calls=model_calls,
+        outcome_envelope=base.outcome_envelope.model_copy(
+            update={"evidence_classes": classes, "external_network_calls": network}
+        ),
+    )
+    report.local_model_calls = local_model_calls
+    return report
+
+
+def test_receipt_refuses_off_box_calls_with_no_external_calls():
+    from openadapt_flow.model_call_evidence import model_call_evidence_error
+    from openadapt_flow.receipt import build_receipt
+
+    assert model_call_evidence_error(1, ["model"], "none") is not None
+    with pytest.raises(Exception, match="observed external network"):
+        build_receipt(
+            _receipt_report(model_calls=1, local_model_calls=0, network="none")
+        )
+    receipt = build_receipt(
+        _receipt_report(model_calls=1, local_model_calls=0, network="observed")
+    )
+    assert receipt.model_calls == 1 and receipt.external_network_calls == "observed"
+
+
+def test_receipt_lets_in_process_calls_say_no_external_calls():
+    from openadapt_flow.model_call_evidence import model_call_evidence_error
+    from openadapt_flow.receipt import build_receipt
+
+    assert model_call_evidence_error(0, [], "none") is None
+    receipt = build_receipt(
+        _receipt_report(model_calls=0, local_model_calls=2, network="none")
+    )
+    assert receipt.model_calls == 0
+    assert receipt.external_network_calls == "none"
+    assert "model" not in receipt.evidence_classes
+
+
+def test_counts_from_a_raised_step_never_land_on_the_next_run(tmp_path):
+    from openadapt_flow.runtime.model_egress import EgressRecorder
+
+    recorder = EgressRecorder()
+    recorder.count("identity_vlm_calls")
+    recorder.drain(None)  # the step raised: no result to put them on
+    recorder.bind_run(tmp_path / "run-2")
+    fresh = StepResult(step_id="s1", intent="x", ok=True)
+    recorder.drain(fresh)
+    assert fresh.identity_vlm_calls == 0
