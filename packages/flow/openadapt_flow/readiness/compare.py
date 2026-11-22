@@ -98,7 +98,9 @@ _ID_WORDS = frozenset(
     "id ids mrn zip postal postcode phone tel fax mobile account acct ssn npi "
     "code number num no ref sku iban routing card member".split()
 )
-_ISO_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ]00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)?)?$")
+_ISO_DATE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})(?:[T ]00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)?)?$"
+)
 _UNCOMPARED_BODY = "<body>"
 
 
@@ -177,14 +179,14 @@ def contamination(
             "reason": "no_screen_before_write",
         }
     text = normalize_structured(before_screen)
-    shown = sum(
-        1 for v in values if re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text)
-    )
+    shown = sum(1 for v in values if re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text))
     return {
         "compared": len(values),
         "shown": shown,
         "not_comparable": bool(values) and shown * 2 >= len(values),
-        "reason": "values_already_on_screen" if values and shown * 2 >= len(values) else None,
+        "reason": "values_already_on_screen"
+        if values and shown * 2 >= len(values)
+        else None,
     }
 
 
@@ -262,14 +264,18 @@ def compare_case(
     ]
     case["extra_held_writes"] = len(extra)
     got = {f["name"]: f for f in proposed.get("fields") or []}
-    body_unreadable = _UNCOMPARED_BODY in got and got[_UNCOMPARED_BODY].get(
-        "parse"
-    ) == "uncompared"
+    body_unreadable = (
+        _UNCOMPARED_BODY in got and got[_UNCOMPARED_BODY].get("parse") == "uncompared"
+    )
     rows: list[dict[str, Any]] = []
     for name, value in expected.items():
         if name in got and got[name].get("parse") != "uncompared":
             if not values_equal(
-                value, got[name].get("value"), codecs.get(name), name=name, numbers=False
+                value,
+                got[name].get("value"),
+                codecs.get(name),
+                name=name,
+                numbers=False,
             ):
                 rows.append(
                     {
@@ -321,8 +327,10 @@ def compare_case(
     case["undeclared_fields"] = kinds.count("extra")
     if not identity.get("ok") or "wrong_record" in kinds:
         case["status"] = "WRONG_RECORD"
-        case["reason"] = identity.get("code") if not identity.get("ok") else (
-            "a record field names another record"
+        case["reason"] = (
+            identity.get("code")
+            if not identity.get("ok")
+            else ("a record field names another record")
         )
         return case
     check = contamination(before_screen, human)
@@ -382,13 +390,17 @@ def compare_runs(
         before = (
             screen_path.read_text(encoding="utf-8") if screen_path.is_file() else None
         )
-        held = [
-            doc
-            for doc in (
-                _read_json(p) for p in sorted((task_dir / "held").glob("*.json"))
-            )
-            if doc is not None
-        ] if (task_dir / "held").is_dir() else []
+        held = (
+            [
+                doc
+                for doc in (
+                    _read_json(p) for p in sorted((task_dir / "held").glob("*.json"))
+                )
+                if doc is not None
+            ]
+            if (task_dir / "held").is_dir()
+            else []
+        )
         cases.append(
             compare_case(
                 episode,

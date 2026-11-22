@@ -53,7 +53,11 @@ class CdpWire:
         timeout_s: float = 10.0,
     ) -> None:
         parts = urlsplit(ws_url)
-        if parts.scheme != "ws" or parts.hostname not in ("127.0.0.1", "localhost", "::1"):
+        if parts.scheme != "ws" or parts.hostname not in (
+            "127.0.0.1",
+            "localhost",
+            "::1",
+        ):
             raise CdpError("the DevTools endpoint must be a loopback ws:// URL")
         self._on_event = on_event
         self._timeout_s = timeout_s
@@ -85,9 +89,7 @@ class CdpWire:
         self._pending_lock = threading.Lock()
         self.closed = threading.Event()
         self.error: Optional[str] = None
-        self._events: "queue.Queue[Optional[tuple[str, dict[str, Any], Optional[str]]]]" = (
-            queue.Queue()
-        )
+        self._events: "queue.Queue[Optional[tuple[str, dict[str, Any], Optional[str]]]]" = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_loop, name="openadapt-cdp-wire", daemon=True
         )
@@ -166,7 +168,11 @@ class CdpWire:
                         slot[0].set()
                     continue
                 self._events.put(
-                    (str(msg.get("method")), dict(msg.get("params") or {}), msg.get("sessionId"))
+                    (
+                        str(msg.get("method")),
+                        dict(msg.get("params") or {}),
+                        msg.get("sessionId"),
+                    )
                 )
         except Exception as exc:  # noqa: BLE001
             if not self.closed.is_set():
@@ -207,7 +213,11 @@ class CdpWire:
             msg_id = self._next_id
             slot: list[Any] = [threading.Event(), None]
             self._pending[msg_id] = slot
-        message: dict[str, Any] = {"id": msg_id, "method": method, "params": params or {}}
+        message: dict[str, Any] = {
+            "id": msg_id,
+            "method": method,
+            "params": params or {},
+        }
         if session_id:
             message["sessionId"] = session_id
         try:
@@ -242,7 +252,11 @@ class CdpWire:
         with self._pending_lock:
             self._next_id += 1
             msg_id = self._next_id
-        message: dict[str, Any] = {"id": msg_id, "method": method, "params": params or {}}
+        message: dict[str, Any] = {
+            "id": msg_id,
+            "method": method,
+            "params": params or {},
+        }
         if session_id:
             message["sessionId"] = session_id
         try:

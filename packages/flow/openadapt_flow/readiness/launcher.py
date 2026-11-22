@@ -130,9 +130,14 @@ def price_usage(usage: Mapping[str, Any]) -> Optional[float]:
 
     prices = PRICES_PER_MTOK.get(str(usage.get("model") or ""))
     tokens_in, tokens_out = usage.get("input_tokens"), usage.get("output_tokens")
-    if prices is None or not all(
-        isinstance(n, int) and not isinstance(n, bool) and n >= 0
-        for n in (tokens_in, tokens_out)
+    if (
+        prices is None
+        or not isinstance(tokens_in, int)
+        or not isinstance(tokens_out, int)
+        or isinstance(tokens_in, bool)
+        or isinstance(tokens_out, bool)
+        or tokens_in < 0
+        or tokens_out < 0
     ):
         return None
     return round(
@@ -204,7 +209,10 @@ def _cdp_port(cdp_url: str) -> int:
 
 class _RunningCommand:
     def __init__(
-        self, job: LaunchJob, argv: Sequence[str], egress: Optional["EgressOptions"] = None
+        self,
+        job: LaunchJob,
+        argv: Sequence[str],
+        egress: Optional["EgressOptions"] = None,
     ) -> None:
         self.job = job
         self.egress = None
@@ -321,8 +329,13 @@ class _RunningProgram(_RunningCommand):
             report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
             calls = report.get("model_calls")
             if isinstance(calls, int) and calls == 0:
-                usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
-                         "model": None, "cost_usd": 0.0}
+                usage = {
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "model": None,
+                    "cost_usd": 0.0,
+                }
         except (OSError, ValueError, AttributeError):
             usage = None
         fields = approval_fields(run_dir)
@@ -330,7 +343,9 @@ class _RunningProgram(_RunningCommand):
             exit_code=self._process.proc.returncode,
             usage=usage,
             proposed_fields=fields,
-            notes=[] if fields else ["the program wrote no approval request with fields"],
+            notes=[]
+            if fields
+            else ["the program wrote no approval request with fields"],
             egress=self._egress_summary(),
         )
 
@@ -382,7 +397,12 @@ class ProgramLauncher:
         from openadapt_flow.readiness.program_child import write_args
 
         path = write_args(job.run_dir / "program-args.json", self.flow_args(job))
-        return [*self.python_cmd, "-m", "openadapt_flow.readiness.program_child", str(path)]
+        return [
+            *self.python_cmd,
+            "-m",
+            "openadapt_flow.readiness.program_child",
+            str(path),
+        ]
 
     def start(self, job: LaunchJob) -> RunningAgent:
         argv = self.argv(job)

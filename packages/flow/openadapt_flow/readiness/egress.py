@@ -37,7 +37,13 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-__all__ = ["EGRESS_MODES", "EgressRefused", "EgressSession", "metered_cost", "preflight"]
+__all__ = [
+    "EGRESS_MODES",
+    "EgressRefused",
+    "EgressSession",
+    "metered_cost",
+    "preflight",
+]
 
 EGRESS_MODES = ("scrubbed", "blocked", "unscrubbed")
 #: Where the model base URLs point in ``blocked`` mode: a loopback port the
@@ -78,7 +84,9 @@ def preflight(mode: str, *, scrubber: Any = None) -> Any:
     try:
         return require_scrubber()
     except ScrubberUnavailable as exc:
-        raise EgressRefused(f"the scrubber can't run ({exc}); nothing was run") from None
+        raise EgressRefused(
+            f"the scrubber can't run ({exc}); nothing was run"
+        ) from None
 
 
 def metered_cost(summary: Mapping[str, Any]) -> tuple[Optional[float], Optional[str]]:
@@ -87,7 +95,11 @@ def metered_cost(summary: Mapping[str, Any]) -> tuple[Optional[float], Optional[
     price a call or the session was refused before it ran."""
 
     cost = summary.get("cost_usd")
-    if summary.get("cost_source") == "metered" and isinstance(cost, (int, float)) and not isinstance(cost, bool):
+    if (
+        summary.get("cost_source") == "metered"
+        and isinstance(cost, (int, float))
+        and not isinstance(cost, bool)
+    ):
         return round(float(cost), 6), "metered"
     return None, None
 
@@ -183,7 +195,12 @@ class EgressSession:
 
         if self._egress is not None:
             return self._egress.wrap(list(argv))
-        return [flight.SANDBOX_EXEC, "-p", flight.sandbox_profile([self.cdp_port]), *argv]
+        return [
+            flight.SANDBOX_EXEC,
+            "-p",
+            flight.sandbox_profile([self.cdp_port]),
+            *argv,
+        ]
 
     # -- the result -----------------------------------------------------------------
 

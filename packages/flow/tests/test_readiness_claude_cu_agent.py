@@ -15,7 +15,12 @@ import pytest
 from tests.fixtures.flight.fake_provider import FakeProvider, anthropic_click
 
 pytest.importorskip("anthropic")
-AGENT = Path(__file__).resolve().parents[1] / "benchmark" / "readiness" / "claude_cu_agent.py"
+AGENT = (
+    Path(__file__).resolve().parents[1]
+    / "benchmark"
+    / "readiness"
+    / "claude_cu_agent.py"
+)
 
 
 def _agent() -> Any:
@@ -54,7 +59,10 @@ def upstream(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_the_loop_acts_and_reports_usage(upstream: FakeProvider) -> None:
-    upstream.anthropic_turns = [[anthropic_click(640, 400)], [{"type": "text", "text": "RESULT: DONE"}]]
+    upstream.anthropic_turns = [
+        [anthropic_click(640, 400)],
+        [{"type": "text", "text": "RESULT: DONE"}],
+    ]
     screen = FakeScreen()
     usage = _agent().run_task("Add the note and save.", screen)
     assert screen.clicks == [(640, 400)]
@@ -65,7 +73,9 @@ def test_the_loop_acts_and_reports_usage(upstream: FakeProvider) -> None:
     assert "Medplum" not in first and "Add the note and save." in first
 
 
-def test_usage_json_is_written_after_every_call(upstream: FakeProvider, tmp_path: Path) -> None:
+def test_usage_json_is_written_after_every_call(
+    upstream: FakeProvider, tmp_path: Path
+) -> None:
     import json
 
     upstream.anthropic_turns = [[anthropic_click(10, 10, f"t{i}")] for i in range(5)]
@@ -77,8 +87,12 @@ def test_usage_json_is_written_after_every_call(upstream: FakeProvider, tmp_path
         def click(self, x: float, y: float, **kw: Any) -> None:
             seen.append(json.loads(path.read_text())["calls"])
 
-    agent.run_task("x", Watching(), limits=agent.caps({"OPENADAPT_CU_MAX_STEPS": "3"}),
-                   usage_path=path)
+    agent.run_task(
+        "x",
+        Watching(),
+        limits=agent.caps({"OPENADAPT_CU_MAX_STEPS": "3"}),
+        usage_path=path,
+    )
     assert seen == [1, 2, 3]  # on disk before each action, so a stop loses nothing
     assert json.loads(path.read_text())["calls"] == 3
 
@@ -95,15 +109,22 @@ def test_the_step_cap_holds(upstream: FakeProvider) -> None:
 def test_the_spend_cap_holds(upstream: FakeProvider) -> None:
     upstream.anthropic_turns = [[anthropic_click(10, 10, f"t{i}")] for i in range(40)]
     agent = _agent()
-    usage = agent.run_task("x", FakeScreen(), limits=agent.caps({"OPENADAPT_CU_MAX_USD": "0.0001"}))
+    usage = agent.run_task(
+        "x", FakeScreen(), limits=agent.caps({"OPENADAPT_CU_MAX_USD": "0.0001"})
+    )
     assert usage["calls"] == 1 and usage["stopped"].startswith("spend cap")
 
 
 def test_caps_never_pass_the_maximums() -> None:
     agent = _agent()
     assert agent.caps({}) == {"steps": 25, "usd": 1.0, "seconds": 600}
-    assert agent.caps({"OPENADAPT_CU_MAX_STEPS": "500", "OPENADAPT_CU_MAX_USD": "90",
-                       "OPENADAPT_CU_MAX_S": "1e9"}) == {"steps": 50, "usd": 5.0, "seconds": 1800}
+    assert agent.caps(
+        {
+            "OPENADAPT_CU_MAX_STEPS": "500",
+            "OPENADAPT_CU_MAX_USD": "90",
+            "OPENADAPT_CU_MAX_S": "1e9",
+        }
+    ) == {"steps": 50, "usd": 5.0, "seconds": 1800}
 
 
 def test_an_unpriced_model_is_refused() -> None:
@@ -111,8 +132,9 @@ def test_an_unpriced_model_is_refused() -> None:
         _agent().run_task("x", FakeScreen(), model="claude-unknown")
 
 
-def test_the_shared_leaderboard_ledger_is_not_touched(upstream: FakeProvider, tmp_path: Path,
-                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_shared_leaderboard_ledger_is_not_touched(
+    upstream: FakeProvider, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from benchmark.fhir_medplum.leaderboard import common
 
     monkeypatch.setattr(common, "LEDGER", tmp_path / "spend.json")
@@ -157,16 +179,27 @@ def test_the_loop_works_with_run_tokens_through_the_flight_proxy(
             typed.append(text)
 
     fake.anthropic_turns = [
-        [{"type": "tool_use", "id": "toolu_1", "name": "computer",
-          "input": {"action": "type", "text": "[PERSON_1]"}}],
+        [
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "computer",
+                "input": {"action": "type", "text": "[PERSON_1]"},
+            }
+        ],
         [{"type": "text", "text": "RESULT: DONE"}],
     ]
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
     run_dir = tmp_path / "task-0001"
     try:
-        with ScrubbedEgress(run_dir, spend_cap_usd=1.0, allow_unenforced=True,
-                            use_block=False, upstreams={"anthropic": fake.url},
-                            scrubber=scrubber) as egress:
+        with ScrubbedEgress(
+            run_dir,
+            spend_cap_usd=1.0,
+            allow_unenforced=True,
+            use_block=False,
+            upstreams={"anthropic": fake.url},
+            scrubber=scrubber,
+        ) as egress:
             monkeypatch.setenv("ANTHROPIC_BASE_URL", egress.env["ANTHROPIC_BASE_URL"])
             usage = _agent().run_task(
                 "Open the chart of Jane Sample and type the patient's name in the note.",

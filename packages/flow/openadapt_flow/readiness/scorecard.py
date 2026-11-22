@@ -45,13 +45,19 @@ from typing import Any, Mapping, Optional
 
 from openadapt_flow.readiness.runner import SCOPE_STATEMENT, scope_failure
 
-__all__ = ["REPLAY_STATE", "SCORECARD_SCHEMA", "build_scorecard", "render_html", "write_scorecard"]
+__all__ = [
+    "REPLAY_STATE",
+    "SCORECARD_SCHEMA",
+    "build_scorecard",
+    "render_html",
+    "write_scorecard",
+]
 
 SCORECARD_SCHEMA = "openadapt.readiness-scorecard/v1"
 REPLAY_STATE = {
     "sandbox": (
         "Sandbox: each task ran on a sandbox or test tenant reset to synthetic "
-        "\"before\" state; the person's saved values are the reference."
+        '"before" state; the person\'s saved values are the reference.'
     ),
     "run-ahead": (
         "Run-ahead: the agent worked each live queue item first and stopped "
@@ -99,18 +105,22 @@ def _cost_source(cases: list[Mapping[str, Any]]) -> str:
     return "metered" if all(s == "metered" for s in sources) else "reported"
 
 
-def _egress(cases_doc: Mapping[str, Any], cases: list[Mapping[str, Any]]) -> dict[str, Any]:
+def _egress(
+    cases_doc: Mapping[str, Any], cases: list[Mapping[str, Any]]
+) -> dict[str, Any]:
     run = dict(cases_doc.get("egress") or {})
     mode = run.get("mode")
-    calls: Optional[int] = 0
+    total = 0
+    known = True
     for case in cases:
         n = case.get("model_calls_metered")
         if case.get("reason") == "not_run":
             continue
         if not isinstance(n, int) or isinstance(n, bool):
-            calls = None
+            known = False
             break
-        calls += n
+        total += n
+    calls: Optional[int] = total if known else None
     if mode not in EGRESS_MODES:
         # No flight proxy ran: nothing was scrubbed or metered.
         return {"mode": "unscrubbed", "enforced": False, "model_calls": None}
@@ -143,12 +153,18 @@ def build_scorecard(
     task_type = check_task_type(task_type)
     cases = list(cases_doc.get("cases") or [])
     status = [c["status"] for c in cases]
+
     def _not_checked(reason: str) -> int:
         return sum(
-            1 for c in cases if c["status"] == "NOT_CHECKED" and c.get("reason") == reason
+            1
+            for c in cases
+            if c["status"] == "NOT_CHECKED" and c.get("reason") == reason
         )
 
-    extra_target, egress_refused = _not_checked("extra_target"), _not_checked("egress_refused")
+    extra_target, egress_refused = (
+        _not_checked("extra_target"),
+        _not_checked("egress_refused"),
+    )
     failed_scope = status.count("FAILED_SCOPE") + extra_target + egress_refused
     field_errors = []
     for case in cases:
@@ -170,10 +186,14 @@ def build_scorecard(
                     {"task_id": case["task_id"], "field": field, "kind": row["kind"]}
                 )
     agent_times = [
-        float(c["agent_time_s"]) for c in cases if isinstance(c.get("agent_time_s"), (int, float))
+        float(c["agent_time_s"])
+        for c in cases
+        if isinstance(c.get("agent_time_s"), (int, float))
     ]
     human_times = [
-        float(c["human_time_s"]) for c in cases if isinstance(c.get("human_time_s"), (int, float))
+        float(c["human_time_s"])
+        for c in cases
+        if isinstance(c.get("human_time_s"), (int, float))
     ]
     ran = [c for c in cases if c.get("reason") != "not_run"]
     known = [
@@ -214,7 +234,9 @@ def build_scorecard(
         "scope_statement": (
             SCOPE_STATEMENT
             if landed == 0 and failed_scope == 0
-            else scope_failure(landed, failed_scope, extra_target, egress_refused, len(cases))
+            else scope_failure(
+                landed, failed_scope, extra_target, egress_refused, len(cases)
+            )
         ),
         "cases_total": len(cases),
         "matched": matched,
@@ -238,7 +260,9 @@ def build_scorecard(
         "human_time_s": human,
         "model_cost_usd": {
             "total": cost_total,
-            "per_task": round(cost_total / len(known), 6) if known and cost_total is not None else None,
+            "per_task": round(cost_total / len(known), 6)
+            if known and cost_total is not None
+            else None,
             "unknown_count": unknown,
             "source": _cost_source(ran),
         },
@@ -283,7 +307,11 @@ def _v(value: Any) -> str:
 def _num(value: Any, unit: str = "") -> str:
     if value is None:
         return "unknown"
-    return f"{value:g}{unit}" if isinstance(value, (int, float)) else html.escape(str(value))
+    return (
+        f"{value:g}{unit}"
+        if isinstance(value, (int, float))
+        else html.escape(str(value))
+    )
 
 
 def render_html(card: Mapping[str, Any], cases_doc: Mapping[str, Any]) -> str:
@@ -294,9 +322,17 @@ def render_html(card: Mapping[str, Any], cases_doc: Mapping[str, Any]) -> str:
         ("Matched", f"{card['matched']} of {card['cases_total']}", "ok"),
         ("Mismatched", card["mismatched"], "bad" if card["mismatched"] else ""),
         ("Wrong record", risks["wrong_record"], "bad" if risks["wrong_record"] else ""),
-        ("Not comparable", card["not_comparable"], "warn" if card["not_comparable"] else ""),
+        (
+            "Not comparable",
+            card["not_comparable"],
+            "warn" if card["not_comparable"] else "",
+        ),
         ("Not checked", card["not_checked"], "warn" if card["not_checked"] else ""),
-        ("Writes that reached the app", card["landed_writes"], "bad" if card["landed_writes"] else "ok"),
+        (
+            "Writes that reached the app",
+            card["landed_writes"],
+            "bad" if card["landed_writes"] else "ok",
+        ),
     ]
     tile_html = "".join(
         f"<div class=tile><span class=mute>{html.escape(name)}</span><b class='{cls}'>{_v(val)}</b></div>"

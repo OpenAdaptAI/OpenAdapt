@@ -45,14 +45,21 @@ def read_args(path: Path) -> list[str]:
     doc = json.loads(path.read_text(encoding="utf-8"))
     path.unlink()
     argv = doc.get("argv") if isinstance(doc, dict) else None
-    if doc.get("schema") != SCHEMA or not isinstance(argv, list) or not argv or argv[0] != "run":
+    if (
+        doc.get("schema") != SCHEMA
+        or not isinstance(argv, list)
+        or not argv
+        or argv[0] != "run"
+    ):
         raise SystemExit("program arguments: not a readiness program run; refused")
     return [str(a) for a in argv]
 
 
 def main(args: list[str]) -> int:
     if len(args) != 1:
-        raise SystemExit("usage: python -m openadapt_flow.readiness.program_child <file>")
+        raise SystemExit(
+            "usage: python -m openadapt_flow.readiness.program_child <file>"
+        )
     argv = read_args(Path(args[0]))
     from openadapt_flow.__main__ import main as flow_main
 

@@ -57,6 +57,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
+from openadapt_flow._browser_readiness import require_rendering_ready
 from openadapt_flow.agent_guard.requests import NotASave, origin_of
 from openadapt_flow.readiness.devtools_relay import DevToolsRelay, headless_shell
 from openadapt_flow.readiness.egress import EgressRefused
@@ -83,15 +84,18 @@ SCOPE_STATEMENT = (
 SCOPE_STATEMENT_MAX = 200
 
 
-def scope_failure(landed: int, failed_scope: int, extra_target: int, egress: int,
-                  total: int) -> str:
+def scope_failure(
+    landed: int, failed_scope: int, extra_target: int, egress: int, total: int
+) -> str:
     """What failed, in place of the claim (under 200 characters)."""
 
     parts = []
     if landed:
         parts.append(f"{landed} write(s) reached the app")
     if extra_target:
-        parts.append(f"{extra_target} case(s) had a tab, popup, context or worker the hold couldn't vouch for")
+        parts.append(
+            f"{extra_target} case(s) had a tab, popup, context or worker the hold couldn't vouch for"
+        )
     if egress:
         parts.append(f"{egress} case(s) refused for model traffic outside the proxy")
     text = (
@@ -99,9 +103,15 @@ def scope_failure(landed: int, failed_scope: int, extra_target: int, egress: int
         + ("; ".join(parts) or "see the cases")
         + ". Not a clean shadow run."
     )
-    return text if len(text) <= SCOPE_STATEMENT_MAX else (
-        f"Scope failed in {failed_scope} of {total} case(s). Not a clean shadow run."
+    return (
+        text
+        if len(text) <= SCOPE_STATEMENT_MAX
+        else (
+            f"Scope failed in {failed_scope} of {total} case(s). Not a clean shadow run."
+        )
     )
+
+
 POLL_MS = 25
 SCREEN_EVERY_S = 0.1
 
@@ -259,9 +269,9 @@ def run_one(
         #: The target gate's inventory; None means no gate ran (the case
         #: fails closed as ``extra_target``).
         "target_gate": None,
-        "session": "kept" if cfg.keep_session else (
-            "loaded" if cfg.storage_state else "fresh"
-        ),
+        "session": "kept"
+        if cfg.keep_session
+        else ("loaded" if cfg.storage_state else "fresh"),
         "notes": [],
     }
     _reset(cfg)
@@ -294,6 +304,8 @@ def run_one(
             storage_state=str(state_in) if state_in else None,
         )
         tab = context.new_page()
+        # The tab the hold will guard renders before the app is opened in it.
+        require_rendering_ready(browser, attached_page=tab)
         tab.goto(cfg.app_url)
         guarded = (
             GuardedSave.from_file(cfg.verify, run_dir / "guard", approval="not_gated")
@@ -304,7 +316,9 @@ def run_one(
             tab, screen_selector=cfg.screen_selector, all_resources=True
         )
         main_target = cdp_page.cdp.send("Target.getTargetInfo", {})["targetInfo"]
-        gate = TargetGate(relay.http_url, main_target_id=str(main_target["targetId"])).start()
+        gate = TargetGate(
+            relay.http_url, main_target_id=str(main_target["targetId"])
+        ).start()
         guard = ShadowHoldGuard(
             guarded,
             task,
@@ -457,8 +471,10 @@ def browser_origins(cfg: RunnerConfig) -> tuple[str, ...]:
     """The origins the shadow browser may reach: the app's, the ``not_saves``
     rules' own origins, and ``allow_origins``."""
 
-    found = [origin_of(cfg.app_url)]
-    found += [rule.origin for rule in cfg.not_saves if getattr(rule, "origin", None)]
+    found: list[str] = [origin_of(cfg.app_url)]
+    found += [
+        str(rule.origin) for rule in cfg.not_saves if getattr(rule, "origin", None)
+    ]
     found += [origin_of(o) or o for o in cfg.allow_origins]
     return tuple(dict.fromkeys(o for o in found if o))
 
@@ -506,9 +522,9 @@ def run_episodes(
         "scope_statement": SCOPE_STATEMENT,
         "started_at": _now(),
         "reset_cmd": shlex.join(cfg.reset_cmd) if cfg.reset_cmd else None,
-        "session": "kept" if cfg.keep_session else (
-            "loaded" if cfg.storage_state else "fresh"
-        ),
+        "session": "kept"
+        if cfg.keep_session
+        else ("loaded" if cfg.storage_state else "fresh"),
         "tasks": [],
     }
     options = getattr(launcher, "egress", None)
@@ -520,7 +536,8 @@ def run_episodes(
         # Refuses the whole run before any task; the scrubber is loaded once.
         scrubber = preflight(options.mode, scrubber=options.scrubber)
         if scrubber is not None and options.scrubber is None:
-            launcher.egress = options = dataclasses.replace(options, scrubber=scrubber)
+            options = dataclasses.replace(options, scrubber=scrubber)
+            setattr(launcher, "egress", options)  # noqa: B010 - not on the protocol
     carry = _session_carry(out)
     carry.unlink(missing_ok=True)  # never a session from an earlier run
     try:
@@ -536,12 +553,19 @@ def run_episodes(
     manifest["finished_at"] = _now()
     if options is not None:
         runs = [
-            json.loads((out / t["task_id"] / "run.json").read_text("utf-8")).get("egress") or {}
+            json.loads((out / t["task_id"] / "run.json").read_text("utf-8")).get(
+                "egress"
+            )
+            or {}
             for t in manifest["tasks"]
         ]
         browsers = [
-            (json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))
-             .get("browser_network") or {}).get("limited")
+            (
+                json.loads((out / t["task_id"] / "run.json").read_text("utf-8")).get(
+                    "browser_network"
+                )
+                or {}
+            ).get("limited")
             for t in manifest["tasks"]
         ]
         manifest["egress"] = {
@@ -559,7 +583,9 @@ def run_episodes(
     else:
         manifest["egress"] = None
     manifest["landed_writes"] = sum(
-        json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))["landed_writes"]
+        json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))[
+            "landed_writes"
+        ]
         for t in manifest["tasks"]
     )
     _write_private(out / "run.json", manifest)

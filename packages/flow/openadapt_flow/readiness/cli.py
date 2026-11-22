@@ -32,7 +32,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     verbs = p.add_subparsers(dest="readiness_cmd", required=True)
 
-    imp = verbs.add_parser("import", help="Turn recorded human tasks into reference episodes")
+    imp = verbs.add_parser(
+        "import",
+        help="Turn recorded human tasks into reference episodes",
+        allow_abbrev=False,
+    )
     imp.add_argument("--from", dest="source", required=True, help="one folder per task")
     imp.add_argument("--out", required=True, help="the episodes folder")
     imp.add_argument("--app-url", default=None, help="only saves to this origin count")
@@ -44,14 +48,20 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="induce a lens from the person's HAR traces (repeatable)",
     )
 
-    run = verbs.add_parser("run", help="Run the candidate on every episode, stopped before save")
+    run = verbs.add_parser(
+        "run",
+        help="Run the candidate on every episode, stopped before save",
+        allow_abbrev=False,
+    )
     run.add_argument("--episodes", required=True)
     run.add_argument("--out", required=True, help="the runs folder")
     run.add_argument("--app-url", required=True, help="where each task's tab opens")
     who = run.add_mutually_exclusive_group(required=True)
     who.add_argument("--agent-cmd", help="the agent command, run once per task")
     who.add_argument("--program", help="a compiled program bundle")
-    run.add_argument("--label", default=None, help="the candidate's name on the scorecard")
+    run.add_argument(
+        "--label", default=None, help="the candidate's name on the scorecard"
+    )
     run.add_argument("--mode", choices=("sandbox", "run-ahead"), default="sandbox")
     run.add_argument(
         "--not-save",
@@ -60,11 +70,17 @@ def register(sub: argparse._SubParsersAction) -> None:
         metavar="METHOD:PATH",
         help="a write that is let through (a sign-in form), fnmatch path (repeatable)",
     )
-    run.add_argument("--screen-selector", default=None, help="CSS selector of the record header")
+    run.add_argument(
+        "--screen-selector", default=None, help="CSS selector of the record header"
+    )
     run.add_argument("--timeout", type=float, default=300.0, help="seconds per task")
     run.add_argument("--linger", type=float, default=1.5, help="seconds after the hold")
-    run.add_argument("--reset-cmd", default=None, help="puts the sandbox back before each task")
-    run.add_argument("--verify", default=None, help="verify.yaml: identity through GuardedSave.begin")
+    run.add_argument(
+        "--reset-cmd", default=None, help="puts the sandbox back before each task"
+    )
+    run.add_argument(
+        "--verify", default=None, help="verify.yaml: identity through GuardedSave.begin"
+    )
     run.add_argument(
         "--storage-state",
         default=None,
@@ -106,10 +122,16 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     _lens_flags(run)
 
-    cmp_ = verbs.add_parser("compare", help="Compare each proposed write with the person's save")
+    cmp_ = verbs.add_parser(
+        "compare",
+        help="Compare each proposed write with the person's save",
+        allow_abbrev=False,
+    )
     cmp_.add_argument("--episodes", required=True)
     cmp_.add_argument("--runs", required=True)
-    cmp_.add_argument("--out", required=True, help="cases.json goes here (values, 0600)")
+    cmp_.add_argument(
+        "--out", required=True, help="cases.json goes here (values, 0600)"
+    )
     cmp_.add_argument(
         "--ignore-field",
         action="append",
@@ -118,10 +140,17 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     _lens_flags(cmp_)
 
-    rep = verbs.add_parser("report", help="Write scorecard.json and scorecard.html")
+    rep = verbs.add_parser(
+        "report", help="Write scorecard.json and scorecard.html", allow_abbrev=False
+    )
     rep.add_argument("--cases", required=True, help="cases.json from compare")
     rep.add_argument("--out", required=True)
-    rep.add_argument("--hourly-cost", type=float, default=None, help="USD per hour of the person's time")
+    rep.add_argument(
+        "--hourly-cost",
+        type=float,
+        default=None,
+        help="USD per hour of the person's time",
+    )
     rep.add_argument("--label", default=None)
     rep.add_argument(
         "--task-type",
@@ -150,7 +179,9 @@ def _not_saves(values: list[str]) -> list[Any]:
     for value in values:
         method, sep, path = value.partition(":")
         if not sep or not method or not path.startswith("/"):
-            raise SystemExit(f"readiness: --not-save must be METHOD:/path, got {value!r}")
+            raise SystemExit(
+                f"readiness: --not-save must be METHOD:/path, got {value!r}"
+            )
         rules.append(NotASave(method, path))
     return rules
 
@@ -191,7 +222,10 @@ def _cmd_import(args: argparse.Namespace) -> int:
     result = import_episodes(args.source, out, app_url=args.app_url, lens=lens)
     print(f"readiness import: {len(result.imported)} episode(s) in {out}")
     for item in result.refused:
-        print(f"  refused {item['folder']}: {item['code']} ({item['why']})", file=sys.stderr)
+        print(
+            f"  refused {item['folder']}: {item['code']} ({item['why']})",
+            file=sys.stderr,
+        )
     return 0 if result.imported else 1
 
 
@@ -208,9 +242,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     for value in args.upstream:
         name, sep, url = value.partition("=")
         if not sep or name not in ("anthropic", "openai") or not url.startswith("http"):
-            raise SystemExit(f"readiness: --upstream must be anthropic=URL or openai=URL, got {value!r}")
+            raise SystemExit(
+                f"readiness: --upstream must be anthropic=URL or openai=URL, got {value!r}"
+            )
         upstreams[name] = url
-    egress = EgressOptions(mode=args.egress, spend_cap_usd=args.spend_cap, upstreams=upstreams)
+    egress = EgressOptions(
+        mode=args.egress, spend_cap_usd=args.spend_cap, upstreams=upstreams
+    )
     launcher: Any = (
         SubprocessLauncher(args.agent_cmd, label=args.label, egress=egress)
         if args.agent_cmd
@@ -248,7 +286,10 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     from openadapt_flow.readiness.compare import compare_runs, write_case_files
 
     doc = compare_runs(
-        args.episodes, args.runs, lens=_load_lens(args.lens), ignore_fields=args.ignore_field
+        args.episodes,
+        args.runs,
+        lens=_load_lens(args.lens),
+        ignore_fields=args.ignore_field,
     )
     out = Path(args.out) / "cases.json"
     _write_private(out, doc)

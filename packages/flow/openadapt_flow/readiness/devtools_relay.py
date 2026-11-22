@@ -56,6 +56,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -67,11 +68,13 @@ _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #: The only parameters a client may give ``Target.createBrowserContext``.
 CONTEXT_PARAMS = frozenset({"disposeOnDetach"})
 #: Methods no client may send through the relay (fail closed).
-REFUSED_METHODS = frozenset({
-    "Network.loadNetworkResource",
-    "Target.exposeDevToolsProtocol",
-    "Browser.executeBrowserCommand",
-})
+REFUSED_METHODS = frozenset(
+    {
+        "Network.loadNetworkResource",
+        "Target.exposeDevToolsProtocol",
+        "Browser.executeBrowserCommand",
+    }
+)
 
 
 def headless_shell(executable_path: str) -> str:
@@ -86,7 +89,12 @@ def headless_shell(executable_path: str) -> str:
     for parent in path.parents:
         if parent.name.startswith("chromium-"):
             rev = parent.name.split("-", 1)[1]
-            for found in sorted(parent.parent.glob(f"chromium_headless_shell-{rev}/*/chrome-headless-shell*")):
+            shells = parent.parent.glob(f"chromium_headless_shell-{rev}/*/*")
+            for found in sorted(
+                p
+                for p in shells
+                if p.name.startswith(("chrome-headless-shell", "headless_shell"))
+            ):
                 if found.is_file() and os.access(found, os.X_OK):
                     return str(found)
             break
@@ -209,6 +217,13 @@ class DevToolsRelay:
             "--disable-background-networking",
             "--password-store=basic",
             "--use-mock-keychain",
+            # Playwright's own Linux defaults: CI containers have no user
+            # namespaces for Chromium's sandbox, and a small /dev/shm.
+            *(
+                ("--no-sandbox", "--disable-dev-shm-usage")
+                if sys.platform.startswith("linux")
+                else ()
+            ),
             *self._network_args(),
             *self.extra_args,
             "about:blank",
@@ -230,13 +245,17 @@ class DevToolsRelay:
         )
         os.close(to_browser_r)
         os.close(from_browser_w)
-        threading.Thread(target=self._read_pipe, name="openadapt-relay-pipe", daemon=True).start()
+        threading.Thread(
+            target=self._read_pipe, name="openadapt-relay-pipe", daemon=True
+        ).start()
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind(("127.0.0.1", 0))
         server.listen(16)
         self._server = server
         self.port = server.getsockname()[1]
-        threading.Thread(target=self._accept, name="openadapt-relay-accept", daemon=True).start()
+        threading.Thread(
+            target=self._accept, name="openadapt-relay-accept", daemon=True
+        ).start()
         return self
 
     def close(self) -> None:
@@ -260,7 +279,10 @@ class DevToolsRelay:
                 pass
         for client in list(self._clients):
             self._drop(client, detach=False)
-        for fd in (getattr(self, "_to_browser", None), getattr(self, "_from_browser", None)):
+        for fd in (
+            getattr(self, "_to_browser", None),
+            getattr(self, "_from_browser", None),
+        ):
             if fd is not None:
                 try:
                     os.close(fd)
@@ -359,7 +381,9 @@ class DevToolsRelay:
     def _refuse(self, conn: socket.socket, code: str = "403 Forbidden") -> None:
         self.refused += 1
         try:
-            conn.sendall(f"HTTP/1.1 {code}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode())
+            conn.sendall(
+                f"HTTP/1.1 {code}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode()
+            )
         except OSError:
             pass
         conn.close()
@@ -387,12 +411,12 @@ class DevToolsRelay:
             return
         path = parts[1].split("?", 1)[0]
         prefix = f"/{self.token}"
-        if not secrets.compare_digest(path[: len(prefix)].encode(), prefix.encode()) or (
-            len(path) > len(prefix) and path[len(prefix)] != "/"
-        ):
+        if not secrets.compare_digest(
+            path[: len(prefix)].encode(), prefix.encode()
+        ) or (len(path) > len(prefix) and path[len(prefix)] != "/"):
             self._refuse(conn)
             return
-        rest = path[len(prefix):] or "/"
+        rest = path[len(prefix) :] or "/"
         headers = {}
         for line in lines[1:]:
             name, _, value = line.partition(":")
@@ -421,7 +445,9 @@ class DevToolsRelay:
         self._refuse(conn, "404 Not Found")
 
     def _websocket(self, conn: socket.socket, key: str) -> None:
-        accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+        accept = base64.b64encode(
+            hashlib.sha1((key + _WS_GUID).encode()).digest()
+        ).decode()
         conn.sendall(
             (
                 "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
@@ -517,7 +543,10 @@ class DevToolsRelay:
         refusal = self._refusal(msg)
         if refusal is not None:
             self.refused += 1
-            reply: dict[str, Any] = {"id": original, "error": {"code": -32000, "message": refusal}}
+            reply: dict[str, Any] = {
+                "id": original,
+                "error": {"code": -32000, "message": refusal},
+            }
             if session:
                 reply["sessionId"] = session
             client.send_text(json.dumps(reply))
@@ -526,11 +555,18 @@ class DevToolsRelay:
             with self._lock:
                 owner = self._owners.get(str(session))
             if owner is not client:
-                client.send_text(json.dumps({
-                    "id": original,
-                    "error": {"code": -32001, "message": "Session with given id not found."},
-                    "sessionId": session,
-                }))
+                client.send_text(
+                    json.dumps(
+                        {
+                            "id": original,
+                            "error": {
+                                "code": -32001,
+                                "message": "Session with given id not found.",
+                            },
+                            "sessionId": session,
+                        }
+                    )
+                )
                 return
         else:
             session = client.browser_session
@@ -554,8 +590,13 @@ class DevToolsRelay:
         if detach:
             for session in owned:
                 try:
-                    self._write({"id": next(self._ids), "method": "Target.detachFromTarget",
-                                 "params": {"sessionId": session}})
+                    self._write(
+                        {
+                            "id": next(self._ids),
+                            "method": "Target.detachFromTarget",
+                            "params": {"sessionId": session},
+                        }
+                    )
                 except OSError:
                     break
         try:

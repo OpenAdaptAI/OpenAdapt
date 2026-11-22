@@ -26,7 +26,12 @@ def _ref(**fields: Any) -> dict[str, Any]:
 
 
 #: A run whose target gate saw nothing outside the guarded tab.
-CLEAN_GATE = {"extra_targets": {}, "ungated_targets": {}, "gate_lost": False, "errors": []}
+CLEAN_GATE = {
+    "extra_targets": {},
+    "ungated_targets": {},
+    "gate_lost": False,
+    "errors": [],
+}
 
 
 def _run(**kw: Any) -> dict[str, Any]:
@@ -51,8 +56,13 @@ SCREEN = "Jane Sample — MRN P1 — DOB 1980-01-01"
 
 
 def _case(ref: dict, proposed: Optional[dict], run: Optional[dict] = None, **kw: Any):
-    return compare_case(ref, run if run is not None else _run(), proposed,
-                        before_screen=kw.pop("before_screen", SCREEN), **kw)
+    return compare_case(
+        ref,
+        run if run is not None else _run(),
+        proposed,
+        before_screen=kw.pop("before_screen", SCREEN),
+        **kw,
+    )
 
 
 @pytest.mark.parametrize(
@@ -81,8 +91,10 @@ def test_codec_applies() -> None:
 
 
 def test_matched() -> None:
-    case = _case(_ref(type="Triage", note="Cough, 3 days"),
-                 _proposed(type="Triage", note=" Cough,  3 days"))
+    case = _case(
+        _ref(type="Triage", note="Cough, 3 days"),
+        _proposed(type="Triage", note=" Cough,  3 days"),
+    )
     assert case["status"] == "MATCHED"
     assert {r["kind"] for r in case["fields"]} == {"matched"}
 
@@ -91,16 +103,23 @@ def test_planted_errors() -> None:
     ref = _ref(type="Triage", note="n", dose="5")
     mism = _case(ref, _proposed(type="Consult", note="n", dose="5"))
     assert mism["status"] == "MISMATCHED"
-    assert [(r["name"], r["kind"], r["human"], r["proposed"]) for r in mism["fields"]
-            if r["kind"] != "matched"] == [("type", "mismatched", "Triage", "Consult")]
+    assert [
+        (r["name"], r["kind"], r["human"], r["proposed"])
+        for r in mism["fields"]
+        if r["kind"] != "matched"
+    ] == [("type", "mismatched", "Triage", "Consult")]
     missing = _case(ref, _proposed(type="Triage", dose="5"))
-    assert [(r["name"], r["kind"]) for r in missing["fields"] if r["kind"] != "matched"] == [
-        ("note", "missing")]
+    assert [
+        (r["name"], r["kind"]) for r in missing["fields"] if r["kind"] != "matched"
+    ] == [("note", "missing")]
     extra = _case(ref, _proposed(type="Triage", note="n", dose="5", billing="999"))
     assert extra["status"] == "MISMATCHED"
     assert extra["undeclared_fields"] == 1
-    ignored = _case(ref, _proposed(type="Triage", note="n", dose="5", billing="999"),
-                    ignore_fields=["billing"])
+    ignored = _case(
+        ref,
+        _proposed(type="Triage", note="n", dose="5", billing="999"),
+        ignore_fields=["billing"],
+    )
     assert ignored["status"] == "MATCHED"
 
 
@@ -117,8 +136,10 @@ def test_wrong_record() -> None:
 
 def test_uncompared_is_never_matched() -> None:
     ref = _ref(type="Triage", note="n")
-    unreadable = {"identity": {"ok": True, "code": "verified"},
-                  "fields": [{"name": "<body>", "value": None, "parse": "uncompared"}]}
+    unreadable = {
+        "identity": {"ok": True, "code": "verified"},
+        "fields": [{"name": "<body>", "value": None, "parse": "uncompared"}],
+    }
     case = _case(ref, unreadable)
     assert case["status"] == "NOT_CHECKED"
     assert {r["kind"] for r in case["fields"]} == {"uncompared"}
@@ -126,22 +147,35 @@ def test_uncompared_is_never_matched() -> None:
     one["fields"][2] = {"name": "note", "value": None, "parse": "uncompared"}
     assert _case(ref, one)["status"] == "NOT_CHECKED"
     human_unreadable = _ref(type="Triage")
-    human_unreadable["human_fields"].append({"name": "file", "value": None, "parse": "uncompared"})
-    assert _case(human_unreadable, _proposed(type="Triage", file="x"))["status"] == "NOT_CHECKED"
+    human_unreadable["human_fields"].append(
+        {"name": "file", "value": None, "parse": "uncompared"}
+    )
+    assert (
+        _case(human_unreadable, _proposed(type="Triage", file="x"))["status"]
+        == "NOT_CHECKED"
+    )
 
 
 def test_contamination() -> None:
     ref = _ref(type="Triage", note="Cough for three days")
     shown = SCREEN + "\nPrevious: Triage — Cough for three days"
-    case = _case(ref, _proposed(type="Triage", note="Cough for three days"),
-                 before_screen=shown)
+    case = _case(
+        ref, _proposed(type="Triage", note="Cough for three days"), before_screen=shown
+    )
     assert case["status"] == "NOT_COMPARABLE"
-    half = _case(ref, _proposed(type="Triage", note="Cough for three days"),
-                 before_screen=SCREEN + " Triage")
+    half = _case(
+        ref,
+        _proposed(type="Triage", note="Cough for three days"),
+        before_screen=SCREEN + " Triage",
+    )
     assert half["status"] == "NOT_COMPARABLE"  # one of two is at least half
-    assert contamination(SCREEN, [{"name": "note", "value": "Cough"}])["not_comparable"] is False
-    no_screen = _case(ref, _proposed(type="Triage", note="Cough for three days"),
-                      before_screen=None)
+    assert (
+        contamination(SCREEN, [{"name": "note", "value": "Cough"}])["not_comparable"]
+        is False
+    )
+    no_screen = _case(
+        ref, _proposed(type="Triage", note="Cough for three days"), before_screen=None
+    )
     assert no_screen["status"] == "NOT_COMPARABLE"
 
 
@@ -149,17 +183,30 @@ def test_not_run_and_failed_scope() -> None:
     ref = _ref(type="Triage")
     assert compare_case(ref, None, None)["status"] == "NOT_CHECKED"
     assert _case(ref, None, run=_run(status="TIMEOUT"))["reason"] == "timeout"
-    assert _case(ref, _proposed(type="Triage"), run=_run(landed_writes=1))["status"] == "FAILED_SCOPE"
+    assert (
+        _case(ref, _proposed(type="Triage"), run=_run(landed_writes=1))["status"]
+        == "FAILED_SCOPE"
+    )
 
 
 def _cases() -> dict[str, Any]:
     ref = _ref(type="Triage", note="secret-ish value 123")
     cases = [
-        _case(ref, _proposed(type="Triage", note="secret-ish value 123"),
-              run=_run(model_cost_usd=0.02)),
-        _case(ref, _proposed(type="Consult", note="secret-ish value 123"),
-              run=_run(model_cost_usd=0.04, agent_wall_s=30.0)),
-        _case(ref, _proposed(ok=False, type="Triage", note="x"), run=_run(model_cost_usd=0.0)),
+        _case(
+            ref,
+            _proposed(type="Triage", note="secret-ish value 123"),
+            run=_run(model_cost_usd=0.02),
+        ),
+        _case(
+            ref,
+            _proposed(type="Consult", note="secret-ish value 123"),
+            run=_run(model_cost_usd=0.04, agent_wall_s=30.0),
+        ),
+        _case(
+            ref,
+            _proposed(ok=False, type="Triage", note="x"),
+            run=_run(model_cost_usd=0.0),
+        ),
     ]
     for i, c in enumerate(cases):
         c["task_id"] = f"case-00000{i}"
@@ -178,7 +225,10 @@ def test_scorecard_json_has_no_values() -> None:
         ("case-000002", "<record>", "wrong_record"),
     }
     assert card["model_cost_usd"] == {
-        "total": 0.06, "per_task": 0.02, "unknown_count": 0, "source": "reported"
+        "total": 0.06,
+        "per_task": 0.02,
+        "unknown_count": 0,
+        "source": "reported",
     }
     assert card["agent_time_s"]["median"] == 20.0
     assert card["savings"]["minutes_saved_per_task"] == round(40 / 60, 3)
@@ -211,24 +261,45 @@ def test_usage_pricing_and_program_launcher(tmp_path) -> None:
     )
 
     assert price_usage({"cost_usd": 0.5}) == 0.5
-    assert price_usage({"model": "claude-sonnet-5-5", "input_tokens": 1_000_000,
-                        "output_tokens": 100_000}) == 3.0
-    assert price_usage({"model": "unknown-model", "input_tokens": 1, "output_tokens": 1}) is None
+    assert (
+        price_usage(
+            {
+                "model": "claude-sonnet-5-5",
+                "input_tokens": 1_000_000,
+                "output_tokens": 100_000,
+            }
+        )
+        == 3.0
+    )
+    assert (
+        price_usage({"model": "unknown-model", "input_tokens": 1, "output_tokens": 1})
+        is None
+    )
     assert price_usage({"calls": 3}) is None
     assert read_usage(Path(tmp_path) / "none.json") is None
 
-    job = LaunchJob(task_id="t-00000001", instruction="do it", inputs={"note": "n"},
-                    cdp_url="http://127.0.0.1:9", page_url="http://127.0.0.1:1/",
-                    run_dir=Path(tmp_path))
+    job = LaunchJob(
+        task_id="t-00000001",
+        instruction="do it",
+        inputs={"note": "n"},
+        cdp_url="http://127.0.0.1:9",
+        page_url="http://127.0.0.1:1/",
+        run_dir=Path(tmp_path),
+    )
     argv = ProgramLauncher(Path(tmp_path) / "bundle").flow_args(job)
     assert argv[:2] == ["run", str(Path(tmp_path) / "bundle")]
     assert argv[argv.index("--approval-mode") + 1] == "each_item"
     assert "note=n" in argv
     folder = Path(tmp_path) / "program-run" / "item-approval"
     folder.mkdir(parents=True)
-    (folder / "r.json").write_text(json.dumps({
-        "schema_version": "openadapt.item-approval-request/v1",
-        "fields": [{"label": "note", "before": None, "after": "n"}],
-    }))
+    (folder / "r.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "openadapt.item-approval-request/v1",
+                "fields": [{"label": "note", "before": None, "after": "n"}],
+            }
+        )
+    )
     assert approval_fields(Path(tmp_path) / "program-run") == [
-        {"name": "note", "value": "n", "parse": "form"}]
+        {"name": "note", "value": "n", "parse": "form"}
+    ]

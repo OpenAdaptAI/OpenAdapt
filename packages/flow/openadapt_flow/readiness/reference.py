@@ -15,7 +15,7 @@ folder per task the person did::
      "instruction": "Add the triage note from the referral.",
      "inputs": {"note": "..."},              # what the agent is given
      "expected_record": {"patient_id": "p1", "name": "Jane Sample"},
-     "save": {"method": "POST", "path": "/api/encounter"},   # optional
+     "save": {"method": "POST", "path": "/api/notes"},       # optional
      "fields": ["type", "note"],             # needed for a read-back
      "readback": {"verify": "verify.yaml", "match": {}}}     # optional
 
@@ -130,17 +130,23 @@ def _read_task(folder: Path) -> dict[str, Any]:
     try:
         raw = json.loads((folder / "task.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise ReferenceRefused("task_unreadable", f"cannot read {folder}/task.json") from exc
+        raise ReferenceRefused(
+            "task_unreadable", f"cannot read {folder}/task.json"
+        ) from exc
     if not isinstance(raw, dict) or raw.get("schema") != READINESS_TASK_SCHEMA:
-        raise ReferenceRefused("task_invalid", f"task.json must be {READINESS_TASK_SCHEMA}")
+        raise ReferenceRefused(
+            "task_invalid", f"task.json must be {READINESS_TASK_SCHEMA}"
+        )
     task_id = raw.get("task_id")
     if not isinstance(task_id, str) or not _TASK_ID.match(task_id):
         raise ReferenceRefused(
             "task_invalid", "task_id must be an opaque id (8-128 of A-Za-z0-9._:-)"
         )
     expected = raw.get("expected_record")
-    if not isinstance(expected, dict) or not expected or not all(
-        isinstance(v, str) and v.strip() for v in expected.values()
+    if (
+        not isinstance(expected, dict)
+        or not expected
+        or not all(isinstance(v, str) and v.strip() for v in expected.values())
     ):
         raise ReferenceRefused(
             "task_invalid", "expected_record must name the record with non-empty text"
@@ -231,7 +237,9 @@ def _save_line(
             continue
         writes.append(row)
     if not writes:
-        raise ReferenceRefused("no_save_in_capture", "the capture holds no save request")
+        raise ReferenceRefused(
+            "no_save_in_capture", "the capture holds no save request"
+        )
     kinds = {
         (str(r.get("method")).upper(), HeldRequest("", "GET", str(r.get("url"))).path)
         for r in writes
@@ -297,7 +305,11 @@ def _from_network(
     url = str(line.get("url"))
     return {
         "human_fields": [
-            {"name": f.name, "value": f.value, **({"parse": f.parse} if f.parse == "uncompared" else {})}
+            {
+                "name": f.name,
+                "value": f.value,
+                **({"parse": f.parse} if f.parse == "uncompared" else {}),
+            }
             for f in fields
         ],
         "human_source": "network_capture",
@@ -333,10 +345,14 @@ def verify_config_reader(
     cfg = load_verify_config(path)
     verifier = build_effect_verifier(cfg.verifier, dict(expected))
     if verifier is None:
-        raise ReferenceRefused("readback_unavailable", "the verify config built no reader")
+        raise ReferenceRefused(
+            "readback_unavailable", "the verify config built no reader"
+        )
     state = verifier.capture_pre_state()
     if not getattr(state, "reachable", False):
-        raise ReferenceRefused("readback_unavailable", "the system of record can't be read")
+        raise ReferenceRefused(
+            "readback_unavailable", "the system of record can't be read"
+        )
     return list(state.records)
 
 
@@ -359,7 +375,8 @@ def _from_readback(
         raise
     except Exception as exc:  # noqa: BLE001 - an unreadable store is no reference
         raise ReferenceRefused(
-            "readback_unavailable", f"the saved record could not be read ({type(exc).__name__})"
+            "readback_unavailable",
+            f"the saved record could not be read ({type(exc).__name__})",
         ) from exc
     hits = [
         r
@@ -418,9 +435,7 @@ def build_episode(
             "saved values are unknown",
         )
     expected = dict(raw["expected_record"])
-    intended = [
-        f["name"] for f in human["human_fields"] if f["name"] not in expected
-    ]
+    intended = [f["name"] for f in human["human_fields"] if f["name"] not in expected]
     if not intended:
         raise ReferenceRefused("no_fields", "the save carries no field to compare")
     inputs = task_inputs(raw, expected)
@@ -490,12 +505,18 @@ def import_episodes(
                 folder, app_origin=app_origin, lens=lens, reader=reader
             )
         except ReferenceRefused as exc:
-            result.refused.append({"folder": folder.name, "code": exc.code, "why": exc.message})
+            result.refused.append(
+                {"folder": folder.name, "code": exc.code, "why": exc.message}
+            )
             continue
         task_id = episode["task_id"]
         if task_id in seen:
             result.refused.append(
-                {"folder": folder.name, "code": "duplicate_task_id", "why": "task_id repeats"}
+                {
+                    "folder": folder.name,
+                    "code": "duplicate_task_id",
+                    "why": "task_id repeats",
+                }
             )
             continue
         seen.add(task_id)

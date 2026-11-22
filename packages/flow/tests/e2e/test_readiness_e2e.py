@@ -36,7 +36,9 @@ FIELD_ERRORS = {
     13: {"note": "Synthetic note 13 for reviews"},
 }
 WRONG_RECORD = {16: "next", 19: "next"}
-EVIDENCE = Path(__file__).resolve().parents[2] / "benchmark" / "readiness" / "results.json"
+EVIDENCE = (
+    Path(__file__).resolve().parents[2] / "benchmark" / "readiness" / "results.json"
+)
 #: One task's run folder and the scorecard, for the join tests of the
 #: consumers (J1, J2); written with OPENADAPT_WRITE_EVIDENCE=1.
 SAMPLE = EVIDENCE.parent / "sample"
@@ -52,8 +54,12 @@ def write_sample(runs: Path, task_id: str, card_dir: Path, name: str) -> None:
 
     target = SAMPLE / name
     shutil.rmtree(target, ignore_errors=True)
-    export_task(runs / task_id, target, include_values=True,
-                extra={"scorecard.json": card_dir / "scorecard.json"})
+    export_task(
+        runs / task_id,
+        target,
+        include_values=True,
+        extra={"scorecard.json": card_dir / "scorecard.json"},
+    )
 
 
 def _episode(i: int) -> dict[str, Any]:
@@ -234,7 +240,9 @@ def _record_people(app_url: str, src: Path, n: int) -> None:
         browser.close()
 
 
-def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_shadow_run_to_scorecard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _chromium_or_skip()
     from benchmark.agent_guard.app import serve
     from openadapt_flow.readiness.compare import compare_runs, write_case_files
@@ -249,7 +257,9 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         app_url = f"{app.base_url}/?fault=ok#tasks"
         _record_people(app_url, tmp_path / "people", n)
         assert app.writes == n  # the person's saves landed
-        imported = import_episodes(tmp_path / "people", tmp_path / "episodes", app_url=app_url)
+        imported = import_episodes(
+            tmp_path / "people", tmp_path / "episodes", app_url=app_url
+        )
         assert imported.refused == [], imported.refused
         assert len(imported.imported) == n
 
@@ -263,13 +273,22 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             app.writes = 0
 
         plan = tmp_path / "plan.json"
-        plan.write_text(json.dumps({
-            _episode(i)["task_id"]: {**_agent_plan(i), "true_patient": _episode(i)["patient"]}
-            for i in range(n)
-        }))
+        plan.write_text(
+            json.dumps(
+                {
+                    _episode(i)["task_id"]: {
+                        **_agent_plan(i),
+                        "true_patient": _episode(i)["patient"],
+                    }
+                    for i in range(n)
+                }
+            )
+        )
         for i in range(n):
             given = json.loads(
-                (tmp_path / "episodes" / _episode(i)["task_id"] / "inputs.json").read_text()
+                (
+                    tmp_path / "episodes" / _episode(i)["task_id"] / "inputs.json"
+                ).read_text()
             )
             assert given["inputs"]["record_name"] == PATIENTS[_episode(i)["patient"]]
             assert given["inputs"]["record_patient_id"] == _episode(i)["patient"]
@@ -313,13 +332,18 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         for e in card["field_errors"]
         if e["kind"] in ("mismatched", "missing", "extra")
     }
-    found_wrong = {c["task_id"] for c in cases["cases"] if c["status"] == "WRONG_RECORD"}
+    found_wrong = {
+        c["task_id"] for c in cases["cases"] if c["status"] == "WRONG_RECORD"
+    }
 
     def pr(found: set, planted: set) -> tuple[float, float]:
         hit = len(found & planted)
         return (hit / len(found) if found else 1.0, hit / len(planted))
 
-    field_pr, wrong_pr = pr(found_fields, planted_fields), pr(found_wrong, planted_wrong)
+    field_pr, wrong_pr = (
+        pr(found_fields, planted_fields),
+        pr(found_wrong, planted_wrong),
+    )
     assert field_pr == (1.0, 1.0), (found_fields, planted_fields)
     assert wrong_pr == (1.0, 1.0), (found_wrong, planted_wrong)
     assert card["matched"] == n - len(FIELD_ERRORS) - len(WRONG_RECORD)
@@ -351,8 +375,12 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert card["egress"]["mode"] == "unscrubbed"  # no proxy ran: said so
 
     if os.environ.get("OPENADAPT_WRITE_EVIDENCE") == "1":
-        write_sample(tmp_path / "runs", _episode(0)["task_id"], tmp_path / "card", "matched")
-        write_sample(tmp_path / "runs", _episode(1)["task_id"], tmp_path / "card", "mismatched")
+        write_sample(
+            tmp_path / "runs", _episode(0)["task_id"], tmp_path / "card", "matched"
+        )
+        write_sample(
+            tmp_path / "runs", _episode(1)["task_id"], tmp_path / "card", "mismatched"
+        )
         wrong = _episode(min(WRONG_RECORD))["task_id"]
         write_sample(tmp_path / "runs", wrong, tmp_path / "card", "wrong-record")
         EVIDENCE.parent.mkdir(parents=True, exist_ok=True)

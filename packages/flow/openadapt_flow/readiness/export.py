@@ -26,38 +26,121 @@ __all__ = ["ALLOWED", "VALUE_FILES", "export_task"]
 
 #: File name -> the top-level keys it may carry.
 ALLOWED: Mapping[str, frozenset[str]] = {
-    "run.json": frozenset({
-        "schema", "task_id", "status", "ended", "agent_wall_s", "exit_code", "usage",
-        "model_cost_usd", "model_cost_source", "egress", "landed_writes", "held",
-        "double_save", "other_origin_refused", "proposed", "before_screen",
-        "extra_target_writes", "target_gate", "session", "notes", "requests",
-        "browser_network",
-    }),
-    "egress.json": frozenset({
-        "mode", "enforced", "model_calls", "cost_usd", "cost_source", "refused_requests",
-    }),
-    "usage.json": frozenset({
-        "schema", "calls", "input_tokens", "output_tokens", "model", "cost_usd",
-        "stopped", "final_line",
-    }),
-    "case.json": frozenset({
-        "schema", "task_id", "status", "reason", "identity", "fields", "contamination",
-        "human_time_s", "agent_time_s", "model_cost_usd", "model_cost_source",
-        "model_calls_metered", "landed_writes", "double_save", "out_of_scope_requests",
-        "undeclared_fields", "extra_held_writes",
-    }),
-    "proposed_write.json": frozenset({
-        "schema", "task_id", "request_index", "method", "url_path", "origin", "held_at",
-        "identity", "fields", "withheld_fields", "resource_type", "refused", "screenshot",
-        "screen_text", "source", "target",
-    }),
-    "scorecard.json": frozenset({
-        "schema", "generated_at", "agent_label", "task_type", "mode", "replay_state",
-        "scope_statement", "cases_total", "matched", "mismatched", "not_comparable",
-        "not_checked", "failed_scope", "scope_ok", "risks", "field_errors",
-        "agent_time_s", "human_time_s", "model_cost_usd", "egress", "savings",
-        "landed_writes",
-    }),
+    "run.json": frozenset(
+        {
+            "schema",
+            "task_id",
+            "status",
+            "ended",
+            "agent_wall_s",
+            "exit_code",
+            "usage",
+            "model_cost_usd",
+            "model_cost_source",
+            "egress",
+            "landed_writes",
+            "held",
+            "double_save",
+            "other_origin_refused",
+            "proposed",
+            "before_screen",
+            "extra_target_writes",
+            "target_gate",
+            "session",
+            "notes",
+            "requests",
+            "browser_network",
+        }
+    ),
+    "egress.json": frozenset(
+        {
+            "mode",
+            "enforced",
+            "model_calls",
+            "cost_usd",
+            "cost_source",
+            "refused_requests",
+        }
+    ),
+    "usage.json": frozenset(
+        {
+            "schema",
+            "calls",
+            "input_tokens",
+            "output_tokens",
+            "model",
+            "cost_usd",
+            "stopped",
+            "final_line",
+        }
+    ),
+    "case.json": frozenset(
+        {
+            "schema",
+            "task_id",
+            "status",
+            "reason",
+            "identity",
+            "fields",
+            "contamination",
+            "human_time_s",
+            "agent_time_s",
+            "model_cost_usd",
+            "model_cost_source",
+            "model_calls_metered",
+            "landed_writes",
+            "double_save",
+            "out_of_scope_requests",
+            "undeclared_fields",
+            "extra_held_writes",
+        }
+    ),
+    "proposed_write.json": frozenset(
+        {
+            "schema",
+            "task_id",
+            "request_index",
+            "method",
+            "url_path",
+            "origin",
+            "held_at",
+            "identity",
+            "fields",
+            "withheld_fields",
+            "resource_type",
+            "refused",
+            "screenshot",
+            "screen_text",
+            "source",
+            "target",
+        }
+    ),
+    "scorecard.json": frozenset(
+        {
+            "schema",
+            "generated_at",
+            "agent_label",
+            "task_type",
+            "mode",
+            "replay_state",
+            "scope_statement",
+            "cases_total",
+            "matched",
+            "mismatched",
+            "not_comparable",
+            "not_checked",
+            "failed_scope",
+            "scope_ok",
+            "risks",
+            "field_errors",
+            "agent_time_s",
+            "human_time_s",
+            "model_cost_usd",
+            "egress",
+            "savings",
+            "landed_writes",
+        }
+    ),
 }
 #: Files that carry field values.
 VALUE_FILES = frozenset({"case.json", "proposed_write.json"})
@@ -71,7 +154,8 @@ def _clean(name: str, doc: dict[str, Any]) -> dict[str, Any]:
         doc = {
             **doc,
             "usage": {k: v for k, v in usage.items() if k in _USAGE_KEYS}
-            if isinstance(usage, dict) else None,
+            if isinstance(usage, dict)
+            else None,
         }
     if name == "usage.json":
         doc = {k: v for k, v in doc.items() if k not in ("final_line",)}
@@ -90,7 +174,9 @@ def export_task(
     ``{"copied": [...], "left": [...]}`` with the reason for each left file."""
 
     task_dir, dest = Path(task_dir), Path(dest)
-    sources = {p.name: p for p in sorted(task_dir.iterdir())} if task_dir.is_dir() else {}
+    sources = (
+        {p.name: p for p in sorted(task_dir.iterdir())} if task_dir.is_dir() else {}
+    )
     sources.update({name: Path(p) for name, p in extra.items()})
     copied: list[str] = []
     left: list[str] = []
@@ -108,11 +194,14 @@ def export_task(
             left.append(f"{name}: not readable JSON")
             continue
         if not isinstance(doc, dict) or set(doc) - allowed:
-            left.append(f"{name}: unexpected keys {sorted(set(doc) - allowed) if isinstance(doc, dict) else 'not an object'}")
+            left.append(
+                f"{name}: unexpected keys {sorted(set(doc) - allowed) if isinstance(doc, dict) else 'not an object'}"
+            )
             continue
         dest.mkdir(parents=True, exist_ok=True)
         (dest / name).write_text(
-            json.dumps(_clean(name, doc), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(_clean(name, doc), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
         )
         copied.append(name)
     return {"copied": copied, "left": left}

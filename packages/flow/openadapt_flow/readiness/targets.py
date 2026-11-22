@@ -49,7 +49,13 @@ from openadapt_flow.agent_guard.commit_guard import BLOCK_STATUS, GUARD_HEADER
 from openadapt_flow.agent_guard.requests import HeldRequest
 from openadapt_flow.readiness.cdp_wire import CdpError, CdpWire, browser_ws_url
 
-__all__ = ["EXTRA_PREFIX", "GATED_TYPES", "RoutedPage", "TargetGate", "is_extra_request"]
+__all__ = [
+    "EXTRA_PREFIX",
+    "GATED_TYPES",
+    "RoutedPage",
+    "TargetGate",
+    "is_extra_request",
+]
 
 #: Request ids of the browser-level hold carry this prefix in the guard.
 EXTRA_PREFIX = "gate:"
@@ -89,7 +95,8 @@ class TargetGate:
         existing = self.wire.send("Target.getTargets", {}).get("targetInfos") or []
         self._baseline = {str(t.get("targetId")) for t in existing}
         self.wire.send(
-            "Fetch.enable", {"patterns": [{"urlPattern": "*", "requestStage": "Request"}]}
+            "Fetch.enable",
+            {"patterns": [{"urlPattern": "*", "requestStage": "Request"}]},
         )
         self.wire.send(
             "Target.setAutoAttach",
@@ -100,7 +107,9 @@ class TargetGate:
 
     # -- events (the wire's dispatcher thread) ---------------------------------------
 
-    def _on_event(self, method: str, params: dict[str, Any], session_id: Optional[str]) -> None:
+    def _on_event(
+        self, method: str, params: dict[str, Any], session_id: Optional[str]
+    ) -> None:
         if method == "Fetch.requestPaused" and session_id is None:
             if self._closing:
                 self._fail(str(params.get("requestId") or ""))
@@ -125,7 +134,9 @@ class TargetGate:
                 return
         if params.get("waitingForDebugger") and self.wire is not None:
             try:
-                self.wire.send_nowait("Runtime.runIfWaitingForDebugger", {}, session_id=child)
+                self.wire.send_nowait(
+                    "Runtime.runIfWaitingForDebugger", {}, session_id=child
+                )
             except CdpError as exc:
                 self.errors.append(f"resume: {exc}")
 
@@ -173,7 +184,8 @@ class TargetGate:
             "extra_targets": dict(self.extra_targets),
             "ungated_targets": dict(self.ungated),
             "gate_lost": self.lost,
-            "errors": list(self.errors) + ([self.wire.error] if self.wire and self.wire.error else []),
+            "errors": list(self.errors)
+            + ([self.wire.error] if self.wire and self.wire.error else []),
         }
 
     # -- answers ------------------------------------------------------------------------
@@ -204,8 +216,10 @@ class TargetGate:
             return
         import base64
 
-        body = body if body is not None else json.dumps(
-            {"openadapt_guard": {"blocked": True, "code": code}}
+        body = (
+            body
+            if body is not None
+            else json.dumps({"openadapt_guard": {"blocked": True, "code": code}})
         )
         response_headers = [{"name": "Content-Type", "value": content_type}] + [
             {"name": k, "value": v}
@@ -230,7 +244,8 @@ class TargetGate:
             return
         try:
             self.wire.send_nowait(
-                "Fetch.failRequest", {"requestId": raw_id, "errorReason": "BlockedByClient"}
+                "Fetch.failRequest",
+                {"requestId": raw_id, "errorReason": "BlockedByClient"},
             )
         except CdpError:
             pass

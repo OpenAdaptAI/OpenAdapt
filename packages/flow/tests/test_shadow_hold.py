@@ -64,11 +64,21 @@ def _guard(tmp_path: Path, page: FakePage, **kw: Any) -> ShadowHoldGuard:
     )
 
 
-def _req(rid: str, method: str, path: str, body: Optional[str] = None,
-         ctype: str = "application/json", origin: str = APP) -> HeldRequest:
+def _req(
+    rid: str,
+    method: str,
+    path: str,
+    body: Optional[str] = None,
+    ctype: str = "application/json",
+    origin: str = APP,
+) -> HeldRequest:
     return HeldRequest(
-        request_id=rid, method=method, url=origin + path, resource_type="Fetch",
-        post_data=body, content_type=ctype,
+        request_id=rid,
+        method=method,
+        url=origin + path,
+        resource_type="Fetch",
+        post_data=body,
+        content_type=ctype,
     )
 
 
@@ -103,7 +113,9 @@ def test_graphql_query_post_and_get_mutation_are_held(tmp_path: Path) -> None:
 def test_not_saves_go_on_and_other_origins_are_refused(tmp_path: Path) -> None:
     page = FakePage()
     guard = _guard(tmp_path, page, not_saves=[NotASave("POST", "/login")])
-    guard.on_request(_req("s", "POST", "/login", "user=a", "application/x-www-form-urlencoded"))
+    guard.on_request(
+        _req("s", "POST", "/login", "user=a", "application/x-www-form-urlencoded")
+    )
     guard.on_request(_req("o", "POST", "/beacon", "{}", origin="http://127.0.0.1:1"))
     assert page.continued == ["s"]
     assert [b[0] for b in page.blocked] == ["o"]
@@ -118,9 +130,19 @@ def test_proposed_write_file(tmp_path: Path) -> None:
     guard.on_request(_req("lock", "POST", "/api/lock", '{"id": 1}'))
     assert guard.proposed is None  # a lock is held, but it isn't the save
     guard.on_request(
-        _req("s", "POST", "/api/encounter",
-             json.dumps({"patient_id": "p1", "type": "Triage", "note": "n",
-                         "csrf_token": "abcdefghijkl"}))
+        _req(
+            "s",
+            "POST",
+            "/api/encounter",
+            json.dumps(
+                {
+                    "patient_id": "p1",
+                    "type": "Triage",
+                    "note": "n",
+                    "csrf_token": "abcdefghijkl",
+                }
+            ),
+        )
     )
     path = tmp_path / "proposed_write.json"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -133,7 +155,9 @@ def test_proposed_write_file(tmp_path: Path) -> None:
     assert doc["refused"] is True
     assert doc["withheld_fields"] == 1
     assert {f["name"]: f["value"] for f in doc["fields"]} == {
-        "patient_id": "p1", "type": "Triage", "note": "n",
+        "patient_id": "p1",
+        "type": "Triage",
+        "note": "n",
     }
     assert "abcdefghijkl" not in path.read_text()
     assert (tmp_path / "held" / "1.png").is_file()
@@ -155,7 +179,9 @@ def test_a_forwarded_write_is_counted(tmp_path: Path) -> None:
     guard._seen["x"] = request
     guard.page.continue_request("x")
     assert guard.landed_writes == 1
-    assert guard.outcome()["landed"] == [{"method": "POST", "url_path": "/api/encounter"}]
+    assert guard.outcome()["landed"] == [
+        {"method": "POST", "url_path": "/api/encounter"}
+    ]
 
 
 def test_double_save_and_before_screen(tmp_path: Path) -> None:
@@ -174,22 +200,32 @@ def test_double_save_and_before_screen(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("ctype", "body", "expected"),
     [
-        ("application/x-www-form-urlencoded", "a=1&b=&a=2&c=x",
-         [("a", None, "uncompared"), ("b", "", "form"), ("c", "x", "form")]),
-        ("application/json", '{"a": {"b": 1}, "c": null, "d": true}',
-         [("a.b", "1", "json"), ("c", None, "json"), ("d", "true", "json")]),
+        (
+            "application/x-www-form-urlencoded",
+            "a=1&b=&a=2&c=x",
+            [("a", None, "uncompared"), ("b", "", "form"), ("c", "x", "form")],
+        ),
+        (
+            "application/json",
+            '{"a": {"b": 1}, "c": null, "d": true}',
+            [("a.b", "1", "json"), ("c", None, "json"), ("d", "true", "json")],
+        ),
         ("text/plain", "free text", [("<body>", None, "uncompared")]),
         ("application/json", "[1, 2]", [("<body>", None, "uncompared")]),
         ("application/json", "{not json", [("<body>", None, "uncompared")]),
     ],
 )
 def test_parse_body_fields(ctype: str, body: str, expected: list) -> None:
-    fields, _ = parse_body_fields(method="POST", url=APP + "/x", content_type=ctype, body=body)
+    fields, _ = parse_body_fields(
+        method="POST", url=APP + "/x", content_type=ctype, body=body
+    )
     assert [(f.name, f.value, f.parse) for f in fields] == expected
 
 
 def test_a_write_with_no_body_seen_is_uncompared() -> None:
-    fields, _ = parse_body_fields(method="POST", url=APP + "/x", content_type="", body=None)
+    fields, _ = parse_body_fields(
+        method="POST", url=APP + "/x", content_type="", body=None
+    )
     assert [(f.name, f.parse) for f in fields] == [("<body>", "uncompared")]
 
 
@@ -198,22 +234,29 @@ def test_multipart_and_lens() -> None:
 
     boundary = "XyZ"
     body = (
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nhello\r\n"
+        f'--{boundary}\r\nContent-Disposition: form-data; name="note"\r\n\r\nhello\r\n'
         f"--{boundary}--\r\n"
     )
     fields, _ = parse_body_fields(
-        method="POST", url=APP + "/x",
-        content_type=f"multipart/form-data; boundary={boundary}", body=body,
+        method="POST",
+        url=APP + "/x",
+        content_type=f"multipart/form-data; boundary={boundary}",
+        body=body,
     )
     assert [(f.name, f.value, f.parse) for f in fields] == [("note", "hello", "form")]
     lens = EntityLensSpec(
         entity_name="encounter",
         base_url=APP,
         get_one=EndpointTemplate(method="GET", path_template="/api/encounter/{id}"),
-        write_endpoint=EndpointTemplate(method="PATCH", path_template="/api/encounter/{id}"),
+        write_endpoint=EndpointTemplate(
+            method="PATCH", path_template="/api/encounter/{id}"
+        ),
     )
     fields, _ = parse_body_fields(
-        method="PATCH", url=APP + "/api/encounter/7", content_type="application/json",
-        body='{"note": "n"}', lens=lens,
+        method="PATCH",
+        url=APP + "/api/encounter/7",
+        content_type="application/json",
+        body='{"note": "n"}',
+        lens=lens,
     )
     assert fields[0].parse == "lens"

@@ -208,7 +208,9 @@ def parse_body_fields(
     if body_omitted:
         return uncompared
     if form_pairs is not None:
-        return finish(((str(p[0]), p[1] if len(p) > 1 else "") for p in form_pairs), "form")
+        return finish(
+            ((str(p[0]), p[1] if len(p) > 1 else "") for p in form_pairs), "form"
+        )
     if body is None or body == "":
         if method.upper() in ("POST", "PUT", "PATCH"):
             return uncompared  # a write whose body Flow didn't see
@@ -383,10 +385,8 @@ class ShadowHoldGuard(CommitGuard):
             return False
         if request.method != "GET":
             return True
-        operations = graphql_operations(request)
-        return bool(operations) and any(
-            op in ("mutation", "unknown") for op in operations
-        )
+        operations = graphql_operations(request) or []
+        return any(op in ("mutation", "unknown") for op in operations)
 
     def _listed(self, request: HeldRequest) -> bool:
         return any(rule.matches(request, self.app_origin) for rule in self.not_saves)
@@ -432,7 +432,7 @@ class ShadowHoldGuard(CommitGuard):
         if url.startswith(("data:", "about:")):
             return True  # no network
         if url.startswith("blob:"):
-            url = url[len("blob:"):]  # a blob URL carries its creator's origin
+            url = url[len("blob:") :]  # a blob URL carries its creator's origin
         return origin_of(url) in self.allowed_origins
 
     def _check_forwarded(self, request_id: str) -> None:
@@ -441,9 +441,7 @@ class ShadowHoldGuard(CommitGuard):
             return
         if self._is_app_write(request) and not self._listed(request):
             self.landed_writes += 1
-            self.landed.append(
-                {"method": request.method, "url_path": request.path}
-            )
+            self.landed.append({"method": request.method, "url_path": request.path})
 
     def observe_screen(self) -> None:
         """Before any write is held: keep the first screen that shows the
