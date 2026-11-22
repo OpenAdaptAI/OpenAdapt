@@ -668,6 +668,11 @@ def test_each_phase_gets_a_signed_receipt_with_the_approval_bound(
     stmt = verify_run_receipt(Path(applied["run_dir"]), registry).statement
     assert stmt["predicate"]["approval"]["mode"] == "each_item"
     assert stmt["predicate"]["approval"]["approver_kind"] == "agent"
+    assert stmt["predicate"]["approval"]["commitments"]
+    plan_stmt = verify_run_receipt(Path(plan["run_dir"]), registry).statement
+    assert plan_stmt["predicate"]["approval"]["mode"] == "each_item"
+    assert plan_stmt["predicate"]["approval"]["approver_kind"] == "none"
+    assert plan_stmt["predicate"]["approval"]["commitments"] == {}
 
 
 def test_cli_create_show_approve_apply(

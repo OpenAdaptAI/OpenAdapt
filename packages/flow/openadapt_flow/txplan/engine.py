@@ -229,6 +229,7 @@ def _approval_block(
         "approvals": [],
     }
     if approval:
+        block["decision"] = "approved"
         block["approvals"].append(
             {
                 "decision": "approved",
@@ -267,6 +268,7 @@ def _write_run(
         "execution_outcome": outcome,
         "success": outcome in ("VERIFIED", "ROLLED_BACK"),
         "model_calls": 0,
+        "change_ledger": [],
         "results": results,
         "approval": _approval_block(approval, digest),
         "outcome_envelope": {
@@ -313,14 +315,34 @@ def receipt_status(run_dir: Path | str) -> str:
 def _line(
     *, ok: bool, verified: Optional[bool], irreversible: bool, payload: str, code: str
 ) -> dict[str, Any]:
+    contract_hash = payload if payload.startswith("sha256:") else f"sha256:{payload}"
+    evidence: list[dict[str, Any]] = []
+    if verified is not None:
+        evidence.append(
+            {
+                "effect_contract_hash": contract_hash,
+                "substrate": "api",
+                "initial_verdict": "confirmed" if verified else "refuted",
+                "final_verdict": "confirmed" if verified else "refuted",
+                "observed_effect": "present" if verified else "absent",
+                "verification_tier": 1,
+            }
+        )
     return {
+        "step_id": f"tx-{code}",
+        "intent": f"tx {code}",
         "ok": ok,
         "effect_verified": verified,
         "effect_approved_unverified": verified is None,
         "actuation": "api",
         "risk": "irreversible" if irreversible else "reversible",
-        "effect_contract_hashes": [payload],
-        "effect_field_checks": verified is not None,
+        "effect_contract_hashes": [contract_hash],
+        "effect_evidence": evidence,
+        "effect_field_checks": (
+            [{"field": "delta", "matched": verified, "verification_tier": 1}]
+            if verified is not None
+            else []
+        ),
         "postconditions_ok": None,
         "tx_code": code,
     }
