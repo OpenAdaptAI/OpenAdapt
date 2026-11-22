@@ -25,11 +25,11 @@ clean writes.
 |---|---|---|
 | Clean writes stopped | 0 of 400 | 0 of 400 |
 | Clean writes with a receipt | 400 | 400 |
-| Seconds per write, median (p95) | 0.06 (0.07) | 0.07 (0.59) |
+| Seconds per write, median (p95) | 0.06 (0.08) | 0.07 (0.59) |
 | Wrong value, create | 50 of 50 stopped (`wrong_value`) | 50 of 50 |
 | Wrong value, update or edit | 50 of 50 | 50 of 50 |
 | Duplicate create (the executor sends it twice, without the guard) | 50 of 50 (`duplicate_write`) | 50 of 50 |
-| Duplicate update (Medplum) or comment (Gitea) | 50 of 50 | 50 of 50 |
+| Duplicate update (Medplum) or comment (Gitea) | 0 of 50 landed: the server refused every second PUT (`If-Match`, 412) | 50 of 50 |
 | Partial write | 50 of 50, update (`partial_write`) | 50 of 50, create |
 | Collateral change, same actor (log exposes it) | 50 of 50 (`collateral_mutation`) | 100 of 100 (a comment on another issue, a close or reopen of another issue) |
 | **Missed:** collateral title edit, same actor (the feed doesn't record edits) | not applicable | **0 of 50 stopped** |
@@ -45,23 +45,45 @@ another caller, are outside what it can see. Every one of those plants
 landed: the server accepted each side write.
 
 Every planted fault was a real write. A plant counts as a detection only when
-it landed; none failed to land in this run. The oracle confirmed that the
-wrong-value, partial-write and duplicate-create faults landed. Medplum's
-oracle reads Postgres directly, and Gitea's reads as a site administrator,
-and the verifier never reads through either one. The collateral,
-duplicate-update and duplicate-comment faults were checked by the server
-accepting each extra write.
+it landed. All of them landed except Medplum's duplicate updates: the server
+refused every second PUT (412), so that row has no landed plant to count
+(see the rerun below). The oracle confirmed that the wrong-value,
+partial-write and duplicate-create faults landed. Medplum's oracle reads
+Postgres directly, and Gitea's reads as a site administrator, and the
+verifier never reads through either one. The collateral and duplicate-comment
+faults were checked by the server accepting each extra write.
 
 Zero stops in 400 clean writes bounds the false-stop rate at about 0.75%
-(95%, rule of three) on each system. 50 of 50 per exposed fault class bounds
-the miss rate at about 6% (95%) per class. On Gitea, 100 of the 400 clean
+(95%, rule of three) on each system. 50 of 50 per exposed fault class that
+landed bounds the miss rate at about 6% (95%) per class. On Gitea, 100 of the 400 clean
 writes were title edits, which the feed doesn't record. Those were confirmed
 by read-back alone (`log_does_not_record_update`). On Medplum, 41 clean
 updates set a value the record already held (`no_change_update`), so no log
 event was required for them.
 
-Two changes were needed before this run completed, both in the same pull
-request as these results:
+**Rerun on 22 November 2026 with enforced preconditions (#2529).** Since
+#2529, a whole-record update or a delete is `VERIFIED` only on a route whose
+`If-Match` precondition has enforcement evidence; without it, the 200 clean
+Medplum updates would end `COMPLETED_UNVERIFIED`. Medplum 5.2.8 enforces
+`If-Match`: a PUT or DELETE with a version that doesn't match gets 412 and
+changes nothing ([probe_precondition.py](probe_precondition.py), output in
+[results/medplum_precondition_probe.json](results/medplum_precondition_probe.json)).
+The pack now sends the read's `ETag` as `If-Match` on update and delete and
+records that probe as its evidence. The Medplum column above is from the
+rerun at commit `7fe8cd92`: 400 of 400 clean writes `VERIFIED`, and every
+exposed fault class that landed stopped, 50 of 50. In the duplicate update
+plant, the executor sends the PUT twice; the second now carries a
+stale version and the server refuses it, so the duplicate never lands and
+the row has no landed plants to count. Its receipt reads `HALTED`
+(`stale_baseline`) although the first PUT landed; that is an artifact of the
+plant, which sends both PUTs inside one write. The probe isn't run by the
+adapter on this system: Medplum logs a refused request as an `update`
+AuditEvent, which the audit check would count as a second write. Gitea was
+not rerun. Its clean writes use no whole-record update or delete route, so
+these rules don't change them.
+
+Two changes were needed before the first 22 November run completed, both in
+the same pull request as those results:
 
 - Medplum answers an empty search with a Bundle that leaves `entry` out. Since
   #2437, a search answer without its items field is an error rather than an
@@ -76,8 +98,8 @@ request as these results:
   defaults.
 
 Which code produced each file: the Medplum rows were rerun live at commit
-`6ad9f6fb` (the strict search parser and the bench-only quota override, the
-final code in this pull request; same counts as the first run). The Gitea rows
+`7fe8cd92` (#2529, enforced preconditions and the catalog write-scope check).
+Before that they were from commit `6ad9f6fb`. The Gitea rows
 are from commit `5680f814`; the later changes touch only the marker search and
 the Medplum lab, and Gitea's pack declares no marker search, so its path is
 unchanged.
