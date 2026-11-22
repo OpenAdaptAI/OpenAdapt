@@ -1,4 +1,4 @@
-"""Write a sealed run's Seal as one offline HTML page: ``RUN_DIR/seal.html``.
+"""Write a signed run's receipt as one offline HTML page: ``RUN_DIR/seal.html``.
 
 The page is ``viewer.html`` (built from ``packages/seal-view``; Preact, the
 program map and the Seal inlined) with the run's own files embedded in it:
@@ -52,7 +52,7 @@ def viewer_template() -> str:
             .read_text(encoding="utf-8")
         )
     except (FileNotFoundError, ModuleNotFoundError) as exc:  # pragma: no cover
-        raise SealViewError("this install has no Seal viewer (viewer.html)") from exc
+        raise SealViewError("this install has no receipt viewer (viewer.html)") from exc
 
 
 def _text(path: Path) -> Optional[str]:
@@ -230,7 +230,7 @@ def render_page(data: Mapping[str, Any], template: Optional[str] = None) -> str:
 
     template = template if template is not None else viewer_template()
     if DATA_SLOT not in template:
-        raise SealViewError("the Seal viewer has no slot for the run's files")
+        raise SealViewError("the receipt viewer has no slot for the run's files")
     # JSON in a script element: escape "<" so no "</script>" can end it early.
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     payload = payload.replace("<", "\\u003c")
@@ -269,7 +269,8 @@ def write_seal_page(
         keys = local_keys()
         # A page forwarded to someone else stays a local check, not third-party proof.
         host = {
-            "trustWords": "checked against your computer's Seal key",
+            "trustWords": "checked against this computer's signing key",
+            "signer": "this_computer",
             **dict(host or {}),
         }
     if program is None or _digest_of(program) != report.get("bundle_content_digest"):
@@ -279,7 +280,7 @@ def write_seal_page(
         keys=keys,
         program=program,
         about=about,
-        host={"unchanged": "The files on disk are unchanged.", **dict(host or {})},
+        host=dict(host or {}),
         commands=commands,
     )
     target = Path(out) if out else run_dir / PAGE_NAME
