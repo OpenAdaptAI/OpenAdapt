@@ -117,8 +117,8 @@ class AuditRead(BaseModel):
     actor_path: str = "agent.who.reference"
     entity_path: str = "entity.what.reference"
     action_path: str = "action"
-    #: An empty window proves nothing when the server isn't logging (Medplum
-    #: answers an empty search, not an error, with ``saveAuditEvents`` off).
+    #: An empty window proves nothing when the server isn't logging (some
+    #: servers answer an empty search, not an error, when audit logging is off).
     #: With ``heartbeat``, a found record counts only when the verifier's own
     #: read of it shows up in the trail; set it where reads by id are logged.
     heartbeat: bool = True
@@ -134,8 +134,8 @@ class ChangeFeed(BaseModel):
     #: Read each written resource's ``_history`` for its window versions.
     history: bool = True
     #: Whether the server returns ``meta.author`` on each version, a second
-    #: witness to who wrote it. Medplum 5.2 doesn't, so its contract sets
-    #: false and attribution rests on the audit trail alone.
+    #: witness to who wrote it. When a server does not populate it, the
+    #: contract sets false and attribution rests on the audit trail alone.
     history_author: bool = True
     #: Resource types searched by ``_lastUpdated`` as a second source.
     sweep_types: list[str] = Field(default_factory=list)
@@ -270,8 +270,8 @@ class EnsureContract(BaseModel):
     #: a value the list misses still matches, which stops for review instead
     #: of missing a duplicate.
     void: list[str] = Field(default_factory=list)
-    #: The audit trail is written a little after the save (Medplum: up to
-    #: about 0.1 s). The change feed is read until two reads ``settle_s``
+    #: The audit trail may be written asynchronously after the save.
+    #: The change feed is read until two reads ``settle_s``
     #: apart agree, at most ``stable_reads`` times; a feed still changing
     #: then reads as unreadable.
     settle_s: float = Field(default=2.0, ge=0, le=120)

@@ -161,11 +161,16 @@ def test_screen_bound_or_wrapped_verifiers_are_never_deferred(dirs, kind) -> Non
     pipeline.close()
 
 
-def test_pending_report_is_not_saved_as_success(dirs) -> None:
+def test_pending_report_is_not_saved_as_success(dirs, monkeypatch) -> None:
     """Until the read-back settles, report.json must not say success."""
 
     import threading
 
+    from openadapt_flow.receipt_record import local_registry, verify_run_receipt
+
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(dirs[1].parent / "signer"))
+    monkeypatch.setenv("OPENADAPT_RECEIPT", "on")
+    monkeypatch.delenv("OPENADAPT_SEAL_KEY", raising=False)
     gate = threading.Event()
 
     class SlowVerifier(RestRecordVerifier):
@@ -189,10 +194,14 @@ def test_pending_report_is_not_saved_as_success(dirs) -> None:
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)
         saved = json.loads((run_dir / "report.json").read_text())
         assert saved["success"] is False  # pending
+        assert not (run_dir / "receipt.json").exists()
         gate.set()
         settled = pipeline.take().settled.result(timeout=30)
         assert settled is report and report.success is True
         assert json.loads((run_dir / "report.json").read_text())["success"] is True
+        checked = verify_run_receipt(run_dir, local_registry())
+        assert checked.ok, checked.detail
+        assert checked.statement["predicate"]["lines"]
     finally:
         gate.set()
         stop()
