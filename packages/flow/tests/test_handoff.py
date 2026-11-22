@@ -35,13 +35,26 @@ REPORT = {
     "execution_outcome": "VERIFIED",
     "run_id": "run-handoff-1",
     "started_at": "2026-11-21T01:02:03Z",
+    "change_ledger": [],
     "results": [
-        {"step_id": "s1", "ok": True},
+        {"step_id": "s1", "intent": "Open the patient chart", "ok": True},
         {
             "step_id": "s2",
+            "intent": "Type the triage note",
             "ok": True,
             "effect_verified": True,
             "postconditions_ok": True,
+            "effect_contract_hashes": ["sha256:" + "a" * 64],
+            "effect_evidence": [
+                {
+                    "effect_contract_hash": "sha256:" + "a" * 64,
+                    "substrate": "api",
+                    "initial_verdict": "confirmed",
+                    "final_verdict": "confirmed",
+                    "observed_effect": "present",
+                    "verification_tier": 1,
+                }
+            ],
         },
     ],
 }

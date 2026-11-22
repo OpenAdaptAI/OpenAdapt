@@ -6,8 +6,7 @@ import json
 
 import httpx
 import pytest
-
-from openadapt_flow.eligibility.client import (
+from openadapt_eligibility.client import (
     STEDI_ELIGIBILITY_URL,
     ApplicationMode,
     BenefitSelection,

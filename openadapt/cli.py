@@ -2036,6 +2036,27 @@ def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, 
 
 
 @main.command(
+    "hooks",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def hooks(command_ctx: click.Context) -> None:
+    """Check a coding agent's writes to declared systems of record."""
+    _require_supported_python()
+    hooks_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.hooks.cli",))
+    if hooks_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no hooks command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(hooks_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
     "wrap",
     context_settings={
         "ignore_unknown_options": True,
