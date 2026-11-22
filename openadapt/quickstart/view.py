@@ -15,7 +15,6 @@ fact with no color and no cursor moves, for logs, pipes, CI, ``NO_COLOR`` and
 from __future__ import annotations
 
 import contextlib
-import io
 import os
 import sys
 import time
@@ -49,6 +48,37 @@ _SIDE_BY_SIDE = 80
 MORE_COMMAND = "quickstart --more"
 #: The pause before each read-back field ticks, on a live terminal only.
 _TICK_S = 0.08
+#: The widest the live view draws, in columns. Rules, panels and step lines
+#: stop here in a wide window, so a timing stays next to its row.
+MAX_WIDTH = 100
+#: Terminals that make OSC 8 hyperlinks clickable, by ``TERM_PROGRAM``.
+_HYPERLINK_PROGRAMS = frozenset(
+    {"iTerm.app", "WezTerm", "vscode", "ghostty", "Hyper", "Tabby", "rio"}
+)
+
+
+def hyperlinks_supported(environ: Optional[Mapping[str, str]] = None) -> bool:
+    """True when this terminal makes OSC 8 hyperlinks clickable.
+
+    Elsewhere (Terminal.app among them) a link is printed as its ``file://``
+    address, which those terminals make clickable themselves.
+    """
+
+    env = os.environ if environ is None else environ
+    if env.get("TMUX") or env.get("STY"):
+        return False
+    if env.get("TERM_PROGRAM", "") in _HYPERLINK_PROGRAMS:
+        return True
+    if env.get("KITTY_WINDOW_ID") or env.get("WT_SESSION"):
+        return True
+    if env.get("TERM", "") in ("xterm-kitty", "xterm-ghostty", "foot"):
+        return True
+    if env.get("KONSOLE_VERSION") or env.get("DOMTERM"):
+        return True
+    try:
+        return int(env.get("VTE_VERSION", "0")) >= 5000
+    except ValueError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -83,11 +113,23 @@ def compiled_line(outcome: Outcome, scene: Scene = MOCKMED) -> str:
     return scene.compiled_line(outcome.program_steps)
 
 
+#: A run's status when it stopped before its first click.
+NOT_READY_STATUS = "Stopped before its first click"
+
+
 def run_status(run: RunFacts, marks: Marks, scene: Scene = MOCKMED) -> str:
     if run.checked:
         again = " (on a second try)" if run.repeated else ""
         return f"{marks.ok} {scene.checked_in}{again}"
+    if run.not_ready:
+        return f"{marks.stop} {NOT_READY_STATUS}"
     return f"{marks.stop} {run.plain_label or run.execution_outcome}"
+
+
+def skipped_break_line(scene: Scene = MOCKMED) -> str:
+    """Why Act 3 didn't run when no run got a ready screen."""
+
+    return f"Skipped the last part ({scene.break_title.lower()}): it would stop the same way."
 
 
 def runs_total_line(outcome: Outcome, marks: Marks) -> str:
@@ -573,6 +615,11 @@ class PlainView(_Base):
                 self._say(f"    {self.marks.ok} {name:<{width}}  {value}")
         self._say(f"  {clean_footer(outcome, self.marks)}")
 
+    def not_ready(self, explanation: str, skipped_break: bool) -> None:
+        self._say(f"  {explanation}")
+        if skipped_break:
+            self._say(f"  {skipped_break_line(self.scene)}")
+
     def break_setup(self) -> None:
         self._say(f"      {self.scene.break_setup}")
 
@@ -729,14 +776,19 @@ class RichView(_Base):
     ) -> None:
         from rich.console import Console
 
-        from openadapt.quickstart.images import detect_image_protocol
+        from openadapt.quickstart.images import image_protocol
 
         self.console = console or Console(
             file=stream, highlight=False, soft_wrap=False, width=width
         )
+        if width is None and console is None and self.console.width > MAX_WIDTH:
+            self.console.width = MAX_WIDTH
         self.scene = scene
         self.marks = Marks(getattr(stream, "encoding", None) or "utf-8")
-        self.image_protocol = detect_image_protocol(environ, isatty=True)
+        # Only a real terminal is asked about images: the query is written
+        # to the controlling terminal, which a stand-in stream isn't.
+        self.image_protocol = image_protocol(environ, isatty=_real_tty(stream))
+        self.hyperlinks = hyperlinks_supported(environ)
         if animate is None:
             isatty = getattr(stream, "isatty", None)
             animate = bool(callable(isatty) and isatty() and self.console.is_terminal)
@@ -787,17 +839,19 @@ class RichView(_Base):
     ) -> None:
         from rich.table import Table
 
-        grid = Table.grid(padding=(0, 1), expand=True)
+        # Not expanded: the timing follows its row's text instead of sitting
+        # at the window's right edge.
+        grid = Table.grid(padding=(0, 1))
         grid.add_column(width=2, no_wrap=True)
-        grid.add_column(ratio=1)
-        grid.add_column(justify="right", no_wrap=True)
+        grid.add_column()
+        grid.add_column(no_wrap=True)
         text = f"[bold]{_escape(title)}[/]"
         if detail:
             text += f"  [dim]{_escape(detail)}[/]"
         grid.add_row(
             f"[{style}]{mark}[/]",
             text,
-            f"[dim]{seconds(took)}[/]" if took is not None else "",
+            f"[dim] {seconds(took)}[/]" if took is not None else "",
         )
         self.console.print(grid)
 
@@ -807,10 +861,15 @@ class RichView(_Base):
             self._ready = None
 
     def _link(self, path: Path, text: str) -> str:
+        """A clickable link to ``path``: an OSC 8 hyperlink showing ``text``
+        where the terminal supports one, else the ``file://`` address."""
+
         try:
             uri = path.resolve().as_uri()
         except ValueError:
             return _escape(text)
+        if not self.hyperlinks:
+            return _escape(uri)
         return f"[link={uri}]{_escape(text)}[/link]"
 
     # -- the story --------------------------------------------------------
@@ -899,7 +958,11 @@ class RichView(_Base):
             status = "checked" + (" on a second try" if run.repeated else "")
         else:
             mark = f"[red]{self.marks.stop}[/]"
-            status = run.plain_label or run.execution_outcome
+            status = (
+                NOT_READY_STATUS
+                if run.not_ready
+                else run.plain_label or run.execution_outcome
+            )
         return (
             f"   {mark} {_escape(run.note):<{_LABEL_WIDTH - 6}} "
             f"[dim]{_escape(status)} {seconds(run.seconds)}[/]"
@@ -1040,6 +1103,11 @@ class RichView(_Base):
         else:
             self.console.print(card(len(rows)))
 
+    def not_ready(self, explanation: str, skipped_break: bool) -> None:
+        self.console.print(f"[yellow]{_escape(explanation)}[/]")
+        if skipped_break:
+            self.console.print(f"[dim]{_escape(skipped_break_line(self.scene))}[/]")
+
     def break_setup(self) -> None:
         self._step_line(
             self.marks.arrow,
@@ -1061,11 +1129,12 @@ class RichView(_Base):
         return self._spinning(self.scene.break_title, self.scene.breaking)
 
     def break_result(self, broken: BreakFacts) -> None:
-        drawn = False
+        # The screen and the record as text, in every terminal; the
+        # screenshot is drawn under them only where the terminal answered
+        # for an image protocol.
+        self._side_by_side(broken)
         if self.image_protocol and broken.screenshot is not None:
-            drawn = self._draw_beside_screenshot(broken, self._record_lines(broken))
-        if not drawn:
-            self._side_by_side(broken)
+            self._draw_screenshot(broken)
         self._pause(0.25)
         self._verdicts(broken)
 
@@ -1076,12 +1145,6 @@ class RichView(_Base):
         if self.scene.screen_claims_success:
             return f"[bold red]{self.marks.no} {line}[/]"
         return f"[bold]{line}[/]"
-
-    def _record_lines(self, broken: BreakFacts) -> list[str]:
-        return [
-            f"[bold]{_escape(self.scene.record_title)}[/]",
-            self._record_text(broken),
-        ]
 
     def _side_by_side(self, broken: BreakFacts) -> None:
         from rich.panel import Panel
@@ -1150,20 +1213,18 @@ class RichView(_Base):
             self.console.print()
             self.console.print(_escape(aha))
 
-    def _draw_beside_screenshot(self, broken: BreakFacts, right: list[str]) -> bool:
+    def _draw_screenshot(self, broken: BreakFacts) -> bool:
         from openadapt.quickstart.images import beside_image, crop_png, image_sequence
 
         try:
             png = crop_png(broken.screenshot, self.scene.screen_crop)
-        except Exception:  # noqa: BLE001 - fall back to the text boxes
+        except Exception:  # noqa: BLE001 - the text above already says it
             return False
         cols, rows = 40, 10
-        rendered = [self._ansi(line) for line in right]
-        self.console.print()
-        self.console.print("[bold]The screen[/] [dim](its screenshot)[/]")
+        self.console.print("[dim]The screen's screenshot:[/]")
         block = beside_image(
             image_sequence(png, self.image_protocol, cols=cols, rows=rows),
-            rendered,
+            [],
             indent=3,
             cols=cols,
             rows=rows,
@@ -1171,19 +1232,6 @@ class RichView(_Base):
         self.console.file.write(block)
         self.console.file.flush()
         return True
-
-    def _ansi(self, markup: str) -> str:
-        from rich.console import Console
-
-        buffer = io.StringIO()
-        Console(
-            file=buffer,
-            force_terminal=True,
-            color_system=self.console.color_system,
-            width=200,
-            highlight=False,
-        ).print(markup, end="")
-        return buffer.getvalue()
 
     def _seal_emblem(self, card: Optional[SealCard], steps: int) -> str:
         """One pip per program step; the save, read back, is the diamond."""
@@ -1218,20 +1266,31 @@ class RichView(_Base):
                 padding=(1, 3),
             )
         )
+        page = outcome.seal_pages.verified
+        if page is not None and not self.hyperlinks:
+            # The terminal makes plain addresses clickable, not OSC 8 links:
+            # print the file:// address on one line it may wrap but never
+            # breaks, so the whole address stays one link.
+            self.console.print(
+                f"[bold]Open it[/]  [bold cyan]{self._link(page, '')}[/]",
+                soft_wrap=True,
+            )
         links = Table.grid(padding=(0, 2))
         links.add_column(no_wrap=True)
         links.add_column(overflow="fold")
-        page = outcome.seal_pages.verified
         if page is not None:
-            links.add_row(
-                "[bold]Open it[/]",
-                f"[bold cyan]{self._link(page, str(display_path(page)))}[/]",
-            )
+            if self.hyperlinks:
+                links.add_row(
+                    "[bold]Open it[/]",
+                    f"[bold cyan]{self._link(page, str(display_path(page)))}[/]",
+                )
             links.add_row("", f"[dim]{_escape(seal_page_note(outcome))}[/]")
-        links.add_row(
-            "[dim]Real receipts[/]",
-            f"[cyan][link={REAL_SEALS_URL}]{REAL_SEALS_URL}[/link][/]",
+        real = (
+            f"[link={REAL_SEALS_URL}]{REAL_SEALS_URL}[/link]"
+            if self.hyperlinks
+            else REAL_SEALS_URL
         )
+        links.add_row("[dim]Real receipts[/]", f"[cyan]{real}[/]")
         self.console.print(links)
 
     def finale(self, outcome: Outcome, steps: NextSteps) -> None:
@@ -1293,6 +1352,13 @@ class RichView(_Base):
     def detail(self, lines: list[str]) -> None:
         for line in lines:
             self.console.print(f"   [dim]{_escape(line)}[/]")
+
+
+def _real_tty(stream: IO[str]) -> bool:
+    try:
+        return os.isatty(stream.fileno())
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 def _escape(text: str) -> str:

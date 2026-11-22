@@ -1130,6 +1130,18 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
     )
 
 
+def _print_terminal_receipt(
+    run_dir: Path, report, *, require_opt_in: bool = False
+) -> None:
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    note = receipt_after_run(
+        run_dir, require_opt_in=require_opt_in, expected_report=report
+    )
+    if note:
+        print(note, file=sys.stderr)
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -1176,6 +1188,8 @@ def _finish_replay(
             print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    if args is not None:
+        _print_terminal_receipt(run_dir, report)
     _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
@@ -5176,6 +5190,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
     _maybe_attest_run(run_dir, report, args)
+    _print_terminal_receipt(run_dir, report, require_opt_in=True)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -13200,6 +13215,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_guard_parser(sub)
 
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+
+    _add_hooks_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
@@ -14281,12 +14300,12 @@ def main(
             args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
-            # The run's receipt, and the older offline Seal for one release.
-            # Neither changes the run's exit code.
+            # Terminal handlers sign receipts. Keep the old Seal here for one release.
             from openadapt_flow.receipt_record import after_run_notes
 
             run_dir = getattr(args, "run_dir", None)
-            for note in after_run_notes(Path(run_dir) if run_dir else None):
+            folder = Path(run_dir) if run_dir else None
+            for note in after_run_notes(folder, include_receipt=False):
                 print(note, file=sys.stderr)
         return code
     except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:

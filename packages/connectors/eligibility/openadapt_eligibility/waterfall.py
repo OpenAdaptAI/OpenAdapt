@@ -16,7 +16,7 @@ from typing import Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from openadapt_flow.eligibility.client import (
+from openadapt_eligibility.client import (
     ApplicationMode,
     EligibilityRequest,
     EligibilityResult,

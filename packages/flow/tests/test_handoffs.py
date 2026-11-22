@@ -550,10 +550,11 @@ def test_lines_validate_against_the_receipt_schema_and_sign(tmp_path):
         "run_id": "run-1",
         "execution_outcome": "VERIFIED",
         "results": [
-            {"ok": True},
-            {"ok": True},
-            {"ok": True, "effect_verified": True, "effect_field_checks": [1]},
+            {"step_id": "s1", "intent": "open", "ok": True},
+            {"step_id": "s2", "intent": "fill", "ok": True},
+            {"step_id": "s3", "intent": "save", "ok": True},
         ],
+        "change_ledger": [],
     }
     statement, openings = build_statement(report, "a" * 64, flow_version="3.4.0")
     statement, openings = line.attach_confirmations(statement, openings, states)

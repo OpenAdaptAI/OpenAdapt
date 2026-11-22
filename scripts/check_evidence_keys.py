@@ -29,6 +29,7 @@ is_key_material_path = _policy["is_key_material_path"]
 # write_seal_page. These exceptions never apply to arbitrary export inputs.
 PUBLIC_REGISTRIES = frozenset(
     {
+        "packages/flow/benchmark/hooks_live/seal-key.json",
         "packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/seal-key.json",
         "packages/flow/tests/fixtures/rekor_real/seal-key.json",
         "packages/seal-view/test/fixtures/openemr-r3/site-keys.json",

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
-from openadapt_flow.eligibility.client import (
+from openadapt_eligibility.client import (
     ApplicationMode,
     EligibilityRequest,
     EligibilityStatus,
     StediAccountBoundary,
     StediEligibilityClient,
 )
-from openadapt_flow.eligibility.waterfall import (
+from openadapt_eligibility.waterfall import (
     DEFAULT_REGISTRY_PATH,
     EligibilityRoute,
     PayerCapability,
@@ -290,7 +289,7 @@ def test_malformed_registry_fails_loud(tmp_path):
 
 
 def test_lazy_package_exports():
-    import openadapt_flow.eligibility as eligibility
+    import openadapt_eligibility as eligibility
 
     assert eligibility.EligibilityRoute is EligibilityRoute
     assert callable(eligibility.run_waterfall)

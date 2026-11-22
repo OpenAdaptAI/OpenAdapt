@@ -136,9 +136,50 @@ def test_a_real_run_writes_a_receipt_that_carries_the_claims_line(tmp_path, env)
     result = verify_run_receipt(run_dir, _registry(tmp_path))
     assert result.ok, (result.reason, result.detail)
     assert result.confirmation_lines[0].startswith("Sent to the other party")
+    # Awaiting the other party: signed, and never VERIFIED.
+    predicate = _payload(run_dir / "receipt.json")["predicate"]
+    assert (predicate["outcome"], predicate["reason_code"]) == (
+        "UNKNOWN",
+        "awaiting_counterparty",
+    )
+    assert result.outcome != "VERIFIED"
     sidecar = run_dir / followup.SIDECAR
     assert sidecar.stat().st_mode & 0o777 == 0o600
     assert "CLM-1001" not in sidecar.read_text()
+
+
+def test_a_pending_receipt_is_only_for_sent_handoff_lines():
+    """permissive-default guarded: any other unsettled write refuses."""
+    from types import SimpleNamespace
+
+    from openadapt_flow.receipt_record import ReceiptRecordError, _awaiting_counterparty
+
+    def statement(*checks):
+        return {
+            "predicate": {
+                "outcome": "UNKNOWN",
+                "reason_code": "x",
+                "lines": [{"step": i, "check": c} for i, c in enumerate(checks)],
+            }
+        }
+
+    sent = SimpleNamespace(step=0, state="sent")
+    ok = _awaiting_counterparty(statement("not_checked", "confirmed"), [sent])
+    assert ok["predicate"]["outcome"] == "UNKNOWN"
+    assert ok["predicate"]["reason_code"] == "awaiting_counterparty"
+    # A handoff line plus another unverified write refuses.
+    with pytest.raises(ReceiptRecordError, match="readback_pending"):
+        _awaiting_counterparty(statement("not_checked", "not_checked"), [sent])
+    # A pending write with no handoff line refuses.
+    with pytest.raises(ReceiptRecordError, match="readback_pending"):
+        _awaiting_counterparty(statement("not_checked"), [])
+    # A handoff already answered is not "sent": refuses.
+    answered = SimpleNamespace(step=0, state="recorded_differently")
+    with pytest.raises(ReceiptRecordError, match="readback_pending"):
+        _awaiting_counterparty(statement("not_checked"), [answered])
+    # A refuted write refuses.
+    with pytest.raises(ReceiptRecordError, match="readback_pending"):
+        _awaiting_counterparty(statement("refuted"), [sent])
 
 
 def test_a_run_without_handoffs_has_a_receipt_without_confirmations(tmp_path, env):
@@ -146,9 +187,11 @@ def test_a_run_without_handoffs_has_a_receipt_without_confirmations(tmp_path, en
 
     run_dir = _run(tmp_path)
     registry.forget()
-    # The claim's ledger isn't noted or named: nothing to attach.
-    receipt_after_run(run_dir, env)
-    assert "confirmations" not in _payload(run_dir / "receipt.json")["predicate"]
+    # The claim's ledger isn't noted or named: the pending write has no
+    # handoff line, so the run awaits its check with no receipt yet.
+    note = receipt_after_run(run_dir, env)
+    assert note == "receipt not written: readback_pending"
+    assert not (run_dir / "receipt.json").exists()
 
 
 def test_follow_ups_record_each_change_and_verify_as_a_chain(tmp_path, env):
