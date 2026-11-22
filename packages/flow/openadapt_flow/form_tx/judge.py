@@ -12,10 +12,8 @@ missing controls, mismatched values, or missing required outputs.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
-
-from pydantic import BaseModel, ConfigDict
 
 from openadapt_flow.form_tx.codecs import (
     CodecValueError,
@@ -45,14 +43,20 @@ from openadapt_flow.form_tx.types import (
     ProvenanceKind,
     ReadbackFieldVerdict,
     ReadbackStatus,
+    Subject,
     SummaryVerdict,
     WizardScreenSpec,
-    canonical_sha256,
+    read_subjects,
+    subjects_digest,
+    uncovered_subject_verdicts,
 )
 
 __all__ = [
+    "Subject",
     "SummaryJudge",
     "build_authoritative_fact_map",
+    "read_subjects",
+    "uncovered_subject_verdicts",
 ]
 
 _OVERRIDE_PROVENANCE: dict[HumanDecisionAction, ProvenanceKind] = {
@@ -155,104 +159,6 @@ def _observed_control_matches(
             return True
 
     return False
-
-
-class Subject(BaseModel):
-    """One control the run wrote, kept or accepted, and the key it holds.
-
-    ``subject_id`` names where it is (popup, selector or entity row), so two
-    controls that hold the same dossier key are two subjects.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    subject_id: str
-    key: str
-    label: str = ""
-
-
-def read_subjects(
-    writes: Sequence[FieldWriteRecord],
-    resolutions: Sequence[HumanResolutionRecord],
-) -> list[Subject]:
-    """Every written, kept or operator-accepted control, by subject."""
-    subjects: dict[str, Subject] = {}
-    for w in writes:
-        key = w.dossier_key or w.field_key
-        sid = (
-            f"{w.in_popup_subroutine or 'main'}|{w.screen_id or ''}|"
-            f"{w.selector or ''}|{w.field_key}"
-        )
-        subjects.setdefault(sid, Subject(subject_id=sid, key=key, label=w.label or ""))
-    for rec in resolutions:
-        if (
-            rec.halt_kind == FormHaltKind.PREFILL_ENTITY_CONFLICT
-            and rec.action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL
-        ):
-            # One subject per accepted row, not per table.
-            row = canonical_sha256(rec.resolved_value)[:16]
-            sid = f"entity|{rec.field_signature}|{row}"
-            subjects.setdefault(
-                sid,
-                Subject(subject_id=sid, key=f"entity:{rec.field_signature}|{row}"),
-            )
-    return list(subjects.values())
-
-
-def uncovered_subject_verdicts(
-    subjects: Sequence[Subject],
-    verdicts: Sequence[ReadbackFieldVerdict],
-    codec_for: Callable[[str], FormCodecKind],
-    observations_per_key: Optional[Mapping[str, int]] = None,
-) -> list[ReadbackFieldVerdict]:
-    """absent-evidence-as-success: a subject with no verdict is not_checked.
-
-    One verdict for a key accounts for one subject holding that key. When more
-    subjects hold the key than there are verdicts for it, the summary cannot
-    say which control it shows, so the rest are not_checked. Never passed.
-    """
-    # A passed or failed verdict is an observation of the summary; two
-    # read-backs that resolve to the same shown value are one observation,
-    # so they account for one subject only.
-    observed: dict[str, int] = {}
-    other: dict[str, int] = {}
-    for v in verdicts:
-        bucket = (
-            observed
-            if v.status in (ReadbackStatus.PASSED, ReadbackStatus.FAILED)
-            else other
-        )
-        bucket[v.dossier_key] = bucket.get(v.dossier_key, 0) + 1
-    verdicts_per_key: dict[str, int] = dict(other)
-    for key, n in observed.items():
-        distinct = (observations_per_key or {}).get(key, n)
-        verdicts_per_key[key] = verdicts_per_key.get(key, 0) + min(n, distinct)
-    by_key: dict[str, list[Subject]] = {}
-    for subject in subjects:
-        by_key.setdefault(subject.key, []).append(subject)
-    out: list[ReadbackFieldVerdict] = []
-    for key, group in sorted(by_key.items()):
-        have = verdicts_per_key.get(key, 0)
-        for subject in sorted(group, key=lambda s: s.subject_id)[have:]:
-            out.append(
-                ReadbackFieldVerdict(
-                    dossier_key=key,
-                    codec_kind=codec_for(key),
-                    passed=False,
-                    status=ReadbackStatus.NOT_CHECKED,
-                    provenance=ProvenanceKind.INTAKE_DOCUMENT,
-                    reason=(
-                        f"No read-back covers {subject.label or subject.subject_id!r}"
-                        + (
-                            f": {len(group)} controls hold {key!r} and only "
-                            f"{have} read-back verdict(s) exist"
-                            if have
-                            else ""
-                        )
-                    ),
-                )
-            )
-    return out
 
 
 def _extract_present_outputs(
@@ -626,9 +532,10 @@ class SummaryJudge:
                 continue
             if oc is not None:
                 observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
+        evaluated_subjects = read_subjects(writes, active_resolutions)
         verdicts.extend(
             uncovered_subject_verdicts(
-                read_subjects(writes, active_resolutions),
+                evaluated_subjects,
                 verdicts,
                 _codec_for,
                 {k: len(v) for k, v in observations.items()},
@@ -716,6 +623,8 @@ class SummaryJudge:
             field_verdicts=tuple(verdicts),
             extracted_outputs=final_outputs,
             missing_required_outputs=tuple(missing_required),
+            observations_per_key={k: len(v) for k, v in observations.items()},
+            ledger_digest=subjects_digest(evaluated_subjects),
         )
 
     verify = evaluate

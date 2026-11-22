@@ -462,7 +462,7 @@ class AdmissionPolicy(BaseModel):
     signed_at: str = Field(min_length=10, max_length=64)
     expires_at: str = Field(min_length=10, max_length=64)
     #: ``host`` or ``host:port`` of a web app's origin, or a desktop or
-    #: remote app's ``<kind>://<target>`` (``macos://textedit``).
+    #: remote app's ``<kind>://<target>`` (``macos://example-app``).
     allowed_hosts: tuple[str, ...] = Field(min_length=1)
     #: Step actions (``openadapt_flow.ir.ActionKind`` values).
     allowed_actions: tuple[str, ...] = Field(min_length=1)
@@ -624,7 +624,7 @@ def scope_problems(
             allowed = {h.lower() for h in policy.allowed_hosts if "://" not in h}
         else:
             # A desktop or remote app is named with its kind
-            # (``macos://textedit``), so a web host entry never covers it.
+            # (``macos://example-app``), so a web host entry never covers it.
             host = target_origin.lower()
             allowed = {h.lower() for h in policy.allowed_hosts if "://" in h}
         if host not in allowed:

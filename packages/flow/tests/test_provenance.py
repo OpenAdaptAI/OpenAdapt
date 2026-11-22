@@ -313,7 +313,8 @@ def test_the_guard_sends_a_disagreement_to_a_person(sor, tmp_path: Path) -> None
     # Not gated, but this save goes to a person: commit needs what they see.
     with pytest.raises(GuardRefused) as refused:
         misread.commit()
-    assert refused.value.code == "screenshot_required"
+    # No screenshot and no value read: no card is offered.
+    assert refused.value.code == "values_unread"
 
 
 def test_a_task_whose_values_differ_from_its_provenance_is_refused(

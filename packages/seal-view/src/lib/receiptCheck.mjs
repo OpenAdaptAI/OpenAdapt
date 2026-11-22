@@ -64,6 +64,9 @@ export async function checkReceipt(
         ok,
         reason,
         steps,
+        // Whether the older seal itself verified, so a later requirement's
+        // failure (authorization, anchor) is never mistaken for a missing seal.
+        sealOk: sealResult.ok,
         ...extra,
     })
     if (!sealResult.ok) return result(false, sealResult.reason)

@@ -21,8 +21,6 @@ import { ProgramWorkbench, type SectionEdit } from "@openadapt/program-graph";
 import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
-const POLICY = "clinical-write";
-
 type EditProgramSectionsResponse =
   | { ok: true; graph: QualificationProject["graph"] }
   | { ok: false; error: string };
@@ -264,7 +262,7 @@ export function Qualification({
     try {
       const response = await engineInvoke<QualificationResponse>(
         CMD.GET_QUALIFICATION,
-        { workflow_id: workflowId, policy: POLICY },
+        { workflow_id: workflowId },
       );
       if (!response.ok) {
         setError(response.error);
@@ -408,7 +406,7 @@ export function Qualification({
             .map((value) => value.trim())
             .filter(Boolean),
           minimum_effect_tier: minimumTier,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -461,7 +459,7 @@ export function Qualification({
           step_id: stepId,
           risk,
           explanation: `Operator reviewed this action as ${risk.replaceAll("_", " ")}`,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -554,7 +552,7 @@ export function Qualification({
                 }))
               : [],
           quorum: identityEnforcement === "signal_quorum" ? identityQuorum : 0,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -581,7 +579,7 @@ export function Qualification({
           step_id: selectedActionId,
           effect_index: selectedEffect.index,
           verification_tier: verificationTier,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -605,7 +603,7 @@ export function Qualification({
         {
           workflow_id: workflowId,
           minimum_effect_tier: projectMinimumTier,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -646,7 +644,7 @@ export function Qualification({
             effectKind === "record_written" ? countNewOnly : false,
           effect_index: placeholder?.index,
           verification_tier: bindingVerificationTier,
-          policy: POLICY,
+          ...(project?.policy ? { policy: project.policy } : {}),
         },
       );
       if (!response.ok) {
@@ -679,7 +677,10 @@ export function Qualification({
     try {
       const response = await engineInvoke<QualificationResponse>(
         CMD.CERTIFY_QUALIFICATION,
-        { workflow_id: workflowId, policy: POLICY },
+        {
+          workflow_id: workflowId,
+          ...(project?.policy ? { policy: project.policy } : {}),
+        },
       );
       if (!response.ok) {
         setError(response.error);

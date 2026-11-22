@@ -1,0 +1,3 @@
+{"decision": "held_for_person", "event": "request", "guard_id": "guard-b6ca7b52f361c50713836050eca7c7f7", "kind": "save", "method": "POST", "origin": "http://127.0.0.1:51141", "path_sha256": "a01c22910e2962c5", "resource_type": "XHR", "t": 2.829}
+{"decision": "continued", "event": "request", "hold_ms": 3441.3, "kind": "save", "method": "POST", "origin": "http://127.0.0.1:51141", "path_sha256": "a01c22910e2962c5", "resource_type": "XHR", "t": 6.211}
+{"event": "read_back", "t": 6.361, "verdict": "VERIFIED"}

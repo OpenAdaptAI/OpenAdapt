@@ -1,0 +1,491 @@
+"""The exception watch raises cards and holds saves without the agent.
+
+No browser: page snapshots are the dicts :data:`SNAPSHOT_JS` returns, and
+requests are :class:`HeldRequest` as the guard's CDP layer builds them.
+Synthetic screens and keys only.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from openadapt_types.exception_card import answer_message
+
+from openadapt_flow.agent_guard.requests import HeldRequest, NotASave
+from openadapt_flow.approval_mode.approver_roster import (
+    ROOT_ENV,
+    file_key_signer,
+    init_root,
+)
+from openadapt_flow.exceptions.registry import ExceptionRegistry, roster_verifier
+from openadapt_flow.exceptions.watch import WATCH_EVENTS, ExceptionWatch
+from openadapt_flow.execute.keys import sign_bytes
+from openadapt_flow.jit.authority import public_hex
+
+APP = "http://127.0.0.1:8123"
+CODE_SCREEN = {
+    "text": "Check your phone. Verification code",
+    "elements": [
+        {
+            "tag": "input",
+            "type": "text",
+            "id": "otc",
+            "label": "Verification code",
+            "autocomplete": "one-time-code",
+            "inputmode": "numeric",
+            "maxlength": "6",
+            "visible": True,
+            "bbox": [10, 10, 100, 20],
+        }
+    ],
+}
+FORM_SCREEN = {
+    "text": "New note",
+    "elements": [
+        {
+            "tag": "input",
+            "type": "text",
+            "id": "note",
+            "label": "Note",
+            "visible": True,
+        },
+        {"tag": "button", "type": "", "id": "save", "visible": True},
+    ],
+}
+SIGN_IN_SCREEN = {
+    "text": "Sign in",
+    "elements": [{"tag": "input", "type": "password", "id": "pw", "visible": True}],
+}
+
+
+@pytest.fixture
+def roster(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    key_dir = tmp_path / "keys"
+    key = Ed25519PrivateKey.generate()
+    init_root(
+        key_dir,
+        principal="front-desk",
+        public_key=public_hex(key),
+        sign=file_key_signer(key),
+    )
+    monkeypatch.setenv(ROOT_ENV, public_hex(key))
+    return key_dir, key
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.t = 100.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _watch(tmp_path: Path, roster, **kw) -> ExceptionWatch:
+    key_dir, key = roster
+    return ExceptionWatch(
+        ExceptionRegistry(tmp_path / "registry"),
+        run_ref="watch-run",
+        verify=roster_verifier(key_dir, public_hex(key)),
+        app_origin=APP,
+        events_path=tmp_path / "run" / WATCH_EVENTS,
+        **kw,
+    )
+
+
+def _save(path: str = "/api/encounter", method: str = "POST") -> HeldRequest:
+    return HeldRequest(
+        request_id="r1",
+        method=method,
+        url=APP + path,
+        resource_type="Fetch",
+        post_data=json.dumps({"note": "synthetic"}),
+    )
+
+
+def _answer(watch: ExceptionWatch, key, choice: str) -> None:
+    card = watch.card
+    unsigned = watch.registry.unsigned_answer(card, choice, route="cli")
+    watch.registry.write_answer(
+        card,
+        {
+            **unsigned,
+            "public_key": public_hex(key),
+            "signature": sign_bytes(key, answer_message(unsigned)),
+        },
+    )
+
+
+def _events(tmp_path: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (tmp_path / "run" / WATCH_EVENTS).read_text().splitlines()
+    ]
+
+
+def test_a_code_screen_opens_a_card_and_blocks_saves_until_a_person_answers(
+    tmp_path: Path, roster
+) -> None:
+    watch = _watch(tmp_path, roster)
+    assert watch.on_request(_save()) is None  # nothing open: the save goes on
+    assert watch.observe(CODE_SCREEN) == "second_factor"
+    assert watch.card is not None and watch.card.kind == "second_factor"
+    # The agent never asked; it saves anyway. Blocked, whatever it does.
+    assert watch.on_request(_save()) == "exception_open"
+    # Reads still go through, and so does a write the guard config lists
+    # as not a save (the code form a person submits in the live browser).
+    assert watch.on_request(_save(method="GET")) is None
+    assert watch.poll() is None  # nobody has answered
+    _answer(watch, roster[1], "done_by_person")
+    outcome = watch.poll()
+    assert outcome is not None and outcome.proceed is True
+    assert watch.card is None and not watch.holding
+    assert watch.on_request(_save()) is None
+    # The page still shows the code screen: not asked again until it goes.
+    assert watch.observe(CODE_SCREEN) is None
+    assert watch.observe(FORM_SCREEN) is None
+    assert watch.observe(CODE_SCREEN) == "second_factor"
+    # Ending now would leave that new card unanswered: not a clean exit.
+    assert watch.stop_code() == 6
+    events = [e["event"] for e in _events(tmp_path)]
+    assert events[:5] == [
+        "watch_started",
+        "card_opened",
+        "request_blocked",
+        "answer",
+        "card_opened",
+    ]
+
+
+def test_a_not_a_save_write_goes_through_while_a_card_is_open(
+    tmp_path: Path, roster
+) -> None:
+    watch = _watch(tmp_path, roster, not_saves=(NotASave("POST", "/verify"),))
+    watch.observe(CODE_SCREEN)
+    assert watch.on_request(_save("/verify")) is None
+    assert watch.on_request(_save("/api/encounter")) == "exception_open"
+
+
+@pytest.mark.parametrize("choice", ["abort", "skip"])
+def test_a_stop_answer_blocks_every_later_save(
+    tmp_path: Path, roster, choice: str
+) -> None:
+    watch = _watch(tmp_path, roster)
+    watch.observe(CODE_SCREEN)
+    _answer(watch, roster[1], choice)
+    outcome = watch.poll()
+    assert outcome is not None and outcome.proceed is False
+    assert watch.stopped == choice
+    assert watch.on_request(_save()) == "exception_stopped"
+    # No new card after a stop: the run is over.
+    assert watch.observe(SIGN_IN_SCREEN) is None
+    assert watch.stop_code() == 3
+
+
+def test_an_answer_off_the_roster_keeps_the_run_stopped(tmp_path: Path, roster) -> None:
+    watch = _watch(tmp_path, roster)
+    watch.observe(CODE_SCREEN)
+    _answer(watch, Ed25519PrivateKey.generate(), "done_by_person")
+    outcome = watch.poll()
+    assert outcome is not None and outcome.proceed is False
+    assert outcome.reason == "human_approver_unregistered"
+    assert watch.on_request(_save()) == "exception_stopped"
+
+
+def test_an_expired_card_stops_the_run(tmp_path: Path, roster) -> None:
+    watch = _watch(tmp_path, roster, deadline_s=1)
+    watch.observe(CODE_SCREEN)
+    card = watch.card
+    from datetime import timedelta
+
+    from openadapt_flow.exceptions.registry import parse_time
+
+    later = parse_time(card.deadline_at) + timedelta(seconds=1)
+    outcome = watch.registry.poll(card, verify=watch.verify, now=later)
+    assert outcome is not None and outcome.reason == "expired"
+    # The watch reads the same record on its next look.
+    assert watch.poll() is not None
+    assert watch.on_request(_save()) == "exception_stopped"
+
+
+def test_a_sign_in_counts_only_after_a_save(tmp_path: Path, roster) -> None:
+    watch = _watch(tmp_path, roster)
+    assert watch.observe(SIGN_IN_SCREEN) is None  # the ordinary start of a task
+    watch.on_request(_save())
+    assert watch.observe(SIGN_IN_SCREEN) == "session_expired"
+
+
+def test_a_stall_is_raised_only_when_asked_for(tmp_path: Path, roster) -> None:
+    clock = _Clock()
+    off = _watch(tmp_path / "off", roster, clock=clock)
+    on = _watch(tmp_path / "on", roster, clock=clock, stall_s=30)
+    for watch in (off, on):
+        watch.observe(FORM_SCREEN)
+    clock.t += 31
+    assert off.observe(FORM_SCREEN) is None
+    assert on.observe(FORM_SCREEN) == "timeout_or_stall"
+
+
+def test_the_card_carries_nothing_from_the_page(tmp_path: Path, roster) -> None:
+    planted = dict(
+        CODE_SCREEN, text="Verification code for Maribel Quintanilla 88812345"
+    )
+    watch = _watch(tmp_path, roster)
+    watch.observe(planted)
+    blob = b"".join(
+        p.read_bytes() for p in (tmp_path / "registry").rglob("*") if p.is_file()
+    )
+    blob += (tmp_path / "run" / WATCH_EVENTS).read_bytes()
+    assert b"Maribel" not in blob and b"88812345" not in blob
+
+
+def test_a_bad_run_ref_is_refused_before_anything_runs(tmp_path: Path, roster) -> None:
+    from openadapt_flow.exceptions.registry import ExceptionRegistryError
+
+    key_dir, key = roster
+    with pytest.raises(ExceptionRegistryError):
+        ExceptionWatch(
+            ExceptionRegistry(tmp_path / "registry"),
+            run_ref="../elsewhere",
+            verify=roster_verifier(key_dir, public_hex(key)),
+            app_origin=APP,
+        )
+
+
+class _Page:
+    def __init__(self, snapshot: dict) -> None:
+        self.snapshot = snapshot
+
+    def is_closed(self) -> bool:
+        return False
+
+    def evaluate(self, _js: str) -> dict:
+        return self.snapshot
+
+    def wait_for_timeout(self, _ms: int) -> None:
+        return None
+
+
+class _Cdp:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict]] = []
+
+    def send(self, method: str, params: dict | None = None) -> dict:
+        self.sent.append((method, params or {}))
+        return {}
+
+
+def _paused(path: str = "/api/encounter", rid: str = "1") -> dict:
+    return {
+        "requestId": rid,
+        "request": {"url": APP + path, "method": "POST", "headers": {}},
+        "resourceType": "Fetch",
+    }
+
+
+def _decisions(cdp: _Cdp) -> list[str]:
+    return [m for m, _ in cdp.sent if m.startswith("Fetch.")]
+
+
+def test_a_registry_it_cannot_write_refuses_every_write_and_exits_4(
+    tmp_path: Path, roster
+) -> None:
+    """The reviewer's probe: the card can't be written (an unwritable folder
+    stands in for a full disk). Nothing paused or later goes on."""
+
+    import os
+
+    from openadapt_flow.exceptions.watch import run_loop
+
+    key_dir, key = roster
+    root = tmp_path / "registry"
+    root.mkdir()
+    os.chmod(root, 0o500)
+    try:
+        watch = ExceptionWatch(
+            ExceptionRegistry(root),
+            run_ref="watch-run",
+            verify=roster_verifier(key_dir, public_hex(key)),
+            app_origin=APP,
+            events_path=tmp_path / "run" / WATCH_EVENTS,
+        )
+        cdp = _Cdp()
+        paused: list[dict] = []
+        ticks = [0]
+
+        class _Arrives(_Page):
+            """Saves the agent sends after the failure, as CDP delivers them."""
+
+            def wait_for_timeout(self, _ms: int) -> None:
+                ticks[0] += 1
+                if watch.failed is not None and ticks[0] in (3, 6):
+                    paused.append(_paused(rid=str(ticks[0])))
+
+        def stop() -> bool:
+            return ticks[0] >= 10
+
+        # The real loop: the card write fails on the first look, and the loop
+        # stays, refusing the two saves that arrive afterwards.
+        run_loop(watch, _Arrives(CODE_SCREEN), cdp, paused, poll_s=0.01, stop=stop)
+        assert watch.failed is not None and watch.lost == "watch_failed"
+        assert watch.stop_code() == 4
+        assert paused == []
+        assert _decisions(cdp) == ["Fetch.fulfillRequest", "Fetch.fulfillRequest"]
+        assert all(
+            p["responseCode"] == 409 for m, p in cdp.sent if m.startswith("Fetch.")
+        )
+        lost = [e for e in _events(tmp_path) if e["event"] == "watch_lost"]
+        assert lost and lost[0]["reason"] == "watch_failed"
+    finally:
+        os.chmod(root, 0o700)
+
+
+def test_a_request_it_cannot_classify_is_refused(tmp_path: Path, roster) -> None:
+    from openadapt_flow.exceptions.watch import _decide
+
+    watch = _watch(tmp_path, roster)
+    cdp = _Cdp()
+    assert _decide(cdp, watch, {"requestId": "1", "request": "not a request"}) is True
+    [(method, params)] = cdp.sent
+    assert method == "Fetch.fulfillRequest" and params["responseCode"] == 409
+
+
+def test_ending_with_a_card_open_is_not_a_clean_exit(tmp_path: Path, roster) -> None:
+    from openadapt_flow.exceptions.watch import run_loop
+
+    watch = _watch(tmp_path, roster)
+    run_loop(watch, _Page(CODE_SCREEN), _Cdp(), [], poll_s=0.01, max_s=0.2)
+    assert watch.card is not None and watch.lost is None
+    assert watch.stop_code() == 6
+
+
+def test_cmd_watch_turns_any_failure_into_a_documented_code(
+    tmp_path: Path, roster, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import argparse
+
+    from openadapt_flow.exceptions import cli, watch
+
+    config = tmp_path / "guard.yaml"
+    (tmp_path / "verify.yaml").write_text(
+        "schema_version: openadapt.verify/v1\n"
+        "verifier: {kind: rest, base_url: 'http://127.0.0.1:8123',"
+        " records_path: /api/records}\n"
+        "effects: [{kind: record_written, match: {note: {param: note}}}]\n"
+    )
+    config.write_text(
+        "schema_version: openadapt.agent-guard/v1\n"
+        f"app_url: {APP}/\n"
+        "verify: verify.yaml\n"
+    )
+
+    def broken(w: ExceptionWatch, **_kw: object) -> int:
+        w.observe(CODE_SCREEN)  # a card is open ...
+        raise ValueError("something the loop didn't expect")  # ... and it breaks
+
+    monkeypatch.setattr(watch, "watch_browser", broken)
+    key_dir, key = roster
+    args = argparse.Namespace(
+        approver_root=public_hex(key),
+        key_dir=str(key_dir),
+        config=str(config),
+        run_ref="watch-run",
+        run_dir=str(tmp_path / "run"),
+        registry=str(tmp_path / "registry"),
+        task_id=None,
+        deadline_s=None,
+        stall_s=None,
+        cdp="http://127.0.0.1:9",
+        page_url=None,
+        poll_s=0.5,
+        max_s=None,
+    )
+    assert cli.cmd_watch(args) == 4
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["lost"] == "watch_failed" and out["failed"] == "ValueError"
+
+
+def test_cleanup_decides_every_paused_save_when_one_is_refused(
+    tmp_path: Path, roster
+) -> None:
+    """Paused saves go on when the session detaches, so each one is decided
+    first; a decision the browser refuses doesn't stop the rest."""
+
+    from openadapt_flow.exceptions.watch import drain
+
+    class _Refuses(_Cdp):
+        def send(self, method: str, params: dict | None = None) -> dict:
+            self.sent.append((method, params or {}))
+            if (params or {}).get("requestId") == "2":
+                raise RuntimeError("Invalid InterceptionId")
+            return {}
+
+    watch = _watch(tmp_path, roster)
+    watch.observe(CODE_SCREEN)  # a card is open: every save is refused
+    cdp = _Refuses()
+    paused = [_paused(rid=r) for r in ("1", "2", "3")]
+    drain(cdp, watch, paused)
+    assert paused == []
+    assert [(m, p["requestId"]) for m, p in cdp.sent] == [
+        ("Fetch.fulfillRequest", "1"),
+        ("Fetch.fulfillRequest", "2"),
+        ("Fetch.fulfillRequest", "3"),
+    ]
+
+
+def test_an_interrupt_with_a_card_open_exits_6(
+    tmp_path: Path, roster, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import argparse
+
+    from openadapt_flow.exceptions import cli, watch
+
+    (tmp_path / "verify.yaml").write_text(
+        "schema_version: openadapt.verify/v1\n"
+        "verifier: {kind: rest, base_url: 'http://127.0.0.1:8123',"
+        " records_path: /api/records}\n"
+        "effects: [{kind: record_written, match: {note: {param: note}}}]\n"
+    )
+    config = tmp_path / "guard.yaml"
+    config.write_text(
+        "schema_version: openadapt.agent-guard/v1\n"
+        f"app_url: {APP}/\n"
+        "verify: verify.yaml\n"
+    )
+
+    def interrupted(w: ExceptionWatch, **_kw: object) -> int:
+        w.observe(CODE_SCREEN)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(watch, "watch_browser", interrupted)
+    key_dir, key = roster
+    args = argparse.Namespace(
+        approver_root=public_hex(key),
+        key_dir=str(key_dir),
+        config=str(config),
+        run_ref="watch-run",
+        run_dir=str(tmp_path / "run"),
+        registry=str(tmp_path / "registry"),
+        task_id=None,
+        deadline_s=None,
+        stall_s=None,
+        cdp="http://127.0.0.1:9",
+        page_url=None,
+        poll_s=0.5,
+        max_s=None,
+    )
+    assert cli.cmd_watch(args) == 6
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["lost"] is None and out["failed"] is None
+
+
+def test_the_lost_message_names_no_card_when_none_was_open(
+    tmp_path: Path, roster, capsys
+) -> None:
+    watch = _watch(tmp_path, roster)
+    watch.fail(OSError("disk full"))
+    err = capsys.readouterr().err
+    assert "every write is refused until the watch exits" in err
+    assert "card was open" not in err and "run was stopped" not in err

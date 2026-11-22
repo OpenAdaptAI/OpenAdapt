@@ -193,9 +193,14 @@ def test_signer_refuses_verified_when_one_of_two_bound_fields_passed() -> None:
 
 
 def test_receipt_carries_who_read_it_back() -> None:
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
     priv, _ = generate_ed25519_keypair()
     verdict = SummaryVerdict(
-        passed=True, checked_count=1, field_verdicts=(_passed("a"),)
+        passed=True,
+        checked_count=1,
+        field_verdicts=(_passed("a"),),
+        ledger_digest=subjects_digest(read_subjects((), ())),
     )
     receipt = issue_form_tx_receipt(
         run_id="r",
@@ -204,6 +209,7 @@ def test_receipt_carries_who_read_it_back() -> None:
         dossier=_dossier(a="1"),
         outcome=FormTxOutcome.VERIFIED_DONE,
         summary_verdict=verdict,
+        writes=(),
     )
     assert receipt.payload.readback_evidence == "acting_session_reread"
     assert form_tx_receipt_format(receipt) == RECEIPT_FORMAT_CURRENT
@@ -381,10 +387,14 @@ def test_digest_only_signing_cannot_issue_verified() -> None:
 
 def test_current_receipt_with_a_field_stripped_does_not_verify() -> None:
     from openadapt_flow.form_tx.receipt import receipt_readback_evidence
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
 
     priv, _ = generate_ed25519_keypair()
     verdict = SummaryVerdict(
-        passed=True, checked_count=1, field_verdicts=(_passed("a"),)
+        passed=True,
+        checked_count=1,
+        field_verdicts=(_passed("a"),),
+        ledger_digest=subjects_digest(read_subjects((), ())),
     )
     receipt = issue_form_tx_receipt(
         run_id="r",
@@ -393,6 +403,7 @@ def test_current_receipt_with_a_field_stripped_does_not_verify() -> None:
         dossier=_dossier(a="1"),
         outcome=FormTxOutcome.VERIFIED_DONE,
         summary_verdict=verdict,
+        writes=(),
     )
     wire = receipt.model_dump(mode="json")
     del wire["payload"]["readback_evidence"]
@@ -400,3 +411,38 @@ def test_current_receipt_with_a_field_stripped_does_not_verify() -> None:
     assert not verify_form_tx_receipt(stripped)
     assert receipt_readback_evidence(receipt) == "acting_session_reread"
     assert receipt_readback_evidence(stripped) == "unknown"
+
+
+def test_signer_refuses_verified_when_a_written_popup_input_has_no_verdict() -> None:
+    from openadapt_flow.form_tx.types import read_subjects, subjects_digest
+
+    priv, _ = generate_ed25519_keypair()
+    writes = [
+        FieldWriteRecord(
+            field_key="a", dossier_key="a", selector="#a", source="auto_fill"
+        ),
+        FieldWriteRecord(
+            field_key="calc.area",
+            dossier_key="calc.area",
+            selector="#area",
+            source="auto_fill",
+            in_popup_subroutine="calc",
+        ),
+    ]
+    verdict = SummaryVerdict(
+        passed=True,
+        checked_count=1,
+        field_verdicts=(_passed("a"),),
+        ledger_digest=subjects_digest(read_subjects(writes, ())),
+    )
+    with pytest.raises(ValueError, match="uncovered"):
+        issue_form_tx_receipt(
+            run_id="r",
+            signing_key=priv,
+            pack=_pack("a"),
+            dossier=_dossier(a="1"),
+            outcome=FormTxOutcome.VERIFIED_DONE,
+            summary_verdict=verdict,
+            writes=writes,
+            fields_filled_auto=2,
+        )

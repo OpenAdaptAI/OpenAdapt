@@ -1,0 +1,47 @@
+# Stripe in test mode through its REST API, checked against the Events API.
+# Not measured: no Stripe test-mode key was available to this bench. The
+# reader's handling of this shape (``data``, ``has_more``, ``starting_after``)
+# is covered by tests/test_txplan_scoped.py with recorded-shape pages only.
+# Use a test-mode restricted key (rk_test_...) and never a live key.
+schema_version: openadapt.tx/v1
+systems:
+  - name: stripe
+    kind: rest
+    base_url: https://api.stripe.com
+    auth: {header: Authorization, prefix: "Bearer ", value_env: STRIPE_TEST_KEY}
+    idempotency_header: Idempotency-Key
+    audit:
+      pattern: event_stream
+      path: /v1/events
+      params: {limit: "100"}
+      items: data
+      paging: {kind: cursor, param: starting_after, has_more: has_more}
+      fields:
+        id: id
+        at: created
+        # An event names the API request that caused it; automatic events
+        # (a scheduled invoice) name none and are outside the caller's scope.
+        actor: request.id
+        resource: data.object.id
+        action: type
+      actions:
+        create: [customer.created]
+        update: [customer.updated]
+        delete: [customer.deleted]
+      logs: [create, update, delete]
+      # The Events API names the request, not the key: every API-caused event
+      # in the account is in scope, so give the bench an account of its own.
+      actor: {any: true}
+      lag: {attempts: 20, wait_s: 1.0}
+    collections:
+      - name: customer
+        list: {path: /v1/customers}
+        read: {path: "/v1/customers/{id}"}
+        create: {method: POST, path: /v1/customers}
+        update: {method: POST, path: "/v1/customers/{id}"}
+        delete: {method: DELETE, path: "/v1/customers/{id}"}
+        scoped:
+          audit_ref: "{id}"
+          encoding: form
+          identity: [email]
+          volatile: [created, livemode, invoice_prefix, next_invoice_sequence, balance, test_clock]

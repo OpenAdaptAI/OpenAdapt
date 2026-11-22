@@ -94,13 +94,14 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt demo quickstart --break-it
+uvx --python 3.12 openadapt@latest quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
-fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
-does the same.
+fetches Python 3.12 if you need it, and `@latest` runs the newest release. With
+Python 3.10 to 3.12 already installed, `python -m pip install --upgrade openadapt`
+then `openadapt quickstart --break-it` does the same. The browser runs hidden
+and progress shows in the terminal; add `--watch` to see the browser window.
 
 ### What it shows
 
@@ -168,8 +169,32 @@ sandbox workflow that returns every outcome. To serve your own workflows, run
 `--mode production` the agent can list them but not run them.
 `openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
 and `openadapt verify effect` judges a write made by any agent or script
-against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
+against the system of record. `openadapt hooks install --agent claude-code`
+(or `codex`) checks a coding agent's writes to the databases, APIs and MCP
+servers you declare: each is pre-checked, read back and given a signed
+receipt. The hooks are advisory; see
+[HOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HOOKS.md).
+[Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
+
+### Hand results from agent to agent
+
+When one agent hands a result to another, the run's signed receipt goes with
+it, and the receiving agent verifies it against keys it pins:
+
+```bash
+openadapt handoff send result.json --run RUN_DIR --out result.handoff.json
+openadapt handoff verify result.handoff.json --keys trusted-keys.json
+```
+
+The verdict says who signed, which checks passed and which were not checked,
+and any change confirmed in the other party's own system. A valid signature
+proves who signed, not that the claim is true. Handoffs travel over MCP
+(`serve --handoffs`), HTTP and webhooks (`--post URL`), files and email
+(`--detached`), and the A2A (Agent2Agent) protocol (`openadapt agent serve
+--a2a`, with an Agent Card, after `pip install 'openadapt[a2a]'`).
+[HANDOFFS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HANDOFFS.md)
+has the details.
 
 ### Record a task by hand
 
@@ -317,6 +342,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
+- **Hands results from agent to agent with their receipts**, over MCP, HTTP, files and the A2A protocol, and verifies a handoff on arrival.
 - **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.

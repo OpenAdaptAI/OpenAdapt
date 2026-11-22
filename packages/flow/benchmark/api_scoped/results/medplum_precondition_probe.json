@@ -1,0 +1,13 @@
+{
+  "delete_wrong_version": 412,
+  "present_after_wrong_delete": true,
+  "put_read_version": 200,
+  "put_stale_version": 412,
+  "put_wrong_version": 412,
+  "read_etag_present": true,
+  "refused_requests_logged_as": [
+    "update"
+  ],
+  "server": "5.2.8-1dcfd2e",
+  "unchanged_after_wrong_put": true
+}
