@@ -1,0 +1,95 @@
+name: "Verify OpenAdapt Seal"
+description: "Offline cryptographic verification of OpenAdapt run receipts (record/run/v1) with GitHub Step Summary."
+author: "OpenAdaptAI"
+
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  receipt:
+    description: "Path to an OpenAdapt receipt JSON file (DSSE record/run/v1 envelope or openadapt.receipt-card/v1)."
+    required: true
+  public-key:
+    description: "Optional path to an Ed25519 public key PEM file or an openadapt.receipt-keys/v1 JSON registry."
+    required: false
+    default: ""
+  keys:
+    description: "Optional path to an openadapt.receipt-keys/v1 JSON pinned key registry."
+    required: false
+    default: ""
+  key-role:
+    description: "Trusted signer role assigned when public-key is a raw Ed25519 PEM file (this_computer, customer_key, openadapt_cloud, public_log, or demo)."
+    required: false
+    default: "this_computer"
+  openings:
+    description: "Optional path to a receipt.private.json openings sidecar."
+    required: false
+    default: ""
+  python-version:
+    description: "Python version used to run offline verification."
+    required: false
+    default: "3.12"
+  install-mode:
+    description: "Dependency install mode: auto (local packages/types if present, else PyPI), pypi, or skip."
+    required: false
+    default: "auto"
+
+outputs:
+  verified:
+    description: "'true' if the receipt passed offline cryptographic verification, otherwise 'false'."
+    value: ${{ steps.verify.outputs.verified }}
+  receipt-id:
+    description: "The verified run or receipt identifier, or empty on failure."
+    value: ${{ steps.verify.outputs.receipt-id }}
+  outcome:
+    description: "The recorded run outcome from the verified receipt (e.g. VERIFIED, STOPPED), or empty on failure."
+    value: ${{ steps.verify.outputs.outcome }}
+  reason:
+    description: "Empty on success, or the fail-closed refusal reason code on failure."
+    value: ${{ steps.verify.outputs.reason }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      if: inputs.install-mode != 'skip'
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install offline verifier dependencies
+      if: inputs.install-mode != 'skip'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INSTALL_MODE: ${{ inputs.install-mode }}
+      run: |
+        set -euo pipefail
+        LOCAL_TYPES="${ACTION_PATH}/../../../packages/types"
+        if [ "$INSTALL_MODE" = "auto" ] && [ -f "${LOCAL_TYPES}/pyproject.toml" ]; then
+          python -m pip install --quiet --disable-pip-version-check --no-build-isolation --no-deps -e "$LOCAL_TYPES"
+          python -c "import cryptography, pydantic" >/dev/null 2>&1 || \
+            python -m pip install --quiet --disable-pip-version-check "pydantic>=2.5" "cryptography>=42.0"
+        else
+          python -m pip install --quiet --disable-pip-version-check "openadapt-types>=0.24.1,<0.25" "cryptography>=42.0"
+        fi
+
+    - name: Verify OpenAdapt Seal offline
+      id: verify
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_RECEIPT: ${{ inputs.receipt }}
+        INPUT_PUBLIC_KEY: ${{ inputs.public-key }}
+        INPUT_KEYS: ${{ inputs.keys }}
+        INPUT_KEY_ROLE: ${{ inputs.key-role }}
+        INPUT_OPENINGS: ${{ inputs.openings }}
+      run: |
+        set -euo pipefail
+        python "${ACTION_PATH}/verify_seal.py" \
+          --receipt "${INPUT_RECEIPT}" \
+          --public-key "${INPUT_PUBLIC_KEY}" \
+          --keys "${INPUT_KEYS}" \
+          --key-role "${INPUT_KEY_ROLE}" \
+          --openings "${INPUT_OPENINGS}"
