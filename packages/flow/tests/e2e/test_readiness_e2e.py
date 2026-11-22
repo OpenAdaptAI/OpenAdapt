@@ -40,20 +40,20 @@ EVIDENCE = Path(__file__).resolve().parents[2] / "benchmark" / "readiness" / "re
 #: One task's run folder and the scorecard, for the join tests of the
 #: consumers (J1, J2); written with OPENADAPT_WRITE_EVIDENCE=1.
 SAMPLE = EVIDENCE.parent / "sample"
-SAMPLE_FILES = ("run.json", "case.json", "egress.json", "proposed_write.json", "usage.json")
 
 
 def write_sample(runs: Path, task_id: str, card_dir: Path, name: str) -> None:
-    """Copy one task's run files and the scorecard into ``sample/<name>/``."""
+    """Export one task's run files and the scorecard into ``sample/<name>/``
+    through the allowlist (synthetic run, so values are included)."""
 
     import shutil
 
+    from openadapt_flow.readiness.export import export_task
+
     target = SAMPLE / name
-    target.mkdir(parents=True, exist_ok=True)
-    for file in SAMPLE_FILES:
-        if (runs / task_id / file).is_file():
-            shutil.copyfile(runs / task_id / file, target / file)
-    shutil.copyfile(card_dir / "scorecard.json", target / "scorecard.json")
+    shutil.rmtree(target, ignore_errors=True)
+    export_task(runs / task_id, target, include_values=True,
+                extra={"scorecard.json": card_dir / "scorecard.json"})
 
 
 def _episode(i: int) -> dict[str, Any]:
@@ -103,7 +103,11 @@ def agent_main() -> int:
     plan = json.loads(Path(os.environ["READINESS_E2E_PLAN"]).read_text())[
         os.environ["OPENADAPT_TASK_ID"]
     ]
-    assert os.environ["OPENADAPT_TASK"].strip()
+    task = os.environ["OPENADAPT_TASK"]
+    # The task names its record (``readiness import`` adds it), so the agent
+    # can tell which of the listed patients to open.
+    named = [pid for pid, name in PATIENTS.items() if name in task and pid in task]
+    assert named == [plan["true_patient"]], (named, task)
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(os.environ["OPENADAPT_GUARD_CDP_URL"])
         base = os.environ["OPENADAPT_GUARD_PAGE_URL"].split("?")[0].split("#")[0]
@@ -259,7 +263,17 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             app.writes = 0
 
         plan = tmp_path / "plan.json"
-        plan.write_text(json.dumps({_episode(i)["task_id"]: _agent_plan(i) for i in range(n)}))
+        plan.write_text(json.dumps({
+            _episode(i)["task_id"]: {**_agent_plan(i), "true_patient": _episode(i)["patient"]}
+            for i in range(n)
+        }))
+        for i in range(n):
+            given = json.loads(
+                (tmp_path / "episodes" / _episode(i)["task_id"] / "inputs.json").read_text()
+            )
+            assert given["inputs"]["record_name"] == PATIENTS[_episode(i)["patient"]]
+            assert given["inputs"]["record_patient_id"] == _episode(i)["patient"]
+            assert "record_name" in given["instruction"]
         monkeypatch.setenv("READINESS_E2E_PLAN", str(plan))
         launcher = SubprocessLauncher(
             [sys.executable, str(Path(__file__).resolve())],

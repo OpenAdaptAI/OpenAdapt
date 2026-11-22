@@ -382,8 +382,7 @@ def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
     assert checked.ok
     subjects = {s["name"]: s["digest"]["sha256"] for s in checked.statement["subject"]}
     assert (
-        subjects["report.json"] == exact
-        and subjects["report.canonical"] == canonical
+        subjects["report.json"] == exact and subjects["report.canonical"] == canonical
     )
     lines = checked.statement["predicate"]["lines"]
     assert len(lines) == 1 and lines[0]["step"] == 5
@@ -406,7 +405,10 @@ def test_settled_receipt_covers_both_report_encodings(fixture, tmp_path):
     if legacy != canonical:
         with pytest.raises(ValueError, match="canonical report"):
             verified_receipt_metrics(
-                wire, pinned_signer=pin, report_jcs_sha256=legacy, outcome=checked.outcome
+                wire,
+                pinned_signer=pin,
+                report_jcs_sha256=legacy,
+                outcome=checked.outcome,
             )
     with pytest.raises(ValueError, match="outcome"):
         verified_receipt_metrics(
@@ -523,7 +525,9 @@ def test_completed_unverified_no_write_uses_actual_report_serialization(
             receipt_record, "receipt_after_run", wraps=receipt_record.receipt_after_run
         ) as sign:
             cli.main(["replay", str(tmp_path / "unused"), "--run-dir", str(tmp_path)])
-        sign.assert_called_once_with(tmp_path, require_opt_in=False, expected_report=report)
+        sign.assert_called_once_with(
+            tmp_path, require_opt_in=False, expected_report=report
+        )
     else:
         from openadapt_flow.cli_worklist_pool import _item_run
 
@@ -870,6 +874,102 @@ def test_a_receipt_names_both_report_digests(tmp_path):
     report["model_calls"] = 3
     (run / "report.json").write_text(json.dumps(report, indent=4))
     assert not verify_run_receipt(run, local_registry()).ok
+
+
+def test_transaction_receipts_become_lines(tmp_path):
+    from openadapt_flow.tx.receipt import issue_tx_receipt
+
+    run = _run(tmp_path, "VERIFIED", "tx")
+    _, tx_path = issue_tx_receipt(
+        run / "tx",
+        task_id="task-1",
+        entity_name="referral",
+        operation="create",
+        outcome="CONFIRMED",
+    )
+    assert tx_path.name == "tx-receipt.cose"
+    write_receipt_record(run)
+    result = verify_run_receipt(run, local_registry())
+    assert result.ok, result.detail
+    tx_lines = [x for x in result.statement["predicate"]["lines"] if "evidence" in x]
+    assert len(tx_lines) == 1
+    line = tx_lines[0]
+    assert line["evidence"]["kind"] == "tx_receipt"
+    assert (
+        line["evidence"]["sha256"]
+        == __import__("hashlib").sha256(tx_path.read_bytes()).hexdigest()
+    )
+    assert (line["check"], line["strength"]) == ("confirmed", "read_back")
+    assert line["step"] >= 3  # after the run's own steps
+
+
+def test_an_evidence_receipt_that_does_not_verify_is_not_promoted(tmp_path):
+    from openadapt_flow.receipt_record import evidence_lines
+    from openadapt_flow.tx.receipt import issue_tx_receipt
+
+    run = _run(tmp_path, "VERIFIED", "tx-forged")
+    _, tx_path = issue_tx_receipt(
+        run / "tx",
+        task_id="t",
+        entity_name="referral",
+        operation="create",
+        outcome="CONFIRMED",
+    )
+    assert [x["check"] for x in evidence_lines(run, 0)] == ["confirmed"]
+    # The same bytes with no signing key of their own in the run: not checked.
+    elsewhere = run / "copied" / "tx-receipt.cose"
+    elsewhere.parent.mkdir()
+    elsewhere.write_bytes(tx_path.read_bytes())
+    checks = sorted(x["check"] for x in evidence_lines(run, 0))
+    assert checks == ["confirmed", "not_checked"]
+    # Every file counts: none is cut before the caller's line limit.
+    for n in range(70):
+        extra = run / f"many-{n}" / "tx-receipt.cose"
+        extra.parent.mkdir()
+        extra.write_bytes(b"not a receipt")
+    assert len(evidence_lines(run, 0)) == 72
+
+
+def test_rewriting_an_existing_receipt_verifies_it_first(tmp_path):
+    run = _run(tmp_path, "VERIFIED", "rewrite")
+    write_receipt_record(run)
+    private = json.loads((run / "receipt.private.json").read_text())
+    opening = private["openings"]["flow_version"]
+    opening["value"] = "9.9.9"  # no longer the committed value
+    (run / "receipt.private.json").write_text(json.dumps(private))
+    from openadapt_flow.receipt_record import ReceiptRecordError
+
+    with pytest.raises(ReceiptRecordError, match="existing_unverified"):
+        write_receipt_record(run)
+
+
+def test_an_unsigned_tutorial_marker_never_opens_the_program_name(tmp_path):
+    from openadapt_flow.receipt_record import public_reveal
+
+    run = _run(tmp_path, "VERIFIED", "marker")
+    report = json.loads((run / "report.json").read_text())
+    report["governed_approval_source"] = "operator"
+    (run / "report.json").write_text(json.dumps(report))
+    (run / "run-summary.json").write_text(
+        json.dumps({"provenance": "synthetic-tutorial"})
+    )
+    assert public_reveal(run) == ["flow_version"]
+    report = json.loads((run / "report.json").read_text())
+    report["governed_approval_source"] = "openadapt-flow-tutorial"
+    (run / "report.json").write_text(json.dumps(report))
+    assert public_reveal(run) == ["flow_version", "program_name"]
+
+
+def test_the_public_card_is_written_and_verifies(tmp_path):
+    run = _run(tmp_path, "HALTED", "card")
+    write_receipt_record(run)
+    card = json.loads((run / "receipt.card.json").read_text())
+    assert card["schema"] == r.CARD_SCHEMA
+    assert set(card["openings"]) == {"flow_version"}
+    assert "MockMed" not in json.dumps(card)
+    result = r.verify_receipt(card, local_registry())
+    assert result.ok and result.outcome == "STOPPED"
+    assert _verify(str(run / "receipt.card.json")).exit_code == 0
 
 
 @pytest.mark.parametrize("status", ["pending", "approved", "continuing"])

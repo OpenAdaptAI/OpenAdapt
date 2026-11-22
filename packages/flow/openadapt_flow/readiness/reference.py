@@ -40,6 +40,15 @@ Each episode is written to ``EPISODES/<task_id>/``: ``reference_episode.json``
 (``openadapt.reference-episode/v1``, mode 0600, it holds values),
 ``inputs.json`` (0600), and ``guard_task.json`` (``openadapt.guard-task/v1``,
 intended fields by name only) so the guard runs unchanged.
+
+The candidate is told which record to work on. The record is what the guard
+checks (``expected_record``: the identity shown on the record the person
+saved, such as a name and an id); its fields are added to the candidate's
+inputs as plain fields (``record_<name>``, unless the task's inputs already
+carry that key) and the instruction ends with one line naming them, so an
+app that lists several records can be worked without guessing. A task can
+turn this off with ``"record_in_inputs": false``. The values stay plain
+input fields so a proxy that pseudonymizes text sees them like any other.
 """
 
 from __future__ import annotations
@@ -414,7 +423,7 @@ def build_episode(
     ]
     if not intended:
         raise ReferenceRefused("no_fields", "the save carries no field to compare")
-    inputs = {"instruction": str(raw.get("instruction") or ""), "inputs": dict(raw.get("inputs") or {})}
+    inputs = task_inputs(raw, expected)
     episode = {
         "schema": REFERENCE_SCHEMA,
         "task_id": raw["task_id"],
@@ -430,6 +439,34 @@ def build_episode(
         "intended_fields": {name: None for name in intended},
     }
     return episode, inputs, guard_task
+
+
+RECORD_PREFIX = "record_"
+
+
+def task_inputs(raw: Mapping[str, Any], expected: Mapping[str, Any]) -> dict[str, Any]:
+    """The instruction and inputs the candidate gets, with the target record
+    named (see the module docstring)."""
+
+    instruction = str(raw.get("instruction") or "").strip()
+    given = dict(raw.get("inputs") or {})
+    if raw.get("record_in_inputs", True) is False or not expected:
+        return {"instruction": instruction, "inputs": given}
+    keys, added = [], []
+    for name, value in expected.items():
+        key = f"{RECORD_PREFIX}{name}"
+        if key not in given:
+            given[key] = value
+            added.append(key)
+        keys.append(key)
+    line = "Work on the record identified by the inputs " + ", ".join(keys) + "."
+    return {
+        "instruction": (instruction + "\n\n" + line).strip(),
+        "inputs": given,
+        # Added here, not the person's task inputs (a program gets no
+        # parameter for them).
+        "record_keys": added,
+    }
 
 
 def import_episodes(

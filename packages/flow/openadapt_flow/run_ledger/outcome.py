@@ -278,11 +278,13 @@ READINESS_CASE_REASON: dict[str, str] = {
 #: after the shadow guard counted the saves that reached the app, so with
 #: ``landed_writes == 0`` they are failures with evidence that nothing was
 #: written. ``AGENT_ERROR`` is the default before the guard counted anything:
-#: its ``landed_writes: 0`` is not evidence, so it is UNKNOWN.
+#: its ``landed_writes: 0`` is not evidence, so it is UNKNOWN. Every reason
+#: for a shadow run is a ``shadow_*`` one (or ``egress_refused``), so Cloud
+#: never counts a readiness trial as a production failure.
 READINESS_RUN_NO_WRITE_REASON: dict[str, str] = {
-    "TIMEOUT": "timed_out_no_write",
-    "NO_WRITE_HELD": "agent_gave_up",
-    "AGENT_ERROR": "write_unconfirmed",
+    "TIMEOUT": "shadow_timed_out",
+    "NO_WRITE_HELD": "shadow_no_proposal",
+    "AGENT_ERROR": "shadow_agent_error",
 }
 
 
@@ -325,9 +327,9 @@ def shadow_reason(
         and run_status in READINESS_RUN_NO_WRITE_REASON
     ):
         return READINESS_RUN_NO_WRITE_REASON[str(run_status)]
-    if case_status is None:
+    if case_status is None or case_status not in READINESS_CASE_REASON:
         return "shadow_not_compared"
-    return outcome_reason(READINESS_CASE_REASON, case_status)
+    return READINESS_CASE_REASON[case_status]
 
 
 #: P7 fallback ``status`` (``wrap/fallback.py``) on ``path: agent_fallback``.

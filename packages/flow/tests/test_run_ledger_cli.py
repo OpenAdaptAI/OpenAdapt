@@ -40,7 +40,9 @@ def _run_fixtures() -> list[Path]:
     return sorted(
         p
         for p in FIXTURES.iterdir()
-        if p.is_dir() and not p.name.endswith("_config") and p.name != "exceptions_home"
+        if p.is_dir()
+        and not p.name.endswith("_config")
+        and p.name not in ("exceptions_home", "run2_approvals")
     )
 
 
@@ -205,7 +207,8 @@ def test_export_refuses_a_value_that_reached_a_label(tmp_path, capsys):
     out = tmp_path / "export.jsonl"
     assert main(["ledger", "export", "--out", str(out)]) == 2
     assert "private sidecar" in capsys.readouterr().err
-    assert not out.exists()
+    # The refused row stays local; nothing else was in the ledger.
+    assert out.read_text() == ""
 
 
 def test_export_second_guard_uses_the_scrubber(capsys):

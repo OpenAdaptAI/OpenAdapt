@@ -249,6 +249,74 @@ def render_form(r: Record, size: tuple[int, int] = (900, 360)) -> bytes:
     return out.getvalue()
 
 
+REASONS = [
+    "Chest pain follow-up",
+    "Diabetes review",
+    "Knee x-ray results",
+    "Medication refill",
+    "Blood pressure check",
+    "Asthma action plan",
+]
+#: Words on the work-list screen that are not personal data.
+UI_WORDS = [
+    "MockMed",
+    "Home",
+    "Referrals",
+    "Encounters",
+    "Settings",
+    "Referral",
+    "Tasks",
+    "Patient",
+    "Reason",
+    "Priority",
+    "Action",
+    "Open",
+    "High",
+    "Routine",
+]
+
+
+def ui_screen(r: Record, reason: str, size: tuple[int, int] = (1100, 420)) -> bytes:
+    """A work-list screen: app name, navigation, headers, one patient row
+    with a reason and a priority, and an Open button."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", size, (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    try:
+        big = ImageFont.truetype("Arial.ttf", 30)
+        font = ImageFont.truetype("Arial.ttf", 22)
+    except OSError:
+        big = ImageFont.load_default(size=30)
+        font = ImageFont.load_default(size=22)
+    draw.rectangle((0, 0, size[0], 56), fill=(30, 60, 110))
+    draw.text((20, 12), "MockMed", fill=(255, 255, 255), font=big)
+    for i, item in enumerate(("Home", "Referrals", "Encounters", "Settings")):
+        draw.text((260 + i * 150, 18), item, fill=(255, 255, 255), font=font)
+    draw.text((20, 80), "Referral Tasks", fill=(0, 0, 0), font=big)
+    cols = (20, 330, 700, 900)
+    for x, head in zip(cols, ("Patient", "Reason", "Priority", "Action")):
+        draw.text((x, 150), head, fill=(80, 80, 80), font=font)
+    draw.text((cols[0], 210), r.name, fill=(0, 0, 0), font=font)
+    draw.text((cols[1], 210), reason, fill=(0, 0, 0), font=font)
+    draw.text((cols[2], 210), "High", fill=(0, 0, 0), font=font)
+    draw.rectangle((cols[3] - 6, 204, cols[3] + 70, 240), outline=(30, 60, 110))
+    draw.text((cols[3], 210), "Open", fill=(30, 60, 110), font=font)
+    draw.text((cols[0], 280), f"MRN {r.mrn}", fill=(0, 0, 0), font=font)
+    draw.text((cols[2], 280), "Routine", fill=(0, 0, 0), font=font)
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def ui_instruction(r: Record, reason: str) -> str:
+    """A task instruction naming the patient, as a buyer's agent gets it."""
+    return (
+        f"Open the referral for {r.name} (MRN {r.mrn}) and add a triage note: "
+        f"{reason}. Then go back to Referral Tasks."
+    )
+
+
 def build(seed: int, count: int) -> list[dict[str, Any]]:
     rng = random.Random(seed)
     out = []

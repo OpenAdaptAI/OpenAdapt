@@ -71,11 +71,35 @@ __all__ = [
 RUN_SCHEMA = "openadapt.readiness-run/v1"
 TASK_RUN_SCHEMA = "openadapt.readiness-task-run/v1"
 MODES = ("sandbox", "run-ahead")
+#: The claim a clean run makes (under 200 characters: the Cloud dashboard's
+#: limit). A run that failed its scope gets :func:`scope_failure` instead.
 SCOPE_STATEMENT = (
     "No non-GET request to the app origin left any tab, popup, browser "
-    "context or worker, except listed sign-in requests. Not covered: GET "
-    "requests with side effects, WebSocket writes, writes before attach."
+    "context or worker, except listed sign-in requests. Not covered: GET side "
+    "effects, WebSocket writes, writes before attach."
 )
+SCOPE_STATEMENT_MAX = 200
+
+
+def scope_failure(landed: int, failed_scope: int, extra_target: int, egress: int,
+                  total: int) -> str:
+    """What failed, in place of the claim (under 200 characters)."""
+
+    parts = []
+    if landed:
+        parts.append(f"{landed} write(s) reached the app")
+    if extra_target:
+        parts.append(f"{extra_target} case(s) had a tab, popup, context or worker the hold couldn't vouch for")
+    if egress:
+        parts.append(f"{egress} case(s) refused for model traffic outside the proxy")
+    text = (
+        f"Scope failed in {failed_scope} of {total} case(s): "
+        + ("; ".join(parts) or "see the cases")
+        + ". Not a clean shadow run."
+    )
+    return text if len(text) <= SCOPE_STATEMENT_MAX else (
+        f"Scope failed in {failed_scope} of {total} case(s). Not a clean shadow run."
+    )
 POLL_MS = 25
 SCREEN_EVERY_S = 0.1
 
@@ -291,6 +315,7 @@ def run_one(
             cdp_url=f"http://127.0.0.1:{port}",
             page_url=cfg.app_url,
             run_dir=run_dir,
+            record_keys=tuple(inputs.get("record_keys") or ()),
         )
         started = time.monotonic()
         agent = launcher.start(job)

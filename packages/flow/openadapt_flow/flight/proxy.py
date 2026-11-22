@@ -299,6 +299,7 @@ class FlightProxy:
         timeout_s: float = 600.0,
         ssl_context: Optional[ssl.SSLContext] = None,
         ocr_words: Any = None,
+        pseudonymize: bool = True,
     ) -> None:
         if scrub and scrubber is None:
             raise ValueError("scrubbing is on but no scrubber was given")
@@ -307,7 +308,19 @@ class FlightProxy:
             name: check_upstream(url)
             for name, url in {**DEFAULT_UPSTREAMS, **dict(upstreams or {})}.items()
         }
-        self._scrub = Scrub(scrubber, ocr_words=ocr_words) if scrub else None
+        from openadapt_flow.flight.pseudonym import FILE_NAME, Placeholders, Pseudonyms
+
+        #: The run's token map (real values; local only, never forwarded).
+        self.pseudonyms: Any = (
+            Pseudonyms(timeline.run_dir / FILE_NAME)
+            if scrub and pseudonymize
+            else Placeholders()
+        )
+        self._scrub = (
+            Scrub(scrubber, ocr_words=ocr_words, pseudonyms=self.pseudonyms)
+            if scrub
+            else None
+        )
         #: CONNECTs to the egress trap (a direct call the agent tried).
         self.trapped: list[str] = []
         self.max_cost_usd = max_cost_usd
@@ -669,6 +682,17 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(429, _error_body(refusal))
                 return
             forward = owner.prepare(provider, body, headers)
+            from openadapt_flow.flight.pseudonym import stream_refusal
+
+            try:
+                parsed_forward = json.loads(forward) if forward else None
+            except ValueError:
+                parsed_forward = None
+            why = stream_refusal(
+                rest.split("?", 1)[0], parsed_forward, owner.pseudonyms
+            )
+            if why:
+                raise ScrubRefused(why)
         except ScrubRefused as exc:
             message = f"not sent: {exc}. Nothing left this machine."
             owner.timeline.refused_request(
@@ -744,6 +768,33 @@ class _Handler(BaseHTTPRequestHandler):
                 "",
             )
             streamed = "text/event-stream" in content_type
+            tokens = bool(getattr(owner.pseudonyms, "active", False)) and bool(
+                len(owner.pseudonyms)
+            )
+            if not streamed:
+                data = response.read()
+                if not encoded and "json" in content_type:
+                    try:
+                        meter.json_body(json.loads(data))
+                    except ValueError:
+                        pass
+                if tokens and response.status < 400:
+                    from openadapt_flow.flight.pseudonym import detokenize_response
+
+                    try:
+                        if encoded:
+                            raise ValueError("compressed")
+                        data = detokenize_response(data, owner.pseudonyms)
+                    except ValueError:
+                        reason = (
+                            "the provider's response could not be de-tokenized, so "
+                            "it was not passed on"
+                        )
+                        owner.timeline.refused_request(
+                            provider=provider, status=502, reason=reason
+                        )
+                        self._send(502, _error_body(reason))
+                        return
             self.send_response(response.status)
             for key, value in response.getheaders():
                 if key.lower() in _HOP:
@@ -751,30 +802,42 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header(key, value)
             self.send_header("Connection", "close")
             if streamed:
+                from openadapt_flow.flight.pseudonym import StreamDetokenizer
+
+                rewriter = StreamDetokenizer(owner.pseudonyms) if tokens else None
                 self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
+
+                def emit(part: bytes) -> None:
+                    if part:
+                        self.wfile.write(
+                            f"{len(part):x}\r\n".encode("ascii") + part + b"\r\n"
+                        )
+                        self.wfile.flush()
+
                 while True:
                     chunk = response.read1(65536)
                     if not chunk:
                         break
                     if not encoded:
                         meter.feed(chunk)
-                    self.wfile.write(
-                        f"{len(chunk):x}\r\n".encode("ascii") + chunk + b"\r\n"
-                    )
-                    self.wfile.flush()
+                    if rewriter is None:
+                        emit(chunk)
+                    elif encoded:
+                        emit(rewriter._fail("the stream is compressed"))
+                        break
+                    else:
+                        emit(rewriter.feed(chunk))
+                        if rewriter.failed:
+                            break
+                if rewriter is not None and not rewriter.failed:
+                    emit(rewriter.close())
                 self.wfile.write(b"0\r\n\r\n")
                 meter.close()
             else:
-                data = response.read()
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
-                if not encoded and "json" in content_type:
-                    try:
-                        meter.json_body(json.loads(data))
-                    except ValueError:
-                        pass
             self.close_connection = True
         except (OSError, http.client.HTTPException):
             self.close_connection = True

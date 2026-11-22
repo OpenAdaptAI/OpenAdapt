@@ -352,3 +352,121 @@ def test_a_negative_estimate_reads_minus_dollars() -> None:
     assert card["savings"]["est_value_usd"] == -0.75
     page = render_html(card, doc)
     assert "-$0.75 (estimate)" in page and "$-0.75" not in page
+
+
+# -- round 3: the scope line and the target record --------------------------------------
+
+
+def test_a_failed_scope_card_says_what_failed_not_the_claim() -> None:
+    from openadapt_flow.readiness.runner import SCOPE_STATEMENT, SCOPE_STATEMENT_MAX
+
+    assert len(SCOPE_STATEMENT) <= SCOPE_STATEMENT_MAX
+    clean = compare_case(_ref(type="Triage"), _run(), _proposed(type="Triage"),
+                         before_screen=SCREEN, held=[_held(0)])
+    extra = compare_case(_ref(type="Triage"), _run(extra_target_writes=1),
+                         _proposed(type="Triage"), before_screen=SCREEN, held=[_held(0)])
+    landed = compare_case(_ref(type="Triage"), _run(landed_writes=1),
+                          _proposed(type="Triage"), before_screen=SCREEN)
+    assert build_scorecard({"cases": [clean]})["scope_statement"] == SCOPE_STATEMENT
+    doc = {"cases": [clean, extra, landed]}
+    card = build_scorecard(doc)
+    statement = card["scope_statement"]
+    assert card["scope_ok"] is False
+    assert statement != SCOPE_STATEMENT and "left any tab" not in statement
+    assert statement.startswith("Scope failed in 2 of 3 case(s)")
+    assert "1 write(s) reached the app" in statement and "couldn't vouch" in statement
+    assert len(statement) <= SCOPE_STATEMENT_MAX
+    page = render_html(card, doc)
+    assert "left any tab" not in page and statement.replace("'", "&#x27;") in page
+    many = build_scorecard({"cases": [landed] * 30 + [extra] * 30})
+    assert len(many["scope_statement"]) <= SCOPE_STATEMENT_MAX
+
+
+def test_import_names_the_target_record_in_the_inputs() -> None:
+    from openadapt_flow.readiness.reference import task_inputs
+
+    raw = {"instruction": "Add the note and save.", "inputs": {"note": "n"}}
+    got = task_inputs(raw, {"patient_id": "p1", "name": "Jane Sample"})
+    assert got["inputs"] == {"note": "n", "record_patient_id": "p1",
+                             "record_name": "Jane Sample"}
+    assert got["instruction"].startswith("Add the note and save.")
+    assert got["instruction"].endswith(
+        "Work on the record identified by the inputs record_patient_id, record_name.")
+    assert got["record_keys"] == ["record_patient_id", "record_name"]
+    # The person's own input of that name wins; it is not a program parameter to drop.
+    own = task_inputs({**raw, "inputs": {"record_name": "Jane S."}}, {"name": "Jane Sample"})
+    assert own["inputs"] == {"record_name": "Jane S."} and own["record_keys"] == []
+    off = task_inputs({**raw, "record_in_inputs": False}, {"name": "Jane Sample"})
+    assert off == {"instruction": "Add the note and save.", "inputs": {"note": "n"}}
+
+
+def test_a_program_gets_no_parameter_for_the_record_inputs(tmp_path: Path) -> None:
+    from openadapt_flow.readiness.launcher import LaunchJob, ProgramLauncher
+
+    job = LaunchJob(task_id="t-00000001", instruction="x",
+                    inputs={"note": "n", "record_name": "Jane Sample"},
+                    cdp_url="http://127.0.0.1:9", page_url="http://127.0.0.1/",
+                    run_dir=tmp_path, record_keys=("record_name",))
+    argv = ProgramLauncher(tmp_path / "bundle", egress=None).argv(job)
+    assert "note=n" in argv and not any("Jane" in a for a in argv)
+
+
+# -- round 4: nothing outside the allowlist leaves the run folder -------------------------
+
+PLANTED = "Zyxwv Qtest"
+SAMPLES = Path(__file__).resolve().parents[1] / "benchmark" / "readiness"
+
+
+def test_export_copies_only_the_allowlist(tmp_path: Path) -> None:
+    from openadapt_flow.readiness.export import export_task
+
+    runs = tmp_path / "runs"
+    task = runs / "case-0001"
+    (task / "egress").mkdir(parents=True)
+    (task / "egress" / "pseudonyms.json").write_text(json.dumps({"[PERSON_1]": PLANTED}))
+    (task / "pseudonyms.json").write_text(json.dumps({"[PERSON_1]": PLANTED}))
+    (task / "stray.txt").write_text(PLANTED)
+    (task / "agent.log").write_text(PLANTED)
+    (task / "before_screen.txt").write_text(PLANTED)
+    (task / "usage.json").write_text(json.dumps({"calls": 1, "note": PLANTED}))
+    run = _run(model_cost_usd=0.0, model_cost_source="metered",
+               usage={"calls": 1, "cost_usd": 0.0, "extra": PLANTED})
+    (task / "run.json").write_text(json.dumps({"schema": "openadapt.readiness-task-run/v1",
+                                               "task_id": "case-0001", **run}))
+    (task / "egress.json").write_text(json.dumps(
+        {"mode": "scrubbed", "enforced": True, "model_calls": 1, "cost_usd": 0.0,
+         "cost_source": "metered", "refused_requests": 0}))
+    case = compare_case(_ref(type="Triage"), run, _proposed(type="Triage"),
+                        before_screen=SCREEN, held=[_held(0)])
+    doc = {"cases": [case]}
+    write_case_files(doc, runs)
+    card_dir = tmp_path / "card"
+    card_dir.mkdir()
+    (card_dir / "scorecard.json").write_text(json.dumps(build_scorecard(doc)))
+    out = tmp_path / "export"
+    result = export_task(task, out, include_values=True,
+                         extra={"scorecard.json": card_dir / "scorecard.json"})
+    assert sorted(result["copied"]) == ["case.json", "egress.json", "run.json",
+                                        "scorecard.json"]
+    left = " ".join(result["left"])
+    for name in ("egress", "pseudonyms.json", "stray.txt", "agent.log",
+                 "before_screen.txt", "usage.json"):
+        assert name in left, (name, left)
+    for path in out.rglob("*"):
+        assert PLANTED not in path.read_text(), path
+    assert PLANTED not in json.dumps(doc)
+    # Without values, case files stay behind too.
+    bare = export_task(task, tmp_path / "bare")
+    assert "case.json" not in bare["copied"]
+
+
+def test_committed_samples_hold_no_patient_names_or_pseudonym_maps() -> None:
+    from tests.e2e.test_readiness_e2e import PATIENTS
+
+    files = [p for p in SAMPLES.rglob("*.json")]
+    assert files
+    for path in files:
+        text = path.read_text()
+        assert "pseudonyms" not in path.name, path
+        for name in [*PATIENTS.values(), PLANTED]:
+            assert name not in text, (path, name)

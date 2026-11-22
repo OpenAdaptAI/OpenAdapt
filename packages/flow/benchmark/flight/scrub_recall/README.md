@@ -25,30 +25,62 @@ tesseract's reading of the scrubbed image; only fields tesseract reads in
 the original image count.
 
 ```bash
-python measure.py --seed 7 --count 50 --out results/2026-11-21-seed7.json
+python measure.py --seed 7 --count 50 --out results/2026-11-22-seed7.json
 ```
 
-## Result (2026-11-21, seed 7, 50 records, 250 fields per path)
+## Result (2026-11-22, seed 7, 50 records, 250 fields per path)
+
+`results/2026-11-22-seed7.json`. The flight scrubber here replaces values
+with run tokens (`[PERSON_1]`), and each measurement uses a fresh token map,
+so a name found in one text doesn't help find it in another.
 
 | | Tool result | Message text | Long message | Image |
 |---|---|---|---|---|
 | Presidio alone | 196/250 (78.4%) | 196/250 (78.4%) | 193/250 (77.2%) | 168/249 (67.5%) |
-| Flight scrubber | 246/250 (98.4%) | 245/250 (98.0%) | 244/250 (97.6%) | 245/249 (98.4%) |
+| Flight scrubber | 245/250 (98.0%) | 244/250 (97.6%) | 244/250 (97.6%) | 242/249 (97.2%) |
 
-Every miss of the flight scrubber is a name: 4, 5 and 6 of 50 in the three
-text paths, 4 of 50 in images. Dates, record numbers, phones and addresses:
+Every miss of the flight scrubber is a name: 5, 6 and 6 of 50 in the three
+text paths, 7 of 50 in images. Dates, record numbers, phones and addresses:
 no misses. One phone in one image was unreadable to tesseract before
-scrubbing and is not counted. A name in a JSON text sent as message text
-can be missed when JSON escapes it (`Gr\u00fcnewald`).
+scrubbing and is not counted.
 
-History: the first measurement had only the tool-result and image paths
-(98.4% each). A readiness smoke run then showed Presidio missing a name in
-a long prompt that it found in the same sentence alone, so the scrubber now
-also runs NER on each line, sentence and quoted string. The long-message and
-message-text paths were added with that change. The tool-result number fell
-to 97.6% with the first version of the change (pieces before the whole
-string); running the whole string first brought it back to 98.4%. That
-ordering was chosen after seeing seed 7.
+## Over-redaction (precision)
+
+The first 20 records are also drawn on a work-list screenshot (app name,
+four navigation items, a "Referral Tasks" heading, column headers, the
+patient's row with a referral reason, a priority and an Open button, and
+the record number), and written into a task instruction ("Open the referral
+for <name> (MRN <number>) and add a triage note: <reason>. Then go back to
+Referral Tasks."). Counted: the non-personal words tesseract reads on the
+original screen, and how many it still reads after scrubbing; the
+instruction's non-personal words, and how many are kept.
+
+| | Screen words kept | Instruction words kept | Screen PHI hidden | Instruction PHI hidden |
+|---|---|---|---|---|
+| Presidio alone | 103/333 (30.9%) | 334/375 (89.1%) | 21/40 | 32/40 |
+| Flight scrubber | 310/333 (93.1%) | 354/375 (94.4%) | 38/40 | 37/40 |
+
+The flight scrubber loses the app name "MockMed" on all 20 screens
+(Presidio reads it as a person) and "Knee" on 3. Presidio's image
+redaction, as the proxy used it first, blacks out the navigation, the
+heading and every column header.
+
+## History
+
+- 2026-11-21, first run: tool result and image only, with bare
+  placeholders: 98.4% and 98.4%.
+- 2026-11-21, after a readiness smoke run showed Presidio missing a name in
+  a long prompt: NER also on each line, sentence and quoted string; message
+  and long-message paths added (98.4 / 98.0 / 97.6%; image 98.4%). The
+  order (whole string first) was chosen after seeing seed 7.
+- 2026-11-22, run tokens and less over-redaction: ORGANIZATION and NRP hits
+  are no longer redacted unless NER asked about the words alone names an
+  identifier, and screenshots are no longer passed through Presidio's
+  image redaction (each OCR cell goes through the text detection instead).
+  Recall fell by 1 to 3 fields per path; words kept on screen rose from
+  30.9% to 93.1%. The re-check of organisation hits was added after seeing
+  seed 7's instruction misses (it hid 2 more names there and changed no
+  corpus number).
 
 What this does and doesn't show:
 
@@ -62,6 +94,6 @@ What this does and doesn't show:
 - Names are the weak point: an unusual name the spaCy model doesn't tag,
   with no label next to it, gets through.
 - Faces, handwriting and text tesseract can't read are not covered.
-- It measures what is hidden, not what the agent can still do. The agent
-  can't read a patient name it must check; task success with scrubbing on
-  has not been measured.
+- Task success with scrubbing on has not been measured. With run tokens the
+  agent can match a name between its task and the screen and type it, but
+  it can't read the name itself.

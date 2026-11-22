@@ -204,7 +204,8 @@ def test_anthropic_sdk_call_is_scrubbed_metered_and_priced(tmp_path, provider):
     image = Image.open(io.BytesIO(base64.b64decode(source["data"])))
     assert source["media_type"] == "image/png"
     assert image.size == (320, 120)
-    assert image.getextrema() == ((0, 0), (0, 0), (0, 0))  # the scrubbed frame
+    # What is painted over is covered by test_flight_phi_payload (real OCR);
+    # this fixture's OCR reads nothing.
 
     summary = proxy.timeline.finish()
     assert validate_flight(summary) == []

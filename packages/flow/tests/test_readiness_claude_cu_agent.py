@@ -119,3 +119,64 @@ def test_the_shared_leaderboard_ledger_is_not_touched(upstream: FakeProvider, tm
     upstream.anthropic_turns = [[{"type": "text", "text": "RESULT: NOT DONE stub"}]]
     _agent().run_task("x", FakeScreen())
     assert not (tmp_path / "spend.json").exists()
+
+
+def _png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 48), "white").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_the_loop_works_with_run_tokens_through_the_flight_proxy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flight proxy (real scrubber, pseudonyms on) between the loop and a
+    stub upstream: the upstream sees ``[PERSON_1]`` for the name in the task,
+    answers with a ``type`` of ``[PERSON_1]``, and the loop types the real
+    name, because the proxy de-tokenizes tool inputs on the way back."""
+
+    from openadapt_flow.flight.egress import ScrubbedEgress
+    from openadapt_flow.flight.scrub import ScrubberUnavailable, require_scrubber
+
+    try:
+        scrubber = require_scrubber()
+    except ScrubberUnavailable as exc:
+        pytest.skip(f"the scrubber can't run here: {exc}")
+    fake = FakeProvider(model="claude-sonnet-5-5").start()
+    typed: list[str] = []
+
+    class TypingScreen(FakeScreen):
+        def screenshot(self) -> bytes:
+            return _png()
+
+        def type(self, text: str) -> None:
+            typed.append(text)
+
+    fake.anthropic_turns = [
+        [{"type": "tool_use", "id": "toolu_1", "name": "computer",
+          "input": {"action": "type", "text": "[PERSON_1]"}}],
+        [{"type": "text", "text": "RESULT: DONE"}],
+    ]
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
+    run_dir = tmp_path / "task-0001"
+    try:
+        with ScrubbedEgress(run_dir, spend_cap_usd=1.0, allow_unenforced=True,
+                            use_block=False, upstreams={"anthropic": fake.url},
+                            scrubber=scrubber) as egress:
+            monkeypatch.setenv("ANTHROPIC_BASE_URL", egress.env["ANTHROPIC_BASE_URL"])
+            usage = _agent().run_task(
+                "Open the chart of Jane Sample and type the patient's name in the note.",
+                TypingScreen(),
+                usage_path=run_dir / "usage.json",
+            )
+    finally:
+        fake.stop()
+    sent = fake.received_bytes()
+    assert b"[PERSON_1]" in sent and b"Jane Sample" not in sent and b"Jane" not in sent
+    assert typed == ["Jane Sample"], typed
+    assert usage["calls"] == 2 and usage["final_line"] == "RESULT: DONE"
+    assert (run_dir / "egress" / "pseudonyms.json").is_file()  # local only

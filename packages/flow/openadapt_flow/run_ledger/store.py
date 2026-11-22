@@ -37,7 +37,7 @@ import secrets
 import tempfile
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -209,22 +209,58 @@ def _human(collected: Collected) -> RunLedgerHumanV1:
 def _times(
     collected: Collected,
 ) -> tuple[Optional[str], Optional[str], Optional[float]]:
+    """``started_at``, ``ended_at`` and ``duration_s``.
+
+    A source that keeps the run's own start and end (wrap, compiled runs,
+    flight, compile-agent) wins. Otherwise the run is bounded by the
+    wall-clock moments its files record (an approval asked and answered, a
+    shadow hold, a read-back issued, an exception card): ``ended_at`` is the
+    latest one, and ``started_at`` is ``ended_at`` minus the run's own
+    duration, or the earliest moment if that is earlier. No moment at all:
+    both stay ``null``. ``duration_s`` is a source's own measure, never a
+    span of moments.
+    """
+
     starts = [c.started_at for c in collected.contributions if c.started_at]
     ends = [c.ended_at for c in collected.contributions if c.ended_at]
     started = min(starts, key=_parse) if starts else None
     ended = max(ends, key=_parse) if ends else None
     if started is not None and ended is not None and _parse(ended) < _parse(started):
         ended = None
+    durations = [
+        c.duration_s for c in collected.contributions if c.duration_s is not None
+    ]
     if started is not None and ended is not None:
         duration: Optional[float] = round(
             (_parse(ended) - _parse(started)).total_seconds(), 3
         )
-    else:
-        durations = [
-            c.duration_s for c in collected.contributions if c.duration_s is not None
-        ]
-        duration = durations[0] if durations else None
+        return started, ended, duration
+    duration = durations[0] if durations else None
+    moments = [m for c in collected.contributions for m in c.moments]
+    for contribution in collected.contributions:
+        for interval in contribution.intervals:
+            moments += [m for m in (interval.opened_at, interval.decided_at) if m]
+    moments += [m for m in (started, ended) if m]
+    if not moments:
+        return started, ended, duration
+    times = [_parse(m) for m in moments]
+    last = max(times)
+    first = min(times)
+    if started is None:
+        begin = last - timedelta(seconds=duration) if duration is not None else first
+        started_dt = min(begin, first)
+        started = _iso(started_dt)
+    if ended is None:
+        ended = _iso(last)
     return started, ended, duration
+
+
+def _iso(moment: datetime) -> str:
+    return (
+        moment.astimezone(timezone.utc)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def _first(values: list[Optional[str]]) -> Optional[str]:
@@ -456,12 +492,14 @@ class LedgerStore:
         task_id: Optional[str] = None,
         run_ref: Optional[str] = None,
         config: tuple[Path | str, ...] = (),
+        approvals: Optional[Path | str] = None,
     ) -> AddResult:
         run = Path(run)
         collected = collect(
             run,
             exceptions=self.exceptions_dir(run_ref),
             config=tuple(Path(c) for c in config),
+            approvals=Path(approvals) if approvals is not None else None,
         )
         row, sidecar, digest = build_row(
             run, task_type=task_type, task_id=task_id, collected=collected

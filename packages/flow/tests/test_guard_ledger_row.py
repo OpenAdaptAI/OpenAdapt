@@ -340,7 +340,9 @@ def test_a_declined_approval_is_escalated(sor, tmp_path: Path, approver) -> None
     assert row["verdict"] == "ESCALATED"
     assert row["guard_verdict"] is None
     assert row["verdict_reason"] == "person_declined"
-    assert row["approver_kind"] == "none"
+    # A person signed the decline: the row says so (it said "none" before).
+    assert row["approver_kind"] == "person"
+    assert g._approver is not None and g._approver["id"] == "front-desk"
     assert row["approval_opened_at"] == g._request.created_at
     assert row["approval_decided_at"] is not None
     assert not (tmp_path / DIFF_FILENAME).exists()
@@ -424,6 +426,7 @@ def test_a_decline_from_the_phone_card_carries_a_reason(
     assert [b["code"] for b in guard.summary.blocked] == ["declined"]
     row = json.loads((tmp_path / ROW_FILENAME).read_text())
     assert (row["verdict"], row["verdict_reason"]) == ("ESCALATED", "person_declined")
+    assert row["approver_kind"] == "person"
 
 
 def test_an_observe_only_verified_save_is_verified_in_the_row(

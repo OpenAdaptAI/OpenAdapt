@@ -75,6 +75,9 @@ class LaunchJob:
     cdp_url: str
     page_url: str
     run_dir: Path
+    #: Inputs added by ``readiness import`` to name the record (not program
+    #: parameters).
+    record_keys: tuple[str, ...] = ()
 
     @property
     def task_text(self) -> str:
@@ -364,6 +367,8 @@ class ProgramLauncher:
             str(job.run_dir / "program-run"),
         ]
         for key, value in sorted(job.inputs.items()):
+            if key in job.record_keys:
+                continue
             argv += ["--param", f"{key}={value}"]
         return argv
 

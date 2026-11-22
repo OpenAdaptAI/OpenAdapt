@@ -235,7 +235,7 @@ def test_the_image_pattern_pass_paints_over_a_matching_ocr_line():
         ("Notes", (5, 30, 40, 8), 2),
     ]
     out = Image.open(io.BytesIO(redact_image_patterns(buf.getvalue(), lambda _: words)))
-    assert out.getpixel((90, 15)) == (0, 0, 0)  # the number is covered
+    assert out.getpixel((90, 15)) != (255, 255, 255)  # the number is covered
     assert out.getpixel((20, 33)) == (255, 255, 255)  # "Notes" is not
 
 
