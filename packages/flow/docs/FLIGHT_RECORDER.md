@@ -161,6 +161,24 @@ Two more layers catch what those shapes miss:
   with at least 20% upper and 20% lower case, which is what base64 looks
   like and prose, numbers, hex and URLs don't. A JWT or any other opaque
   token that long refuses the request too; nothing is sent.
+- The same backstop refuses a 512-character stretch that is mostly one or
+  two base64 letters ("////", "AAAA"): an uncompressed white page as BMP or
+  TIFF. Rules and table borders made of "-", "_" or "=" don't count.
+- Image signatures are searched for in every string's base64 letters, JSON
+  escapes decoded and every other character dropped, at all three
+  alignments (PNG, JPEG, GIF, BMP, TIFF, WEBP), and again in all of the
+  request's strings joined together (an image split across text blocks or
+  a JSON array of chunks). An image the layers above scrubbed in place is
+  taken out first; any other signature refuses the request.
+
+### What the scrubber does not cover
+
+The scrubber covers images and text in ordinary agent traffic, in standard
+encodings: base64 in any wrapping, and JSON escapes. An agent that
+deliberately re-encodes data (hex, percent-encoding, another base, a custom
+scheme, or anything else) can get it past the scrubber. A hostile agent is
+out of scope for the scrubber; the egress block and your choice of model
+provider are the controls there.
 
 Each image is OCR'd with tesseract. Each OCR line, split into table cells at
 wide gaps, goes through the same detection, and each value is painted over

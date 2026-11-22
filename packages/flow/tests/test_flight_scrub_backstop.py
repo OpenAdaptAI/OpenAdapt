@@ -39,6 +39,13 @@ class Stub:
         return value
 
     def image(self, raw: bytes) -> tuple[bytes, bool]:
+        # As the real scrubber does: an image that can't be decoded whole
+        # (cut short, split across strings) refuses.
+        try:
+            with Image.open(io.BytesIO(raw)) as decoded:
+                decoded.load()
+        except Exception as exc:  # noqa: BLE001
+            raise ScrubRefused(f"undecodable image ({type(exc).__name__})") from None
         self.images += 1
         return b"\x89PNG\r\n\x1a\nSCRUBBED", True
 
@@ -152,22 +159,48 @@ def test_a_jwt_or_opaque_blob_refuses():
 
 
 def _random_image(rng: random.Random) -> bytes:
-    w, h = rng.randint(8, 48), rng.randint(8, 48)
-    image = Image.new("RGB", (w, h))
-    image.putdata(
-        [
-            (rng.randrange(256), rng.randrange(256), rng.randrange(256))
-            for _ in range(w * h)
-        ]
-    )
+    from PIL import ImageDraw
+
+    w, h = rng.randint(8, 160), rng.randint(8, 64)
+    kind = rng.randrange(3)
+    if kind == 0:  # noise
+        image = Image.new("RGB", (w, h))
+        image.putdata(
+            [
+                (rng.randrange(256), rng.randrange(256), rng.randrange(256))
+                for _ in range(w * h)
+            ]
+        )
+    else:  # a white page with a line of text: mostly one byte value
+        image = Image.new("RGB", (w, h), "white")
+        ImageDraw.Draw(image).text((2, 2), "John Smith 4471923", fill="black")
+        if kind == 2:
+            image = image.convert("1")  # 1-bit
+    fmt = rng.choice(["PNG", "BMP", "JPEG", "GIF", "TIFF"])
+    if fmt == "JPEG" and image.mode == "1":
+        image = image.convert("L")
     buf = io.BytesIO()
-    image.save(buf, format=rng.choice(["PNG", "BMP", "JPEG", "GIF"]))
+    image.save(buf, format=fmt)
     return buf.getvalue()
 
 
 def _transform(rng: random.Random, b64: str) -> str:
     text = b64
-    shape = rng.randrange(8)
+    shape = rng.randrange(11)
+    if shape == 8:  # separators the code does not know, widths under 64
+        width = rng.randint(8, 63)
+        sep = rng.choice(["|", ";", ",", " | ", "#", "~", "::"])
+        return _fold(text, width, sep)
+    if shape == 9:  # a JSON array of chunks
+        width = rng.randint(8, 63)
+        chunks = [text[i : i + width] for i in range(0, len(text), width)]
+        return json.dumps({"chunks": chunks})
+    if shape == 10:  # Python quoted lines
+        width = rng.randint(8, 63)
+        lines = [
+            "    '" + text[i : i + width] + "'" for i in range(0, len(text), width)
+        ]
+        return "ICON = (\n" + "\n".join(lines) + "\n)"
     if shape == 1:
         width = rng.choice([16, 32, 40, 64, 76, 100])
         sep = rng.choice(["\n", "\r\n", "\n  ", "\t", " ", "<br>", "&#10;", '"+\n"'])
@@ -193,7 +226,7 @@ def _transform(rng: random.Random, b64: str) -> str:
 
 def test_fuzz_random_images_in_random_shapes_never_leave_unscrubbed():
     rng = random.Random(2493)
-    for _ in range(600):
+    for _ in range(800):
         raw = _random_image(rng)
         encode = rng.choice([base64.b64encode, base64.urlsafe_b64encode])
         b64 = encode(raw).decode()
@@ -262,3 +295,98 @@ def test_the_backstop_refusal_sends_zero_bytes_upstream(tmp_path):
     assert err.value.code == 502
     assert b"encoded data" in err.value.read()
     assert provider.requests == [] and provider.received_bytes() == b""
+
+
+# -- the reviewer's last-round probes ----------------------------------------
+
+
+def _page(fmt: str, mode: str = "RGB", size: tuple[int, int] = (120, 40)) -> bytes:
+    from PIL import ImageDraw
+
+    image = Image.new(mode, size, "white")
+    ImageDraw.Draw(image).text((2, 10), "John Smith", fill="black")
+    buf = io.BytesIO()
+    image.save(buf, fmt)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        _page("PNG"),
+        _page("BMP"),
+        _page("BMP", "1"),
+        _page("GIF"),
+        _page("TIFF"),
+        _page("BMP", size=(400, 60)),
+    ],
+    ids=["png", "bmp", "bmp-1bit", "gif", "tiff", "bmp-wide"],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "pyconcat",
+        "single-plus",
+        "pipe",
+        "hex-entity",
+        "comma-quoted",
+        "json-array",
+        "pipe48",
+        "u-escape",
+        "double-escaped",
+    ],
+)
+def test_white_pages_in_unknown_separators_are_scrubbed_or_refused(raw, shape):
+    b64 = base64.b64encode(raw).decode()
+    chunks = [b64[i : i + 60] for i in range(0, len(b64), 60)]
+    text = {
+        "pyconcat": "data = (\n" + "\n".join("    '" + c + "'" for c in chunks) + "\n)",
+        "single-plus": "x = '" + "' + '".join(chunks) + "'",
+        "pipe": "|".join(chunks),
+        "hex-entity": "&#xA;".join(b64[i : i + 76] for i in range(0, len(b64), 76)),
+        "comma-quoted": '"' + '","'.join(chunks) + '"',
+        "json-array": json.dumps({"chunks": chunks}),
+        "pipe48": "|".join(b64[i : i + 48] for i in range(0, len(b64), 48)),
+        "u-escape": "".join("\\u%04x" % ord(c) for c in b64),
+        "double-escaped": json.dumps(json.dumps({"d": b64.replace("/", "\\/")})),
+    }[shape]
+    result, stub, forwarded = _outcome(text, block=True)
+    if result == "sent":
+        assert stub.images >= 1
+        assert not _leaked(b64, forwarded)
+
+
+def test_an_image_split_across_text_blocks_refuses():
+    b64 = base64.b64encode(_page("PNG")).decode()
+    body = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "x",
+                        "content": [
+                            {"type": "text", "text": b64[i : i + 200]}
+                            for i in range(0, len(b64), 200)
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    with pytest.raises(ScrubRefused):
+        scrub_request(body, Stub())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "+----------+----------+\n| col      | value    |\n" * 40,
+        "=" * 600,
+        "Results\n" + "-" * 700 + "\nDone",
+        "AAPL MSFT GOOG " * 60,
+    ],
+)
+def test_tables_and_rules_are_not_refused_by_the_diversity_check(text):
+    assert _outcome(text)[0] == "sent"
