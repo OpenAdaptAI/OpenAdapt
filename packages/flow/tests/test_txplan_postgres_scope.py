@@ -584,6 +584,18 @@ def test_a_trigger_that_rewrites_itself_is_never_verified(
     assert _notes(cur) == 0
 
 
+@pytest.mark.parametrize("level", ["repeatable read", "serializable"])
+def test_a_write_under_snapshot_isolation_is_never_verified(
+    db: Any, tmp_path: Path, level: str
+) -> None:
+    # One snapshot for the whole transaction: the inventory read after the
+    # write can't see DDL another session committed since the read before it.
+    cluster, _ = db
+    value = level.replace(" ", "\\ ")  # libpq options escape a space
+    pinned = {**cluster, "options": f"-c default_transaction_isolation={value}"}
+    _capped(_attempt(_ctx(pinned, tmp_path), _update(3, 4)), "snapshot_isolation")
+
+
 def test_an_empty_schema_on_the_search_path_does_not_cap(
     db: Any, tmp_path: Path
 ) -> None:
@@ -684,6 +696,7 @@ def _pg(**over: Any) -> dict[str, Any]:
         "xmin::text": [("p", "16500", "700")],
         "n.nspname = ANY(%s) AND": [(1,)],
         "pg_stat_xact_user_tables": [(0,)],
+        "transaction_isolation": [("read committed",)],
         "current_schemas": [("public", ["public"])],
         "pg_foreign_data_wrapper": [(0,)],
         "pg_extension": [(0,)],
@@ -734,6 +747,7 @@ def _explain(*outputs: str, schema: str = "public") -> list[tuple[Any, ...]]:
             "",
             "scope_changed",
         ),
+        (_pg(transaction_isolation=[("repeatable read",)]), "", "snapshot_isolation"),
         (_pg(pg_foreign_data_wrapper=[(1,)]), "", "foreign_data"),
         (_pg(pg_extension=[(1,)]), "", "remote_link"),
         (_pg(pg_event_trigger=[(1,)]), "", "event_trigger"),

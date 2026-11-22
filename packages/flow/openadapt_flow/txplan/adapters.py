@@ -516,6 +516,12 @@ def _pg_fingerprint(cur: Any) -> str:
 
 def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
     gaps: set[str] = set()
+    # Under REPEATABLE READ or SERIALIZABLE every read in the transaction sees
+    # one snapshot, so the reads before and after the write can't see a
+    # concurrent session's DDL between them.
+    cur.execute("SELECT current_setting('transaction_isolation')")
+    if str(cur.fetchone()[0]).lower() != "read committed":
+        gaps.add("snapshot_isolation")
     cur.execute("SELECT current_schema(), current_schemas(false)::text[]")
     schema, path = cur.fetchone()
     others = [p for p in (path or []) if p != schema]
