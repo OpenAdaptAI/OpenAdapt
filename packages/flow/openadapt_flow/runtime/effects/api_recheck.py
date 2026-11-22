@@ -1042,6 +1042,10 @@ class VerifierReadback:
                 if account is None:
                     cid = getattr(token_src, "client_id", None)
                     if isinstance(cid, str) and cid.strip():
+                        # The exact strings the token source signs as the
+                        # assertion audience and sends the request to: no
+                        # trimming, so ``/token`` and ``/token/`` (which can
+                        # be different authorization endpoints) differ.
                         for srv_attr in (
                             "token_url",
                             "_token_url",
@@ -1050,11 +1054,11 @@ class VerifierReadback:
                         ):
                             srv = getattr(token_src, srv_attr, None)
                             if isinstance(srv, str) and srv.strip():
-                                auth_server = srv.strip().rstrip("/")
+                                auth_server = srv
                                 break
                         if auth_server is None:
                             return None
-                        account = cid.strip()
+                        account = cid
         if account is None:
             return None
         scope: dict[str, Any] = {

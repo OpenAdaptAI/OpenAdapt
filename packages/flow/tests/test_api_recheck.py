@@ -1050,6 +1050,25 @@ def test_smart_client_id_binds_authorization_server_and_allows_key_renewal() -> 
     out_b = recheck(state, src_b, target=TARGET, expected_state_sha256=sha, now=later)
     assert out_b.outcome == "NOT_CHECKED" and "record source" in out_b.reason
 
+    # The same authority host with a trailing slash is a different token
+    # endpoint and JWT audience -> NOT_CHECKED, not merged.
+    src_a_slash = VerifierReadback(
+        _SmartVerifier(
+            _SmartTokenSource(
+                "shared-client", "https://auth-a.invalid/oauth2/token/", kid="k1"
+            )
+        ),
+        _Effect(),
+        None,
+        fields=["note"],
+        version_path="meta.versionId",
+    )
+    assert src_a_slash.source_scope() != src_a1.source_scope()
+    out_slash = recheck(
+        state, src_a_slash, target=TARGET, expected_state_sha256=sha, now=later
+    )
+    assert out_slash.outcome == "NOT_CHECKED" and "record source" in out_slash.reason
+
 
 def test_incomplete_log_returns_not_checked_even_when_fields_changed_or_missing() -> (
     None
