@@ -2015,6 +2015,80 @@ def shadow(command_ctx: click.Context) -> None:
     _run_flow(["shadow", *command_ctx.args])
 
 
+#: `openadapt flow flight` options that take a value, and flags. Click drops
+#: the "--" before CMD, so the launcher puts it back after these.
+FLIGHT_VALUE_OPTIONS = frozenset(
+    {
+        "--task-id",
+        "--out",
+        "--label",
+        "--gate",
+        "--approval-timeout",
+        "--cdp",
+        "--guard-config",
+        "--guard-task",
+        "--max-cost-usd",
+        "--safe-label",
+    }
+)
+FLIGHT_FLAGS = frozenset(
+    {
+        "--no-scrub",
+        "--i-accept-unscrubbed",
+        "--allow-unenforced-egress",
+        "--no-egress-block",
+        "--json",
+        "-h",
+        "--help",
+    }
+)
+
+
+def _flight_argv(args: list[str]) -> list[str]:
+    """``args`` with "--" restored before CMD, so CMD's options stay CMD's."""
+    out: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in FLIGHT_VALUE_OPTIONS:
+            out.extend(args[index : index + 2])
+            index += 2
+        elif token in FLIGHT_FLAGS or token.split("=", 1)[0] in FLIGHT_VALUE_OPTIONS:
+            out.append(token)
+            index += 1
+        else:
+            return [*out, "--", *args[index:]]
+    return out
+
+
+@main.command(
+    "flight",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def flight(command_ctx: click.Context) -> None:
+    """Record any agent you already run, and hold its saves for a person.
+
+    `openadapt flight [OPTIONS] -- CMD ...` meters and prices the agent's
+    model calls, scrubs every string and screenshot before it leaves the
+    machine, blocks other egress on macOS, logs its actions and writes
+    flight.json. Every argument passes to
+    `openadapt flow flight`; its options are listed by
+    `openadapt flight --help`.
+    """
+    if "flight" not in _flow_verbs():
+        click.echo(
+            "Error: the installed openadapt-flow has no flight command.", err=True
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
+    _run_flow(["flight", *_flight_argv(list(command_ctx.args))])
+
+
 def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
     """Show pure help for absent commands; preserve installed-engine failures."""
     targets = {
