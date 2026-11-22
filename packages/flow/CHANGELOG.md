@@ -19,6 +19,13 @@
 
 ### Features
 
+- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
+  demonstrated click gets its role from what the backend counted: a commit
+  when it wrote, a navigation when the screen changed with no write. A live
+  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
+  is a neutral view of a screen (role, name, state, containers) with adapters
+  for a browser page, an accessibility tree and a `form_tx` snapshot.
+
 - One verdict kernel, `openadapt_flow.verdict`, for every check that turns
   evidence into held, refuted or not checked. It fixes the obligations from
   the plan first, settles results against them, and never passes an empty
