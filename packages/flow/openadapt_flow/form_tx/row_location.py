@@ -21,6 +21,7 @@ A part with any other codec leaves every key of the row ``not_checked``.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -32,7 +33,11 @@ from openadapt_flow.effect_location import (
     evaluate_all,
 )
 from openadapt_flow.effect_location.record import Part
-from openadapt_flow.form_tx.codecs import CodecValueError, normalize_with_codec
+from openadapt_flow.form_tx.codecs import (
+    CodecValueError,
+    collapse_whitespace,
+    normalize_with_codec,
+)
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     match_anchor_in_snapshot,
@@ -140,9 +145,24 @@ def row_readback_results(
                 out.setdefault(part.dossier_key, []).append(
                     ("not_checked", "The intake value can't be read by this codec")
                 )
+        shown = _shown(row, snapshot)
+        # A part with no intake value: like a field read-back, the summary
+        # must not show a value the run never had (a portal prefill).
+        for part in row.parts:
+            if part.dossier_key in expected or part.dossier_key in out:
+                continue
+            for match in shown.matches:
+                fits = re.fullmatch(row.pattern, collapse_whitespace(match["text"]))
+                group = fits.group(part.group) if fits else None
+                if group is not None and group.strip():
+                    out.setdefault(part.dossier_key, []).append(
+                        (
+                            "refuted",
+                            "The row shows a value for a key the intake has no value for",
+                        )
+                    )
         if not plan:
             continue
-        shown = _shown(row, snapshot)
         reading = Reading(
             location_id=location.id,
             run_id=run_id,

@@ -583,6 +583,8 @@ class SummaryJudge:
         }
         for sd in summary_check.split_date_readbacks:
             declared_keys |= {sd.day_key, sd.month_key, sd.year_key}
+        for row in summary_check.row_readbacks:
+            declared_keys |= {part.dossier_key for part in row.parts}
         expected_keys = {
             binding.dossier_key
             for binding in active_pack.bindings

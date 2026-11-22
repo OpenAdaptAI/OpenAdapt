@@ -140,11 +140,15 @@ def test_an_unported_codec_leaves_the_row_not_checked() -> None:
     }
 
 
-def test_a_key_without_an_intake_value_is_not_judged() -> None:
+def test_a_shown_value_for_a_key_with_no_intake_value_is_refuted() -> None:
+    # Like a field read-back: the summary must not show a value the run never
+    # had (a portal prefill).
     got = _statuses(
         _snap(("Travellers", "Ada Byron (01/31/1990)")), {"t_name": "Ada Byron"}
     )
-    assert got == {"t_name": "held"}
+    assert got == {"t_name": "held", "t_dob": "refuted"}
+    empty = _statuses(_snap(("Travellers", "Ada Byron ()")), {"t_name": "Ada Byron"})
+    assert empty == {"t_name": "held"}
 
 
 def _verdict_args() -> tuple[Any, Any]:
