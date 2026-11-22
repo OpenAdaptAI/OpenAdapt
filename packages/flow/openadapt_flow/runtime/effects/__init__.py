@@ -24,9 +24,8 @@ Public surface:
   :class:`SqlRecordVerifier` (read-only SQL, enforced whitelist),
   :class:`FileArrivalVerifier` (file / SFTP arrival),
   :class:`MaildirDeliveryVerifier` (maildir / SMTP-capture email delivery),
-  :class:`DocumentArrivalVerifier` (report arrival + parseable content),
-  :class:`DocumentHashVerifier` (filesystem document store), and
-  :class:`LocalStateVerifier` (files and OS settings on this computer).
+  :class:`DocumentArrivalVerifier` (report arrival + parseable content), and
+  :class:`DocumentHashVerifier` (filesystem document store).
 - The adapter platform (:mod:`openadapt_flow.runtime.effects.adapter`):
   :class:`VerifierAdapter` / :class:`VerifierAdapterBase` (lifecycle:
   configure -> test-connection -> capture-before -> capture-after ->
@@ -127,9 +126,6 @@ from openadapt_flow.runtime.effects.graphql import (  # noqa: F401
     GraphQLRecordVerifier,
     assert_read_only_graphql,
 )
-from openadapt_flow.runtime.effects.local_state import (  # noqa: F401
-    LocalStateVerifier,
-)
 from openadapt_flow.runtime.effects.rest import (  # noqa: F401
     RestRecordVerifier,
 )
@@ -211,7 +207,6 @@ __all__ = [
     "capture_table_counts",
     "FileArrivalVerifier",
     "ArrivalTransport",
-    "LocalStateVerifier",
     "SeparateSessionReadbackVerifier",
     "UiReadbackSpec",
     "DesktopReadbackSpec",

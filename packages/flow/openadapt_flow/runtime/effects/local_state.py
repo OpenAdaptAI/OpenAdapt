@@ -62,14 +62,18 @@ import hashlib
 import json
 import os
 import plistlib
-import re
+import stat
 import subprocess
-import sys
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union
+from sys import platform as _SYS_PLATFORM
+from typing import Any, Callable, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
+from openadapt_flow.local_state_sources import (  # noqa: F401 - re-exported
+    FileSource,
+    LocalStateSource,
+    MacosDefaultsSource,
+    WindowsRegistrySource,
+)
 from openadapt_flow.runtime.effects.adapter import (
     VerifierAdapterBase,
     poll_until_settled,
@@ -83,90 +87,18 @@ from openadapt_flow.verification import VerificationTier
 
 #: A file larger than this many bytes is hashed, but its ``text`` is ``None``.
 TEXT_LIMIT = 1 << 20  # 1 MiB
+# A local store larger than this is not read: it is unreadable, not absent.
+FILE_LIMIT = 256 * 1024 * 1024
 
 #: The supported macOS preferences reader. An absolute path, so ``PATH``
 #: cannot substitute another program.
 DEFAULTS_BINARY = "/usr/bin/defaults"
 
-#: A source id: what an effect's ``match: {id: ...}`` names.
-_SOURCE_ID = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,63}")
-#: A preferences domain: ``NSGlobalDomain`` or a reverse-DNS bundle id. A
-#: leading ``-`` is refused, so a domain can never become a ``defaults`` flag.
-_DEFAULTS_DOMAIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}")
 #: Registry hives a source may read. Per-user settings and machine settings;
 #: nothing else is needed for read-back.
 REGISTRY_HIVES = ("HKCU", "HKLM")
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[bytes]"]
-
-
-class _Source(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    id: str
-
-    @field_validator("id")
-    @classmethod
-    def _check_id(cls, value: str) -> str:
-        if not _SOURCE_ID.fullmatch(value):
-            raise ValueError(
-                "local-state source id must start with a letter and use only "
-                "letters, digits, '_', '.' or '-' (at most 64 characters)"
-            )
-        return value
-
-
-class FileSource(_Source):
-    """A file on this computer: its contents and SHA-256."""
-
-    type: Literal["file"] = "file"
-    #: The file's path. ``~`` and environment variables are expanded.
-    path: str = Field(min_length=1)
-
-
-class MacosDefaultsSource(_Source):
-    """One key in a macOS preferences domain."""
-
-    type: Literal["macos_defaults"] = "macos_defaults"
-    #: ``NSGlobalDomain`` (``-g`` is accepted and means the same) or a bundle id.
-    domain: str
-    key: str = Field(min_length=1, max_length=255)
-
-    @field_validator("domain")
-    @classmethod
-    def _check_domain(cls, value: str) -> str:
-        if value == "-g":
-            return "NSGlobalDomain"
-        if not _DEFAULTS_DOMAIN.fullmatch(value):
-            raise ValueError(
-                "macos_defaults domain must be NSGlobalDomain or a bundle id "
-                "(letters, digits, '.', '_' or '-'; not starting with '-')"
-            )
-        return value
-
-
-class WindowsRegistrySource(_Source):
-    """One value in the Windows registry."""
-
-    type: Literal["windows_registry"] = "windows_registry"
-    hive: Literal["HKCU", "HKLM"]
-    #: The key path under the hive, with backslashes (no leading backslash).
-    path: str = Field(min_length=1, max_length=1024)
-    #: The value's name. An empty string is the key's default value.
-    name: str = Field(default="", max_length=16383)
-
-    @field_validator("path")
-    @classmethod
-    def _check_path(cls, value: str) -> str:
-        if value.startswith("\\") or "\x00" in value:
-            raise ValueError(
-                "windows_registry path is relative to the hive and must not "
-                "start with a backslash"
-            )
-        return value
-
-
-LocalStateSource = Union[FileSource, MacosDefaultsSource, WindowsRegistrySource]
 
 
 class _Unreadable(Exception):
@@ -257,7 +189,7 @@ class LocalStateVerifier(VerifierAdapterBase):
         self.poll_interval_s = poll_interval_s
         self._runner = runner or _run
         self._registry = registry
-        self._platform = platform or sys.platform
+        self._platform = platform or _SYS_PLATFORM
         #: Why the last read was unreadable, for the verdict's detail.
         self.last_error: Optional[str] = None
 
@@ -267,14 +199,30 @@ class LocalStateVerifier(VerifierAdapterBase):
         path = Path(os.path.expandvars(os.path.expanduser(source.path)))
         record: dict[str, Any] = {"id": source.id, "type": source.type}
         try:
+            # Only a regular file is a store. A device, FIFO or socket (or a
+            # link to one) could block the open or never reach EOF, so it is
+            # unreadable. O_NONBLOCK keeps a FIFO swapped in after the stat
+            # from blocking the open; fstat then checks the opened file.
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise _Unreadable(f"{source.id}: not a regular file")
             # O_RDONLY only: the read never creates or truncates the file.
-            with path.open("rb") as fh:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+            with os.fdopen(fd, "rb") as fh:
+                opened = os.fstat(fh.fileno())
+                if not stat.S_ISREG(opened.st_mode):
+                    raise _Unreadable(f"{source.id}: not a regular file")
+                if opened.st_size > FILE_LIMIT:
+                    raise _Unreadable(f"{source.id}: larger than {FILE_LIMIT} bytes")
                 data = fh.read(TEXT_LIMIT + 1)
                 digest = hashlib.sha256(data)
                 size = len(data)
                 for block in iter(lambda: fh.read(1 << 16), b""):
                     digest.update(block)
                     size += len(block)
+                    if size > FILE_LIMIT:  # grew while being read
+                        raise _Unreadable(
+                            f"{source.id}: larger than {FILE_LIMIT} bytes"
+                        )
         except FileNotFoundError:
             if not path.parent.is_dir():
                 # The folder that should hold the file is gone: that is not

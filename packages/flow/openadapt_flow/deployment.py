@@ -39,6 +39,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.local_state_sources import LocalStateSource
 from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
@@ -55,7 +56,6 @@ from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
 from openadapt_flow.runtime.effects.frame import FrameAttribution, FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
-from openadapt_flow.runtime.effects.local_state import LocalStateSource
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
@@ -2657,7 +2657,7 @@ def _build_effect_verifier_unredacted(
                 "effects.kind 'local-state' requires effects.local_state "
                 "(the files or settings to read)"
             )
-        from openadapt_flow.runtime.effects import LocalStateVerifier
+        from openadapt_flow.runtime import LocalStateVerifier
 
         return LocalStateVerifier(
             list(cfg.local_state), poll_interval_s=cfg.poll_interval_s

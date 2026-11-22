@@ -8,6 +8,7 @@ qualified on the lab machines (docs/LOCAL_STATE_CHECKS.md).
 from __future__ import annotations
 
 import hashlib
+import os
 import plistlib
 import subprocess
 from pathlib import Path
@@ -79,6 +80,32 @@ def test_missing_folder_is_unreadable(tmp_path: Path) -> None:
     verdict = v.verify(_field("note", "present", "False"), v.capture_pre_state())
     assert verdict.verdict is Verdict.INDETERMINATE
     assert "does not exist" in verdict.reason
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs a FIFO")
+def test_a_fifo_or_device_source_is_unreadable_and_never_blocks(tmp_path: Path) -> None:
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    link = tmp_path / "link.txt"
+    link.symlink_to(fifo)
+    for path in (fifo, link, Path(os.devnull)):
+        v = LocalStateVerifier([FileSource(id="note", path=str(path))])
+        assert v.read() is None
+        verdict = v.verify(_field("note", "present", "True"), v.capture_pre_state())
+        assert verdict.verdict is Verdict.INDETERMINATE
+        assert "not a regular file" in verdict.reason
+
+
+def test_a_file_over_the_read_limit_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.runtime.effects import local_state
+
+    monkeypatch.setattr(local_state, "FILE_LIMIT", 8)
+    big = tmp_path / "big.txt"
+    big.write_bytes(b"x" * 9)
+    v = LocalStateVerifier([FileSource(id="note", path=str(big))])
+    assert v.read() is None
 
 
 def test_large_or_binary_file_has_no_text_but_a_hash(tmp_path: Path) -> None:
