@@ -135,6 +135,7 @@ def _commit_screen(landmark: str) -> WizardScreenSpec:
 
 def _address_pack() -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="address-test",
         domain_schema="test.quote/v1",
         ui_profile_id="layout-test",

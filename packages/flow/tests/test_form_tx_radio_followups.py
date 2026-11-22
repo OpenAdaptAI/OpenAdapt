@@ -149,6 +149,7 @@ def _binding(key: str, label: str, kind: ControlKind) -> FieldBindingSpec:
 
 def _pack() -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="rerender-test",
         domain_schema="test.quote/v1",
         ui_profile_id="rerender-test",

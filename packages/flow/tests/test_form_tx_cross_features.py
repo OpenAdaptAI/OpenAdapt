@@ -104,7 +104,8 @@ class QuoteForm extends HTMLElement {
         city: city.value,
         alarm: alarm ? alarm.value : '',
       });
-      await fetch('/api/submit', {method: 'POST', body});
+      // Read the reply before leaving the page, so the request is not cut off.
+      await (await fetch('/api/submit', {method: 'POST', body})).text();
       location.href = '/app/summary';
     });
   }
@@ -205,6 +206,7 @@ def _pack() -> FormPack:
         )
     )
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="cross-feature-test",
         domain_schema="test.quote/v1",
         ui_profile_id="cross-feature-test",

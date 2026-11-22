@@ -187,6 +187,7 @@ def test_label_in_the_cell_before_and_choose_placeholder(browser: Any) -> None:
 
 def _address_pack() -> FormPack:
     return FormPack(
+        commit_url_patterns=("/api/submit",),
         pack_id="address-test",
         domain_schema="test.quote/v1",
         ui_profile_id="layout-test",
@@ -249,6 +250,7 @@ def test_child_window_popup_from_a_routed_frame_runs_and_closes(
             page, _profile(frame_path_patterns=(r"/app/.*",)), base_origin=ORIGIN
         )
         pack = FormPack(
+            commit_url_patterns=("/api/submit",),
             pack_id="framed-popup-test",
             domain_schema="test.quote/v1",
             ui_profile_id="layout-test",
