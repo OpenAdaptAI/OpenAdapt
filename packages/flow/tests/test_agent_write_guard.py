@@ -199,16 +199,36 @@ def _saturate_pool() -> threading.Event:
     from openadapt_flow.integrations.agents import _POOL
 
     release = threading.Event()
+    started = threading.Barrier(_POOL._max_workers + 1)
+
+    def _hold() -> None:
+        started.wait(timeout=10)
+        release.wait(30)
+
     for _ in range(_POOL._max_workers):
-        _POOL.submit(release.wait, 30)
+        _POOL.submit(_hold)
+    started.wait(timeout=10)
     return release
 
 
 def test_a_read_back_queued_behind_a_full_pool_survives_a_timeout(
-    portal: Portal, tmp_path: Path
+    portal: Portal, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from openadapt_flow.integrations.agents import _POOL
+
     guard = _guard(portal, tmp_path)
     blockers: list[threading.Event] = []
+    queued = asyncio.Event()
+    loop_ref: list[asyncio.AbstractEventLoop] = []
+    real_submit = _POOL.submit
+
+    def _tracking_submit(fn, /, *args, **kwargs):
+        fut = real_submit(fn, *args, **kwargs)
+        if blockers and fn == guard._finish:
+            loop_ref[0].call_soon_threadsafe(queued.set)
+        return fut
+
+    monkeypatch.setattr(_POOL, "submit", _tracking_submit)
 
     async def write():
         out = await asyncio.to_thread(portal.save_order, **ORDER)
@@ -216,9 +236,12 @@ def test_a_read_back_queued_behind_a_full_pool_survives_a_timeout(
         return out
 
     async def timed_out():
+        loop_ref.append(asyncio.get_running_loop())
+        task = asyncio.create_task(guard.arun(ORDER, write))
+        await asyncio.wait_for(queued.wait(), timeout=10.0)
         with pytest.raises(TimeoutError):
-            async with asyncio.timeout(0.5):
-                await guard.arun(ORDER, write)
+            async with asyncio.timeout(0.05):
+                await task
 
     try:
         asyncio.run(timed_out())

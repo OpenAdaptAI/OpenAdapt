@@ -274,9 +274,8 @@ def tutorial_provenance(run_dir: Path) -> Optional[str]:
         except OSError:
             pass
     for folder in folders:
-        try:
-            receipt = json.loads((folder / "receipt.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        receipt = _read_run_summary(folder)
+        if receipt is None:
             continue
         if (
             isinstance(receipt, dict)
@@ -556,8 +555,12 @@ def check_link(
     transport: Transport,
     origin: Optional[str] = None,
     say: Callable[[str], None] = print,
+    pinned: Optional[Callable[[str], bool]] = None,
 ) -> int:
-    """Fetch a hosted Seal and check its signature here. 0 when valid."""
+    """Fetch a hosted Seal and check its signature here. 0 when valid.
+
+    With ``pinned``, the signing key must also be one this computer trusts
+    (active in its pinned registry), as a downloaded file's must."""
     parsed = parse_link(url, origin)
     if parsed is None:
         say(f"not valid: not a hosted Seal link: {url}")
@@ -594,6 +597,10 @@ def check_link(
     result = public_seal.verify_public_seal(doc)
     if not result.ok:
         say(f"not valid: {result.reason}")
+        return 1
+    if pinned is not None and not pinned(str(result.key_id)):
+        say("  Not verified: unknown signer")
+        say(f"  (key {result.key_id} isn't pinned here, or was revoked)")
         return 1
     from openadapt_flow.offline_seal import seal_sha256
 
@@ -793,3 +800,16 @@ __all__ = [
     "unpublish",
     "upload",
 ]
+
+
+def _read_run_summary(folder: Path) -> Optional[dict]:
+    """The run summary from ``run-summary.json``, or an older ``receipt.json``."""
+    for name in ("run-summary.json", "receipt.json"):
+        try:
+            data = json.loads((folder / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        # Any summary, never the signed receipt (a DSSE envelope).
+        if isinstance(data, dict) and "payloadType" not in data:
+            return data
+    return None

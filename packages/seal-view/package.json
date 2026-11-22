@@ -1,7 +1,7 @@
 {
   "name": "@openadapt/seal-view",
   "version": "0.1.0",
-  "description": "The OpenAdapt Seal: one run's signed report, checked in the browser and drawn as a living object, with the run replayed over its program map.",
+  "description": "The OpenAdapt receipt: one run's signed record, checked in the browser and drawn as a living object, with the run replayed over its program map.",
   "license": "MIT",
   "type": "module",
   "sideEffects": [
