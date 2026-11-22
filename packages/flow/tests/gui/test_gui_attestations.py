@@ -426,3 +426,27 @@ def test_judge_refuses_empty_unexpected_and_unread_boxes() -> None:
         judge_attestations([row], good, run_id="r", complete=False).status
         is not Status.HELD
     )
+
+
+def test_one_spec_matching_two_identical_boxes_stops_on_both(page) -> None:
+    twin = _membership(
+        extra=f'<label><input type="checkbox" id="dec2">{TRUE}</label>'.replace(
+            "<label>", "<fieldset><legend>Declaration</legend><label>"
+        )
+        + "</fieldset>"
+    )
+    with _apps.serve(page, twin):
+        act = _open(page, twin)
+        plan = plan_checkboxes(
+            act.observe(), attestations=[DECL], grants=[GRANT], ignored=[MARKETING]
+        )
+        stops = [b for b in plan.stops if b.attestation_id == "declaration"]
+        assert len(stops) == 2 and not plan.ticks
+        assert {b.reason for b in stops} == {
+            "the attestation's spec matches more than one box"
+        }
+        with pytest.raises(ValueError):
+            apply_attestations(act, plan)
+        assert not any(
+            c.checked for c in act.observe().controls if c.role == "checkbox"
+        )

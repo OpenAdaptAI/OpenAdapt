@@ -25,7 +25,8 @@ it on its own. This module separates the two:
   shows the state the pack declared.
 - ``stop``: anything else. An undeclared checkbox, a changed statement, a
   missing or mismatched grant, an attestation bound to a field, a box ticked
-  before the run touched it, or two specs matching one box. The run stops
+  before the run touched it, two specs matching one box, or one spec
+  matching several boxes (one grant covers one box). The run stops
   before acting on any box.
 
 :func:`judge_attestations` is a verdict site. Its obligations are the plan's
@@ -256,6 +257,14 @@ def plan_checkboxes(
     by_id = _grants_by_id(grants)
     bound_set = set(bound)
     boxes: list[BoxPlan] = []
+    # One grant covers one box: a spec that names several boxes on the
+    # screen (two identical "I agree" boxes) stops on every one of them.
+    matches = {
+        a.attestation_id: sum(
+            1 for c in screen.controls if c.role in BOX_ROLES and a.control.matches(c)
+        )
+        for a in attestations
+    }
     for ctrl in screen.controls:
         if ctrl.role not in BOX_ROLES:
             continue
@@ -282,6 +291,15 @@ def plan_checkboxes(
             continue
         if len(specs) > 1:
             boxes.append(_stop(ctrl, "two declared attestations match this box"))
+            continue
+        if specs and matches[specs[0].attestation_id] > 1:
+            boxes.append(
+                _stop(
+                    ctrl,
+                    "the attestation's spec matches more than one box",
+                    specs[0].attestation_id,
+                )
+            )
             continue
         if not specs:
             leave = [i for i in ignored if i.control.matches(ctrl)]
