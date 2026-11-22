@@ -18,11 +18,31 @@ Per field of the human reference:
     form name, a file). Never counted as matched.
 
 Normalisation, general for every app: null and empty text are the same;
-leading, trailing and repeated whitespace is ignored; two numbers are equal
-when their decimal values are; an ISO date equals the same date with a
-time of midnight. A lens's field codec (``openadapt.entity-lens/v1``) is
-applied on top through :func:`openadapt_flow.tx.judge.apply_field_codec`.
-Case is not folded: a careful person would send ``jane`` back.
+leading, trailing and repeated whitespace is ignored; an ISO date equals the
+same date with a time of midnight. A lens's field codec
+(``openadapt.entity-lens/v1``) is applied on top through
+:func:`openadapt_flow.tx.judge.apply_field_codec`. Case is not folded: a
+careful person would send ``jane`` back.
+
+Numbers. Two values compare as decimals (``12.50`` equals ``12.5``) only
+when both are plain amounts: digits with at most one decimal point and an
+optional ``-``, no exponent, no leading ``+``, no leading zero before
+another digit (``007``), at most 9 digits before the point, and the field
+name doesn't look like an identifier. Names that look like an identifier
+contain one of the words id, mrn, zip, postal, postcode, phone, tel, fax,
+mobile, account, acct, ssn, npi, code, number, num, no, ref, sku, iban,
+routing, card or member (``patient_id``, ``zipCode``, ``account_no``).
+Everything else compares as exact text after the whitespace trim, so
+``02134`` is not ``2134`` and ``1e3`` is not ``1000``. Record fields
+(``expected_record``) always compare as exact text.
+
+Extra held writes. The hold keeps every write the agent sent
+(``held/<n>.json``). Any held write besides the proposed one (a second
+PATCH, a DELETE, a write to another record, the same save twice) makes the
+case ``MISMATCHED`` with reason ``extra_held_writes``: the person made one
+save. A case whose run couldn't vouch for the other tabs, popups, contexts
+and workers (:func:`openadapt_flow.readiness.runner.extra_target`) is
+``NOT_CHECKED`` with reason ``extra_target``.
 
 A case is ``MATCHED`` only when the identity check passed, every human field
 matched, the write has no field outside the declared ones, and the case is
@@ -46,7 +66,9 @@ __all__ = [
     "compare_case",
     "compare_runs",
     "contamination",
+    "identifier_like",
     "values_equal",
+    "write_case_files",
 ]
 
 CASE_SCHEMA = "openadapt.readiness-case/v1"
@@ -66,7 +88,13 @@ FIELD_KINDS = (
     "wrong_record",
     "uncompared",
 )
-_NUMBER = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
+#: A plain amount (see the module docstring): no exponent, no ``+``, no
+#: leading zero before a digit, at most 9 digits before the point.
+_AMOUNT = re.compile(r"^-?(0|[1-9]\d{0,8})(\.\d+)?$")
+_ID_WORDS = frozenset(
+    "id ids mrn zip postal postcode phone tel fax mobile account acct ssn npi "
+    "code number num no ref sku iban routing card member".split()
+)
 _ISO_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ]00:00(?::00(?:\.0+)?)?(?:Z|[+-]00:?00)?)?$")
 _UNCOMPARED_BODY = "<body>"
 
@@ -77,13 +105,38 @@ def _text(value: Any) -> str:
     return " ".join(str(value).split())
 
 
-def values_equal(human: Any, proposed: Any, codec: Any = None) -> bool:
-    """Whether two field values are the same write (see the module docstring)."""
+def identifier_like(name: Optional[str]) -> bool:
+    """Whether a field name looks like an identifier (see the module docstring)."""
+
+    if not name:
+        return False
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(name))
+    words = re.split(r"[^A-Za-z0-9]+", spaced.lower())
+    return any(w in _ID_WORDS for w in words)
+
+
+def values_equal(
+    human: Any,
+    proposed: Any,
+    codec: Any = None,
+    *,
+    name: Optional[str] = None,
+    exact: bool = False,
+) -> bool:
+    """Whether two field values are the same write (see the module docstring).
+
+    ``exact`` (record fields) compares the trimmed text only."""
 
     left, right = _text(human), _text(proposed)
     if left == right:
         return True
-    if _NUMBER.match(left) and _NUMBER.match(right):
+    if exact:
+        return False
+    if (
+        not identifier_like(name)
+        and _AMOUNT.match(left)
+        and _AMOUNT.match(right)
+    ):
         try:
             return Decimal(left) == Decimal(right)
         except InvalidOperation:
@@ -140,8 +193,12 @@ def compare_case(
     before_screen: Optional[str] = None,
     codecs: Optional[Mapping[str, Any]] = None,
     ignore_fields: Sequence[str] = (),
+    held: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """One case: the reference, the run's outcome and its proposed write.
+
+    ``held`` is every write the hold kept (``held/<n>.json``); any one besides
+    the proposed write makes the case ``MISMATCHED`` (``extra_held_writes``).
 
     The result keeps values (it is local, like the HTML); the scorecard JSON
     copies only names and kinds out of it.
@@ -164,11 +221,14 @@ def compare_case(
         "human_time_s": reference.get("human_duration_s"),
         "agent_time_s": (run or {}).get("agent_wall_s"),
         "model_cost_usd": (run or {}).get("model_cost_usd"),
+        "model_cost_source": (run or {}).get("model_cost_source"),
+        "model_calls_metered": ((run or {}).get("egress") or {}).get("model_calls"),
         "landed_writes": int((run or {}).get("landed_writes") or 0),
         "double_save": bool((run or {}).get("double_save")),
         "out_of_scope_requests": int((run or {}).get("other_origin_refused") or 0)
         + int((run or {}).get("landed_writes") or 0),
         "undeclared_fields": 0,
+        "extra_held_writes": 0,
     }
     if run is None:
         case["reason"] = "not_run"
@@ -177,12 +237,24 @@ def compare_case(
         case["status"] = "FAILED_SCOPE"
         case["reason"] = "a write reached the app"
         return case
+    from openadapt_flow.readiness.runner import extra_target
+
+    if extra_target(run):
+        case["reason"] = "extra_target"
+        return case
     if proposed is None:
         case["reason"] = str(run.get("status") or "no_write_held").lower()
         return case
 
     identity = dict(proposed.get("identity") or {})
     case["identity"] = identity
+    mine_index = proposed.get("request_index")
+    extra = [
+        {"method": h.get("method"), "url_path": h.get("url_path")}
+        for h in held
+        if h.get("request_index") != mine_index or mine_index is None
+    ]
+    case["extra_held_writes"] = len(extra)
     got = {f["name"]: f for f in proposed.get("fields") or []}
     body_unreadable = _UNCOMPARED_BODY in got and got[_UNCOMPARED_BODY].get(
         "parse"
@@ -190,7 +262,7 @@ def compare_case(
     rows: list[dict[str, Any]] = []
     for name, value in expected.items():
         if name in got and got[name].get("parse") != "uncompared":
-            if not values_equal(value, got[name].get("value"), codecs.get(name)):
+            if not values_equal(value, got[name].get("value"), name=name, exact=True):
                 rows.append(
                     {
                         "name": name,
@@ -213,7 +285,9 @@ def compare_case(
             row["proposed"] = mine.get("value")
             row["kind"] = (
                 "matched"
-                if values_equal(field.get("value"), mine.get("value"), codecs.get(name))
+                if values_equal(
+                    field.get("value"), mine.get("value"), codecs.get(name), name=name
+                )
                 else "mismatched"
             )
         rows.append(row)
@@ -246,6 +320,10 @@ def compare_case(
         return case
     if any(k in ("mismatched", "missing", "extra") for k in kinds):
         case["status"] = "MISMATCHED"
+        return case
+    if extra:
+        case["status"] = "MISMATCHED"
+        case["reason"] = "extra_held_writes"
         return case
     if "uncompared" in kinds or not human:
         case["status"] = "NOT_CHECKED"
@@ -291,6 +369,13 @@ def compare_runs(
         before = (
             screen_path.read_text(encoding="utf-8") if screen_path.is_file() else None
         )
+        held = [
+            doc
+            for doc in (
+                _read_json(p) for p in sorted((task_dir / "held").glob("*.json"))
+            )
+            if doc is not None
+        ] if (task_dir / "held").is_dir() else []
         cases.append(
             compare_case(
                 episode,
@@ -299,6 +384,7 @@ def compare_runs(
                 before_screen=before,
                 codecs=codecs,
                 ignore_fields=ignore_fields,
+                held=held,
             )
         )
     return {
@@ -307,5 +393,29 @@ def compare_runs(
         "mode": manifest.get("mode"),
         "scope_statement": manifest.get("scope_statement"),
         "runs_landed_writes": manifest.get("landed_writes"),
+        "egress": manifest.get("egress"),
         "cases": cases,
     }
+
+
+def write_case_files(cases_doc: Mapping[str, Any], runs: Any) -> int:
+    """Write each case as ``case.json`` (0600, it holds values) in its task's
+    run folder, identical to its entry in ``cases.json``; returns how many."""
+
+    import json
+    import os
+    from pathlib import Path
+
+    written = 0
+    for case in cases_doc.get("cases") or []:
+        folder = Path(runs) / str(case["task_id"])
+        if not folder.is_dir():
+            continue
+        path = folder / "case.json"
+        tmp = path.with_name("case.json.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(case, fh, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+        written += 1
+    return written

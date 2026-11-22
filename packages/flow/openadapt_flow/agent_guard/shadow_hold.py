@@ -37,8 +37,27 @@ request the guard lets go on is checked again there. A non-``GET`` request to
 the app's origin that is not listed in ``not_saves`` and still went on is
 counted in ``landed_writes``; one makes the run ``FAILED_SCOPE``.
 
-Not covered: ``GET`` requests with side effects, WebSocket writes, other tabs,
-and writes sent before the guard attached.
+Other tabs, popups, browser contexts and workers: the readiness runner's
+:class:`~openadapt_flow.readiness.targets.TargetGate` hands their requests to
+this guard too (request ids with the gate's prefix). A write from one of them
+is held and refused like any other, recorded in ``held/`` with
+``"target": "other"``, never becomes the proposed write, and is counted in
+``extra_target_writes`` (the case is ``extra_target``: the identity check
+reads the guarded tab, so such a write can't be checked).
+
+The contamination check's screen (:attr:`ShadowHoldGuard.contamination_screen`,
+``before_screen.txt``) is the first screen text that showed the task's
+record, plus the first value seen in each form control from then until the
+first write was held (the page's ``form_values``, when it has one). A form
+that opens later already filled in is seen; a field the agent typed into was
+first seen empty. The identity check still reads the screen text only, so a
+name typed into a search box is not the record.
+
+No guard ledger row is written for a shadow hold (``ledger_dir`` is None):
+nothing was saved, so there is nothing to attest.
+
+Not covered: ``GET`` requests with side effects, WebSocket writes, and
+writes sent before the guard attached.
 """
 
 from __future__ import annotations
@@ -226,6 +245,12 @@ def parse_body_fields(
     return uncompared
 
 
+def _is_extra(request: HeldRequest) -> bool:
+    from openadapt_flow.readiness.targets import is_extra_request
+
+    return is_extra_request(request.request_id)
+
+
 def _write_private(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -253,6 +278,10 @@ class _CountingPage:
     def screen_text(self) -> Optional[str]:
         return self._inner.screen_text()
 
+    def form_values(self) -> Optional[list[tuple[str, str]]]:
+        read = getattr(self._inner, "form_values", None)
+        return read() if callable(read) else None
+
     def screenshot(self) -> Optional[bytes]:
         return self._inner.screenshot()
 
@@ -264,9 +293,15 @@ class _CountingPage:
 
 
 class _NoStore:
-    """Stands in for a :class:`GuardedSave` when no verify config is given."""
+    """Stands in for a :class:`GuardedSave` when no verify config is given.
+
+    It has no state directory or verify config; code that reads them gets
+    None (and the shadow hold never reads back)."""
 
     approval = "not_gated"
+    state_dir: Optional[Path] = None
+    verify: Any = None
+    ledger_dir: Optional[Path] = None
 
 
 class ShadowHoldGuard(CommitGuard):
@@ -306,6 +341,8 @@ class ShadowHoldGuard(CommitGuard):
             scope=None,
             **kwargs,
         )
+        # A shadow hold saves nothing: no guard ledger row for it.
+        self.ledger_dir = None
         self._store = guarded
         self.summary.mode = "shadow_hold"
         self.run_dir = Path(run_dir)
@@ -323,9 +360,13 @@ class ShadowHoldGuard(CommitGuard):
         self.landed: list[dict[str, Any]] = []
         #: Writes to another origin the guard refused.
         self.other_origin_refused = 0
+        #: Writes from another tab, popup, context or worker (held, refused).
+        self.extra_target_writes = 0
         #: The first screen text on which the task's record showed, read
         #: before any write was held (the contamination check reads it).
         self.before_screen: Optional[str] = None
+        #: The first value seen in each form control once the record showed.
+        self._first_values: dict[str, str] = {}
 
     # -- what is a write ----------------------------------------------------------
 
@@ -355,6 +396,9 @@ class ShadowHoldGuard(CommitGuard):
                 self._log(request, "not_a_save", "continued")
                 return
             self.summary.requests["save"] = self.summary.requests.get("save", 0) + 1
+            if _is_extra(request):
+                self._hold_extra(request, self._clock())
+                return
             self._on_save(request, self._clock())
             return
         kind = classify(request, app_origin=self.app_origin, not_saves=self.not_saves)
@@ -384,14 +428,30 @@ class ShadowHoldGuard(CommitGuard):
 
     def observe_screen(self) -> None:
         """Before any write is held: keep the first screen that shows the
-        task's record (for the contamination check)."""
+        task's record, then the first value of each form control (for the
+        contamination check)."""
 
-        if self.before_screen is not None or self.held:
+        if self.held:
             return
-        screen = self.page.screen_text()
-        status, _ = check_identity(self.task.expected_record, screen)
-        if status == "verified":
+        if self.before_screen is None:
+            screen = self.page.screen_text()
+            status, _ = check_identity(self.task.expected_record, screen)
+            if status != "verified":
+                return
             self.before_screen = screen
+        read = getattr(self.page, "form_values", None)
+        for key, value in (read() if callable(read) else None) or []:
+            self._first_values.setdefault(key, value)
+
+    @property
+    def contamination_screen(self) -> Optional[str]:
+        """The record's first screen plus each control's first value (see the
+        module docstring); None when the record never showed before a write."""
+
+        if self.before_screen is None:
+            return None
+        values = [v for v in self._first_values.values() if v]
+        return self.before_screen + ("\n" + "\n".join(values) if values else "")
 
     # -- the hold ----------------------------------------------------------------------
 
@@ -413,6 +473,47 @@ class ShadowHoldGuard(CommitGuard):
             "ok": status == "verified",
             "code": "verified" if status == "verified" else f"identity_{status}",
         }
+
+    def _hold_extra(self, request: HeldRequest, held_at: float) -> None:
+        """A write from another tab, popup, context or worker: held, refused,
+        never the proposed write (see the module docstring)."""
+
+        self.summary.saves_held += 1
+        self.extra_target_writes += 1
+        index = len(self.held)
+        fields, withheld = parse_body_fields(
+            method=request.method,
+            url=request.url,
+            content_type=request.content_type,
+            body=request.post_data,
+            lens=self.lens,
+        )
+        record: dict[str, Any] = {
+            "schema": PROPOSED_WRITE_SCHEMA,
+            "task_id": self.task.task_id,
+            "request_index": index,
+            "method": request.method,
+            "url_path": request.path,
+            "origin": origin_of(request.url),
+            "held_at": self._wall().isoformat(timespec="milliseconds"),
+            "identity": {"ok": False, "code": "extra_target"},
+            "fields": [f.to_dict() for f in fields],
+            "withheld_fields": withheld,
+            "resource_type": request.resource_type,
+            "target": "other",
+            "refused": True,
+        }
+        data = json.dumps(record, indent=2, sort_keys=True).encode("utf-8")
+        _write_private(self.run_dir / "held" / f"{index}.json", data)
+        self.held.append(record)
+        self._refuse(
+            request,
+            "save",
+            held_at,
+            "extra_target",
+            "stopped before save (shadow mode): a write from another tab, "
+            "popup, context or worker",
+        )
 
     def _on_save(self, request: HeldRequest, held_at: float) -> None:
         self.summary.saves_held += 1
@@ -479,6 +580,7 @@ class ShadowHoldGuard(CommitGuard):
             "landed_writes": self.landed_writes,
             "landed": list(self.landed),
             "other_origin_refused": self.other_origin_refused,
+            "extra_target_writes": self.extra_target_writes,
             "double_save": any(n > 1 for n in same.values()),
             "requests": dict(self.summary.requests),
         }

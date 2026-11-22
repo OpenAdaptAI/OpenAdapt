@@ -25,8 +25,18 @@ def _ref(**fields: Any) -> dict[str, Any]:
     }
 
 
+#: A run whose target gate saw nothing outside the guarded tab.
+CLEAN_GATE = {"extra_targets": {}, "ungated_targets": {}, "gate_lost": False, "errors": []}
+
+
 def _run(**kw: Any) -> dict[str, Any]:
-    return {"status": "HELD", "agent_wall_s": 20.0, "landed_writes": 0, **kw}
+    return {
+        "status": "HELD",
+        "agent_wall_s": 20.0,
+        "landed_writes": 0,
+        "target_gate": CLEAN_GATE,
+        **kw,
+    }
 
 
 def _proposed(ok: bool = True, parse: str = "json", **fields: Any) -> dict[str, Any]:
@@ -167,7 +177,9 @@ def test_scorecard_json_has_no_values() -> None:
         ("case-000001", "type", "mismatched"),
         ("case-000002", "<record>", "wrong_record"),
     }
-    assert card["model_cost_usd"] == {"total": 0.06, "per_task": 0.02, "unknown_count": 0}
+    assert card["model_cost_usd"] == {
+        "total": 0.06, "per_task": 0.02, "unknown_count": 0, "source": "reported"
+    }
     assert card["agent_time_s"]["median"] == 20.0
     assert card["savings"]["minutes_saved_per_task"] == round(40 / 60, 3)
     assert card["savings"]["est_value_usd"] == round(40 / 60 * 1 / 60 * 60 - 0.06, 2)

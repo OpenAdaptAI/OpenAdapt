@@ -8,14 +8,27 @@ For each episode, one at a time:
 1. The operator's ``--reset-cmd`` (if any) puts the sandbox back to its
    synthetic "before" state.
 2. The runner starts a headless Chromium with a DevTools port, opens one tab
-   at ``--app-url``, and puts :class:`~openadapt_flow.agent_guard.shadow_hold.ShadowHoldGuard`
-   on it over CDP (every request of the tab is paused and decided).
+   at ``--app-url`` (service workers blocked), and puts
+   :class:`~openadapt_flow.agent_guard.shadow_hold.ShadowHoldGuard` on it
+   over CDP (every request of the tab is paused and decided). A
+   :class:`~openadapt_flow.readiness.targets.TargetGate` hands every request
+   of every other tab, popup, browser context and worker to the same guard,
+   before the candidate starts.
 3. It starts the candidate through an :class:`~openadapt_flow.readiness.launcher.AgentLauncher`
    and decides the tab's requests until the save was held (and then
    ``--linger`` seconds more), the candidate exits, or ``--timeout`` passes.
 4. It stops the candidate *before* the guard lets go of the tab, so a retried
    save can't slip through once requests are no longer paused, then blocks
    anything still paused and closes the browser.
+
+Signed-in session (``--storage-state FILE``, ``--keep-session``): every task
+gets a new browser, hold and run folder. ``--storage-state`` loads a
+Playwright storage state (cookies, local storage) into each task's context;
+with ``--keep-session`` the state at the end of each task is carried to the
+next (in ``RUNS/.session/``, mode 0600, removed when the run ends), so a
+person signs in once, not once per task. The state carries what the app keeps
+in local storage too, so an app that keeps drafts there can carry one task's
+draft into the next: the contamination check reads the screen either way.
 
 Per task, ``RUNS/<task_id>/`` holds ``run.json`` (no values), the held
 requests (``held/``), ``proposed_write.json`` and ``before_screen.txt``
@@ -58,9 +71,9 @@ RUN_SCHEMA = "openadapt.readiness-run/v1"
 TASK_RUN_SCHEMA = "openadapt.readiness-task-run/v1"
 MODES = ("sandbox", "run-ahead")
 SCOPE_STATEMENT = (
-    "No non-GET request to the app origin left the browser except listed "
-    "sign-in requests. Not covered: GET requests with side effects, WebSocket "
-    "writes, other tabs, writes before attach."
+    "No non-GET request to the app origin left any tab, popup, browser "
+    "context or worker, except listed sign-in requests. Not covered: GET "
+    "requests with side effects, WebSocket writes, writes before attach."
 )
 POLL_MS = 25
 SCREEN_EVERY_S = 0.1
@@ -81,6 +94,11 @@ class RunnerConfig:
     viewport: tuple[int, int] = (1280, 800)
     #: Called before each task, after ``reset_cmd`` (tests use it).
     reset: Optional[Callable[[], None]] = None
+    #: A Playwright storage state (cookies, local storage) loaded into each
+    #: task's context.
+    storage_state: Optional[Path] = None
+    #: Carry the session from each task to the next (see the module docstring).
+    keep_session: bool = False
     notes: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -155,6 +173,23 @@ def _program_proposal(
     _write_private(run_dir / "proposed_write.json", record)
 
 
+SESSION_DIR = ".session"
+
+
+def _session_carry(out: Path) -> Path:
+    return out / SESSION_DIR / "storage_state.json"
+
+
+def _session_in(out: Path, cfg: RunnerConfig) -> Optional[Path]:
+    if cfg.keep_session and _session_carry(out).is_file():
+        return _session_carry(out)
+    if cfg.storage_state is not None:
+        if not Path(cfg.storage_state).is_file():
+            raise FileNotFoundError(f"storage state {cfg.storage_state} not found")
+        return Path(cfg.storage_state)
+    return None
+
+
 def run_one(
     episode_dir: Path,
     episode: dict[str, Any],
@@ -162,13 +197,14 @@ def run_one(
     launcher: AgentLauncher,
     cfg: RunnerConfig,
 ) -> dict[str, Any]:
-    """One task in its own browser and guard session."""
+    """One task in its own browser, hold and guard session."""
 
     from playwright.sync_api import sync_playwright
 
     from openadapt_flow.agent_guard.cdp import CdpGuardPage
     from openadapt_flow.agent_guard.shadow_hold import ShadowHoldGuard
     from openadapt_flow.guard import GuardedSave, load_task
+    from openadapt_flow.readiness.targets import RoutedPage, TargetGate
 
     task_id = str(episode["task_id"])
     run_dir = out / task_id
@@ -185,27 +221,43 @@ def run_one(
         "exit_code": None,
         "usage": None,
         "model_cost_usd": None,
+        "model_cost_source": None,
         "landed_writes": 0,
         "held": 0,
         "double_save": False,
         "other_origin_refused": 0,
         "proposed": False,
         "before_screen": False,
+        "extra_target_writes": 0,
+        #: The target gate's inventory; None means no gate ran (the case
+        #: fails closed as ``extra_target``).
+        "target_gate": None,
+        "session": "kept" if cfg.keep_session else (
+            "loaded" if cfg.storage_state else "fresh"
+        ),
         "notes": [],
     }
     _reset(cfg)
     port = _free_port()
     pw = sync_playwright().start()
     browser = None
+    context = None
     agent = None
     cdp_page = None
+    gate = None
     guard = None
     try:
         browser = pw.chromium.launch(
             headless=cfg.headless, args=[f"--remote-debugging-port={port}"]
         )
         width, height = cfg.viewport
-        tab = browser.new_page(viewport={"width": width, "height": height})
+        state_in = _session_in(out, cfg)
+        context = browser.new_context(
+            viewport={"width": width, "height": height},
+            service_workers="block",
+            storage_state=str(state_in) if state_in else None,
+        )
+        tab = context.new_page()
         tab.goto(cfg.app_url)
         guarded = (
             GuardedSave.from_file(cfg.verify, run_dir / "guard", approval="not_gated")
@@ -215,10 +267,14 @@ def run_one(
         cdp_page = CdpGuardPage(
             tab, screen_selector=cfg.screen_selector, all_resources=True
         )
+        main_target = cdp_page.cdp.send("Target.getTargetInfo", {})["targetInfo"]
+        gate = TargetGate(
+            f"http://127.0.0.1:{port}", main_target_id=str(main_target["targetId"])
+        ).start()
         guard = ShadowHoldGuard(
             guarded,
             task,
-            cdp_page,
+            RoutedPage(cdp_page, gate),
             app_origin=cfg.app_url,
             run_dir=run_dir,
             not_saves=cfg.not_saves,
@@ -243,7 +299,11 @@ def run_one(
         while True:
             tab.wait_for_timeout(POLL_MS)
             cdp_page.drain(guard)
+            gate.drain(guard)
             now = time.monotonic()
+            if gate.lost:
+                ended = "gate_lost"
+                break
             if held_at is None and now - last_screen >= SCREEN_EVERY_S:
                 guard.observe_screen()
                 last_screen = now
@@ -266,11 +326,15 @@ def run_one(
         # The candidate goes first: once the tab is released nothing is held.
         agent.stop()
         cdp_page.drain(guard)
+        gate.drain(guard)
         result = agent.result()
         _program_proposal(guard, result, cdp_page, run_dir)
         record["exit_code"] = result.exit_code
         record["usage"] = result.usage
         record["model_cost_usd"] = (result.usage or {}).get("cost_usd")
+        record["model_cost_source"] = (
+            "reported" if record["model_cost_usd"] is not None else None
+        )
         record["notes"] += result.notes
     except Exception as exc:  # noqa: BLE001 - recorded; the next task still runs
         record["notes"].append(f"runner error: {type(exc).__name__}: {exc}")
@@ -280,13 +344,25 @@ def run_one(
                 agent.stop()
             except Exception:  # noqa: BLE001
                 pass
+        if gate is not None:
+            # From here every request the gate sees is blocked, until the
+            # browser is gone; the tab's own hold is released after it.
+            gate.close_hold()
+            record["target_gate"] = gate.status()
         if cdp_page is not None:
             cdp_page.release()
+        if cfg.keep_session and context is not None and guard is not None:
+            try:
+                _write_private(_session_carry(out), context.storage_state())
+            except Exception as exc:  # noqa: BLE001 - the next task signs in again
+                record["notes"].append(f"session not kept: {type(exc).__name__}")
         if browser is not None:
             try:
                 browser.close()
             except Exception:  # noqa: BLE001
                 pass
+        if gate is not None:
+            gate.close()
         pw.stop()
     if guard is not None:
         outcome = guard.outcome()
@@ -296,15 +372,19 @@ def run_one(
                 "held": outcome["held"],
                 "double_save": outcome["double_save"],
                 "other_origin_refused": outcome["other_origin_refused"],
+                "extra_target_writes": outcome["extra_target_writes"],
                 "proposed": guard.proposed is not None,
                 "requests": outcome["requests"],
             }
         )
-        if guard.before_screen is not None:
-            _write_private(run_dir / "before_screen.txt", guard.before_screen)
+        screen = guard.contamination_screen
+        if screen is not None:
+            _write_private(run_dir / "before_screen.txt", screen)
             record["before_screen"] = True
         if outcome["landed_writes"]:
             record["status"] = "FAILED_SCOPE"
+        elif extra_target(record):
+            record["status"] = "EXTRA_TARGET"
         elif guard.proposed is not None:
             record["status"] = "HELD"
         elif record["ended"] == "timeout":
@@ -313,6 +393,21 @@ def run_one(
             record["status"] = "NO_WRITE_HELD"
     _write_private(run_dir / "run.json", record)
     return record
+
+
+def extra_target(run: Any) -> bool:
+    """A task run the hold can't vouch for outside the guarded tab: no gate
+    ran, the gate lost its connection, a target was left ungated, or a write
+    came from another tab, popup, context or worker."""
+
+    gate = run.get("target_gate")
+    if not isinstance(gate, dict):
+        return True
+    return bool(
+        gate.get("gate_lost")
+        or gate.get("ungated_targets")
+        or int(run.get("extra_target_writes") or 0)
+    )
 
 
 def run_episodes(
@@ -337,15 +432,23 @@ def run_episodes(
         "scope_statement": SCOPE_STATEMENT,
         "started_at": _now(),
         "reset_cmd": shlex.join(cfg.reset_cmd) if cfg.reset_cmd else None,
+        "session": "kept" if cfg.keep_session else (
+            "loaded" if cfg.storage_state else "fresh"
+        ),
         "tasks": [],
     }
-    for folder, episode in load_episodes(episodes):
-        if only and episode["task_id"] not in only:
-            continue
-        result = run_one(folder, episode, out, launcher, cfg)
-        manifest["tasks"].append(
-            {"task_id": result["task_id"], "status": result["status"]}
-        )
+    carry = _session_carry(out)
+    carry.unlink(missing_ok=True)  # never a session from an earlier run
+    try:
+        for folder, episode in load_episodes(episodes):
+            if only and episode["task_id"] not in only:
+                continue
+            result = run_one(folder, episode, out, launcher, cfg)
+            manifest["tasks"].append(
+                {"task_id": result["task_id"], "status": result["status"]}
+            )
+    finally:
+        carry.unlink(missing_ok=True)
     manifest["finished_at"] = _now()
     manifest["landed_writes"] = sum(
         json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))["landed_writes"]

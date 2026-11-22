@@ -65,6 +65,16 @@ def register(sub: argparse._SubParsersAction) -> None:
     run.add_argument("--linger", type=float, default=1.5, help="seconds after the hold")
     run.add_argument("--reset-cmd", default=None, help="puts the sandbox back before each task")
     run.add_argument("--verify", default=None, help="verify.yaml: identity through GuardedSave.begin")
+    run.add_argument(
+        "--storage-state",
+        default=None,
+        help="a Playwright storage state (cookies, local storage) loaded into each task",
+    )
+    run.add_argument(
+        "--keep-session",
+        action="store_true",
+        help="carry the signed-in session from each task to the next",
+    )
     _lens_flags(run)
 
     cmp_ = verbs.add_parser("compare", help="Compare each proposed write with the person's save")
@@ -84,6 +94,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     rep.add_argument("--out", required=True)
     rep.add_argument("--hourly-cost", type=float, default=None, help="USD per hour of the person's time")
     rep.add_argument("--label", default=None)
+    rep.add_argument(
+        "--task-type",
+        default=None,
+        help="the kind of task, a lowercase identifier (default: unspecified)",
+    )
     p.set_defaults(func=cmd_readiness)
 
 
@@ -170,6 +185,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         reset_cmd=shlex.split(args.reset_cmd) if args.reset_cmd else None,
         verify=Path(args.verify) if args.verify else None,
         lens=_load_lens(args.lens),
+        storage_state=Path(args.storage_state) if args.storage_state else None,
+        keep_session=args.keep_session,
     )
     manifest = run_episodes(args.episodes, args.out, launcher, cfg)
     print(
@@ -180,13 +197,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_compare(args: argparse.Namespace) -> int:
-    from openadapt_flow.readiness.compare import compare_runs
+    from openadapt_flow.readiness.compare import compare_runs, write_case_files
 
     doc = compare_runs(
         args.episodes, args.runs, lens=_load_lens(args.lens), ignore_fields=args.ignore_field
     )
     out = Path(args.out) / "cases.json"
     _write_private(out, doc)
+    write_case_files(doc, args.runs)
     counts: dict[str, int] = {}
     for case in doc["cases"]:
         counts[case["status"]] = counts.get(case["status"], 0) + 1
@@ -195,10 +213,20 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
-    from openadapt_flow.readiness.scorecard import write_scorecard
+    from openadapt_flow.readiness.scorecard import check_task_type, write_scorecard
 
+    try:
+        task_type = check_task_type(args.task_type)
+    except ValueError as exc:
+        raise SystemExit(f"readiness report: {exc}") from None
     cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
-    card = write_scorecard(cases, args.out, hourly_cost=args.hourly_cost, agent_label=args.label)
+    card = write_scorecard(
+        cases,
+        args.out,
+        hourly_cost=args.hourly_cost,
+        agent_label=args.label,
+        task_type=task_type,
+    )
     print(
         f"readiness report: matched {card['matched']} of {card['cases_total']}; "
         f"{Path(args.out) / 'scorecard.html'}"
