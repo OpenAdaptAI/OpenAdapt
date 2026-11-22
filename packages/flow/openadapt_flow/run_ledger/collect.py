@@ -165,9 +165,22 @@ class Contribution:
     #: P7: the fallback request id whose item-approval folder holds the
     #: gate's requests and answers (``ledger add --approvals``).
     approvals_key: Optional[str] = None
+    #: Config files a source points at (P7's confirmed verify.yaml).
+    config_paths: list[Path] = field(default_factory=list)
+    #: A dispatcher envelope's ``run_id``: wrap's run store record
+    #: (``runs/<run_id>.json``) keeps its start and finish times.
+    run_record_id: Optional[str] = None
+    #: P7: what a field the record check names counts as (confirmed or not).
+    fields_check: Optional[str] = None
+    #: P7 ``gate_answers``: request id -> request_sha256.
+    gate_requests: dict[str, Optional[str]] = field(default_factory=dict)
     #: ``fields`` are names a read-back saw in the new record, not names
     #: the run declared it would write.
     readback_fields: bool = False
+    #: The guard's relative clock (``guard_events.jsonl`` ``t``) when the save
+    #: was held for a person: with the approval's created_at it names the
+    #: run's start.
+    anchor_t: Optional[float] = None
     #: True when the source shows no person was asked during the run (a
     #: shadow hold, a guard run with approval ``not_gated``): the row's
     #: ``intervention_s`` is then 0 rather than unknown.
@@ -313,6 +326,34 @@ def collect_agent_guard(path: Path) -> Contribution:
                         events.append(event)
         except (OSError, ValueError):
             out.signal("source_unreadable")
+    times = [t for t in (_float(e.get("t")) for e in events) if t is not None]
+    if doc.get("ended") == "timeout" and times:
+        # After its last save decision the guard only waited for the agent
+        # to exit; the run's own span ends at that decision.
+        out.duration_s = round(max(times), 3)
+    held = [
+        t
+        for e in events
+        if e.get("decision") == "held_for_person"
+        and (t := _float(e.get("t"))) is not None
+    ]
+    # Where the save was held for a person: lines the approval request's own
+    # created_at up with the guard's relative clock (see ``collect``).
+    out.anchor_t = held[0] if held else None
+    if events and not held:
+        # The guard's own events show no save was held for a person: a save
+        # blocked before any card opened asked nobody.
+        out.no_person = True
+    meta = path.parent / "recording" / "meta.json"
+    if meta.is_file() and not meta.is_symlink():
+        try:
+            created = _read_json(meta).get("created_at")
+        except (_Unreadable, AttributeError):
+            created = None
+        if (moment := _stamp(created)) is not None:
+            # The recording is written when the guarded run ends.
+            out.files.append(meta)
+            out.moments.append(moment)
     scope_codes = {
         str(item.get("code"))
         for item in doc.get("scope_blocked") or []
@@ -604,7 +645,9 @@ def collect_agent_run_record(path: Path) -> Contribution:
 # -- a person's time ----------------------------------------------------------------
 
 
-def collect_item_approvals(folder: Path) -> Contribution:
+def collect_item_approvals(
+    folder: Path, only: Optional[Mapping[str, Optional[str]]] = None
+) -> Contribution:
     """``item-approval/request-<id>.json`` and ``answer-<id>.json``.
 
         One interval per request, from the request's ``created_at`` to the
@@ -620,6 +663,8 @@ def collect_item_approvals(folder: Path) -> Contribution:
     out = Contribution(name)
     for request_path in sorted(folder.glob("request-*.json")):
         request_id = request_path.name[len("request-") : -len(".json")]
+        if only is not None and request_id not in only:
+            continue  # not one of the requests the run's gate recorded
         try:
             request = _read_json(request_path)
         except _Unreadable:
@@ -650,6 +695,13 @@ def collect_item_approvals(folder: Path) -> Contribution:
                 answer.get("schema_version") != ITEM_APPROVAL_ANSWER_SCHEMA
             ):
                 out.signal("schema_unrecognised")
+                continue
+            if only is not None and only.get(request_id) not in (
+                None,
+                answer.get("request_sha256"),
+            ):
+                # The gate recorded another request under this id.
+                out.signal("source_unreadable")
                 continue
             decided = _stamp(answer.get("answered_at"))
             decision = answer.get("decision")
@@ -928,9 +980,16 @@ def collect_exception_answer(path: Path) -> Contribution:
     ``$OPENADAPT_HOME/exceptions/<run_ref>/`` (read through
     :func:`openadapt_flow.run_ledger.readers.collect_exception_folder`).
 
-    Reads ``kind``, ``opened_at`` and ``decided_at``; ``answer`` isn't read. A
-    ``second_factor`` kind is a second-factor interval, anything else an
-    exception interval. Either way a person was needed: ESCALATED.
+    Reads ``kind``, ``opened_at``, ``decided_at``, ``answer`` and
+    ``approver_kind``. A ``second_factor`` kind is a second-factor interval,
+    anything else an exception interval; the person's time counts either way.
+
+    The bucket: a person who cleared the exception (``continue`` or
+    ``done_by_person``, decided) let the run go on, as an approved approval
+    does, so the answer is no bucket source: the run's own result decides
+    (a save read back independently is VERIFIED). An exception the person
+    stopped (``skip``, ``abort``, ``decline``), one that expired, or one not
+    answered yet is ESCALATED (``second_factor`` / ``exception_card``).
     """
 
     name = "exception"
@@ -958,7 +1017,13 @@ def collect_exception_answer(path: Path) -> Contribution:
             key=f"exception:{card}" if isinstance(card, str) else "",
         )
     )
-    out.signal("second_factor" if second else "exception_card")
+    cleared = (
+        doc.get("answer") in ("continue", "done_by_person")
+        and doc.get("approver_kind") == "person"
+        and decided_at is not None
+    )
+    if not cleared:
+        out.signal("second_factor" if second else "exception_card")
     return out
 
 
@@ -1006,6 +1071,10 @@ _ALLOWED_PATTERNS = (
     ("jobs", "job-", ".json"),  # task ledger: job-<hex>.json
     ("runs", "run-", ".json"),  # wrap's run store: run-<hex>.json
     ("egress", "timeline", ".jsonl"),
+    # Only created_at is read (the guard's recording metadata).
+    ("recording", "meta", ".json"),
+    # The shadow hold's held proposals: only held_at is read.
+    ("held", "", ".json"),
 )
 #: A file named directly (``ledger add FILE``) may also be a wrap run record
 #: (``run-<id>.json``) or a ``wrap-dispatch --result`` envelope.
@@ -1261,14 +1330,47 @@ def collect(
         contribution = collect_exception_folder(exceptions)
         if contribution is not None:
             contributions.append(contribution)
-    if approvals is not None:
-        # P7's item-approval gate: <approvals>/<fallback request id>/item-approval.
-        for key in sorted({c.approvals_key for c in contributions if c.approvals_key}):
-            folder = Path(approvals) / key / "item-approval"
-            if folder.is_dir() and not folder.is_symlink():
-                contribution = collect_item_approvals(folder)
-                if contribution.files:
-                    contributions.append(contribution)
+    from openadapt_flow.run_ledger.readers import fallback_neighbours, record_times
+
+    for contribution in contributions:
+        if contribution.run_record_id and contribution.started_at is None:
+            contribution.started_at, contribution.ended_at, record = record_times(
+                contribution, run
+            )
+            if record is not None:
+                contribution.files.append(record)
+
+    for fallback in [c for c in contributions if c.approvals_key]:
+        # P7's item-approval gate: <approvals>/<fallback request id>/item-approval,
+        # given with --approvals or found near the run by that exact id.
+        approval_dir, result_extra = fallback_neighbours(
+            fallback, run, Path(approvals) if approvals is not None else None
+        )
+        if approval_dir is not None:
+            contribution = collect_item_approvals(
+                approval_dir, only=fallback.gate_requests or None
+            )
+            if contribution.files:
+                contributions.append(contribution)
+        if result_extra is not None:
+            contributions.append(result_extra)
+            config = [*config, *result_extra.config_paths]
+    opened = sorted(
+        i.opened_at
+        for c in contributions
+        if c.collector in ("item_approval", "guard_ledger_row")
+        for i in c.intervals
+        if i.kind == "approval"
+    )
+    for contribution in contributions:
+        if contribution.anchor_t is not None and opened:
+            start = datetime.fromisoformat(opened[0].replace("Z", "+00:00"))
+            begin = start - timedelta(seconds=contribution.anchor_t)
+            contribution.started_at = _iso(begin)
+            if contribution.duration_s is not None:
+                contribution.ended_at = _iso(
+                    begin + timedelta(seconds=contribution.duration_s)
+                )
     collected = Collected(
         root=run,
         contributions=contributions,

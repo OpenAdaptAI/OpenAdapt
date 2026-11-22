@@ -63,11 +63,8 @@ def test_a_matched_shadow_run_is_escalated_never_verified_or_caught():
     }
     # The shadow hold asks nobody: 0, not unknown.
     assert row.human.intervention_s == 0.0
-    assert [(f.name, f.check) for f in row.fields_written] == [
-        ("note", "matched"),
-        ("patient_id", "not_checked"),
-        ("type", "matched"),
-    ]
+    # A shadow run writes nothing: no fields_written (round 3 finding 2).
+    assert row.fields_written == () and row.fields_differing == 0
 
 
 def test_an_old_shadow_hold_guard_row_is_ignored():
@@ -102,9 +99,7 @@ def test_metered_egress_cost_beats_the_agents_report():
 def test_a_wrong_record_shadow_is_the_error_the_shadow_caught():
     row, private, _ = build_row(FIXTURES / "shadow_wrong_record")
     assert _outcome(row) == ("CAUGHT_ERROR", "shadow_wrong_record")
-    checks = {f.name: f.check for f in row.fields_written}
-    assert checks == {"note": "matched", "patient_id": "differs", "type": "matched"}
-    assert row.fields_differing == 1
+    assert row.fields_written == () and row.fields_differing == 0
     assert '"p3"' not in json.dumps(row.to_json())
     assert private.fields["patient_id"] == {
         "intended": "p3",
@@ -116,7 +111,7 @@ def test_a_wrong_record_shadow_is_the_error_the_shadow_caught():
 def test_a_mismatched_shadow_is_caught():
     row, _, _ = build_row(FIXTURES / "shadow_mismatched")
     assert _outcome(row) == ("CAUGHT_ERROR", "shadow_field_mismatch")
-    assert row.fields_differing >= 1
+    assert row.fields_written == ()
 
 
 def test_an_extra_target_run_is_unknown_never_a_match():
@@ -147,7 +142,7 @@ def test_a_refused_egress_is_told_apart_from_a_healthy_blocked_run(tmp_path):
 def test_a_shadow_run_without_its_case_is_not_a_match():
     row, _, _ = build_row(FIXTURES / "shadow_no_case")
     assert _outcome(row) == ("UNKNOWN", "shadow_not_compared")
-    assert {f.check for f in row.fields_written} == {"not_checked"}
+    assert row.fields_written == ()
 
 
 def test_a_write_that_reached_the_app_in_shadow_mode_is_unknown(tmp_path):
@@ -399,11 +394,13 @@ def _store(tmp_path: Path) -> LedgerStore:
 
 def test_declared_patient_id_passes_the_scrubber_check(tmp_path):
     store = _store(tmp_path)
-    for name in ("shadow_matched", "shadow_wrong_record", "shadow_mismatched"):
-        store.add(FIXTURES / name)
-    lines = outbound_lines(store, summary=False, scrubber=_Presidio())
-    assert len(lines) == 3
-    assert any('"patient_id"' in line for line in lines)
+    store.add(
+        FIXTURES / "run2_fallback_approved",
+        config=(RUN2_VERIFY,),
+        approvals=RUN2_APPROVALS,
+    )
+    (line,) = outbound_lines(store, summary=False, scrubber=_Presidio())
+    assert '"patient_id"' in line
 
 
 def test_an_undeclared_rewritable_name_still_refuses(tmp_path):
@@ -428,8 +425,9 @@ def test_an_extra_field_the_reference_does_not_declare_refuses(tmp_path):
     (run / "case.json").write_text(json.dumps(case))
     store = _store(tmp_path)
     store.add(run)
-    with pytest.raises(LedgerRefused, match="fields_written.name"):
-        outbound_lines(store, summary=False, scrubber=_Presidio("ssn"))
+    # A shadow row carries no field names at all, so none can leave.
+    (line,) = outbound_lines(store, summary=False, scrubber=_Presidio("ssn"))
+    assert "ssn" not in line
 
 
 def test_a_failed_scope_case_declares_none_of_the_proposed_names(tmp_path):
@@ -443,8 +441,6 @@ def test_a_failed_scope_case_declares_none_of_the_proposed_names(tmp_path):
     store = _store(tmp_path)
     assert store.add(run).row.outcome_reason == "shadow_write_landed"
     assert store.entries()[0]["declared_fields"] == []
-    with pytest.raises(LedgerRefused, match="fields_written.name"):
-        outbound_lines(store, summary=False, scrubber=_Presidio())
 
 
 def test_another_tasks_guard_task_declares_nothing(tmp_path):
@@ -472,7 +468,11 @@ def test_guard_task_fields_are_declared_through_config(tmp_path):
 
 def test_an_entry_from_before_declared_fields_exempts_nothing(tmp_path):
     store = _store(tmp_path)
-    store.add(FIXTURES / "shadow_matched")
+    store.add(
+        FIXTURES / "run2_fallback_approved",
+        config=(RUN2_VERIFY,),
+        approvals=RUN2_APPROVALS,
+    )
     body = "".join(
         json.dumps({k: v for k, v in e.items() if k != "declared_fields"}) + "\n"
         for e in store.entries()
@@ -498,7 +498,7 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
     store = _store(tmp_path)
     for path in sorted(FIXTURES.iterdir()):
         if path.name == "shadow_no_case":
-            continue  # no case.json declares its fields: see below
+            continue  # added at the end
         if path.name.startswith("fallback_"):
             continue  # no config declares their read-back field names
         if path.name.startswith(("shadow_", "run2_claude")):
@@ -512,10 +512,11 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
             store.add(path, config=files)
     lines = outbound_lines(store, summary=True, scrubber=scrubber)
     assert len(lines) == len(store.latest())
-    # With no case.json, nothing declares patient_id: the export refuses.
+    # A shadow run with no case.json: no field names, so it goes too.
     store.add(FIXTURES / "shadow_no_case")
-    with pytest.raises(LedgerRefused, match="fields_written.name"):
-        outbound_lines(store, summary=True, scrubber=scrubber)
+    assert len(outbound_lines(store, summary=True, scrubber=scrubber)) == len(
+        store.latest()
+    )
 
 
 # -- J6: the push payload -------------------------------------------------------------
@@ -727,10 +728,19 @@ def test_the_approved_fallback_has_the_persons_time_and_its_fields(tmp_path):
     assert row.started_at is not None and row.ended_at is not None
 
 
-def test_without_the_approvals_folder_the_persons_time_is_unknown():
-    row, _, _ = build_row(FIXTURES / "run2_envelope_approved.json")
+def test_without_the_approvals_folder_the_persons_time_is_unknown(tmp_path):
+    alone = tmp_path / "result-drift-approved.json"
+    shutil.copy(FIXTURES / "run2_envelope_approved.json", alone)
+    row, _, _ = build_row(alone)
     assert _outcome(row) == ("VERIFIED", "readback_verified")
     assert row.human.intervention_s is None
+
+
+def test_the_envelope_finds_its_own_approvals_folder_by_request_id():
+    # The fixtures folder holds run2_approvals/<fallback request id>/: the
+    # gate_answers' request id and sha256 bind it to this envelope.
+    row, _, _ = build_row(FIXTURES / "run2_envelope_approved.json")
+    assert row.human.intervention_s == 0.062
 
 
 def test_the_envelope_with_its_approvals_folder(tmp_path):
@@ -761,9 +771,10 @@ def test_a_p7_request_id_is_declared_by_p7s_own_file(tmp_path):
 
 def test_times_come_from_the_runs_own_files():
     row, _, _ = build_row(FIXTURES / "run2_guard_approved")
-    # Ended at the answer and read-back; started its own 7.715 s before.
-    assert row.ended_at == "2026-11-22T05:02:12.089101Z"
-    assert row.started_at == "2026-11-22T05:02:04.374101Z"
+    # The guard held the save at t=2.829 s; the approval request was created
+    # then (05:02:08.735233), so the run started 2.829 s before that.
+    assert row.started_at == "2026-11-22T05:02:05.906233Z"
+    assert row.ended_at == "2026-11-22T05:02:13.621233Z"
     assert row.duration_s == 7.715
     row, _, _ = build_row(FIXTURES / "run2_envelope_happy.json")
     assert row.started_at is None and row.ended_at is None  # no source has one
@@ -910,3 +921,91 @@ def test_the_allowlist(name, direct, allowed):
     from openadapt_flow.run_ledger.collect import allowed_file
 
     assert allowed_file(Path("/x") / name, direct=direct) is allowed
+
+
+# -- round 5: run3 (2026-11-22) accuracy findings -----------------------------------
+#
+# run3_* are copies of /tmp/acp-demo-out/run3 (allowlisted files only).
+
+RUN3_FALLBACK = FIXTURES / "run3_fallback"
+
+
+def test_a_cleared_exception_then_a_verified_save_is_verified():
+    # P6: the person typed the code (done_by_person); the guard then read the
+    # save back independently. VERIFIED, with the person's time recorded.
+    exceptions = FIXTURES / "run3_exceptions_home" / "exceptions" / "watch-2fa-run3"
+    row, _, _ = build_row(FIXTURES / "run3_watch", exceptions=exceptions)
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    assert [i.kind for i in row.human.intervals] == ["second_factor"]
+    assert row.human.intervention_s == 0.059
+
+
+def test_a_stopped_exception_stays_escalated_even_after_a_verified_save(tmp_path):
+    folder = tmp_path / "watch-2fa-run3"
+    shutil.copytree(
+        FIXTURES / "run3_exceptions_home" / "exceptions" / "watch-2fa-run3", folder
+    )
+    (answer,) = folder.glob("answer-*.json")
+    doc = json.loads(answer.read_text())
+    doc["answer"] = "abort"  # the person stopped the run
+    answer.write_text(json.dumps(doc))
+    row, _, _ = build_row(FIXTURES / "run3_watch", exceptions=folder)
+    assert _outcome(row) == ("ESCALATED", "second_factor")
+
+
+def test_run3_shadow_rows_write_no_fields():
+    row, _, _ = build_row(FIXTURES / "run3_shadow_matched")
+    assert _outcome(row) == ("ESCALATED", "shadow_matched")
+    assert row.fields_written == ()
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "run3_adversarial",  # the hold's held/0.json held_at
+        "run3_guard_wrong_patient",  # recording/meta.json created_at
+        "run3_fallback/result-happy.json",  # wrap's run store record
+        "run3_fallback/result-drift-approved.json",
+        "run3_fallback/result-drift-declined.json",
+    ],
+)
+def test_run3_rows_have_start_times(fixture):
+    row, _, _ = build_row(FIXTURES / fixture)
+    assert row.started_at is not None and row.ended_at is not None
+
+
+def test_the_approved_fallback_envelope_finds_its_approval_and_fields():
+    row, _, _ = build_row(RUN3_FALLBACK / "result-drift-approved.json")
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    assert [i.kind for i in row.human.intervals] == ["approval"]
+    assert row.human.intervention_s == 0.043
+    # From the fallback's own result.json record check, kept to the names
+    # the task's confirmed compiled/verify.yaml declares.
+    assert [(f.name, f.check) for f in row.fields_written] == [
+        ("note", "matched"),
+        ("patient_id", "matched"),
+        ("type", "matched"),
+    ]
+
+
+def test_a_gate_answer_for_another_request_is_not_read(tmp_path):
+    copy = tmp_path / "fb"
+    shutil.copytree(RUN3_FALLBACK, copy)
+    envelope = copy / "result-drift-approved.json"
+    doc = json.loads(envelope.read_text())
+    doc["fallback"]["gate_answers"][0]["request_sha256"] = "sha256:" + "0" * 64
+    envelope.write_text(json.dumps(doc))
+    row, _, _ = build_row(envelope)
+    # The folder's answer belongs to another request: fail closed.
+    assert _outcome(row) == ("UNKNOWN", "source_unreadable")
+
+
+def test_the_decline_rows_duration_is_the_runs_own_span():
+    # The guard idled 54 s after the decline until its timeout; the run ends
+    # at its last save decision (t=5.893). The person answered 3.191 s after
+    # the card opened.
+    row, _, _ = build_row(FIXTURES / "run3_guard_decline")
+    assert _outcome(row) == ("ESCALATED", "person_declined")
+    assert row.duration_s == 5.893
+    assert row.human.intervention_s == 3.191
+    assert row.started_at == "2026-11-22T05:56:43.053948Z"

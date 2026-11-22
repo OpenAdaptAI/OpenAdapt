@@ -112,6 +112,9 @@ RunLedgerOutcomeReason = Literal[
     "halted_before_effect",
     "gate_held",
     "shadow_matched",
+    # P5: the approval card couldn't read the values back, so a person
+    # decides with what's on screen.
+    "values_unread",
     # CAUGHT_ERROR
     "readback_refuted",
     "save_blocked_wrong_record",
@@ -170,6 +173,7 @@ RUN_LEDGER_REASON_OUTCOME: Mapping[str, RunLedgerOutcome] = {
     "halted_before_effect": _E,
     "gate_held": _E,
     "shadow_matched": _E,
+    "values_unread": _E,
     "readback_refuted": _C,
     "save_blocked_wrong_record": _C,
     "save_blocked_other_origin": _C,

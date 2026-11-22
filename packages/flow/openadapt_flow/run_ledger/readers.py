@@ -25,6 +25,7 @@ is decided only in :mod:`openadapt_flow.run_ledger.outcome`.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
@@ -234,12 +235,25 @@ def collect_shadow_run(folder: Path) -> Contribution:
     proposed_values: dict[str, Any] = {}
     if (held := _stamp((proposed or {}).get("held_at"))) is not None:
         out.moments.append(held)  # when the shadow hold stopped the save
+    for held_path in sorted((folder / "held").glob("*.json"))[:64]:
+        # The hold's own record of each save it stopped (an extra target's
+        # too). Only ``held_at`` is read; the file holds the values.
+        if held_path.is_symlink() or not held_path.name[:-5].isdigit():
+            continue
+        try:
+            held_doc = _read_json(held_path)
+        except _Unreadable:
+            continue
+        if isinstance(held_doc, dict) and (moment := _stamp(held_doc.get("held_at"))):
+            out.moments.append(moment)
+            out.files.append(held_path)
     out.moments += _timeline_moments(folder / "egress" / "timeline.jsonl", out)
     for item in (proposed or {}).get("fields") or []:
         if isinstance(item, dict) and (fname := _field_name(item.get("name"))):
             proposed_names.append(fname)
             proposed_values[fname] = item.get("value")
     case_names: set[str] = set()
+    compared: dict[str, str] = {}
     # compare.py returns before it builds the field rows for FAILED_SCOPE,
     # a task that didn't run and a run with no proposal; then the case
     # declares nothing about the proposed names.
@@ -263,7 +277,7 @@ def collect_shadow_run(folder: Path) -> Contribution:
                 continue
             kind = row.get("kind")
             check = _CASE_KIND_CHECK.get(str(kind), "not_checked")
-            out.fields[fname] = _worse(out.fields.get(fname), check)
+            compared[fname] = _worse(compared.get(fname), check)
             out.private_fields[fname] = {
                 "intended": row.get("proposed"),
                 "saved": row.get("human"),
@@ -279,7 +293,7 @@ def collect_shadow_run(folder: Path) -> Contribution:
     for fname in proposed_names:
         if fname in case_names:
             continue
-        out.fields[fname] = _worse(out.fields.get(fname), "not_checked")
+        compared[fname] = _worse(compared.get(fname), "not_checked")
         out.private_fields.setdefault(
             fname, {"intended": proposed_values.get(fname), "saved": None}
         )
@@ -288,7 +302,10 @@ def collect_shadow_run(folder: Path) -> Contribution:
             # the reference doesn't declare; one it leaves out is an
             # expected-record or ignored field the task declared.
             out.declared_fields.add(fname)
-    out.fields_differing = sum(1 for c in out.fields.values() if c == "differs")
+    # A shadow run writes nothing, so the row has no fields_written and no
+    # fields_differing: the comparison is in case.json (and the values in
+    # the private sidecar), and the reason says whether it matched.
+    del compared
 
     landed = _int(run.get("landed_writes"))
     if case is not None and _int(case.get("landed_writes")):
@@ -376,6 +393,9 @@ def collect_fallback_result(path: Path) -> Contribution:
     if not is_dispatch_result(doc):
         return _refused(name, path, "schema_unrecognised")
     out = Contribution(name, files=[path], executor_label="openadapt-wrap")
+    run_id = doc.get("run_id")
+    if isinstance(run_id, str) and re.fullmatch(r"run-[0-9a-f]{8,64}", run_id):
+        out.run_record_id = run_id
 
     def _dict(value: Any) -> dict[str, Any]:
         return value if isinstance(value, dict) else {}
@@ -425,10 +445,17 @@ def collect_fallback_result(path: Path) -> Contribution:
     # the times a person was asked and answered; ``ledger add --approvals``
     # reads it there. A terminal gate keeps one time per save, not a pair.
     answers = fallback.get("gate_answers")
-    if isinstance(answers, list) and answers:
-        key = fallback.get("request_id")
-        if isinstance(key, str) and _task_id(key) is not None:
-            out.approvals_key = key
+    key = fallback.get("request_id")
+    if isinstance(key, str) and _task_id(key) is not None:
+        # The fallback's own request id names its folders: the item-approval
+        # requests and, for an envelope, the result.json with field names.
+        out.approvals_key = key
+    if isinstance(answers, list):
+        for answer in answers:
+            rid = answer.get("request_id") if isinstance(answer, dict) else None
+            if isinstance(rid, str) and re.fullmatch(r"[0-9a-f]{32}", rid):
+                sha = answer.get("request_sha256")
+                out.gate_requests[rid] = sha if isinstance(sha, str) else None
     for gate in run1.get("gates") or []:
         if not isinstance(gate, dict):
             continue
@@ -437,7 +464,7 @@ def collect_fallback_result(path: Path) -> Contribution:
             out.moments.append(at)
         if (
             at is not None
-            and out.approvals_key is None
+            and not out.gate_requests
             and str(gate.get("decision", "")).endswith("_by_hold")
         ):
             out.intervals.append(Interval("approval", at, None, key=f"gate:{at}"))
@@ -462,6 +489,7 @@ def collect_fallback_result(path: Path) -> Contribution:
     if reason == "readback_verified":
         out.readback_tiers.append("independent_readback")
     out.signal(reason)
+    out.fields_check = "matched" if confirmed else "not_checked"
     # The names the record check read back in the task's new record
     # (``result.json`` only; the envelope doesn't carry them). ``collect``
     # keeps only the ones the run's config declares when it declares any.
@@ -472,6 +500,126 @@ def collect_fallback_result(path: Path) -> Contribution:
             out.fields[fname] = "matched" if confirmed else "not_checked"
         out.readback_fields = True
     return out
+
+
+def _named_dirs(base: Path, name: str, *, depth: int = 5) -> list[Path]:
+    """Folders called exactly ``name`` under ``base`` (no links, bounded)."""
+
+    found: list[Path] = []
+    stack = [(base, 0)]
+    seen = 0
+    while stack and seen < 5000:
+        folder, level = stack.pop()
+        try:
+            entries = sorted(folder.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            seen += 1
+            if entry.is_symlink() or not entry.is_dir():
+                continue
+            if entry.name == name:
+                found.append(entry)
+            if level < depth:
+                stack.append((entry, level + 1))
+    return sorted(found)
+
+
+def record_times(
+    contribution: Contribution, run: Path
+) -> tuple[Optional[str], Optional[str], Optional[Path]]:
+    """A dispatcher envelope's start and finish, from wrap's run store record
+    ``runs/<run_id>.json`` near it (``openadapt-agent.run/v1`` with the same
+    ``request_id``). Only ``started_at`` and ``finished_at`` are read; the
+    envelope is already the record's result."""
+
+    run_id = contribution.run_record_id
+    base = run.parent if run.is_file() else run
+    for folder in _named_dirs(base, "runs", depth=6):
+        path = folder / f"{run_id}.json"
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            doc = _read_json(path)
+        except _Unreadable:
+            continue
+        if (
+            isinstance(doc, dict)
+            and doc.get("schema") == "openadapt-agent.run/v1"
+            and doc.get("run_id") == run_id
+            and doc.get("request_id") in contribution.task_ids
+        ):
+            return _stamp(doc.get("started_at")), _stamp(doc.get("finished_at")), path
+    return None, None, None
+
+
+def fallback_neighbours(
+    fallback: Contribution, run: Path, approvals: Optional[Path]
+) -> tuple[Optional[Path], Optional[Contribution]]:
+    """P7's files beside a fallback run, found by its own request id.
+
+    * The item-approval folder: ``<approvals>/<id>/item-approval`` with
+      ``--approvals``, else a folder named exactly ``<id>`` near the run
+      (under the directory holding the result or envelope) that has an
+      ``item-approval`` folder. Only the requests the run's ``gate_answers``
+      name, with the same ``request_sha256``, are read.
+    * For an envelope (no field names of its own): the fallback's own
+      ``result.json`` (a folder named ``<id>`` holding one whose
+      ``replay.fallback.request_id`` is ``<id>``), for the record check's
+      field names, and the task's confirmed ``compiled/verify.yaml`` beside
+      the cache (``<cache>/fallback/<task>/<id>/`` -> ``<cache>/<task>``).
+    """
+
+    key = fallback.approvals_key
+    assert key is not None
+    base = run.parent if run.is_file() else run
+    approval_dir: Optional[Path] = None
+    if approvals is not None:
+        candidate = approvals / key / "item-approval"
+        approval_dir = candidate if candidate.is_dir() else None
+    named = _named_dirs(base, key)
+    if approval_dir is None and fallback.gate_requests:
+        for folder in named:
+            if (folder / "item-approval").is_dir():
+                approval_dir = folder / "item-approval"
+                break
+    extra: Optional[Contribution] = None
+    result_dir = None
+    if run.is_file() or (run / "result.json") not in fallback.files:
+        for folder in named:
+            result = folder / "result.json"
+            if result in fallback.files or not result.is_file():
+                continue
+            try:
+                doc = _read_json(result)
+            except _Unreadable:
+                continue
+            replay = doc.get("replay") if isinstance(doc, dict) else None
+            mine = (
+                isinstance(replay, dict)
+                and isinstance(replay.get("fallback"), dict)
+                and replay["fallback"].get("request_id") == key
+            )
+            if mine and is_dispatch_result(doc):
+                result_dir = folder
+                record = doc.get("record_check")
+                names = record.get("fields") if isinstance(record, dict) else None
+                extra = Contribution("wrap_fallback_fields", files=[result])
+                if isinstance(names, list) and record.get("created") == 1:
+                    check = fallback.fields_check or "not_checked"
+                    for fname in [n for n in map(_field_name, names) if n]:
+                        extra.fields[fname] = check
+                    extra.readback_fields = True
+                break
+    else:
+        result_dir = run
+    if result_dir is not None:
+        task_dir = result_dir.parent
+        verify = task_dir.parent.parent / task_dir.name / "compiled" / "verify.yaml"
+        if verify.is_file() and not verify.is_symlink():
+            extra = extra or Contribution("wrap_fallback_fields")
+            extra.config_paths.append(verify)
+    return approval_dir, extra
 
 
 # -- P6 exceptions (J4) -------------------------------------------------------------

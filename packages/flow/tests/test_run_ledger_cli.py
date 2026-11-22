@@ -42,7 +42,7 @@ def _run_fixtures() -> list[Path]:
         for p in FIXTURES.iterdir()
         if p.is_dir()
         and not p.name.endswith("_config")
-        and p.name not in ("exceptions_home", "run2_approvals")
+        and p.name not in ("exceptions_home", "run2_approvals", "run3_exceptions_home")
     )
 
 

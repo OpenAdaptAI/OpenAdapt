@@ -28,11 +28,11 @@ Schema `openadapt.run-ledger/v1`, defined in
 | `task_type` | The operator's label from `--task-type` (default `unspecified`). Lower-case words only, so it can't carry a name. |
 | `executor_kind`, `executor_label` | `agent`, `program`, `human` or `unknown`, and a short label such as `browser-use`. |
 | `inputs_commitment` | `sha256:` of a random salt plus the run's inputs. The salt is only in the private sidecar. `null` when no source names the inputs. |
-| `started_at`, `ended_at`, `duration_s` | From a source that keeps the run's own start and end (wrap, compiled runs, flight, compile-agent). Otherwise from the wall-clock moments the run's files record (an approval asked and answered, a shadow hold, the egress timeline's first and last model call, a read-back issued, an exception card): `ended_at` is the latest, and `started_at` is `ended_at` minus the run's own duration, or the earliest moment if that is earlier. `null` only when no source records a moment. `duration_s` is always a source's own measure. |
+| `started_at`, `ended_at`, `duration_s` | From a source that keeps the run's own start and end (wrap, compiled runs, flight, compile-agent). Otherwise from the wall-clock moments the run's files record (an approval asked and answered, a shadow hold, the egress timeline's first and last model call, a read-back issued, an exception card): `ended_at` is the latest, and `started_at` is `ended_at` minus the run's own duration, or the earliest moment if that is earlier. `null` only when no source records a moment. A guard run is placed exactly when it held a save for a person: the approval request's `created_at` minus the guard's own `t` for that hold. A dispatcher envelope takes its start and finish from wrap's run store record `runs/<run_id>.json` near it. `duration_s` is always a source's own measure; a guard run that ended by timeout after its last save decision is measured to that decision, not through the wait for the agent to exit. |
 | `model` | `calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `cost_source` (`metered`, `reported` or `unknown`). A value a source doesn't give is `null`, never `0`. |
 | `human` | `intervals` (`approval`, `question`, `exception`, `second_factor`, each with `opened_at` and `decided_at`) and `intervention_s`, their sum. If any interval has no `decided_at`, `intervention_s` is `null`. With no intervals it is `0` only when a source shows no person was asked (a shadow hold, which never asks; an agent-guard run with approval `not_gated`; a flight with no gate events), and `null` (unknown) otherwise. A shadow run's person did the real save in a separate recorded run, so the shadow row itself is `0`. |
 | `outcome`, `outcome_reason` | See below. |
-| `fields_written`, `fields_differing` | Field names with `matched`, `differs` or `not_checked`, and how many differ. Names only. |
+| `fields_written`, `fields_differing` | Field names with `matched`, `differs` or `not_checked`, and how many differ. Names only. A shadow run writes nothing, so its row has none; its comparison stays in `case.json` and the values in the private sidecar. |
 | `readback_tier` | The weakest read: `independent_readback`, `screen_readback` or `unchecked`. |
 | `receipt_digest` | The run receipt's digest, when there is one. |
 | `sources` | The files the row came from, relative to the run directory. |
@@ -56,7 +56,7 @@ reason names another bucket is refused.
 | Bucket | When | Reasons |
 | --- | --- | --- |
 | VERIFIED | An independent read-back verified the save and no hold is pending. | `readback_verified` |
-| ESCALATED | The run stopped for a person, a person declined it, or a person did the step. | `approval_held`, `person_declined`, `approval_declined`, `question_asked`, `exception_card`, `second_factor`, `halted_before_effect`, `gate_held`, `shadow_matched` |
+| ESCALATED | The run stopped for a person, a person declined it, or a person did the step. | `approval_held`, `person_declined`, `values_unread`, `approval_declined`, `question_asked`, `exception_card`, `second_factor`, `halted_before_effect`, `gate_held`, `shadow_matched` |
 | CAUGHT_ERROR | A check caught a wrong save. A person declining is not a catch on its own. | `readback_refuted`, `save_blocked_wrong_record`, `save_blocked_other_origin`, `save_blocked_double_save`, `save_blocked_out_of_scope`, `gate_refused`, `shadow_wrong_record`, `shadow_field_mismatch` |
 | FAILED | Crashed, timed out, canceled or gave up, with no evidence of a write. | `crashed_no_write`, `timed_out_no_write`, `agent_gave_up`, `shadow_no_proposal`, `shadow_timed_out`, `platform_failed`, `canceled_no_write`, `policy_rejected_no_write` |
 | UNKNOWN | Nothing settles it. Never folded into another bucket. | `shadow_write_landed`, `completed_unverified`, `shadow_not_compared`, `shadow_extra_target`, `shadow_agent_error`, `egress_refused`, `reconciliation_required`, `screen_readback_only`, `lost_reply`, `write_unconfirmed`, `saved_awaiting_check`, `rolled_back`, `self_approved`, `observe_only_would_block`, `schema_unrecognised`, `source_unreadable`, `task_id_conflict`, `unmapped_outcome`, `no_sources` |
@@ -83,6 +83,15 @@ Two more rules:
   refuted read-back, a differing field, a blocked wrong record. Those
   outrank ESCALATED anyway. `approval_declined` is an approval nobody gave
   in time (`request_expired`, `approval_wait_timed_out`).
+- **A person who helped, then a verified save, is VERIFIED.** An approval
+  the person approved, a P7 gate the person approved, and a P6 exception the
+  person cleared (`continue` or `done_by_person`, decided) let the run go on:
+  none is a bucket source. The person's time is recorded in `human` (the
+  interval's `kind` keeps which: `approval`, `exception`, `second_factor`),
+  and the run's own result decides, so a save read back independently is
+  VERIFIED. An approval declined, an exception stopped (`skip`, `abort`,
+  `decline`), expired or not yet answered is ESCALATED, and ESCALATED
+  outranks VERIFIED.
 - **"No write" needs evidence.** A crash, failure or timeout can come after a
   request went out. `crashed_no_write` and `timed_out_no_write` are used only
   where the source also shows nothing was sent (the agent guard's own save
@@ -217,10 +226,17 @@ signer) but no times; its request and answer files sit in
 `<approvals>/<fallback request id>/item-approval/` (`wrap-dispatch
 --fallback-approvals`). `ledger add --approvals DIR` reads them there: the
 person's time runs from the request's `created_at` to the answer's
-`answered_at`. Without `--approvals` the time is unknown. A `result.json`'s
+`answered_at`. Without `--approvals`, a folder named exactly the fallback's
+request id near the envelope or result (bounded search) is used, and only
+the requests `gate_answers` names with the same `request_sha256` are read;
+an answer bound to another request is UNKNOWN (`source_unreadable`). With
+none found the time is unknown. A `result.json`'s
 record check names the fields of the new record; the row keeps those the
 run's config (`--config verify.yaml`) declares, `matched` when the check is
-readable and passed. The envelope carries no field names.
+readable and passed. For an envelope, which carries no field names, the
+fallback's own `result.json` (a folder named the fallback request id, with a
+matching `replay.fallback.request_id`) gives them, and the task's confirmed
+`<cache>/<task>/compiled/verify.yaml` declares which to keep.
 
 On `path: program` or `held` the envelope is read like a wrap result;
 `NO_ADMITTED_PROGRAM` is FAILED (`policy_rejected_no_write`, nothing ran).
