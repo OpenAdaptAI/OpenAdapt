@@ -66,7 +66,12 @@ class PlaywrightComputer:
         return self.page.evaluate(LABEL_JS, [x, y])
 
 
+CALLS = 0
+
+
 def call_model(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    global CALLS
+    CALLS += 1
     body = {
         "model": "claude-opus-5-5",
         "max_tokens": 512,
@@ -166,6 +171,10 @@ def main(url: str, out: str) -> int:
         browser.close()
     with open(out, "w", encoding="utf-8") as handle:
         json.dump({"saved": saved, "held": held}, handle)
+    usage = os.environ.get("OPENADAPT_USAGE_PATH")
+    if usage:  # the agent's own count, which flight compares with its own
+        with open(usage, "w", encoding="utf-8") as handle:
+            json.dump({"schema": "openadapt.agent-usage/v1", "calls": CALLS}, handle)
     return 0
 
 

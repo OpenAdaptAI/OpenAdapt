@@ -76,18 +76,20 @@ recorded in `flight.json` under `details.egress.opt_out`.
 the proxy:
 
 - your agent wrote `usage.json` (`openadapt.agent-usage/v1`, at
-  `OPENADAPT_USAGE_PATH`) with more calls than the proxy saw; or
+  `OPENADAPT_USAGE_PATH`) with more calls than the proxy saw;
+- your agent wrote no `usage.json` and the egress block was off; or
 - a client that ignored the base URLs but honoured `HTTPS_PROXY` reached the
   trap. The trap refuses it and records the host. Anything else that honours
   the proxy variables is trapped too and refuses the run: an agent's
   telemetry, or on Linux a browser your command starts.
 
 `details.egress` in `flight.json` holds `refused`, the reason and the
-numbers. A connection that the kernel refuses without going through the trap
-is blocked but not counted: macOS doesn't log these denials to an
-unprivileged process. Without a `usage.json` the agent's own count can't be
-compared. Under the block such a direct call still fails; without the block
-it is not detected.
+numbers. Without a `usage.json` and without the block, the run is refused
+too: nothing could show a call that went around the proxy. Under the block,
+`details.egress.checks.cross_check` is `"unavailable"`. A connection that
+the kernel refuses without going through the trap is blocked but not
+counted: macOS doesn't log these denials to an unprivileged process. Under
+the block such a direct call still fails.
 
 Other limits of the block:
 
@@ -106,7 +108,8 @@ The same API is available in Python as
 Every string in the request body is scrubbed, wherever it is, with these
 exceptions that must reach the provider unchanged: thinking and reasoning
 blocks (their signatures must verify; they came from the provider), tool
-definitions, request settings (`model`, `tool_choice`, `metadata`...) and
+definitions, request settings (`model`, `tool_choice`...; not `metadata`,
+whose values are scrubbed) and
 protocol fields (`type`, `role`, ids, the tool name of a tool call). Inside
 tool-call arguments and a tool result's fields no key and no block type is
 exempt. Arguments sent as a JSON object or array in a string are parsed,

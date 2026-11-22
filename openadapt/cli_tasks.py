@@ -88,6 +88,7 @@ FLOW_NAMES = {
     "qualify": "qualify",
     "readiness": "qualify readiness",
     "receipt": "verify receipt",
+    "handoff": "verify handoff",
     "reconcile": "verify reconcile",
     "record": "record",
     "redact-report": "inspect redact-report",

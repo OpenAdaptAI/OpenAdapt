@@ -174,6 +174,8 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     egress = summary["details"]["egress"]
     assert egress["enforced"] is (sys.platform == "darwin")
     assert egress["refused"] is False
+    assert egress["checks"]["cross_check"] == "compared"
+    assert egress["checks"]["agent_reported_calls"] == len(script)
     assert json.loads((run_dir / "egress.json").read_text())["mode"] == "scrubbed"
     calls = len(script)
     assert summary["model"]["calls"] == calls
