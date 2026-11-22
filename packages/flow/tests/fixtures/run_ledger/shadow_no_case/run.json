@@ -1,0 +1,26 @@
+{
+  "agent_wall_s": 2.001,
+  "before_screen": true,
+  "double_save": false,
+  "ended": "held",
+  "exit_code": 0,
+  "held": 1,
+  "landed_writes": 0,
+  "model_cost_usd": 0.03,
+  "notes": [],
+  "other_origin_refused": 0,
+  "proposed": true,
+  "requests": {
+    "save": 1
+  },
+  "schema": "openadapt.readiness-task-run/v1",
+  "status": "HELD",
+  "task_id": "readiness-mockmed-0000",
+  "usage": {
+    "calls": 6,
+    "cost_usd": 0.03,
+    "input_tokens": 12000,
+    "model": "claude-sonnet-5-5",
+    "output_tokens": 600
+  }
+}

@@ -215,9 +215,9 @@ class ValueExpr(BaseModel):
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
     #: For a ``param`` the system of record stores transformed: how it stores
-    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: what was entered (some web forms normalize street and city to
     #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
-    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: as the browser's ``toUpperCase()`` does for uppercase-forced fields
     #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). ``capitalize_words``
     #: puts the first letter of each space-separated word in capitals and
     #: drops extra spaces, as an app's capitalize-on-save fields do (JavaScript:
@@ -236,7 +236,7 @@ class ValueExpr(BaseModel):
     #: null field) and nothing else: never ``""``, never the text ``"None"``.
     null: Optional[Literal[True]] = None
     #: ``True`` when the system of record leaves this field out of a record
-    #: whose value is null (Redmine's issue JSON omits ``assigned_to`` when
+    #: whose value is null (some REST APIs omit nullable keys when
     #: no one is assigned). Then a null value matches a missing field too.
     #: Without it a missing field matches nothing: a misspelled or
     #: unprojected field must not pass for null. Declared per field, never
@@ -928,7 +928,7 @@ class Effect(BaseModel):
     #: caller names (:data:`DEFAULT_IDEMPOTENCY_KEY_FIELD` unless told).
     key_field: str = DEFAULT_IDEMPOTENCY_KEY_FIELD
     #: ``record_written`` only: a duplicate (idempotency) key made of several
-    #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
+    #: fields, such as ``{lname, fname, dob}``. Field -> value, each
     #: a :class:`ValueExpr` like :attr:`match`. The count reads only records
     #: whose key fields all match, and the check also REFUTES when more than
     #: one record in the read set carries the key, counting records that
@@ -1587,12 +1587,12 @@ class EffectVerifier(Protocol):
     """Independent verification of a typed :class:`Effect` against a REAL
     system of record (an API / DB / filesystem), never the screen.
 
-    A verifier is bound to one substrate (an OpenEMR FHIR endpoint, a REST
+    A verifier is bound to one substrate (a FHIR endpoint, a REST
     system of record, a document store) and knows how to (1) snapshot the
     system of record before the action and (2) decide whether the intended
     effect actually landed. The same :class:`Effect` contract is honored by
     every substrate -- that substrate-agnosticism is the point (an
-    OpenEMR-shaped protocol would just overfit MockMed's replacement).
+    single-app-shaped protocol would overfit one vendor).
 
     Contract for implementers:
 
