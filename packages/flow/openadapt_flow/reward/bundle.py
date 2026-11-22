@@ -5,7 +5,7 @@ loads: the contract, its required and forbidden effects, the oracle recipe,
 and (when certified) a self-signed certificate with the calibration counts
 beside it. :func:`write_bundle` writes one from the effects and oracle a
 caller passes; tests, the benchmark harnesses and the ``serve-reward`` demo
-seed (:mod:`openadapt_flow.reward.seed`) all build their bundles with it.
+seed (the demo reward seed) all build their bundles with it.
 
 Nothing here is a production recipe. A production-scope certificate is
 calibrated on a held-out corpus by the OpenAdapt control service.

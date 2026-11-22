@@ -4,7 +4,7 @@ A demonstration keeps every literal gesture. A few of them leave a step that
 asserts nothing, and a strict certification policy (``clinical-write``) then
 refuses the bundle. These passes replace such a gesture with an equivalent one
 that carries its own check, using only the recording's own frames. They used
-to live in one script per workflow (``scripts/openemr_qualification.py``);
+to live in one script per workflow;
 they now run in every compile.
 
 Each pass is evidence-gated and records every change it makes, so the result
