@@ -2,8 +2,11 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
-## Unreleased
+## v2.3.0 (2026-11-22)
 
+- Works with openadapt-flow 4: the Flow requirement is now
+  `>=2.2.0,<5` (was `<4`), so `pip install openadapt` can resolve
+  openadapt-flow 4.0.0.
 - New `a2a` extra for `openadapt-agent serve --a2a`, the A2A (Agent2Agent)
   protocol adapter in openadapt-flow (docs/A2A.md). `--handoffs` adds
   `get_handoff` and `verify_handoff`. Both need an openadapt-flow that has

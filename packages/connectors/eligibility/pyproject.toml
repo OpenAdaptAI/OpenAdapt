@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "openadapt-flow>=3.4.0,<4",
+    "openadapt-flow>=4.0.0,<5",
     "pydantic>=2.0",
     "PyYAML>=6.0",
     "requests>=2.31",
@@ -31,7 +31,7 @@ packages = ["openadapt_eligibility"]
 [tool.uv]
 # openadapt-types reaches this project only through openadapt-flow, so the
 # path source below did not apply to it and the lock took openadapt-types
-# from PyPI. Flow 3.5.0 needs openadapt-types 0.24.1, which PyPI does not
+# from PyPI. Flow 4.0.0 needs openadapt-types 0.24.1, which PyPI does not
 # serve until it releases. The override makes openadapt-types a requirement
 # of this project, so the lock takes the in-tree copy, like Flow's.
 # Keep its range equal to Flow's openadapt-types range; when Flow moves to

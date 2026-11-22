@@ -484,7 +484,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "openadapt-flow"
-version = "3.5.0"
+version = "4.0.0"
 source = { editable = "../../flow" }
 dependencies = [
     { name = "cryptography" },

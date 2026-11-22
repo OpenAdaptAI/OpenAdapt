@@ -4,7 +4,7 @@
 ## v0.24.1 (2026-11-22)
 
 openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
-have. This release adds it and the other modules Flow 3.5.0 uses. It stays
+have. This release adds it and the other modules Flow 4.0.0 uses. It stays
 within the `<0.25.0` range every released Flow 3 accepts, so upgrading this
 package repairs a Flow 3.4.0 install.
 
@@ -39,17 +39,17 @@ package repairs a Flow 3.4.0 install.
 
 ### Fixes
 
-- A reward scoring policy whose `escalated_after_effect_reward` is at or
-  above its `verified_reward` is refused, because asking a person would then
-  pay as much as finishing. A contract that sets `verified_reward` to 0.5 or
-  less must now also set `escalated_after_effect_reward` below it
+- A reward scoring policy that declares an `escalated_after_effect_reward`
+  at or above its `verified_reward` is refused, because asking a person would
+  then pay as much as finishing. A contract that leaves it at the default
+  still loads when its `verified_reward` is 0.5 or less, as in 0.24.0, and
+  then gives no credit for asking (`escalated_after_effect_credit`)
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
-- `RewardContractV1.digest` covers every scoring field with its default, so
-  the new `escalated_after_effect_reward` changes the digest of every reward
-  contract, including one that does not set it. A certificate issued under
-  0.24.0 names the old digest, and checking it against the same contract
-  under 0.24.1 reports a digest mismatch. Issue certificates again under
-  0.24.1 ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+- Reward contract digests are unchanged from 0.24.0.
+  `escalated_after_effect_reward` enters `RewardContractV1.digest` only when
+  it differs from its default, so every contract and certificate issued
+  under 0.24.0 hashes and verifies as before. A test checks contracts and
+  certificates issued by openadapt-types 0.24.0 from PyPI.
 
 ## v0.24.0 (2026-10-20)
 

@@ -15,12 +15,17 @@
 
 <!-- version list -->
 
-## v3.5.0 (2026-11-22)
+## v4.0.0 (2026-11-22)
+
+A major release: it removes `openadapt_flow.eligibility` and renames parts
+of the Execute and reward APIs. See "Upgrading from 3.x" below.
 
 This release needs openadapt-types 0.24.1. Flow 3.4.0 imported
 `openadapt_types.receipt`, which openadapt-types 0.24.0 does not have, so a
 clean install of 3.4.0 failed on every receipt path. Flow now requires
-`openadapt-types>=0.24.1,<0.25.0`.
+`openadapt-types>=0.24.1,<0.25.0`. A Flow 3.4.0 install is repaired by
+upgrading openadapt-types to 0.24.1, which 3.4.0's range allows.
+`openadapt-agent` 2.3.0 is the first agent release that accepts Flow 4.
 
 ### Features
 
@@ -141,23 +146,52 @@ clean install of 3.4.0 failed on every receipt path. Flow now requires
 
 ### Breaking changes
 
-- The Stedi 270/271 payer eligibility client moved out of `openadapt-flow`
-  into the `openadapt-eligibility` connector in this repository
-  (`packages/connectors/eligibility`). `openadapt_flow.eligibility` no longer
-  exists. `openadapt-eligibility` is not on PyPI yet; install it from the
-  repository and import `openadapt_eligibility` (#2488).
-- Execute (#2486):
-  - `ExecuteService`, `create_app` and `serve` take `seed_admissions` (the
-    admitted bundles to seed) in place of `seed_mockmed`. The
-    `--seed-mockmed` flag still works.
-  - The `synthetic_mockmed` runner is now `synthetic_runner`, and its
-    evidence tags are `synthetic-verified` and `synthetic-banner-lie`.
-- Reward bundles take explicit `task_id`, `environment_id` and
-  `certificate_id`; the defaults no longer name the demo app (#2486).
-- Identity checks no longer treat `patient`, `chart`, `charts`,
-  `discharged`, `admitted`, `appointment` and `demo` as row chrome. Words
-  repeated across sibling rows are derived from the rows instead
-  (`derive_sibling_chrome_words`) (#2486).
+- `openadapt_flow.eligibility` is gone. The Stedi 270/271 payer eligibility
+  client moved into the `openadapt-eligibility` connector
+  (`packages/connectors/eligibility`), which is not on PyPI yet (#2488).
+- `ExecuteService`, `create_app` and `serve` take `seed_admissions` in
+  place of `seed_mockmed` (#2486).
+- The `synthetic_mockmed` runner is now `synthetic_runner`. Its evidence
+  tags are `synthetic-verified` and `synthetic-banner-lie` (#2486).
+- The reward bundle builder's default task, environment and certificate ids
+  no longer name the demo app (#2486).
+
+### Upgrading from 3.x
+
+- **Eligibility.** Install the connector from the repository and change
+  the import:
+
+  ```bash
+  pip install "openadapt-eligibility @ git+https://github.com/OpenAdaptAI/OpenAdapt#subdirectory=packages/connectors/eligibility"
+  ```
+
+  ```python
+  # before
+  from openadapt_flow.eligibility import ...
+  # after
+  from openadapt_eligibility import ...
+  ```
+
+  The module names inside it are unchanged (`artifact`, `client`,
+  `waterfall`), and `payer_routes.yaml` ships with it.
+- **Execute seeding.** Replace `seed_mockmed=True` with the bundles to seed:
+
+  ```python
+  from openadapt_flow.mockmed.execute_seed import demo_admissions
+
+  service = ExecuteService(..., seed_admissions=demo_admissions())
+  ```
+
+  `seed_admissions` takes any iterable of `AdmittedBundle`, so your own
+  admitted bundles work the same way. On the command line,
+  `--seed-mockmed` still works.
+- **Synthetic runner.** Code or stored evidence that matches
+  `synthetic_mockmed` should match `synthetic_runner`. The evidence tags
+  are now `synthetic-verified` and `synthetic-banner-lie`.
+- **Reward bundles.** If you relied on the default ids, pass `task_id`,
+  `environment_id` and `certificate_id` to the bundle builder explicitly.
+  Bundles built with the defaults now carry `task_synthetic_record_write`,
+  `environment_synthetic` and `reward_certificate_synthetic`.
 
 ### Fixes
 

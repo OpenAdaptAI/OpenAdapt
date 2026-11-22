@@ -253,6 +253,16 @@ class RewardOracleV1(_StrictContract):
         return tier_of(self.channel)
 
 
+#: The credit for asking after the work is done, when a contract declares none.
+ESCALATED_AFTER_EFFECT_DEFAULT = 0.5
+#: Scoring fields added in 0.24.1, with the default a contract certified
+#: under 0.24.0 implicitly has. RewardContractV1.digest leaves them out at that
+#: default, so every 0.24.0 digest stays the same.
+_DIGEST_STABLE_SCORING_DEFAULTS: Mapping[str, float] = {
+    "escalated_after_effect_reward": ESCALATED_AFTER_EFFECT_DEFAULT,
+}
+
+
 class RewardScoringPolicyV1(_StrictContract):
     """How each scoring class becomes a scalar.
 
@@ -266,8 +276,10 @@ class RewardScoringPolicyV1(_StrictContract):
     ``x``, declaring done pays more in expectation only when the policy is
     more than ``(x - w) / (v - w)`` sure the effect is right.  With the
     defaults (1, -1, 0.5) that is 75%.  Zero gives no credit for asking; a
-    value at or above the verified reward is refused, because asking would
-    then pay as much as finishing.
+    declared value at or above the verified reward is refused, because asking
+    would then pay as much as finishing.  The default is kept for a contract
+    whose ``verified_reward`` is 0.5 or less, which 0.24.0 accepted, and then
+    gives no credit for asking (``escalated_after_effect_credit``).
     """
 
     verified_reward: StrictFloat = Field(
@@ -301,7 +313,7 @@ class RewardScoringPolicyV1(_StrictContract):
         allow_inf_nan=False,
     )
     escalated_after_effect_reward: StrictFloat = Field(
-        default=0.5,
+        default=ESCALATED_AFTER_EFFECT_DEFAULT,
         ge=0.0,
         lt=1.0,
         allow_inf_nan=False,
@@ -311,11 +323,26 @@ class RewardScoringPolicyV1(_StrictContract):
 
     @model_validator(mode="after")
     def _partial_credit_below_verified(self) -> RewardScoringPolicyV1:
-        if self.escalated_after_effect_reward >= self.verified_reward:
+        if (
+            self.escalated_after_effect_reward >= self.verified_reward
+            and self.escalated_after_effect_reward != ESCALATED_AFTER_EFFECT_DEFAULT
+        ):
             raise ValueError(
                 "escalated_after_effect_reward must be below verified_reward"
             )
         return self
+
+    @property
+    def escalated_after_effect_credit(self) -> float:
+        """The scalar an ``escalated_after_effect`` episode earns.
+
+        The declared value, or zero when the default is not below the
+        verified reward, so asking never pays as much as finishing.
+        """
+
+        if self.escalated_after_effect_reward >= self.verified_reward:
+            return 0.0
+        return self.escalated_after_effect_reward
 
     def scalar_for(self, outcome: RewardOutcomeV1) -> float | None:
         """Return the declared scalar, or ``None`` for an unscored outcome."""
@@ -327,7 +354,7 @@ class RewardScoringPolicyV1(_StrictContract):
             RewardOutcomeV1.REJECTED_POLICY: self.rejected_policy_reward,
             RewardOutcomeV1.WRONG_EFFECT: self.wrong_effect_reward,
             RewardOutcomeV1.ESCALATED_AFTER_EFFECT: (
-                self.escalated_after_effect_reward
+                self.escalated_after_effect_credit
             ),
         }
         return declared.get(RewardOutcomeV1(outcome))
@@ -390,7 +417,19 @@ class RewardContractV1(_StrictContract):
 
     @property
     def digest(self) -> str:
-        return _digest_payload(self.model_dump(mode="json"))
+        """The canonical digest certificates and receipts bind.
+
+        A scoring field added after a contract version shipped enters the
+        digest only when it differs from its default, so a contract written
+        before the field existed keeps the digest it was certified under.
+        """
+
+        payload = self.model_dump(mode="json")
+        scoring = payload["scoring"]
+        for name, default in _DIGEST_STABLE_SCORING_DEFAULTS.items():
+            if scoring.get(name) == default:
+                del scoring[name]
+        return _digest_payload(payload)
 
 
 class RewardCertificateV1(_StrictContract):

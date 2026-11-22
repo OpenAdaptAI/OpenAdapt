@@ -1,0 +1,139 @@
+{
+  "cases": [
+    {
+      "certificate": {
+        "calibration_corpus_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "calibration_scope": "synthetic",
+        "certificate_id": "reward.certificate.default",
+        "checker_configuration_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "delta": 0.05,
+        "epsilon": 0.0114,
+        "expiry_policy_updates": 50,
+        "issued_at": "2026-09-01T12:00:00Z",
+        "issued_at_policy_update": 100,
+        "issuer": "self_signed",
+        "issuer_key_id": "key.reference.0001",
+        "reward_contract_digest": "sha256:15844d27bd5d12fe71868b2753a31292c676f878dc379562956176fea8e5246c",
+        "schema_version": "openadapt.reward-certificate/v1",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "signature_algorithm": "ed25519",
+        "threshold": 0.5
+      },
+      "certificate_digest": "sha256:08f3123efd5a42a90993d5ab34d10b9adcea8accc449f4d260e5d9b5887b9e40",
+      "certificate_state_at_update_120": "current",
+      "contract": {
+        "certificate_policy": {
+          "calibration_corpus_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "delta": 0.05,
+          "epsilon": 0.0114,
+          "expiry_policy_updates": 50,
+          "threshold": 0.5
+        },
+        "components": [
+          {
+            "name": "halt_on_uncertainty",
+            "weight": 0.25
+          },
+          {
+            "name": "terminal_effect",
+            "weight": 1.0
+          }
+        ],
+        "contract_id": "reward.contract.default",
+        "contract_version": "reward.contract.default.v1",
+        "environment_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environment_id": "environment.local.0001",
+        "forbidden_effect_contract_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "oracle": {
+          "channel": "file",
+          "identity_keys": [
+            "record_id"
+          ],
+          "oracle_contract_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "required_effect_contract_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "schema_version": "openadapt.reward-contract/v1",
+        "scoring": {
+          "halted_before_effect_reward": 0.0,
+          "platform_failures": "unscored",
+          "refused_reward": 0.0,
+          "rejected_policy_reward": 0.0,
+          "uncertain_episodes": "unscored",
+          "verified_reward": 1.0,
+          "wrong_effect_reward": -1.0
+        },
+        "task_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "task_id": "task.reference.0001"
+      },
+      "contract_digest": "sha256:15844d27bd5d12fe71868b2753a31292c676f878dc379562956176fea8e5246c"
+    },
+    {
+      "certificate": {
+        "calibration_corpus_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "calibration_scope": "synthetic",
+        "certificate_id": "reward.certificate.low-verified",
+        "checker_configuration_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "delta": 0.05,
+        "epsilon": 0.0114,
+        "expiry_policy_updates": 50,
+        "issued_at": "2026-09-01T12:00:00Z",
+        "issued_at_policy_update": 100,
+        "issuer": "self_signed",
+        "issuer_key_id": "key.reference.0001",
+        "reward_contract_digest": "sha256:7ed7ab3a5f17daa0ed06d77e59e21d1fbdd306d1e0cb0c2e16380dd779884650",
+        "schema_version": "openadapt.reward-certificate/v1",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "signature_algorithm": "ed25519",
+        "threshold": 0.5
+      },
+      "certificate_digest": "sha256:31e200581cd5cb5866affc5f847557b7d4235b198eeb2c1fddb78edf24715d89",
+      "certificate_state_at_update_120": "current",
+      "contract": {
+        "certificate_policy": {
+          "calibration_corpus_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "delta": 0.05,
+          "epsilon": 0.0114,
+          "expiry_policy_updates": 50,
+          "threshold": 0.5
+        },
+        "components": [
+          {
+            "name": "halt_on_uncertainty",
+            "weight": 0.25
+          },
+          {
+            "name": "terminal_effect",
+            "weight": 1.0
+          }
+        ],
+        "contract_id": "reward.contract.low-verified",
+        "contract_version": "reward.contract.low-verified.v1",
+        "environment_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "environment_id": "environment.local.0001",
+        "forbidden_effect_contract_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "oracle": {
+          "channel": "file",
+          "identity_keys": [
+            "record_id"
+          ],
+          "oracle_contract_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "required_effect_contract_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "schema_version": "openadapt.reward-contract/v1",
+        "scoring": {
+          "halted_before_effect_reward": 0.0,
+          "platform_failures": "unscored",
+          "refused_reward": 0.0,
+          "rejected_policy_reward": 0.0,
+          "uncertain_episodes": "unscored",
+          "verified_reward": 0.5,
+          "wrong_effect_reward": -1.0
+        },
+        "task_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "task_id": "task.reference.0001"
+      },
+      "contract_digest": "sha256:7ed7ab3a5f17daa0ed06d77e59e21d1fbdd306d1e0cb0c2e16380dd779884650"
+    }
+  ],
+  "issued_with": "openadapt-types 0.24.0 from PyPI"
+}
