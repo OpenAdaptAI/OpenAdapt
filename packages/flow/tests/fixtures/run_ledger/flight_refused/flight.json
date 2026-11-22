@@ -1,0 +1,28 @@
+{
+  "actions_count": 9,
+  "ended_at": "2026-11-20T11:01:00Z",
+  "executor_label": "openai-cua",
+  "gate_events": [
+    {
+      "at": "2026-11-20T11:00:40Z",
+      "kind": "held",
+      "reason": "consequential_click"
+    },
+    {
+      "at": "2026-11-20T11:00:41Z",
+      "kind": "refused",
+      "reason": "wrong_record"
+    }
+  ],
+  "model": {
+    "calls": 5,
+    "cost_source": "unknown",
+    "cost_usd": null,
+    "input_tokens": 9000,
+    "output_tokens": 400
+  },
+  "schema": "openadapt.flight-run/v1",
+  "started_at": "2026-11-20T11:00:00Z",
+  "task_id": "flight-task-0002",
+  "timeline_path": "timeline.jsonl"
+}

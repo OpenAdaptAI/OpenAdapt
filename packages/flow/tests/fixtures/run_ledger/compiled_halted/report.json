@@ -1,0 +1,16 @@
+{
+  "est_model_cost_usd": 0.0,
+  "execution_outcome": "HALTED",
+  "model_calls": 0,
+  "params": {
+    "patient_ref": "SYN-PATIENT-0042"
+  },
+  "production_eligible": true,
+  "readback": null,
+  "results": [],
+  "started_at": "2026-11-20T09:00:00.000000+00:00",
+  "success": false,
+  "total_ms": 1800.0,
+  "transaction_outcome": "HALTED_BEFORE_EFFECT",
+  "workflow_name": "synthetic-intake"
+}
