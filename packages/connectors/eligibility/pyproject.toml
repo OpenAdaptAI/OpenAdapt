@@ -28,6 +28,16 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_eligibility"]
 
+[tool.uv]
+# openadapt-types reaches this project only through openadapt-flow, so the
+# path source below did not apply to it and the lock took openadapt-types
+# from PyPI. Flow 3.5.0 needs openadapt-types 0.24.1, which PyPI does not
+# serve until it releases. The override makes openadapt-types a requirement
+# of this project, so the lock takes the in-tree copy, like Flow's.
+override-dependencies = [
+    "openadapt-types>=0.24.0,<0.25.0",
+]
+
 [tool.uv.sources]
 openadapt-flow = { path = "../../flow", editable = true }
 openadapt-types = { path = "../../types", editable = true }

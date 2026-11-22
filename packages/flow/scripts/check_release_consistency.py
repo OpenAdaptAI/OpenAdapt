@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import math
@@ -1704,6 +1705,290 @@ def validate_distribution_directory(
     return wheel, sdist
 
 
+# Flow imports openadapt_types, and a user's pip may install the oldest
+# openadapt-types that Flow's `>=` floor allows. Flow 3.4.0 imported
+# openadapt_types.receipt while its floor, 0.24.0, had no such module, so a
+# clean install failed on every receipt path. CI never saw it, because CI
+# installs openadapt-types from this monorepo's source. This check reads the
+# floor version's sources from its git tag (openadapt-types-v<floor>), not from
+# PyPI, and fails when Flow names a module, or a name in one, that the floor
+# lacks.
+TYPES_DISTRIBUTION = "openadapt-types"
+TYPES_IMPORT_ROOT = "openadapt_types"
+TYPES_TAG_PREFIX = "openadapt-types-v"
+TYPES_SOURCE_DIR = "packages/types/openadapt_types"
+TYPES_FLOOR_PATTERN = re.compile(
+    r"^openadapt-types\s*(?:\[[^\]]*\])?\s*[^;]*?>=\s*([0-9][^,\s;]*)"
+)
+
+
+class TypesReference(NamedTuple):
+    path: str
+    line: int
+    module: str
+    name: str | None
+    # True for `alias.attr`, read through a name an import bound.
+    via_alias: bool = False
+
+
+def types_floor(root: Path = ROOT) -> str:
+    """The lowest openadapt-types version Flow's base dependencies allow."""
+    import tomllib
+
+    meta = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    floors = [
+        match.group(1)
+        for requirement in meta["project"].get("dependencies", [])
+        if (match := TYPES_FLOOR_PATTERN.match(requirement.strip()))
+    ]
+    if len(floors) != 1:
+        raise ValueError(
+            f"expected exactly one {TYPES_DISTRIBUTION}>= floor in pyproject.toml, "
+            f"found {floors}"
+        )
+    return floors[0]
+
+
+def _module_name(relative: str) -> str:
+    parts = PurePosixPath(relative).with_suffix("").parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join((TYPES_IMPORT_ROOT, *parts))
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+    )
+
+
+def _has_tag(repo: Path, ref: str) -> bool:
+    found = _git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    return found.returncode == 0
+
+
+def _types_sources_at_tag(repo: Path, tag: str) -> dict[str, str] | None:
+    """Module name to source for openadapt_types at a tag, or None without it.
+
+    A shallow CI checkout has no tags, so a missing tag is fetched once.
+    """
+    ref = f"refs/tags/{tag}"
+    if not _has_tag(repo, ref):
+        _git(
+            repo,
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--depth=1",
+            "origin",
+            f"+{ref}:{ref}",
+        )
+        if not _has_tag(repo, ref):
+            return None
+    listing = _git(repo, "ls-tree", "-r", "--name-only", ref, "--", TYPES_SOURCE_DIR)
+    if listing.returncode:
+        raise ValueError(f"could not list {TYPES_SOURCE_DIR} at {tag}")
+    sources: dict[str, str] = {}
+    for path in listing.stdout.splitlines():
+        if not path.endswith(".py"):
+            continue
+        shown = _git(repo, "show", f"{ref}:{path}")
+        if shown.returncode:
+            raise ValueError(f"could not read {path} at {tag}")
+        sources[_module_name(path[len(TYPES_SOURCE_DIR) + 1 :])] = shown.stdout
+    if not sources:
+        raise ValueError(f"{tag} has no {TYPES_SOURCE_DIR} sources")
+    return sources
+
+
+def _types_sources_in_tree(repo: Path) -> dict[str, str]:
+    base = repo / TYPES_SOURCE_DIR
+    return {
+        _module_name(path.relative_to(base).as_posix()): path.read_text(
+            encoding="utf-8"
+        )
+        for path in sorted(base.rglob("*.py"))
+    }
+
+
+def _types_tree_version(repo: Path) -> str:
+    import tomllib
+
+    meta = tomllib.loads(
+        (repo / "packages/types/pyproject.toml").read_text(encoding="utf-8")
+    )
+    return str(meta["project"]["version"])
+
+
+def floor_types_sources(root: Path = ROOT) -> tuple[str, dict[str, str]]:
+    """Where the floor's sources come from, and the sources themselves.
+
+    The floor's tag when it exists. A floor that is not tagged yet must be
+    the openadapt-types version in this tree: the two release together, and
+    scripts/ci/release_plan.py holds Flow until PyPI serves that version.
+    Any other untagged floor fails.
+    """
+    repo = root.parents[1]
+    floor = types_floor(root)
+    tag = f"{TYPES_TAG_PREFIX}{floor}"
+    sources = _types_sources_at_tag(repo, tag)
+    if sources is not None:
+        return tag, sources
+    in_tree = _types_tree_version(repo)
+    if in_tree != floor:
+        raise ValueError(
+            f"Flow's {TYPES_DISTRIBUTION} floor {floor} has no tag {tag}, and the "
+            f"in-tree {TYPES_DISTRIBUTION} is {in_tree}, not {floor}"
+        )
+    return f"packages/types, unreleased {floor}", _types_sources_in_tree(repo)
+
+
+_SCOPES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+)
+
+
+def _defined_names(source: str) -> set[str]:
+    """Names a module binds at import time, including TYPE_CHECKING imports."""
+    names: set[str] = set()
+
+    def visit(body: list[ast.stmt]) -> None:
+        for node in body:
+            if isinstance(node, _SCOPES):
+                names.add(node.name)
+                continue
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else [node.target]
+                )
+                for target in targets:
+                    for leaf in ast.walk(target):
+                        if isinstance(leaf, ast.Name):
+                            names.add(leaf.id)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name)
+            for field in ("body", "orelse", "finalbody"):
+                child = getattr(node, field, None)
+                if isinstance(child, list):
+                    visit(child)
+            for handler in getattr(node, "handlers", []) or []:
+                visit(handler.body)
+
+    visit(ast.parse(source).body)
+    return names
+
+
+def flow_types_references(root: Path = ROOT) -> list[TypesReference]:
+    """Every openadapt_types module and name Flow's package code uses.
+
+    Covers `import openadapt_types.x`, `from openadapt_types.x import y`, and
+    attributes read through a name bound to an openadapt_types module or
+    object (`from openadapt_types import receipt as r`, then `r.loads_strict`).
+    """
+    references: list[TypesReference] = []
+    for path in sorted((root / DIST_NAME).rglob("*.py")):
+        relative = path.relative_to(root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+        aliases: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".")[0] != TYPES_IMPORT_ROOT:
+                        continue
+                    references.append(
+                        TypesReference(relative, node.lineno, alias.name, None)
+                    )
+                    if alias.asname:
+                        aliases[alias.asname] = alias.name
+                    else:
+                        aliases[TYPES_IMPORT_ROOT] = TYPES_IMPORT_ROOT
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                module = node.module or ""
+                if module.split(".")[0] != TYPES_IMPORT_ROOT:
+                    continue
+                for alias in node.names:
+                    if alias.name == "*":
+                        references.append(
+                            TypesReference(relative, node.lineno, module, None)
+                        )
+                        continue
+                    references.append(
+                        TypesReference(relative, node.lineno, module, alias.name)
+                    )
+                    aliases[alias.asname or alias.name] = f"{module}.{alias.name}"
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in aliases
+            ):
+                references.append(
+                    TypesReference(
+                        relative,
+                        node.lineno,
+                        aliases[node.value.id],
+                        node.attr,
+                        via_alias=True,
+                    )
+                )
+    return references
+
+
+def missing_types_references(
+    references: list[TypesReference], sources: dict[str, str]
+) -> list[TypesReference]:
+    """The references the given openadapt_types sources cannot satisfy."""
+    defined: dict[str, set[str]] = {}
+
+    def names_of(module: str) -> set[str]:
+        if module not in defined:
+            defined[module] = _defined_names(sources[module])
+        return defined[module]
+
+    missing = []
+    for reference in references:
+        if reference.module in sources:
+            if reference.name is None:
+                continue
+            if f"{reference.module}.{reference.name}" in sources:
+                continue
+            if reference.name not in names_of(reference.module):
+                missing.append(reference)
+            continue
+        # An attribute read through a bound name that is not a module: a
+        # class or function imported from one (attributes of objects are out
+        # of scope), or a name whose own import is already reported missing.
+        if reference.via_alias:
+            continue
+        missing.append(reference)
+    return missing
+
+
+def validate_types_floor_imports(root: Path = ROOT) -> str:
+    """Fail when Flow uses openadapt_types code its floor version lacks."""
+    origin, sources = floor_types_sources(root)
+    missing = missing_types_references(flow_types_references(root), sources)
+    if missing:
+        unique = sorted(set(missing))
+        lines = "\n".join(
+            f"  {item.path}:{item.line}: {item.module}"
+            + (f".{item.name}" if item.name else "")
+            for item in unique
+        )
+        raise ValueError(
+            f"Flow uses openadapt_types code that its floor "
+            f"{TYPES_DISTRIBUTION}>={types_floor(root)} ({origin}) lacks. Raise "
+            f"the floor to a {TYPES_DISTRIBUTION} release that has it:\n{lines}"
+        )
+    return origin
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--sync", action="store_true")
@@ -1798,8 +2083,10 @@ def main() -> int:
 
     try:
         validate_public_source_tree()
+        types_origin = validate_types_floor_imports()
     except ValueError as error:
         parser.error(str(error))
+    print(f"Every openadapt_types import exists in Flow's floor ({types_origin}).")
 
     versions = release_versions()
     unique_versions = set(versions.values())

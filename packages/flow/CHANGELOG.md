@@ -15,7 +15,12 @@
 
 <!-- version list -->
 
-## v3.4.0 (2026-11-21)
+## v3.5.0 (2026-11-22)
+
+This release needs openadapt-types 0.24.1. Flow 3.4.0 imported
+`openadapt_types.receipt`, which openadapt-types 0.24.0 does not have, so a
+clean install of 3.4.0 failed on every receipt path. Flow now requires
+`openadapt-types>=0.24.1,<0.25.0`.
 
 ### Features
 
@@ -44,6 +49,125 @@
   call goes through the MCP server's gate (`agent/contract_call.py`). Person
   confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
   (docs/A2A.md).
+- `openadapt handoff list` shows handoffs sent to other parties and what
+  their systems confirmed. A counterparty confirmation is evidence, read from
+  the other party's system, that it recorded what was sent. Two producers
+  ship: payer acknowledgments, and referral intake read back from the
+  receiving clinic. The handoff ledger keeps keys and sent values only as
+  HMAC digests (#2410, #2415; docs/COUNTERPARTY_CONFIRMATIONS.md).
+- Receipts: `record/run/v1` can carry counterparty confirmation lines. A
+  receipt without confirmations is byte-identical to one written before this
+  change. Flow signs a settled report over its stored bytes and its RFC 8785
+  form, and the managed callback adapter checks the pinned signer and final
+  outcome (#2410, #2412).
+- Receipts: each run also writes `receipt.card.json`, the same signed
+  envelope with only allow-listed values opened. Each transaction receipt in a
+  run folder becomes one line of the run's receipt, with its own verdict. A
+  receipt can be anchored in a Rekor transparency log, and the viewer shows
+  the receipt first (#2426; docs/RECEIPTS.md).
+- `openadapt hooks install --agent claude-code` (or `codex`) writes
+  project-local hooks. Each tool call that writes to a system declared in
+  `openadapt.systems.yaml` (a database URL, an HTTP API, a CLI that reaches
+  one, or an MCP server's tools) is pre-checked against the declared writes,
+  read back afterwards, and given a signed receipt. The hooks are advisory
+  (#2411, #2496; docs/HOOKS.md).
+- `openadapt proxy --postgres URL -- CMD` (or `--sqlite PATH`, and `--api`
+  for HTTP APIs) holds the credentials and gives the agent scoped MCP tools.
+  Each SQL write is dry-run in a rolled-back transaction with its exact
+  row-level diff, approved by policy or by a person against the plan digest,
+  committed only if the diff still matches, and undone with a read-back
+  proof. `openadapt plan` does the same for a batch of writes to REST APIs,
+  SQL databases and email: dry-run, apply under a single-use approval with an
+  idempotency key per write, and undo with a read-back proof. Email waits in
+  a cancelable queue (#2428; docs/TRANSACTIONS.md).
+- Writes to hosted APIs and SaaS systems, where there is no database to
+  diff, are verified by reading the record back and by the system's own event
+  or audit log. On an update every other field of the record must be
+  unchanged, and the log must show no other change by the same credentials
+  in the window. Every result states that narrower scope. A pack can declare
+  what an empty search answer looks like (`search_empty`); any other answer
+  missing its items field is an error (#2437, #2525;
+  docs/API_VERIFICATION.md).
+- `openadapt-flow ledger` writes one value-free accounting row per run for any
+  executor: an OpenAdapt agent, a compiled program, another vendor's agent or
+  a person. A row records the outcome (VERIFIED, ESCALATED, CAUGHT_ERROR,
+  FAILED or UNKNOWN), a closed reason, a person's minutes, model calls and
+  cost, the fields checked and the read-back tier. Values stay in a local
+  0600 sidecar. VERIFIED needs an independent read-back (#2478, #2528;
+  docs/RUN_LEDGER.md).
+- An exception queue lets any agent stop and ask a person one closed
+  question. `openadapt-flow exceptions serve` runs the `raise_exception` MCP tool,
+  `watch` raises cards from a Chromium agent's page and blocks its saves
+  while one is open, `list` shows waiting cards, and `answer` writes one
+  closed answer signed with an approver key. A run goes on only after a
+  verified `continue` or `done_by_person` (#2494; docs/EXCEPTION_QUEUE.md).
+- The guard's approval card shows each field's value now, read from the
+  record, beside the value the held request sends, read by the app's write
+  adapter. When the adapter can't read the request, the card says `not read`;
+  it never shows the task's value in its place. Read-backs go through one
+  provider interface, and every save gets a ledger row (#2492).
+- `openadapt-flow wrap-dispatch --fallback agent --fallback-max-cost-usd N`
+  hands a compiled program's drifted run back to the agent behind a
+  pre-commit gate. It falls back only on a terminal halt before any effect, with zero
+  model calls in the replay and no change in the record check. It never falls
+  back on `RECONCILIATION_REQUIRED`, a lost reply, a failed record check or a
+  model call during replay. Without the flag, a stopped program is held, as
+  before (#2491; docs/WRAP_FALLBACK.md).
+- `openadapt flight -- CMD` records a run of a computer-use agent you already
+  run. CMD's model calls go through a loopback proxy that scrubs text and
+  screenshots before they leave the machine, meters cost against
+  `--max-cost-usd`, and refuses any request it can't scrub. It logs the
+  agent's actions and holds each click not known to be safe for a person
+  (#2493; docs/FLIGHT_RECORDER.md).
+- `openadapt-flow readiness` scores a candidate agent or compiled program on
+  20 to 50 tasks a person already did, before it may save anything.
+  `readiness run` holds every save the candidate would make, and
+  `readiness compare` scores each proposed write field by field against the
+  person's save. The result is a one-page scorecard (#2498;
+  docs/READINESS.md).
+- Generated verify contracts stop fewer correct writes:
+  - A task with a new combination of already-demonstrated fields gets a
+    contract composed from the admitted per-field placements, admitted only
+    after planted faults are caught (#2490).
+  - A `None` parameter in a SQL verification read binds as `IS NULL` when
+    every use of the parameter is null-safe; any other `None` is still
+    refused (#2489).
+  - A field whose app swaps `NULL` and `''` on save gets a `null_empty`
+    codec, learned from what the server did and applied only to that field
+    (#2402).
+- Screen checks can crop a region of interest from the full-resolution frame
+  for the model, and the identity and remote model checks share one
+  veto-only guard (#2485).
+
+### Breaking changes
+
+- The Stedi 270/271 payer eligibility client moved out of `openadapt-flow`
+  into the separate `openadapt-eligibility` connector
+  (`packages/connectors/eligibility`). `openadapt_flow.eligibility` no longer
+  exists; import `openadapt_eligibility` instead (#2488).
+- `ExecuteService`, `create_app` and `serve` take `seed_admissions` (the
+  admitted bundles to seed) in place of `seed_mockmed`. The
+  `--seed-mockmed` flag still works (#2486).
+
+### Fixes
+
+- A P7 fallback counts as "nothing written" only when its record check is
+  readable and shows no created, changed or removed record anywhere,
+  including outside the run. Otherwise the ledger row is UNKNOWN
+  (`write_unconfirmed`) (#2528).
+- Hook receipts carry the step fields `record/run/v1` requires, so a hook
+  run writes its `receipt.json` again (#2496).
+- The release-consistency check fails when Flow imports an
+  `openadapt_types` module, or a name in one, that the oldest openadapt-types
+  its dependency floor allows lacks. It reads that version from its git tag.
+
+### Requirements
+
+- `openadapt-types>=0.24.1,<0.25.0` (was `>=0.24.0`).
+
+## v3.4.0 (2026-11-21)
+
+### Features
 
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a

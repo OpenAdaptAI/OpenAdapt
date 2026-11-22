@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.24.1 (2026-11-22)
+
+openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
+have. This release adds it and the other modules Flow 3.5.0 uses. It stays
+within the `<0.25.0` range every released Flow 3 accepts, so upgrading this
+package repairs a Flow 3.4.0 install.
+
+### Features
+
+- `openadapt_types.receipt`: the `record/run/v1` signed run receipt. It
+  covers building, signing and verifying the statement, the public card
+  (`receipt.card.json`) with only allow-listed values opened, private
+  openings, role keys and a key registry, counterparty confirmation lines,
+  and follow-up statements. Signing and verifying import `cryptography` only
+  when called ([#2394](https://github.com/OpenAdaptAI/OpenAdapt/pull/2394),
+  [#2410](https://github.com/OpenAdaptAI/OpenAdapt/pull/2410),
+  [#2412](https://github.com/OpenAdaptAI/OpenAdapt/pull/2412),
+  [#2426](https://github.com/OpenAdaptAI/OpenAdapt/pull/2426)).
+- `openadapt_types.receipt_callback`: checks a managed callback's settled
+  report against its pinned signer and final outcome
+  ([#2412](https://github.com/OpenAdaptAI/OpenAdapt/pull/2412)).
+- `openadapt_types.run_ledger`: `openadapt.run-ledger/v1` (`RunLedgerRowV1`)
+  and `openadapt.agent-run-summary/v1` (`AgentRunSummaryV1`), one value-free
+  accounting row per run. Every string field is closed by a pattern or an
+  enum. The names are exported from `openadapt_types`
+  ([#2478](https://github.com/OpenAdaptAI/OpenAdapt/pull/2478)).
+- `openadapt_types.exception_card`: `openadapt.exception-card/v1` and
+  `openadapt.exception-answer/v1`, with seven closed kinds and five closed
+  answers. Import it by its submodule path; it is not exported from
+  `openadapt_types` ([#2494](https://github.com/OpenAdaptAI/OpenAdapt/pull/2494)).
+- Reward contracts: the `escalated_after_effect` outcome, for an episode
+  whose required effects are all in the system of record but which asked a
+  person instead of declaring the task done. It scores as partial credit,
+  `escalated_after_effect_reward` (default 0.5, at least 0 and below 1)
+  ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+
+### Fixes
+
+- A reward scoring policy whose `escalated_after_effect_reward` is at or
+  above its `verified_reward` is refused, because asking a person would then
+  pay as much as finishing. A contract that sets `verified_reward` to 0.5 or
+  less must now also set `escalated_after_effect_reward` below it
+  ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+
 ## v0.24.0 (2026-10-20)
 
 The models live in this package again, and it depends only on `pydantic>=2.5`; the Python 3.13 cap is gone. `openadapt-flow` 2.3.0 and later depend on it, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)). Upgrade `openadapt-flow` to 2.3.0 together with this package: openadapt-flow 2.2.0 carries its own copy of the models, so with 0.24.0 alone, `isinstance` checks between the two copies fail.

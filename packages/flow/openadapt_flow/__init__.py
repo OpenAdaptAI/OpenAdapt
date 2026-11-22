@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 
 # Strict no-outbound mode follows the package into child interpreters, so a
 # Python child that imports openadapt_flow is refused off-machine connections

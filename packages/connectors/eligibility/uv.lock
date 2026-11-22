@@ -6,6 +6,9 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[manifest]
+overrides = [{ name = "openadapt-types", editable = "../../types" }]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -481,7 +484,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "openadapt-flow"
-version = "3.4.0"
+version = "3.5.0"
 source = { editable = "../../flow" }
 dependencies = [
     { name = "cryptography" },
@@ -547,7 +550,7 @@ requires-dist = [
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'windows'" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.1.4" },
-    { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
+    { name = "openadapt-types", specifier = ">=0.24.1,<0.25.0" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
     { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9,<5.1" },
     { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9,<5.1" },
@@ -604,15 +607,20 @@ provides-extras = ["vision", "native-ocr", "browser", "dev", "grounder", "ground
 
 [[package]]
 name = "openadapt-types"
-version = "0.24.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.24.1"
+source = { editable = "../../types" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/fb/9ba7017c2dd42132425a2b15ebcbb79fc7920d8a98961da9bb93d3a9f79b/openadapt_types-0.24.0.tar.gz", hash = "sha256:16dcd1da1c2c78c08d650a19eb9cc439474f996812a87198b316d51bfac443db", size = 318220, upload-time = "2026-10-20T16:40:43.505Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/38/2c7c3a7ebac23cc2e79039c4eca66aae5c3fd1c11a1076cb5cdc189771d6/openadapt_types-0.24.0-py3-none-any.whl", hash = "sha256:8025e8a4dc9235fd81d4b24ae7fa7e544120abdb8d4ee7df160e4f50d9230d75", size = 224713, upload-time = "2026-10-20T16:40:42.061Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", marker = "extra == 'dev'", specifier = ">=50.0.0" },
+    { name = "pydantic", specifier = ">=2.5" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "packaging"

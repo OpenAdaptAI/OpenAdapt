@@ -23,6 +23,7 @@ constraints = [
     { name = "filelock", marker = "python_full_version >= '3.11'", specifier = ">=4.2.1" },
     { name = "pillow", marker = "python_full_version >= '3.11'", specifier = ">=13.0.0" },
 ]
+overrides = [{ name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" }]
 
 [[package]]
 name = "a2a-sdk"
@@ -2759,7 +2760,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "3.4.0"
+version = "3.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -3028,7 +3029,7 @@ requires-dist = [
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'windows'" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.1.4" },
-    { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
+    { name = "openadapt-types", specifier = ">=0.24.1,<0.25.0" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
     { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9,<5.1" },
     { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9,<5.1" },
