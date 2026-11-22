@@ -6,6 +6,17 @@
 
 ### Features
 
+- **Agent-to-agent handoffs.**
+  - `openadapt handoff send` attaches a run's receipt to a result for
+    another agent: inline, detached beside a file, or POSTed to a webhook.
+    `openadapt handoff verify` checks one on arrival against your pinned keys
+    and says who signed it, what was checked, and that a valid signature
+    proves who signed, not that the claim is true. Also available as
+    `openadapt verify handoff`.
+  - `openadapt agent serve --handoffs` adds the same over MCP.
+  - `openadapt agent serve --a2a` serves workflows over the A2A (Agent2Agent)
+    protocol with an Agent Card. It needs the new `openadapt[a2a]` extra.
+
 - **Receipts replace Seals.** A receipt is a signed, itemized record of one run:
   what it changed, how each change was checked, and who signed it. It doesn't
   grade the run. Every run, with any outcome, now writes `receipt.json` (a DSSE
