@@ -40,6 +40,23 @@ package repairs a Flow 3.4.0 install.
   refused, because asking would then pay as much as finishing. The default
   is 0: a contract that doesn't declare it earns nothing for this outcome
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+- `openadapt_types.managed_job`: domain-neutral inbox, outbox, tool result
+  and MCP tool contracts (`openadapt.managed-*/v1`), with four new packaged
+  schemas. `openadapt_types.clinic_job` stays as the compatibility module for
+  `openadapt.clinic-*/v1` payloads; its exception and enum names are now
+  aliases of the `Managed*` ones
+  ([#2487](https://github.com/OpenAdaptAI/OpenAdapt/pull/2487)).
+- Domain-neutral names beside the v1 ones: `StepClass.HIGH_RISK_WRITE`
+  (wire value `clinical_write`), `ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN`
+  and `OutcomeSourceV1.MANAGED_TOOL_STATUS`. Approval records and policies
+  also accept the input keys `high_risk_write`, `high_risk_write_opt_in_sha256`
+  and step class `high_risk_write`; plain outcome inputs accept
+  `managed_tool_status`, and `plain_outcome()` takes a
+  `managed_tool_status=` argument beside `clinic_tool_status=`. Each is
+  stored and written as its v1 form, so
+  output is byte-identical to 0.24.0. The packaged schemas, and readers
+  older than 0.24.1, accept only the v1 forms
+  ([#2487](https://github.com/OpenAdaptAI/OpenAdapt/pull/2487)).
 
 ### Compatibility
 
@@ -49,6 +66,9 @@ package repairs a Flow 3.4.0 install.
   new `escalated_after_effect` outcome earns 0 under them, since they never
   declared it. A test checks this against contracts and certificates
   issued by openadapt-types 0.24.0 from PyPI.
+- Every 0.24.0 approval record, approver policy and identity, clinic payload
+  and plain outcome loads and serializes to the same bytes and digests, and
+  every 0.24.0 name and enum member still exists under its 0.24.0 name.
 - `escalated_after_effect_reward` is serialized, and so hashed, only when it
   differs from 0, so a file 0.24.1 writes for an undeclared contract is one
   0.24.0 can read. A contract that declares a non-zero value can't be read
