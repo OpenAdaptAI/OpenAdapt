@@ -1,0 +1,1 @@
+Holds the database credentials and runs the agent with scoped MCP tools: each SQL write is dry-run in a rolled-back transaction with its exact row-level diff, approved by policy or by a person against the plan digest, committed once only if its diff matches, and undone with a read-back proof.

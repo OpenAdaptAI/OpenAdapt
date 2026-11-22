@@ -370,7 +370,11 @@ def test_claude_code_allowed_blocked_and_uncertain(project: Path, api: str) -> N
     assert verified.ok and verified.outcome == "UNKNOWN"
     line = verified.statement["predicate"]["lines"][0]
     assert line["check"] == "not_checked" and line["strength"] == "none"
-    assert line["not_checked"] == ["approved_unverified", "postconditions"]
+    assert line["not_checked"] == [
+        "approved_unverified",
+        "field_values",
+        "postconditions",
+    ]
     assert verified.statement["predicate"]["checks"]["effects"] == {
         "required": 1,
         "confirmed": 0,
