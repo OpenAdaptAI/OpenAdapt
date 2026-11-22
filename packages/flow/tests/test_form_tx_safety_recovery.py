@@ -72,6 +72,66 @@ def test_stale_prefill_value_cannot_be_accepted() -> None:
     assert surface.committed_record is None
 
 
+class _RelabelledFieldSurface(FakeStatefulFormSurface):
+    """After the halt, the halted field's selector now holds a different field."""
+
+    relabel_after_halt = False
+
+    def snapshot(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        snap = super().snapshot(*args, **kwargs)
+        if not self.relabel_after_halt:
+            return snap
+        controls = tuple(
+            control.model_copy(
+                update={
+                    "label_text": "Other Applicant Bank Account",
+                    "section_text": "Payment",
+                    "name_attr": "bank_account",
+                }
+            )
+            if control.dom_selector == "#prior-claims"
+            else control
+            for control in snap.controls
+        )
+        return snap.model_copy(update={"controls": controls})
+
+
+@pytest.mark.parametrize(
+    "action,value",
+    [
+        (HumanDecisionAction.PROVIDE_VALUE, "0"),
+        (HumanDecisionAction.ACCEPT_PORTAL_PREFILL, None),
+    ],
+)
+def test_decision_never_acts_on_a_different_field_at_the_same_selector(
+    action: HumanDecisionAction, value: object
+) -> None:
+    surface = _RelabelledFieldSurface(prefill_values={"prior_claims_count": "2"})
+    reconciler = FormReconciler(surface)
+    session = ReconcilerSession(_build_pack(), _build_dossier(has_pool="No"))
+    result = reconciler.run_until_halt_or_done(session)
+    halt = result.halts[0]
+    assert halt.kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+    surface.relabel_after_halt = True
+    values_before = dict(surface.values)
+    mutations_before = surface.mutation_count
+    with pytest.raises(ValueError, match="control changed"):
+        reconciler.apply_human_resolution(
+            session,
+            HumanResolutionInput(
+                halt_id=halt.halt_id,
+                action=action,
+                actor_id="operator",
+                provided_value=value,
+                idempotency_key=f"stale-{action.value}",
+            ),
+        )
+    assert surface.values == values_before
+    assert surface.mutation_count == mutations_before
+    assert session.human_resolutions == []
+    assert surface.committed_record is None
+
+
 def test_replaced_entity_at_same_row_selector_cannot_be_dismissed() -> None:
     surface = FakeStatefulFormSurface(
         entity_rows=[
