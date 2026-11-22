@@ -28,7 +28,7 @@ RELEVANT = {
         "after_complete",
     ),
     "navigate": ("role", "writes_before", "writes_after", "moved", "after_complete"),
-    "in_place": ("role", "writes_before", "writes_after", "after_complete"),
+    "in_place": ("role", "writes_before", "writes_after", "moved", "after_complete"),
 }
 
 
@@ -97,6 +97,7 @@ register(
             Seed(_ev("navigate", moved=False), False, "did not move"),
             Seed(_ev("commit", after_errors=("Card declined",)), False, "error shown"),
             Seed(_ev("unknown"), False, "the demo could not count writes"),
+            Seed(_ev("in_place", moved=True), False, "an in-place step moved"),
         ],
         fields=_fields(),
         values=tuple(

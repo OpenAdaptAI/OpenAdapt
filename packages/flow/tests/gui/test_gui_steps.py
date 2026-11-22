@@ -257,16 +257,18 @@ def test_grid_sheet_tab_navigates_and_save_menu_item_commits() -> None:
     assert replay.saved[-1]["Q2"] == [["Rent", ""]]
 
 
-def test_a_backend_that_cannot_count_writes_never_attempts_a_commit() -> None:
+def test_a_backend_that_cannot_count_writes_never_takes_a_step() -> None:
     grid = _grid()
     rec = Recorder(grid)
+    rec.click("tab:1")
     rec.click("tool:save")
-    (learned,) = learn_steps(rec.steps)
+    tab, save = learn_steps(rec.steps)
     blind = _grid()
     blind.count_writes = False
-    out = take_step(blind, learned.spec)
-    assert not out.clicked and out.result.status is Status.NOT_CHECKED
-    assert blind.saved == []
+    for step in (save, tab):
+        out = take_step(blind, step.spec)
+        assert not out.clicked and out.result.status is Status.NOT_CHECKED
+    assert blind.saved == [] and blind.active == 0
     rec2 = Recorder(blind)
     rec2.click("tool:save")
     (unknown,) = learn_steps(rec2.steps)
@@ -274,6 +276,13 @@ def test_a_backend_that_cannot_count_writes_never_attempts_a_commit() -> None:
 
 
 # -- the verdict and the form_tx adapter ------------------------------------------------
+
+
+def test_an_in_place_step_that_moves_the_screen_is_refuted() -> None:
+    ev = StepEvidence("s", StepRole.IN_PLACE, 0, 2, 2, True, True)
+    assert judge_step(ev).status is Status.REFUTED
+    held = StepEvidence("s", StepRole.IN_PLACE, 0, 2, 2, False, True)
+    assert judge_step(held).status is Status.HELD
 
 
 def test_judge_step_needs_exact_whole_counts() -> None:
