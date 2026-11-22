@@ -782,6 +782,17 @@ def test_contracts_and_certificates_issued_under_0_24_0_verify_unchanged(
     )
 
 
+def test_a_default_contract_serializes_as_0_24_0_did() -> None:
+    # 0.24.0 forbids unknown fields, so a file this version writes must not
+    # carry the new field at its default.
+    case = json.loads(_ISSUED_0_24_0.read_text(encoding="utf-8"))["cases"][0]
+    contract = RewardContractV1.model_validate(case["contract"])
+    assert contract.model_dump(mode="json") == case["contract"]
+    assert "escalated_after_effect_reward" not in contract.scoring.model_dump()
+    custom = _contract_with_scoring(escalated_after_effect_reward=0.25)
+    assert custom.scoring.model_dump()["escalated_after_effect_reward"] == 0.25
+
+
 def test_escalated_after_effect_reward_is_part_of_the_contract_digest() -> None:
     half = _contract_with_scoring(escalated_after_effect_reward=0.5)
     quarter = _contract_with_scoring(escalated_after_effect_reward=0.25)

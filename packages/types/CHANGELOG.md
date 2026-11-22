@@ -37,20 +37,22 @@ package repairs a Flow 3.4.0 install.
   person instead of declaring the task done. It scores as partial credit,
   `escalated_after_effect_reward` (default 0.5, at least 0 and below 1)
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
-
-### Fixes
-
 - A reward scoring policy whose `escalated_after_effect_reward` is at or
   above its `verified_reward` is refused, because asking a person would then
   pay as much as finishing. The one exception is the default, 0.5: a contract
-  with a `verified_reward` of 0.5 or less still loads, as in 0.24.0, and
-  asking then earns no credit (`escalated_after_effect_credit`)
-  ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+  with a `verified_reward` of 0.5 or less loads, as in 0.24.0, and asking then
+  earns no credit (`escalated_after_effect_credit`).
+
+### Compatibility
+
 - Reward contract digests are unchanged from 0.24.0.
-  `escalated_after_effect_reward` enters `RewardContractV1.digest` only when
-  it differs from its default, so every contract and certificate issued
-  under 0.24.0 hashes and verifies as before. A test checks contracts and
-  certificates issued by openadapt-types 0.24.0 from PyPI.
+  `escalated_after_effect_reward` is serialized, and so hashed, only when it
+  differs from its default. Every contract and certificate issued under
+  0.24.0 hashes and verifies as before, and a file 0.24.1 writes for such a
+  contract is one 0.24.0 can read. A test checks contracts and certificates
+  issued by openadapt-types 0.24.0 from PyPI.
+- A contract that sets `escalated_after_effect_reward` to anything but 0.5
+  can't be read by 0.24.0, which forbids unknown fields.
 
 ## v0.24.0 (2026-10-20)
 

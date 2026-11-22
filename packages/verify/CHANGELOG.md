@@ -2,9 +2,10 @@
 
 ## v0.2.1 (2026-11-22)
 
-- Accept openadapt-flow 4: every openadapt-flow requirement is now
-  `>=3.0.0,<5` (was `<4`), so openadapt-verify installs beside the next Flow
-  major instead of holding Flow at 3.x (#2535).
+- Accept openadapt-flow 4: the openadapt-flow requirement and the `openai`,
+  `claude` and `mcp` extras now allow `<5` (was `<4`), so openadapt-verify
+  installs beside the next Flow major instead of holding Flow at 3.x
+  (#2535).
 
 ## v0.2.0 (2026-11-14)
 

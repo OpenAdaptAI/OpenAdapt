@@ -47,7 +47,9 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    SerializerFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -256,8 +258,8 @@ class RewardOracleV1(_StrictContract):
 #: The credit for asking after the work is done, when a contract declares none.
 ESCALATED_AFTER_EFFECT_DEFAULT = 0.5
 #: Scoring fields added in 0.24.1, with the default a contract certified
-#: under 0.24.0 implicitly has. RewardContractV1.digest leaves them out at that
-#: default, so every 0.24.0 digest stays the same.
+#: under 0.24.0 implicitly has. They are not serialized at that default, so
+#: every 0.24.0 digest stays the same and 0.24.0 can read what 0.24.1 writes.
 _DIGEST_STABLE_SCORING_DEFAULTS: Mapping[str, float] = {
     "escalated_after_effect_reward": ESCALATED_AFTER_EFFECT_DEFAULT,
 }
@@ -332,6 +334,19 @@ class RewardScoringPolicyV1(_StrictContract):
                 "escalated_after_effect_reward must be below verified_reward"
             )
         return self
+
+    @model_serializer(mode="wrap")
+    def _omit_new_defaults(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        # A field added in 0.24.1 is written out only when it differs from
+        # its default, so a file this version writes stays readable by
+        # 0.24.0 (whose models forbid unknown fields) and hashes the same.
+        data = handler(self)
+        for name, default in _DIGEST_STABLE_SCORING_DEFAULTS.items():
+            if data.get(name) == default:
+                del data[name]
+        return data
 
     @property
     def escalated_after_effect_credit(self) -> float:
@@ -420,17 +435,13 @@ class RewardContractV1(_StrictContract):
     def digest(self) -> str:
         """The canonical digest certificates and receipts bind.
 
-        A scoring field added after a contract version shipped enters the
-        digest only when it differs from its default, so a contract written
+        A scoring field added after a contract version shipped is serialized,
+        and so hashed, only when it differs from its default
+        (``RewardScoringPolicyV1._omit_new_defaults``). A contract written
         before the field existed keeps the digest it was certified under.
         """
 
-        payload = self.model_dump(mode="json")
-        scoring = payload["scoring"]
-        for name, default in _DIGEST_STABLE_SCORING_DEFAULTS.items():
-            if scoring.get(name) == default:
-                del scoring[name]
-        return _digest_payload(payload)
+        return _digest_payload(self.model_dump(mode="json"))
 
 
 class RewardCertificateV1(_StrictContract):
