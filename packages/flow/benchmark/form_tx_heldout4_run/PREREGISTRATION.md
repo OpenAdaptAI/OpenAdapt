@@ -127,6 +127,20 @@ rows and per-control logs. That is a judgement and is labelled as one. For
 each pack the results also state how many demonstrations it used, which is
 one, and which compiler findings it adopted.
 
+**Secondary metric (declared under D1, before any scored case).** For every
+case B ends `verified_done`, the result records which read produced it:
+- the page the run landed on after commit (`same_screen`);
+- a new navigation or search that fetched the record from the server again
+  (`fresh_navigation`);
+- a separate session.
+
+The engine's `SummaryVerdict.read_route` holds this; it is reporting only.
+Set 4's verified share is reported both ways:
+- under today's meaning;
+- under the shared check-level ladder, where a same-screen read counts as
+  SHOWN and only a fresh reload, a separate session or the system of record
+  counts as VERIFIED.
+
 ## Criteria (fixed now)
 
 - **Halving test (kill):** B's clean-case false stops must be at most half of
@@ -152,4 +166,9 @@ operators.
 
 ## Deviations
 
-None yet.
+**D1, 2026-11-21, before any scored case.** Two additions:
+- **Secondary metric.** The read-route metric above, added at the
+  coordinator's request. It does not change any criterion.
+- **Engine pin for B.** `ENGINE_SHA_B` is set to the round-3 head. That head
+  includes the read-route field, which is reporting only, and the merge of the
+  #2429 and #2448 heads.

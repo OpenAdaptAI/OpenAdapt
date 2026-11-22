@@ -483,6 +483,8 @@ def run_case(
                 ),
                 "failed": list(verdict.failed_keys),
                 "not_checked": list(verdict.not_checked_keys),
+                # Reporting only (Set 4 secondary metric).
+                "read_route": getattr(verdict, "read_route", "unrecorded"),
             }
         out["receipt"] = result.receipt is not None
     except Exception as exc:  # noqa: BLE001
