@@ -1848,12 +1848,16 @@ def verify_draft(ctx: click.Context) -> None:
     model calls. `--help` lists every option.
     """
     _require_supported_python()
-    try:
-        from openadapt_flow.verify_draft.draft import main as draft_main
-    except ImportError:
-        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
-        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
-        sys.exit(1)
+    draft_main = _optional_engine_entrypoint(
+        ctx, ("openadapt_flow.verify_draft.draft",)
+    )
+    if draft_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no verify draft command.",
+            err=True,
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
     sys.exit(int(draft_main(list(ctx.args)) or 0))
 
 
