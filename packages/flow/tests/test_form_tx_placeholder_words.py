@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from openadapt_flow.form_tx import reconciler
+from openadapt_flow.form_tx import reconciler as reconciler_mod
 from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.types import (
     FieldAnchorSpec,
@@ -133,3 +134,55 @@ def test_the_option_resolver_default_is_unchanged() -> None:
     assert old is not None
     now = inspect.signature(resolve_unique_option).parameters["placeholder_values"]
     assert now.default == old == load_words("placeholders")
+
+
+def test_the_unbound_control_scan_uses_the_pack_override() -> None:
+    """A control no binding names, showing "-- Select --": empty under the
+    default list, a value the run did not set under a pack that does not
+    count that text as a placeholder (it is kept as uncovered)."""
+    from openadapt_flow.form_tx.types import (
+        DossierFact,
+        FormSnapshot,
+        InputDossier,
+        ObservedControl,
+        ObservedOption,
+        ProvenanceKind,
+    )
+    from tests.test_form_tx_reconciler_and_receipts import FakeStatefulFormSurface
+
+    ctrl = ObservedControl(
+        control_id="c1",
+        dom_selector="#extra",
+        tag="select",
+        role="combobox",
+        name_attr="extra",
+        id_attr="extra",
+        label_text="Extra cover",
+        current_value="-- Select --",
+        options=(
+            ObservedOption(value="-- Select --", label="-- Select --"),
+            ObservedOption(value="gold", label="Gold"),
+        ),
+    )
+    snapshot = FormSnapshot(url_origin_and_path="http://p.test/f", controls=(ctrl,))
+    dossier = InputDossier(
+        dossier_id="d",
+        request_id="r",
+        facts={
+            "x": DossierFact(
+                key="x",
+                value="1",
+                provenance=ProvenanceKind.INTAKE_DOCUMENT,
+                source_id="i",
+            )
+        },
+    )
+
+    def uncovered(pack: FormPack) -> dict[str, str]:
+        reconciler = reconciler_mod.FormReconciler(FakeStatefulFormSurface())
+        session = reconciler.create_session(pack, dossier)
+        reconciler._scan_unbound_controls(session, snapshot)
+        return dict(session._uncovered)
+
+    assert uncovered(_pack()) == {}
+    assert uncovered(_pack(placeholder_values=("",))) != {}

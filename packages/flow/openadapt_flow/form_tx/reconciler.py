@@ -1904,7 +1904,7 @@ class FormReconciler:
             and not c.is_secret
             and c.tag.casefold() == "input"
             and c.input_type.casefold() in _FREE_TEXT_INPUT_TYPES
-            and _is_control_empty(c)
+            and _is_control_empty(c, _pack_placeholders(session.pack))
         ]
         for ctrl in [*_editable_fields(snapshot), *readonly_text]:
             if ctrl.modal_container:
@@ -1921,7 +1921,7 @@ class FormReconciler:
             ):
                 continue
             label = collapse_whitespace(_field_label(ctrl)) or ctrl.dom_selector
-            empty = _is_control_empty(ctrl)
+            empty = _is_control_empty(ctrl, _pack_placeholders(session.pack))
             shown = ""
             if not empty:
                 shown = ctrl.current_value
@@ -2317,7 +2317,9 @@ class FormReconciler:
             return [halt]
 
         if not _is_return_value_empty_or_zero(
-            return_before.current_value, subroutine.return_codec
+            return_before.current_value,
+            subroutine.return_codec,
+            _pack_placeholders(session.pack),
         ):
             existing_fact = session.effective_facts.get(subroutine.return_output_key)
             if existing_fact is not None and values_equivalent(
@@ -2583,7 +2585,9 @@ class FormReconciler:
             facts=session.effective_facts,
         )
         if return_after is None or not _is_valid_non_zero_return_value(
-            return_after.current_value, subroutine.return_codec
+            return_after.current_value,
+            subroutine.return_codec,
+            _pack_placeholders(session.pack),
         ):
             sig = f"popup_return|{subroutine.subroutine_id}"
             halt_id = _deterministic_halt_id(
