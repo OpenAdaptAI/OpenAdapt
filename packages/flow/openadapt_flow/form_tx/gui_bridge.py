@@ -525,10 +525,21 @@ def _fill_with_bindings(
                     what_happened=halts[0].message,
                 )
             )
-        blank = _blank_choice_halt(rec, session, snapshot)
+        # The section's dialog is the only one open (run_section and the
+        # resume path check that), and its fields are the screen being left:
+        # the scans below skip controls inside a modal, so read them as not.
+        in_dialog = snapshot.model_copy(
+            update={
+                "controls": tuple(
+                    c.model_copy(update={"modal_container": ""})
+                    for c in snapshot.controls
+                )
+            }
+        )
+        blank = _blank_choice_halt(rec, session, in_dialog)
         if blank is not None:
             raise _FillHalt(blank)
-        unbound = _unbound_halt(rec, session, snapshot)
+        unbound = _unbound_halt(rec, session, in_dialog)
         if unbound is not None:
             raise _FillHalt(unbound)
 

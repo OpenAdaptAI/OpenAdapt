@@ -57,7 +57,9 @@ class _Site:
         ignore_saves: bool = False,
         notes: str = "",
         row_note: bool = False,
+        dialog_note: bool = False,
     ) -> None:
+        self.dialog_note = dialog_note
         self.notes = notes
         self.row_note = row_note
         self.state: dict[str, Any] = {"meds": [], "sections": {}}
@@ -97,6 +99,12 @@ class _Site:
                     ("billing", "Billing", "Billing email"),
                 )
             )
+            if self.dialog_note:
+                cards = cards.replace(
+                    '<input id="f-profile">',
+                    '<input id="f-profile"><label for="n-p">Notes</label>'
+                    '<input id="n-p" value="carried over">',
+                )
             return HUB_PAGE.replace("<!--CARDS-->", cards)
         if path == "/hub-review":
             return "<h1>Review</h1><button id=\"go\" onclick=\"fetch('/api/submit',{method:'POST',body:'{}'}).then(()=>location.href='/done')\">Submit setup</button>"
@@ -460,3 +468,20 @@ def test_a_prefilled_field_inside_an_added_row_stops_before_the_link(
     assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
     assert "Row note" in result.halts[0].message
     assert site.state["meds"] == [] and site.records == []
+
+
+def test_a_prefilled_field_inside_a_section_dialog_stops_before_its_save(
+    browser: Any,
+) -> None:
+    site = _Site(dialog_note=True)
+    result, _ = _run(
+        browser,
+        site,
+        "/hub",
+        HUB_PACK,
+        _dossier(company="Acme Test", billing_email="ap@example.test"),
+        profile=HUB_PROFILE,
+    )
+    assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert "Notes" in result.halts[0].message
+    assert site.state["sections"] == {} and site.records == []
