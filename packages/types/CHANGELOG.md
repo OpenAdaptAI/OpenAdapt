@@ -34,25 +34,25 @@ package repairs a Flow 3.4.0 install.
   `openadapt_types` ([#2494](https://github.com/OpenAdaptAI/OpenAdapt/pull/2494)).
 - Reward contracts: the `escalated_after_effect` outcome, for an episode
   whose required effects are all in the system of record but which asked a
-  person instead of declaring the task done. It scores as partial credit,
-  `escalated_after_effect_reward` (default 0.5, at least 0 and below 1)
+  person instead of declaring the task done. It earns the contract's
+  `escalated_after_effect_reward`, at least 0 and below its
+  `verified_reward`; a declared value at or above `verified_reward` is
+  refused, because asking would then pay as much as finishing. The default
+  is 0: a contract that doesn't declare it earns nothing for this outcome
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
-- A reward scoring policy whose `escalated_after_effect_reward` is at or
-  above its `verified_reward` is refused, because asking a person would then
-  pay as much as finishing. The one exception is the default, 0.5: a contract
-  with a `verified_reward` of 0.5 or less loads, as in 0.24.0, and asking then
-  earns no credit (`escalated_after_effect_credit`).
 
 ### Compatibility
 
-- Reward contract digests are unchanged from 0.24.0.
-  `escalated_after_effect_reward` is serialized, and so hashed, only when it
-  differs from its default. Every contract and certificate issued under
-  0.24.0 hashes and verifies as before, and a file 0.24.1 writes for such a
-  contract is one 0.24.0 can read. A test checks contracts and certificates
+- Contracts written or certified under 0.24.0 behave as before. They load
+  (including any positive `verified_reward`), hash to the same digest, keep
+  their certificates, and score every outcome 0.24.0 had the same way. The
+  new `escalated_after_effect` outcome earns 0 under them, since they never
+  declared it. A test checks this against contracts and certificates
   issued by openadapt-types 0.24.0 from PyPI.
-- A contract that sets `escalated_after_effect_reward` to anything but 0.5
-  can't be read by 0.24.0, which forbids unknown fields.
+- `escalated_after_effect_reward` is serialized, and so hashed, only when it
+  differs from 0, so a file 0.24.1 writes for an undeclared contract is one
+  0.24.0 can read. A contract that declares a non-zero value can't be read
+  by 0.24.0, which forbids unknown fields.
 
 ## v0.24.0 (2026-10-20)
 

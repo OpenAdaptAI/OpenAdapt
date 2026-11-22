@@ -124,7 +124,7 @@ class RewardOutcomeV1(str, Enum):
     and no forbidden effect is, but the policy halted, refused, or was
     rejected instead of declaring the task done.  Partial credit: the
     contract's ``escalated_after_effect_reward``, at least zero and below the
-    verified reward."""
+    verified reward, and zero when the contract declares none."""
 
     RECONCILIATION_REQUIRED = "reconciliation_required"
     """Delivery or effect is uncertain.  UNSCORED.  Never 0.0."""
@@ -256,7 +256,9 @@ class RewardOracleV1(_StrictContract):
 
 
 #: The credit for asking after the work is done, when a contract declares none.
-ESCALATED_AFTER_EFFECT_DEFAULT = 0.5
+#: Zero: an outcome added in 0.24.1 never pays under a contract that was
+#: written, or certified, without declaring it.
+ESCALATED_AFTER_EFFECT_DEFAULT = 0.0
 #: Scoring fields added in 0.24.1, with the default a contract certified
 #: under 0.24.0 implicitly has. They are not serialized at that default, so
 #: every 0.24.0 digest stays the same and 0.24.0 can read what 0.24.1 writes.
@@ -276,13 +278,12 @@ class RewardScoringPolicyV1(_StrictContract):
     the confidence a policy needs before it declares done rather than asks:
     with verified reward ``v``, wrong-effect reward ``w`` and this value
     ``x``, declaring done pays more in expectation only when the policy is
-    more than ``(x - w) / (v - w)`` sure the effect is right.  With the
-    defaults (1, -1, 0.5) that is 75%.  Zero gives no credit for asking.  A
-    value other than the default 0.5 at or above the verified reward is
-    refused, because asking would then pay as much as finishing.  At 0.5 (the
-    default, or the same value written out) with a ``verified_reward`` of 0.5
-    or less, which 0.24.0 accepted, the contract loads and asking earns no
-    credit (``escalated_after_effect_credit``).
+    more than ``(x - w) / (v - w)`` sure the effect is right.  With
+    ``v = 1``, ``w = -1`` and ``x = 0.5`` that is 75%.  The default is zero:
+    a contract that doesn't declare it gives no credit for asking, so a
+    contract certified before this outcome existed never starts paying for
+    it.  A value at or above the verified reward is refused, because asking
+    would then pay as much as finishing.
     """
 
     verified_reward: StrictFloat = Field(
@@ -326,10 +327,7 @@ class RewardScoringPolicyV1(_StrictContract):
 
     @model_validator(mode="after")
     def _partial_credit_below_verified(self) -> RewardScoringPolicyV1:
-        if (
-            self.escalated_after_effect_reward >= self.verified_reward
-            and self.escalated_after_effect_reward != ESCALATED_AFTER_EFFECT_DEFAULT
-        ):
+        if self.escalated_after_effect_reward >= self.verified_reward:
             raise ValueError(
                 "escalated_after_effect_reward must be below verified_reward"
             )
@@ -352,12 +350,10 @@ class RewardScoringPolicyV1(_StrictContract):
     def escalated_after_effect_credit(self) -> float:
         """The scalar an ``escalated_after_effect`` episode earns.
 
-        The declared value, or zero when the default is not below the
-        verified reward, so asking never pays as much as finishing.
+        The declared value, zero when the contract declares none. The
+        validator keeps it below the verified reward.
         """
 
-        if self.escalated_after_effect_reward >= self.verified_reward:
-            return 0.0
         return self.escalated_after_effect_reward
 
     def scalar_for(self, outcome: RewardOutcomeV1) -> float | None:

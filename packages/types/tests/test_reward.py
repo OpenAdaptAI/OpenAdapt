@@ -705,7 +705,7 @@ def test_default_scalar_for_each_scored_outcome() -> None:
     contract = _contract()
     expected = {
         RewardOutcomeV1.VERIFIED: 1.0,
-        RewardOutcomeV1.ESCALATED_AFTER_EFFECT: 0.5,
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT: 0.0,
         RewardOutcomeV1.HALTED_BEFORE_EFFECT: 0.0,
         RewardOutcomeV1.REFUSED: 0.0,
         RewardOutcomeV1.REJECTED_POLICY: 0.0,
@@ -744,14 +744,19 @@ def test_escalated_after_effect_reward_must_stay_below_verified() -> None:
     assert contract.scoring.escalated_after_effect_reward == 0.4
 
 
-def test_the_default_gives_no_credit_when_it_is_not_below_verified() -> None:
+def test_an_undeclared_escalation_earns_nothing() -> None:
+    # A contract written without the field never pays for the new outcome.
+    escalated = RewardOutcomeV1.ESCALATED_AFTER_EFFECT
+    assert _contract().scoring.escalated_after_effect_reward == 0.0
+    assert _contract().scoring.scalar_for(escalated) == 0.0
     # 0.24.0 accepted any positive verified_reward; 0.24.1 still does.
-    contract = _contract_with_scoring(verified_reward=0.5)
-    scoring = contract.scoring
-    assert scoring.escalated_after_effect_reward == 0.5
-    assert scoring.escalated_after_effect_credit == 0.0
-    assert scoring.scalar_for(RewardOutcomeV1.ESCALATED_AFTER_EFFECT) == 0.0
-    assert _contract().scoring.scalar_for(RewardOutcomeV1.ESCALATED_AFTER_EFFECT) == 0.5
+    low = _contract_with_scoring(verified_reward=0.5)
+    assert low.scoring.scalar_for(escalated) == 0.0
+    declared = _contract_with_scoring(escalated_after_effect_reward=0.25)
+    assert declared.scoring.escalated_after_effect_credit == 0.25
+    assert declared.scoring.scalar_for(escalated) == 0.25
+    with pytest.raises(ValidationError, match="below verified_reward"):
+        _contract_with_scoring(verified_reward=0.5, escalated_after_effect_reward=0.5)
 
 
 _ISSUED_0_24_0 = Path(__file__).parent / "fixtures" / "reward_issued_0_24_0.json"
@@ -780,6 +785,20 @@ def test_contracts_and_certificates_issued_under_0_24_0_verify_unchanged(
         certificate_state(certificate, 120).value
         == case["certificate_state_at_update_120"]
     )
+    # Every outcome 0.24.0 knew scores as it did, and the one it didn't
+    # earns nothing under a contract that never declared it.
+    for outcome, expected in case["scores_tier_2_update_120"].items():
+        scored = score(RewardOutcomeV1(outcome), 2, certificate, 120, contract=contract)
+        assert scored.scalar == expected["scalar"], outcome
+        assert scored.certified == expected["certified"], outcome
+        assert scored.development_only == expected["development_only"], outcome
+        assert list(scored.certification_refusals) == (
+            expected["certification_refusals"]
+        ), outcome
+    escalated = score(
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT, 2, certificate, 120, contract=contract
+    )
+    assert escalated.scalar == 0.0
 
 
 def test_a_default_contract_serializes_as_0_24_0_did() -> None:
@@ -794,10 +813,10 @@ def test_a_default_contract_serializes_as_0_24_0_did() -> None:
 
 
 def test_escalated_after_effect_reward_is_part_of_the_contract_digest() -> None:
-    half = _contract_with_scoring(escalated_after_effect_reward=0.5)
+    zero = _contract_with_scoring(escalated_after_effect_reward=0.0)
     quarter = _contract_with_scoring(escalated_after_effect_reward=0.25)
-    assert half.digest == _contract().digest
-    assert quarter.digest != half.digest
+    assert zero.digest == _contract().digest
+    assert quarter.digest != zero.digest
 
 
 def test_receipt_partial_credit_is_never_negative_or_uncertain() -> None:
