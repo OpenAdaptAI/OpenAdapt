@@ -9,7 +9,8 @@ On main there are two launchers:
   guarded browser and the task in its environment and drives the tab it
   finds there::
 
-      OPENADAPT_GUARD_CDP_URL   the DevTools endpoint of the guarded browser
+      OPENADAPT_GUARD_CDP_URL   the DevTools endpoint of the guarded browser (a
+                                loopback relay URL carrying the run's token)
       OPENADAPT_GUARD_PAGE_URL  the URL the guarded tab was opened at
       OPENADAPT_TASK            the instruction, then the inputs as JSON
       OPENADAPT_TASK_ID         the task id

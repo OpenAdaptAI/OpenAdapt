@@ -170,11 +170,14 @@ repeated form name, a file part, or a body the browser didn't expose is
 `"uncompared"` and has no value.
 
 The runner, per episode: runs `--reset-cmd`, starts a headless Chromium with
-a DevTools port, opens one tab at `--app-url` (service workers blocked in its
+DevTools on a pipe only (no TCP port, which any local user could use against
+the signed-in session; the candidate's `OPENADAPT_GUARD_CDP_URL` is a
+loopback relay that refuses every HTTP and WebSocket request without the
+run's random token, `readiness/devtools_relay.py`), opens one tab at `--app-url` (service workers blocked in its
 context), attaches the hold over CDP (every request of that tab is paused),
-turns on the target gate, and starts the candidate. It stops the candidate
-before it lets go of the tab, so a retried save can't land once requests are
-no longer paused. One task, one browser, one guard session.
+turns on the target gate, and starts the candidate. It stops the candidate,
+then closes the browser, every target with it, while both holds are still
+on, so a page timer can't send after a hold lets go. One task, one browser, one guard session.
 
 ### Other tabs, popups, contexts and workers
 
@@ -233,7 +236,7 @@ run `FAILED_SCOPE` and flags the whole scorecard; `run` exits 2.
 
 | Variable | Meaning |
 | --- | --- |
-| `OPENADAPT_GUARD_CDP_URL` | the DevTools endpoint of the guarded browser |
+| `OPENADAPT_GUARD_CDP_URL` | the DevTools endpoint of the guarded browser: the token-gated relay, `http://127.0.0.1:<port>/<token>` (use it as given) |
 | `OPENADAPT_GUARD_PAGE_URL` | the URL the guarded tab was opened at |
 | `OPENADAPT_TASK` | the instruction, then the inputs as JSON |
 | `OPENADAPT_TASK_ID` | the task id |
@@ -371,7 +374,7 @@ Case status, in order: `NOT_CHECKED` (not run), `FAILED_SCOPE`,
 held), `WRONG_RECORD` (the identity check failed, or a record field in the
 write names another record), `NOT_COMPARABLE`, `MISMATCHED` (any mismatched,
 missing or extra field, or an extra held write), `NOT_CHECKED` (an
-uncompared field), `MATCHED`. A case is `MATCHED` only when identity passed, every field the
+uncompared field), `MATCHED`. No field name is exempt from the extra-field check, not even `<body>`. A case is `MATCHED` only when identity passed, every field the
 person saved matched, no undeclared field was sent, and it is comparable.
 
 `cases.json` holds values and is written 0600. `compare` also writes each
@@ -399,7 +402,7 @@ values:
  landed_writes}
 ```
 
-`mismatched` includes wrong-record cases; `not_checked` includes
+`field_errors[].field` is the person's field name, or `undeclared_field` for a field the candidate sent that the person didn't save (the candidate's own name for it never leaves the machine). `mismatched` includes wrong-record cases; `not_checked` includes
 `FAILED_SCOPE` cases. `failed_scope` counts `FAILED_SCOPE` cases and
 `extra_target` cases; `scope_ok` is true only when it is 0 and no write
 reached the app. `task_type` is `--task-type` (a lowercase identifier) or

@@ -470,3 +470,34 @@ def test_committed_samples_hold_no_patient_names_or_pseudonym_maps() -> None:
         assert "pseudonyms" not in path.name, path
         for name in [*PATIENTS.values(), PLANTED]:
             assert name not in text, (path, name)
+
+
+# -- review: undeclared names stay local; no name is exempt ------------------------------
+
+
+def test_undeclared_field_names_never_reach_the_scorecard() -> None:
+    import json as _json
+
+    name_like = "Jane_Sample_DOB_1980-01-01"
+    case = compare_case(_ref(type="Triage"), _run(),
+                        _proposed(type="Triage", **{name_like: "x"}), before_screen=SCREEN,
+                        held=[_held(0)])
+    assert case["status"] == "MISMATCHED" and case["undeclared_fields"] == 1
+    card = build_scorecard({"cases": [case]})
+    assert {e["field"] for e in card["field_errors"]} == {"undeclared_field"}
+    assert card["risks"]["undeclared_field"] == 1
+    assert name_like not in _json.dumps(card)
+    assert "Jane" not in _json.dumps(card)
+
+
+def test_a_field_named_body_is_not_exempt() -> None:
+    case = compare_case(_ref(type="Triage"), _run(),
+                        _proposed(type="Triage", **{"<body>": "anything"}),
+                        before_screen=SCREEN, held=[_held(0)])
+    assert case["status"] == "MISMATCHED", case
+    assert [r["kind"] for r in case["fields"] if r["name"] == "<body>"] == ["extra"]
+    unparsed = _proposed(type="Triage")
+    unparsed["fields"].append({"name": "<body>", "value": None, "parse": "uncompared"})
+    case = compare_case(_ref(type="Triage"), _run(), unparsed, before_screen=SCREEN,
+                        held=[_held(0)])
+    assert case["status"] != "MATCHED", case

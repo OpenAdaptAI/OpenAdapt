@@ -135,7 +135,7 @@ class TargetGate:
         """Hand the browser-level paused requests to ``guard``."""
 
         decided = 0
-        while True:
+        for _ in range(self._paused.qsize()):  # only what was queued on entry
             try:
                 params = self._paused.get_nowait()
             except queue.Empty:

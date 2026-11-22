@@ -162,7 +162,9 @@ class CdpGuardPage:
         requests it decided."""
 
         decided = 0
-        while self._paused:
+        # Only what was queued on entry: a page that sends faster than the
+        # guard decides must not keep the caller's loop here forever.
+        for _ in range(len(self._paused)):
             held = HeldRequest.from_cdp(self._paused.pop(0))
             self._open[held.request_id] = held
             try:

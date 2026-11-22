@@ -139,6 +139,11 @@ def agent_main() -> int:
     origin = page_url.split("/", 3)[0] + "//" + page_url.split("/", 3)[2]
     body = _body(plan)
     attempt: dict[str, Any] = {"route": route}
+    # First, so a stop mid-route still leaves the cross-check its count.
+    Path(os.environ["OPENADAPT_USAGE_PATH"]).write_text(
+        json.dumps({"schema": "openadapt.agent-usage/v1", "calls": 0, "input_tokens": 0,
+                    "output_tokens": 0, "model": None, "cost_usd": 0.0})
+    )
     if route == "cookie":
         with sync_playwright() as pw:
             browser = pw.chromium.connect_over_cdp(cdp_url)

@@ -1,8 +1,8 @@
 {
   "agent_label": "scripted-agent",
   "agent_time_s": {
-    "mean": 2.053,
-    "median": 2.048
+    "mean": 2.109,
+    "median": 2.08
   },
   "cases_total": 20,
   "egress": {
@@ -48,10 +48,10 @@
       "task_id": "readiness-mockmed-0019"
     }
   ],
-  "generated_at": "2026-11-22T05:51:40+00:00",
+  "generated_at": "2026-11-22T07:01:51+00:00",
   "human_time_s": {
-    "mean": 0.936,
-    "median": 0.935
+    "mean": 0.939,
+    "median": 0.936
   },
   "landed_writes": 0,
   "matched": 13,
@@ -77,9 +77,9 @@
     "estimate": true,
     "formula": "(human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value",
     "inputs": {
-      "agent_median_s": 2.048,
+      "agent_median_s": 2.08,
       "hourly_cost_usd": 40.0,
-      "human_median_s": 0.935,
+      "human_median_s": 0.936,
       "matched_cases": 13,
       "model_cost_usd": 0.0,
       "why_no_value": null
