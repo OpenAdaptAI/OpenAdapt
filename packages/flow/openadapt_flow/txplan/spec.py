@@ -71,10 +71,28 @@ class Auth(_Closed):
     value_env: str
 
 
+class Enforcement(_Closed):
+    """A recorded probe: a write sent with a version that did not match was
+    refused with ``status``. Without this (or a probe the adapter runs), a
+    declared precondition is not trusted: a server that ignores ``If-Match``
+    would apply the write over a newer edit."""
+
+    status: int = Field(ge=100, le=599)
+    #: When the probe ran (ISO date), and against what (a server version).
+    observed: str = Field(min_length=4, max_length=40)
+    server: str = Field(default="", max_length=80)
+
+
 class Precondition(_Closed):
     """A server-enforced condition on a write: the record must still be the
     version OpenAdapt read (``If-Match``). Without one, a whole-record write
-    or a delete can erase another caller's edit made after the read."""
+    or a delete can erase another caller's edit made after the read.
+
+    It counts only with enforcement evidence: ``enforcement`` (a recorded
+    probe whose status is a refusal status), or ``probe: true``, which lets
+    the adapter send the first write on the route once with a version that
+    can't match. A refusal proves enforcement; an accepted probe was the
+    write itself, sent without a check, and is never VERIFIED."""
 
     header: str = Field(default="If-Match", pattern=r"^[A-Za-z0-9-]{1,64}$")
     #: Where the version comes from: the read's ``ETag`` response header, or
@@ -86,6 +104,15 @@ class Precondition(_Closed):
     format: str = "{value}"
     #: Statuses by which the server says the record changed, so nothing was written.
     refused_status: list[int] = Field(default_factory=lambda: [412])
+    enforcement: Optional[Enforcement] = None
+    probe: bool = False
+
+    def recorded(self) -> bool:
+        """A recorded probe that got a refusal status."""
+        return (
+            self.enforcement is not None
+            and self.enforcement.status in self.refused_status
+        )
 
     @model_validator(mode="after")
     def _check(self) -> "Precondition":
@@ -104,7 +131,8 @@ class Route(_Closed):
     replace: bool = False
     #: update and delete: send the version that was read, so the server
     #: refuses the write if the record changed since. A replace update or a
-    #: delete without one is never VERIFIED: a lost update can't be excluded.
+    #: delete without an enforced one is never VERIFIED: a lost update can't
+    #: be excluded.
     precondition: Optional[Precondition] = None
     #: list only: pagination.
     page_param: Optional[str] = None

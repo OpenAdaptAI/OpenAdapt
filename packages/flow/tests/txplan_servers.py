@@ -26,6 +26,10 @@ class RestStore:
         self.replace = replace
         self.lock = threading.Lock()
         self.writes = 0
+        #: A server that ignores ``If-Match`` (applies every write).
+        self.ignore_if_match = False
+        #: The ``If-Match`` of every PATCH and DELETE, in order (None: absent).
+        self.if_match_seen: list[Optional[str]] = []
 
     def add(self, **fields: Any) -> dict[str, Any]:
         with self.lock:
@@ -90,7 +94,12 @@ class RestStore:
             def _stale(self, rid: int) -> bool:
                 """An ``If-Match`` that names an older version: refuse (412)."""
                 want = self.headers.get("If-Match")
-                if want is None or want == store.etag(store.records[rid]):
+                store.if_match_seen.append(want)
+                if (
+                    store.ignore_if_match
+                    or want is None
+                    or want == store.etag(store.records[rid])
+                ):
                     return False
                 store.precondition_failed += 1
                 self._send(412, {})

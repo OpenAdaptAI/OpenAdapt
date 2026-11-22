@@ -99,6 +99,10 @@ def mail() -> Iterator[MailSink]:
         sink.close()
 
 
+#: The evidence a pack records after probing a server's If-Match handling.
+_PROBED = {"status": 412, "observed": "2026-11-22", "server": "RestStore"}
+
+
 def _spec(
     tmp_path: Path,
     *,
@@ -106,7 +110,7 @@ def _spec(
     rest_url: str | None = None,
     mail: MailSink | None = None,
     holdback: float = 60,
-    precondition: bool = True,
+    precondition: Any = True,
 ) -> Path:
     systems: list[dict[str, Any]] = []
     if db is not None:
@@ -121,7 +125,13 @@ def _spec(
         )
     if rest_url is not None:
         # The store's ETag: the write is refused if the record moved since read.
-        cond: dict[str, Any] = {"precondition": {}} if precondition else {}
+        # A recorded probe: the store refuses a mismatched If-Match with 412.
+        # A dict is the precondition as given (``{}``: declared, unproven).
+        cond: dict[str, Any] = (
+            {"precondition": precondition}
+            if isinstance(precondition, dict)
+            else ({"precondition": {"enforcement": _PROBED}} if precondition else {})
+        )
         systems.append(
             {
                 "name": "tasks",
@@ -1229,7 +1239,7 @@ def test_unconditional_held_delete_after_its_recheck_is_not_verified(
     out = engine.release(ctx, plan["digest"])
     assert 5 not in store.records
     assert out["outcome"] == "COMPLETED_UNVERIFIED", out
-    assert out["tx"]["unconditional"] == 1
+    assert out["tx"]["unconditional_writes"] == 1
 
 
 def test_conditional_held_delete_after_its_recheck_is_refused_by_the_server(
@@ -1341,3 +1351,229 @@ def test_unconditional_replace_adopted_after_a_crash_is_not_verified(
     out = engine.apply_plan(ctx, plan["digest"])
     assert out["tx"]["sent"] == 0
     assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+
+
+# -- closed scope: enforcement evidence, undo preconditions, scope caps -------
+# A write is VERIFIED only when nothing it can't see could have changed data
+# around it. Each negative below ends VERIFIED (or ROLLED_BACK) on the head
+# before this rule.
+
+
+def test_a_precondition_the_server_ignores_is_not_verified(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A declared If-Match the server never checks: the other caller's edit is
+    # erased and the read-back of the planned field still passes.
+    store, url = rest
+    store.ignore_if_match = True
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition={}))
+    plan = _go(ctx, "T-ign", [_update(3, amount=7)])
+    _edit_before_send(monkeypatch, store, 3)
+    out = engine.apply_plan(ctx, plan["digest"])
+    assert store.records[3]["title"] == "item 3"  # the edit was erased
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert out["tx"]["not_covered"] == ["precondition_unproven"]
+
+
+def test_recorded_evidence_with_a_status_that_is_not_a_refusal_proves_nothing(
+    tmp_path: Path, rest
+) -> None:
+    _, url = rest
+    pre = {"enforcement": {"status": 200, "observed": "2026-11-22"}}
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=pre))
+    out = engine.apply_plan(ctx, _go(ctx, "T-200", [_update(3, amount=7)])["digest"])
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+
+
+def test_a_probe_the_server_refuses_proves_the_precondition_once_per_route(
+    tmp_path: Path, rest
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition={"probe": True}))
+    plan = _go(ctx, "T-pr", [_update(3, amount=7), _update(4, amount=8)])
+    out = engine.apply_plan(ctx, plan["digest"])
+    assert out["outcome"] == "VERIFIED", out
+    assert store.precondition_failed == 1  # one probe, for both writes
+    assert store.records[3]["amount"] == 7 and store.records[4]["amount"] == 8
+    assert store.writes == 2
+
+
+def test_a_probe_the_server_accepts_is_the_write_and_is_never_verified(
+    tmp_path: Path, rest
+) -> None:
+    store, url = rest
+    store.ignore_if_match = True
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition={"probe": True}))
+    out = engine.apply_plan(ctx, _go(ctx, "T-pa", [_update(3, amount=7)])["digest"])
+    assert store.writes == 1  # the probe landed; nothing was sent again
+    assert store.records[3]["amount"] == 7
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert out["tx"]["not_covered"] == ["precondition_unproven"]
+
+
+def test_an_undo_with_no_precondition_is_not_a_verified_rollback(
+    tmp_path: Path, rest
+) -> None:
+    # The undo of a create is a delete with no version check: an edit made to
+    # the new record after the undo's check would be deleted with it.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=False))
+    create = {
+        "system": "tasks",
+        "collection": "item",
+        "op": "create",
+        "fields": {"title": "new", "amount": 1},
+    }
+    plan = _go(ctx, "T-uc", [create])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert len(store.records) == 10  # the undo itself ran
+    assert undo["outcome"] == "COMPLETED_UNVERIFIED", undo
+    assert undo["tx"]["not_covered"] == ["unconditional_undo"]
+
+
+def test_an_undo_carries_the_version_it_checked(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Another caller edits the record after the undo's check and before its
+    # restore arrives. The restore names the version checked, so the server
+    # refuses it and the edit stays.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    plan = _go(ctx, "T-uv", [_update(3, amount=7)])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    original = RestAdapter._call
+
+    def call(self: RestAdapter, method: str, path: str, *a: Any, **kw: Any) -> Any:
+        if str(kw.get("key") or "").endswith(":undo"):
+            with store.lock:
+                store.records[3]["title"] = "edited by someone else"
+                store.records[3]["updated"] = store.records[3]["updated"] + 1.0
+        return original(self, method, path, *a, **kw)
+
+    monkeypatch.setattr(RestAdapter, "_call", call)
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert store.records[3]["title"] == "edited by someone else", store.records[3]
+    assert undo["outcome"] != "ROLLED_BACK", undo
+    assert undo["tx"]["codes"] == {"changed_since_apply": 1}
+
+
+def test_an_undo_with_an_enforced_precondition_is_rolled_back(
+    tmp_path: Path, rest
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    plan = _go(ctx, "T-ur", [_update(3, amount=7)])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert undo["outcome"] == "ROLLED_BACK", undo
+    assert store.records[3]["amount"] == 30
+    assert store.if_match_seen[-1] is not None  # the restore was conditional
+
+
+def _sql_update(rid: int, **fields: Any) -> dict[str, Any]:
+    return {
+        "system": "crm",
+        "collection": "customers",
+        "op": "update",
+        "id": rid,
+        "fields": fields,
+    }
+
+
+def _open_scope(monkeypatch: pytest.MonkeyPatch, *gaps: str) -> None:
+    """The adapter's scope inventory finds these gaps (a foreign table, say)."""
+    from openadapt_flow.txplan.adapters import SqlAdapter
+
+    monkeypatch.setattr(
+        SqlAdapter, "scope_gaps", lambda self, cur, sql="": list(gaps), raising=False
+    )
+
+
+def test_a_database_write_with_an_open_scope_is_capped_not_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    _open_scope(monkeypatch, "foreign_data")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    plan = _go(ctx, "T-open", [_sql_update(3, balance=99.5)])
+    out = engine.apply_plan(ctx, plan["digest"])
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert out["tx"]["not_covered"] == ["foreign_data"]
+    assert (3, "cust 3", 99.5, "") in _rows(db)["customers"]  # it was written
+    assert plan["writes"][0].get("not_covered") == ["foreign_data"]
+
+
+def test_a_raw_statement_with_an_open_scope_is_capped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    _open_scope(monkeypatch, "truncate")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    sql = {
+        "system": "crm",
+        "op": "sql",
+        "fields": {"sql": "UPDATE customers SET balance = 1 WHERE id = 2"},
+    }
+    out = engine.apply_plan(ctx, _go(ctx, "T-raw", [sql])["digest"])
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert out["tx"]["not_covered"] == ["truncate"]
+
+
+def test_a_replay_of_a_ledger_entry_with_no_recorded_scope_is_not_verified(
+    tmp_path: Path,
+) -> None:
+    # An entry written before the scope check (or by an adoption) says nothing
+    # about what its transaction could reach.
+    db = _db(tmp_path / "crm.sqlite")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    plan = _go(ctx, "T-old", [_sql_update(3, balance=99.5)])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    w = plan["writes"][0]
+    ctx.state.record(
+        w["key"],
+        "applied",
+        plan=plan["digest"],
+        payload=w["payload_sha256"],
+        result={"id": "3"},
+    )
+    again = engine.apply_plan(
+        ctx, _go(ctx, "T-old", [_sql_update(3, balance=99.5)])["digest"]
+    )
+    assert again["tx"]["replays"] == 1 and again["tx"]["sent"] == 0
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert again["tx"]["not_covered"] == ["scope_unrecorded"]
+
+
+def test_a_replay_keeps_the_scope_gaps_of_its_send(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    _open_scope(monkeypatch, "rule")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    first = engine.apply_plan(
+        ctx, _go(ctx, "T-rr", [_sql_update(3, balance=99.5)])["digest"]
+    )
+    assert first["outcome"] == "COMPLETED_UNVERIFIED"
+    _open_scope(monkeypatch)  # closed now: the replay keeps what the send saw
+    again = engine.apply_plan(
+        ctx, _go(ctx, "T-rr", [_sql_update(3, balance=99.5)])["digest"]
+    )
+    assert again["tx"]["replays"] == 1
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert again["tx"]["not_covered"] == ["rule"]
+
+
+def test_a_database_undo_with_an_open_scope_is_not_a_verified_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    before = _rows(db)
+    ctx = _ctx(_spec(tmp_path, db=db))
+    plan = _go(ctx, "T-su", [_sql_update(3, balance=99.5)])
+    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    _open_scope(monkeypatch, "trigger_not_local")
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert _rows(db) == before  # the undo ran
+    assert undo["outcome"] == "COMPLETED_UNVERIFIED", undo
+    assert undo["tx"]["not_covered"] == ["trigger_not_local"]

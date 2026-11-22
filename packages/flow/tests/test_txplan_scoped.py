@@ -52,6 +52,8 @@ class AuditedStore:
         self.empty_to_null = False
         #: Writes refused because ``If-Match`` named an older ``updated``.
         self.precondition_failed = 0
+        #: A server that ignores ``If-Match`` (applies every write).
+        self.ignore_if_match = False
 
     def log(self, actor: str, rid: int, action: str) -> None:
         self.events.append(
@@ -89,7 +91,11 @@ class AuditedStore:
 
             def _stale(self, rid: int) -> bool:
                 want = self.headers.get("If-Match")
-                if want is None or want == str(store.records[rid]["updated"]):
+                if (
+                    store.ignore_if_match
+                    or want is None
+                    or want == str(store.records[rid]["updated"])
+                ):
                     return False
                 store.precondition_failed += 1
                 self._send(412, {})
@@ -185,11 +191,22 @@ def _spec(
     search: bool = True,
     idem: bool = False,
     logs: Optional[list[str]] = None,
-    precondition: bool = True,
+    precondition: Any = True,
 ) -> TxSpec:
     # The record's ``updated`` is its version: a write naming an older one is refused.
+    # ``"declared"``: a precondition with no enforcement evidence.
     cond: dict[str, Any] = (
-        {"precondition": {"source": "field", "field": "updated"}}
+        {
+            "precondition": {
+                "source": "field",
+                "field": "updated",
+                **(
+                    {}
+                    if precondition == "declared"
+                    else {"enforcement": {"status": 412, "observed": "2026-11-22"}}
+                ),
+            }
+        }
         if precondition
         else {}
     )
@@ -1456,3 +1473,57 @@ def test_conditional_replace_sends_the_version_it_read(lab: Any) -> None:
     out = _write(_ctx(url, state), op="update", rid="1", fields={"qty": 5})
     assert out["outcome"] == "VERIFIED", out
     assert store.precondition_failed == 0 and store.records[1]["qty"] == 5
+
+
+# -- enforcement evidence and stored results -----------------------------------
+
+
+def test_a_declared_precondition_the_server_ignores_is_not_verified(lab: Any) -> None:
+    # The version goes out as If-Match, but nothing shows the server checks
+    # it: this one doesn't, and the other caller's edit is erased.
+    store, url, state = lab
+    store.ignore_if_match = True
+    _seed(store)
+    out = _write(
+        _ctx(url, state, precondition="declared"),
+        op="update",
+        rid="1",
+        fields={"qty": 5},
+        send=_after_another_edit(url),
+    )
+    assert store.records[1]["colour"] == "red"  # the other edit was erased
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert "precondition_unproven" in out["codes"]
+
+
+def test_a_resolved_retry_is_capped_like_a_fresh_write(lab: Any) -> None:
+    # A stored VERIFIED (from code before the cap, or from a spec that has
+    # since lost its evidence) is not returned as VERIFIED for a route that
+    # would not verify now.
+    store, url, state = lab
+    _seed(store)
+    first = _write(
+        _ctx(url, state, precondition="declared"),
+        op="update",
+        rid="1",
+        fields={"qty": 5},
+    )
+    key = json.loads((Path(first["run_dir"]) / "report.json").read_text())["tx"]["key"]
+    stored = {k: v for k, v in first.items() if k != "precondition_enforced"}
+    state.record(key, "resolved", result={**stored, "outcome": "VERIFIED", "codes": []})
+    again = _write(
+        _ctx(url, state, precondition=False), op="update", rid="1", fields={"qty": 5}
+    )
+    assert again.get("replayed") is True and store.writes == 1
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+    assert "unconditional_write" in again["codes"]
+
+
+def test_a_resolved_retry_with_evidence_stays_verified(lab: Any) -> None:
+    store, url, state = lab
+    _seed(store)
+    ctx = _ctx(url, state)
+    first = _write(ctx, op="update", rid="1", fields={"qty": 5})
+    assert first["outcome"] == "VERIFIED", first
+    again = _write(ctx, op="update", rid="1", fields={"qty": 5})
+    assert again.get("replayed") is True and again["outcome"] == "VERIFIED"

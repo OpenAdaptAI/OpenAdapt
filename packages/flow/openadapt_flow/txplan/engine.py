@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 from openadapt_flow.txplan.adapters import (
+    UNCONDITIONAL,
     AdapterError,
     ChangedSinceApply,
     Diverged,
@@ -37,7 +38,6 @@ from openadapt_flow.txplan.adapters import (
     column_digests,
     diff_frames,
     same,
-    unconditional,
     volatile_columns,
 )
 from openadapt_flow.txplan.spec import (
@@ -442,22 +442,22 @@ def _undo_sql(
     entry: Any,
     images: Any,
     digest: str,
-) -> str:
+) -> tuple[str, list[str]]:
     if w.get("ddl") or not images:
-        return "no_undo"
+        return "no_undo", []
     rids = [*images.get("after", {}), *images.get("before", {})]
     current = adapter.current_digests(rids)
     for rid, want in images.get("after", {}).items():
         if current.get(rid) != want:
-            return "changed_since_apply"
+            return "changed_since_apply", []
     for rid in images.get("before", {}):
         if rid not in images.get("after", {}) and current.get(rid) is not None:
-            return "changed_since_apply"  # a removed row came back
+            return "changed_since_apply", []  # a removed row came back
     state.record(w["key"], "undo_begun", plan=digest, payload=entry.payload)
     try:
-        adapter.compensate_sql(images)
+        gaps = adapter.compensate_sql(images)
     except ChangedSinceApply:
-        return "changed_since_apply"
+        return "changed_since_apply", []
     except AdapterError as exc:
         state.record(
             w["key"],
@@ -466,7 +466,7 @@ def _undo_sql(
             payload=entry.payload,
             reason=f"undo: {exc}"[:120],
         )
-        return "undo_failed"
+        return "undo_failed", []
     now_ = adapter.current_digests(rids + list(images.get("added_pk", {})))
     ok = all(now_.get(r) is None for r in images.get("added_pk", {})) and all(
         now_.get(r) == _row_digests(adapter, r, item["row"])
@@ -485,7 +485,7 @@ def _undo_sql(
             payload=entry.payload,
             reason="undo: the read-back does not show the baseline",
         )
-    return "undone" if ok else "undo_refuted"
+    return ("undone" if ok else "undo_refuted"), gaps
 
 
 def _check_write(spec: TxSpec, n: int, w: Mapping[str, Any]) -> dict[str, Any]:
@@ -788,6 +788,9 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
                     ]
                     writes[i]["staged_after"] = after_image(res["after_raw"], vol)
         for i, res in zip(idx, results):
+            # What the dry run could not close: the write will be at best
+            # COMPLETED_UNVERIFIED, and the approver sees it before approving.
+            writes[i]["staged_not_covered"] = list(res.get("not_covered") or [])
             if writes[i]["op"] == "sql":
                 writes[i]["staged_diff"] = res["staged_diff"]
                 writes[i]["staged_rows"] = res["rows"]
@@ -877,6 +880,11 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
                     if w["op"] == "sql"
                     else {}
                 ),
+                **(
+                    {"not_covered": w["staged_not_covered"]}
+                    if w.get("staged_not_covered")
+                    else {}
+                ),
             }
             for w in writes
         ],
@@ -956,24 +964,44 @@ def approve_plan(
 # -- apply ---------------------------------------------------------------------
 
 
-def _unconditional(spec: TxSpec, w: Mapping[str, Any]) -> bool:
-    system = spec.system(w["system"])
-    if not isinstance(system, RestSystem):
-        return False
-    return unconditional(system.collection(w.get("collection")), w["op"])
+def _gaps(
+    ctx: Ctx, w: Mapping[str, Any], result: Optional[Mapping[str, Any]]
+) -> list[str]:
+    """Why this write's read-back can't make it VERIFIED: what its adapter
+    could not rule out (an unenforced precondition, an open write scope)."""
+    fn = getattr(ctx.adapter(w["system"]), "not_covered", None)
+    return list(fn(w, result)) if fn is not None else []
+
+
+def _note_gaps(tx: dict[str, Any], gaps: Sequence[str]) -> None:
+    tx["not_covered"] = sorted({*tx.get("not_covered", []), *gaps})
+    tx["capped"] = tx.get("capped", 0) + 1
+    if any(g in UNCONDITIONAL for g in gaps):
+        tx["unconditional_writes"] = tx.get("unconditional_writes", 0) + 1
 
 
 def _capped(
-    spec: TxSpec, w: Mapping[str, Any], verified: Optional[bool], tx: dict[str, Any]
+    ctx: Ctx,
+    w: Mapping[str, Any],
+    verified: Optional[bool],
+    tx: dict[str, Any],
+    result: Optional[Mapping[str, Any]],
 ) -> Optional[bool]:
-    """Stale-baseline class: a write sent with no version check may have
-    erased another caller's edit made after the plan read, and still read
-    back like this write. Its read-back confirms it, but never VERIFIES it,
-    on every path that can mark it verified (a send, a replay, an adoption)."""
-    if verified is True and _unconditional(spec, w):
-        tx["unconditional_writes"] = tx.get("unconditional_writes", 0) + 1
-        return None
-    return verified
+    """Closed-scope class: a read-back confirms a write, but VERIFIES it only
+    when nothing it can't see could have changed data around it. A write
+    sent with no enforced version check may have erased another caller's
+    edit and still read back like this write; a database write whose scope
+    inventory is unreadable or not empty may have written outside the frame.
+    Either one caps the write, on every path that can mark it verified (a
+    send, a replay, an adoption, a release). ``tx["not_covered"]`` keeps the
+    reason codes."""
+    if verified is not True:
+        return verified
+    gaps = _gaps(ctx, w, result)
+    if not gaps:
+        return verified
+    _note_gaps(tx, gaps)
+    return None
 
 
 def _post_image(images: Mapping[str, Any], volatile: Sequence[str]) -> dict[str, Any]:
@@ -1135,7 +1163,9 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                         replay_verified, _ = _readback(
                             ctx, w, base, entry.result, replay=True
                         )
-                        replay_verified = _capped(spec, w, replay_verified, tx)
+                        replay_verified = _capped(
+                            ctx, w, replay_verified, tx, entry.result
+                        )
                         if replay_verified is not True:
                             tx["unverified_replays"] = (
                                 tx.get("unverified_replays", 0) + 1
@@ -1156,7 +1186,9 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     if w["op"] == "update"
                     else (None, None)
                 )
-                adopted_verified = _capped(spec, w, verified, tx)
+                # Nothing recorded what this attempt's send proved or what its
+                # transaction could reach: the adapter's gaps for no result.
+                adopted_verified = _capped(ctx, w, verified, tx, None)
                 if verified:
                     state.record(
                         key,
@@ -1311,8 +1343,8 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if rows_image is not None:
                 images[key]["rows"] = rows_image
             code = "confirmed" if verified else "refuted"
-            if verified and _capped(spec, w, verified, tx) is None:
-                verified, code = None, "confirmed_unconditional"
+            if verified and _capped(ctx, w, verified, tx, result) is None:
+                verified, code = None, "confirmed_not_covered"
             results.append(
                 _line(
                     ok=verified is not False,
@@ -1350,7 +1382,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if ok
             and not tx.get("held")
             and not tx.get("unverified_replays")
-            and not tx.get("unconditional_writes")
+            and not tx.get("capped")
             else ("COMPLETED_UNVERIFIED" if ok else "RECONCILIATION_REQUIRED")
         )
         run = _write_run(
@@ -1391,6 +1423,7 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         writes, baselines = priv["writes"], priv["baselines"]
         results: list[dict[str, Any]] = []
         per_write: dict[str, str] = {}
+        uncovered: dict[str, list[str]] = {}
         tx: dict[str, Any] = {"phase": "undo", "writes": len(writes)}
         for w, base in reversed(list(zip(writes, baselines))):
             key = w["key"]
@@ -1419,7 +1452,7 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             result = entry.result or {"id": w.get("id")}
             adapter = ctx.adapter(w["system"])
             if w["op"] == "sql":
-                per_write[key] = _undo_sql(
+                per_write[key], gaps = _undo_sql(
                     state,
                     adapter,
                     w,
@@ -1427,6 +1460,8 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     (images.get(key) or {}).get("rows"),
                     digest,
                 )
+                if per_write[key] == "undone" and gaps:
+                    uncovered[key] = gaps
                 continue
             rid = str(result.get("id") or w.get("id"))
             current = adapter.read(w["collection"], rid)
@@ -1438,7 +1473,21 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             state.record(key, "undo_begun", plan=digest, payload=entry.payload)
             try:
-                adapter.compensate(w, base, result, key)
+                gaps = adapter.compensate(
+                    w,
+                    base,
+                    result,
+                    key,
+                    expect=(
+                        None
+                        if want is None
+                        else (lambda rec, w=w, want=want: _norm(system, w, rec) == want)
+                    ),
+                )
+            except (ChangedSinceApply, StaleBaseline):
+                # The record moved after the check: nothing was written over it.
+                per_write[key] = "changed_since_apply"
+                continue
             except AdapterError as exc:
                 state.record(
                     key,
@@ -1473,6 +1522,10 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     reason="undo: the read-back does not show the baseline",
                 )
             per_write[key] = "undone" if ok else "undo_refuted"
+            if ok and gaps:
+                # Closed-scope class: an undo sent with no enforced version
+                # check (or with an open write scope) is not a verified undo.
+                uncovered[key] = list(gaps)
         # The whole frame back to the baseline: the records and the collateral.
         after = ctx.frames(list(priv["frames"]))
         leftover: list[str] = []
@@ -1506,7 +1559,12 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         for r in leftover:
             if r in own and per_write.get(own[r]) == "undone":
                 per_write[own[r]] = "frame_differs"
-        verified = [k for k in counted if per_write[k] == "undone" and not collateral]
+        done = [k for k in counted if per_write[k] == "undone" and not collateral]
+        verified = [k for k in done if k not in uncovered]
+        for k in uncovered:
+            if per_write.get(k) == "undone":
+                per_write[k] = "undone_not_covered"
+                _note_gaps(tx, uncovered[k])
         for w in writes:
             code = per_write.get(w["key"])
             if code in (
@@ -1519,9 +1577,9 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             results.append(
                 _line(
-                    ok=w["key"] in verified,
+                    ok=w["key"] in done,
                     verified=(w["key"] in verified)
-                    if code != "irreversible_released"
+                    if code not in ("irreversible_released", "undone_not_covered")
                     else None,
                     irreversible=w["irreversible"],
                     payload=w["payload_sha256"],
@@ -1551,8 +1609,12 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         not_undone = [
             k for k, v in per_write.items() if v in ("no_undo", "irreversible_released")
         ]
-        ok = len(verified) == len(counted) and not collateral and not not_undone
-        outcome = "ROLLED_BACK" if ok else "RECONCILIATION_REQUIRED"
+        ok = len(done) == len(counted) and not collateral and not not_undone
+        outcome = (
+            ("ROLLED_BACK" if len(verified) == len(done) else "COMPLETED_UNVERIFIED")
+            if ok
+            else "RECONCILIATION_REQUIRED"
+        )
         approval = state.approval_record(digest)
         run = _write_run(
             state,
@@ -1706,7 +1768,7 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
                         )
                         continue
                 try:
-                    adapter.apply(w, base, key)
+                    sent_result = adapter.apply(w, base, key)
                 except StaleBaseline:
                     # The server refused the conditional write: the record
                     # changed after the recheck read. Nothing was written.
@@ -1728,11 +1790,9 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
                     )
                     continue
                 verified, _ = _readback(ctx, w, base, {"id": w.get("id")})
-                if verified and _unconditional(ctx.spec, w):
-                    # Stale-baseline class: the recheck read and the send are
-                    # two requests, and nothing made the send conditional.
-                    verified = None
-                    tx["unconditional"] = tx.get("unconditional", 0) + 1
+                # Stale-baseline class: the recheck read and the send are two
+                # requests; only an enforced version check closes the gap.
+                verified = _capped(ctx, w, verified, tx, sent_result)
             state.unhold(key)
             state.record(
                 key,

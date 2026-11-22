@@ -45,7 +45,7 @@ from openadapt_flow.txplan.adapters import (
     RestAdapter,
     StaleBaseline,
     precondition_for,
-    unconditional,
+    write_gaps,
 )
 from openadapt_flow.txplan.audit import (
     Audit,
@@ -77,7 +77,13 @@ HARD = (
 #: Not verified: the read-back or the log never settled, or the write could
 #: have erased another caller's edit unseen (no precondition on a whole-record
 #: write or a delete).
-SOFT = ("audit_lag", "audit_unreadable", "recovery_unproven", "unconditional_write")
+SOFT = (
+    "audit_lag",
+    "audit_unreadable",
+    "recovery_unproven",
+    "unconditional_write",
+    "precondition_unproven",
+)
 
 Send = Callable[..., Optional[str]]
 _ABSENT = object()
@@ -128,6 +134,23 @@ def _form(value: Any, prefix: str = "") -> list[tuple[str, str]]:
     return [(prefix, str(value))]
 
 
+def _request_raw(
+    adapter: RestAdapter,
+    method: str,
+    path: str,
+    body: Any = None,
+    headers: Optional[Mapping[str, str]] = None,
+    encoding: str = "json",
+) -> Any:
+    kw: dict[str, Any] = {"json": body}
+    if encoding == "form" and body is not None:
+        kw = {"data": dict(_form(body))}
+    try:
+        return adapter.http.request(method, path, headers=dict(headers or {}), **kw)
+    except Exception as exc:  # noqa: BLE001 - delivery unknown
+        raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
+
+
 def _request(
     adapter: RestAdapter,
     method: str,
@@ -137,13 +160,7 @@ def _request(
     encoding: str = "json",
     refused: Any = (),
 ) -> tuple[int, Any]:
-    kw: dict[str, Any] = {"json": body}
-    if encoding == "form" and body is not None:
-        kw = {"data": dict(_form(body))}
-    try:
-        resp = adapter.http.request(method, path, headers=dict(headers or {}), **kw)
-    except Exception as exc:  # noqa: BLE001 - delivery unknown
-        raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
+    resp = _request_raw(adapter, method, path, body, headers, encoding)
     if resp.status_code in refused:
         raise StaleBaseline(f"{method} refused: the record changed since it was read")
     if resp.status_code >= 400:
@@ -181,11 +198,11 @@ def default_send(
     headers: dict[str, str] = {}
     if adapter.system.idempotency_header:
         headers[adapter.system.idempotency_header] = key
-    if route.precondition is not None and op != "create":
+    conditional = route.precondition is not None and op != "create"
+    if conditional:
         if not condition:
             # Stale-baseline class: a declared precondition is never dropped.
             raise AdapterError("no version was read for the precondition")
-        headers.update(condition)
     values = {**(baseline or {}), **fields, **(path or {}), "id": rid}
     if op == "create":
         body: Any = {**scoped.create_body, **fields}
@@ -202,18 +219,34 @@ def default_send(
         body = None
     else:
         body = adapter._body(coll, route, dict(baseline) if baseline else None, fields)
+    url = adapter._fill(route.path, values)
+    if conditional and adapter.system.audit is None:
+        # Enforcement evidence: the first write on the route goes once with a
+        # version that can't match (see RestAdapter.probe). With a log, a
+        # refused probe may be logged as a write of the record, so the pack
+        # records the probe instead (``precondition.enforcement``).
+        plain = {
+            k: v for k, v in headers.items() if k != adapter.system.idempotency_header
+        }
+
+        def probe_send(h: dict[str, str]) -> Any:
+            return _request_raw(
+                adapter, route.method, url, body, {**plain, **h}, scoped.encoding
+            )
+
+        proof, _ = adapter.probe(coll, op, probe_send)
+        if proof == "landed":
+            return rid  # the probe was the write, sent without a check
+    if conditional:
+        headers.update(condition or {})
     _, got = _request(
         adapter,
         route.method,
-        adapter._fill(route.path, values),
+        url,
         body,
         headers,
         scoped.encoding,
-        refused=(
-            route.precondition.refused_status
-            if route.precondition is not None and op != "create"
-            else ()
-        ),
+        refused=route.precondition.refused_status if conditional else (),  # type: ignore[union-attr]
     )
     if op == "create":
         new = (got or {}).get(route.id_from or coll.id_field)
@@ -575,6 +608,15 @@ def scoped_write(
         if entry is not None and entry.status == "resolved":
             out = dict(entry.result)
             out["replayed"] = True
+            # Stale-cached-verdict class: a stored VERIFIED is capped by the
+            # same rules as a fresh write, with the evidence the send kept.
+            enforced = out.get("precondition_enforced")
+            gaps = write_gaps(
+                coll, op, enforced if isinstance(enforced, bool) else None
+            )
+            if gaps and out.get("outcome") == "VERIFIED":
+                out["outcome"] = "COMPLETED_UNVERIFIED"
+                out["codes"] = [*(out.get("codes") or []), *gaps]
             return out
 
         baseline = None
@@ -771,12 +813,12 @@ def scoped_write(
             notes=notes,
             sleep=sleep,
         )
-        if unconditional(coll, op):
-            # Stale-baseline class: a whole-record write or a delete sent with
-            # no version check can erase an edit another caller made after
-            # the pre-read, and read back exactly like this write. The audit
-            # check sees only this actor, so it can't rule that out.
-            codes.append("unconditional_write")
+        # Stale-baseline class: a whole-record write or a delete sent with
+        # no enforced version check can erase an edit another caller made
+        # after the pre-read, and read back exactly like this write. The
+        # audit check sees only this actor, so it can't rule that out.
+        enforced = adapter.enforced(coll, op) if condition else False
+        codes.extend(write_gaps(coll, op, enforced))
         hard = [c for c in codes if c in HARD]
         soft = [c for c in codes if c in SOFT]
         if hard:
@@ -786,7 +828,13 @@ def scoped_write(
         else:
             outcome, verified = "VERIFIED", True
         tx.update({"codes": codes, "notes": notes, **detail})
-        result = {"id": target_id, "outcome": outcome, "codes": codes, "notes": notes}
+        result = {
+            "id": target_id,
+            "outcome": outcome,
+            "codes": codes,
+            "notes": notes,
+            "precondition_enforced": enforced,
+        }
         return _finish(
             ctx,
             digest,

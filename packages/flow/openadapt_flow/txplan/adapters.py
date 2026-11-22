@@ -29,6 +29,7 @@ import importlib
 import json
 import os
 import re
+import secrets
 import time
 from typing import Any, Callable, Mapping, Optional, Sequence
 from urllib.parse import quote
@@ -62,17 +63,37 @@ class StaleBaseline(AdapterError):
     read. Nothing was written."""
 
 
-def unconditional(coll: Collection, op: str) -> bool:
-    """Stale-baseline class: a write that overwrites or removes fields outside
-    the intent (a replace update, a delete) with no server-enforced check that
-    the record is still the version read. Another caller's edit made after the
-    read can be erased and still read back like a correct write."""
+#: Fixed reason codes for a write that can't be VERIFIED because something
+#: that could have changed data outside what OpenAdapt read back is not ruled
+#: out. They never name a table, trigger, schema or database: run reports are
+#: world-readable.
+UNCONDITIONAL = ("unconditional_write", "precondition_unproven")
+
+
+def write_gaps(coll: Collection, op: str, enforced: Optional[bool] = None) -> list[str]:
+    """Stale-baseline class: why a write that overwrites or removes fields
+    outside the intent (a replace update, a delete) can't be VERIFIED.
+
+    Another caller's edit made after the read can be erased and still read
+    back like a correct write, unless the server refused a write whose
+    version no longer matched. A declared precondition counts only with
+    enforcement evidence: a recorded probe in the spec, or ``enforced``, what
+    the send itself proved (a probe the adapter ran and the server refused)."""
     if op not in ("update", "delete"):
-        return False
+        return []
     route = getattr(coll, op, None)
     if route is None or (op == "update" and not route.replace):
-        return False
-    return route.precondition is None
+        return []
+    pre = route.precondition
+    if pre is None:
+        return ["unconditional_write"]
+    if pre.recorded() or enforced is True:
+        return []
+    return ["precondition_unproven"]
+
+
+def unconditional(coll: Collection, op: str, enforced: Optional[bool] = None) -> bool:
+    return bool(write_gaps(coll, op, enforced))
 
 
 def _dotted(record: Optional[Mapping[str, Any]], path: str) -> Any:
@@ -301,6 +322,318 @@ def column_digests(
     return {k: digest(tag(v)) for k, v in record.items() if k not in drop}
 
 
+# -- write scope (SQL) ---------------------------------------------------------
+#
+# The frame reads one schema (PostgreSQL) or one database (MySQL). Row counts
+# show the writes this backend made outside it, but not a TRUNCATE (it zeroes
+# them), a write a foreign table or dblink makes from another backend, or
+# anything a trigger the account can't see does. So a write is VERIFIED only
+# when the adapter can list everything that could write outside the frame,
+# and the list is empty. "Proven local" is an allowlist: anything it can't
+# read or doesn't recognise is a gap.
+
+_PG_SAFE_LANGS = ("plpgsql", "sql")
+#: System functions with effects outside the rows the frame reads.
+_PG_EFFECT_FUNCS = re.compile(
+    r"^(lo_.*|lowrite|loread|set_config|dblink.*|pg_.*|currval|nextval|setval)$"
+)
+_MYSQL_BUILTINS = frozenset(
+    """
+    abs acos adddate addtime ascii asin atan atan2 avg bin bit_and bit_count
+    bit_length bit_or bit_xor cast ceil ceiling char char_length
+    character_length coalesce concat concat_ws conv convert convert_tz cos cot
+    count crc32 curdate current_date current_time current_timestamp
+    current_user curtime database date date_add date_format date_sub datediff
+    day dayname dayofmonth dayofweek dayofyear decimal degrees elt exp
+    extract field find_in_set floor format from_days from_unixtime greatest
+    group_concat hex hour if ifnull inet_aton inet_ntoa insert instr interval
+    isnull json_array json_contains json_extract json_object json_quote
+    json_set json_unquote json_valid last_day last_insert_id lcase least
+    left length ln locate log log10 log2 lower lpad ltrim makedate maketime
+    max md5 microsecond mid min minute mod month monthname now nullif oct
+    octet_length ord period_add period_diff pi position pow power quarter
+    quote radians rand regexp_like regexp_replace regexp_substr repeat replace
+    reverse right round row_count rpad rtrim schema sec_to_time second sha1
+    sha2 sign signed sin space sqrt str_to_date strcmp subdate substr
+    substring substring_index subtime sum sysdate tan time time_format
+    time_to_sec timediff timestamp timestampadd timestampdiff to_days
+    to_seconds trim truncate ucase unhex unix_timestamp unsigned upper user
+    utc_date utc_time utc_timestamp uuid uuid_short week weekday weekofyear
+    year yearweek binary nchar varchar datetime int integer bigint json
+    """.split()
+)
+#: Words that take a parenthesis without being a call.
+_SQL_PAREN_WORDS = frozenset(
+    """
+    values in exists if elseif while and or not when then else select where on
+    as case return returns set using into key index primary unique check over
+    partition row any all some between like is null default table from join
+    update references foreign by with distinct do of to array
+    """.split()
+)
+#: Words after which a name followed by ``(`` is a table or index, not a call.
+_NAME_WORDS = frozenset("into table update join from references on".split())
+_IDENT = r'(?:"(?:[^"]|"")+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
+_STRIP = {
+    "postgresql": re.compile(
+        r"--[^\n]*|/\*.*?\*/|[Ee]'(?:[^'\\]|\\.|'')*'|'(?:[^']|'')*'"
+        r"|\$\$.*?\$\$|\$([A-Za-z_][A-Za-z0-9_]*)\$.*?\$\1\$",
+        re.S,
+    ),
+    "mysql": re.compile(r"--[ \t][^\n]*|#[^\n]*|/\*.*?\*/|'(?:[^'\\]|\\.|'')*'", re.S),
+}
+
+
+def _unquote(name: str) -> str:
+    if name[:1] == '"':
+        return name[1:-1].replace('""', '"')
+    if name[:1] == "`":
+        return name[1:-1]
+    return name.lower()
+
+
+def sql_tokens(text: str, dialect: str) -> tuple[set[str], set[str], set[str]]:
+    """The qualifiers (``x`` in ``x.y``), the called names (``f`` in
+    ``f(``), and the bare keywords of a statement or a function body, with
+    comments and string literals left out. A quote the strip can't close
+    makes the text unparseable: the keyword ``?unparsed`` is returned."""
+    body = _STRIP[dialect].sub(" '' ", text)
+    words: set[str] = set()
+    if body.count("'") % 2 or "$$" in body:
+        words.add("?unparsed")
+    quals = {
+        _unquote(m.group(1))
+        for m in re.finditer(rf"({_IDENT})\s*\.\s*(?:{_IDENT}|\*)", body)
+    }
+    calls: set[str] = set()
+    # The word before a (possibly qualified) name: ``INTO s.t (`` names a
+    # table, not a call.
+    before, last = "", ""
+    for m in re.finditer(rf"({_IDENT})(\s*\()?|\.", body):
+        tok = m.group(1)
+        if tok is None:
+            last = "."
+            continue
+        name = _unquote(tok)
+        if last != ".":
+            before = last
+        if (
+            m.group(2)
+            and name.lower() not in _SQL_PAREN_WORDS
+            and before.lower() not in _NAME_WORDS
+        ):
+            calls.add(name)
+        if tok[:1] not in ('"', "`"):
+            words.add(tok.lower())
+        last = name
+    return quals, calls, words
+
+
+def _pg_body_gaps(cur: Any, texts: Sequence[str], schema: str) -> list[str]:
+    """Gaps in statement or function bodies: TRUNCATE, dynamic SQL, COPY, a
+    schema other than the frame's, or a call to a function that is not a
+    side-effect-free system function."""
+    gaps: set[str] = set()
+    quals: set[str] = set()
+    calls: set[str] = set()
+    for text in texts:
+        q, c, w = sql_tokens(text, "postgresql")
+        quals |= q
+        calls |= c
+        if "?unparsed" in w:
+            gaps.add("body_unparsed")
+        if "truncate" in w:
+            gaps.add("truncate")
+        if "execute" in w:
+            gaps.add("dynamic_sql")
+        if "copy" in w:
+            gaps.add("copy")
+    if quals:
+        cur.execute(
+            "SELECT nspname FROM pg_namespace WHERE nspname = ANY(%s)",
+            (sorted(quals),),
+        )
+        schemas = {str(r[0]) for r in cur.fetchall()}
+        if schemas - {schema, "pg_catalog", "information_schema"}:
+            gaps.add("other_schema")
+    if calls:
+        cur.execute(
+            "SELECT p.proname, n.nspname FROM pg_proc p "
+            "JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "WHERE p.proname = ANY(%s)",
+            (sorted(calls),),
+        )
+        for name, nsp in cur.fetchall():
+            if str(nsp) not in ("pg_catalog", "information_schema"):
+                gaps.add("user_function")
+            elif _PG_EFFECT_FUNCS.match(str(name)):
+                gaps.add("system_function_with_effects")
+    return sorted(gaps)
+
+
+#: The frame schema's relations (tables, views, matviews, foreign tables).
+_PG_FRAME_RELS = (
+    "SELECT c.oid FROM pg_class c WHERE c.relnamespace = "
+    "(SELECT oid FROM pg_namespace WHERE nspname = current_schema())"
+)
+
+
+def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
+    gaps: set[str] = set()
+    cur.execute("SELECT current_schema(), current_schemas(false)::text[]")
+    schema, path = cur.fetchone()
+    if not schema or list(path or []) != [schema]:
+        # Unqualified names could resolve to another schema.
+        gaps.add("search_path_open")
+    cur.execute(
+        "SELECT (SELECT count(*) FROM pg_foreign_data_wrapper)"
+        " + (SELECT count(*) FROM pg_foreign_server)"
+        " + (SELECT count(*) FROM pg_foreign_table)"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("foreign_data")
+    cur.execute(
+        "SELECT count(*) FROM pg_extension WHERE extname IN ('dblink', 'postgres_fdw')"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("remote_link")
+    cur.execute(
+        "SELECT count(*) FROM pg_operator o JOIN pg_namespace n "
+        "ON n.oid = o.oprnamespace "
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("user_operator")
+    cur.execute(
+        "SELECT count(*) FROM pg_rewrite WHERE rulename <> '_RETURN' "
+        f"AND ev_class IN ({_PG_FRAME_RELS})"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("rule")
+    # Defaults and checks on frame relations that call a user function.
+    cur.execute(
+        "SELECT count(*) FROM pg_depend d JOIN pg_proc p ON p.oid = d.refobjid "
+        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE d.refclassid = 'pg_proc'::regclass "
+        "AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND ("
+        "(d.classid = 'pg_attrdef'::regclass AND d.objid IN "
+        f"(SELECT oid FROM pg_attrdef WHERE adrelid IN ({_PG_FRAME_RELS}))) OR "
+        "(d.classid = 'pg_constraint'::regclass AND d.objid IN "
+        f"(SELECT oid FROM pg_constraint WHERE conrelid IN ({_PG_FRAME_RELS}))))"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("user_function_default")
+    cur.execute(
+        "SELECT l.lanname, p.prosecdef, p.proconfig IS NOT NULL, n.nspname, p.prosrc "
+        "FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
+        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "JOIN pg_language l ON l.oid = p.prolang "
+        "WHERE NOT t.tgisinternal AND t.tgenabled <> 'D' "
+        f"AND t.tgrelid IN ({_PG_FRAME_RELS})"
+    )
+    bodies: list[str] = []
+    for lang, secdef, config, nsp, src in cur.fetchall():
+        if str(nsp) == "pg_catalog":
+            continue  # a built-in trigger function writes only NEW
+        if str(lang) not in _PG_SAFE_LANGS or secdef or config:
+            gaps.add("trigger_not_local")
+            continue
+        bodies.append(str(src or ""))
+    texts = bodies + ([sql] if sql else [])
+    if texts:
+        gaps |= set(_pg_body_gaps(cur, texts, str(schema)))
+    return sorted(gaps)
+
+
+def _like_literal(pattern: str) -> str:
+    """A MySQL grant name as the literal it also matches (``\\_`` is ``_``)."""
+    return re.sub(r"\\(.)", r"\1", pattern)
+
+
+def mysql_trigger_visibility(
+    grants: Sequence[str], db: str, tables: Sequence[str]
+) -> bool:
+    """Whether ``SHOW GRANTS`` proves the TRIGGER privilege on every frame
+    table. ``information_schema.triggers`` lists only the triggers of tables
+    the account holds it on, so without it an empty list proves nothing.
+
+    Allowlist: a GRANT of TRIGGER or ALL on ``*.*``, on the database, or on
+    the table, read literally (a wildcard grant counts only for the name it
+    spells). A role, a partial revoke or a line it can't read proves nothing."""
+    if any(str(line).strip().upper().startswith("REVOKE") for line in grants):
+        return False  # a partial revoke: a broader grant no longer says enough
+    covered_db = False
+    covered: set[str] = set()
+    for line in grants:
+        text = str(line).strip()
+        m = re.match(
+            r"^GRANT\s+(.+?)\s+ON\s+(?:TABLE\s+)?(\S+)\s+TO\s", text, re.I | re.S
+        )
+        if not m:
+            continue  # a role grant: its privileges are not shown here
+        privs = re.sub(r"\([^)]*\)", "", m.group(1)).upper()
+        names = {p.strip() for p in privs.split(",")}
+        if not ({"TRIGGER", "ALL", "ALL PRIVILEGES"} & names):
+            continue
+        target = m.group(2)
+        tm = re.fullmatch(
+            r"(\*|`(?:[^`]|``)+`|[A-Za-z0-9_$\\%]+)\.(\*|`(?:[^`]|``)+`|[A-Za-z0-9_$]+)",
+            target,
+        )
+        if not tm:
+            continue
+        dbp, tbl = tm.group(1), tm.group(2)
+        if dbp == "*":
+            if tbl == "*":
+                return True
+            continue
+        dbname = _like_literal(dbp.strip("`").replace("``", "`"))
+        if dbname != db:
+            continue
+        if tbl == "*":
+            covered_db = True
+        else:
+            covered.add(tbl.strip("`").replace("``", "`"))
+    return covered_db or all(t in covered for t in tables)
+
+
+def _mysql_scope_gaps(cur: Any, sql: str, tables: Sequence[str]) -> list[str]:
+    gaps: set[str] = set()
+    cur.execute("SELECT DATABASE()")
+    db = str(cur.fetchone()[0] or "")
+    cur.execute("SHOW GRANTS")
+    grants = [str(r[0]) for r in cur.fetchall()]
+    if not db or not mysql_trigger_visibility(grants, db, tables):
+        gaps.add("trigger_privilege_unproven")
+    cur.execute(
+        "SELECT count(*) FROM information_schema.tables "
+        "WHERE table_schema = DATABASE() "
+        "AND UPPER(engine) IN ('FEDERATED', 'CONNECT', 'SPIDER')"
+    )
+    if int(cur.fetchone()[0]):
+        gaps.add("foreign_data")
+    cur.execute(
+        "SELECT action_statement FROM information_schema.triggers "
+        "WHERE trigger_schema = DATABASE()"
+    )
+    bodies = [str(r[0] or "") for r in cur.fetchall()]
+    for body in bodies:
+        quals, calls, words = sql_tokens(body, "mysql")
+        if "?unparsed" in words:
+            gaps.add("body_unparsed")
+        if "call" in words or "execute" in words or "prepare" in words:
+            gaps.add("routine_call")
+        if {q for q in quals if q.lower() not in ("new", "old") and q != db}:
+            gaps.add("other_qualifier")
+        if {c for c in calls if c.lower() not in _MYSQL_BUILTINS}:
+            gaps.add("user_function")
+    if sql:
+        _, calls, words = sql_tokens(sql, "mysql")
+        if {c for c in calls if c.lower() not in _MYSQL_BUILTINS}:
+            gaps.add("user_function")
+    return sorted(gaps)
+
+
 # -- REST ----------------------------------------------------------------------
 
 
@@ -323,6 +656,9 @@ class RestAdapter:
         self.http = client or httpx.Client(
             base_url=system.url(), headers=headers, timeout=system.timeout_s
         )
+        #: (collection, op) -> whether a probe proved the server enforces the
+        #: route's precondition. Probed once per route per adapter.
+        self._probed: dict[tuple[str, str], bool] = {}
 
     @staticmethod
     def _fill(path: str, values: Mapping[str, Any]) -> str:
@@ -339,6 +675,22 @@ class RestAdapter:
 
         return re.sub(r"\{([a-z_][a-z0-9_]*)\}", one, path)
 
+    def _raw(
+        self,
+        method: str,
+        path: str,
+        body: Any = None,
+        *,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> Any:
+        try:
+            return self.http.request(
+                method, path, json=body, params=params, headers=dict(headers or {})
+            )
+        except Exception as exc:  # noqa: BLE001 - transport failure: delivery unknown
+            raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
+
     def _call(
         self,
         method: str,
@@ -354,13 +706,18 @@ class RestAdapter:
         headers = dict(condition or {})
         if key and self.system.idempotency_header:
             headers[self.system.idempotency_header] = key
-        try:
-            resp = self.http.request(
-                method, path, json=body, params=params, headers=headers
-            )
-        except Exception as exc:  # noqa: BLE001 - transport failure: delivery unknown
-            raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
-        if condition and resp.status_code in refused:
+        resp = self._raw(method, path, body, params=params, headers=headers)
+        return self._answer(method, resp, bool(condition), refused, etag_out)
+
+    @staticmethod
+    def _answer(
+        method: str,
+        resp: Any,
+        conditional: bool,
+        refused: Sequence[int] = (),
+        etag_out: Optional[list[Any]] = None,
+    ) -> Any:
+        if conditional and resp.status_code in refused:
             raise StaleBaseline(
                 f"{method} refused: the record changed since it was read"
             )
@@ -376,6 +733,58 @@ class RestAdapter:
             return resp.json()
         except ValueError:
             return {}
+
+    def enforced(self, coll: Collection, op: str) -> bool:
+        """Whether the route's precondition has enforcement evidence: a
+        recorded probe, or one this adapter ran."""
+        pre = getattr(getattr(coll, op, None), "precondition", None)
+        return pre is not None and (
+            pre.recorded() or self._probed.get((coll.name, op)) is True
+        )
+
+    def probe(
+        self, coll: Collection, op: str, send: Callable[[dict[str, str]], Any]
+    ) -> tuple[str, Any]:
+        """Prove the server enforces the route's precondition, once per route.
+
+        ``send`` makes the planned request with the headers it is given (and
+        no idempotency key, so a cached refusal can't answer the real send)
+        and returns the response. The probe sends it with a version that
+        can't match. ``proven``: the server refused it. ``unproven``: there is
+        no evidence, or the probe got another error, and nothing landed.
+        ``landed``: the server applied the write without checking the
+        version; the response is returned, and the write must not be sent
+        again."""
+        pre = getattr(getattr(coll, op, None), "precondition", None)
+        if pre is None:
+            return "unproven", None
+        k = (coll.name, op)
+        if pre.recorded() or self._probed.get(k) is True:
+            return "proven", None
+        if not pre.probe or k in self._probed:
+            return "unproven", None
+        wrong = pre.format.replace("{value}", "openadapt-probe-" + secrets.token_hex(8))
+        resp = send({pre.header: wrong})
+        if resp.status_code in pre.refused_status:
+            self._probed[k] = True
+            return "proven", None
+        self._probed[k] = False
+        if 200 <= resp.status_code < 300:
+            return "landed", resp
+        return "unproven", None
+
+    def not_covered(
+        self, write: Mapping[str, Any], result: Optional[Mapping[str, Any]]
+    ) -> list[str]:
+        """Why this write's read-back can't make it VERIFIED (empty: nothing)."""
+        if write.get("op") not in ("update", "delete"):
+            return []
+        enforced = (result or {}).get("precondition_enforced")
+        return write_gaps(
+            self.coll(write.get("collection")),
+            write["op"],
+            enforced if isinstance(enforced, bool) else None,
+        )
 
     def coll(self, name: Optional[str]) -> Collection:
         return self.system.collection(name)
@@ -515,20 +924,31 @@ class RestAdapter:
         if route.precondition is not None and op != "create" and not condition:
             # Stale-baseline class: a declared precondition is never dropped.
             raise AdapterError("the plan holds no version for the precondition")
-        got = self._call(
-            route.method,
-            self._fill(route.path, values),
-            None if op == "delete" else self._body(coll, route, baseline, fields),
-            key=key,
-            condition=condition if op != "create" else None,
-            refused=route.precondition.refused_status if route.precondition else (),
-        )
+        path = self._fill(route.path, values)
+        body = None if op == "delete" else self._body(coll, route, baseline, fields)
         if op == "create":
+            got = self._call(route.method, path, body, key=key)
             rid = (got or {}).get(route.id_from or coll.id_field)
             if rid in (None, ""):
                 raise AdapterError("the create returned no id")
             return {"id": str(rid)}
-        return {"id": str(write["id"])}
+        out: dict[str, Any] = {"id": str(write["id"])}
+        if route.precondition is None:
+            self._call(route.method, path, body, key=key)
+            return out
+        refused = route.precondition.refused_status
+        proof, _ = self.probe(
+            coll, op, lambda h: self._raw(route.method, path, body, headers=h)
+        )
+        if proof == "landed":
+            # The server applied the probe: the write is in, unchecked.
+            out["precondition_enforced"] = False
+            return out
+        self._call(
+            route.method, path, body, key=key, condition=condition, refused=refused
+        )
+        out["precondition_enforced"] = proof == "proven"
+        return out
 
     def compensate(
         self,
@@ -536,37 +956,62 @@ class RestAdapter:
         baseline: Optional[Record],
         result: Mapping[str, Any],
         key: str,
-    ) -> None:
+        *,
+        expect: Optional[Callable[[Record], bool]] = None,
+    ) -> list[str]:
+        """Undo one write. Returns why the undo can't be VERIFIED (empty when
+        it was sent with an enforced precondition).
+
+        Stale-baseline class: the record is read once, with its version;
+        ``expect`` checks that read is still what the apply left, and the
+        undo carries that version, so an edit landing after the check is
+        refused by the server (:class:`StaleBaseline`), never overwritten."""
         coll = self.coll(write.get("collection"))
         op = write["op"]
         rid = str(result.get("id") or write.get("id"))
         if op == "create":
-            route = coll.delete
+            undo_op, route = "delete", coll.delete
             if route is None:
                 raise AdapterError(
                     f"{coll.name} declares no delete, so a create can't be undone"
                 )
-            self._call(
-                route.method, self._fill(route.path, {"id": rid}), key=key + ":undo"
-            )
-            return
-        if op == "update":
-            route = coll.update
+        elif op == "update":
+            undo_op, route = "update", coll.update
             assert route is not None and baseline is not None
+        else:
+            raise AdapterError(f"no exact undo for a REST {op}")
+        current, etag = self.read_versioned(coll.name, rid)
+        if current is None or (expect is not None and not expect(current)):
+            raise ChangedSinceApply(f"{coll.name}/{rid}")
+        condition = precondition_for(coll, undo_op, current, etag)
+        if undo_op == "delete":
+            path, body = self._fill(route.path, {"id": rid}), None
+        else:
+            assert baseline is not None
             changed = list(write.get("fields") or {})
-            restore = (
+            body = (
                 {k: v for k, v in baseline.items() if k not in coll.server_fields}
                 if route.replace
                 else {k: baseline.get(k) for k in changed}
             )
-            self._call(
-                route.method,
-                self._fill(route.path, {**baseline, "id": rid}),
-                restore,
-                key=key + ":undo",
-            )
-            return
-        raise AdapterError(f"no exact undo for a REST {op}")
+            path = self._fill(route.path, {**baseline, "id": rid})
+        if condition is None:
+            self._call(route.method, path, body, key=key + ":undo")
+            return ["unconditional_undo"]
+        proof, _ = self.probe(
+            coll, undo_op, lambda h: self._raw(route.method, path, body, headers=h)
+        )
+        if proof == "landed":
+            return ["unconditional_undo"]
+        self._call(
+            route.method,
+            path,
+            body,
+            key=key + ":undo",
+            condition=condition,
+            refused=route.precondition.refused_status if route.precondition else (),
+        )
+        return [] if proof == "proven" else ["unconditional_undo"]
 
     def expected_after(
         self, write: Mapping[str, Any], baseline: Optional[Record]
@@ -659,7 +1104,8 @@ class SqlAdapter:
 
     def _refuse_unobserved_writes(self, cur: Any, sql: str) -> None:
         """Unobserved-scope class: the frame reads one schema (or database), so
-        a statement may not change rows anywhere else."""
+        a statement may not change rows anywhere else. This refuses writes
+        that are seen; :meth:`scope_gaps` caps what can't be seen."""
         d = self.system.dialect
         if d == "postgresql":
             # This transaction's own row counts, for every table it touched.
@@ -670,35 +1116,55 @@ class SqlAdapter:
             )
             if int(cur.fetchone()[0]):
                 raise Diverged("the statement changed rows outside the current schema")
-        elif d == "mysql":
+        elif d == "mysql" and sql:
             cur.execute("SELECT DATABASE()")
             current = str(cur.fetchone()[0] or "")
             cur.execute("SHOW DATABASES")
             others = {str(r[0]).lower() for r in cur.fetchall()} - {current.lower()}
-            named = {
-                m.lower()
-                for m in re.findall(
-                    r"`?([A-Za-z0-9_$]+)`?\s*\.\s*`?[A-Za-z0-9_$]+", sql
-                )
-            }
-            # A trigger's writes are part of the statement: one that names
-            # another database, or calls a routine whose writes can't be
-            # read from here, makes the statement's scope unobservable.
-            cur.execute(
-                "SELECT action_statement FROM information_schema.triggers "
-                "WHERE trigger_schema = DATABASE()"
-            )
-            bodies = "\n".join(str(r[0] or "") for r in cur.fetchall())
-            if re.search(r"\bCALL\b", bodies, re.IGNORECASE):
-                raise Diverged("a trigger calls a routine the frame can't observe")
-            named |= {
-                m.lower()
-                for m in re.findall(
-                    r"`?([A-Za-z0-9_$]+)`?\s*\.\s*`?[A-Za-z0-9_$]+", bodies
-                )
-            }
+            named = {q.lower() for q in sql_tokens(sql, "mysql")[0]}
             if named & others:
-                raise Diverged("the statement or a trigger names another database")
+                raise Diverged("the statement names another database")
+
+    def scope_gaps(self, cur: Any, sql: str = "") -> list[str]:
+        """Closed write-scope check, inside the write's own transaction.
+
+        A database write may be VERIFIED only when everything that could
+        write outside the observed frame can be listed, and the list is
+        empty. Returns fixed reason codes, one per open item; an inventory
+        that can't be read is ``scope_unreadable``. A gap never refuses the
+        write: it caps the outcome at ``COMPLETED_UNVERIFIED``."""
+        d = self.system.dialect
+        if d == "sqlite":
+            # One file: ATTACH is refused, so a trigger can only write tables
+            # the frame reads, and the connection registers no functions.
+            return []
+        if d == "postgresql":
+            # A failed catalog read aborts a PostgreSQL transaction: read under
+            # a savepoint, so an unreadable inventory caps the write instead of
+            # refusing it.
+            cur.execute("SAVEPOINT oa_scope")
+            try:
+                gaps = _pg_scope_gaps(cur, sql)
+            except Exception:  # noqa: BLE001 - unreadable: capped, not refused
+                cur.execute("ROLLBACK TO SAVEPOINT oa_scope")
+                return ["scope_unreadable"]
+            cur.execute("RELEASE SAVEPOINT oa_scope")
+            return gaps
+        try:
+            return _mysql_scope_gaps(cur, sql, self._tables(cur))
+        except Exception:  # noqa: BLE001 - unreadable: capped, not refused
+            return ["scope_unreadable"]
+
+    def not_covered(
+        self, write: Mapping[str, Any], result: Optional[Mapping[str, Any]]
+    ) -> list[str]:
+        """The scope gaps recorded with the write. A result without them (an
+        adoption after a crash, a ledger entry from older code) is never
+        VERIFIED: nothing says what could fire then."""
+        gaps = (result or {}).get("not_covered")
+        if not isinstance(gaps, list):
+            return ["scope_unrecorded"]
+        return [str(g) for g in gaps]
 
     def _tables(self, cur: Any) -> list[str]:
         d = self.system.dialect
@@ -845,6 +1311,7 @@ class SqlAdapter:
         # Every op, not only raw SQL: a trigger on a planned insert, update or
         # delete can write outside the frame too.
         self._refuse_unobserved_writes(cur, sql)
+        result["not_covered"] = self.scope_gaps(cur, sql)
         return result
 
     def _exec_one(
@@ -1027,7 +1494,7 @@ class SqlAdapter:
         )
         return {**result, "post_commit_matches": matches, "_images": images}
 
-    def compensate_sql(self, images: Mapping[str, Any]) -> None:
+    def compensate_sql(self, images: Mapping[str, Any]) -> list[str]:
         """Undo one statement from its images, in one transaction: delete what
         it added, restore what it changed, reinsert what it removed.
 
@@ -1077,12 +1544,18 @@ class SqlAdapter:
                             f"{len(failed)} row(s) could not be restored"
                         )
                     left = failed
+                if self.system.dialect == "postgresql":
+                    cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                # The undo's own writes fire the same triggers.
+                self._refuse_unobserved_writes(cur, "")
+                gaps = self.scope_gaps(cur)
             except Exception:
                 con.rollback()
                 raise
             con.commit()
         finally:
             con.close()
+        return gaps
 
     def _restore_row(self, cur: Any, rid: str, item: Mapping[str, Any]) -> None:
         table = rid.split("/", 1)[0]
@@ -1134,7 +1607,10 @@ class SqlAdapter:
         baseline: Optional[Record],
         result: Mapping[str, Any],
         key: str,
-    ) -> None:
+        *,
+        expect: Optional[Callable[[Record], bool]] = None,
+    ) -> list[str]:
+        """Undo one write; returns the undo's own scope gaps."""
         op = write["op"]
         rid = str(result.get("id") or write.get("id"))
         if op == "create":
@@ -1165,7 +1641,8 @@ class SqlAdapter:
             }
         else:
             raise AdapterError(f"no SQL undo for {op}")
-        self.apply(inverse, None, key + ":undo")
+        done = self.apply(inverse, None, key + ":undo")
+        return self.not_covered(inverse, done)
 
     def expected_after(
         self, write: Mapping[str, Any], baseline: Optional[Record]
