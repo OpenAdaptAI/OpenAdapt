@@ -3,7 +3,6 @@
  "rounds": 2,
  "person_decisions": 0,
  "seconds": 359.9,
- "model_usd": 0.1717,
  "reason": "admitted",
  "contract": "benchmark/verify_draft/results/directus/draft/contract.yaml",
  "questions": [],

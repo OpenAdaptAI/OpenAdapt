@@ -58,8 +58,8 @@ synthetic.
   admission and held out.
 - **False stops**: clean writes not confirmed, or whose recheck didn't
   confirm.
-- **Model cost**: from each call's token counts at the model's list price,
-  in the spend ledger (`results/spend.jsonl`).
+- **Model calls**: each call and its token counts, in `result.json`
+  (`model_calls`). Prices stay out of the public results.
 
 ## Kill criterion
 
@@ -74,8 +74,9 @@ scored on the held-out faults as well.
 
 ## Spend cap
 
-USD 30 in all, enforced by the ledger. A call is refused when the total plus
-the worst case of one call would pass it.
+A fixed cap in all, enforced by the spend ledger, which is kept outside the
+repository. A call is refused when the total plus the worst case of one call
+would pass it.
 
 ## Addendum, 2026-11-21, before Directus
 

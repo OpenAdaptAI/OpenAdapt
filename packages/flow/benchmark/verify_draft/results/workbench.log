@@ -22,7 +22,6 @@
  "reason": "admitted",
  "model": "claude-opus-5-5",
  "prompt_sha256": "sha256:c33fbf890663c5314f9afb16035a491c6526217054cfacda14685bd0caf0d796",
- "model_usd": 0.0789,
  "rounds": [
   {
    "admitted": true,

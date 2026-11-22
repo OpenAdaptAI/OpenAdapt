@@ -9,7 +9,8 @@ browser-free and headless. Raw data for every run, void or not, is under
 - `draft/rounds/`: every draft and every admission case;
 - `draft/contract.yaml`: the admitted contracts;
 - `setup/`: the operator inputs;
-- `spend.jsonl` and `spend-dev.jsonl`: every model call.
+- `result.json`'s `model_calls`: every model call of the run, with its
+  token counts.
 
 ## Verdict
 
@@ -49,12 +50,12 @@ minutes on the two local apps, with one round each.
 
 ## Per-app table (reported runs)
 
-| App | Tuned on? | Description | Setup minutes | Person decisions | Drafts admitted / rejected | Planted faults caught, admission | Planted faults caught, held out | False stops, admission clean writes | False stops, held-out clean writes | Model USD |
+| App | Tuned on? | Description | Setup minutes | Person decisions | Drafts admitted / rejected | Planted faults caught, admission | Planted faults caught, held out | False stops, admission clean writes | False stops, held-out clean writes | Model calls |
 |---|---|---|---|---|---|---|---|---|---|---|
-| MockLoan (create) | yes | `db` | 1.4 | 0 | 1 / 0 | 8/8 | 10/10 | 0/5 | 0/5 | 0.05 |
-| Workbench, MockMed profile (update) | yes | `db` | 1.3 | 0 | 1 / 0 | 6/6 | 6/6 | 0/5 | 0/5 | 0.08 |
-| Mealie v2.8.0 (update), first valid run | no | OpenAPI | 9.2 | 0 | 0 / 3 | best draft 6/8 | not run (nothing admitted) | best draft 0/5 | - | 0.58 |
-| Directus 11.5.1 (update) | no | OpenAPI | 6.0 | 0 | 1 / 1 | 7/7 | 8/8 | 0/5 | 0/5 | 0.17 |
+| MockLoan (create) | yes | `db` | 1.4 | 0 | 1 / 0 | 8/8 | 10/10 | 0/5 | 0/5 | 1 |
+| Workbench, MockMed profile (update) | yes | `db` | 1.3 | 0 | 1 / 0 | 6/6 | 6/6 | 0/5 | 0/5 | 1 |
+| Mealie v2.8.0 (update), first valid run | no | OpenAPI | 9.2 | 0 | 0 / 3 | best draft 6/8 | not run (nothing admitted) | best draft 0/5 | - | 3 |
+| Directus 11.5.1 (update) | no | OpenAPI | 6.0 | 0 | 1 / 1 | 7/7 | 8/8 | 0/5 | 0/5 | 2 |
 
 How to read the columns:
 
@@ -63,15 +64,10 @@ How to read the columns:
 - Each admitted contract also confirmed every write in its attribution
   probe: 5 writes each (2 users x 2 payloads, plus the first write
   repeated).
-- Model cost per contract is USD 0.05 to 0.17 for the admitted ones, and
-  USD 0.58 for Mealie's refusal.
+- Each admitted contract took 1 or 2 model calls; Mealie's refusal took 3.
 
-The benchmark spent USD 2.52 in all:
-
-- USD 1.93 on the reported and void runs (`spend.jsonl`);
-- USD 0.59 on development on the tuned apps (`spend-dev.jsonl`).
-
-The cap was USD 30.
+The benchmark made 24 model calls in all: 15 in the reported and void runs,
+and 9 in development on the tuned apps.
 
 ## What each case showed
 
@@ -141,11 +137,11 @@ refuted all 8 applicable faults:
 
 ## Earlier runs (kept, not reported in the table)
 
-| Run | What happened | Minutes | Model USD |
+| Run | What happened | Minutes | Model calls |
 |---|---|---|---|
-| Mealie run 1, void | Operator setup error: the read-only role had no `SELECT` on the sequences, so no baseline could be taken. Stopped after round 2. The command now checks the read account once before any model call. | - | 0.51 |
-| Mealie run 3, after the fixes below | Refused after 3 rounds. The best draft caught 6 of 7 faults, missing only the lost update. | 4.0 | 0.44 |
-| MockLoan and workbench, prompt 1 (`results/v1/`) | Admitted in round 1 with the same numbers as the reported runs. | 1.4 and 1.2 | 0.04 and 0.06 |
+| Mealie run 1, void | Operator setup error: the read-only role had no `SELECT` on the sequences, so no baseline could be taken. Stopped after round 2. The command now checks the read account once before any model call. | - | 3 |
+| Mealie run 3, after the fixes below | Refused after 3 rounds. The best draft caught 6 of 7 faults, missing only the lost update. | 4.0 | 3 |
+| MockLoan and workbench, prompt 1 (`results/v1/`) | Admitted in round 1 with the same numbers as the reported runs. | 1.4 and 1.2 | 1 and 1 |
 
 Mealie run 2 exposed three faults in the qualifier. They were fixed before
 Directus, and the addendum lists them:

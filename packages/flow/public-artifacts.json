@@ -1165,8 +1165,6 @@
     "benchmark/verify_draft/results/mockloan/result.json",
     "benchmark/verify_draft/results/mockloan/setup/sandbox.yaml",
     "benchmark/verify_draft/results/mockloan/setup/task.yaml",
-    "benchmark/verify_draft/results/spend-dev.jsonl",
-    "benchmark/verify_draft/results/spend.jsonl",
     "benchmark/verify_draft/results/v1/mealie/draft/report.json",
     "benchmark/verify_draft/results/v1/mealie/draft/rounds/round-1.yaml",
     "benchmark/verify_draft/results/v1/mealie/draft/rounds/round-2.admission.json",

@@ -3,7 +3,6 @@
  "rounds": 1,
  "person_decisions": 0,
  "seconds": 83.2,
- "model_usd": 0.0477,
  "reason": "admitted",
  "contract": "benchmark/verify_draft/results/mockloan/draft/contract.yaml",
  "questions": [],

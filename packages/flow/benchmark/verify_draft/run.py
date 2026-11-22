@@ -5,7 +5,9 @@
 
 1. The operator setup (``apps.py``), timed on its own.
 2. ``openadapt verify draft`` (``openadapt_flow.verify_draft.draft.run``)
-   with the pinned model: setup minutes, rounds, person decisions, cost.
+   with the pinned model: setup minutes, rounds, person decisions, model
+   calls and tokens. The spend ledger (with prices) stays outside the
+   committed results.
 3. If a contract is admitted, a held-out check with no model: a second
    qualification run on harness-chosen values (other clean writes, the
    faults planted on other rows with other values), plus app-level faults
@@ -111,7 +113,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("app", choices=sorted(SETUPS))
     ap.add_argument("--out", required=True)
     ap.add_argument(
-        "--spend-ledger", default="benchmark/verify_draft/results/spend.jsonl"
+        "--spend-ledger",
+        default=str(Path.home() / ".openadapt" / "verify-draft" / "spend.jsonl"),
     )
     ap.add_argument("--spend-cap-usd", type=float, default=30.0)
     args = ap.parse_args(argv)
@@ -134,6 +137,11 @@ def main(argv: list[str] | None = None) -> int:
             log=lambda s: print(f"[{args.app}] {s}", file=sys.stderr, flush=True),
         )
         minutes = (time.monotonic() - started) / 60
+        report_path = out / "draft" / "report.json"
+        if report_path.is_file():  # the committed proof carries no prices
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            report.pop("model_usd", None)
+            report_path.write_text(json.dumps(report, indent=1), encoding="utf-8")
         rounds = [
             {
                 "admitted": a.admitted,
@@ -179,8 +187,10 @@ def main(argv: list[str] | None = None) -> int:
             "reason": outcome.reason[:2000],
             "model": M.MODEL,
             "prompt_sha256": M.prompt_sha256(),
-            "model_usd": round(outcome.usd, 4),
-            "model_calls": [e for e in ledger.entries],
+            # Calls and tokens only: the public proof carries no prices.
+            "model_calls": [
+                {k: v for k, v in e.items() if k != "usd"} for e in ledger.entries
+            ],
             "rounds": rounds,
             "notes": run.notes,
         }

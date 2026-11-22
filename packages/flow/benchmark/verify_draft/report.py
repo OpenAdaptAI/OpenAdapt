@@ -27,7 +27,7 @@ def row(r: dict) -> str:
     return (
         f"| {r['app']}{' (untuned)' if r['untuned'] else ''} | {r['describe']} | {r['setup_minutes']:.1f} | "
         f"{r['person_decisions']} | {r['drafts_admitted']} / {r['drafts_rejected']} | {caught} | {held} | "
-        f"{clean_adm} | {clean_held} | {r['model_usd']:.2f} |"
+        f"{clean_adm} | {clean_held} | {len(r.get('model_calls') or [])} |"
     )
 
 
@@ -35,7 +35,7 @@ def main(names: list[str]) -> int:
     print(
         "| App | Description | Setup minutes | Person decisions | Drafts admitted / rejected | "
         "Planted faults caught (admission) | Planted faults caught (held out) | "
-        "False stops (admission clean writes) | False stops (held-out clean writes) | Model USD |"
+        "False stops (admission clean writes) | False stops (held-out clean writes) | Model calls |"
     )
     print("|---|---|---|---|---|---|---|---|---|---|")
     for name in names or sorted(
