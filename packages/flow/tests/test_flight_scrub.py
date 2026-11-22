@@ -480,3 +480,56 @@ def test_a_url_without_a_scheme_is_cut_in_text_and_on_screen():
     covered = "".join(text[s:e] for s, e, _ in spans)
     assert "4471923" in covered and "Zyxwv" in covered
     assert "emr.example.test" not in covered
+
+
+def _wrapped(b64: str, width: int = 76, sep: str = "\n") -> str:
+    return sep.join(b64[i : i + width] for i in range(0, len(b64), width))
+
+
+def test_wrapped_base64_images_are_scrubbed_wherever_they_are():
+    _raw, b64 = _big_png()
+    texts = [
+        "screenshot:\n" + _wrapped(b64),  # a prefixed 76-column dump
+        "data:image/png;base64," + _wrapped(b64),  # a data URI, wrapped
+        (
+            "Content-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+            + _wrapped(b64, sep="\r\n")
+            + "\r\n--boundary--"
+        ),  # a MIME part
+        "  " + _wrapped(b64, 64, "\n  ") + "\nend",  # indented lines
+    ]
+    for text in texts:
+        scrub = CountingScrub()
+        out = scrub_request({"messages": [{"role": "user", "content": text}]}, scrub)[
+            "messages"
+        ][0]["content"]
+        assert scrub.images == 1, text[:40]
+        for line in _wrapped(b64).split("\n")[1:-1]:
+            assert line not in out
+
+
+def test_prose_and_urls_are_not_taken_for_base64():
+    scrub = CountingScrub()
+    prose = "\n".join(["see the patient chart and add a note"] * 20)
+    url = "open https://emr.example/" + "patients/abc-def/" * 20
+    bare = "open emr.example/" + "patients/abc-def/" * 20
+    for text in (prose, url, bare):
+        scrub_request({"messages": [{"role": "user", "content": text}]}, scrub)
+    assert scrub.images == 0
+
+
+def test_wrapped_base64_that_is_not_an_image_refuses():
+    blob = base64.b64encode(("Patient Zyxwv Qtest MRN 4471923 " * 40).encode())
+    text = "dump:\n" + _wrapped(blob.decode())
+    with pytest.raises(ScrubRefused, match="not an image"):
+        scrub_request(
+            {"messages": [{"role": "user", "content": text}]}, CountingScrub()
+        )
+
+
+def test_a_deeply_nested_request_refuses_instead_of_crashing():
+    node: Any = "x"
+    for _ in range(5000):
+        node = [node]
+    with pytest.raises(ScrubRefused, match="nested"):
+        scrub_request({"messages": node}, CountingScrub())

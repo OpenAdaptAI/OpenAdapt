@@ -855,7 +855,43 @@ _IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x0
 
 
 #: A run of base64 characters long enough to be an encoded payload.
-_B64_RUN = re.compile(r"[A-Za-z0-9+/_-]{%d,}={0,2}" % 256)
+#: Lines may break between groups (76-column MIME, PEM-style dumps): a run
+#: is base64 characters with line breaks (and indentation) between them.
+_B64_RUN = re.compile(
+    r"[A-Za-z0-9+/_-]{16,}={0,2}(?:[ \t]*\r?\n[ \t]*[A-Za-z0-9+/_-]{4,}={0,2})*"
+)
+#: Base64 lines shorter than this, other than the last, are prose that
+#: happens to use base64 letters ("see\nthe\npatient").
+_B64_LINE_MIN = 40
+
+
+def _runs(value: str) -> list[tuple[int, int, str]]:
+    """(start, end, base64 text without whitespace) of each payload-sized
+    base64 run in ``value``, wrapped or not."""
+    out = []
+    for m in _B64_RUN.finditer(value):
+        lines = m.group(0).split()
+        compact = "".join(lines)
+        if len(compact) < _BLOB_MIN:
+            continue
+        if len(lines) > 1 and any(len(line) < _B64_LINE_MIN for line in lines[:-1]):
+            continue
+        out.append((m.start(), m.end(), compact))
+    return out
+
+
+def _decode_run(compact: str) -> Optional[bytes]:
+    """The run's bytes; when a stray character before it shifts the
+    alignment, the offset that decodes to an image wins."""
+    first = None
+    for skip in range(4):
+        blob = _base64_blob(compact[skip:])
+        if blob is None:
+            continue
+        if _is_image(blob):
+            return blob
+        first = blob if first is None else first
+    return first
 
 
 def _base64_blob(value: str) -> Optional[bytes]:
@@ -919,7 +955,7 @@ def scrub_request(
         head, sep, data = value.partition(",")
         if not sep or ";base64" not in head:
             raise ScrubRefused("an image data URL is not base64")
-        png = image(_b64(data))
+        png = image(_b64("".join(data.split())))  # wrapped across lines too
         return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
     def string(value: str, *, image_slot: bool) -> str:
@@ -927,9 +963,15 @@ def scrub_request(
             if value[5:].lower().startswith("image/"):
                 return data_url(value)
             raise ScrubRefused("a non-image data URL can't be scrubbed")
-        blob = _base64_blob(value)
-        if blob is None and len(value) >= _BLOB_MIN and _B64_RUN.search(value):
-            return embedded(value, image_slot)
+        runs = _runs(value) if len(value) >= _BLOB_MIN else []
+        whole = (
+            len(runs) == 1
+            and not value[: runs[0][0]].strip()
+            and not value[runs[0][1] :].strip()
+        )
+        blob = _decode_run(runs[0][2]) if whole else None
+        if blob is None and runs:
+            return embedded(value)
         if blob is not None:
             # A screenshot in another shape (an MCP image item's data, a raw
             # base64 PNG in a tool result or in JSON text): scrubbed as an
@@ -946,31 +988,44 @@ def scrub_request(
             raise ScrubRefused("the text scrubber returned no text")
         return out
 
-    def embedded(value: str, image_slot: bool) -> str:
+    def embedded(value: str) -> str:
         """``value`` with every base64 run of _BLOB_MIN or more characters
-        inside it (JSON in a text block, ``<img src="data:...">``, a prefixed
-        dump) scrubbed as an image in place, and the text around the runs
-        scrubbed as text; a run that is not an image refuses."""
+        inside it, wrapped across lines or not (JSON in a text block,
+        ``<img src="data:...">``, a prefixed dump, a MIME part), scrubbed as
+        an image in place; the text around the runs is scrubbed as text.
+        A run that is not an image refuses. A run inside a URL is left to
+        the URL cut. No recursion: the text pieces go to the text scrubber
+        directly."""
+        urls = [m.span() for m in _URL.finditer(value)] + [
+            m.span() for m in _BARE_URL.finditer(value)
+        ]
         out = []
         last = 0
-        for m in _B64_RUN.finditer(value):
-            blob = _base64_blob(m.group(0))
-            if blob is None:
-                continue  # not valid base64: plain text, scrubbed as such
-            if not _is_image(blob):
+        for start, end, compact in _runs(value):
+            if any(us <= start and end <= ue for us, ue in urls):
+                continue
+            blob = _decode_run(compact)
+            if blob is None or not _is_image(blob):
                 raise ScrubRefused(
                     "a base64 payload that is not an image can't be scrubbed"
                 )
-            head = value[last : m.start()]
+            head = value[last:start]
             head = re.sub(
                 r"data:image/[\w.+-]+;base64,$", "data:image/png;base64,", head
             )
-            out.append(string(head, image_slot=False) if head else head)
+            out.append(text_piece(head))
             out.append(base64.b64encode(image(blob)).decode("ascii"))
-            last = m.end()
-        tail = value[last:]
-        out.append(string(tail, image_slot=False) if tail else tail)
+            last = end
+        out.append(text_piece(value[last:]))
         return "".join(out)
+
+    def text_piece(piece: str) -> str:
+        if not piece:
+            return piece
+        cleaned = scrub.text(piece)
+        if not isinstance(cleaned, str):
+            raise ScrubRefused("the text scrubber returned no text")
+        return cleaned
 
     def number(value: Any) -> Any:
         """A number of five or more digits is an identifier until shown
@@ -1089,13 +1144,16 @@ def scrub_request(
                 out[k] = structural(v, k, kind)
         return _mime_png(node, out)
 
-    if not isinstance(body, dict):
-        return structural(body, None)
-    clean: dict[str, Any] = {}
-    for k, v in body.items():
-        if k == "metadata":
-            # Caller-defined values (a user id, a session label): data.
-            clean[k] = payload(v, k)
-        else:
-            clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
-    return clean
+    try:
+        if not isinstance(body, dict):
+            return structural(body, None)
+        clean: dict[str, Any] = {}
+        for k, v in body.items():
+            if k == "metadata":
+                # Caller-defined values (a user id, a session label): data.
+                clean[k] = payload(v, k)
+            else:
+                clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
+        return clean
+    except RecursionError:
+        raise ScrubRefused("the request is nested too deeply to scrub") from None

@@ -698,3 +698,54 @@ def test_a_focus_move_then_more_input_in_one_action_is_held():
     inner = FakeCuaComputer()
     GatedComputerCall(inner, RefuseGate()).keypress(["TAB", "ENTER"])
     assert inner.calls == []
+
+
+def _control_chars() -> list[str]:
+    return (
+        [chr(c) for c in range(0x20)]
+        + [chr(0x7F)]
+        + [chr(c) for c in range(0x80, 0xA0)]
+    )
+
+
+def test_no_typed_text_with_a_control_character_ever_passes():
+    import itertools
+    import random
+
+    rng = random.Random(2493)
+    printable = ["a", "Z", " ", "  ", "Save", "ok go", "é", "1"]
+    controls = _control_chars()
+    texts = set()
+    for c in controls:
+        for p in printable:
+            texts |= {c, p + c, c + p, p + c + p, c + " " + c}
+    for _ in range(300):
+        parts = [rng.choice(printable) for _ in range(rng.randint(0, 3))]
+        parts.insert(rng.randint(0, len(parts)), rng.choice(controls))
+        texts.add("".join(parts))
+
+    class Hooked(FakeTool):
+        def __init__(self, focus):
+            super().__init__()
+            self.focus = focus
+
+        def focused_label(self):
+            return self.focus
+
+    states = ["button Save", "textbox Name", "textarea Note", "searchbox Find", None]
+    for text, focus in itertools.product(sorted(texts), states):
+        if focus is None:
+            # No focus hook, but the last click was on a known text field.
+            tool = LabelledTool({(1, 1): "textbox Name"})
+            computer = GatedComputer(tool, RefuseGate())
+            computer(**_click(1, 1))
+            tool.calls.clear()
+        else:
+            tool = Hooked(focus)
+            computer = GatedComputer(tool, RefuseGate())
+        computer(action="type", text=text)
+        assert tool.calls == [], (repr(text), focus)
+    # Plain printable text still follows the text-field rule.
+    tool = Hooked("textbox Name")
+    GatedComputer(tool, RefuseGate())(action="type", text="Zed Quux 12")
+    assert len(tool.calls) == 1

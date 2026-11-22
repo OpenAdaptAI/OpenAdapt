@@ -139,10 +139,12 @@ organisations). A date with no digit ("today") is left alone too.
 
 Images are found wherever they are: base64 `image` blocks, `data:image/...`
 URLs, an MCP image item's `data`, and any run of 256 or more base64
-characters inside any string (a raw dump in a tool result, JSON in a text
-block, `<img src="data:...">`). A run that decodes to an image is scrubbed
-in place; one that decodes to anything else can't be read, and the request
-is refused.
+characters inside any string, on one line or wrapped across lines (a raw
+dump in a tool result, JSON in a text block, `<img src="data:...">`, a
+76-column MIME part). A run that decodes to an image is scrubbed in place;
+one that decodes to anything else can't be read, and the request is
+refused. A run inside a URL is left to the URL cut. A request nested too
+deeply to walk is refused.
 
 Each image is OCR'd with tesseract. Each OCR line, split into table cells at
 wide gaps, goes through the same detection, and each value is painted over
@@ -255,7 +257,7 @@ What passes, by action:
 | Scroll, wait, screenshot, pointer move | always |
 | Tab, Shift+Tab, Escape, arrows, Page Up/Down, Home, End, Ctrl/Cmd+C, Ctrl/Cmd+A, Ctrl/Cmd+F | always, unless the same action then types or presses anything else |
 | Backspace, Delete, Ctrl/Cmd+X, Ctrl/Cmd+V, a single character | focus is in a text field |
-| Typed text | focus is in a text field, and the text has no tab followed by more text and no line break |
+| Typed text | focus is in a text field and the text has no control character (no tab, line break or other C0/C1 character); typed text with one is always held |
 | Enter | focus is in a multi-line text area or a search box, or on a known-safe control |
 | Space | focus is in a text field or on a known-safe control |
 | Ctrl/Cmd+S, Ctrl/Cmd+Enter, any other key or combination, any other action | never |

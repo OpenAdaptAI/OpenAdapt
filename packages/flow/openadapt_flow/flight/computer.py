@@ -189,6 +189,11 @@ _TEXT_ROLES = {"textbox", "searchbox", "textarea", "multiline", "combobox"}
 _FOCUS_KEYS = {"Tab", "Shift+Tab"}
 
 
+def _has_control(text: str) -> bool:
+    """Whether ``text`` holds a C0 or C1 control character (or DEL)."""
+    return any(ord(ch) < 0x20 or 0x7F <= ord(ch) <= 0x9F for ch in text)
+
+
 def _combo(op: Any) -> str:
     key = str(op.key)
     if len(key) == 1:
@@ -406,11 +411,10 @@ def classify(
         if op.kind in ("press", "hotkey") and _combo(op) in _FOCUS_KEYS:
             moved = True
             continue
-        if op.kind == "type" and op.text and "\t" in op.text:
-            if op.text.split("\t", 1)[1]:
-                return held("typed text that moves focus and types on")
-            moved = True
-            continue
+        if op.kind == "type" and _has_control(op.text or ""):
+            # A tab moves focus, a line break submits, other control
+            # characters are keys too: typed text holding any is held.
+            return held("typed text with a control character (a tab, a line break...)")
         if op.kind in ("click", "double_click"):
             pointer_op = op
         elif op.kind == "right_click":
@@ -460,9 +464,6 @@ def classify(
                 "a save shortcut",
                 op_dicts,
             )
-        elif op.kind == "type" and op.text and ("\n" in op.text or "\r" in op.text):
-            key_reason = "typed text that ends a line can commit the focused control"
-            enter_like = True
         elif op.kind == "type":
             typed = True
         elif op.kind in ("observe", "wait", "scroll"):
@@ -631,7 +632,7 @@ def _leaves_text_field(result: Classification, before: bool) -> bool:
         kind = op.get("kind")
         if kind in ("observe", "wait", "scroll"):
             continue
-        if kind == "type" and "\t" not in str(op.get("text", "")):
+        if kind == "type" and not _has_control(str(op.get("text", ""))):
             continue
         if kind in ("press", "hotkey"):
             key = str(op.get("key", ""))
