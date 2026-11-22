@@ -1,0 +1,1 @@
+| A switched-off `problems_only` gate asks a person before the save instead of stopping the item | Released | Synthetic; real app in [#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513) | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md#when-the-mode-turns-itself-off) |
