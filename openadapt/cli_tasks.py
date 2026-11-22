@@ -123,6 +123,7 @@ FLOW_NAMES = {
     "variants": "compile --variants",
     "verify-run": "verify effect",
     "visualize": "inspect visualize",
+    "wrap-dispatch": "run --dispatch",
 }
 
 

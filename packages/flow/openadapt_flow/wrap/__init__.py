@@ -234,7 +234,13 @@ class WrappedTask:
         if "receipt_binding" not in result:
             result["receipt_binding"] = unbound("NO_RECEIPT")
         result["reason"] = "cached_tool_result"
+        # The stored result is the reply, so a retry replays all of it.
+        result = self.finalize(result)
         store.finish(begin.record, result)
+        return result
+
+    def finalize(self, result: dict[str, Any]) -> dict[str, Any]:
+        """The result as it is stored and returned; a caller may add fields."""
         return result
 
 

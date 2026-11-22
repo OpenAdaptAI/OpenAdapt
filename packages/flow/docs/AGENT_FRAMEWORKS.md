@@ -239,7 +239,13 @@ What each skill run has:
   record check fails, the result is `RECORD_CHECK_FAILED` with the check's
   reasons, for a person to look at the record.
 
-A skill that fails a run is evicted: it moves to `<cache_dir>/evicted/`, and
-the next run of the task goes to the agent and compiles afresh.
-`cache.evict(prompt, params)` does the same by hand. Skills live in
+A skill that fails a run is held, not rerun by the agent: the next run of the
+task returns `CACHE_HALTED` with the stop's reason, makes no model calls, and
+keeps the halt as evidence until a person reconciles, repairs or releases it.
+`cache.evict(prompt, params)` sets the skill aside by hand (it moves to
+`<cache_dir>/evicted/`), and the next run goes to the agent and compiles
+afresh. To send a proved pre-effect drift to the agent behind a pre-commit
+gate instead, opt in per task with `FallbackPolicy` or
+`openadapt-flow wrap-dispatch --fallback agent`
+([WRAP_FALLBACK.md](WRAP_FALLBACK.md)). Skills live in
 `~/.openadapt/skills` unless you pass `cache_dir=`.
