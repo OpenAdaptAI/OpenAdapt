@@ -164,6 +164,17 @@ def _record_people(app_url: str, src: Path, n: int) -> None:
                 ),
             )
             page.wait_for_selector("#saved-banner", timeout=10000)
+            # The save's requestfinished callback runs on the event loop;
+            # pump it until the write is in the capture, then detach.
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and (
+                capture.pending_writes()
+                or not any(
+                    str(line.get("method", "GET")).upper() != "GET"
+                    for line in list(capture._lines)  # noqa: SLF001 - test drain
+                )
+            ):
+                page.wait_for_timeout(20)
             capture.stop()
             capture.write(rec, t0)
             (rec / "events.jsonl").write_text(
