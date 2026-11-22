@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "OpenAdapt Guard",
+  "version": "0.1.0",
+  "description": "Verify web form saves with local read-back checks and offline-verifiable Ed25519 signed receipts. Zero telemetry, zero egress.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_title": "OpenAdapt Guard — Verify Form Saves",
+    "default_popup": "popup.html"
+  }
+}
