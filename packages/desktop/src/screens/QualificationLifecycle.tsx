@@ -63,7 +63,7 @@ function secretEnvironmentReference(name: string): string {
 // that this screen cannot see.
 function deployBlocker(project: QualificationProject): string {
   if (!project.graph.bundle.encrypted) {
-    return "Seal and encrypt this version before you deploy it.";
+    return "Encrypt this version before you deploy it.";
   }
   if (!project.capability_coverage?.satisfied) {
     return "Run cases that cover every required runner capability before you deploy.";
@@ -787,7 +787,7 @@ export function QualificationLifecycle({
               void artifactAction(CMD.SEAL_QUALIFICATION_WORKFLOW, "seal")
             }
           >
-            Seal and encrypt version
+            Encrypt version
           </Button>
           <Button
             disabled={Boolean(busy)}

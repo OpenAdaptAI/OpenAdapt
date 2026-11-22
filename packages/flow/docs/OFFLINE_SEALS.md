@@ -1,5 +1,11 @@
 # Offline Seals and no-outbound mode
 
+> **Older format.** Every run now writes a receipt, `receipt.json`; see
+> [RECEIPTS.md](RECEIPTS.md). This page describes `seal.json`
+> (`local-seal/v1`), which Flow still writes for one release and
+> `openadapt verify` still checks, and the keys, public-log anchors and
+> authorizations both formats share.
+
 A Seal is a signed statement about one run. OpenAdapt Cloud can issue one
 (see [`RECEIPTS.md`](RECEIPTS.md) and `attach-seal`), but that needs a
 network connection. An offline Seal is signed by a key on the machine that ran

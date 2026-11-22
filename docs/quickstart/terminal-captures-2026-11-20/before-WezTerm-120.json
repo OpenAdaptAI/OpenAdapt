@@ -1,0 +1,15 @@
+{
+  "command": [
+    "uvx",
+    "--python",
+    "3.12",
+    "openadapt@1.23.0",
+    "quickstart",
+    "--break-it",
+    "--headless"
+  ],
+  "term_program": "WezTerm",
+  "cols": 120,
+  "exit_code": 0,
+  "seconds": 23.1
+}

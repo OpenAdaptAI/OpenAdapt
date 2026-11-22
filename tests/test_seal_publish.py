@@ -886,7 +886,7 @@ def test_the_tutorial_card_carries_the_program_name(make_run, tmp_path, monkeypa
     run = make_run()
     _terminal(monkeypatch)
     monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_status(True)))
-    cli._quickstart_publish_offer()(run, lambda _line: None, lambda _q: "")
+    cli._quickstart_publish_offer()([run], lambda _line: None, lambda _q: "")
     card = json.loads((run / "public-seal.json").read_text())["card"]
     assert card["program_name"] == "local-quickstart"
 
@@ -916,7 +916,7 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     )
     assert calls == [[root / "run-1"]]
     text = stream.getvalue()
-    assert text.index("Your Seal:") < text.index("offer shown") < text.index("Next:")
+    assert text.index("Your receipt:") < text.index("offer shown") < text.index("Next:")
     assert "seal publish" not in text
 
 
@@ -971,7 +971,7 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
 
     text = _rich_finale(tmp_path, offer)
     assert calls == [[tmp_path / "openadapt-quickstart" / "run-1"]]
-    assert text.index("Your Seal") < text.index("offer shown") < text.index("Next  ")
+    assert text.index("Your receipt") < text.index("offer shown") < text.index("Next  ")
     assert "Put it online" not in text
 
 

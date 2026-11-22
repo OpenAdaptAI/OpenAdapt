@@ -15,6 +15,24 @@
 // glow), and the page opens on the finished Seal with "Play the run". What the
 // visitor starts still plays, as fades and colour changes.
 //
+// Layout: one screen, like an app. From 900 px wide, the program map fills the
+// left pane (drag or arrow-key the divider; "Expand map" gives it the whole
+// width), the Seal and the verdict sit top right, and the details sit bottom
+// right in four tabs: Summary (the counts and the signature check), Steps
+// (every step), Evidence (the picked step: its checks, pictures and
+// read-backs) and Raw (the signed fields, the files and the commands). Picking
+// a step on the map, the ring or the list opens its evidence. Narrower, the
+// page stacks: the Seal and the verdict, then the tabs, with the map as a
+// fifth tab. The verdict stays in the top bar at every width and on every
+// tab. The URL's fragment keeps the tab and the step (#tab=evidence&step=6),
+// so a link can open one step.
+//
+// Theme: light or dark from the shared semantic roles (--oa-*), which the host
+// provides (openadapt.ai's stylesheet; the offline viewer inlines it). The
+// visitor's choice is the `data-theme` attribute on <html> and `oa-theme` in
+// local storage, the same as openadapt.ai's own switch; with no choice, the
+// system setting.
+//
 // Data: `seal`, the run's props (lib/sealProps.mjs sealPageProps). The host's
 // own parts come in `host`, all optional:
 //   loadFiles()  the run's files as the check reads them (default: fetch the
@@ -28,8 +46,9 @@
 //                entry and GitHub's key list (default true; the viewer: false)
 //   kicker, footer, trustWords (how the verdict names the key: "signed by
 //   the pinned key"; the offline viewer: "checked against your computer's
-//   Seal key"), unchanged ("The published
-//   files are unchanged."), canonicalOrigin (rewritten to this page's origin
+//   signing key"), unchanged ("The published files are unchanged; this was a
+//   copy in your browser."), signer ('this_computer' or 'demo'), mediaNote
+//   (the caption under a step's screenshots), canonicalOrigin (rewritten to this page's origin
 //   in the commands)
 // No <head>: the host sets the title (sealPageMeta).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -43,6 +62,7 @@ import { rekorLiveMatch, rekorSearchUrl } from '../lib/rekorLive.mjs'
 import { frameOfStep, litAt, nextHighlight, replayFrames } from '../lib/sealReplay.mjs'
 import { authorizedLine as authorizedWords, checkGithubIdentity } from '../lib/runAuthorization.mjs'
 import { runDate } from '../lib/sealDates.mjs'
+import { safeHref } from '../lib/safeFileHref.mjs'
 import { sealOutcomeLine } from '../lib/sealOutcome.mjs'
 import SealArt from './SealArt.jsx'
 import HashLine from './HashLine.jsx'
@@ -56,14 +76,15 @@ const SPEEDS = [1, 2, 4]
 
 // Each failure, in words a reader can act on. The code shows beside it.
 const REASONS = {
-    subject_mismatch: "The report doesn't match the SHA-256 the Seal signed.",
+    subject_mismatch: "The report doesn't match the SHA-256 the receipt signed.",
     bad_signature: "The Ed25519 signature doesn't match the signed fields.",
-    malformed: "The Seal file isn't well formed.",
-    unknown_key: "The Seal names a key this site doesn't pin.",
-    revoked_key: 'The Seal names a revoked key.',
-    key_mismatch: "The key in the Seal isn't the key this site pins.",
+    malformed: "The receipt file isn't well formed.",
+    unknown_key: "The receipt names a key this site doesn't pin.",
+    revoked_key: 'The receipt names a revoked key.',
+    key_mismatch: "The key in the receipt isn't the key this site pins.",
     ambiguous_key: 'The pinned key list names this key twice.',
 }
+const UNKNOWN_SIGNER = new Set(['unknown_key', 'key_mismatch', 'ambiguous_key'])
 const reasonText = (reason) =>
     REASONS[reason] ||
     (String(reason).startsWith('anchor_')
@@ -72,7 +93,11 @@ const reasonText = (reason) =>
           ? "The authorization doesn't cover this run."
           : 'The check failed.')
 
+// A host-given file link: a relative path or an https URL, never a javascript: URI.
 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`
+// Required effect predicates can check record cardinality or individual fields.
+// Their count describes checks, never a count of fields or separate reads.
+const recordChecksLine = (confirmed, total) => `${confirmed} of ${total} record checks confirmed`
 const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t)
 
 function usePrefersReducedMotion() {
@@ -85,6 +110,94 @@ function usePrefersReducedMotion() {
         return () => mq.removeEventListener('change', update)
     }, [])
     return reduced
+}
+
+function useMediaQuery(query) {
+    const [match, setMatch] = useState(false)
+    useEffect(() => {
+        const mq = window.matchMedia(query)
+        const update = () => setMatch(mq.matches)
+        update()
+        mq.addEventListener('change', update)
+        return () => mq.removeEventListener('change', update)
+    }, [query])
+    return match
+}
+
+const THEME_KEY = 'oa-theme'
+const storedTheme = () => {
+    try {
+        const v = window.localStorage.getItem(THEME_KEY)
+        return v === 'light' || v === 'dark' ? v : null
+    } catch {
+        return null
+    }
+}
+const systemTheme = () => (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+const htmlTheme = () => {
+    const v = document.documentElement.getAttribute('data-theme')
+    return v === 'light' || v === 'dark' ? v : null
+}
+
+// The page's theme: <html data-theme> when the host set one, else the saved
+// choice, else the system's; it follows the system until the visitor picks.
+// `own`: this page owns <html> (its own chrome), so it writes the attribute.
+function useTheme(own) {
+    const [theme, setTheme] = useState('dark')
+    useEffect(() => {
+        const resolve = () => htmlTheme() || storedTheme() || systemTheme()
+        const apply = () => {
+            const next = resolve()
+            if (own && !htmlTheme()) document.documentElement.setAttribute('data-theme', next)
+            setTheme(next)
+        }
+        apply()
+        const mq = window.matchMedia('(prefers-color-scheme: light)')
+        const onSystem = () => {
+            if (storedTheme()) return
+            if (own) document.documentElement.setAttribute('data-theme', systemTheme())
+            apply()
+        }
+        mq.addEventListener('change', onSystem)
+        const mo = new MutationObserver(() => setTheme(resolve()))
+        mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+        return () => {
+            mq.removeEventListener('change', onSystem)
+            mo.disconnect()
+        }
+    }, [own])
+    const flip = useCallback(() => {
+        const next = theme === 'dark' ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', next)
+        const meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', next === 'light' ? '#ffffff' : '#05080d')
+        try {
+            window.localStorage.setItem(THEME_KEY, next)
+        } catch {
+            // Storage can be refused (a private window); the switch still works for this visit.
+        }
+        setTheme(next)
+    }, [theme])
+    return [theme, flip]
+}
+
+// The tab and step in the URL's fragment: #tab=evidence&step=6 (step from 1).
+const TABS = ['summary', 'steps', 'evidence', 'raw']
+const TAB_LABELS = { summary: 'Summary', program: 'Program', steps: 'Steps', evidence: 'Evidence', raw: 'Raw' }
+function readFragment(stepCount) {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const tab = params.get('tab')
+    const n = Number.parseInt(params.get('step') || '', 10)
+    return {
+        tab: TABS.includes(tab) || tab === 'program' ? tab : null,
+        step: Number.isInteger(n) && n >= 1 && n <= stepCount ? n - 1 : null,
+    }
+}
+function fragmentOf(tab, step) {
+    const parts = []
+    if (tab && tab !== 'summary') parts.push(`tab=${tab}`)
+    if (step != null) parts.push(`step=${step + 1}`)
+    return parts.length ? `#${parts.join('&')}` : ''
 }
 
 // Pointer parallax: the Seal's layers shift with the pointer, eased each frame.
@@ -128,38 +241,12 @@ function useParallax(ref, enabled) {
     }, [ref, enabled])
 }
 
-// Mount children once their place comes within a screen of view.
-function WhenNear({ children, minHeight }) {
-    const ref = useRef(null)
-    const [near, setNear] = useState(false)
-    useEffect(() => {
-        const el = ref.current
-        if (!el) return undefined
-        const io = new IntersectionObserver(
-            ([e]) => {
-                if (e.isIntersecting) {
-                    setNear(true)
-                    io.disconnect()
-                }
-            },
-            { rootMargin: '600px 0px' }
-        )
-        io.observe(el)
-        return () => io.disconnect()
-    }, [])
-    return (
-        <div ref={ref} style={{ minHeight }}>
-            {near ? children : null}
-        </div>
-    )
-}
-
 /** The page's title and description, for the host's <head>. */
 export function sealPageMeta(page) {
     const c = page.rings.counts
     return {
-        title: `${page.label} · ${page.job} · OpenAdapt Seal`,
-        description: `${page.app}, ${page.job}: ${page.label}. ${c.stepsPassed} of ${c.steps} steps, ${c.checksPassed} of ${c.checks} screen checks${c.readbacksPassed ? `, ${c.readbacksPassed} of ${c.readbacks} fields read back from the record` : ''}. A signed run report you can check in your browser.`,
+        title: `${page.label} · ${page.job} · OpenAdapt Receipt`,
+        description: `${page.app}, ${page.job}: ${page.label}. ${c.stepsPassed} of ${c.steps} steps, ${c.checksPassed} of ${c.checks} screen checks${c.readbacksPassed ? `, ${c.readbacksPassed} of ${c.readbacks} record checks confirmed` : ''}. A signed run report you can check in your browser.`,
     }
 }
 
@@ -173,10 +260,17 @@ export default function SealPage({ seal: page, host = {} }) {
         kicker: hostKicker = null,
         footer = null,
         trustWords = 'signed by the pinned key',
-        unchanged = 'The published files are unchanged.',
+        unchanged = 'The published files are unchanged; this was a copy in your browser.',
         canonicalOrigin = null,
         chrome = true,
         map = {},
+        // Who signed it, as the host knows from its pinned keys: 'this_computer'
+        // only when the host checked against this computer's own key, or 'demo'.
+        // Trust-label class: no claim the host didn't make, so the default
+        // names no signer.
+        signer: signerRole = null,
+        // Screenshots are never part of a receipt; a host shows them only from a local run folder.
+        mediaNote = "From this computer's run folder: not part of the receipt, never uploaded",
     } = host
     const {
         rings,
@@ -213,56 +307,26 @@ export default function SealPage({ seal: page, host = {} }) {
     const [witness, setWitness] = useState(null)
     const [live, setLive] = useState(null)
     const [change, setChange] = useState(null)
+    const [anotherOpen, setAnotherOpen] = useState(false)
     const [selected, setSelected] = useState(null)
     const [hovered, setHovered] = useState(null)
     const [focusIndex, setFocusIndex] = useState(0)
     const [ring, setRing] = useState(null)
     const [copied, setCopied] = useState(false)
-    const [tamperOpen, setTamperOpen] = useState(false)
     const [commands, setCommands] = useState(canonicalCommands)
+    const [theme, flipTheme] = useTheme(chrome)
+    // The split view from 900 px; below it, one column with the map as a tab.
+    const wide = useMediaQuery('(min-width: 900px)')
+    const [tab, setTab] = useState('summary')
+    const [mapOpened, setMapOpened] = useState(false)
+    const [expanded, setExpanded] = useState(false)
+    const [split, setSplit] = useState(50)
+    const [hashReady, setHashReady] = useState(false)
     const filesRef = useRef(null)
     const stageRef = useRef(null)
     const runId = useRef(0)
     useParallax(stageRef, !reduced)
-    // The map inspector's "Back to the Seal ↑": scroll up to the Seal and pulse it once.
-    const [pulse, setPulse] = useState(0)
-    const pulseTimer = useRef(0)
     const tiltRef = useRef(null)
-    const heldPointer = useRef(false)
-    const heldListener = useRef(null)
-    const backToSeal = useCallback(
-        (event) => {
-            const el = stageRef.current
-            if (!el) return
-            const target = tiltRef.current || el
-            target.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
-            el.focus({ preventScroll: true })
-            // Hover means nothing until the pointer itself moves again.
-            heldPointer.current = true
-            let from = event && event.detail > 0 ? [event.screenX, event.screenY] : null
-            const moved = (e) => {
-                from ??= [e.screenX, e.screenY]
-                if (Math.hypot(e.screenX - from[0], e.screenY - from[1]) < 6) return
-                heldPointer.current = false
-                window.removeEventListener('pointermove', moved)
-            }
-            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
-            heldListener.current = moved
-            window.addEventListener('pointermove', moved)
-            // Two values, so a second press restarts the animation; it clears itself.
-            setPulse((n) => (n % 2) + 1)
-            clearTimeout(pulseTimer.current)
-            pulseTimer.current = setTimeout(() => setPulse(0), 1600)
-        },
-        [reduced]
-    )
-    useEffect(
-        () => () => {
-            clearTimeout(pulseTimer.current)
-            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
-        },
-        []
-    )
 
     // The replay: one index into the run's frames is the only playback state.
     const frames = useMemo(() => replayFrames(rings), [rings])
@@ -273,20 +337,57 @@ export default function SealPage({ seal: page, host = {} }) {
     const current = replaying ? frames[frame] : null
     const lit = useMemo(() => (current ? litAt(current, rings) : null), [current, rings])
 
-    // The page's own chrome: a dark page under the Seal, edge to edge.
+    // The page's own chrome: the theme's canvas under the app, edge to edge.
     useEffect(() => {
         if (!chrome) return undefined
         const { body, documentElement: html } = document
-        const prev = [body.style.background, html.style.background, html.style.colorScheme]
-        body.style.background = '#030507'
-        html.style.background = '#030507'
-        html.style.colorScheme = 'dark'
+        const prev = [body.style.background, html.style.background]
+        body.style.background = 'var(--oa-canvas)'
+        html.style.background = 'var(--oa-canvas)'
         return () => {
             body.style.background = prev[0]
             html.style.background = prev[1]
-            html.style.colorScheme = prev[2]
         }
     }, [chrome])
+
+    // The divider's place, kept for this visitor (local storage, if allowed).
+    useEffect(() => {
+        try {
+            const v = Number(window.localStorage.getItem('oa-seal-split'))
+            if (v >= 30 && v <= 70) setSplit(v)
+        } catch {
+            // No storage: the default split.
+        }
+    }, [])
+    const saveSplit = useCallback((v) => {
+        const next = Math.max(30, Math.min(70, Math.round(v)))
+        setSplit(next)
+        try {
+            window.localStorage.setItem('oa-seal-split', String(next))
+        } catch {
+            // No storage: the split holds for this visit.
+        }
+    }, [])
+
+    // The tab and step from the URL's fragment, on load and when it changes.
+    useEffect(() => {
+        const load = () => {
+            const f = readFragment(rings.steps.length)
+            if (f.tab) setTab(f.tab)
+            if (f.step != null) {
+                setSelected(f.step)
+                setFocusIndex(f.step)
+                if (!f.tab) setTab('evidence')
+            }
+        }
+        load()
+        setHashReady(true)
+        window.addEventListener('hashchange', load)
+        return () => window.removeEventListener('hashchange', load)
+    }, [rings.steps.length])
+    useEffect(() => {
+        if (tab === 'program') setMapOpened(true)
+    }, [tab])
 
     // The command fetches the files from the site serving this page (a preview or openadapt.ai).
     useEffect(() => {
@@ -393,6 +494,7 @@ export default function SealPage({ seal: page, host = {} }) {
         setPhase('replay')
         setSelected(null)
         setHovered(null)
+        setTab((t) => (t === 'program' ? t : 'evidence'))
         setFrame((f) => (f === null || f >= frames.length - 1 ? 0 : f))
         setPlaying(true)
     }, [frames.length])
@@ -422,7 +524,11 @@ export default function SealPage({ seal: page, host = {} }) {
         const onKey = (e) => {
             const t = e.target
             if (t && (t.closest?.('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey)) return
+            // Widgets with their own arrow keys keep them: the tabs, the divider,
+            // the step list and the program map.
+            const inWidget = Boolean(t?.closest?.('[role="tablist"], [role="separator"], [data-steplist], .opg-root'))
             const onButton = t?.closest?.('button, a, summary')
+            if (inWidget && e.key !== 'j' && e.key !== 'k') return
             if (e.key === ' ' && !onButton && !t?.closest?.('[data-step]')) {
                 e.preventDefault()
                 if (playing) setPlaying(false)
@@ -435,6 +541,17 @@ export default function SealPage({ seal: page, host = {} }) {
                 e.preventDefault()
                 stepBy(-1)
             } else if (replaying && e.key === 'Escape') stopReplay()
+            else if ((e.key === 'j' || e.key === 'k') && !e.shiftKey) {
+                // j and k: the next or the previous step, from anywhere but a field.
+                e.preventDefault()
+                const d = e.key === 'j' ? 1 : -1
+                if (replaying) stepBy(d)
+                else {
+                    const n = rings.steps.length
+                    const at = selected ?? (d > 0 ? -1 : n)
+                    pick(Math.max(0, Math.min(n - 1, at + d)))
+                }
+            }
         }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
@@ -447,18 +564,19 @@ export default function SealPage({ seal: page, host = {} }) {
     const onActive = useCallback(
         (i, how = {}) => {
             if (how.focus) setFocusIndex(i)
-            // After "Back to the Seal", the Seal scrolls under a pointer that never moved: not pointing.
-            if (!how.focus && heldPointer.current) return
             // During a replay, pointing at a step moves the replay there (the same index).
             if (frame !== null) seek(frameOfStep(frames, i))
             else setHovered(i)
         },
         [frame, frames, seek]
     )
+    // Picking a step (the ring, the map or the list) opens its evidence.
     const pick = useCallback(
-        (i) => {
+        (i, { keepTab = false } = {}) => {
             if (frame !== null) seek(frameOfStep(frames, i))
-            else setSelected((p) => (p === i ? null : i))
+            else setSelected(i)
+            setFocusIndex(i)
+            if (!keepTab) setTab((t) => (t === 'program' ? t : 'evidence'))
         },
         [frame, frames, seek]
     )
@@ -485,9 +603,24 @@ export default function SealPage({ seal: page, host = {} }) {
         stageRef.current?.querySelector(`[data-step="${next}"]`)?.focus()
     }
 
+    // The tab and step go into the URL's fragment when the visitor picks them,
+    // not on every frame of a replay.
+    const viewTab = tab === 'program' && wide ? 'summary' : tab
+    const urlStep = replaying ? null : selected
+    useEffect(() => {
+        if (!hashReady || playing) return
+        const next = fragmentOf(viewTab, urlStep)
+        if (next === window.location.hash || (!next && !window.location.hash)) return
+        try {
+            window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${next}`)
+        } catch {
+            // Some file:// contexts refuse it; the page still works.
+        }
+    }, [viewTab, urlStep, hashReady, playing])
+
     const copyLink = async () => {
         try {
-            await navigator.clipboard.writeText(copyHref)
+            await navigator.clipboard.writeText(`${copyHref}${fragmentOf(viewTab, urlStep)}`)
             setCopied(true)
             setTimeout(() => setCopied(false), 2200)
         } catch {
@@ -499,7 +632,7 @@ export default function SealPage({ seal: page, host = {} }) {
     const stats = [
         { ring: 'steps', big: `${c.stepsPassed}/${c.steps}`, small: rings.stoppedAt == null ? 'steps passed' : `steps, stopped at ${rings.stoppedAt + 1}` },
         { ring: 'checks', big: `${c.checksPassed}/${c.checks}`, small: c.checksFailed ? `screen checks, ${c.checksFailed} failed` : 'screen checks' },
-        { ring: 'readbacks', big: `${c.readbacksPassed}/${c.readbacks}`, small: c.readbacksFailed ? `record reads, ${c.readbacksFailed} failed` : c.readbacksPassed ? 'read back from the record' : 'record reads, not reached' },
+        { ring: 'readbacks', big: `${c.readbacksPassed}/${c.readbacks}`, small: c.readbacksFailed ? `record checks, ${c.readbacksFailed} failed` : c.readbacksPassed ? 'record checks confirmed' : 'record checks, not reached' },
         { ring: 'identity', big: `${c.identityPassed}/${c.identity}`, small: 'right-record checks' },
     ]
     const when = startedAt ? runDate(startedAt) : null
@@ -521,22 +654,150 @@ export default function SealPage({ seal: page, host = {} }) {
     const witnesses = hasWitness
         ? { rekor: witnessState(files.anchor, witness?.rekor), tsa: witnessState(files.tsa, witness?.tsa) }
         : null
-    const ariaSeal = `The Seal of this run: ${stats.map((l) => `${l.big} ${l.small}`).join('; ')}.`
+    const ariaSeal = `The receipt of this run: ${stats.map((l) => `${l.big} ${l.small}`).join('; ')}.`
     const busy = phase === 'verify' || phase === 'build'
-    const stepLine = step
-        ? `Step ${step.i + 1} of ${rings.steps.length}${step.section ? ` · ${step.section}` : ''}${step.t0 != null ? ` · at ${secs(step.t0)}` : ''}`
+    const lineStep = step
+    const stepLine = lineStep
+        ? `Step ${lineStep.i + 1} of ${rings.steps.length}${lineStep.section ? ` · ${lineStep.section}` : ''}${lineStep.t0 != null ? ` · at ${secs(lineStep.t0)}` : ''}`
         : null
+    // The step the Evidence tab shows: the replay's, else the one picked.
+    const evidenceIndex = replaying ? current.step : selected
+    const evidenceStep = evidenceIndex != null ? rings.steps[evidenceIndex] : null
+    const reached = rings.steps.filter((x) => x.status !== 'not_reached').length
+    // The verdict in a few words, for the top bar: always in view.
+    const chip =
+        verdict === null
+            ? { state: 'pending', text: phase === 'build' ? 'Assembling' : 'Checking signature' }
+            : verdict === 'valid'
+              ? { state: 'valid', text: tampered ? 'Restored · signature valid' : 'Signature valid' }
+              : verdict === 'fails'
+                ? { state: 'fails', text: tampered ? 'Changed copy fails' : 'Signature check fails' }
+                : verdict === 'unsupported'
+                  ? { state: 'unchecked', text: 'Report matches · signature not checked here' }
+                  : { state: 'unchecked', text: 'Not checked here' }
+    // Every tab is in the page; CSS hides "Program" from 900 px, where the map has its own pane.
+    const allTabs = ['summary', 'program', 'steps', 'evidence', 'raw']
+    const tabs = wide ? TABS : allTabs
+    const onTabKey = (e) => {
+        const i = tabs.indexOf(viewTab)
+        const moves = { ArrowRight: 1, ArrowLeft: -1 }
+        let next = null
+        if (e.key in moves) next = tabs[(i + moves[e.key] + tabs.length) % tabs.length]
+        else if (e.key === 'Home') next = tabs[0]
+        else if (e.key === 'End') next = tabs[tabs.length - 1]
+        else return
+        e.preventDefault()
+        setTab(next)
+        e.currentTarget.querySelector(`[data-tab="${next}"]`)?.focus()
+    }
+    const appRef = useRef(null)
+    // The top bar's height (it wraps on a phone), for the sticky tabs under it.
+    const topRef = useRef(null)
+    const pageRef = useRef(null)
+    useEffect(() => {
+        const top = topRef.current
+        const root = pageRef.current
+        if (!top || !root || typeof ResizeObserver === 'undefined') return undefined
+        const ro = new ResizeObserver(() => root.style.setProperty('--top-h', `${top.offsetHeight}px`))
+        ro.observe(top)
+        return () => ro.disconnect()
+    }, [])
+    const onSplitKey = (e) => {
+        const moves = { ArrowLeft: -2, ArrowRight: 2 }
+        if (e.key in moves) saveSplit(split + moves[e.key])
+        else if (e.key === 'Home') saveSplit(30)
+        else if (e.key === 'End') saveSplit(70)
+        else if (e.key === 'Enter') setExpanded((x) => !x)
+        else return
+        e.preventDefault()
+    }
+    const onSplitDown = (e) => {
+        const box = appRef.current
+        if (!box || e.button !== 0) return
+        e.preventDefault()
+        const el = e.currentTarget
+        el.setPointerCapture?.(e.pointerId)
+        const r = box.getBoundingClientRect()
+        const move = (ev) => saveSplit(((ev.clientX - r.left) / r.width) * 100)
+        const up = () => {
+            el.removeEventListener('pointermove', move)
+            el.removeEventListener('pointerup', up)
+            el.removeEventListener('pointercancel', up)
+        }
+        el.addEventListener('pointermove', move)
+        el.addEventListener('pointerup', up)
+        el.addEventListener('pointercancel', up)
+    }
+    const showMap = wide || viewTab === 'program' || mapOpened
+
+    // The signer line, always shown: who signed this receipt, or why it isn't verified.
+    const demo = signerRole === 'demo' || seal?.issuer === 'demo'
+    const signer =
+        verdict === null
+            ? { state: 'pending', text: 'Checking who signed it' }
+            : verdict === 'valid'
+              ? demo
+                  ? { state: 'demo', text: 'Demo key: checks only in this demo' }
+                  : signerRole === 'this_computer'
+                    ? { state: 'signed', text: 'Signed by this computer' }
+                    : { state: 'signed', text: 'Signed by a pinned key' }
+              : UNKNOWN_SIGNER.has(result?.reason)
+                ? { state: 'unknown', text: 'Not verified: unknown signer' }
+                : verdict === 'fails'
+                  ? { state: 'fails', text: 'Not verified: the signature check failed' }
+                  : { state: 'unchecked', text: 'Not verified here' }
+    const legacy = typeof seal?.schema === 'string' && /^openadapt\.(local-seal|public-seal)\//.test(seal.schema)
+
+    const verdictText =
+        verdict === null ? (
+            <span className={s.pending}>{phase === 'build' ? 'Assembling the receipt from the report' : 'Checking the Ed25519 signature in your browser'}</span>
+        ) : verdict === 'valid' ? (
+            <>
+                <b>Valid.</b> This is the report exactly as the run wrote it, {trustWords}.
+            </>
+        ) : verdict === 'unsupported' ? (
+            <>
+                <b>The report matches.</b> This browser can&apos;t check Ed25519 signatures; {commands ? 'use the commands under Raw.' : 'check it from a terminal: openadapt verify RUN_FOLDER.'}
+            </>
+        ) : verdict === 'not_loaded' ? (
+            <>
+                <b>The files didn&apos;t load,</b> so nothing was checked here. {commands ? 'Use the commands under Raw.' : 'Check it from a terminal: openadapt verify RUN_FOLDER.'}
+            </>
+        ) : (
+            <>
+                <b>Fails.</b> {reasonText(result.reason)} <code className={s.code}>{result.reason}</code>
+            </>
+        )
 
     return (
         <>
-            <a className={s.skip} href="#main">
+            <a
+                className={s.skip}
+                href="#main"
+                onClick={(e) => {
+                    // Keep the fragment's tab and step: move focus, not the URL.
+                    e.preventDefault()
+                    document.getElementById('main')?.focus()
+                }}
+            >
                 Skip to content
             </a>
-            <div className={s.page} data-tone={tone} data-phase={phase}>
-                <div className={s.grid} aria-hidden="true" />
-                <header className={s.top}>
+            <div
+                ref={pageRef}
+                className={s.page}
+                data-tone={tone}
+                data-phase={phase}
+                // With its own chrome the page sets the theme on <html> and inherits it,
+                // so the server's HTML already has the visitor's theme; embedded, it sets its own.
+                data-theme={chrome ? undefined : theme}
+                data-layout={wide ? 'split' : 'stack'}
+                data-expanded={wide && expanded ? '1' : undefined}
+                data-view={viewTab}
+                style={{ '--split': `${split}%` }}
+            >
+                <header className={s.top} ref={topRef}>
                     {links.home ? (
-                        <Link href={links.home.href} className={s.home}>
+                        <Link href={links.home.href} className={s.home} aria-label={links.home.label}>
                             <OpenAdaptMark className={s.mark} />
                             <span>{links.home.label}</span>
                         </Link>
@@ -546,263 +807,439 @@ export default function SealPage({ seal: page, host = {} }) {
                             <span>OpenAdapt</span>
                         </span>
                     )}
+                    <span className={s.crumb}>
+                        <span>Signed run report</span>
+                        {kicker ? <span>{kicker}</span> : null}
+                    </span>
                     {runs?.length ? (
-                    <nav className={s.runs} aria-label="The other runs">
-                        {runs.map((r) => (
-                            <Link
-                                key={r.sealId}
-                                href={r.href /* nosemgrep: react-href-var -- sealPagePath() builds /seals/ plus 16 hex digits of the Seal's SHA-256. */}
-                                className={s.run}
-                                data-tone={r.tone}
-                                aria-current={r.sealId === page.sealId ? 'page' : undefined}
-                                title={`Referral ${r.referral}: ${r.label}`}
-                            >
-                                <span className={s.runSeal}>
-                                    <SealArt rings={r.rings} tone={r.tone} digest={r.digest} variant="emblem" phase="rest" still label="" />
-                                </span>
-                                <span className={s.runText}>
-                                    <b>{r.referral}</b>
-                                    <span>{r.label}</span>
-                                </span>
-                            </Link>
-                        ))}
-                    </nav>
+                        <nav className={s.runs} aria-label="The other runs">
+                            {runs.map((r) => (
+                                <Link
+                                    key={r.sealId}
+                                    href={r.href /* nosemgrep: react-href-var -- sealPagePath() builds /seals/ plus 16 hex digits of the Seal's SHA-256. */}
+                                    className={s.run}
+                                    data-tone={r.tone}
+                                    aria-current={r.sealId === page.sealId ? 'page' : undefined}
+                                    title={`Referral ${r.referral}: ${r.label}`}
+                                >
+                                    <span className={s.runSeal} aria-hidden="true">
+                                        <SealArt rings={r.rings} tone={r.tone} digest={r.digest} variant="emblem" phase="rest" still label="" />
+                                    </span>
+                                    <span className={s.runText}>
+                                        <b>{r.referral}</b>
+                                        <span>{r.label}</span>
+                                    </span>
+                                </Link>
+                            ))}
+                        </nav>
                     ) : null}
+                    <span className={s.topEnd}>
+                        <span className={s.chip} data-chip={chip.state} role="status">
+                            <span className={s.chipDot} aria-hidden="true" />
+                            {chip.text}
+                        </span>
+                        {copyHref ? (
+                            <button type="button" className={s.iconBtn} onClick={copyLink} title="Copy a link to this view" aria-label={copied ? 'Link copied' : 'Copy link'}>
+                                <LinkIcon />
+                                <span className={s.wideOnly}>{copied ? 'Copied' : 'Copy link'}</span>
+                            </button>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={s.iconBtn}
+                            onClick={flipTheme}
+                            aria-label={`Switch to the ${theme === 'dark' ? 'light' : 'dark'} theme`}
+                            title={`Switch to the ${theme === 'dark' ? 'light' : 'dark'} theme`}
+                        >
+                            <ThemeIcon theme={theme} />
+                        </button>
+                    </span>
                 </header>
 
-                <main id="main" className={s.hero}>
-                    <section className={s.text} aria-labelledby="seal-h1">
-                        <p className={s.kicker}>
-                            <span>Signed run report</span>
-                            {kicker ? <span>{kicker}</span> : null}
-                        </p>
-                        <h1 id="seal-h1" className={s.outcome}>
-                            {label}
-                        </h1>
-                        {stopReason ? <p className={s.reason}>{cap(stopReason)}</p> : null}
-                        <p className={s.meta}>
-                            <span>{job}</span>
-                            <span>{app}</span>
-                            {when ? <span>{when}</span> : null}
-                        </p>
-                        <p className={s.line}>{line}</p>
-                        {authorization && authorizedLine ? (
-                            <p className={s.by}>
-                                <a href={`https://github.com/${authorization.login}`} rel="noopener noreferrer">
-                                    {authorizedLine}
-                                </a>
-                            </p>
-                        ) : null}
-
-                        <dl className={s.stats} aria-label="What the Seal shows">
-                            {stats.map((l) => (
-                                <div key={l.ring} data-ring={l.ring} onMouseEnter={() => setRing(l.ring)} onMouseLeave={() => setRing(null)}>
-                                    <dt>
-                                        <span className={s.swatch} aria-hidden="true" />
-                                        {l.small}
-                                    </dt>
-                                    <dd>{l.big}</dd>
-                                </div>
-                            ))}
-                        </dl>
-                        <p className={s.calls}>
-                            {c.modelCalls ?? '–'} AI model calls · {secs(rings.runMs)} of program time
-                        </p>
-
-                        <button type="button" className={s.playCta} onClick={playing ? () => setPlaying(false) : play} disabled={busy}>
-                            <span className={s.playIcon} aria-hidden="true">
-                                {playing ? '❚❚' : '▶'}
-                            </span>
-                            <span>
-                                <b>{playing ? 'Pause the run' : replaying ? 'Resume the run' : 'Play the run'}</b>
-                                <small>
-                                    {rings.steps.filter((x) => x.status !== 'not_reached').length} steps, every check in order
-                                    {rings.stoppedAt != null ? ', to the stop' : ', to the save'}
-                                </small>
-                            </span>
-                        </button>
-
-                        <div className={s.proof} aria-live="polite">
-                            <HashLine
-                                label={tampered && change.target === 'report' ? 'This copy of report.json' : 'report.json, in this browser'}
-                                from={seal.signature}
-                                to={digest}
-                                against={seal.subject_sha256}
-                                running={phase === 'verify'}
-                                still={reduced}
-                            />
-                            <div className={s.signed}>
-                                <span className={s.proofLabel}>Signed in the Seal</span>
-                                <code className={s.hex}>{seal.subject_sha256}</code>
+                <div className={s.app} ref={appRef}>
+                    <main id="main" tabIndex={-1} className={s.hero} aria-labelledby="seal-h1">
+                        <section className={s.stage} ref={stageRef} aria-label="The receipt" tabIndex={-1} onMouseLeave={() => setHovered(null)}>
+                            <div className={s.tilt} ref={tiltRef}>
+                                <SealArt
+                                    rings={rings}
+                                    tone={tone}
+                                    digest={seed}
+                                    phase={phase}
+                                    buildMs={BUILD_MS}
+                                    active={replaying ? null : shown}
+                                    focusIndex={focusIndex}
+                                    onActive={onActive}
+                                    onPick={pick}
+                                    onKey={onRingKey}
+                                    ringFocus={ring}
+                                    witnesses={witnesses}
+                                    lit={lit}
+                                    spot={current?.spotlight || null}
+                                    label={ariaSeal}
+                                />
                             </div>
-                            <p className={s.verdict} data-verdict={verdict || 'pending'}>
-                                {verdict === null ? (
-                                    <span className={s.pending}>{phase === 'build' ? 'Assembling the Seal from the report' : 'Checking the Ed25519 signature in your browser'}</span>
-                                ) : verdict === 'valid' ? (
-                                    <>
-                                        <b>Valid.</b> This is the report exactly as the run wrote it, {trustWords}.
-                                    </>
-                                ) : verdict === 'unsupported' ? (
-                                    <>
-                                        <b>The report matches.</b> This browser can&apos;t check Ed25519 signatures; use the commands below.
-                                    </>
-                                ) : verdict === 'not_loaded' ? (
-                                    <>
-                                        <b>The files didn&apos;t load,</b> so nothing was checked here. Use the commands below.
-                                    </>
-                                ) : (
-                                    <>
-                                        <b>Fails.</b> {reasonText(result.reason)} <code className={s.code}>{result.reason}</code>
-                                    </>
-                                )}
+                        </section>
+                        <div className={s.heading}>
+                            <h1 id="seal-h1" className={s.outcome}>
+                                {label}
+                            </h1>
+                            {stopReason ? <p className={s.reason}>{cap(stopReason)}</p> : null}
+                            <p className={s.meta}>
+                                <span>{job}</span>
+                                <span>{app}</span>
+                                {when ? <span>{when}</span> : null}
+                            </p>
+                            <p className={s.verdict} data-verdict={verdict || 'pending'} aria-live="polite">
+                                {verdictText}
+                            </p>
+                            <p className={s.signer} data-signer={signer.state}>
+                                <span>{signer.text}</span>
                             </p>
                             {tampered && verdict === 'fails' ? (
-                                <p className={s.change}>
-                                    Changed in a copy of the {change.target === 'seal' ? 'Seal' : 'report'}: <code>{change.field}</code>{' '}
-                                    <del>{change.from}</del> → <ins>{change.to}</ins>. {unchanged}
-                                </p>
+                                <div className={s.changed} data-changed="">
+                                    <p className={s.changeHead}>
+                                        <b>This changed copy fails:</b> {change.field === 'model_calls' ? 'model calls' : 'outcome'} {change.from} → {change.to}. The receipt no longer matches.
+                                    </p>
+                                    <p className={s.change}>
+                                        Changed in a copy of the {change.target === 'seal' ? 'receipt' : 'report'}: <code>{change.field}</code>{' '}
+                                        <del>{change.from}</del> → <ins>{change.to}</ins>.
+                                    </p>
+                                    <p className={s.change}>{unchanged}</p>
+                                    <div className={s.actions}>
+                                        <button type="button" className={s.primary} onClick={() => verify(null)} disabled={busy}>
+                                            Restore
+                                        </button>
+                                        <button type="button" className={s.ghost} aria-expanded={anotherOpen} aria-controls="receipt-changes" onClick={() => setAnotherOpen((o) => !o)}>
+                                            Try another change
+                                        </button>
+                                    </div>
+                                    <div id="receipt-changes" className={s.another} role="group" aria-label="Other changes" hidden={!anotherOpen}>
+                                        {tamper
+                                            .filter((t) => t.id !== change.id)
+                                            .map((t) => (
+                                                <button key={t.id} type="button" className={s.tchip} disabled={busy} onClick={() => verify(t)}>
+                                                    <span>{t.label}</span>
+                                                    <code>
+                                                        {t.from} → {t.to}
+                                                    </code>
+                                                </button>
+                                            ))}
+                                    </div>
+                                </div>
                             ) : null}
+                            <div className={s.actions}>
+                                <button type="button" className={s.primary} onClick={playing ? () => setPlaying(false) : play} disabled={busy}>
+                                    <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span>
+                                    {playing ? 'Pause the run' : replaying ? 'Resume the run' : 'Play the run'}
+                                </button>
+                                <button type="button" className={s.ghost} onClick={() => verify(null)} disabled={busy}>
+                                    Verify
+                                </button>
+                                {tampered && verdict === 'fails' ? null : (
+                                    <button
+                                        type="button"
+                                        className={s.ghost}
+                                        onClick={() => {
+                                            setAnotherOpen(false)
+                                            verify(tamper[0])
+                                        }}
+                                        disabled={busy || !tamper.length}
+                                    >
+                                        Try changing it
+                                    </button>
+                                )}
+                            </div>
                         </div>
+                        <div className={s.dock}>
+                            <Player
+                                frames={frames}
+                                frame={frame}
+                                playing={playing}
+                                speed={speed}
+                                busy={busy}
+                                rings={rings}
+                                onPlay={play}
+                                onPause={() => setPlaying(false)}
+                                onSeek={seek}
+                                onNext={toNextHighlight}
+                                onSpeed={setSpeed}
+                                onClose={stopReplay}
+                            />
+                            <p className={s.stepLine} data-step={step ? step.i : ''} aria-live="polite">
+                                {stepLine ||
+                                    (verdict === 'valid'
+                                        ? `✓ Signature valid over this exact report · ${reached} steps`
+                                        : verdict === 'fails'
+                                          ? `✗ ${reasonText(result?.reason)}`
+                                          : ' ')}
+                            </p>
+                        </div>
+                    </main>
 
-                        <div className={s.actions}>
-                            <button type="button" className={s.primary} onClick={() => verify(null)} disabled={busy}>
-                                {tampered ? 'Restore and verify' : 'Verify'}
-                            </button>
-                            <button
-                                type="button"
-                                className={s.ghost}
-                                aria-expanded={tamperOpen}
-                                aria-controls="seal-tamper"
-                                onClick={() => setTamperOpen((o) => !o)}
-                            >
-                                Tamper with it
-                            </button>
-                            {copyHref ? (
-                                <button type="button" className={s.quiet} onClick={copyLink}>
-                                    {copied ? 'Link copied' : 'Copy link'}
+                    <section
+                        className={s.mapPane}
+                        aria-labelledby="map-h"
+                        id="seal-panel-program"
+                        role={wide ? undefined : 'tabpanel'}
+                    >
+                        <div className={s.paneHead}>
+                            <h2 id="map-h">Program steps for this run</h2>
+                            {wide ? (
+                                <button type="button" className={s.iconBtn} aria-pressed={expanded} onClick={() => setExpanded((x) => !x)}>
+                                    {expanded ? 'Show details' : 'Expand map'}
                                 </button>
                             ) : null}
                         </div>
-                        <div id="seal-tamper" className={s.tamper} hidden={!tamperOpen}>
-                            <p className={s.tamperHead}>Change one thing in a copy of the files, then check the copy:</p>
-                            <div className={s.chips}>
-                                {tamper.map((t) => (
-                                    <button
-                                        key={t.id}
-                                        type="button"
-                                        className={s.chip}
-                                        aria-pressed={change?.id === t.id}
-                                        disabled={busy}
-                                        onClick={() => verify(t)}
-                                    >
-                                        <span>{t.label}</span>
-                                        <code>
-                                            {t.from} → {t.to}
-                                        </code>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <RecordTable seal={seal} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />
-                        {commands ? (
-                            <details className={s.fields}>
-                                <summary>{page.commandsLabel || 'Check the same files on your computer'}</summary>
-                                <pre className={s.cmds}>
-                                    <code>{commands}</code>
-                                </pre>
-                            </details>
+                        {showMap ? (
+                            <SealMap
+                                program={program}
+                                map={{ title: `${job} · ${app}`, ...map }}
+                                step={shown}
+                                status={step ? (step.status === 'stopped' ? 'stopped' : current?.stage === 'done' ? 'saved' : 'running') : null}
+                                onPick={(i) => pick(i)}
+                                anchor={rings.anchor}
+                                sealRun={{ rings, tone, irisSeed: seed, referral }}
+                                sealLine={sealOutcomeLine({ rings, label, stopReason }, verdict === 'valid')}
+                                theme={theme}
+                                fill={wide}
+                            />
                         ) : null}
                     </section>
 
-                    <section className={s.stage} ref={stageRef} aria-label="The Seal" tabIndex={-1} data-pulse={pulse || undefined}>
-                        <div className={s.tilt} ref={tiltRef}>
-                            <SealArt
-                                rings={rings}
-                                tone={tone}
-                                digest={seed}
-                                phase={phase}
-                                buildMs={BUILD_MS}
-                                active={replaying ? null : shown}
-                                focusIndex={focusIndex}
-                                onActive={onActive}
-                                onPick={pick}
-                                onKey={onRingKey}
-                                ringFocus={ring}
-                                witnesses={witnesses}
-                                lit={lit}
-                                spot={current?.spotlight || null}
-                                label={ariaSeal}
-                            />
-                        </div>
+                    <div
+                        className={s.resizer}
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label="Resize the program map"
+                        aria-valuenow={split}
+                        aria-valuemin={30}
+                        aria-valuemax={70}
+                        tabIndex={0}
+                        onKeyDown={onSplitKey}
+                        onPointerDown={onSplitDown}
+                        onDoubleClick={() => saveSplit(50)}
+                        title="Drag, or use the arrow keys. Enter expands the map."
+                    />
 
-                        <Player
-                            frames={frames}
-                            frame={frame}
-                            playing={playing}
-                            speed={speed}
-                            busy={busy}
-                            rings={rings}
-                            onPlay={play}
-                            onPause={() => setPlaying(false)}
-                            onSeek={seek}
-                            onNext={toNextHighlight}
-                            onSpeed={setSpeed}
-                            onClose={stopReplay}
-                        />
-
-                        <div className={s.dock}>
-                            <p className={s.stepLine} data-step={step ? step.i : ''} aria-live="polite">
-                                {stepLine || (verdict === 'valid' ? '✓ Signature valid over this exact report' : verdict === 'fails' ? `✗ ${reasonText(result?.reason)}` : ' ')}
-                            </p>
-                            {step ? (
-                                <StepPanel
-                                    step={step}
-                                    rings={rings}
-                                    media={media[step.i]}
-                                    frame={current}
-                                    stopReason={stopReason}
-                                    stopNote={stopNote}
-                                    closable={!replaying && selected != null}
-                                    onClose={() => setSelected(null)}
-                                    onLeave={() => setHovered(null)}
-                                />
-                            ) : null}
-                        </div>
-                    </section>
-                </main>
-
-                <section className={s.mapBand} aria-labelledby="map-h">
-                    <div className={s.mapHead}>
-                        <h2 id="map-h">The program this run ran</h2>
+                    <div className={s.tabs} role="tablist" aria-label="Details" onKeyDown={onTabKey}>
+                        {allTabs.map((t) => (
+                            <button
+                                key={t}
+                                type="button"
+                                role="tab"
+                                id={`seal-tab-${t}`}
+                                data-tab={t}
+                                aria-selected={viewTab === t}
+                                aria-controls={`seal-panel-${t}`}
+                                tabIndex={viewTab === t ? 0 : -1}
+                                onClick={() => setTab(t)}
+                            >
+                                {TAB_LABELS[t]}
+                                {t === 'steps' ? <span className={s.count}>{rings.steps.length}</span> : null}
+                                {t === 'evidence' && evidenceStep ? <span className={s.count}>{evidenceStep.i + 1}</span> : null}
+                            </button>
+                        ))}
                     </div>
-                    <WhenNear minHeight={420}>
-                        <SealMap
-                            program={program}
-                            map={{ title: `${job} · ${app}`, ...map }}
-                            step={shown}
-                            status={step ? (step.status === 'stopped' ? 'stopped' : current?.stage === 'done' ? 'saved' : 'running') : null}
-                            onPick={(i) => (replaying ? seek(frameOfStep(frames, i)) : setSelected(i))}
-                            anchor={rings.anchor}
-                            sealRun={{ rings, tone, irisSeed: seed, referral }}
-                            sealLine={sealOutcomeLine({ rings, label, stopReason }, verdict === 'valid')}
-                            onBackToSeal={backToSeal}
-                        />
-                    </WhenNear>
-                </section>
 
-                <footer className={s.foot}>
-                    <p>
-                        {footer ||
-                            "The signature comes from the machine that ran it: it shows the report hasn't changed since the run."}
-                    </p>
-                    <p className={s.footLinks}>
-                        {links.programMap ? <Link href={links.programMap.href}>{links.programMap.label}</Link> : null}
-                        <a href={links.docs || 'https://docs.openadapt.ai/reference/receipts-and-seals/'}>How Seals work</a>
-                    </p>
-                </footer>
+                    <div className={s.panels}>
+                        <section id="seal-panel-summary" role="tabpanel" aria-labelledby="seal-tab-summary" hidden={viewTab !== 'summary'} className={s.panel}>
+                            <p className={s.line}>{line}</p>
+                            {authorization && authorizedLine ? (
+                                <p className={s.by}>
+                                    <a href={`https://github.com/${authorization.login}`} rel="noopener noreferrer">
+                                        {authorizedLine}
+                                    </a>
+                                </p>
+                            ) : null}
+                            <dl className={s.stats} aria-label="What the receipt shows">
+                                {stats.map((l) => (
+                                    <div key={l.ring} data-ring={l.ring} onMouseEnter={() => setRing(l.ring)} onMouseLeave={() => setRing(null)}>
+                                        <dt>
+                                            <span className={s.swatch} aria-hidden="true" />
+                                            {l.small}
+                                        </dt>
+                                        <dd>{l.big}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                            <p className={s.calls}>
+                                {c.modelCalls == null
+                                    ? `The program ran for ${secs(rings.runMs)}.`
+                                    : `The program ran for ${secs(rings.runMs)} and made ${c.modelCalls} AI model calls.`}
+                            </p>
+
+                            <h2 className={s.sub}>The signature check</h2>
+                            <div className={s.proof}>
+                                <HashLine
+                                    label={tampered && change.target === 'report' ? 'This copy of report.json' : 'report.json, in this browser'}
+                                    from={seal.signature}
+                                    to={digest}
+                                    against={seal.subject_sha256}
+                                    running={phase === 'verify'}
+                                    still={reduced}
+                                />
+                                <div className={s.signed}>
+                                    <span className={s.proofLabel}>Signed in the receipt</span>
+                                    <code className={s.hex}>{seal.subject_sha256}</code>
+                                </div>
+                            </div>
+
+                            <p className={s.foot}>
+                                {footer || "The signature comes from the machine that ran it: it shows the report hasn't changed since the run."}{' '}
+                                {links.programMap ? <Link href={links.programMap.href}>{links.programMap.label}</Link> : null}{' '}
+                                <a href={links.docs || 'https://docs.openadapt.ai/reference/receipts-and-seals/'}>How receipts work</a>
+                            </p>
+                        </section>
+
+                        <section id="seal-panel-steps" role="tabpanel" aria-labelledby="seal-tab-steps" hidden={viewTab !== 'steps'} className={s.panel}>
+                            <StepList rings={rings} active={evidenceIndex} onPick={(i) => pick(i)} onFocusStep={(i) => pick(i, { keepTab: true })} />
+                        </section>
+
+                        <section id="seal-panel-evidence" role="tabpanel" aria-labelledby="seal-tab-evidence" hidden={viewTab !== 'evidence'} className={s.panel}>
+                            {evidenceStep ? (
+                                <>
+                                    <div className={s.evHead}>
+                                        <p className={s.evTitle}>
+                                            <span className={s.evNum}>Step {evidenceStep.i + 1} of {rings.steps.length}</span>
+                                            {evidenceStep.section ? <span>{evidenceStep.section}</span> : null}
+                                            {evidenceStep.t0 != null ? <span>at {secs(evidenceStep.t0)}</span> : null}
+                                        </p>
+                                        <span className={s.evNav}>
+                                            <button type="button" className={s.iconBtn} onClick={() => (replaying ? stepBy(-1) : pick(Math.max(0, evidenceStep.i - 1)))} disabled={evidenceStep.i === 0} aria-label="Previous step" title="Previous step (k)">
+                                                ‹
+                                            </button>
+                                            <button type="button" className={s.iconBtn} onClick={() => (replaying ? stepBy(1) : pick(Math.min(rings.steps.length - 1, evidenceStep.i + 1)))} disabled={evidenceStep.i === rings.steps.length - 1} aria-label="Next step" title="Next step (j)">
+                                                ›
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <StepPanel
+                                        step={evidenceStep}
+                                        rings={rings}
+                                        media={media[evidenceStep.i]}
+                                        frame={current}
+                                        stopReason={stopReason}
+                                        stopNote={stopNote}
+                                        mediaNote={mediaNote}
+                                    />
+                                </>
+                            ) : (
+                                <div className={s.empty}>
+                                    <p>Pick a step on the map, on the receipt or in Steps to see its checks{media.some((m) => m && (m.crop || m.frame)) ? ', its pictures' : ''} and its record checks.</p>
+                                    {rings.anchor ? (
+                                        <button type="button" className={s.ghost} onClick={() => pick(rings.anchor.step)}>
+                                            Show the step the receipt covers (step {rings.anchor.step + 1})
+                                        </button>
+                                    ) : null}
+                                </div>
+                            )}
+                        </section>
+
+                        <section id="seal-panel-raw" role="tabpanel" aria-labelledby="seal-tab-raw" hidden={viewTab !== 'raw'} className={s.panel}>
+                            {legacy ? (
+                                <p className={s.older} data-format="">
+                                    Format: {seal.schema.replace(/^openadapt\./, '')}, still verifies
+                                </p>
+                            ) : null}
+                            <RecordTable seal={seal} files={files} links={links} witnesses={witnesses} witness={witness} live={change ? null : live} authorization={authorization} authorizedLine={authorizedLine} />
+                            {commands ? (
+                                <>
+                                    <h2 className={s.sub}>{page.commandsLabel || 'Check the same files on your computer'}</h2>
+                                    {/* Focusable, so the keyboard can scroll it. */}
+                                    <pre className={s.cmds} tabIndex={0}>
+                                        <code>{commands}</code>
+                                    </pre>
+                                </>
+                            ) : null}
+                        </section>
+                    </div>
+                </div>
             </div>
         </>
+    )
+}
+
+function LinkIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+    )
+}
+
+function ThemeIcon({ theme }) {
+    return theme === 'dark' ? (
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+    ) : (
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+    )
+}
+
+// Every step in one list: its number, name, section, result and checks. One
+// row is in the tab order; the arrow keys move between rows and show each
+// row's evidence when Enter or a click picks it.
+function StepList({ rings, active, onPick, onFocusStep }) {
+    const list = useRef(null)
+    const [focus, setFocus] = useState(active ?? 0)
+    useEffect(() => {
+        if (active != null) setFocus(active)
+    }, [active])
+    const n = rings.steps.length
+    const onKey = (e) => {
+        const moves = { ArrowDown: 1, ArrowUp: -1 }
+        let next = null
+        if (e.key in moves) next = Math.max(0, Math.min(n - 1, focus + moves[e.key]))
+        else if (e.key === 'Home') next = 0
+        else if (e.key === 'End') next = n - 1
+        else return
+        e.preventDefault()
+        setFocus(next)
+        onFocusStep(next)
+        list.current?.querySelector(`[data-row="${next}"]`)?.focus()
+    }
+    return (
+        <ol className={s.steps} ref={list} data-steplist="" onKeyDown={onKey} aria-label="The run's steps">
+            {rings.steps.map((st) => {
+                const petal = rings.identity.find((p) => p.step === st.i)
+                const reads = rings.readbacks.filter((r) => r.step === st.i)
+                const checks = st.checks.passed + st.checks.failed
+                return (
+                    <li key={st.i}>
+                        <button
+                            type="button"
+                            data-row={st.i}
+                            data-status={st.status}
+                            aria-current={active === st.i ? 'step' : undefined}
+                            tabIndex={focus === st.i ? 0 : -1}
+                            onClick={() => onPick(st.i)}
+                        >
+                            <span className={s.sNum}>{String(st.i + 1).padStart(2, '0')}</span>
+                            <span className={s.sMark} aria-hidden="true">
+                                {st.status === 'passed' ? '✓' : st.status === 'stopped' ? '■' : '·'}
+                            </span>
+                            <span className={s.sName}>
+                                {st.name}
+                                {st.section ? <small>{st.section}</small> : null}
+                            </span>
+                            <span className={s.sTags}>
+                                {petal ? <span data-ok={petal.result === 'passed' ? '1' : '0'}>record</span> : null}
+                                {checks ? <span data-ok={st.checks.failed ? '0' : '1'}>{checks} {checks === 1 ? 'check' : 'checks'}</span> : null}
+                                {reads.length ? <span data-ok={reads.some((r) => r.result === 'failed') ? '0' : '1'}>{reads.length} record {reads.length === 1 ? 'check' : 'checks'}</span> : null}
+                            </span>
+                            <span className={s.srOnly}>
+                                {st.status === 'passed' ? ', passed' : st.status === 'stopped' ? ', stopped here' : ', not reached'}
+                                {petal ? ', checks the right record' : ''}
+                            </span>
+                        </button>
+                    </li>
+                )
+            })}
+        </ol>
     )
 }
 
@@ -850,7 +1287,7 @@ function Player({ frames, frame, playing, speed, busy, rings, onPlay, onPause, o
 }
 
 // The step being shown, as a compact table, with its read-backs and pictures.
-function StepPanel({ step, rings, media, frame, stopReason, stopNote, closable, onClose, onLeave }) {
+function StepPanel({ step, rings, media, frame, stopReason, stopNote, mediaNote }) {
     const reads = rings.readbacks.filter((r) => r.step === step.i)
     const petal = rings.identity.find((p) => p.step === step.i)
     const n = step.checks.passed + step.checks.failed
@@ -869,10 +1306,17 @@ function StepPanel({ step, rings, media, frame, stopReason, stopNote, closable, 
             ? ['Right record', petal.result === 'passed' ? '✓ Confirmed before acting' : petal.result === 'not_reached' ? 'Not reached' : '✗ Not confirmed', petal.result === 'passed' ? 'ok' : 'ghost', 'identity']
             : null,
         n ? ['Screen checks', step.checks.failed ? `■ ${step.checks.failed} of ${n} failed` : `✓ ${step.checks.passed} of ${n} passed`, step.checks.failed ? 'halt' : 'ok', 'checks'] : null,
-        reads.length ? ['Read back', `${reads.filter((r) => r.result === 'passed').length} of ${reads.length} from the record`, 'ok', 'save'] : null,
+        reads.length
+            ? [
+                  'Read-back',
+                  recordChecksLine(reads.filter((r) => r.result === 'passed').length, reads.length),
+                  reads.some((r) => r.result === 'failed') ? 'halt' : reads.every((r) => r.result === 'passed') ? 'ok' : 'ghost',
+                  'save',
+              ]
+            : null,
     ].filter(Boolean)
     return (
-        <aside className={s.inspector} data-status={step.status} data-step={step.i} data-spot={spot || undefined} aria-live="polite" onMouseLeave={onLeave}>
+        <aside className={s.inspector} data-status={step.status} data-step={step.i} data-spot={spot || undefined} aria-live="polite">
             <div className={s.inMain}>
                 <table className={s.kv}>
                     <tbody>
@@ -901,12 +1345,13 @@ function StepPanel({ step, rings, media, frame, stopReason, stopNote, closable, 
                             <figcaption>This run</figcaption>
                         </figure>
                     ) : null}
+                    {mediaNote ? <p className={s.shotsNote} data-media-note="">{mediaNote}</p> : null}
                 </div>
             ) : null}
             </div>
             {reads.length ? (
                     <table className={s.readTable} data-count={shownReads}>
-                        <caption>Each saved field, read back from the record after the save. Values aren&apos;t shown.</caption>
+                        <caption>Each saved field was read back from the record after the save. The values aren&apos;t published.</caption>
                         <thead>
                             <tr>
                                 <th scope="col">Field</th>
@@ -920,10 +1365,10 @@ function StepPanel({ step, rings, media, frame, stopReason, stopNote, closable, 
                                 const done = k < shownReads && r.result !== 'not_reached'
                                 const record = /record exists/i.test(r.label || '')
                                 return (
-                                    <tr key={r.i} data-done={done ? '1' : '0'} data-new={replay && k === shownReads - 1 ? '1' : undefined}>
+                                    <tr key={r.i} data-done={done ? '1' : '0'} data-result={done ? r.result : undefined} data-new={replay && k === shownReads - 1 ? '1' : undefined}>
                                         <td>{record ? 'The new record' : (r.label || `Read ${k + 1}`).replace(/ matches$/, '')}</td>
                                         <td>{record ? 'exactly 1' : 'as entered'}</td>
-                                        <td>{done ? (record ? '1 found' : 'equal') : '…'}</td>
+                                        <td>{done ? (r.result === 'passed' ? (record ? '1 found' : 'equal') : record ? 'not exactly 1' : 'not equal') : '…'}</td>
                                         <td>{done ? (r.result === 'passed' ? '✓' : '✗') : ''}</td>
                                     </tr>
                                 )
@@ -931,11 +1376,6 @@ function StepPanel({ step, rings, media, frame, stopReason, stopNote, closable, 
                         </tbody>
                     </table>
                 ) : null}
-            {closable ? (
-                <button type="button" className={s.inClose} onClick={onClose} aria-label="Close the step">
-                    ×
-                </button>
-            ) : null}
         </aside>
     )
 }
@@ -944,15 +1384,15 @@ const utc = (seconds) => new Date(seconds * 1000).toISOString().replace('T', ' '
 const isoUtc = (iso) => String(iso).replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC')
 const short = (hex, n = 16) => `${String(hex).slice(0, n)}…`
 const WITNESS_REASONS = {
-    anchor_mismatch: "The log entry isn't for this Seal.",
-    anchor_key_mismatch: "The log entry isn't signed by the Seal's key.",
+    anchor_mismatch: "The log entry isn't for this receipt.",
+    anchor_key_mismatch: "The log entry isn't signed by the receipt's key.",
     anchor_bad_signature: "The log entry's signature doesn't match.",
     anchor_unknown_log: "The entry names a log this site doesn't pin.",
     anchor_bad_timestamp: "The log's signed timestamp doesn't verify.",
     anchor_bad_inclusion: "The inclusion proof doesn't reach the log's tree.",
     anchor_bad_checkpoint: "The log's signed checkpoint doesn't verify.",
     anchor_malformed: "The log entry isn't well formed.",
-    tsa_imprint_mismatch: "The timestamp stamps a different digest from this Seal's.",
+    tsa_imprint_mismatch: "The timestamp stamps a different digest from this receipt's.",
     tsa_bad_signature: "The timestamp's signature doesn't verify.",
     tsa_untrusted: "The timestamp doesn't chain to the pinned Sigstore root.",
     tsa_expired: "The timestamp's certificate wasn't valid at that time.",
@@ -987,9 +1427,9 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
                     <a href={rekorSearchUrl(r.logIndex)} rel="noopener noreferrer">
                         {r.logIndex}
                     </a>
-                    , logged {utc(r.integratedTime)}, log <code>{short(r.logId, 8)}</code>. Inclusion proof, signed timestamp and
-                    checkpoint checked against the pinned Rekor key.
-                    {live === 'match' ? ' Matches the public log.' : live === 'differs' ? ' The public log serves a different entry.' : ''}
+                    , logged {utc(r.integratedTime)}, log <code>{short(r.logId, 8)}</code>. The inclusion proof, signed timestamp and
+                    checkpoint verify against the pinned Rekor key.
+                    {live === 'match' ? ' This entry matches the public log.' : live === 'differs' ? ' The public log serves a different entry.' : ''}
                 </span>
             ) : (
                 <span key="rf">
@@ -1006,7 +1446,7 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
                 'Checking…'
             ) : t?.ok ? (
                 <span key="t">
-                    Sigstore Timestamp Authority (RFC 3161): {isoUtc(t.genTime)}, over this Seal&apos;s SHA-256, chained to the pinned{' '}
+                    Sigstore Timestamp Authority (RFC 3161): {isoUtc(t.genTime)}, over this receipt&apos;s SHA-256, chained to the pinned{' '}
                     <a href="https://timestamp.sigstore.dev/api/v1/timestamp/certchain" rel="noopener noreferrer">
                         Sigstore TSA root
                     </a>
@@ -1055,14 +1495,14 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
                 <p className={s.fileLinks}>
                     {['report.json', 'seal.json', files.anchor ? 'seal.anchor.json' : null, files.tsa ? 'seal.tsa.json' : null, files.tsr ? 'seal.tsr' : null]
                         .filter(Boolean)
-                        .map((name) => [name, links.file(name)])
+                        .map((name) => [name, safeHref(links.file(name))])
                         .filter(([, href]) => href)
                         .map(([name, href]) => (
                             <a key={name} href={href}>
                                 {name}
                             </a>
                         ))}
-                    {links.keys ? <a href={links.keys.href}>{links.keys.label}</a> : null}
+                    {links.keys && safeHref(links.keys.href) ? <a href={safeHref(links.keys.href) /* nosemgrep: react-href-var -- safeHref allows only a relative path or an https URL. */}>{links.keys.label}</a> : null}
                 </p>
             ) : null}
         </section>
