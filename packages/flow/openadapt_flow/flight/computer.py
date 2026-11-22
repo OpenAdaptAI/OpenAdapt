@@ -185,6 +185,8 @@ FIELD_KEYS: frozenset[str] = frozenset(
     {"Backspace", "Delete", "Control+x", "Meta+x", "Control+v", "Meta+v"}
 )
 _TEXT_ROLES = {"textbox", "searchbox", "textarea", "multiline", "combobox"}
+#: Keys that move focus to another control.
+_FOCUS_KEYS = {"Tab", "Shift+Tab"}
 
 
 def _combo(op: Any) -> str:
@@ -366,6 +368,7 @@ def classify(
         Callable[[int, int], Optional[tuple[int, int, int, int]]]
     ] = None,
     safe_labels: frozenset[str] = frozenset(),
+    in_text_field: bool = False,
 ) -> Classification:
     """Classify one action. A click or key passes only on a known-safe
     target; any failure to read the target is commit-class."""
@@ -394,7 +397,20 @@ def classify(
     def held(reason: str) -> Classification:
         return Classification(True, kind, None, None, None, "none", reason, op_dicts)
 
+    moved = False
     for op in ops:
+        if moved and op.kind not in ("observe", "wait", "scroll"):
+            # Focus moved inside this action: what follows reaches a control
+            # the gate has not read.
+            return held("an action after moving focus in the same action")
+        if op.kind in ("press", "hotkey") and _combo(op) in _FOCUS_KEYS:
+            moved = True
+            continue
+        if op.kind == "type" and op.text and "\t" in op.text:
+            if op.text.split("\t", 1)[1]:
+                return held("typed text that moves focus and types on")
+            moved = True
+            continue
         if op.kind in ("click", "double_click"):
             pointer_op = op
         elif op.kind == "right_click":
@@ -519,6 +535,13 @@ def classify(
                 f"(focused {focused!r}) is not known to be safe",
                 op_dicts,
             )
+        if focused is None and not in_text_field:
+            # No focus hook: the last click must have landed on a readable
+            # text field, or the text may reach a button (a space presses it).
+            return held(
+                "typing or editing keys with no known text field focused "
+                "(unknown counts as commit)"
+            )
         if typed and focused and not text_field:
             # Typed text reaches a focused button too: a space presses it.
             return Classification(
@@ -596,6 +619,28 @@ def classify(
     else:
         reason = f"{reason} (focused {label!r}, not a known-safe control)"
     return Classification(True, kind, None, None, label, source, reason, op_dicts)
+
+
+def _leaves_text_field(result: Classification, before: bool) -> bool:
+    """Whether focus is in a known text field after an allowed action."""
+    kinds = [op.get("kind") for op in result.ops]
+    if any(k in ("click", "double_click") for k in kinds):
+        role = split_role(result.label)[0] if result.label else None
+        return result.label_source == "accessibility" and role in _TEXT_ROLES
+    for op in result.ops:
+        kind = op.get("kind")
+        if kind in ("observe", "wait", "scroll"):
+            continue
+        if kind == "type" and "\t" not in str(op.get("text", "")):
+            continue
+        if kind in ("press", "hotkey"):
+            key = str(op.get("key", ""))
+            mods = sorted(str(m) for m in op.get("modifiers", ()) or ())
+            combo = "+".join([*mods, key.lower() if len(key) == 1 else key])
+            if combo in FIELD_KEYS or (kind == "press" and len(key) == 1):
+                continue
+        return False
+    return before
 
 
 def _focused_is_text_area(label: str) -> bool:
@@ -754,6 +799,9 @@ class _Gatekeeper:
         self.ocr = ocr or _ocr_label
         self.target_bounds = target_bounds
         self.safe_labels = parse_safe_labels(safe_labels) | _env_safe_labels()
+        #: Whether the last allowed action left focus in a known text field
+        #: (a click on a target the accessibility hook calls a text field).
+        self.in_text_field = False
         self.pointer: Optional[tuple[int, int]] = None
         self._index = 0
         self._lock = threading.Lock()
@@ -797,6 +845,7 @@ class _Gatekeeper:
                 pointer=self.pointer,
                 target_bounds=self.target_bounds,
                 safe_labels=self.safe_labels,
+                in_text_field=self.in_text_field,
             )
         except Exception as exc:  # noqa: BLE001 - fail closed
             result = Classification(
@@ -809,6 +858,7 @@ class _Gatekeeper:
                 f"classification failed ({type(exc).__name__})",
             )
         if not result.commit:
+            self.in_text_field = _leaves_text_field(result, self.in_text_field)
             if result.kind not in ("screenshot", "cursor_position"):
                 self._record(raw, result, "performed", None)
             return "allow", None, result.label
@@ -834,6 +884,8 @@ class _Gatekeeper:
             decision = "refuse"
         if decision not in ("allow", "hold", "refuse"):
             decision = "refuse"
+        if decision == "allow":
+            self.in_text_field = False  # performed: where focus went is unknown
         self._record(raw, result, _GATE_KIND[decision], png)
         if self.recorder is not None:
             try:

@@ -118,7 +118,9 @@ digits becomes `"<ID>"`.
 
 Each string goes through these steps:
 
-1. URLs are cut to their origin (`https://emr.example/<path removed>`).
+1. URLs are cut to their origin (`https://emr.example/<path removed>`),
+   with or without a scheme (`emr.example/<path removed>`), at the path:
+   the query goes too, whatever brackets it holds.
 2. Personal values are found: values already seen in this run, deterministic
    patterns (dates, phone numbers, e-mail addresses, street addresses,
    numbers of five or more digits, the value after a label such as `Name:`,
@@ -134,6 +136,13 @@ and are left alone; they mostly hit app names, headers and words like
 "DONE". When Presidio, asked about the same words alone, names a person or
 another identifier, they are redacted (it reads some names in a sentence as
 organisations). A date with no digit ("today") is left alone too.
+
+Images are found wherever they are: base64 `image` blocks, `data:image/...`
+URLs, an MCP image item's `data`, and any run of 256 or more base64
+characters inside any string (a raw dump in a tool result, JSON in a text
+block, `<img src="data:...">`). A run that decodes to an image is scrubbed
+in place; one that decodes to anything else can't be read, and the request
+is refused.
 
 Each image is OCR'd with tesseract. Each OCR line, split into table cells at
 wide gaps, goes through the same detection, and each value is painted over
@@ -212,35 +221,56 @@ faces or handwriting, and it can't cover text tesseract can't read.
 
 ## The pre-commit gate
 
-The gate checks clicks, double clicks, Enter and Space keys, Ctrl+S or Cmd+S,
-and typed text that ends a line. For each one, the wrapper reads the label of
-the target:
+The gate checks every action the agent asks your executor to perform. An
+action passes without a person only when everything it does is known to be
+safe; anything else goes to the gate.
 
-1. from your executor's accessibility hook (`label_at(x, y)`, or
-   `focused_label()` for keys) when it has one. The hook may name the role
-   first, as in `"button Save"`;
-2. otherwise, by OCR of a fresh screenshot. Only a text line whose box holds
+To read a target, the wrapper uses:
+
+1. your executor's accessibility hook (`label_at(x, y)`, or
+   `focused_label()` for the focused control) when it has one. The hook may
+   name the role first, as in `"button Save"`;
+2. otherwise, OCR of a fresh screenshot. Only a text line whose box holds
    the click point names the target, or every line inside the target's
    bounds when your executor has `target_bounds(x, y)`. A line next to the
    target, such as the field label beside an icon-only button, is not its
    label.
 
-The gate fails closed. An action passes without a person only when its
-target is known to be safe:
+A target is known to be safe when:
 
-- the role only focuses or reveals: `textbox`, `searchbox`, `textarea`,
-  `combobox` or `tab` (this needs the accessibility hook); or
-- the whole label, ignoring case and surrounding arrows, is one of: Back, Go
+- the accessibility hook gives it a role that only focuses or reveals:
+  `textbox`, `searchbox`, `textarea`, `combobox` or `tab`; or
+- its whole label, ignoring case and surrounding arrows, is one of: Back, Go
   back, Cancel, Close, Search, Find, Open, View, View details, Details, Show
   more, Show less, More, Expand, Collapse, Menu, Previous page, Next page,
   Home, Help.
 
-Everything else is commit-class: Save, OK, Done, Next, Apply, Delete,
+What passes, by action:
+
+| Action | Passes without a person when |
+| --- | --- |
+| Click, double click | the target is known to be safe |
+| Right click | always (it opens a menu; the item clicked next is gated) |
+| Drag | both ends are known-safe targets |
+| Scroll, wait, screenshot, pointer move | always |
+| Tab, Shift+Tab, Escape, arrows, Page Up/Down, Home, End, Ctrl/Cmd+C, Ctrl/Cmd+A, Ctrl/Cmd+F | always, unless the same action then types or presses anything else |
+| Backspace, Delete, Ctrl/Cmd+X, Ctrl/Cmd+V, a single character | focus is in a text field |
+| Typed text | focus is in a text field, and the text has no tab followed by more text and no line break |
+| Enter | focus is in a multi-line text area or a search box, or on a known-safe control |
+| Space | focus is in a text field or on a known-safe control |
+| Ctrl/Cmd+S, Ctrl/Cmd+Enter, any other key or combination, any other action | never |
+
+"Focus is in a text field" means the accessibility hook says so. Without a
+focus hook, it means the last action the wrapper let through was a click on
+a target the accessibility hook called a text field, followed only by
+typing, editing keys, scrolls or waits. A Tab, any other key, or a click
+anywhere else ends it. With OCR alone the gate can't tell a field from a
+button, so it holds typing.
+
+Everything not listed is commit-class: Save, OK, Done, Next, Apply, Delete,
 "Cancel order", a label in another language, an icon with no text, a target
 that can't be read, and any action the JIT translators can't classify (a
-triple click, a separate mouse-down). Enter and Space on the focused control
-use the same rule; Enter also passes in a multi-line text area or a search
-box, and Space in a text field. Ctrl+S or Cmd+S is always commit-class.
+triple click, a separate mouse-down).
 
 `--safe-label LABEL` (repeatable) adds labels for one deployment, such as a
 navigation button your app calls "New Encounter". A label with Save, Submit,

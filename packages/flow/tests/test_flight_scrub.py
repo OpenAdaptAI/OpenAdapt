@@ -429,3 +429,54 @@ def test_a_chat_completions_image_by_url_is_refused():
     }
     with pytest.raises(ScrubRefused, match="by URL"):
         scrub_request(body, _scrub())
+
+
+def test_base64_images_inside_text_are_scrubbed_in_place():
+    _raw, b64 = _big_png()
+    texts = [
+        json.dumps({"screenshot": b64, "patient": "x"}),  # JSON in a text block
+        f"screenshot: {b64} done",  # a prefixed dump
+        f'<img src="data:image/jpeg;base64,{b64}"> after',  # HTML
+    ]
+    body = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": texts[0]}]},
+            {"role": "tool", "tool_call_id": "c1", "content": texts[1]},
+            {"role": "user", "content": texts[2]},
+        ]
+    }
+    scrub = CountingScrub()
+    out = scrub_request(body, scrub)
+    raw = json.dumps(out)
+    assert scrub.images == 3 and b64 not in raw
+    assert "data:image/png;base64," in out["messages"][2]["content"]
+    assert out["messages"][1]["content"].startswith("screenshot: ")
+    assert out["messages"][1]["content"].endswith(" done")
+
+
+def test_a_non_image_base64_run_inside_text_refuses():
+    blob = base64.b64encode(("Patient Zyxwv Qtest " * 40).encode()).decode()
+    with pytest.raises(ScrubRefused, match="not an image"):
+        scrub_request(
+            {
+                "messages": [
+                    {"role": "tool", "tool_call_id": "c", "content": f"x {blob}"}
+                ]
+            },
+            CountingScrub(),
+        )
+
+
+def test_a_url_without_a_scheme_is_cut_in_text_and_on_screen():
+    from openadapt_flow.flight.scrub import detect, scrub_urls
+
+    assert scrub_urls("at emr.example.test/patients/4471923?name=Zyxwv done") == (
+        "at emr.example.test/<path removed> done"
+    )
+    assert scrub_urls("10.0.0.5:8080/chart/77?x=1") == "10.0.0.5:8080/<path removed>"
+    assert scrub_urls("and/or e.g. this") == "and/or e.g. this"
+    text = "emr.example.test/patients/4471923?name=Zyxwv"
+    spans = detect(text, lambda t: t, lambda t: [])
+    covered = "".join(text[s:e] for s, e, _ in spans)
+    assert "4471923" in covered and "Zyxwv" in covered
+    assert "emr.example.test" not in covered

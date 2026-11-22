@@ -196,9 +196,38 @@ def _cut_url(match: re.Match[str]) -> str:
     return origin + "/<path removed>" + tail
 
 
+#: A URL without a scheme, as an address bar shows it: a host name (or
+#: IP) with a dot, then a path. Not inside a URL that has a scheme.
+_BARE_URL = re.compile(
+    r"(?i)(?<![\w@/.:-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}|"
+    r"\d{1,3}(?:\.\d{1,3}){3}|localhost)(:\d+)?(/[^\s\"'<>]*)"
+)
+
+
+def _bare_path(m: re.Match[str]) -> tuple[int, int]:
+    """(start, end) of a scheme-less URL's path and query in its text."""
+    start, end = m.start(3), m.end(3)
+    path = m.group(3)
+    if "?" not in path and "#" not in path:
+        while end > start and m.string[end - 1] in _URL_TAIL:
+            end -= 1
+    return start, end
+
+
 def scrub_urls(text: str) -> str:
-    """``text`` with every URL cut to its origin."""
-    return _URL.sub(_cut_url, text)
+    """``text`` with every URL cut to its origin, with or without a scheme."""
+    text = _URL.sub(_cut_url, text)
+    out = []
+    last = 0
+    for m in _BARE_URL.finditer(text):
+        start, end = _bare_path(m)
+        if text[start:end] in ("", "/") or text[start:end] == "/<path removed>":
+            continue
+        out.append(text[last:start])
+        out.append("/<path removed>")
+        last = end
+    out.append(text[last:])
+    return "".join(out)
 
 
 def scrub_pattern_text(text: str) -> str:
@@ -427,6 +456,13 @@ def detect(
     # Tokens, placeholders and cut URL paths are cut out of a span that
     # touches them; the rest of the span is still scrubbed.
     protected: list[Span] = [(*m.span(), "") for m in _PROTECTED.finditer(text)]
+    for m in _BARE_URL.finditer(text):
+        start, end = _bare_path(m)
+        if text[start:end] not in ("", "/") and not text[start:end].startswith(
+            "/<path removed>"
+        ):
+            found.append((start, end, "URL", 1))
+        protected.append((m.start(), m.start(3), ""))
     # A URL's origin is the app's address, kept on purpose (see _cut_url).
     for m in _URL.finditer(text):
         origin = _split_url(m.group(0))[0]
@@ -818,6 +854,10 @@ _BASE64 = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
 _IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x00*")
 
 
+#: A run of base64 characters long enough to be an encoded payload.
+_B64_RUN = re.compile(r"[A-Za-z0-9+/_-]{%d,}={0,2}" % 256)
+
+
 def _base64_blob(value: str) -> Optional[bytes]:
     """The decoded bytes when ``value`` is a long base64 string, else None."""
     if len(value) < _BLOB_MIN:
@@ -888,6 +928,8 @@ def scrub_request(
                 return data_url(value)
             raise ScrubRefused("a non-image data URL can't be scrubbed")
         blob = _base64_blob(value)
+        if blob is None and len(value) >= _BLOB_MIN and _B64_RUN.search(value):
+            return embedded(value, image_slot)
         if blob is not None:
             # A screenshot in another shape (an MCP image item's data, a raw
             # base64 PNG in a tool result or in JSON text): scrubbed as an
@@ -903,6 +945,32 @@ def scrub_request(
         if not isinstance(out, str):
             raise ScrubRefused("the text scrubber returned no text")
         return out
+
+    def embedded(value: str, image_slot: bool) -> str:
+        """``value`` with every base64 run of _BLOB_MIN or more characters
+        inside it (JSON in a text block, ``<img src="data:...">``, a prefixed
+        dump) scrubbed as an image in place, and the text around the runs
+        scrubbed as text; a run that is not an image refuses."""
+        out = []
+        last = 0
+        for m in _B64_RUN.finditer(value):
+            blob = _base64_blob(m.group(0))
+            if blob is None:
+                continue  # not valid base64: plain text, scrubbed as such
+            if not _is_image(blob):
+                raise ScrubRefused(
+                    "a base64 payload that is not an image can't be scrubbed"
+                )
+            head = value[last : m.start()]
+            head = re.sub(
+                r"data:image/[\w.+-]+;base64,$", "data:image/png;base64,", head
+            )
+            out.append(string(head, image_slot=False) if head else head)
+            out.append(base64.b64encode(image(blob)).decode("ascii"))
+            last = m.end()
+        tail = value[last:]
+        out.append(string(tail, image_slot=False) if tail else tail)
+        return "".join(out)
 
     def number(value: Any) -> Any:
         """A number of five or more digits is an identifier until shown
