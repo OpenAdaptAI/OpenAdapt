@@ -115,3 +115,47 @@ Every pack used **one** demonstration plus the blank-form probe.
 Three synthetic portals by one author, 30 cases, each pack built from one
 demonstration. The B0/B comparison also differs in pack authors, not only in
 engine and compiler.
+
+## B against B0: which stops come from what (post-hoc analysis)
+
+B stopped more clean cases than B0 (12 against 9) and more traps (13 against
+9). Case by case, the differences come from two sources: one stricter safety
+rule and one compiler gap. Everything else is the same root cause stopping
+both arms, with a different stop message.
+
+**Compiler gap: a default it cannot prove from one demo.**
+- **What happened.** The B hollowfen pack followed the compiler and did not
+  declare the deductible default, because the blank value equalled the dev
+  intake (`unproven_same_as_intake`). The B0 author declared it by judgement.
+- **In B:** every hollowfen case where the deductible differs stops.
+  - Clean cases: hbm-s05 and hbm-s08 became false stops (2 of B's 3 extra).
+  - Traps: hbm-s06, hbm-s09 and hbm-s10 were caught.
+- **In B0:** hbm-s06 was submitted wrong (deductible 500, intake 2500). The
+  B0 author's default was really a prefill.
+- **Reading.** From one demo the layer cannot tell a default from a prefill.
+  The fail-closed choice cost 2 clean cases and prevented 1 wrong submit. A
+  real second demo is the general fix.
+
+**Stricter safety rule: no commit control means no commit.**
+- **What happened.** In B a screen with no commit control always stops (the
+  #2429 save-evidence rule).
+- **Clean cases:** lta-s05 became a false stop (B's third extra).
+- **Traps:** lta-s07 was caught. B0 submitted both without evidence of a
+  commit path.
+
+**Same root cause in both arms, different message:**
+- **Repeating rows (no "add another traveller"):** lta-s01, s04, s06 and
+  s10. B0 stopped on an ungrounded name; B stopped on its pack's popup
+  workaround.
+- **Look-alike directory entries:** the bfu cases. One B pack stops one step
+  earlier, on a link it cannot click.
+
+**Other:**
+- **Harness:** hbm-s07 was a B0 harness error. The scripted operator did not
+  know the `select` action; it is fixed in `run.py` after this run, as a
+  post-hoc change to the harness.
+- **B did better:** B submitted lta-s08 correctly; B0 stopped it.
+
+**Net.** Of B's 3 extra clean stops, 2 are the defaults gap (compiler, one
+demo) and 1 is the stricter commit rule. Of B's extra trap catches, 3 are the
+same defaults stop, 1 is the commit rule and 1 is the harness error.

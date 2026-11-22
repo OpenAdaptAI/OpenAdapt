@@ -309,7 +309,20 @@ def operator_decision(
     note["script_hit"] = entry is not None
     if entry is None:
         return res(HumanDecisionAction.ESCALATE_TO_OWNER)
-    action = HumanDecisionAction(entry.get("action", "provide_value"))
+    raw_action = str(entry.get("action", "provide_value"))
+    # Answer keys may name the operator's step in their own words ("select"
+    # an option); anything that is not a decision action and carries a value
+    # is a provided value, anything else escalates.
+    aliases = {"select": "provide_value", "choose": "provide_value", "type": "provide_value"}
+    raw_action = aliases.get(raw_action, raw_action)
+    try:
+        action = HumanDecisionAction(raw_action)
+    except ValueError:
+        note["unknown_script_action"] = raw_action
+        if entry.get("value") is not None:
+            action = HumanDecisionAction.PROVIDE_VALUE
+        else:
+            return res(HumanDecisionAction.ESCALATE_TO_OWNER)
     if action == HumanDecisionAction.PROVIDE_VALUE and action in allowed:
         return res(action, entry.get("value"), halt.dossier_key)
     if action == HumanDecisionAction.ACCEPT_PORTAL_PREFILL and action in allowed:
