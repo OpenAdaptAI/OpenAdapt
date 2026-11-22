@@ -54,6 +54,7 @@ from urllib.parse import urlsplit
 
 from openadapt_flow.jit.adapters import Op, UnsupportedAction
 from openadapt_flow.runtime.identity import normalize_structured
+from openadapt_flow.second_factor import ONE_TIME_CODE_MARKER
 
 __all__ = [
     "TEACH_SCOPE_SCHEMA",
@@ -1013,7 +1014,10 @@ class TeachGuard:
                         "the clicked control is one the authorization forbids",
                     )
             if op.kind == "type":
-                if (op.text or "") not in typeable:
+                # The one-time-code marker types only a code a person supplies,
+                # and only into a one-time-code field (the recorder refuses it
+                # anywhere else).
+                if (op.text or "") not in typeable and op.text != ONE_TIME_CODE_MARKER:
                     self._raise(
                         "typed_value_not_declared",
                         "the agent typed text the task did not declare; only "

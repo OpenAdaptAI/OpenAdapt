@@ -616,7 +616,7 @@ PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwrigh
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4808 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3661 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6820 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6818 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight
