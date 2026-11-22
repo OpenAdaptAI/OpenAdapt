@@ -394,9 +394,23 @@ class FormPack(BaseModel):
     screens: tuple[WizardScreenSpec, ...] = ()
     summary_check: Optional[SummaryCheckSpec] = None
     max_commit_mutations: int = Field(default=1, ge=0, le=10)
+    # Overrides of the engine's default word lists (``form_tx/presets/words``).
+    # None keeps the default. An entity table also expects a dossier entity of
+    # one of these kinds when it carries the table's key fields.
+    primary_entity_kinds: Optional[tuple[str, ...]] = None
 
     def digest(self) -> str:
-        return canonical_sha256(self)
+        # An override left unset is not hashed, so a pack written before the
+        # field existed keeps its digest.
+        data = self.model_dump(mode="json")
+        for name in _UNHASHED_WHEN_UNSET:
+            if data.get(name) is None:
+                data.pop(name, None)
+        return canonical_sha256(data)
+
+
+#: FormPack fields left out of the digest while they are None.
+_UNHASHED_WHEN_UNSET = ("primary_entity_kinds",)
 
 
 class ObservedOption(BaseModel):
