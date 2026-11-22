@@ -1,0 +1,857 @@
+{
+  "schema": "openadapt.flight-scrub-recall/v1",
+  "seed": 7,
+  "records": 50,
+  "fields_per_record": [
+    "name",
+    "dob",
+    "mrn",
+    "phone",
+    "address"
+  ],
+  "leak_rule": "normalised value is a substring of the normalised output; a name also leaks when either part appears as a word",
+  "seconds": 62.4,
+  "configs": {
+    "presidio": {
+      "text": {
+        "name": {
+          "total": 50,
+          "leaked": 25
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 3
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 13
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 2
+        },
+        "address": {
+          "total": 50,
+          "leaked": 11
+        }
+      },
+      "image": {
+        "name": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 28
+        },
+        "dob": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 0
+        },
+        "mrn": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 17
+        },
+        "phone": {
+          "readable": 49,
+          "unreadable": 1,
+          "leaked": 15
+        },
+        "address": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 21
+        }
+      },
+      "misses": [
+        {
+          "index": 0,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 0,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 0,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 0,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 1,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 1,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 2,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 2,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 2,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 2,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 2,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 3,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 3,
+          "where": "text",
+          "field": "phone"
+        },
+        {
+          "index": 3,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 4,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 4,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 5,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 5,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 6,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 6,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 6,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 6,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 6,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 7,
+          "where": "text",
+          "field": "dob"
+        },
+        {
+          "index": 7,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 8,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 8,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 8,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 8,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 8,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 8,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 9,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 9,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 9,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 10,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 11,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 11,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 11,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 12,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 13,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 13,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 13,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 13,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 13,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 13,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 14,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 14,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 15,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 15,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 16,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 16,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 16,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 16,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 16,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 17,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 17,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 17,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 17,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 17,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 18,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 18,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 19,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 21,
+          "where": "text",
+          "field": "dob"
+        },
+        {
+          "index": 21,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 21,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 21,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 22,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 22,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 22,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 22,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 23,
+          "where": "text",
+          "field": "phone"
+        },
+        {
+          "index": 23,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 23,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 23,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 25,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 25,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 27,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 27,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 28,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 28,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 29,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 29,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 30,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 30,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 31,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 31,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 32,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 32,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 32,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 33,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 33,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 33,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 34,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 34,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 34,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 35,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 35,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 35,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 36,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 36,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 36,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 36,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 37,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 37,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 37,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 38,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 38,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 39,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 39,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 40,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 41,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 41,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 41,
+          "where": "text",
+          "field": "address"
+        },
+        {
+          "index": 41,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 41,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 42,
+          "where": "text",
+          "field": "dob"
+        },
+        {
+          "index": 42,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 43,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 43,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 43,
+          "where": "image",
+          "field": "address"
+        },
+        {
+          "index": 44,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 44,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 44,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 44,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 45,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 45,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 46,
+          "where": "image",
+          "field": "phone"
+        },
+        {
+          "index": 47,
+          "where": "image",
+          "field": "mrn"
+        },
+        {
+          "index": 48,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 49,
+          "where": "text",
+          "field": "mrn"
+        },
+        {
+          "index": 49,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 49,
+          "where": "image",
+          "field": "mrn"
+        }
+      ],
+      "text_recall": {
+        "fields": 250,
+        "caught": 196,
+        "recall": 0.784
+      },
+      "image_recall": {
+        "fields": 249,
+        "caught": 168,
+        "recall": 0.6747
+      }
+    },
+    "flight": {
+      "text": {
+        "name": {
+          "total": 50,
+          "leaked": 4
+        },
+        "dob": {
+          "total": 50,
+          "leaked": 0
+        },
+        "mrn": {
+          "total": 50,
+          "leaked": 0
+        },
+        "phone": {
+          "total": 50,
+          "leaked": 0
+        },
+        "address": {
+          "total": 50,
+          "leaked": 0
+        }
+      },
+      "image": {
+        "name": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 4
+        },
+        "dob": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 0
+        },
+        "mrn": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 0
+        },
+        "phone": {
+          "readable": 49,
+          "unreadable": 1,
+          "leaked": 0
+        },
+        "address": {
+          "readable": 50,
+          "unreadable": 0,
+          "leaked": 0
+        }
+      },
+      "misses": [
+        {
+          "index": 14,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 18,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 19,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 25,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 27,
+          "where": "text",
+          "field": "name"
+        },
+        {
+          "index": 37,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 38,
+          "where": "image",
+          "field": "name"
+        },
+        {
+          "index": 45,
+          "where": "image",
+          "field": "name"
+        }
+      ],
+      "text_recall": {
+        "fields": 250,
+        "caught": 246,
+        "recall": 0.984
+      },
+      "image_recall": {
+        "fields": 249,
+        "caught": 245,
+        "recall": 0.9839
+      }
+    }
+  }
+}
