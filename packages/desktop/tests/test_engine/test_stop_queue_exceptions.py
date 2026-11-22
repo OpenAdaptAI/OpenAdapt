@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from openadapt_desktop import exception_queue, stop_queue
+from openadapt_desktop.approver_anchor import Ace
 from openadapt_desktop.portal.stops import DispatcherStopQueue
 from tests.test_engine.test_stop_queue import (  # noqa: F401  (fixtures)
     enclave,
@@ -92,6 +94,25 @@ def _cards(disp) -> list[dict]:
     listed = disp.dispatch("list_stop_cards", {})
     assert listed["ok"] is True
     return [c for c in listed["cards"] if c["kind"] == stop_queue.EXCEPTION_KIND]
+
+
+def _let_everyone_read(path: Path, allowed: bool) -> None:
+    """Grant or take back read access for every user, the platform's way:
+    mode bits on POSIX, an ACL entry for Everyone (S-1-1-0) on Windows, where
+    ``chmod`` only sets the read-only flag."""
+
+    if os.name == "nt":
+        change = ["/grant", "*S-1-1-0:(R)"] if allowed else ["/remove:g", "*S-1-1-0"]
+        subprocess.run(["icacls", str(path), *change], check=True, capture_output=True)
+    else:
+        path.chmod(0o644 if allowed else 0o600)
+
+
+def _private_to_this_user(path: Path) -> bool:
+    if os.name == "nt":
+        with path.open("rb") as handle:
+            return exception_queue._windows_private(handle.fileno(), path)
+    return stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def _answer_file(card: dict) -> Path:
@@ -241,7 +262,8 @@ def test_the_window_signs_and_writes_the_runs_answer(queue, enclave):  # noqa: F
     assert result["ok"] is True and result["changed"] == 1
     assert len(enclave.prompts) == 1
     path = _answer_file(raw)
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert _private_to_this_user(path)
+    assert b"\r\n" not in path.read_bytes()
     answer = json.loads(path.read_text())
     assert answer["answer"] == "done_by_person"
     assert answer["approver_kind"] == "person" and answer["route"] == "desktop"
@@ -392,10 +414,39 @@ def test_a_card_other_users_can_read_is_not_shown(queue):  # noqa: F811
     disp, _db, _keychain = queue
     raw = _write_card()
     path = exception_queue.registry_root() / raw["run_ref"] / f"card-{raw['card_id'][7:]}.json"
-    path.chmod(0o644)
+    _let_everyone_read(path, True)
     assert _cards(disp) == []
-    path.chmod(0o600)
+    _let_everyone_read(path, False)
     assert [c["source"]["id"] for c in _cards(disp)] == [raw["card_id"]]
+
+
+_ME = "S-1-5-21-1-2-3-1001"
+_PROFILE_ACL = [
+    Ace(0, 0x10, 0x1F01FF, "S-1-5-18"),
+    Ace(0, 0x10, 0x1F01FF, "S-1-5-32-544"),
+    Ace(0, 0x10, 0x1F01FF, _ME),
+]
+
+
+@pytest.mark.parametrize(
+    "owner,aces,refused",
+    [
+        (_ME, _PROFILE_ACL, False),
+        ("S-1-5-32-544", _PROFILE_ACL, False),  # an elevated process's default owner
+        ("S-1-5-21-1-2-3-1002", _PROFILE_ACL, True),  # another user's file
+        (_ME, None, True),  # a NULL DACL: everyone has full control
+        (_ME, [*_PROFILE_ACL, Ace(0, 0, 0x120089, "S-1-1-0")], True),  # Everyone may read
+        (_ME, [*_PROFILE_ACL, Ace(0, 0, 0x120089, "S-1-5-32-545")], True),  # Users may read
+        (_ME, [*_PROFILE_ACL, Ace(9, 0, 0x120089, "S-1-1-0")], True),  # a callback allow
+        (_ME, [*_PROFILE_ACL, Ace(0, 0x08, 0x120089, "S-1-1-0")], False),  # inherit-only
+        (_ME, [*_PROFILE_ACL, Ace(1, 0, 0x120089, "S-1-1-0")], False),  # a deny entry
+        (_ME, [*_PROFILE_ACL, Ace(2, 0, 0x120089, "S-1-1-0")], True),  # an audit entry type
+    ],
+)
+def test_the_windows_rule_allows_only_this_user_system_and_administrators(owner, aces, refused):
+    me = frozenset({_ME, "S-1-5-32-544"} if owner == "S-1-5-32-544" else {_ME})
+    reason = exception_queue.windows_private_reason(owner, aces, me=me)
+    assert (reason is not None) is refused
 
 
 def test_the_scan_stops_at_the_cap_across_runs(monkeypatch):

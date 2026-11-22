@@ -195,7 +195,9 @@ def cmd_list(args: argparse.Namespace) -> int:
             print(json.dumps(row.to_json(), sort_keys=True))
         return 0
     if not rows:
-        print("No rows yet. Add one with: openadapt-flow ledger add RUN_DIR")
+        from openadapt_flow.cli_hints import command
+
+        print("No rows yet. Add one with: " + command("ledger add RUN_DIR"))
         return 0
     for row in rows:
         print(

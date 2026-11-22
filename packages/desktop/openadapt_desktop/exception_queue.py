@@ -15,6 +15,14 @@ the card id (the digest of the card), and a regular file, not a link, owned by
 this user, readable by no one else (no group or other permission bits), under
 the size cap. A card that fails any check isn't shown.
 
+Windows has no permission bits or ``O_NOFOLLOW``, so there the same rules are
+checked another way: a card that is a link or any other reparse point (a
+symlink, a junction) is refused before it is opened, the opened file must be
+the one that was checked, and its owner and access control list are read from
+the open handle. The owner must be this user, and only this user, SYSTEM and
+Administrators (what a user's profile folder grants by default) may hold any
+right on it. When that can't be read, no card is shown.
+
 An answer is the closed answer signed with the approver key Desktop already
 uses for the stop queue (Touch ID on a Mac, the portal's key for a phone).
 The waiting run checks the signature against its pinned approver roster, so
@@ -61,6 +69,10 @@ _MAX_BYTES = 256 * 1024
 _RUN_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _CARD_FILE = re.compile(r"^card-([0-9a-f]{64})\.json$")
 _SUMMARY_MAX = 200
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+#: Who besides this user may hold rights on a card on Windows: SYSTEM and
+#: Administrators, which a user's profile folder grants by default.
+_WINDOWS_TRUSTED_SIDS = frozenset({"S-1-5-18", "S-1-5-32-544"})
 
 
 def _canonical(value: Any) -> bytes:
@@ -72,8 +84,124 @@ def registry_root() -> Path:
     return (Path(home) if home else Path.home() / ".openadapt") / "exceptions"
 
 
+def _binary(flags: int) -> int:
+    """Raw bytes on Windows too (no newline or Ctrl-Z translation)."""
+
+    return flags | getattr(os, "O_BINARY", 0)
+
+
+def _is_link(info: os.stat_result) -> bool:
+    """A symlink, or on Windows any reparse point (a junction too)."""
+
+    reparse = getattr(info, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT
+    return stat.S_ISLNK(info.st_mode) or bool(reparse)
+
+
+def windows_private_reason(
+    owner_sid: str | None, aces: list[Any] | None, *, me: frozenset[str]
+) -> str | None:
+    """Why a Windows file isn't private to this user, or ``None`` when it is.
+
+    ``me`` is this user's SIDs: the process token's user and the owner it
+    gives new files. ``aces is None`` is a NULL DACL (everyone has full
+    control). Deny entries only take rights away; an entry of a type this
+    check doesn't know refuses the file.
+    """
+
+    from openadapt_desktop.approver_anchor import (
+        _ALLOW_ACE_TYPES,
+        _DENY_ACE_TYPES,
+        _INHERIT_ONLY_ACE,
+    )
+
+    if owner_sid not in me:
+        return f"it is owned by {owner_sid}, not this user"
+    if aces is None:
+        return "it has no access control list, so everyone can open it"
+    allowed = me | _WINDOWS_TRUSTED_SIDS
+    for ace in aces:
+        if ace.ace_type in _DENY_ACE_TYPES:
+            continue
+        if ace.ace_type not in _ALLOW_ACE_TYPES:
+            return f"it has an access entry of a type this check doesn't know ({ace.ace_type})"
+        if ace.flags & _INHERIT_ONLY_ACE:
+            continue
+        if ace.mask and ace.sid not in allowed:
+            return f"{ace.sid} has access to it"
+    return None
+
+
+def _windows_me() -> frozenset[str]:  # pragma: no cover - Windows only
+    """This process's user SID and the owner SID it gives new files."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    from openadapt_desktop.approver_anchor import _sid_string, _windll
+
+    advapi = _windll("advapi32", use_last_error=True)
+    kernel = _windll("kernel32", use_last_error=True)
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    advapi.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    token = wintypes.HANDLE()
+    if not advapi.OpenProcessToken(kernel.GetCurrentProcess(), 0x0008, ctypes.byref(token)):
+        raise OSError("can't open this process's token")
+    try:
+        sids: set[str] = set()
+        for info_class in (1, 4):  # TokenUser, TokenOwner: a SID pointer first
+            buffer = ctypes.create_string_buffer(1024)
+            needed = wintypes.DWORD()
+            if not advapi.GetTokenInformation(
+                token, info_class, buffer, len(buffer), ctypes.byref(needed)
+            ):
+                raise OSError("can't read this process's token")
+            sid = ctypes.c_void_p.from_buffer(buffer).value
+            if not sid:
+                raise OSError("this process's token has no SID")
+            sids.add(_sid_string(advapi, kernel, ctypes.c_void_p(sid)))
+        return frozenset(sids)
+    finally:
+        kernel.CloseHandle(token)
+
+
+def _windows_private(fd: int, path: Path) -> bool:  # pragma: no cover - Windows only
+    """The open file is private to this user. Any failure to tell is ``False``."""
+
+    try:
+        import msvcrt
+
+        from openadapt_desktop.approver_anchor import _windows_security
+
+        owner, aces = _windows_security(path, handle=msvcrt.get_osfhandle(fd))
+        return windows_private_reason(owner, aces, me=_windows_me()) is None
+    except Exception:
+        return False
+
+
 def _read(path: Path) -> bytes | None:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags = _binary(os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    windows = os.name == "nt"
+    before = None
+    if windows:
+        # No O_NOFOLLOW here: refuse a link before opening, and below require
+        # that the file opened is the one checked.
+        try:
+            before = os.lstat(path)
+        except OSError:
+            return None
+        if _is_link(before) or not stat.S_ISREG(before.st_mode):
+            return None
     try:
         fd = os.open(path, flags)
     except OSError:
@@ -86,6 +214,15 @@ def _read(path: Path) -> bytes | None:
             return None
         if os.name == "posix" and info.st_mode & 0o077:
             return None  # another user could read or change it
+        if windows:
+            if (
+                before is None
+                or not info.st_ino
+                or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)
+            ):
+                return None  # swapped between the check and the open
+            if not _windows_private(fd, path):
+                return None  # another user could read or change it
         return os.read(fd, _MAX_BYTES + 1)[:_MAX_BYTES]
     finally:
         os.close(fd)
@@ -138,7 +275,7 @@ def open_cards(root: Path | None = None) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for folder in folders:
         try:
-            if stat.S_ISLNK(os.lstat(folder).st_mode) or not folder.is_dir():
+            if _is_link(os.lstat(folder)) or not folder.is_dir():
                 continue
             names = sorted(os.listdir(folder))
         except OSError:
@@ -205,16 +342,20 @@ def message(unsigned: dict[str, Any]) -> bytes:
 
 def _write_exclusive(path: Path, payload: bytes) -> None:
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(tmp, flags, 0o600)
+    flags = _binary(os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0))
     try:
-        view = memoryview(payload)
-        while view:
-            view = view[os.write(fd, view) :]
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    try:
+        fd = os.open(tmp, flags, 0o600)
+        try:
+            # 0o600 means nothing on Windows: the file takes its folder's ACL.
+            # Write the answer only where it comes out private, as a card must.
+            if os.name == "nt" and not _windows_private(fd, tmp):
+                raise PermissionError(f"{tmp} would not be private to this user")
+            view = memoryview(payload)
+            while view:
+                view = view[os.write(fd, view) :]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         os.link(tmp, path)
     finally:
         try:
@@ -307,6 +448,7 @@ __all__ = [
     "registry_root",
     "unsigned_answer",
     "valid_card",
+    "windows_private_reason",
 ]
 
 
