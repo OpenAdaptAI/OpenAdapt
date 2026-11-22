@@ -35,9 +35,8 @@ export function Welcome({
           A person or an AI agent does a workflow once, in any app. OpenAdapt
           turns it into a program that repeats the workflow with new inputs
           and checks each save by reading it back. When something doesn't
-          match, it stops and asks instead of guessing. It suits highly
-          regulated work, such as medical records and insurance, where a wrong
-          entry matters.
+          match, it stops and asks instead of guessing. It suits high-stakes
+          and regulated systems of record where a wrong entry matters.
         </p>
       </section>
 

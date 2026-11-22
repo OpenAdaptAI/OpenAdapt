@@ -825,7 +825,7 @@ class SqliteCopy:
     SQL (or inserts ``target``). The check's read runs against the copy.
 
     The database's other tables are outside the slice. ``subject_field`` is
-    the column they refer to the saved record by (OpenEMR's ``pid``). Unset,
+    the column they refer to the saved record by (e.g. a foreign-key id). Unset,
     it is the one column the slice's table shares with other tables whose
     name ends in ``id`` (not the key).
     """

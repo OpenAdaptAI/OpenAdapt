@@ -139,6 +139,63 @@ def compare(
     return new, stale
 
 
+#: Sibling core packages guarded against app-specific leaks when running from
+#: the monorepo checkout (zero allowed hits outside ``# example:`` comments).
+CORE_PACKAGE_ROOTS: tuple[tuple[str, str], ...] = (
+    ("types", "openadapt_types"),
+    ("desktop", "openadapt_desktop"),
+    ("capture", "openadapt_capture"),
+)
+CORE_PACKAGE_APP_TERMS: tuple[str, ...] = (
+    "openemr",
+    "medplum",
+    "mockmed",
+    "stedi",
+    "openimis",
+)
+
+
+def scan_core_packages(
+    packages_dir: Path | None = None, config: dict | None = None
+) -> list[str]:
+    """Scan sibling core packages (types, desktop, capture) for app names."""
+    root = packages_dir if packages_dir is not None else FLOW.parent
+    if not root.is_dir():
+        return []
+    config = config if config is not None else load_config()
+    terms = _term_patterns(config)
+    checked_terms = {
+        term: terms[term] for term in CORE_PACKAGE_APP_TERMS if term in terms
+    }
+    violations: list[str] = []
+    for pkg_name, mod_name in CORE_PACKAGE_ROOTS:
+        pkg_root = root / pkg_name / mod_name
+        if not pkg_root.is_dir():
+            continue
+        for path in sorted(pkg_root.rglob("*")):
+            if not path.is_file() or path.suffix not in SUFFIXES:
+                continue
+            if "__pycache__" in path.parts:
+                continue
+            rel = path.relative_to(root).as_posix()
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for number, line in enumerate(text.splitlines(), start=1):
+                stripped = line.lstrip()
+                if EXAMPLE_MARKER.match(stripped):
+                    continue
+                split = _CAMEL_BOUNDARY.sub(" ", line)
+                for term, (pattern, is_name) in checked_terms.items():
+                    if pattern.search(line) or (is_name and pattern.search(split)):
+                        violations.append(
+                            f"packages/{rel}: {term!r} on line {number} "
+                            "(0 allowed in core packages)"
+                        )
+    return violations
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__.split("\n", 1)[0], allow_abbrev=False
@@ -153,17 +210,21 @@ def main(argv: list[str] | None = None) -> int:
     hits = scan()
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     new, stale = compare(hits, baseline)
+    core_violations = scan_core_packages()
 
     if args.update_baseline:
-        if new:
+        if new or core_violations:
             print("New hits cannot enter the baseline:", file=sys.stderr)
-            print("\n".join(f"  {line}" for line in new), file=sys.stderr)
+            print(
+                "\n".join(f"  {line}" for line in (*new, *core_violations)),
+                file=sys.stderr,
+            )
             return 1
         BASELINE.write_text(json.dumps(counts(hits), indent=2) + "\n", encoding="utf-8")
         print(f"Baseline lowered: {BASELINE.relative_to(FLOW)}")
         return 0
 
-    if new:
+    if new or core_violations:
         print(
             "The engine names a specific application. Put what one app needs "
             "in data (app_profiles/*.yaml, a generated contract, a deployment "
@@ -172,7 +233,9 @@ def main(argv: list[str] | None = None) -> int:
             "only gives an example may carry '# example:'.",
             file=sys.stderr,
         )
-        print("\n".join(f"  {line}" for line in new), file=sys.stderr)
+        print(
+            "\n".join(f"  {line}" for line in (*new, *core_violations)), file=sys.stderr
+        )
     if stale:
         print(
             "The baseline is higher than the engine now; lower it with "
@@ -180,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         print("\n".join(f"  {line}" for line in stale), file=sys.stderr)
-    if new or stale:
+    if new or stale or core_violations:
         return 1
     total = sum(n for by_term in baseline.values() for n in by_term.values())
     print(f"Engine generality OK ({total} baseline hits left)")
