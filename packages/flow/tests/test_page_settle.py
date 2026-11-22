@@ -419,3 +419,62 @@ def test_any_change_since_seed_forces_a_fresh_frame(browser) -> None:
         assert again.phash != first.phash
     finally:
         ctx.close()
+
+
+# A headed window that the OS reports as covered (on macOS, a Chrome window
+# behind a full-size Terminal.app window) renders no animation frames. This
+# init script stands in for that headlessly: requestAnimationFrame never
+# calls back, so the probe's "two frames since the last change" can't pass.
+_NO_FRAMES = "window.requestAnimationFrame = function () { return 0; };"
+
+
+def _frameless_backend(browser, html: str):
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    server = _Server(html, 0.0)
+    context = browser.new_context(
+        viewport={"width": 640, "height": 400}, device_scale_factor=1
+    )
+    page = context.new_page()
+    page.add_init_script(_NO_FRAMES)
+    backend = PlaywrightBackend(page)
+    page.goto(server.url, wait_until="domcontentloaded")
+    return backend, _Ctx(context, server)
+
+
+def test_page_that_renders_no_frames_hands_over_to_screenshots(browser) -> None:
+    """A covered window settles from screenshots instead of timing out."""
+
+    backend, ctx = _frameless_backend(browser, "<!doctype html><p>static</p>")
+    try:
+        started = time.monotonic()
+        result = settle_mod.wait_settled_result(backend, timeout_s=10.0)
+        assert result.settled and result.mode == "pixel"
+        assert time.monotonic() - started < 5.0
+        assert backend._quiescence.last_reason == "unavailable"
+    finally:
+        ctx.close()
+
+
+def test_page_that_renders_no_frames_still_waits_for_changes(browser) -> None:
+    """The handover never turns a changing page into a settled one."""
+
+    backend, ctx = _frameless_backend(browser, _CHURN)
+    try:
+        time.sleep(1.3)  # past the paint stall: the DOM still churns
+        assert backend.page_quiescent(0.1) is False
+        assert backend._quiescence.last_reason.startswith("busy:changed")
+    finally:
+        ctx.close()
+
+
+def test_recent_frames_keep_the_paint_check(browser) -> None:
+    """A page that renders frames is never handed over for paint."""
+
+    backend, _page, ctx = _backend(browser, "<!doctype html><p>static</p>")
+    try:
+        time.sleep(0.3)
+        assert backend.page_quiescent(0.1) is True
+        assert backend._quiescence.last_reason == "quiet"
+    finally:
+        ctx.close()

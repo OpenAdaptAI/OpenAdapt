@@ -206,7 +206,11 @@ own rows, the exact columns, and never a column the probe's query strings,
 the parameters or a contract name. A `changed` move counts only when every
 round shows it (`--rounds`, at least two): per-request bookkeeping moves on
 every request, while an edit someone makes to the acting user's own row
-during one round does not, so it stays a stop. A round in which nothing
+during one round does not, so it stays a stop. After each round the probe
+also reads a control window of the same length in which it sends nothing.
+A column that moves in a control window moves without a request (a
+background job, or another session), so it is not excused automatically:
+it goes under `needs_approval`. A round in which nothing
 moved means nothing is learned. An `added` row (a first-login row) is
 never admitted by the probe: its excuse names columns, not values, so it
 would also cover a row the agent adds for itself with other values. It is
@@ -225,7 +229,8 @@ contract whose frame can see a lost update without the bookkeeping move:
 one whose every declared effect creates a new record (`count_new_only`;
 a create beside a `field_equals` update doesn't count), or one that reads
 the target's versions (`frame.versions`) on the surface of every other
-effect (its `target_surface`, when set). In an update with no
+effect (its `target_surface`; with none set, every other effect must be
+on one surface, since an unscoped read tells records apart by id alone). In an update with no
 version source, another user's edit that the agent's stale save reverts
 leaves nothing changed, and only the bookkeeping move stopped it, so such
 contracts keep stopping unless the probe can give them a version source.

@@ -112,7 +112,9 @@ def users(e: Engine) -> learn.Users:
     return learn.users_from("app_user", "id", schema)
 
 
-def run_probe(e: Engine, tmp_path: Path, send: Any, rounds: int = 3) -> dict:
+def run_probe(
+    e: Engine, tmp_path: Path, send: Any, rounds: int = 3, idle: Any = None
+) -> dict:
     c = Contract.from_dict(note_contract(e), name="note")
     eps = learn_probe.probe(
         c,
@@ -122,6 +124,7 @@ def run_probe(e: Engine, tmp_path: Path, send: Any, rounds: int = 3) -> dict:
         send=send,
         rounds=rounds,
         workdir=tmp_path / "probe",
+        idle=idle or (lambda _s: None),
     )
     return learn_probe.propose(eps, users(e))
 
@@ -459,3 +462,67 @@ def test_versions_on_another_surface_do_not_cover_an_update() -> None:
     assert learn_probe._sees_its_own_harm(contract) is False
     contract.config.frame.versions = NS(target_surface=None)
     assert learn_probe._sees_its_own_harm(contract) is True
+
+
+def test_a_background_writer_on_the_actors_row_is_not_excused(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A job that bumps the acting user's row whether or not a request is
+    sent moves in the control windows too: timing alone is no attribution,
+    so it waits for a person instead of becoming an automatic excuse."""
+
+    def background(_seconds: float) -> None:
+        engine.run(
+            "UPDATE app_user SET last_login = %s WHERE id = %s", _stamp(), int(ACTOR)
+        )
+
+    def send() -> set[str]:
+        background(0)
+        engine.run(
+            "UPDATE api_token SET last_seen = %s WHERE user_id = %s",
+            _stamp(),
+            int(ACTOR),
+        )
+        return {"q"}
+
+    proposal = run_probe(engine, tmp_path, send, idle=background)
+    got = {(x["table"], tuple(x["columns"])) for x in excuses_of(proposal)}
+    assert not any(t == "app_user" for t, _cols in got)
+    held = proposal["kinds"]["read_only_probe"]["needs_approval"]
+    assert any(x["table"] == "app_user" for x in held)
+    # The token row moved only with requests: still bookkeeping.
+    assert ("api_token", ("last_seen",)) in got
+
+
+def test_episodes_without_control_windows_excuse_nothing_automatically(
+    engine: Engine, tmp_path: Path
+) -> None:
+    c = Contract.from_dict(note_contract(engine), name="note")
+    eps = learn_probe.probe(
+        c, {"title": "Probe note", "body": "x"}, kind="add_note", actor=ACTOR,
+        send=first_once(engine), workdir=tmp_path / "probe", idle=lambda _s: None,
+    )  # fmt: skip
+    proposal = learn_probe.propose(
+        [e for e in eps if not e.get("control")], users(engine)
+    )
+    assert excuses_of(proposal) == []
+    assert proposal["kinds"]["read_only_probe"]["needs_approval"]
+
+
+def test_unscoped_versions_over_two_surfaces_do_not_cover_updates() -> None:
+    from types import SimpleNamespace as NS
+
+    from openadapt_flow.runtime.effects.effect import EffectKind
+    from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+    def update(surface: str) -> Any:
+        return NS(kind=EffectKind.FIELD_EQUALS, probe=surface_probe(surface),
+                  expected_count=1, count_new_only=False)  # fmt: skip
+
+    versions = NS(target_surface=None)
+    two = NS(config=NS(frame=NS(versions=versions),
+                       effects=[update("primary"), update("secondary")]))  # fmt: skip
+    assert learn_probe._sees_its_own_harm(two) is False
+    one = NS(config=NS(frame=NS(versions=versions),
+                       effects=[update("primary"), update("primary")]))  # fmt: skip
+    assert learn_probe._sees_its_own_harm(one) is True

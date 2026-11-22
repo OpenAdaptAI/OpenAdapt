@@ -15,7 +15,8 @@ the app's own bookkeeping, not something an agent asked for:
    (``begin_write`` with the probe's parameters), send the read-only
    requests as the agent, and judge the frame (``verify_write``). No write
    is sent, so the declared effect is absent; only the frame's moved rows
-   are used.
+   are used. A control window of the same length follows each round with
+   no request; a move it shows is not the request's and is not excused.
 2. Propose from those moves with the learner's own rules
    (:func:`openadapt_flow.learn.propose`): only the acting user's own row
    (``actor_row``), exact columns, ``changed`` only, and never a column a
@@ -39,6 +40,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Optional
@@ -112,12 +114,16 @@ def probe(
     send: Callable[[], set[str]],
     rounds: int = DEFAULT_ROUNDS,
     workdir: Optional[Path] = None,
+    idle: Callable[[float], None] = time.sleep,
 ) -> list[dict[str, Any]]:
     """Run ``rounds`` read-only windows under ``contract``'s frame.
 
     ``send`` sends the read-only requests as the agent and returns the
     query-parameter names it sent (``learn.query_fields``); it must not
-    write. Returns one episode per round."""
+    write. After each request window, a control window as long as it sends
+    nothing (``idle``): a row that moves there moves without a request, so
+    it is not the request's bookkeeping. Returns one request episode and
+    one control episode (``control: True``) per round."""
 
     from openadapt_flow.verifier import Actor, begin_write, verify_write
 
@@ -139,13 +145,33 @@ def probe(
                 write_key=f"read-only-probe-{kind}-{i}",
                 workdir=base / f"round-{i}",
             )
+            started = time.monotonic()
             sent = set(send())
+            elapsed = time.monotonic() - started
             result = verify_write(pending)
             out.append(
                 episode(
                     kind, result, contract=contract, params=params, sent_fields=sent
                 )
             )
+            control = begin_write(
+                contract,
+                dict(params),
+                actor=Actor("agent", str(actor)),
+                ledger=None,
+                write_key=f"read-only-probe-{kind}-{i}-control",
+                workdir=base / f"round-{i}-control",
+            )
+            idle(elapsed)
+            ep = episode(
+                kind,
+                verify_write(control),
+                contract=contract,
+                params=params,
+                sent_fields=set(),
+            )
+            ep["control"] = True
+            out.append(ep)
     return out
 
 
@@ -206,7 +232,18 @@ def propose(
     different property the agent sets). Such moves go under
     ``needs_approval``: a person approves them with ``learn approve``."""
 
-    eps = [dict(e, kind="read_only_probe") for e in episodes if e.get("probe")]
+    probes = [e for e in episodes if e.get("probe")]
+    controls = [e for e in probes if e.get("control")]
+    eps = [dict(e, kind="read_only_probe") for e in probes if not e.get("control")]
+    # fail-open class: correlation-as-attribution. A move seen in every
+    # request round is only timing; it is the request's bookkeeping only
+    # when the control windows (no request) show it never moving on its own.
+    background = {
+        (str(m.get("table")), str(c))
+        for e in controls
+        for m in e.get("moves") or []
+        for c in m.get("columns") or [None]
+    }
     learnable = [e for e in eps if _learn._why_ignored(e) is None]
     n = max(1, len(learnable))
     proposal = _learn.propose(eps, users=users, k=n, n=n, source="read-only probe")
@@ -223,13 +260,33 @@ def propose(
         kept: list[dict[str, Any]] = []
         held: list[dict[str, Any]] = []
         for e in body.get("excuses") or []:
-            (held if e.get("change") == "added" else kept).append(e)
+            if e.get("change") == "added":
+                e["why_not"] = (
+                    "an added row: its excuse names columns, not values, so a "
+                    "person approves it (learn approve)"
+                )
+            elif len(controls) < len(eps):
+                e["why_not"] = (
+                    "no control window without requests for every round: "
+                    "nothing shows the move comes from the request, so a "
+                    "person approves it (learn approve)"
+                )
+            elif any(
+                (str(e.get("table")), str(c)) in background
+                or (str(e.get("table")), "None") in background
+                for c in e.get("columns") or []
+            ):
+                e["why_not"] = (
+                    "it also moved in a control window with no request: a "
+                    "background writer, not the request's bookkeeping, so a "
+                    "person approves it (learn approve)"
+                )
+            else:
+                kept.append(e)
+                continue
+            held.append(e)
         for e in held:
             e.pop("id", None)
-            e["why_not"] = (
-                "an added row: its excuse names columns, not values, so a "
-                "person approves it (learn approve)"
-            )
         body["excuses"] = kept
         body["needs_approval"] = held
     proposal.pop("proposal_sha256", None)
@@ -359,7 +416,13 @@ def _sees_its_own_harm(contract: Any) -> bool:
     versions = getattr(frame, "versions", None)
     if versions is not None:
         surface = getattr(versions, "target_surface", None)
-        if surface is None or all(surface_of(e) == surface for e in others):
+        if surface is None:
+            # fail-open class: ambiguous-subject-binding. An unscoped version
+            # read judges targets by their local id alone, so two records
+            # with one id on two surfaces would share one version check.
+            if len({surface_of(e) for e in others}) == 1:
+                return True
+        elif all(surface_of(e) == surface for e in others):
             return True
     rows = getattr(frame, "row_versions", None)
     database = getattr(frame, "database", None)
