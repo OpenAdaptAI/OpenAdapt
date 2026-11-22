@@ -33886,6 +33886,24 @@
         "title": "Drift Oracle Calls",
         "type": "integer"
        },
+       "identity_vlm_calls": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Identity Vlm Calls",
+        "type": "integer"
+       },
+       "local_identity_vlm_calls": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Local Identity Vlm Calls",
+        "type": "integer"
+       },
+       "grounder_calls": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Grounder Calls",
+        "type": "integer"
+       },
        "postcondition_page_scale": {
         "anyOf": [
          {
@@ -47665,6 +47683,24 @@
      "drift_oracle_calls": {
       "default": 0,
       "title": "Drift Oracle Calls",
+      "type": "integer"
+     },
+     "identity_vlm_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Identity Vlm Calls",
+      "type": "integer"
+     },
+     "local_identity_vlm_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Local Identity Vlm Calls",
+      "type": "integer"
+     },
+     "grounder_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Grounder Calls",
       "type": "integer"
      },
      "postcondition_page_scale": {
