@@ -265,7 +265,7 @@ if __name__ == "__main__":  # pragma: no cover - lab entry point
     import argparse
     import tempfile
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
