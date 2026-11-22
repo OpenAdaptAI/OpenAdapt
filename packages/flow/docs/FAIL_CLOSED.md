@@ -297,6 +297,9 @@ Done:
   are the obligations; a box the plan never saw is unexpected.
 - [x] `gui.hub.judge_hub` (C1 C2): new. The planned sections are the
   obligations; completion is read from the hub, never from the save click.
+- [x] `gui.repeating.judge_instances` (C1 C2 C5): new. Item-by-slot
+  obligations from the intake, checked in the instance each item was written
+  into; an instance nobody planned is refuted.
 
 Next, most bug-prone first:
 
