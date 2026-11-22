@@ -515,9 +515,24 @@ class FormPack(BaseModel):
     # otherwise named on the receipt as not covered; one listed here keeps
     # the run from verified_done instead.
     required_intake_keys: tuple[str, ...] = ()
+    # Override of the engine's default placeholder texts
+    # (``form_tx/presets/words/placeholders.json``) for controls no binding
+    # names; a binding sets its own with ``placeholder_values``. None keeps
+    # the default.
+    placeholder_values: Optional[tuple[str, ...]] = None
 
     def digest(self) -> str:
-        return canonical_sha256(self)
+        # An override left unset is not hashed, so a pack written before the
+        # field existed keeps its digest.
+        data = self.model_dump(mode="json")
+        for name in _UNHASHED_WHEN_UNSET:
+            if data.get(name) is None:
+                data.pop(name, None)
+        return canonical_sha256(data)
+
+
+#: FormPack fields left out of the digest while they are None.
+_UNHASHED_WHEN_UNSET = ("placeholder_values",)
 
 
 class ObservedOption(BaseModel):

@@ -98,6 +98,14 @@ _PRIMARY_ENTITY_KINDS = frozenset(
 _DEFAULT_PLACEHOLDERS: tuple[str, ...] = load_words("placeholders")
 
 
+def _pack_placeholders(pack: FormPack) -> tuple[str, ...]:
+    """The placeholder texts for a control no binding names: the pack's own
+    list when it sets one, else the default."""
+    if pack.placeholder_values is not None:
+        return pack.placeholder_values
+    return _DEFAULT_PLACEHOLDERS
+
+
 class ReconcilerSession:
     """Mutable, resumable state for one governed ``form_tx`` execution."""
 
@@ -4181,7 +4189,7 @@ class FormReconciler:
                     placeholders = (
                         binding.placeholder_values
                         if binding is not None
-                        else _DEFAULT_PLACEHOLDERS
+                        else _pack_placeholders(session.pack)
                     )
                     act_halt = self._actuate_control(
                         active_surface,
@@ -4446,7 +4454,7 @@ class FormReconciler:
             placeholders = (
                 binding.placeholder_values
                 if binding is not None
-                else _DEFAULT_PLACEHOLDERS
+                else _pack_placeholders(session.pack)
             )
             if live_ctrl is None or _is_control_empty(live_ctrl, placeholders):
                 refusal_msg = (
