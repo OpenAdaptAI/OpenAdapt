@@ -15,7 +15,44 @@
 
 <!-- version list -->
 
-## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
+## Unreleased
+
+### Features
+
+- One verdict kernel, `openadapt_flow.verdict`, for every check that turns
+  evidence into held, refuted or not checked. It fixes the obligations from
+  the plan first, settles results against them, and never passes an empty
+  set, a truncated or short read, a probe that raised, a result bound to
+  another run, two results that disagree, or a code nobody listed.
+  `Result.nothing_else` holds a "nothing else changed" claim only on a
+  complete read. Functions marked `@verdict_site` are run by a fail-open
+  harness (`tests/failopen`) with 15 generic mutations, which checks the
+  verdict at three levels (refuted, not checked, held), not as one bit. It
+  flags 14 fail-open bugs rebuilt from this repository's history (pinned
+  pre-fix copies) and one live connector site, and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
+  a hand-written fold kind rises, including a broad `except` that logs and
+  falls through and a "nothing else changed" test over a set that may be a
+  partial read. See `docs/FAIL_CLOSED.md`.
+- The hard-invariant layer, the frame's version check, `verify-run`'s effect
+  folds and the receipt's line judge and tally are built on the kernel.
+
+### Fixes
+
+- `verify-run`: an effect list that is empty, or tiers that don't pair one to
+  one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
+  `CONFIRMED`, `present` and `independent_readback`. The receipt model already
+  refuses an empty list, so no run changes outcome today.
+- `verify-run`: the effect folds settle against the planned effects, so a
+  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
+  code nobody listed is `unknown` rather than `present`.
+- The frame's version check: a duplicate version row, a version history
+  that lost a row, or a changed target with no new version no longer hides a
+  version saved by another user. The frame is refuted instead of not checked.
+- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
+  counted as not checked, so the three line counts add up to the lines.
+
+## v3.4.0 (2026-11-21)
 
 ### Features
 
@@ -64,6 +101,10 @@
   registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
   otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
   and public key an owner or admin must register.
+- `openadapt login` with no token signs in through the browser: a PKCE
+  loopback grant on `127.0.0.1` that stores the same credential `push` and
+  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
+  the old path (#2379).
 
 ### Fixes
 
@@ -79,6 +120,13 @@
   mismatch stops the run before apply. The side panel shows refuted and
   incomplete runs as needing action. Measured on four held-out synthetic
   quote portals: `benchmark/form_tx_heldout_run/RESULTS.md`.
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
   secret boundary stops recording before that text reaches its artifacts.
@@ -104,6 +152,48 @@
 - Passphrase-derived keys, attended run keys and opened sealed sets are no
   longer cached for the whole process. Each independent operation
   authenticates again; caller-owned handles still reuse their key (#2341).
+  A durable checkpoint store counts as such a handle: it keeps the keys it
+  derived from its explicit key for its own lifetime. Without that, each
+  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
+  instead of 3.5 s (131 derivations, now 1).
+- In reverse-proxy mode the wire tap relays a redirect to a path on the
+  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
+  so it can front a form app that answers a save with Post/Redirect/Get. The
+  client's next request comes back through the tap. Browser route mode still
+  refuses every redirect, and the tap never follows one itself (#2392).
+- Guarded native keyboard delivery on a Windows agent that advertises
+  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
+  control and frame. #2313 describes when it applies and what it checks.
+- A repair candidate id that would leave the repair store is refused (#2369).
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+- An admitted managed run, and its resume, keep the policy the local Standard
+  gate chose when neither the CLI nor the deployment names one, instead of
+  exiting with code 2 (#2401).
+- Lens route induction can use a trace's observed effects, not only HTTP
+  methods, to assign route roles (#2393).
+- Generated verify contracts stop fewer correct writes: five generator causes
+  of false stops are fixed, each by one schema-independent rule (#2418).
+- `import openadapt_flow` loads its `ir` re-exports on first use, and the
+  qualification models and several replayer helpers moved into their own
+  modules. Names still import explicitly from their old modules;
+  `from openadapt_flow.qualification import *` no longer includes
+  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
+  #2455, #2456, #2459).
+
+### Requirements
+
+- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
+  release with `sanitization_config()`, which sanitized reuse and approval bind
+  to.
+- On Python 3.11 and newer, the lock moves Pillow, filelock and other
+  dependencies to a release that fixes an open security advisory. The
+  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
 
 ## v3.3.0 (2026-11-19)
 
