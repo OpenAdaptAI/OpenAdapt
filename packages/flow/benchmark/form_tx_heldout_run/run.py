@@ -39,6 +39,11 @@ SUITES = {
         "benchmark.form_tx_heldout4",
         "benchmark.form_tx_heldout_run.packs4b0",
     ),
+    # Set 4 v2 (sealed): portals live outside the repo, in the folder named
+    # by FORM_TX_SET4V2_PRIVATE (default ~/oa/private/form-tx-set4v2), and the
+    # answer key is decrypted in memory by its own scorer.
+    "set4v2": ("form_tx_set4v2", "benchmark.form_tx_heldout_run.packs5"),
+    "set4v2b0": ("form_tx_set4v2", "benchmark.form_tx_heldout_run.packs5b0"),
 }
 _SUITE = {"name": "heldout"}
 
@@ -46,6 +51,15 @@ _SUITE = {"name": "heldout"}
 def _use_suite(name: str) -> None:
     global PORTALS, load_answer_key, score_case, PACKS, dossier_for
     portals_pkg, packs_mod = SUITES[name]
+    if not portals_pkg.startswith("benchmark."):
+        import os
+
+        private = os.environ.get(
+            "FORM_TX_SET4V2_PRIVATE",
+            str(Path.home() / "oa" / "private" / "form-tx-set4v2"),
+        )
+        if private not in sys.path:
+            sys.path.insert(0, private)
     PORTALS = importlib.import_module(portals_pkg + ".portals").PORTALS
     scoring = importlib.import_module(portals_pkg + ".scoring")
     load_answer_key, score_case = scoring.load_answer_key, scoring.score_case
@@ -412,14 +426,9 @@ def run_case(
 ) -> dict[str, Any]:
     spec = PORTALS[pid]
     _post(f"{base}/__oracle/load_case", {"case_id": case_id})
+    pkg_dir = Path(importlib.import_module(SUITES[_SUITE["name"]][0]).__file__).parent
     intake = json.loads(
-        (
-            HERE.parent
-            / SUITES[_SUITE["name"]][0].split(".")[-1]
-            / "cases"
-            / pid
-            / f"{case_id}.intake.json"
-        ).read_text()
+        (pkg_dir / "cases" / pid / f"{case_id}.intake.json").read_text()
     )
     script = answer_key["cases"][case_id].get("operator_script", {})
     out: dict[str, Any] = {"portal": pid, "case_id": case_id, "halts": []}
