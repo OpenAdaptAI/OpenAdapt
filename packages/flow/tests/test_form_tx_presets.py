@@ -167,3 +167,29 @@ def test_an_unknown_word_list_is_refused() -> None:
 
     with pytest.raises(ValueError):
         load_words("no_such_list")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "[]",
+        '"words"',
+        '{"schema": "other/v1", "name": "bad", "words": []}',
+        '{"schema": "openadapt.form-word-list/v1", "name": "other", "words": []}',
+        '{"schema": "openadapt.form-word-list/v1", "name": "bad", "words": [1]}',
+        '{"schema": "openadapt.form-word-list/v1", "name": "bad", "words": "a"}',
+    ],
+)
+def test_a_malformed_word_list_is_refused(
+    content: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.form_tx import presets
+
+    (tmp_path / "bad.json").write_text(content, encoding="utf-8")
+    monkeypatch.setattr(presets, "_WORDS", tmp_path)
+    presets.load_words.cache_clear()
+    try:
+        with pytest.raises(ValueError):
+            presets.load_words("bad")
+    finally:
+        presets.load_words.cache_clear()
