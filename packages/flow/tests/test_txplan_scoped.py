@@ -944,12 +944,12 @@ _BUNDLE = {"resourceType": "Bundle", "type": "searchset"}
 _P1 = {"resource": {"resourceType": "Patient", "id": "p1"}}
 _P2 = {"resource": {"resourceType": "Patient", "id": "p2"}}
 
-#: One refused answer per clause of the strict parser, with the message only
-#: that clause raises. Each clause's source line carries the same tag
-#: (``# search-clause: <tag>``), so the mutation test below can remove it.
+#: One probe per clause of the strict parser: refused with that clause's
+#: message, and accepted once only that clause is removed (no other check
+#: catches it). Each clause's source carries the same tag
+#: (``# search-clause: <tag>``).
 SEARCH_REFUSALS = {
-    "object-answer": ([], "items", "did not return an object"),
-    "list-answer": ({"items": []}, "root", "did not return a list"),
+    "list-answer": ({"id": "x"}, "root", "did not return a list"),
     "total-count": ({**_BUNDLE, "total": True, "entry": [_P1]}, "fhir", "not a count"),
     "shape-equals": (
         {"resourceType": "Bundle", "type": "history", "entry": []},
@@ -961,6 +961,11 @@ SEARCH_REFUSALS = {
         "fhir",
         "answer has link",
     ),
+    "absent-shape": (
+        {**_BUNDLE, "link": {"relation": "next"}, "entry": []},
+        "fhir",
+        "link is malformed",
+    ),
     "items-field": ({"error": "busy"}, "items", "has no items"),
     "fan-out-list": ({**_BUNDLE, "entry": {}}, "fhir", "fan-out is not a list"),
     "step-present": (
@@ -968,7 +973,11 @@ SEARCH_REFUSALS = {
         "fhir",
         "has no resource",
     ),
-    "leaf-object": ({"items": [1]}, "items", "is not an object"),
+    "no-flatten-after-fanout": (
+        {**_BUNDLE, "entry": [{"resource": []}]},
+        "fhir",
+        "usable id",
+    ),
     "usable-id": (
         {**_BUNDLE, "entry": [{"resource": {"id": False}}]},
         "fhir",
@@ -977,8 +986,18 @@ SEARCH_REFUSALS = {
     "total-equals": ({**_BUNDLE, "total": 2, "entry": [_P1]}, "fhir", "doesn't match"),
 }
 
+#: How a clause is removed: a raise becomes ``pass``; the flatten guard loses
+#: its condition.
+_MUTANT = {
+    "no-flatten-after-fanout": (
+        r'flatten = flatten and "\*" not in steps  # search-clause: no-flatten-after-fanout\n',
+        "flatten = flatten  # mutated\n",
+    ),
+}
 
-def _refuses(module, body, pack, message) -> bool:
+
+def _outcome(module, body, pack):
+    """("refused", message), ("accepted", ids), or ("crashed", error)."""
     from openadapt_flow.txplan.adapters import AdapterError
 
     class Adapter:
@@ -989,16 +1008,15 @@ def _refuses(module, body, pack, message) -> bool:
             )
 
     try:
-        module._search(Adapter(), pack, "m1", "id")
+        return "accepted", module._search(Adapter(), pack, "m1", "id")
     except AdapterError as exc:
-        return message in str(exc)
-    except Exception:  # noqa: BLE001 - another error is not this clause
-        return False
-    return False
+        return "refused", str(exc)
+    except Exception as exc:  # noqa: BLE001 - a crash is not acceptance
+        return "crashed", repr(exc)
 
 
 def test_each_search_clause_is_load_bearing() -> None:
-    """Mutation test: remove one clause at a time; its refusal must stop."""
+    """Mutation test: with one clause removed, its probe must be accepted."""
     import types
 
     from openadapt_flow.txplan import scoped as real
@@ -1006,23 +1024,28 @@ def test_each_search_clause_is_load_bearing() -> None:
     source = Path(real.__file__).read_text(encoding="utf-8")
     _, items, root, fhir = _search_packs()
     packs = {"items": items, "root": root, "fhir": fhir}
-    tags = set(re.findall(r"# search-clause: ([a-z-]+)", source))
+    tags = set(re.findall(r"# search-clause: ([a-z-]+)\n", source))
     assert tags == set(SEARCH_REFUSALS), tags ^ set(SEARCH_REFUSALS)
     for tag, (body, pack, message) in SEARCH_REFUSALS.items():
-        assert _refuses(real, body, packs[pack], message), tag
-        mutated = re.sub(
-            rf"raise AdapterError\((?:(?!raise AdapterError).)*?\)"
-            rf"  # search-clause: {tag}\n",
-            "pass  # mutated\n",
-            source,
-            flags=re.S,
+        kind, detail = _outcome(real, body, packs[pack])
+        assert kind == "refused" and message in detail, (tag, kind, detail)
+        pattern, replacement = _MUTANT.get(
+            tag,
+            (
+                rf"raise AdapterError\((?:(?!raise AdapterError).)*?\)"
+                rf"  # search-clause: {tag}\n",
+                "pass  # mutated\n",
+            ),
         )
+        mutated = re.sub(pattern, replacement, source, flags=re.S)
         assert mutated != source, tag
         module = types.ModuleType(f"scoped_without_{tag.replace('-', '_')}")
         module.__file__ = real.__file__
         exec(compile(mutated, real.__file__, "exec"), module.__dict__)
-        assert not _refuses(module, body, packs[pack], message), (
-            f"removing the {tag} clause leaves its case refused the same way"
+        kind, detail = _outcome(module, body, packs[pack])
+        assert kind == "accepted", (
+            f"with the {tag} clause removed its probe is {kind} ({detail}): "
+            "another check catches it, so this clause isn't the guard"
         )
 
 
@@ -1049,6 +1072,13 @@ def test_a_marker_search_parses_strictly_and_closed_by_default() -> None:
         {**_BUNDLE, "total": 1.0, "entry": [_P1]},
         {"resourceType": "OperationOutcome", "total": 0},
         {"resourceType": "Bundle", "type": "batch-response"},
+        {**_BUNDLE, "entry": [{"resource": []}]},  # one entry never reads empty
+        {**_BUNDLE, "total": 0, "entry": [{"resource": []}]},
+        {**_BUNDLE, "entry": [{"resource": [{"id": "a"}, {"id": "b"}]}]},
+        {**_BUNDLE, "link": [{"relation": "Next", "url": "u"}]},  # any case
+        {**_BUNDLE, "link": [{"relation": 1}]},
+        {**_BUNDLE, "link": "next"},
+        {**_BUNDLE, "link": [None]},
     ):
         with pytest.raises(AdapterError):
             _run_search(body, fhir)

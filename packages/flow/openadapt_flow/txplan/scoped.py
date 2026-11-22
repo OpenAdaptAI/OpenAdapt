@@ -272,16 +272,17 @@ def _usable_id(value: Any) -> bool:
     return (isinstance(value, str) and value != "") or isinstance(value, int)
 
 
-def _strict_items(got: Any, path: str) -> list[Mapping[str, Any]]:
+def _strict_items(got: Any, path: str) -> list[Any]:
     """The records at ``path`` in a search answer, parsed closed by default.
 
     ``path`` is dotted; ``*`` fans out over a list. Every step must exist:
-    a named step needs an object holding that key with a non-null value, a
-    ``*`` step needs a list, and each element must yield exactly one object.
-    A path that ends on a list yields its elements. Anything else raises, so
-    no shape can drop a record on the way to the id check."""
+    a named step needs an object holding that key with a non-null value, and
+    a ``*`` step needs a list. A path without ``*`` that ends on a list
+    yields its elements; after a ``*`` each element is one record, never a
+    list to flatten. The records are checked by the caller (usable ids)."""
+    steps = [p for p in path.split(".") if p] if path else []
     current: list[Any] = [got]
-    for step in [p for p in path.split(".") if p] if path else []:
+    for step in steps:
         nxt: list[Any] = []
         for value in current:
             if step == "*":
@@ -291,19 +292,47 @@ def _strict_items(got: Any, path: str) -> list[Mapping[str, Any]]:
                     )  # search-clause: fan-out-list
                 nxt.extend(value)
             else:
-                if not isinstance(value, Mapping) or value.get(step) is None:
+                found = value.get(step) if isinstance(value, Mapping) else None
+                if found is None:
                     raise AdapterError(
                         f"a marker search item has no {step}"
                     )  # search-clause: step-present
-                nxt.append(value[step])
+                else:
+                    nxt.append(found)
         current = nxt
-    if len(current) == 1 and isinstance(current[0], list):
+    flatten = len(current) == 1 and isinstance(current[0], list)
+    flatten = flatten and "*" not in steps  # search-clause: no-flatten-after-fanout
+    if flatten:
         current = current[0]
-    if not all(isinstance(x, Mapping) for x in current):
-        raise AdapterError(
-            "a marker search item is not an object"
-        )  # search-clause: leaf-object
     return current
+
+
+def _present(got: Any, spec: str) -> bool:
+    """Whether an ``absent`` path is present, resolved strictly.
+
+    ``name[key=value]`` (a next link) needs ``name`` to be absent, or a list
+    of objects whose ``key`` is a string; any other shape raises. The value
+    matches without regard to case. A plain dotted path uses ``pick``."""
+    from openadapt_flow.txplan.audit import _SELECT
+
+    sel = _SELECT.match(spec)
+    if not sel or not isinstance(got, Mapping):
+        return bool(pick(got, spec))
+    name, key, want = sel.groups()
+    entries = got.get(name)
+    if entries is None:
+        return False
+    if not isinstance(entries, list) or not all(
+        isinstance(x, Mapping) and isinstance(x.get(key), str) for x in entries
+    ):
+        raise AdapterError(
+            f"the marker search answer's {name} is malformed"
+        )  # search-clause: absent-shape
+    listed = entries if isinstance(entries, list) else []
+    return any(
+        isinstance(x, Mapping) and str(x.get(key)).casefold() == want.casefold()
+        for x in listed
+    )
 
 
 def _search(
@@ -317,15 +346,13 @@ def _search(
     when present, must be an int equal to the number of records. The items
     field may be absent only on an answer that reports ``total: 0`` or, for
     a pack that declares ``search_empty``, matches that shape. Anything else
-    raises, so no answer reads as "not found" unless it says so."""
+    raises, so no answer reads as "not found" unless it says so. Each check
+    is tagged ``# search-clause:`` and is the only one that catches its case
+    (``tests/test_txplan_scoped.py::test_each_search_clause_is_load_bearing``)."""
     if not scoped.search:
         return None
     _, got = _request(adapter, "GET", fill(scoped.search, {"marker": marker}))
     path = scoped.search_items
-    if path and not isinstance(got, Mapping):
-        raise AdapterError(
-            "the marker search did not return an object"
-        )  # search-clause: object-answer
     if not path and not isinstance(got, list):
         raise AdapterError(
             "the marker search did not return a list"
@@ -344,23 +371,24 @@ def _search(
                     f"the marker search answer has no {spec} {want}"
                 )  # search-clause: shape-equals
         for spec in shape.absent:
-            if pick(got, spec):
+            if _present(got, spec):
                 raise AdapterError(
                     f"the marker search answer has {spec}"
                 )  # search-clause: shape-absent
     head = path.split(".", 1)[0] if path else ""
-    if head and head not in got:
-        if total != 0 and shape is None:
+    if head and (not isinstance(got, Mapping) or head not in got):
+        if not isinstance(got, Mapping) or (total != 0 and shape is None):
             raise AdapterError(
                 f"the marker search has no {head}"
             )  # search-clause: items-field
-        records: list[Mapping[str, Any]] = []
+        records: list[Any] = []
     else:
         records = _strict_items(got, path)
-    ids = [r.get(id_field) for r in records]
+    ids = [r.get(id_field) if isinstance(r, Mapping) else None for r in records]
     if not all(_usable_id(i) for i in ids):
-        # An item without a usable id may be the write already landed: it
-        # never reads as absent, and every item counts toward a duplicate.
+        # An item without a usable id (or that isn't an object) may be the
+        # write already landed: it never reads as absent, and every item
+        # counts toward a duplicate.
         raise AdapterError(
             "a marker search item has no usable id"
         )  # search-clause: usable-id
