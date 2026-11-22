@@ -276,7 +276,12 @@ def _search(
     if scoped.search_items and not isinstance(got, Mapping):
         raise AdapterError("the marker search did not return an object")
     head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
-    if head and head not in got and got.get("total") != 0:
+    empty = scoped.search_empty
+    declared_empty = bool(empty) and any(
+        str(v) == str(empty.get("equals"))
+        for v in pick(got, str(empty.get("path", "")))
+    )
+    if head and head not in got and got.get("total") != 0 and not declared_empty:
         # Missing-evidence class: no results field is not an empty result,
         # unless the response says it matched nothing (total 0).
         raise AdapterError(f"the marker search has no {head}")

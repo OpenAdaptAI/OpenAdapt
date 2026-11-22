@@ -242,6 +242,11 @@ class ScopedCollection(_Closed):
     #: and where the matches are in its answer.
     search: Optional[str] = None
     search_items: str = ""
+    #: How an empty search answer looks when it leaves the items field out
+    #: (a FHIR searchset Bundle omits ``entry`` when nothing matched):
+    #: ``{"path": "resourceType", "equals": "Bundle"}``. Without it, a
+    #: missing items field is an error, never an empty result.
+    search_empty: Optional[dict[str, str]] = None
     #: A server-side guard on create, as one header (FHIR ``If-None-Exist``).
     condition_header: Optional[dict[str, str]] = None
     #: Fields that name the record a create makes (an issue's title, a

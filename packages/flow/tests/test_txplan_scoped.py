@@ -926,6 +926,17 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
     with pytest.raises(AdapterError):
         _search(Adapter({"error": "busy"}), scoped, "m1", "id")
     assert _search(Adapter({"total": 0}), scoped, "m1", "id") == []
+    # A FHIR searchset Bundle leaves entry out when nothing matched: empty
+    # only when the pack declares that shape.
+    bundle = {"resourceType": "Bundle", "type": "searchset"}
+    with pytest.raises(AdapterError):
+        _search(Adapter(bundle), scoped, "m1", "id")
+    fhir = scoped.model_copy(
+        update={"search_empty": {"path": "resourceType", "equals": "Bundle"}}
+    )
+    assert _search(Adapter(bundle), fhir, "m1", "id") == []
+    with pytest.raises(AdapterError):
+        _search(Adapter({"resourceType": "OperationOutcome"}), fhir, "m1", "id")
     assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
 
 

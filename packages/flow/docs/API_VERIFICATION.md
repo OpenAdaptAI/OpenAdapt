@@ -69,7 +69,10 @@ A collection's `scoped:` block gives:
 - how its records appear in the log (`audit_ref`, for example `Patient/{id}`),
 - the fields that identify the record a create makes (`identity`),
 - an optional idempotency marker with a search for it, or a conditional-create
-  header,
+  header (a search answer without its items field is an error, not an empty
+  result, unless it reports `total: 0` or matches the pack's `search_empty`
+  shape: a FHIR searchset Bundle leaves `entry` out when nothing matched, so
+  Medplum's pack declares `search_empty: {path: resourceType, equals: Bundle}`),
 - paths the server sets itself (`volatile`),
 - per-field codecs, and
 - `logged_fields`, when the log records only some updates (a feed that shows

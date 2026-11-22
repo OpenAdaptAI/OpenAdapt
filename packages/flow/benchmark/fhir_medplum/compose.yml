@@ -64,6 +64,11 @@ services:
       # The read-path verifier reads the audit trail (AuditEvent); Medplum
       # keeps it as resources only when asked to.
       MEDPLUM_SAVE_AUDIT_EVENTS: "true"
+      # A loopback lab, one client: the default per-user FHIR quota (50,000
+      # units a minute) is spent by audit-log reads within seconds, and a 429
+      # stops the bench. Raise it here only.
+      MEDPLUM_DEFAULT_FHIR_QUOTA: "5000000"
+      MEDPLUM_DEFAULT_RATE_LIMIT: "100000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r => r.ok || process.exit(1)).catch(() => process.exit(1))"]
       interval: 10s
