@@ -323,7 +323,7 @@ def test_verbose_adds_the_engine_detail(root):
 
 def test_finale_has_one_next_step_and_the_rest_behind_more(root):
     output, _ = _plain(FakeEngine(root))
-    finale = output[output.index("\nYour Seal: ") + 1 :].rstrip("\n").splitlines()
+    finale = output[output.index("\nYour receipt: ") + 1 :].rstrip("\n").splitlines()
     assert len(finale) <= 16, finale
     at = finale.index("Next: Give your agent this task as a tool")
     assert finale[at + 1] == (
@@ -345,9 +345,9 @@ def test_more_lists_every_other_next_step(root):
     joined = "\n".join(lines)
     assert "Try it on your own app: openadapt flow record --backend web" in joined
     assert (
-        "Check every Seal again: openadapt seal verify openadapt-quickstart" in joined
+        "Check every receipt again: openadapt verify openadapt-quickstart" in joined
     )
-    assert "Open your Seal (offline): openadapt-quickstart/run-1/seal.html" in joined
+    assert "Open your receipt (offline): openadapt-quickstart/run-1/seal.html" in joined
     assert "https://openadapt.ai/seals" in joined
 
 
@@ -364,7 +364,7 @@ def test_quickstart_more_prints_and_runs_nothing(tmp_path, monkeypatch):
         result = CliRunner().invoke(cli.main, ["quickstart", "--more"])
     assert result.exit_code == 0, result.output
     assert "claude mcp add openadapt --" in result.output
-    assert "seal verify openadapt-quickstart" in result.output
+    assert "openadapt verify openadapt-quickstart" in result.output
     assert "openadapt-quickstart/run-1/seal.html" in result.output
 
 
@@ -376,7 +376,7 @@ def test_no_break_skips_act_three(root):
     assert "page" not in engine.calls
     assert outcome.broken is None
     assert "[5/5]" not in output
-    assert "Your Seal: " in output
+    assert "Your receipt: " in output
 
 
 # ---------------------------------------------------------------------------
@@ -496,14 +496,14 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
     engine = FakeEngine(root)
     opened = []
     output, outcome = _plain(engine, open_page=lambda page: opened.append(page) or True)
-    finale = output[output.index("\nYour Seal: ") + 1 :].splitlines()
+    finale = output[output.index("\nYour receipt: ") + 1 :].splitlines()
     at = finale.index("  Open it: openadapt-quickstart/run-1/seal.html")
     assert finale[at + 1] == (
         "    opened in your browser; it checks the signature in your browser, "
         "offline; nothing is uploaded"
     )
     assert (
-        finale[at + 2] == "  Real Seals from OpenEMR runs: https://openadapt.ai/seals"
+        finale[at + 2] == "  Real receipts from OpenEMR runs: https://openadapt.ai/seals"
     )
     # The person's own Seal opens; the side-by-side page does not.
     assert opened == [root / "run-1" / "seal.html"]
@@ -511,7 +511,7 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
     assert outcome.seal_pages.broken == root / "run-broken" / "seal.html"
     assert "side by side: openadapt-quickstart/index.html\n" in output
     # The page's own command checks that run folder.
-    assert engine.seal_command == "openadapt seal verify openadapt-quickstart/run-1"
+    assert engine.seal_command == "openadapt verify openadapt-quickstart/run-1"
 
 
 def test_a_seal_page_that_fails_leaves_the_seal_and_no_page_line(root):
@@ -744,7 +744,7 @@ def test_terminal_view_tells_the_story_with_boxes_and_one_next_step(root):
     assert "A screen-trusting bot  ✓ Done" in text
     assert "■ Stopped. Not marked done." in text
     assert "a person checks the record before anything is retried" in text
-    assert "◆ Your Seal" in text and "●─●─●─●─●─◆" in text
+    assert "◆ Your receipt" in text and "●─●─●─●─●─◆" in text
     assert "claude mcp add openadapt -- openadapt agent serve --allow-run" in text
     assert text.count("Next  ") == 1
     assert "flow record" not in text
@@ -752,10 +752,22 @@ def test_terminal_view_tells_the_story_with_boxes_and_one_next_step(root):
 
 
 def test_terminal_view_links_the_seal_page(root):
-    output = _rich(root, {})
+    # A terminal with OSC 8 hyperlinks gets a link that shows the short path.
+    output = _rich(root, {"TERM_PROGRAM": "WezTerm"})
     uri = (root / "run-1" / "seal.html").resolve().as_uri()
     assert "\x1b]8;id=" in output and uri in output
     assert "https://openadapt.ai/seals" in output
+
+
+@pytest.mark.parametrize("width", [60, 110])
+def test_terminal_without_hyperlinks_prints_the_whole_file_address(root, width):
+    """Terminal.app makes plain file:// addresses clickable, not OSC 8 links."""
+
+    output = _rich(root, {"TERM_PROGRAM": "Apple_Terminal"}, width=width)
+    uri = (root / "run-1" / "seal.html").resolve().as_uri()
+    assert "\x1b]8;" not in output
+    # On one line, never broken, so the whole address is one link.
+    assert any(uri in line for line in _visible(output).splitlines())
 
 
 def test_narrow_terminal_stacks_and_never_boxes_a_wrapped_command(root):
@@ -764,7 +776,11 @@ def test_narrow_terminal_stacks_and_never_boxes_a_wrapped_command(root):
     # Only the command is left for the terminal to wrap, so a copy of it
     # carries no border characters.
     wide = [line for line in lines if len(line) > 60]
-    assert wide == ["› claude mcp add openadapt -- openadapt agent serve --allow-run"]
+    seal = (root / "run-1" / "seal.html").resolve().as_uri()
+    assert wide == [
+        f"Open it  {seal}",
+        "› claude mcp add openadapt -- openadapt agent serve --allow-run",
+    ]
     # The screen and the record stack: no line holds both boxes.
     assert not any("The screen" in line and "The database" in line for line in lines)
     assert "› claude mcp add openadapt -- openadapt agent serve --allow-run" in output
@@ -781,7 +797,7 @@ def test_the_seal_card_reads_the_runs_receipt(root):
     (run / "receipt.json").write_text(json.dumps(RECEIPT))
     (run / "seal.json").write_text(json.dumps(SEAL))
     plain, _ = _plain(FakeEngine(root))
-    assert "Your Seal: Saved and checked" in plain
+    assert "Your receipt: Saved and checked" in plain
     assert "6 of 6 steps · 2 of 2 record checks · 0 model calls" in plain
     assert "ed25519 over report sha256 6dd4a7f2d1ea" in plain
     assert "VERIFIED" not in plain
@@ -819,22 +835,46 @@ SEAL = {
 
 
 @pytest.mark.parametrize(
-    ("environ", "marker"),
+    ("protocol", "marker"),
     [
-        ({"TERM_PROGRAM": "iTerm.app"}, "\x1b]1337;File=inline=1;"),
-        ({"TERM_PROGRAM": "WezTerm"}, "\x1b]1337;File=inline=1;"),
-        ({"KITTY_WINDOW_ID": "1", "TERM": "xterm-kitty"}, "\x1b_Ga=T,f=100"),
-        ({"TERM_PROGRAM": "ghostty"}, "\x1b_Ga=T,f=100"),
+        ("iterm2", "\x1b]1337;File=inline=1;"),
+        ("kitty", "\x1b_Ga=T,f=100"),
     ],
 )
-def test_terminal_view_draws_the_screenshot_where_supported(root, environ, marker):
+def test_terminal_view_draws_the_screenshot_where_supported(root, protocol, marker):
+    root.mkdir()
+    shot = _png(root / "shot.png", 1280, 800)
+    environ = {"OPENADAPT_INLINE_IMAGES": protocol}
+    output = _rich(root, environ, broken={"screenshot": shot})
+    assert marker in output
+    # The text boxes come first in every terminal; the screenshot is extra.
+    visible = _visible(output)
+    assert "╭─ The screen" in visible and "The database" in visible
+    assert visible.index("╭─ The screen") < visible.index("The screen's screenshot")
+
+
+@pytest.mark.parametrize(
+    "environ",
+    [
+        {"TERM_PROGRAM": "Apple_Terminal"},
+        {"TERM_PROGRAM": "WezTerm"},
+        {"TERM_PROGRAM": "iTerm.app"},
+        {"TERM_PROGRAM": "ghostty"},
+    ],
+)
+def test_terminal_view_shows_the_screen_as_text_without_a_confirmed_protocol(
+    root, environ
+):
+    """No image is drawn on an environment guess: a stand-in stream is never
+    asked, so every terminal gets the text boxes and no reserved rows."""
+
     root.mkdir()
     shot = _png(root / "shot.png", 1280, 800)
     output = _rich(root, environ, broken={"screenshot": shot})
-    assert marker in output
-    assert "The database" in output
-    # The text boxes are the fallback, not drawn as well.
-    assert "╭─ The screen" not in _visible(output)
+    assert "\x1b]1337;" not in output and "\x1b_G" not in output
+    visible = _visible(output)
+    assert "╭─ The screen" in visible and "The database" in visible
+    assert "The screen's screenshot" not in visible
 
 
 def test_terminal_view_falls_back_when_the_screenshot_is_missing(root):
@@ -910,7 +950,9 @@ def test_no_key_is_created_under_the_opt_out(root, monkeypatch, tmp_path):
     [
         ({"TERM_PROGRAM": "iTerm.app"}, True, ITERM2),
         ({"LC_TERMINAL": "iTerm2"}, True, ITERM2),
-        ({"TERM_PROGRAM": "WezTerm"}, True, ITERM2),
+        # WezTerm drew blank rows for the iTerm2 protocol: text unless asked.
+        ({"TERM_PROGRAM": "WezTerm"}, True, None),
+        ({"TERM_PROGRAM": "WezTerm", "OPENADAPT_INLINE_IMAGES": "iterm2"}, True, ITERM2),
         ({"KITTY_WINDOW_ID": "3"}, True, KITTY),
         ({"TERM": "xterm-kitty"}, True, KITTY),
         ({"TERM_PROGRAM": "ghostty"}, True, KITTY),
@@ -1022,7 +1064,7 @@ def test_uvx_spelling_reaches_every_printed_command(root, monkeypatch):
     steps = next_steps(cli._hint, cli._shell_quote, True)(outcome)
     py = f"{sys.version_info[0]}.{sys.version_info[1]}"
     for command in (steps.verify, steps.record, steps.agent):
-        assert command.startswith(f"uvx --python {py} openadapt "), command
+        assert command.startswith(f"uvx --python {py} openadapt@latest "), command
 
 
 def test_every_printed_command_answers_help_in_a_fresh_environment(tmp_path):

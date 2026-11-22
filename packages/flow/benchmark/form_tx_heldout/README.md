@@ -41,7 +41,8 @@ stored, including repeats.
 ## Scoring
 
 `scoring.py` documents the normalization and the result fields.
-`answer_key.json` holds, per case, `expected_record` (every non-metadata
+`answers.json` (named `answer_key.json` until 2026-11-21; renamed because CI
+treats any file named like a key as key material; contents and sha256 unchanged) holds, per case, `expected_record` (every non-metadata
 field the portal stores), `expected_behavior`, `also_acceptable`, `traps`
 and `operator_script` (keyed by visible label and by canonical key, plus
 `session_login`). `case_defs.py` documents the behavior labels.

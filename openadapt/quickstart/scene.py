@@ -104,6 +104,8 @@ class Scene:
             return broken.screen_text
         if self.screen_observed(broken):
             return self.screen_default
+        if getattr(broken, "not_ready", False):
+            return "never reached: the run stopped before its first click"
         return self.screen_unread
 
     def screen_line(self, broken: "BreakFacts") -> str:
@@ -125,6 +127,14 @@ class Scene:
     def why_line(self, broken: "BreakFacts") -> str:
         if not broken.stopped:
             return "OpenAdapt did not stop. Treat this build as broken."
+        if getattr(broken, "not_ready", False) and not broken.stop_attributed:
+            # Stopped before the first click: say why in plain words rather
+            # than that this act's check didn't run.
+            return getattr(broken, "explanation", "") or (
+                "OpenAdapt stopped before its first click because the screen "
+                "never finished drawing, so this run doesn't reach the save. "
+                "Nothing was saved."
+            )
         if not broken.stop_attributed:
             if broken.new_records:
                 return (

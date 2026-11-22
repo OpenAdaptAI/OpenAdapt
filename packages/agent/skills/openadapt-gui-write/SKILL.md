@@ -1,6 +1,6 @@
 ---
 name: openadapt-gui-write
-description: "Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved."
+description: "Verified local desktop & browser automation with read-back checks and signed receipts. Zero egress."
 ---
 
 # OpenAdapt: enter it in the app and check that it saved

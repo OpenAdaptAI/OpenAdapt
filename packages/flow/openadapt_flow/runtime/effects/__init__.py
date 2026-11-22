@@ -18,9 +18,9 @@ Public surface:
   :class:`SeparateSessionReadbackVerifier` reads the saved record from the
   application's own record page in a separately signed-in, read-only
   browser session, for teams with no API or database access.
-- Verifiers: :class:`RestRecordVerifier` (JSON REST SoR, e.g. MockMed
-  ``/api/db``), :class:`GraphQLRecordVerifier` (read-only GraphQL query),
-  :class:`FhirEffectVerifier` (OpenEMR FHIR R4, primary),
+- Verifiers: :class:`RestRecordVerifier` (JSON REST SoR),
+  :class:`GraphQLRecordVerifier` (read-only GraphQL query),
+  :class:`FhirEffectVerifier` (FHIR R4, primary),
   :class:`SqlRecordVerifier` (read-only SQL, enforced whitelist),
   :class:`FileArrivalVerifier` (file / SFTP arrival),
   :class:`MaildirDeliveryVerifier` (maildir / SMTP-capture email delivery),
@@ -35,7 +35,7 @@ Public surface:
   :class:`RedactionPolicy` evidence minimization, and the customer plugin
   seam (:func:`register_verifier_factory` / the
   ``openadapt_flow.effect_verifiers`` entry-point group).
-- SQL table-delta audit (promoted from the Frappe Lending reference matrix):
+- SQL table-delta audit (exact per-table row-delta verification):
   :func:`capture_table_counts`, :func:`audit_table_deltas`.
 - Secret-isolated auth for declarative configs: :class:`AuthRef`, and
   :class:`ResolvedSecrets` for a plugin record check's ``secret_env`` slots.

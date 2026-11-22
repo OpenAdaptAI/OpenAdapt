@@ -759,7 +759,7 @@ Where single-tab and single-backend were assumed or enforced:
 | Identity gates | `replayer.py:12343` (`_verify_identity`) and `runtime/identity.py` | surface-agnostic: they read `self.backend`, so routing that attribute is enough |
 | Effect gates | `replayer.py:7874` (`_verify_effects`) | surface-agnostic except the cached read-back verifier above |
 | Qualification | `openadapt_flow/compiler/qualification_pins.py:199` | application identity is proposed from one `workflow.surface` |
-| | `openadapt_flow/qualification.py:1201` | read-only action classes are WAIT and SCROLL only |
+| | `openadapt_flow/qualification/__init__.py` (`_inferred_action_classification`) | read-only action classes are WAIT and SCROLL only |
 | CLI | `openadapt_flow/__main__.py:2118-2120`, `:3101`, `:3440` | replay launches one page |
 | Docs | `README.md:267`, `docs/PRODUCTION.md:88-96`, `docs/LIMITS.md:406` | "one bundle drives one surface"; compose separate bundles instead |
 

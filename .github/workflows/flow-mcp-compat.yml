@@ -61,14 +61,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
       - name: Install locked base and hash-pinned genuine SDK
         run: |
           uv venv --python 3.12 .venv
           .venv/bin/python scripts/ci/locked_install.py \
             --lock 'packages/flow[dev,agent,browser,langgraph]' \
             --editable packages/types --editable packages/flow
-          uv pip install --python .venv/bin/python --index-url https://pypi.org/simple \
+          uv pip install --python .venv/bin/python --no-config --index-url https://pypi.org/simple \
             --require-hashes --only-binary :all: \
             --requirement scripts/ci/mcp-${{ matrix.mcp }}-py312-linux.requirements
           uv pip check --python .venv/bin/python

@@ -1,4 +1,8 @@
-"""Independent post-commit summary/search read-back judge for ``form_tx``.
+"""Post-commit summary/search read-back judge for ``form_tx``.
+
+The judge reads through the surface of the session that did the work
+(``acting_session_reread``). It is not an independent check: only a read by a
+fresh, separate session would be.
 
 Verifies committed portal state against the authoritative expected fact map
 (grounded ``InputDossier`` facts overlaid with verified human co-pilot
@@ -39,13 +43,20 @@ from openadapt_flow.form_tx.types import (
     ProvenanceKind,
     ReadbackFieldVerdict,
     ReadbackStatus,
+    Subject,
     SummaryVerdict,
     WizardScreenSpec,
+    read_subjects,
+    subjects_digest,
+    uncovered_subject_verdicts,
 )
 
 __all__ = [
+    "Subject",
     "SummaryJudge",
     "build_authoritative_fact_map",
+    "read_subjects",
+    "uncovered_subject_verdicts",
 ]
 
 _OVERRIDE_PROVENANCE: dict[HumanDecisionAction, ProvenanceKind] = {
@@ -125,6 +136,11 @@ def _observed_control_matches(
     ctrl: ObservedControl,
     binding: FieldBindingSpec,
 ) -> bool:
+    # partial-match-as-match: a radio option matches only when it is selected.
+    if (
+        ctrl.input_type.casefold() == "radio" or ctrl.role.casefold() == "radio"
+    ) and ctrl.checked is not True:
+        return False
     if (
         binding.control_kind == ControlKind.CHECKBOX
         and not ctrl.current_value.strip()
@@ -173,7 +189,7 @@ def _extract_present_outputs(
 
 
 class SummaryJudge:
-    """Independent read-back verifier for committed form transactions."""
+    """Read-back verifier for committed form transactions (acting session)."""
 
     def __init__(
         self,
@@ -244,7 +260,7 @@ class SummaryJudge:
         pre_outputs, _ = _extract_present_outputs(snapshot, summary_check.outputs)
         seeded_outputs.update(pre_outputs)
 
-        # Navigate to independent summary/search route if configured and not already there.
+        # Navigate to the summary/search route if configured and not already there.
         if summary_check.summary_url_path and not _url_matches(
             snapshot.url_origin_and_path, summary_check.summary_url_path
         ):
@@ -460,6 +476,18 @@ class SummaryJudge:
                             f"has no expected value to compare",
                         )
                     )
+                elif binding.dossier_key in written_by_key:
+                    # The run wrote this field but there is no value to
+                    # compare: it gets a verdict, never silence.
+                    verdicts.append(
+                        _not_checked(
+                            binding.dossier_key,
+                            prov,
+                            f"{binding.dossier_key!r} was written with no expected "
+                            "value, and the summary shows it empty"
+                            + _where(written_by_key[binding.dossier_key]),
+                        )
+                    )
                 continue
 
             if observed_ctrl is None:
@@ -493,6 +521,26 @@ class SummaryJudge:
                         f"under codec {binding.codec.kind.value!r}",
                     )
                 )
+
+        observations: dict[str, set[str]] = {}
+        for rb in summary_check.field_readbacks:
+            try:
+                oc = match_anchor_in_snapshot(
+                    rb.anchor, snapshot, include_readonly=True
+                )
+            except AmbiguousAnchorError:
+                continue
+            if oc is not None:
+                observations.setdefault(rb.dossier_key, set()).add(oc.dom_selector)
+        evaluated_subjects = read_subjects(writes, active_resolutions)
+        verdicts.extend(
+            uncovered_subject_verdicts(
+                evaluated_subjects,
+                verdicts,
+                _codec_for,
+                {k: len(v) for k, v in observations.items()},
+            )
+        )
 
         # A value that came only from a popup is no better checked than the
         # popup inputs that produced it. If one of those inputs is not
@@ -617,6 +665,8 @@ class SummaryJudge:
             field_verdicts=tuple(verdicts),
             extracted_outputs=final_outputs,
             missing_required_outputs=tuple(missing_required),
+            observations_per_key={k: len(v) for k, v in observations.items()},
+            ledger_digest=subjects_digest(evaluated_subjects),
         )
 
     verify = evaluate
