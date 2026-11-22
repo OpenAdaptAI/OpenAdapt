@@ -327,7 +327,7 @@ def build(seed: int, count: int) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--count", type=int, default=50)
     parser.add_argument("--out", required=True)
