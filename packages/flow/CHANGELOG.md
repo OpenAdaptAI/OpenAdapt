@@ -56,6 +56,27 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Fixes
+
+- File, document, document-hash and email checks no longer claim
+  `system_of_record` (tier 1) for every file. Their strength now follows who
+  produced the artifact, set by the new `effects.artifact_producer`:
+  `acting_session` and the default, `unknown`, are at most `same_screen`;
+  `separate_session` is at most `separate_session`; `system_of_record` keeps
+  tier 1. A store that overlaps `effects.acting_roots`, the user's Downloads
+  folder or a Playwright download folder is graded as the acting session's.
+  Under a declared `separate_session` or `system_of_record` producer, a scan
+  that lists a file in a Playwright download folder beneath the store, or a
+  file whose real path leaves the store, is refused:
+  the verdict is INDETERMINATE and names why. Each verdict records the
+  producer, and whether it was declared or observed, in
+  `read_evidence.provenance`. Breaking: a deployment that relied on the old
+  tier 1 for these kinds must now declare `artifact_producer:
+  system_of_record` (one line in its `effects:` or `verifier:` section,
+  including a `record --verify` file); until it does, runs that need a
+  separate-session or system-of-record check are not `VERIFIED`. Verifier
+  identities of configs that leave both new fields unset are unchanged.
+
 ## v3.4.0 (2026-11-21)
 
 ### Features

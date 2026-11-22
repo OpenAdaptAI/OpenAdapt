@@ -642,6 +642,7 @@ improvising or retrying when something is off.
 | Stop before the effect instead of improvising (`HALTED_BEFORE_EFFECT`) | Released | Real app and synthetic | `runtime/replayer.py` |
 | Never retry an uncertain save (`RECONCILIATION_REQUIRED`) | Released | Synthetic (fault server) | [VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md) |
 | One check-level scale, 0 to 5, from "unchecked" to "counterparty confirmed" | Released | Unit tests | `openadapt_flow/check_level.py` |
+| Grade a file, PDF or email check by who produced it: a file the acting session wrote or downloaded, or one with no declared producer, is at most `same_screen`; one a separate session fetched is at most `separate_session`; only a declared `system_of_record` producer reaches `system_of_record`. A store that overlaps the acting session's folders (named ones, the user's Downloads, a Playwright download folder) is graded as the acting session's whatever is declared. Under a strong declared producer, a scan that reads a file in a browser download folder beneath the store, or a symlink out of it, is refused as INDETERMINATE. The verdict's `read_evidence.provenance` names the producer and whether it was declared or observed | On main | Unit tests through each of the four readers (mixed store, symlink, system-owned positive case); a PDF downloaded by headless Chromium from a loopback app, the same bytes from a separate browser context and from the app's store, and a headless download landing beneath a broader store | `runtime/effects/artifact_provenance.py`, `effects.artifact_producer`, `packages/flow/tests/test_effect_artifact_provenance.py` |
 | Check a value where a careful person would look again: an effect location (`openadapt.effect-location/v1`) is pack data for one place an intended value shows (path and start condition, locator, expected value, codec, expected count, optional baseline). One summary row can cover two values ("Name (DOB)"), and a date can be split over three fields. Every planned value is `held`, `refuted` or `not_checked`; a place that can't be reached, found or read is `not_checked`. The check level follows the start condition (a new session is level 3), and the engine holds no application words | PR [#2500](https://github.com/OpenAdaptAI/OpenAdapt/pull/2500), not yet used by a runner | Unit tests and the fail-open harness (synthetic readings only) | `openadapt_flow/effect_location/`, [EFFECT_LOCATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_LOCATION.md) |
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md) |
 | Judge an "ensure the record exists" write (found, created once with every value, or needs review) through a FHIR server's read path only: searches, AuditEvent and `_history`, never the database; the coverage claim names that read path. An agent's own correction of the record it created counts as one write when the audit trail and history show only that agent, no other reader, and the same record in every version | Released ([#1640](https://github.com/OpenAdaptAI/OpenAdapt/pull/1640), corrections [#1655](https://github.com/OpenAdaptAI/OpenAdapt/pull/1655)) | Real app (Medplum 5.2.8; three blind fault suites: 17/18, 17/20, 19/20; no fault passed in the last two. Corrections, on 15 blind cases and the 37 public ones: false stops 8 to 2 and 9 to 4 for Claude, no harm passed that the old rule caught) | `openadapt_flow/ensure_record.py`, [ENSURE_RECORD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ENSURE_RECORD.md) |
@@ -2114,9 +2115,9 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's own screens read in a separate signed-in
-session (tier 2): a record page in a separate browser (`ui_readback`), a
-relaunched desktop app or a second RDP session (`fresh_session`, tested on
+or a file the system itself wrote; tier 1) or the application's own screens
+read in a separate signed-in session (tier 2): a record page in a separate
+browser (`ui_readback`), a relaunched desktop app or a second RDP session (`fresh_session`, tested on
 mocks only), or a look-up in a separate desktop, RDP or Citrix session
 (`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
 the application, so none is a system-of-record read, and each has its own
@@ -2140,6 +2141,14 @@ never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
 Production evidence; a live ICA/HDX session is a deployment-specific
 qualification. Wire the independent read before paying a sprint for a
 `VERIFIED` outcome.
+
+**A file's producer is declared, not proven.** File, PDF and email checks
+reach tier 1 or 2 only when the configuration declares who wrote the store
+(`artifact_producer`). Flow lowers that claim when it sees a browser download
+folder or a declared acting folder in or around the store, or a symlink out
+of it. It cannot tell a file the acting session saved straight into the store
+under an ordinary name from one the system wrote. The evidence then says
+`producer_source: declared`: the level rests on the configuration.
 
 The reopen itself has limits. It earns the `reopened` level only when its
 navigation contains a recognized state reset; without one it is
