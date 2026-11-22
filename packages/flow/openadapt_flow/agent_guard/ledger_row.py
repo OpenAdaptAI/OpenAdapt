@@ -216,14 +216,23 @@ def _approval_times(guard: Any) -> tuple[Optional[str], Optional[str]]:
     request = getattr(guard, "_request", None) if guard is not None else None
     if request is None:
         return None, None
+    if getattr(guard, "_approver", None) is None:
+        # The guard accepted no answer (none came, or it was refused): the
+        # row has no decision time, whatever file is on disk.
+        return request.created_at, None
     decided = None
     try:
-        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
-
-        answer = ItemApprovalStore(guard.dir, key_dir=guard.owner.key_dir).read_answer(
-            request.request_id
+        from openadapt_flow.approval_mode.item_approval import (
+            ItemApprovalStore,
+            answer_refusal,
         )
-        decided = answer.answered_at if answer is not None else None
+
+        store = ItemApprovalStore(guard.dir, key_dir=guard.owner.key_dir)
+        answer = store.read_answer(request.request_id)
+        if answer is not None and (
+            answer_refusal(request, answer, policy=store.context()) is None
+        ):
+            decided = answer.answered_at
     except Exception:  # noqa: BLE001 - an unreadable answer: time unknown
         decided = None
     return request.created_at, decided

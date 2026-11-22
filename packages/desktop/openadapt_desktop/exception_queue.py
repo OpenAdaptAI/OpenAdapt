@@ -1,6 +1,7 @@
 """Exception cards from any agent's run, in the stop queue.
 
-Flow's exception registry (``openadapt-flow exceptions``) keeps one folder per
+Requires Flow with the exception registry (#2494): Flow's exception registry
+(``openadapt-flow exceptions``) keeps one folder per
 run under ``$OPENADAPT_HOME/exceptions`` (``~/.openadapt/exceptions`` by
 default). A run that hits a second-factor prompt, an unexpected dialog, a
 sign-in page mid-task, a stall, a possible duplicate, a record it can't tell
@@ -10,8 +11,9 @@ apart, or a task it can't finish writes a ``card-<id>.json`` and waits for an
 
 Desktop pins an exact Flow release, so this module reads the files as plain
 JSON and checks them itself: the schema id, the closed kind and answer sets,
-the card id (the digest of the card), a regular 0600-style file under the
-size cap. A card that fails any check isn't shown.
+the card id (the digest of the card), and a regular file, not a link, owned by
+this user, readable by no one else (no group or other permission bits), under
+the size cap. A card that fails any check isn't shown.
 
 An answer is the closed answer signed with the approver key Desktop already
 uses for the stop queue (Touch ID on a Mac, the portal's key for a phone).
@@ -82,6 +84,8 @@ def _read(path: Path) -> bytes | None:
             return None
         if hasattr(os, "getuid") and info.st_uid != os.getuid():
             return None
+        if os.name == "posix" and info.st_mode & 0o077:
+            return None  # another user could read or change it
         return os.read(fd, _MAX_BYTES + 1)[:_MAX_BYTES]
     finally:
         os.close(fd)
@@ -157,6 +161,8 @@ def open_cards(root: Path | None = None) -> list[dict[str, Any]]:
                 cards.append(card)
             if len(cards) >= MAX_CARDS:
                 break
+        if len(cards) >= MAX_CARDS:
+            break
     return sorted(cards, key=lambda c: str(c.get("opened_at")))
 
 

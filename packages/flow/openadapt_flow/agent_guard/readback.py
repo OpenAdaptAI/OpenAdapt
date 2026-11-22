@@ -28,6 +28,7 @@ mapping and the task's parameters and must return a provider.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Protocol, Sequence
 
 from openadapt_flow.guard import (
@@ -201,6 +202,35 @@ class VerifyRunReadback:
         )
 
 
+#: ``GuardResult.outcome`` (and ``guard.json``'s ``outcome``) when the guard's
+#: verdict overrides the verify-run receipt's.
+OVERRIDDEN = "overridden"
+#: Written next to a receipt the guard overrode: ``<receipt>.override.json``.
+OVERRIDE_SCHEMA = "openadapt.guard-receipt-override/v1"
+
+
+def _mark_overridden(
+    receipt: Path, receipt_outcome: str, verdict: GuardVerdict, reason: Optional[str]
+) -> None:
+    import hashlib
+
+    try:
+        digest = "sha256:" + hashlib.sha256(receipt.read_bytes()).hexdigest()
+    except OSError:
+        digest = None
+    _write_json(
+        receipt.with_name(receipt.stem + ".override.json"),
+        {
+            "schema": OVERRIDE_SCHEMA,
+            "receipt": receipt.name,
+            "receipt_sha256": digest,
+            "receipt_outcome": receipt_outcome,
+            "guard_verdict": verdict.value,
+            "reason": reason,
+        },
+    )
+
+
 def settle(guard: Guard, result: ReadbackResult, verdict: GuardVerdict) -> GuardResult:
     """Record the final verdict on the guard and its task ledger.
 
@@ -219,14 +249,23 @@ def settle(guard: Guard, result: ReadbackResult, verdict: GuardVerdict) -> Guard
         reason = f"readback:tier_{result.tier}"
     else:
         reason = evidence.get("reason")
+    receipt_path = (
+        prior.receipt_path if prior is not None else evidence.get("receipt_path")
+    )
+    outcome = prior.outcome if prior is not None else evidence.get("outcome")
+    overridden = prior is not None or verdict is not result.verdict
+    if overridden and receipt_path and outcome is not None:
+        # The receipt on disk keeps the outcome verify-run signed; the guard's
+        # stricter verdict is written beside it, and the guard's own record
+        # says the receipt was overridden, so no file reads as verified alone.
+        _mark_overridden(Path(receipt_path), outcome, verdict, reason)
+        outcome = OVERRIDDEN
     final = GuardResult(
         verdict=verdict,
         guard_id=guard.guard_id,
         task_id=guard.task.task_id,
-        outcome=prior.outcome if prior is not None else evidence.get("outcome"),
-        receipt_path=(
-            prior.receipt_path if prior is not None else evidence.get("receipt_path")
-        ),
+        outcome=outcome,
+        receipt_path=receipt_path,
         receipt=prior.receipt if prior is not None else None,
         reason=reason,
     )

@@ -468,3 +468,40 @@ def test_no_values_and_no_screenshot_offers_no_card(
     assert not list((tmp_path / "state").rglob("item-approval/request-*.json"))
     row = json.loads((tmp_path / ROW_FILENAME).read_text())
     assert (row["verdict"], row["verdict_reason"]) == ("ESCALATED", "values_unread")
+
+
+def test_a_refused_answer_gives_no_decision_time(sor, tmp_path: Path, approver) -> None:
+    """An answer the guard refuses (bound to another request) is not a
+    decision: the row has no approval_decided_at and no approver."""
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalStore,
+        make_answer,
+    )
+    from openadapt_flow.approval_mode.model import ITEM_APPROVAL_ROUTE
+
+    page = _Page(FakeAgent(sor[0]), "p1")
+    guard = _guard(sor, tmp_path, page, approval="each_item")
+    page.save()
+    g = guard._waiting[0]
+    store = ItemApprovalStore(g.dir)
+    answer = make_answer(
+        store.read_request(g._request.request_id),
+        decision="approve",
+        decided_by="human",
+        route=ITEM_APPROVAL_ROUTE,
+        approver_id=None,
+        auth_method="none",
+        policy=store.context(),
+        signer=approver[1],
+    )
+    store.write_answer(
+        answer.model_copy(update={"request_sha256": "sha256:" + "0" * 64})
+    )
+    guard.poll()
+    assert guard.summary.blocked, guard.summary
+    row = json.loads((tmp_path / ROW_FILENAME).read_text())
+    assert row["approval_opened_at"] == g._request.created_at
+    assert row["approval_decided_at"] is None
+    assert row["approver_kind"] == "none"
+    assert page.sent == []

@@ -8,11 +8,16 @@ branch, ``_READ_FORM_VALUES``): ``input``, ``select``, ``textarea`` and
 ``contenteditable`` values in document order, leaving out password, hidden,
 file and button inputs. It also keeps each control's label (its ``<label>``,
 ``aria-label``, ``aria-labelledby`` or placeholder), id and name, so a value
-can be matched to a task field by name. Nothing here names an app.
+can be matched to a task field by name, and whether the page renders it: a
+control inside ``hidden``, ``aria-hidden`` or ``inert``, failing
+``checkVisibility()``, with ``display: none``, ``visibility`` other than
+visible, zero opacity, or an empty box is not on screen. A control scrolled
+out of the viewport still is. Nothing here names an app.
 
 :func:`match_fields` gives a task field a screen value only when every
 control whose id, name or label is that field's name (or the record field
-the effect contract binds it to) shows the same value. No match, or two
+the effect contract binds it to) shows the same value, counting only
+rendered controls. No match, a match only by hidden controls, or two
 controls that disagree, leaves the field unread on screen.
 
 Raw values: kept in memory and in 0600 files only, like the card's others.
@@ -53,6 +58,19 @@ READ_CONTROLS_JS = """
     }
     return clean(el.getAttribute('placeholder'));
   };
+  const shown = (el) => {
+    if (el.closest('[hidden], [aria-hidden="true"], [inert]')) { return false; }
+    if (typeof el.checkVisibility === 'function'
+        && !el.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})) {
+      return false;
+    }
+    const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility !== 'visible' || Number(st.opacity) === 0) {
+      return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
   for (const el of document.querySelectorAll('input, select, textarea, [contenteditable]')) {
     if (el.closest('#' + %(notice)s)) { continue; }
     const tag = el.tagName.toLowerCase();
@@ -78,14 +96,15 @@ READ_CONTROLS_JS = """
       continue;
     }
     out.push({key: base + ':' + seen[base], id: el.id || '',
-      name: el.getAttribute('name') || '', label: labelOf(el), value: value});
+      name: el.getAttribute('name') || '', label: labelOf(el), value: value,
+      visible: shown(el)});
   }
   return out;
 }
 """
 
 
-def controls_from(raw: Any) -> Optional[list[dict[str, str]]]:
+def controls_from(raw: Any) -> Optional[list[dict[str, Any]]]:
     """The controls :data:`READ_CONTROLS_JS` returned, or None if malformed."""
 
     if not isinstance(raw, list):
@@ -94,12 +113,13 @@ def controls_from(raw: Any) -> Optional[list[dict[str, str]]]:
     for item in raw:
         if not isinstance(item, Mapping):
             return None
-        out.append(
-            {
-                k: ("" if item.get(k) is None else str(item.get(k)))
-                for k in ("key", "id", "name", "label", "value")
-            }
-        )
+        control: dict[str, Any] = {
+            k: ("" if item.get(k) is None else str(item.get(k)))
+            for k in ("key", "id", "name", "label", "value")
+        }
+        # Only a control the page renders is "on screen"; unknown is hidden.
+        control["visible"] = item.get("visible") is True
+        out.append(control)
     return out
 
 
@@ -108,7 +128,7 @@ def _norm(text: Any) -> str:
 
 
 def match_fields(
-    controls: Optional[Sequence[Mapping[str, str]]],
+    controls: Optional[Sequence[Mapping[str, Any]]],
     fields: Sequence[str],
     bound: Mapping[str, str] = {},  # noqa: B006 - read only
 ) -> dict[str, str]:
@@ -123,7 +143,9 @@ def match_fields(
         values = {
             str(c.get("value") or "")[:_MAX_VALUE]
             for c in controls
-            if wanted
+            # A control the page doesn't render is not what a person saw.
+            if c.get("visible") is True
+            and wanted
             & {_norm(c.get("id")), _norm(c.get("name")), _norm(c.get("label"))}
         }
         if len(values) == 1:

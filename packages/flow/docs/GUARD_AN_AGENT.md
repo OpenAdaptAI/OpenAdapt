@@ -225,14 +225,19 @@ writes neither file.
 By default the guard reads the save back through `verify-run`, then reads the
 record once more through the same reader to fill the diff. A field the
 read-back shows with another value than the task's makes the verdict
-`REFUTED`, whatever else the read-back found.
+`REFUTED`, whatever else the read-back found. When that overrides a
+`verify-run` receipt that says verified, the receipt keeps the outcome it
+signed, `effect-receipt.override.json` beside it records the guard's verdict
+and the receipt's digest, and `guard.json` says `outcome: overridden`.
 
 `readback_provider: <kind>` in `guard.yaml` names another reader, registered
 with `register_verifier_factory("readback:<kind>", factory)`. Only a reader
 that doesn't use the app's screen (`independent_readback`) can make a save
 `VERIFIED`. A reader that reads the app's screen in a second session
 (`screen_readback`) gives `RECONCILIATION_REQUIRED` at best. A reader that
-fails gives `RECONCILIATION_REQUIRED`.
+fails gives `RECONCILIATION_REQUIRED`. The reader declares its own tier, so
+registering one is trusting its code: the guard can't check that a reader
+calling itself `independent_readback` doesn't read the screen.
 
 ## Run 2: a program from run 1
 

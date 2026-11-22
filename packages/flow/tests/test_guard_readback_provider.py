@@ -236,3 +236,40 @@ def test_a_provider_is_named_through_the_verifier_factory_registry(
     assert off.approval_fields is False and off.readback_provider is None
     with pytest.raises(ConfigError, match="readback_provider"):
         parse_config({**base, "readback_provider": {"base_url": "x"}}, base=tmp_path)
+
+
+def test_an_overridden_verified_receipt_is_marked_on_disk(sor, tmp_path: Path) -> None:
+    """verify-run signs VERIFIED, then the field diff makes the guard's verdict
+    REFUTED: the receipt keeps its signed outcome, an override file beside it
+    names the guard's verdict, and guard.json no longer says verified."""
+
+    from dataclasses import replace
+
+    from openadapt_flow.agent_guard.readback import (
+        OVERRIDE_SCHEMA,
+        OVERRIDDEN,
+        VerifyRunReadback,
+    )
+
+    class OtherNote(VerifyRunReadback):
+        def read(self, task: Any, guard: Any) -> Any:
+            return replace(super().read(task, guard), fields={"note": OTHER})
+
+    page = FakePage(FakeAgent(sor[0]), "p1")
+    guard = _guard(sor, tmp_path, page, readback=OtherNote())
+    page.save()
+    guard.poll()
+    assert guard.summary.verdict == "REFUTED"
+    receipt = Path(guard.result.receipt_path)
+    assert json.loads(receipt.read_text())["receipt"]["outcome"] == "verified"
+    override = json.loads(
+        receipt.with_name(receipt.stem + ".override.json").read_text()
+    )
+    assert override["schema"] == OVERRIDE_SCHEMA
+    assert (override["receipt_outcome"], override["guard_verdict"]) == (
+        "verified",
+        "REFUTED",
+    )
+    assert override["receipt_sha256"].startswith("sha256:")
+    record = json.loads((receipt.parent / "guard.json").read_text())
+    assert (record["verdict"], record["outcome"]) == ("REFUTED", OVERRIDDEN)

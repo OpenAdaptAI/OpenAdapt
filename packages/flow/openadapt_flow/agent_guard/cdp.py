@@ -226,7 +226,7 @@ class CdpGuardPage:
         value = (out.get("result") or {}).get("value")
         return value if isinstance(value, str) else None
 
-    def form_controls(self) -> Optional[list[dict[str, str]]]:
+    def form_controls(self) -> Optional[list[dict[str, Any]]]:
         """The form controls' values and labels at this moment
         (:data:`~.screen_values.READ_CONTROLS_JS`), or None when unreadable."""
 

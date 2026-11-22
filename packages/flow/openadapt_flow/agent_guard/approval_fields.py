@@ -437,7 +437,7 @@ def card_for_request(
     request: Any,
     scope: Any,
     *,
-    controls: Optional[Sequence[Mapping[str, str]]] = None,
+    controls: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Any:
     """The commit guard's card for a held save: the values the held request
     carries, read by the app's write adapter (the parser the guard checks

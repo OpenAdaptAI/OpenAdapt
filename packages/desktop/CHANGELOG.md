@@ -11,7 +11,8 @@
   a sign-in partway through, a stall, a possible duplicate, an ambiguous
   record, a task it can't finish), not only Desktop's own runs. Each card is
   answered on its own, here or on a paired phone, and the answer is signed
-  with the same approver key as other stop answers.
+  with the same approver key as other stop answers. Requires Flow with the
+  exception registry (#2494).
 
 ### Bug Fixes
 

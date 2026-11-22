@@ -231,26 +231,30 @@ def test_the_differs_flag_uses_the_value_comparison(sor, tmp_path: Path) -> None
 def test_screen_values_match_a_field_by_id_name_or_label() -> None:
     from openadapt_flow.agent_guard.screen_values import match_fields, readable_png
 
+    def c(key: str, id_: str, name: str, label: str, value: str, visible=True):
+        return {
+            "key": key,
+            "id": id_,
+            "name": name,
+            "label": label,
+            "value": value,
+            "visible": visible,
+        }
+
     controls = [
-        {
-            "key": "textarea:note:1",
-            "id": "note",
-            "name": "",
-            "label": "Note",
-            "value": "typed",
-        },
-        {
-            "key": "input:x:1",
-            "id": "x",
-            "name": "enc_type",
-            "label": "",
-            "value": "Triage",
-        },
-        {"key": "input:a:1", "id": "a", "name": "", "label": "Amount", "value": "1"},
-        {"key": "input:b:1", "id": "b", "name": "", "label": "Amount", "value": "2"},
+        c("textarea:note:1", "note", "", "Note", "typed"),
+        # A hidden template with the same name is not what a person saw.
+        c("textarea:note:2", "note-tpl", "note", "", "template", visible=False),
+        c("input:x:1", "x", "enc_type", "", "Triage"),
+        c("input:a:1", "a", "", "Amount", "1"),
+        c("input:b:1", "b", "", "Amount", "2"),
+        c("input:dob:1", "dob", "", "Date of birth", "1990-01-01", visible=False),
     ]
-    found = match_fields(controls, ["note", "type", "amount"], {"type": "enc_type"})
+    found = match_fields(
+        controls, ["note", "type", "amount", "dob"], {"type": "enc_type"}
+    )
     # Two controls labelled Amount disagree: not read rather than a guess.
+    # dob matches only a hidden control: not read on screen.
     assert found == {"note": "typed", "type": "Triage"}
     assert match_fields(None, ["note"]) == {}
     assert readable_png(tiny_png())
@@ -268,3 +272,42 @@ def test_the_card_shows_the_screen_value_beside_the_task_value(sor) -> None:
     blind = build_card(_task(), cfg, claim_fields=None)
     assert blind.nothing_visible(None) and blind.nothing_visible(b"garbage")
     assert not blind.nothing_visible(tiny_png())
+
+
+def test_the_page_read_skips_controls_that_are_not_rendered() -> None:
+    """READ_CONTROLS_JS in a real headless Chromium: a display:none copy, an
+    aria-hidden copy and a zero-size field with the task's field name are
+    read as hidden; the field the person sees is the only screen value."""
+
+    pytest.importorskip("playwright")
+    from playwright.sync_api import sync_playwright
+
+    from openadapt_flow.agent_guard.cdp import NOTICE_ID
+    from openadapt_flow.agent_guard.screen_values import (
+        READ_CONTROLS_JS,
+        controls_from,
+        match_fields,
+    )
+
+    html = (
+        '<label for="note">Note</label><textarea id="note">seen</textarea>'
+        '<div style="display:none"><textarea name="note">tpl</textarea></div>'
+        '<div aria-hidden="true"><input name="note" value="aria"></div>'
+        '<input name="note" value="tiny" style="width:0;height:0;border:0;padding:0">'
+        '<div style="display:none"><input id="dob" value="1990-01-01"></div>'
+    )
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception as exc:  # noqa: BLE001
+            pytest.skip(f"chromium unavailable: {exc}")
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+            raw = page.evaluate(READ_CONTROLS_JS % {"notice": json.dumps(NOTICE_ID)})
+        finally:
+            browser.close()
+    controls = controls_from(raw)
+    assert controls is not None
+    assert [c["value"] for c in controls if c["visible"]] == ["seen"]
+    assert match_fields(controls, ["note", "dob"]) == {"note": "seen"}

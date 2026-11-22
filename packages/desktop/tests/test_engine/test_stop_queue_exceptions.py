@@ -113,6 +113,7 @@ def test_flows_own_card_file_is_listed():
     folder.mkdir(parents=True)
     path = folder / f"card-{raw['card_id'][7:]}.json"
     path.write_text(json.dumps(raw))
+    path.chmod(0o600)  # as Flow's registry creates it
 
     (found,) = exception_queue.open_cards()
     card = stop_queue.card_for_exception(found)
@@ -148,6 +149,7 @@ def test_desktop_offers_only_what_the_run_offers(queue):  # noqa: F811
     body["choices"] = [c for c in body["choices"] if c["id"] != "continue"]
     card_id = "sha256:" + hashlib.sha256(_canonical(body)).hexdigest()
     (folder / f"card-{card_id[7:]}.json").write_text(json.dumps({**body, "card_id": card_id}))
+    (folder / f"card-{card_id[7:]}.json").chmod(0o600)  # as Flow creates it
 
     (card,) = _cards(disp)
     assert "continue" not in [c["id"] for c in card["choices"]]
@@ -184,6 +186,7 @@ def test_a_card_outside_the_contract_is_not_shown(queue, field, value):  # noqa:
     folder = exception_queue.registry_root() / "guard-run"
     folder.mkdir(parents=True)
     (folder / f"card-{card_id[7:]}.json").write_text(json.dumps({**body, "card_id": card_id}))
+    (folder / f"card-{card_id[7:]}.json").chmod(0o600)  # as Flow creates it
     assert _cards(disp) == []
 
 
@@ -193,6 +196,7 @@ def test_a_linked_card_is_not_read(queue, tmp_path):  # noqa: F811
     path = exception_queue.registry_root() / "guard-run" / f"card-{raw['card_id'][7:]}.json"
     real = tmp_path / "elsewhere.json"
     real.write_text(path.read_text())
+    real.chmod(0o600)
     path.unlink()
     path.symlink_to(real)
     assert _cards(disp) == []
@@ -382,3 +386,20 @@ def test_the_phone_page_knows_the_exception_cards():
 def test_no_registry_folder_is_an_empty_list(tmp_path):
     assert exception_queue.open_cards(tmp_path / "missing") == []
     assert os.environ["OPENADAPT_HOME"]
+
+
+def test_a_card_other_users_can_read_is_not_shown(queue):  # noqa: F811
+    disp, _db, _keychain = queue
+    raw = _write_card()
+    path = exception_queue.registry_root() / raw["run_ref"] / f"card-{raw['card_id'][7:]}.json"
+    path.chmod(0o644)
+    assert _cards(disp) == []
+    path.chmod(0o600)
+    assert [c["source"]["id"] for c in _cards(disp)] == [raw["card_id"]]
+
+
+def test_the_scan_stops_at_the_cap_across_runs(monkeypatch):
+    monkeypatch.setattr(exception_queue, "MAX_CARDS", 2)
+    for run in ("run-a", "run-b", "run-c"):
+        _write_card(run_ref=run)
+    assert len(exception_queue.open_cards()) == 2
