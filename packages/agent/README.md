@@ -503,6 +503,24 @@ python packages/agent/tests/ledger_demo.py
 
 Results: [docs/task-ledger-measurement.json](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/task-ledger-measurement.json).
 
+## Hand results to other agents
+
+`serve --handoffs` adds two tools:
+
+- `get_handoff` returns a finished run's result with its signed receipt
+  attached.
+- `verify_handoff` checks a handoff another agent sent, against the keys this
+  computer pins.
+
+`serve --a2a` serves the same workflows over the A2A (Agent2Agent) protocol
+instead of MCP stdio. It needs `pip install 'openadapt-agent[a2a]'` and
+publishes an Agent Card at `/.well-known/agent-card.json`. It listens on
+127.0.0.1, and any other address needs `--a2a-token-file`.
+
+A valid signature proves who signed, not that the claim is true. The
+receiving agent confirms the claim in its own record. See
+[HANDOFFS.md](../flow/docs/HANDOFFS.md) and [A2A.md](../flow/docs/A2A.md).
+
 ## Security
 
 - The server talks only over stdio and has no sign-in. Anything that can write to its input acts as the OS account that started it, so don't expose it over a network or a tunnel.

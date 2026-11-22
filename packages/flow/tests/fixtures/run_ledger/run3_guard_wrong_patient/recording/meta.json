@@ -1,0 +1,30 @@
+{
+  "id": "16c59ef10140408cb895ba258d5255aa",
+  "created_at": "2026-11-22T05:57:56.063003+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:64430/?fault=ok&idempotency=demo#tasks",
+  "params": {},
+  "secret_params": [],
+  "dialogs_captured": true,
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 1
+  },
+  "source": "openadapt-flow-playwright-cdp",
+  "surface": "web",
+  "viewport_mode": "per-event",
+  "viewport_history": [
+    {
+      "before_event": 0,
+      "viewport": [
+        1280,
+        800
+      ],
+      "device_scale_factor": 1.0
+    }
+  ]
+}

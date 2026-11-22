@@ -94,6 +94,7 @@ class MedplumFixture:
         server_port: int = SERVER_PORT,
         app_port: int = APP_PORT,
         project: str = PROJECT,
+        overrides: tuple[Path, ...] = (),
     ) -> None:
         self.state_dir = Path(
             state_dir or os.environ.get("MEDPLUM_STATE_DIR") or DEFAULT_STATE
@@ -101,6 +102,8 @@ class MedplumFixture:
         self.server_port = server_port
         self.app_port = app_port
         self.project = project
+        #: Extra compose files layered on compose.yml, for one bench only.
+        self.overrides = tuple(Path(p) for p in overrides)
         #: Access tokens by role, reused for half their hour-long lifetime.
         self._tokens: dict[str, tuple[float, str]] = {}
         self.lock = json.loads((HERE / "environment.lock.json").read_text())
@@ -153,7 +156,16 @@ class MedplumFixture:
 
     def compose(self, *args: str, input_text: Optional[str] = None) -> str:
         proc = subprocess.run(
-            ["docker", "compose", "-p", self.project, "-f", str(COMPOSE), *args],
+            [
+                "docker",
+                "compose",
+                "-p",
+                self.project,
+                "-f",
+                str(COMPOSE),
+                *(x for o in self.overrides for x in ("-f", str(o))),
+                *args,
+            ],
             input=input_text,
             capture_output=True,
             text=True,
