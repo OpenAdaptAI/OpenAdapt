@@ -1,0 +1,30 @@
+{
+  "keys": [
+    {
+      "key_id": "seal-ed25519-b7a5ba90250d87f2",
+      "public_key": "jixIC8Mofw0bK9cS4nMakadlpH8vIPKgNuOGQNiiW88=",
+      "role": "this_computer",
+      "status": "active"
+    },
+    {
+      "key_id": "seal-ed25519-66779244d34b26e4",
+      "org": "Example Clinic",
+      "public_key": "5ffJfcfC/ZmKPyyWbPP/qldC+8VXGpgddo7n8qtPtgg=",
+      "role": "customer_key",
+      "status": "active"
+    },
+    {
+      "key_id": "seal-ed25519-6bc36497efe27e32",
+      "public_key": "neFVx9bfL0uP/M3RSJv9FHwROe1McaWww3boCIRDCCc=",
+      "role": "openadapt_cloud",
+      "status": "active"
+    },
+    {
+      "key_id": "seal-ed25519-e23ba7f5a83f229c",
+      "public_key": "2p0X+3bjxBMq3ukmGN+G+NDl+Y/6ZhyhLYHD8ewLhsw=",
+      "role": "demo",
+      "status": "active"
+    }
+  ],
+  "schema": "openadapt.receipt-keys/v1"
+}

@@ -1,0 +1,25 @@
+{
+  "description": "A demo key next to a real key: refused.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoyLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjIsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjowLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImRpc2Nsb3N1cmUiOnsiY29tbWl0bWVudHMiOnt9LCJ2ZXJzaW9uIjoib3BlbmFkYXB0LnB1YmxpYy1kaXNjbG9zdXJlL3YxIn0sImxpbmVzIjpbeyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbXSwib3BlcmF0aW9uIjoid3JpdGUiLCJzdGVwIjoyLCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn0seyJjaGVjayI6ImNvbmZpcm1lZCIsIm5vdF9jaGVja2VkIjpbImZpZWxkX3ZhbHVlcyJdLCJvcGVyYXRpb24iOiJpcnJldmVyc2libGVfd3JpdGUiLCJzdGVwIjo0LCJzdHJlbmd0aCI6InJlYWRfYmFjayIsInRhcmdldF9raW5kIjoiZ3VpIn1dLCJtb2RlbF9jYWxscyI6MCwib3V0Y29tZSI6IlZFUklGSUVEIiwicHJvZ3JhbSI6eyJpZCI6InByb2ctNWJiMjFhYTBmMmU2YWMzMiIsInZlcnNpb25fc2hhMjU2IjoiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiJ9LCJyZWFzb25fY29kZSI6InZlcmlmaWVkIiwic3RhcnRlZF9ob3VyIjoiMjAyNi0xMS0yMFQyMzowMDowMFoiLCJzdGVwcyI6eyJvayI6NSwidG90YWwiOjV9fSwicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vb3BlbmFkYXB0LmFpL3JlY29yZC9ydW4vdjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSJ9LCJuYW1lIjoicmVwb3J0Lmpzb24ifSx7ImRpZ2VzdCI6eyJzaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sIm5hbWUiOiJidW5kbGUifV19",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "qy/Gm0tBSQhMwf10bi+3sUD3E3S9KfPNp3zTByuESFkHz3vGfeNlNGrcjDaQZBmMPu06m1OjanwI4O98VDQDDg=="
+      },
+      {
+        "keyid": "seal-ed25519-e23ba7f5a83f229c",
+        "sig": "3rZqMGsaJfOT+Y/1umw/uddAQPxbjv6Z6UgZGW0MZDuJviHh/NfbonuhgrU66BS5GNGAGXZFr7yVvNvskF4bCg=="
+      }
+    ]
+  },
+  "expected": {
+    "ok": false,
+    "reason": "mixed_demo",
+    "signer_lines": [
+      "Not verified: a demo key signed alongside a real one"
+    ]
+  },
+  "registry": "registry.json"
+}
