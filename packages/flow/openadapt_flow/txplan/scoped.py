@@ -265,31 +265,140 @@ def judge_record(
     return codes, detail
 
 
+def _usable_id(value: Any) -> bool:
+    """A record id: a non-empty string or an int (never a bool or a container)."""
+    if isinstance(value, bool):
+        return False
+    return (isinstance(value, str) and value != "") or isinstance(value, int)
+
+
+def _strict_items(got: Any, path: str) -> list[Any]:
+    """The records at ``path`` in a search answer, parsed closed by default.
+
+    ``path`` is dotted; ``*`` fans out over a list. Every step must exist:
+    a named step needs an object holding that key with a non-null value, and
+    a ``*`` step needs a list. A path without ``*`` that ends on a list
+    yields its elements; after a ``*`` each element is one record, never a
+    list to flatten. The records are checked by the caller (usable ids)."""
+    steps = [p for p in path.split(".") if p] if path else []
+    current: list[Any] = [got]
+    for step in steps:
+        nxt: list[Any] = []
+        for value in current:
+            if step == "*":
+                if not isinstance(value, list):
+                    raise AdapterError(
+                        "a marker search fan-out is not a list"
+                    )  # search-clause: fan-out-list
+                nxt.extend(value)
+            else:
+                found = value.get(step) if isinstance(value, Mapping) else None
+                if found is None:
+                    raise AdapterError(
+                        f"a marker search item has no {step}"
+                    )  # search-clause: step-present
+                else:
+                    nxt.append(found)
+        current = nxt
+    flatten = len(current) == 1 and isinstance(current[0], list)
+    flatten = flatten and "*" not in steps  # search-clause: no-flatten-after-fanout
+    if flatten:
+        current = current[0]
+    return current
+
+
+def _present(got: Any, spec: str) -> bool:
+    """Whether an ``absent`` path is present, resolved strictly.
+
+    ``name[key=value]`` (a next link) needs ``name`` to be absent, or a list
+    of objects whose ``key`` is a string; any other shape raises. The value
+    matches without regard to case. A plain dotted path uses ``pick``."""
+    from openadapt_flow.txplan.audit import _SELECT
+
+    sel = _SELECT.match(spec)
+    if not sel or not isinstance(got, Mapping):
+        return bool(pick(got, spec))
+    name, key, want = sel.groups()
+    entries = got.get(name)
+    if entries is None:
+        return False
+    if not isinstance(entries, list) or not all(
+        isinstance(x, Mapping) and isinstance(x.get(key), str) for x in entries
+    ):
+        raise AdapterError(
+            f"the marker search answer's {name} is malformed"
+        )  # search-clause: absent-shape
+    listed = entries if isinstance(entries, list) else []
+    return any(
+        isinstance(x, Mapping) and str(x.get(key)).casefold() == want.casefold()
+        for x in listed
+    )
+
+
 def _search(
     adapter: RestAdapter, scoped: ScopedCollection, marker: str, id_field: str
 ) -> Optional[list[str]]:
+    """Record ids holding ``marker``, from an answer parsed strictly.
+
+    Missing-evidence class, closed by default: a declared shape is checked
+    on every answer; the items path must resolve exactly (see
+    :func:`_strict_items`); every record needs a usable id; a ``total``,
+    when present, must be an int equal to the number of records. The items
+    field may be absent only on an answer that reports ``total: 0`` or, for
+    a pack that declares ``search_empty``, matches that shape. Anything else
+    raises, so no answer reads as "not found" unless it says so. Each check
+    is tagged ``# search-clause:`` and is the only one that catches its case
+    (``tests/test_txplan_scoped.py::test_each_search_clause_is_load_bearing``)."""
     if not scoped.search:
         return None
     _, got = _request(adapter, "GET", fill(scoped.search, {"marker": marker}))
-    # Missing-evidence class: a search response of the wrong shape is an
-    # error, never an empty result.
-    if scoped.search_items and not isinstance(got, Mapping):
-        raise AdapterError("the marker search did not return an object")
-    head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
-    if head and head not in got and got.get("total") != 0:
-        # Missing-evidence class: no results field is not an empty result,
-        # unless the response says it matched nothing (total 0).
-        raise AdapterError(f"the marker search has no {head}")
-    if not scoped.search_items and not isinstance(got, list):
-        raise AdapterError("the marker search did not return a list")
-    items = pick(got, scoped.search_items) if scoped.search_items else got
-    if scoped.search_items and len(items) == 1 and isinstance(items[0], list):
-        items = items[0]
-    return [
-        str(x.get(id_field))
-        for x in items
-        if isinstance(x, Mapping) and x.get(id_field) is not None
-    ]
+    path = scoped.search_items
+    if not path and not isinstance(got, list):
+        raise AdapterError(
+            "the marker search did not return a list"
+        )  # search-clause: list-answer
+    total = got.get("total") if isinstance(got, Mapping) else None
+    if total is not None and (type(total) is not int or total < 0):
+        raise AdapterError(
+            "the marker search total is not a count"
+        )  # search-clause: total-count
+    shape = scoped.search_empty
+    if shape is not None:
+        # The declared shape is the answer's shape, checked on every answer.
+        for spec, want in shape.equals.items():
+            if not any(str(v) == want for v in pick(got, spec)):
+                raise AdapterError(
+                    f"the marker search answer has no {spec} {want}"
+                )  # search-clause: shape-equals
+        for spec in shape.absent:
+            if _present(got, spec):
+                raise AdapterError(
+                    f"the marker search answer has {spec}"
+                )  # search-clause: shape-absent
+    head = path.split(".", 1)[0] if path else ""
+    if head and (not isinstance(got, Mapping) or head not in got):
+        if not isinstance(got, Mapping) or (total != 0 and shape is None):
+            raise AdapterError(
+                f"the marker search has no {head}"
+            )  # search-clause: items-field
+        records: list[Any] = []
+    else:
+        records = _strict_items(got, path)
+    ids = [r.get(id_field) if isinstance(r, Mapping) else None for r in records]
+    if not all(_usable_id(i) for i in ids):
+        # An item without a usable id (or that isn't an object) may be the
+        # write already landed: it never reads as absent, and every item
+        # counts toward a duplicate.
+        raise AdapterError(
+            "a marker search item has no usable id"
+        )  # search-clause: usable-id
+    if total is not None and total != len(records):
+        # A total that differs from the records returned is a partial page
+        # (or a short answer): it can hide a match or a duplicate.
+        raise AdapterError(
+            "the marker search total doesn't match its records"
+        )  # search-clause: total-equals
+    return [str(i) for i in ids]
 
 
 def _read(
