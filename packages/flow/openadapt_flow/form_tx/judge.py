@@ -368,6 +368,44 @@ def _extract_present_outputs(
     return extracted, invalid_keys
 
 
+def _row_verdicts(
+    rows: Sequence[Any],
+    snapshot: FormSnapshot,
+    expected_facts: Mapping[str, DossierFact],
+    run_id: str,
+    not_checked: Any,
+    failed: Any,
+) -> list[ReadbackFieldVerdict]:
+    """form_tx verdicts for the summary's multi-value rows (``row_location``)."""
+    if not rows:
+        return []
+    from openadapt_flow.form_tx.row_location import row_readback_results
+
+    out: list[ReadbackFieldVerdict] = []
+    results = row_readback_results(tuple(rows), snapshot, expected_facts, run_id=run_id)
+    for key, judged in results.items():
+        fact = expected_facts.get(key)
+        prov = fact.provenance if fact is not None else ProvenanceKind.INTAKE_DOCUMENT
+        part = next(p for r in rows for p in r.parts if p.dossier_key == key)
+        for status, reason in judged:
+            if status == "held":
+                out.append(
+                    ReadbackFieldVerdict(
+                        dossier_key=key,
+                        codec_kind=part.codec.kind,
+                        passed=True,
+                        status=ReadbackStatus.PASSED,
+                        provenance=prov,
+                        reason="Read back from a summary row that shows several values",
+                    )
+                )
+            elif status == "refuted":
+                out.append(failed(key, part.codec.kind, prov, f"Summary row: {reason}"))
+            else:
+                out.append(not_checked(key, prov, f"Summary row: {reason}"))
+    return out
+
+
 class SummaryJudge:
     """Read-back verifier for committed form transactions (acting session)."""
 
@@ -845,6 +883,19 @@ class SummaryJudge:
                             f"Summary shows the date {shown_iso}, not {expected_iso}",
                         )
                     )
+
+        # Rows that show several values in one text ("Name (DOB)"), judged as
+        # effect locations: each key gets its own verdict.
+        verdicts.extend(
+            _row_verdicts(
+                summary_check.row_readbacks,
+                snapshot,
+                expected_facts,
+                active_dossier.digest(),
+                _not_checked,
+                _failed,
+            )
+        )
 
         # Fields no binding covers that held a value this run did not set.
         for label, shown in sorted((uncovered or {}).items()):

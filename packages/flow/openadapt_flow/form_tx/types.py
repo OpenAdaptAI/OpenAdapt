@@ -15,7 +15,14 @@ import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
@@ -465,6 +472,42 @@ class SplitDateReadbackSpec(BaseModel):
     date_order: Literal["YMD", "MDY", "DMY"] = "MDY"
 
 
+class SummaryRowPartSpec(BaseModel):
+    """One named group of a summary row and the intake key it shows."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    group: str = Field(min_length=1)
+    dossier_key: str = Field(min_length=1)
+    codec: FieldCodecSpec = Field(default_factory=FieldCodecSpec)
+
+
+class SummaryRowReadbackSpec(BaseModel):
+    """One summary row that shows several intake values in one text.
+
+    A row such as "Ada Byron (01/31/1990)" shows a name and a date of birth.
+    ``pattern`` must match the whole shown text; each of ``parts`` reads one
+    named group as one intake key. The row is judged as an
+    ``openadapt.effect-location/v1`` template location, so each key gets its
+    own verdict.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    anchor: FieldAnchorSpec
+    pattern: str = Field(min_length=1)
+    parts: tuple[SummaryRowPartSpec, ...] = Field(min_length=1)
+
+    @field_validator("pattern")
+    @classmethod
+    def _pattern_compiles(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise ValueError(f"Invalid row pattern {value!r}: {exc}") from exc
+        return value
+
+
 class SummaryCheckSpec(BaseModel):
     """Summary/search read-back verification contract (read by the acting session)."""
 
@@ -482,7 +525,18 @@ class SummaryCheckSpec(BaseModel):
     # review does not show is left to the post-submit read-back.
     review_readbacks: tuple[FieldBindingSpec, ...] = ()
     split_date_readbacks: tuple[SplitDateReadbackSpec, ...] = ()
+    # Rows that show several intake values in one text ("Name (DOB)").
+    row_readbacks: tuple[SummaryRowReadbackSpec, ...] = ()
     outputs: tuple[OutputExtractionSpec, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_rows(self, handler: Any) -> Any:
+        # Left out while empty, so a pack written before the field existed
+        # dumps and hashes exactly as before.
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("row_readbacks"):
+            data.pop("row_readbacks", None)
+        return data
 
 
 class UnboundControlSpec(BaseModel):
