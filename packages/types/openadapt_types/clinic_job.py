@@ -1,22 +1,10 @@
-"""Thin inbox, outbox, and MCP result contracts for clinic jobs.
+"""LEGACY / COMPATIBILITY SHIM for ``openadapt.clinic-*/v1`` wire payloads.
 
-The workbench owns schema, extract, review, and NL2SQL. This package does
-not reimplement those. OpenAdapt is the hands: a compiled, admitted
-program that halts on the wrong patient. Claude Code may call only the
-three named tools, and only against admitted programs.
+New code should use :mod:`openadapt_types.managed_job` (``openadapt.managed-*/v1``),
+which provides the domain-neutral inbox, outbox, and MCP result contracts.
 
-Identity on this wire is ``patient_token`` only. A name, MRN, or other
-live identifier has no field to travel in. Wrong-patient halt is the
-existing OpenAdapt identity gate. This adapter does not invent a visual
-click.
-
-SaMD: there is no tool that decides urgency or writes follow-up copy
-into a chart. ``run_create_triage_task`` creates a task the clinic
-already defined, and only after ``needs_human`` is false because a
-human accepted.
-
-Fax-first: ``run_attach_fax`` is attach plus task create. OCR stays
-out of this package.
+This module is retained only so previously serialized ``openadapt.clinic-*/v1``
+inbox, outbox, tool-result, and catalog payloads continue to validate cleanly.
 """
 
 from __future__ import annotations
@@ -26,7 +14,6 @@ from enum import Enum
 from typing import Any, Literal
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     StrictBool,
@@ -34,6 +21,20 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_types.managed_job import (
+    ManagedActuationDecisionV1,
+    ManagedActuationHeld,
+    ManagedToolStatusV1,
+    ManagedToolUnknown,
+    _ARTIFACT_PATH_PATTERN,
+    _OPAQUE_TOKEN_PATTERN,
+    _SOURCE_PATTERN,
+    _SUCCESS_STATUSES_NOTE,
+    _TIMESTAMP_PATTERN,
+    _StrictContract,
+)
+
+# Legacy wire schema identifiers; prefer MANAGED_*_SCHEMA in openadapt_types.managed_job.
 CLINIC_INBOX_SCHEMA: Literal["openadapt.clinic-inbox/v1"] = "openadapt.clinic-inbox/v1"
 CLINIC_OUTBOX_SCHEMA: Literal["openadapt.clinic-outbox/v1"] = (
     "openadapt.clinic-outbox/v1"
@@ -45,32 +46,11 @@ CLINIC_MCP_TOOLS_SCHEMA: Literal["openadapt.clinic-mcp-tools/v1"] = (
     "openadapt.clinic-mcp-tools/v1"
 )
 
-_OPAQUE_TOKEN_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
-_SOURCE_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
-_TIMESTAMP_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$"
-# Relative POSIX path of opaque segments. Each segment starts with an
-# alphanumeric or underscore. Dots only appear as an extension separator,
-# so `..`, a leading slash, and a drive letter have no legal shape.
-_ARTIFACT_PATH_PATTERN = (
-    r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)*$"
-)
-
-_SUCCESS_STATUSES_NOTE = (
-    "Only status VERIFIED is success. HALTED and RECONCILIATION_REQUIRED "
-    "are not success and must not be summarized as success."
-)
-
-
-class _StrictContract(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class ClinicActuationHeld(ValueError):
-    """Outbox still needs a human stamp; actuation must not dispatch."""
-
-
-class ClinicToolUnknown(ValueError):
-    """Caller named a tool this catalog does not admit."""
+# Legacy/compat aliases to domain-neutral exceptions and enums in managed_job.
+ClinicActuationHeld = ManagedActuationHeld
+ClinicToolUnknown = ManagedToolUnknown
+ClinicToolStatusV1 = ManagedToolStatusV1
+ClinicActuationDecisionV1 = ManagedActuationDecisionV1
 
 
 class ClinicOutboxActionV1(str, Enum):
@@ -83,17 +63,6 @@ class ClinicMcpToolNameV1(str, Enum):
     RUN_HARVEST = "run_harvest"
     RUN_ATTACH_FAX = "run_attach_fax"
     RUN_CREATE_TRIAGE_TASK = "run_create_triage_task"
-
-
-class ClinicToolStatusV1(str, Enum):
-    VERIFIED = "VERIFIED"
-    HALTED = "HALTED"
-    RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
-
-
-class ClinicActuationDecisionV1(str, Enum):
-    DISPATCH = "dispatch"
-    HOLD_FOR_HUMAN = "hold_for_human"
 
 
 ACTION_TO_TOOL: dict[ClinicOutboxActionV1, ClinicMcpToolNameV1] = {
