@@ -13188,6 +13188,7 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_rollback import register as _register_rollback
     from openadapt_flow.cli_shadow import register as _register_shadow
     from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
     from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
     from openadapt_flow.learn import register as _register_learn
@@ -13203,6 +13204,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_jit_parser(sub)
     _add_compile_agent_parser(sub)
     _add_guard_parser(sub)
+    _add_flight_parser(sub)
     _add_hooks_parser(sub)
     _add_plan_parser(sub)
     _add_proxy_parser(sub)

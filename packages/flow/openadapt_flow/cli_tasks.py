@@ -63,6 +63,7 @@ FLOW_NAMES = {
     "exceptions": "approve exceptions",
     "explain": "inspect explain",
     "fleet": "services fleet",
+    "flight": "run --flight",
     "for-each": "run --for-each",
     "guard": "run --guard",
     "hooks": "setup hooks",

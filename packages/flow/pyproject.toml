@@ -150,6 +150,9 @@ dev = [
     "scikit-image>=0.22",
     # WindowsBackend tests (mock WAA server).
     "requests>=2.31",
+    # The flight scrubber's OCR pass (tests/test_flight_*); CI installs the
+    # tesseract binary next to it.
+    "pytesseract>=0.3.10",
     # VLM service + operator console tests (TestClient over the FastAPI apps);
     # uvicorn for the console's boot smoke test.
     "fastapi>=0.110",
