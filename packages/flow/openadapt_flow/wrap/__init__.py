@@ -8,9 +8,12 @@ import re
 import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from openadapt_flow.integrations.agents.skills import SkillRun
+if TYPE_CHECKING:
+    # Imported lazily: the agent integrations pull in POSIX-only modules,
+    # and building the openadapt-flow parser imports this package.
+    from openadapt_flow.integrations.agents.skills import SkillRun
 
 _PARAMETER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 

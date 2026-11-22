@@ -678,3 +678,20 @@ def test_a_repair_file_write_failure_keeps_the_verified_save(
     )
     assert result["verified"]
     assert result["fallback"]["repair"]["reason"] == "repair_failed:OSError"
+
+
+def test_the_parser_builds_without_posix_only_modules() -> None:
+    """Windows has no fcntl. Registering wrap-dispatch must not import the
+    agent integrations (they reach write_ledger, which needs fcntl)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.modules['fcntl'] = None\n"
+        "from openadapt_flow.__main__ import build_parser\n"
+        "build_parser().parse_args(['wrap-dispatch', 'status', 'task.json'])\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
