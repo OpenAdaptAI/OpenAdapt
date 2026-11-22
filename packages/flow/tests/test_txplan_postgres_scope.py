@@ -19,7 +19,6 @@ from typing import Any, Iterator
 import pytest
 
 pytest.importorskip("cryptography")
-psycopg2 = pytest.importorskip("psycopg2")
 
 from openadapt_flow.txplan import engine  # noqa: E402
 from openadapt_flow.txplan.adapters import AdapterError  # noqa: E402
@@ -37,6 +36,7 @@ def _bin(name: str) -> str:
 
 @pytest.fixture(scope="module")
 def cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]]:
+    pytest.importorskip("psycopg2")
     initdb, pg_ctl = _bin("initdb"), _bin("pg_ctl")
     root = tmp_path_factory.mktemp("pg")
     data = root / "data"
@@ -76,6 +76,8 @@ def cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]
 def db(cluster: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    import psycopg2
+
     con = psycopg2.connect(**cluster)
     con.autocommit = True
     cur = con.cursor()
@@ -194,3 +196,92 @@ def test_a_write_that_stays_in_the_schema_is_verified(db: Any, tmp_path: Path) -
     )
     assert isinstance(out, dict) and out["outcome"] == "VERIFIED", out
     assert _balance(cur, 2) == 7
+
+
+# -- always on: the statement order, and MySQL's trigger inventory -------------
+# These run without a server. They pin what the real-cluster tests above
+# measure, so a CI job without PostgreSQL still catches a regression; the
+# MySQL branch has no server in this suite at all.
+
+
+class _Cursor:
+    """A DB-API cursor that records statements and answers the scope queries."""
+
+    def __init__(self, answers: dict[str, Any]) -> None:
+        self.answers = answers
+        self.sql: list[str] = []
+        self.rowcount = 1
+        self._last: Any = None
+        self.lastrowid = 1
+
+    def execute(self, sql: str, params: Any = None) -> None:
+        self.sql.append(sql)
+        self._last = next((v for k, v in self.answers.items() if k in sql), [(0,)])
+
+    def fetchone(self) -> Any:
+        return self._last[0]
+
+    def fetchall(self) -> Any:
+        return list(self._last)
+
+
+def _adapter(dialect: str) -> Any:
+    from openadapt_flow.txplan.adapters import SqlAdapter
+    from openadapt_flow.txplan.spec import SqlSystem
+
+    return SqlAdapter(
+        SqlSystem(
+            name="crm",
+            kind="sql",
+            dialect=dialect,  # type: ignore[arg-type]
+            driver="x",
+            tables={"customers": "id"},
+        )
+    )
+
+
+def test_postgres_fires_deferred_triggers_before_the_scope_check_on_every_op() -> None:
+    for write in (
+        {"collection": "customers", "op": "update", "id": 1, "fields": {"b": 2}},
+        {"collection": "customers", "op": "delete", "id": 1, "fields": {}},
+        {"collection": "statement", "op": "sql", "fields": {"sql": "UPDATE c SET b=1"}},
+    ):
+        cur = _Cursor({"pg_stat_xact_user_tables": [(0,)]})
+        _adapter("postgresql")._exec(cur, write, None)
+        order = [s for s in cur.sql if "SET CONSTRAINTS" in s or "pg_stat_xact" in s]
+        assert (
+            order
+            == [
+                "SET CONSTRAINTS ALL IMMEDIATE",
+                order[1],
+            ]
+            and "pg_stat_xact" in order[1]
+        ), (write["op"], cur.sql)
+
+
+def test_mysql_refuses_a_trigger_that_writes_another_database_or_calls_a_routine() -> (
+    None
+):
+    from openadapt_flow.txplan.adapters import Diverged
+
+    def cur(body: str) -> _Cursor:
+        return _Cursor(
+            {
+                "SELECT DATABASE()": [("crm",)],
+                "SHOW DATABASES": [("crm",), ("ledger",)],
+                "information_schema.triggers": [(body,)],
+            }
+        )
+
+    adapter = _adapter("mysql")
+    for body in (
+        "INSERT INTO ledger.notes (customer) VALUES (NEW.id)",
+        "CALL note_it(NEW.id)",
+    ):
+        with pytest.raises(Diverged):
+            adapter._refuse_unobserved_writes(cur(body), "UPDATE customers SET b = 1")
+    # A trigger that stays in the database, reading NEW and OLD, is fine.
+    adapter._refuse_unobserved_writes(
+        cur("INSERT INTO notes (customer) VALUES (NEW.id)"),
+        "UPDATE customers SET b = 1",
+    )

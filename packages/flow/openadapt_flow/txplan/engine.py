@@ -963,6 +963,19 @@ def _unconditional(spec: TxSpec, w: Mapping[str, Any]) -> bool:
     return unconditional(system.collection(w.get("collection")), w["op"])
 
 
+def _capped(
+    spec: TxSpec, w: Mapping[str, Any], verified: Optional[bool], tx: dict[str, Any]
+) -> Optional[bool]:
+    """Stale-baseline class: a write sent with no version check may have
+    erased another caller's edit made after the plan read, and still read
+    back like this write. Its read-back confirms it, but never VERIFIES it,
+    on every path that can mark it verified (a send, a replay, an adoption)."""
+    if verified is True and _unconditional(spec, w):
+        tx["unconditional_writes"] = tx.get("unconditional_writes", 0) + 1
+        return None
+    return verified
+
+
 def _post_image(images: Mapping[str, Any], volatile: Sequence[str]) -> dict[str, Any]:
     """What a committed statement left, as digests, for a later replay to
     read back: the rows it added or changed, and the rows it removed."""
@@ -1122,6 +1135,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                         replay_verified, _ = _readback(
                             ctx, w, base, entry.result, replay=True
                         )
+                        replay_verified = _capped(spec, w, replay_verified, tx)
                         if replay_verified is not True:
                             tx["unverified_replays"] = (
                                 tx.get("unverified_replays", 0) + 1
@@ -1142,6 +1156,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     if w["op"] == "update"
                     else (None, None)
                 )
+                adopted_verified = _capped(spec, w, verified, tx)
                 if verified:
                     state.record(
                         key,
@@ -1158,7 +1173,7 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     results.append(
                         _line(
                             ok=True,
-                            verified=True,
+                            verified=adopted_verified,
                             irreversible=False,
                             payload=payload,
                             code="adopted_by_read_back",
@@ -1296,12 +1311,8 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if rows_image is not None:
                 images[key]["rows"] = rows_image
             code = "confirmed" if verified else "refuted"
-            if verified and _unconditional(spec, w):
-                # Stale-baseline class: sent with no version check, so another
-                # caller's edit after the plan read may have been erased and
-                # still read back like this write. Confirmed, not VERIFIED.
+            if verified and _capped(spec, w, verified, tx) is None:
                 verified, code = None, "confirmed_unconditional"
-                tx["unconditional_writes"] = tx.get("unconditional_writes", 0) + 1
             results.append(
                 _line(
                     ok=verified is not False,

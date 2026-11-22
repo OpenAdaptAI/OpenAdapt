@@ -1309,3 +1309,35 @@ def test_sql_replay_whose_rows_still_hold_is_verified(tmp_path: Path) -> None:
     con.close()
     third = engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])
     assert third["tx"].get("unverified_replays") == 1, third
+
+
+def test_unconditional_replace_is_not_verified_on_replay_either(
+    tmp_path: Path, rest
+) -> None:
+    # The same task and payload again sends nothing; the read-back of the
+    # planned field can't rule out a lost update any better the second time.
+    _, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=False))
+    first = engine.apply_plan(ctx, _go(ctx, "T-rp", [_update(3, amount=7)])["digest"])
+    assert first["outcome"] == "COMPLETED_UNVERIFIED", first
+    again = engine.apply_plan(ctx, _go(ctx, "T-rp", [_update(3, amount=7)])["digest"])
+    assert again["tx"]["replays"] == 1 and again["tx"]["sent"] == 0
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+
+
+def test_unconditional_replace_adopted_after_a_crash_is_not_verified(
+    tmp_path: Path, rest
+) -> None:
+    # A crash after the send leaves the key ``begun``; the retry adopts the
+    # write from its read-back instead of resending, and must not VERIFY it.
+    store, url = rest
+    store.records[3]["amount"] = 7  # the send before the crash landed
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=False))
+    plan = _go(ctx, "T-ad", [_update(3, amount=7)])
+    w = plan["writes"][0]
+    ctx.state.record(
+        w["key"], "begun", plan=plan["digest"], payload=w["payload_sha256"]
+    )
+    out = engine.apply_plan(ctx, plan["digest"])
+    assert out["tx"]["sent"] == 0
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
