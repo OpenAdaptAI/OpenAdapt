@@ -43,7 +43,7 @@ removed one, update for a changed one) on the same table, naming the record
 as it was before the change; each entry explains at most one row, and a row
 whose record key changed is never explained.
 
-A row of a per-user table names no record (OpenEMR's ``user_settings``,
+A row of a per-user table names no record (such as ``user_settings``,
 owned by ``setting_user``). Owner-scoped attribution covers it: for a table
 whose rows carry an owner (``attribution.owners``, and the app profile's
 ``own_rows`` tables), another user's write entry of the matching kind that
@@ -139,7 +139,7 @@ class FrameAttribution(BaseModel):
     read: Optional[dict[str, Any]] = None
     #: ``audit_read`` only: the record field the audit entry's
     #: ``record_field`` refers to, when it isn't the frame's identity field.
-    #: OpenEMR's log names a patient (``pid``) while ``lists`` or ``pnotes``
+    #: An audit log may name a parent record key while child tables
     #: rows are told apart by their own ``id``. Such a log names a patient,
     #: not a table: any entry for a patient covers every row of that
     #: patient. So the bot's write to a table the frame doesn't read, logged
@@ -148,7 +148,7 @@ class FrameAttribution(BaseModel):
     #: The whole-database frame (``frame.database``) closes the first.
     record_key: Optional[str] = None
     #: ``audit_read`` only: per surface or table, the field that names the
-    #: record when it isn't ``record_key`` (OpenEMR's ``contact`` row points
+    #: record when it isn't ``record_key`` (a related row may point
     #: at its chart through ``foreign_id``).
     record_keys: dict[str, str] = Field(default_factory=dict)
     #: ``audit_read`` only: the entry field naming what the entry did, and
@@ -246,7 +246,7 @@ class FrameAttribution(BaseModel):
 class FrameSideRecord(BaseModel):
     """Rows the save adds beside each new declared record (a side record).
 
-    OpenEMR's New Patient path writes one ``history_data`` row for the new
+    A create-record path may write one side-table row for the new
     chart, linked by ``pid``. Declared here, such rows are part of the save,
     not collateral, and a missing or extra one refutes the frame.
     """
@@ -315,7 +315,7 @@ class FrameDatabase(BaseModel):
     #: The app's own bookkeeping, reviewed per app: a table name
     #: (append-only) or ``{table, mode, reason}``.
     allow_tables: list[AllowedTable] = Field(default_factory=list)
-    #: Table -> the surface whose records it holds (``patient_data`` ->
+    #: Table -> the surface whose records it holds (e.g. primary table ->
     #: ``patient``): an effect routed to the surface declares rows here too.
     views: dict[str, str] = Field(default_factory=dict)
     #: Table -> a surface that declares its rows (a contract's own read of
@@ -1626,7 +1626,7 @@ def judge_frame(
 
     # Side records: the links each new declared record gives its side rows.
     # A new record another actor created gives its side rows the same way:
-    # those rows are that actor's too (OpenEMR logs a contact row with no
+    # those rows are that actor's too (some apps log a side row with no
     # patient, so only its link to the colleague's chart attributes it).
     side_links: list[set[str]] = []
     other_links: list[set[str]] = []
@@ -1764,7 +1764,7 @@ def judge_frame(
             if any(c not in after or after.get(c) is None for c in same):
                 return
             # The partner's ``same`` columns as they are now: the default row
-            # was written with them (OpenEMR copies the label and the value).
+            # was written with them (some apps copy both the label and the value).
             partners.append(({c: str(after.get(c)) for c in same}, how, list(rules)))
 
         for key in set(before_map) | set(after_map):

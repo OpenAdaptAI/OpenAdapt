@@ -1,0 +1,17 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: rest
+  base_url: http://127.0.0.1:52247
+  records_path: /api/records
+  records_key: records
+  records_complete: true
+effects:
+  - kind: record_written
+    match:
+      patient_id: {param: patient_id}
+      type: {param: type}
+      note: {param: note}
+    expected_count: 1
+    count_new_only: true
+    forbid_collateral_loss: true
+    timeout_s: 1.0

@@ -2660,7 +2660,7 @@ def _external_network_call_state(
     if report.external_network_calls == "observed" or report.model_calls > 0:
         return "observed"
     # A browser run whose origin and entry URL are both on this computer (the
-    # bundled tutorial serves MockMed on 127.0.0.1) sent its own traffic only
+    # bundled tutorial serves the demo app on 127.0.0.1) sent its own traffic only
     # to this machine. Any non-loopback URL, a web run with no recorded origin,
     # and every remote-display target still count as observed egress.
     target_urls = [

@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ManagedMcpToolNameV1": {
+      "enum": [
+        "run_collect",
+        "run_attach_artifact",
+        "run_create_task"
+      ],
+      "title": "ManagedMcpToolNameV1",
+      "type": "string"
+    },
+    "ManagedToolStatusV1": {
+      "enum": [
+        "VERIFIED",
+        "HALTED",
+        "RECONCILIATION_REQUIRED"
+      ],
+      "title": "ManagedToolStatusV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Typed MCP result. Status is the outcome; there is no success flag to set.",
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.managed-tool-result/v1",
+      "default": "openadapt.managed-tool-result/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ManagedToolStatusV1"
+    },
+    "subject_token": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Subject Token",
+      "type": "string"
+    },
+    "tool": {
+      "$ref": "#/$defs/ManagedMcpToolNameV1"
+    }
+  },
+  "required": [
+    "tool",
+    "status",
+    "subject_token"
+  ],
+  "title": "ManagedToolResultV1",
+  "type": "object",
+  "x-openadapt-success-rule": "Only status VERIFIED is success. HALTED and RECONCILIATION_REQUIRED are not success and must not be summarized as success."
+}
