@@ -584,6 +584,7 @@ def _with_receipt(run_dir: Path, home: Path) -> dict:
 
     Returns a registry that names the key's role: a supplied older Seal
     registry names none, so the page never calls its keys this computer's."""
+    pytest.importorskip("openadapt_flow.receipt_record")
     from openadapt_flow.offline_seal import public_key_entry, signer_for
     from openadapt_flow.receipt_record import write_receipt_record
 
