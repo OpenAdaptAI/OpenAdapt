@@ -805,12 +805,31 @@ def test_intake_value_no_binding_enters_keeps_the_run_from_verified(
     )
     done = reconciler.run_until_halt_or_done(session)
     assert len(s.records) == 1
-    if ignored:
-        assert done.outcome == FormTxOutcome.VERIFIED_DONE, done.what_happened
-        assert "intake:drivers.additional" in done.receipt.payload.not_covered
-    else:
-        assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE, done.what_happened
-        assert "intake:drivers.additional" in done.summary_verdict.not_checked_keys
+    # An intake value the portal never asks for is named on the receipt as
+    # not covered; it blocks verified_done only when the pack requires it.
+    assert done.outcome == FormTxOutcome.VERIFIED_DONE, done.what_happened
+    assert "intake:drivers.additional" in done.receipt.payload.not_covered
+    assert "drivers.additional" not in done.receipt.payload.covered_keys
+
+
+def test_required_intake_value_no_binding_enters_blocks_verified(
+    site: tuple[_Site, str], browser: Any
+) -> None:
+    s, base = site
+    s.pages["/"] = _UNBOUND.replace(' value="Jasper Vellacott"', "")
+    pack = _unbound_pack(declare_paperless=True).model_copy(
+        update={"required_intake_keys": ("drivers.additional",)}
+    )
+    _, _, reconciler, session = _start(
+        browser,
+        base,
+        "/",
+        pack,
+        _dossier(**{"applicant.first_name": "Avery", "drivers.additional": "Pavel"}),
+    )
+    done = reconciler.run_until_halt_or_done(session)
+    assert done.outcome == FormTxOutcome.READBACK_INCOMPLETE, done.what_happened
+    assert "intake:drivers.additional" in done.summary_verdict.not_checked_keys
 
 
 _ROW_RADIO = """
