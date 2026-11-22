@@ -1,6 +1,6 @@
 {
   "__main__.py": {
-    "mockmed": 42,
+    "mockmed": 41,
     "textedit": 1
   },
   "backend.py": {
@@ -17,10 +17,6 @@
   },
   "backends/win_agent/server.py": {
     "notepad": 1
-  },
-  "compile_agent/code_action.py": {
-    "openemr": 1,
-    "token_main": 1
   },
   "compiler/compile.py": {
     "mockmed": 2,
@@ -45,33 +41,6 @@
     "openemr": 1,
     "textedit": 1
   },
-  "eligibility/__init__.py": {
-    "stedi": 6
-  },
-  "eligibility/client.py": {
-    "stedi": 28
-  },
-  "eligibility/payer_routes.yaml": {
-    "stedi": 5
-  },
-  "eligibility/waterfall.py": {
-    "stedi": 9
-  },
-  "ensure_record.py": {
-    "medplum": 3
-  },
-  "execute/app.py": {
-    "mockmed": 4
-  },
-  "execute/dispatch.py": {
-    "mockmed": 10
-  },
-  "execute/registry.py": {
-    "mockmed": 19
-  },
-  "execute/service.py": {
-    "mockmed": 4
-  },
   "execution_profiles.py": {
     "mockmed": 1
   },
@@ -85,9 +54,6 @@
     "dolibarr": 1,
     "espocrm": 2,
     "redmine": 2
-  },
-  "ir.py": {
-    "token_main": 1
   },
   "jit/authority.py": {
     "textedit": 2
@@ -154,25 +120,12 @@
   "registry.py": {
     "openemr": 2
   },
-  "report_redaction.py": {
-    "csrf_token_form": 2,
-    "token_main": 1
-  },
-  "reward/bundle.py": {
-    "mockmed": 3
-  },
   "reward/seed.py": {
     "mockmed": 34
   },
   "risk.py": {
     "openemr": 1,
     "openimis": 1
-  },
-  "rollback_state.py": {
-    "openemr": 1
-  },
-  "runtime/actuators/web_form.py": {
-    "openemr": 2
   },
   "runtime/effects/__init__.py": {
     "frappe": 1,
@@ -217,9 +170,6 @@
     "frappe": 7,
     "frappe-table": 1,
     "openemr": 1
-  },
-  "runtime/identity.py": {
-    "mockmed": 1
   },
   "runtime/replay/_shared.py": {
     "mockmed": 1
