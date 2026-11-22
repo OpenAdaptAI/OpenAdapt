@@ -24,14 +24,15 @@ from openadapt_flow.execute.dispatch import (  # noqa: E402
     _map_outcome,
     project_run_report,
 )
-from openadapt_flow.execute.registry import (  # noqa: E402
+from openadapt_flow.execute.service import ExecuteService  # noqa: E402
+from openadapt_flow.mockmed.execute_seed import (  # noqa: E402
     MOCKMED_EFFECT_STRENGTH,
     MOCKMED_ENVIRONMENT_OK,
     MOCKMED_QUALIFICATION_ID,
     MOCKMED_WORKFLOW_DIGEST,
     MOCKMED_WORKFLOW_VERSION,
+    mockmed_admissions,
 )
-from openadapt_flow.execute.service import ExecuteService  # noqa: E402
 
 
 def _request() -> dict[str, object]:
@@ -53,7 +54,9 @@ def _request() -> dict[str, object]:
 
 
 def _receipt(tmp_path: Path, runner: Any) -> Any:
-    store = ExecuteService(tmp_path, token="t", runner=runner, seed_mockmed=True)
+    store = ExecuteService(
+        tmp_path, token="t", runner=runner, seed_admissions=mockmed_admissions()
+    )
     accepted = store.create_execution(_request())
     return store.get_receipt(accepted.execution_id)
 
@@ -123,7 +126,9 @@ def test_admission_lookup_failure_stays_failed_platform(
         calls.append("ran")
         raise AssertionError("the runner must not be reached")
 
-    store = ExecuteService(tmp_path, token="t", runner=runner, seed_mockmed=True)
+    store = ExecuteService(
+        tmp_path, token="t", runner=runner, seed_admissions=mockmed_admissions()
+    )
 
     def broken_lookup(*args: Any, **kwargs: Any) -> Any:
         raise OSError("admission store unreadable")
@@ -189,7 +194,7 @@ def test_unsealable_fault_never_leaves_execution_running(
     from openadapt_flow.execute.service import ExecuteServiceError
 
     _fail_every_finalize(monkeypatch)
-    store = ExecuteService(tmp_path, token="t", seed_mockmed=True)
+    store = ExecuteService(tmp_path, token="t", seed_admissions=mockmed_admissions())
     accepted = store.create_execution(_request())
 
     status = store.get_status(accepted.execution_id)
@@ -218,7 +223,9 @@ def test_unsealable_pre_effect_fault_is_not_left_running(
         raise DispatchError("admitted bundle_dir is missing", pre_effect=True)
 
     _fail_every_finalize(monkeypatch)
-    store = ExecuteService(tmp_path, token="t", runner=runner, seed_mockmed=True)
+    store = ExecuteService(
+        tmp_path, token="t", runner=runner, seed_admissions=mockmed_admissions()
+    )
     accepted = store.create_execution(_request())
     assert store.get_status(accepted.execution_id).state is (
         ExecuteLifecycleStateV1.WAITING_FOR_RECONCILIATION
@@ -238,7 +245,7 @@ def test_finalize_failure_after_delivered_effect_requires_reconciliation(
         real_finalize(self, *args, **kwargs)
 
     monkeypatch.setattr(ExecuteService, "_finalize", finalize_fails_once)
-    store = ExecuteService(tmp_path, token="t", seed_mockmed=True)
+    store = ExecuteService(tmp_path, token="t", seed_admissions=mockmed_admissions())
     accepted = store.create_execution(_request())
     receipt = store.get_receipt(accepted.execution_id)
     assert receipt.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED

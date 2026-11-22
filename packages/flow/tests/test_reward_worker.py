@@ -616,6 +616,7 @@ def test_bundle_refuses_content_only_required_effect(seeded: dict[str, Any]) -> 
         seeded,
         "content-only",
         [{"kind": "record_written", "match": {"type": "Triage"}, "expected_count": 1}],
+        identity_keys=["patient_id"],
     )
     with pytest.raises(ValueError, match="patient_id"):
         RewardBundle.load(directory)
