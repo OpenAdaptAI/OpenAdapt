@@ -566,9 +566,8 @@ def receipt_after_run(
     if not (Path(run_dir) / "report.json").is_file():
         return None
     try:
-        from openadapt_flow.offline_seal import seal_home
-
         from openadapt_flow.handoffs.registry import ledgers_for
+        from openadapt_flow.offline_seal import seal_home
 
         write_receipt_record(
             Path(run_dir),
