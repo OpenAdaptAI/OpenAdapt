@@ -2,7 +2,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v1.24.0 (2026-11-22)
 
 ### Features
 

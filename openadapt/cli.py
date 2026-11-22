@@ -1335,8 +1335,10 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # public_seal module, and the quickstart's encrypted checkpoints rely on its
 # key derivation once per store. Launcher 1.23 requires Flow 3.3: the OpenEMR
 # quickstart's referral program checks its date picker against the run's
-# clock (`Postcondition.text_clock`), which Flow 3.2 ignores.
-_SUPPORTED_FLOW_RANGE = ">=3.3.0,<4.0.0"
+# clock (`Postcondition.text_clock`), which Flow 3.2 ignores. Launcher 1.24
+# requires Flow 3.4 (headed-browser settle fallback, receipts/handoffs, and
+# the openadapt-privacy 1.1.4 floor).
+_SUPPORTED_FLOW_RANGE = ">=3.4.0,<4.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -1346,7 +1348,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (3, 3, 0) <= parsed < (4, 0, 0)
+    return parsed is not None and (3, 4, 0) <= parsed < (4, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
