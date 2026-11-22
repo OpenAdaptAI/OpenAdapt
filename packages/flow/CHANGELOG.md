@@ -19,6 +19,32 @@
 
 ### Features
 
+- Agent-to-agent handoffs. `openadapt-flow handoff send` attaches a run's
+  `record/run/v1` receipt to what one agent hands another: inline, detached
+  beside a file (`FILE.handoff.json`), or POSTed to a webhook.
+  `openadapt-flow handoff verify` checks one against the receiver's pinned
+  keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
+  gives the signer role, integrity, the checks passed and not checked, and
+  counterparty confirmation lines. It always says that a valid signature
+  proves who signed, not that the claim is true. `send` binds the payload as
+  the receipt's `payload` subject, re-signed by the run's own key, so a
+  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
+  no payload (`payload_not_bound`). The private openings file never
+  travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
+- `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
+  `verify_handoff`. `serve --a2a` serves the same workflows over the A2A
+  (Agent2Agent) protocol 1.0 with the official `a2a-sdk` (new `a2a` extra):
+  - an Agent Card at `/.well-known/agent-card.json`;
+  - JSON-RPC and HTTP+JSON bindings;
+  - one skill per workflow plus `verify_handoff`;
+  - the draft extension `https://openadapt.ai/extensions/handoff-receipt/v1`.
+
+  It listens on 127.0.0.1 by default, needs a bearer token on any other
+  address, and refuses browser `Origin` and unknown `Host` headers. Every A2A
+  call goes through the MCP server's gate (`agent/contract_call.py`). Person
+  confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
+  (docs/A2A.md).
+
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a
   `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the

@@ -52,6 +52,8 @@ async function main() {
         tsaText: data.tsa_text ?? null,
         tsrBytes: data.tsr_b64 ? bytes(data.tsr_b64) : null,
         auth: data.auth ?? null,
+        receiptText: data.receipt_text ?? null,
+        receiptKeys: data.receipt_keys ?? null,
     }
     let props
     try {

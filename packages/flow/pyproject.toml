@@ -19,6 +19,16 @@ keywords = [
     "desktop",
     "citrix",
     "rdp",
+    "gui",
+    "automation",
+    "workflow",
+    "verification",
+    "a2a",
+    "agent2agent",
+    "agent-card",
+    "agent-handoff",
+    "in-toto",
+    "dsse",
 ]
 license = { text = "MIT" }
 # rapidocr-onnxruntime is part of the validated identity/OCR path and does not
@@ -328,6 +338,15 @@ agent = [
     "mcp>=1.28,<3",
     "jsonschema>=4.20.0",
     "anyio>=4.0",
+]
+
+# Agent-to-agent handoffs over the A2A (Agent2Agent) protocol:
+# `openadapt-agent serve --a2a`. a2a-sdk is Apache-2.0 (a2aproject/a2a-python);
+# http-server adds Starlette and sse-starlette (BSD-3-Clause).
+a2a = [
+    "openadapt-flow[agent]",
+    "a2a-sdk[http-server]>=1.3.1,<2",
+    "uvicorn>=0.29",
 ]
 
 # Verified write tools for agent frameworks
