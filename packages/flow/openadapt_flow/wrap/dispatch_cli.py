@@ -652,7 +652,7 @@ def cmd_wrap_dispatch(args: argparse.Namespace) -> int:
             return 0
         result = run(args)
     except (TaskArgumentsError, TaskSetupError) as exc:
-        print(f"openadapt-flow wrap-dispatch: {exc}", file=sys.stderr)
+        print(f"wrap-dispatch: {exc}", file=sys.stderr)
         return 2
     _emit(result, args.result)
     return 0 if result.get("verified") is True else 1
