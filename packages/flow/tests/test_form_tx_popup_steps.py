@@ -66,7 +66,8 @@ document.getElementById('open-est').addEventListener('click', () => {{ {opener} 
 document.getElementById('submit').addEventListener('click', async () => {{
   const body = {{first: document.getElementById('first').value,
                  dwelling: document.getElementById('dwelling').value}};
-  await fetch('/submit', {{method: 'POST', body: JSON.stringify(body)}});
+  // Read the reply before leaving the page, so the request is not cut off.
+  await (await fetch('/submit', {{method: 'POST', body: JSON.stringify(body)}})).text();
   location.href = '/summary';
 }});
 </script>
@@ -245,6 +246,7 @@ class _Portal:
 def _pack(mode: str, result_label: Optional[str] = None) -> FormPack:
     int_codec = FieldCodecSpec(kind=FormCodecKind.INTEGER)
     return FormPack(
+        commit_url_patterns=("/submit",),
         pack_id=f"popup-steps-{mode}",
         domain_schema="test.quote/v1",
         ui_profile_id="popup-steps-test",
