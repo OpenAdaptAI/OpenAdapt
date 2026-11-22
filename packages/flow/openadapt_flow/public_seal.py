@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -398,10 +397,9 @@ def _name(value: Any, what: str) -> Optional[str]:
 
 def _provenance(run_dir: Path) -> Provenance:
     """``synthetic-tutorial`` only when the run's own receipt says so."""
-    try:
-        receipt = json.loads((run_dir / "receipt.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "production"
+    from openadapt_flow.receipt import read_run_summary
+
+    receipt = read_run_summary(run_dir)
     if isinstance(receipt, dict) and receipt.get("provenance") == "synthetic-tutorial":
         return "synthetic-tutorial"
     return "production"

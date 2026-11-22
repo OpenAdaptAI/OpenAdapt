@@ -1,0 +1,1 @@
+Dry-runs a batch of writes to external systems (REST APIs, SQL databases, email) and prints what would change; applies it only under a single-use approval bound to the plan digest, with an idempotency key per write that a regenerated payload cannot change; undoes it with a read-back proof; holds email in a cancelable queue.

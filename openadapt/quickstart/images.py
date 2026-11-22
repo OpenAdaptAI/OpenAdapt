@@ -1,11 +1,17 @@
 """Show a screenshot inline on terminals that can draw images.
 
-Two protocols cover the terminals that support it: iTerm2's inline images
-(iTerm2 and WezTerm) and Kitty's graphics protocol (Kitty and Ghostty). Each
-terminal is recognized from the variables it sets for its own sessions. Nothing
-is assumed: an unknown terminal, a terminal multiplexer (tmux and screen don't
-pass images through unless configured to), or output that isn't a terminal
-gets ``None``, and the caller draws a text box instead.
+Two protocols cover the terminals that support it: iTerm2's inline images and
+Kitty's graphics protocol (Kitty and Ghostty). A terminal is a candidate when
+the variables it sets for its own sessions name it, and it is used only when
+it also answers a query for that protocol (:func:`terminal_answers`). An
+unknown terminal, a terminal multiplexer (tmux and screen don't pass images
+through unless configured to), output that isn't a terminal, or a terminal
+that doesn't answer gets ``None``, and the caller shows the text description
+alone.
+
+WezTerm sets ``TERM_PROGRAM=WezTerm`` and speaks the iTerm2 protocol, but a
+WezTerm run showed blank rows where the image should have been, so it is not
+a candidate on its own; ``OPENADAPT_INLINE_IMAGES=iterm2`` turns it on.
 """
 
 from __future__ import annotations
@@ -13,8 +19,11 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
+import sys
+import time
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 
 ITERM2 = "iterm2"
 KITTY = "kitty"
@@ -27,7 +36,11 @@ OVERRIDE_ENV = "OPENADAPT_INLINE_IMAGES"
 def detect_image_protocol(
     environ: Optional[Mapping[str, str]] = None, *, isatty: bool
 ) -> Optional[str]:
-    """Return the image protocol this terminal speaks, or None when unsure."""
+    """Return the image protocol this terminal names itself for, or None.
+
+    This reads only the environment. :func:`image_protocol` also asks the
+    terminal before anything is drawn.
+    """
 
     env = os.environ if environ is None else environ
     override = (env.get(OVERRIDE_ENV) or "").strip().lower()
@@ -43,13 +56,99 @@ def detect_image_protocol(
     program = env.get("TERM_PROGRAM", "")
     if program == "iTerm.app" or env.get("LC_TERMINAL") == "iTerm2":
         return ITERM2
-    if program == "WezTerm":
-        return ITERM2
     if env.get("KITTY_WINDOW_ID") or term == "xterm-kitty":
         return KITTY
     if program == "ghostty" or term == "xterm-ghostty":
         return KITTY
     return None
+
+
+def image_protocol(
+    environ: Optional[Mapping[str, str]] = None,
+    *,
+    isatty: bool,
+    answers: Optional[Callable[[str], bool]] = None,
+) -> Optional[str]:
+    """The protocol to draw with: named by the terminal and answered by it.
+
+    ``OPENADAPT_INLINE_IMAGES`` set to a protocol is used as given, without a
+    query, for setups detection can't see.
+    """
+
+    env = os.environ if environ is None else environ
+    candidate = detect_image_protocol(env, isatty=isatty)
+    if candidate is None:
+        return None
+    if (env.get(OVERRIDE_ENV) or "").strip().lower() == candidate:
+        return candidate
+    return candidate if (answers or terminal_answers)(candidate) else None
+
+
+#: Kitty's graphics query (a 1x1 image it checks but doesn't store), and
+#: iTerm2's cell-size report. Each is followed by Primary Device Attributes,
+#: which every terminal answers, so a terminal that ignores the first query
+#: is known as soon as its device attributes arrive.
+_QUERIES = {
+    KITTY: "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\",
+    ITERM2: "\x1b]1337;ReportCellSize\x07",
+}
+_ANSWERS = {
+    KITTY: re.compile(rb"\x1b_Gi=31;OK"),
+    ITERM2: re.compile(rb"\x1b\]1337;ReportCellSize="),
+}
+_DEVICE_ATTRIBUTES = "\x1b[c"
+_DEVICE_ANSWER = re.compile(rb"\x1b\[\?[0-9;]*c")
+
+
+def terminal_answers(protocol: str, *, timeout_s: float = 0.5) -> bool:
+    """Ask the controlling terminal whether it speaks ``protocol``.
+
+    Writes the protocol's query and a device-attributes request to
+    ``/dev/tty`` with echo off, then reads until the device attributes arrive
+    or ``timeout_s`` passes. True only when the protocol's own answer came
+    back. Windows, or no controlling terminal, is False.
+    """
+
+    if sys.platform == "win32":
+        return False
+    try:
+        import select
+        import termios
+        import tty
+    except ImportError:
+        return False
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        return False
+    try:
+        try:
+            saved = termios.tcgetattr(fd)
+        except termios.error:
+            return False
+        try:
+            tty.setcbreak(fd)
+            os.write(fd, (_QUERIES[protocol] + _DEVICE_ATTRIBUTES).encode("ascii"))
+            reply = b""
+            deadline = time.monotonic() + timeout_s
+            while not _DEVICE_ANSWER.search(reply):
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    break
+                ready, _, _ = select.select([fd], [], [], left)
+                if not ready:
+                    break
+                chunk = os.read(fd, 1024)
+                if not chunk:
+                    break
+                reply += chunk
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        return bool(_ANSWERS[protocol].search(reply))
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
 
 
 def crop_png(path: Path, box: tuple[int, int, int, int]) -> bytes:
@@ -124,5 +223,7 @@ __all__ = [
     "beside_image",
     "crop_png",
     "detect_image_protocol",
+    "image_protocol",
     "image_sequence",
+    "terminal_answers",
 ]

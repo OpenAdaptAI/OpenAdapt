@@ -61,28 +61,36 @@ FLOW_NAMES = {
     "disambiguate": "compile --disambiguate",
     "emit-mcp": "workflow emit-mcp",
     "emit-skill": "workflow emit-skill",
+    "exceptions": "approve exceptions",
     "explain": "inspect explain",
     "fleet": "services fleet",
+    "flight": "run --flight",
     "for-each": "run --for-each",
     "guard": "run --guard",
+    "hooks": "setup hooks",
     "induce": "compile --induce",
     "intake": "teach --intake",
     "item-approval": "approve --item",
     "jit": "compile --jit",
     "known-ids": "verify known-ids",
     "learn": "teach --learn",
+    "ledger": "inspect ledger",
     "lint": "inspect lint",
     "local-seal": "verify local-seal",
     "login": "setup login",
     "materialize-approved": "compile --materialize-approved",
     "narration": "record narration",
     "no-outbound": "setup no-outbound",
+    "plan": "run --plan",
     "process": "run --process",
     "propose-qualification": "qualify --propose",
+    "proxy": "services proxy",
     "pull": "workflow pull",
     "push": "workflow push",
     "qualify": "qualify",
+    "readiness": "qualify readiness",
     "receipt": "verify receipt",
+    "handoff": "verify handoff",
     "reconcile": "verify reconcile",
     "record": "record",
     "redact-report": "inspect redact-report",
@@ -115,6 +123,7 @@ FLOW_NAMES = {
     "variants": "compile --variants",
     "verify-run": "verify effect",
     "visualize": "inspect visualize",
+    "wrap-dispatch": "run --dispatch",
 }
 
 
@@ -127,6 +136,9 @@ FLOW_ROUTES = routes(FLOW_NAMES)
 # Merge integration only: these capabilities are not registered by this change.
 # Once their own registrar is present, the task view can expose it automatically.
 INTEGRATION_NAMES = {"pilot": "verify pilot", "audit": "verify audit"}
+#: Leaves renamed in place: the new name and the legacy leaf it replaces. The
+#: task route still names the legacy leaf, which every released engine has.
+RENAMED_LEAVES = {"encrypt": "seal"}
 
 
 def translate(

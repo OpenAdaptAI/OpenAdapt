@@ -72,12 +72,56 @@ class RunFacts:
     #: "Stopped before saving", ...), from its transaction outcome.
     plain_label: str = ""
     #: True when this run is a repeat: its first try, in a worker, stalled
-    #: and was stopped.
+    #: and was stopped, or its first try never got a ready screen.
     repeated: bool = False
+    #: True when the run stopped before its first action because the app's
+    #: screen never finished drawing (see :func:`starting_state_not_ready`).
+    not_ready: bool = False
+    #: Why it stopped, in plain words, when ``not_ready``.
+    explanation: str = ""
 
     @property
     def report_md(self) -> Path:
         return self.run_dir / "REPORT.md"
+
+
+#: The engine's words for a run its readiness gate stopped before step one.
+_NOT_READY_MARK = "starting state not ready"
+
+
+def starting_state_not_ready(
+    execution_outcome: object, transaction_outcome: object, halt_reason: object
+) -> bool:
+    """True when a run stopped before its first action, on an unready screen.
+
+    The readiness gate halts a run whose starting screen never settles (still
+    loading, animating, or, for a visible window, not drawing at all). Only
+    ``HALTED_BEFORE_EFFECT`` counts: that outcome proves nothing was written,
+    so running again in a fresh folder is safe.
+    """
+
+    return (
+        str(execution_outcome) == "HALTED"
+        and transaction_outcome == "HALTED_BEFORE_EFFECT"
+        and _NOT_READY_MARK in str(halt_reason or "")
+    )
+
+
+def not_ready_explanation(visible: bool) -> str:
+    """Why a run stopped before its first click, in plain words."""
+
+    if visible:
+        return (
+            "The browser window never finished drawing, so OpenAdapt stopped "
+            "before its first click and saved nothing. A window that is "
+            "covered or on another desktop doesn't draw. Run it again without "
+            "--watch, or keep the window in view."
+        )
+    return (
+        "The app's page never finished loading, so OpenAdapt stopped before "
+        "its first click and saved nothing. Run it again; if it happens "
+        "again, the report says what kept changing."
+    )
 
 
 @dataclass
@@ -103,6 +147,11 @@ class BreakFacts:
     #: whose cause the evidence doesn't show, stays False, and the views then
     #: describe a generic stop instead of the demonstration.
     stop_attributed: bool = False
+    #: True when this run stopped before its first action because the app's
+    #: screen never finished drawing, even on a second try.
+    not_ready: bool = False
+    #: Why it stopped, in plain words, when ``not_ready``.
+    explanation: str = ""
     result: Any = field(default=None, repr=False)
 
     @property
@@ -291,7 +340,7 @@ def run_program(
     )
     if report.execution_outcome == "VERIFIED":
         write_receipt(_build_tutorial_receipt(report), run_dir)
-    return RunFacts(
+    facts = RunFacts(
         index=index,
         note=note,
         run_dir=run_dir,
@@ -307,7 +356,15 @@ def run_program(
         plain_label=plain_result(
             report.transaction_outcome, report.execution_outcome
         ).label,
+        not_ready=starting_state_not_ready(
+            report.execution_outcome,
+            report.transaction_outcome,
+            getattr(getattr(report, "halt", None), "reason", ""),
+        ),
     )
+    if facts.not_ready:
+        facts.explanation = not_ready_explanation(visible)
+    return facts
 
 
 class EarlyScreenRead:
@@ -549,6 +606,18 @@ class FlowEngine:
             (index, note if varied else None, f"run-{index}")
             for index, note in enumerate(notes, 1)
         ]
+        retry: list[tuple[int, Optional[str], str]] = []
+
+        def finish(run: RunFacts) -> None:
+            # A run that never got a ready screen wrote nothing; it runs once
+            # more, here, in a new folder, and only that try is reported.
+            if run.not_ready and not run.repeated:
+                retry.append(
+                    (run.index, jobs[run.index - 1][1], f"{run.run_dir.name}-retry")
+                )
+                return
+            on_finish(run)
+
         leftover = jobs
         pool = self._started_pool()
         if pool is not None:
@@ -556,13 +625,17 @@ class FlowEngine:
                 jobs,
                 bundle_dir=self.bundle_dir,
                 root=self.root,
-                on_finish=on_finish,
+                on_finish=finish,
             )
             # Act 2 is their only job: let them shut down during Act 3.
             pool.release()
         for index, note, folder in leftover:
             run = self.run(index, note, folder)
             run.repeated = folder != f"run-{index}"
+            finish(run)
+        for index, note, folder in retry:
+            run = self.run(index, note, folder)
+            run.repeated = True
             on_finish(run)
 
     # -- act 3 ------------------------------------------------------------
@@ -580,13 +653,24 @@ class FlowEngine:
         return_focus_to_terminal(visible=self.visible)
 
     def break_it(self) -> BreakFacts:
-        """Rerun the same program while the database rejects the save."""
+        """Rerun the same program while the database rejects the save.
 
+        A run that never got a ready screen (it stopped before its first
+        action and wrote nothing) runs once more in ``run-broken-retry``.
+        """
+
+        broken = self._break_once(self.root / "run-broken")
+        if broken.not_ready:
+            again = self._break_once(self.root / "run-broken-retry")
+            again.seconds += broken.seconds
+            return again
+        return broken
+
+    def _break_once(self, run_dir: Path) -> BreakFacts:
         from openadapt_flow.demo_proof import _final_frame, _load_report
         from openadapt_flow.tutorial import _run_break_it, consequential_step
 
         assert self.workflow is not None
-        run_dir = self.root / "run-broken"
         save = consequential_step(self.workflow).id
         # The save step's screenshot lands before the engine's wait on the
         # database, so it can be read during that wait.
@@ -606,7 +690,7 @@ class FlowEngine:
         report = _load_report(Path(result.run_dir))
         screenshot = _final_frame(Path(result.run_dir), report) if report else None
         screen_text = None  # read by read_screen(), alongside the page
-        return BreakFacts(
+        broken = BreakFacts(
             run_dir=Path(result.run_dir),
             fault=result.fault,
             execution_outcome=str(result.execution_outcome),
@@ -623,20 +707,36 @@ class FlowEngine:
             # The record check read the save back and refuted it: the
             # silent failure this act injects, not some other refusal.
             stop_attributed=int(result.effects_refuted) > 0,
+            not_ready=starting_state_not_ready(
+                result.execution_outcome,
+                result.transaction_outcome,
+                result.halt_reason,
+            ),
             result=result,
         )
+        if broken.not_ready:
+            broken.explanation = not_ready_explanation(self.visible)
+        return broken
 
     def read_screen(self, broken: BreakFacts) -> Optional[str]:
-        """What the halted run's screenshot says (see :func:`read_screen_text`)."""
+        """What the halted run's screen said.
 
-        if broken.screenshot is None:
-            return None
-        early = getattr(self, "_early", None)
-        if early is not None:
-            text = early.text_for(broken.screenshot)
-            if text is not None:
-                return text
-        return read_screen_text(broken.screenshot)
+        The saved message read off its screenshot (:func:`read_screen_text`),
+        else the success text the engine itself observed on screen when it
+        checked the step, else None.
+        """
+
+        text = None
+        if broken.screenshot is not None:
+            early = getattr(self, "_early", None)
+            if early is not None:
+                text = early.text_for(broken.screenshot)
+            if text is None:
+                text = read_screen_text(broken.screenshot)
+        if text is None:
+            claim = getattr(broken.result, "screen_claim_text", None)
+            text = str(claim).strip() if claim else None
+        return text
 
     # -- finale -----------------------------------------------------------
 
@@ -661,6 +761,7 @@ class FlowEngine:
         except ImportError:
             return False
         seal_run(broken.run_dir, home=seal_home(), enqueue=False)
+        write_run_receipts([broken.run_dir])
         return (broken.run_dir / "seal.json").is_file()
 
     def seal_pages(
@@ -759,6 +860,8 @@ def seal_runs(runs: list[RunFacts]) -> Optional[SealFacts]:
         from openadapt_flow.offline_seal import seal_home, seal_run
     except ImportError:
         return None
+    # Every run gets a receipt, whatever its outcome; signing isn't grading.
+    write_run_receipts([run.run_dir for run in runs])
     checked = [run for run in runs if run.checked]
     if not checked:
         return None
@@ -769,6 +872,27 @@ def seal_runs(runs: list[RunFacts]) -> Optional[SealFacts]:
         seal = seal_run(run.run_dir, home=seal_home(), enqueue=False)
         key_id = str(seal.key_id)
     return SealFacts(key_id=key_id, sealed=len(checked))
+
+
+def write_run_receipts(run_dirs: list[Path]) -> int:
+    """Write each run's ``receipt.json`` (record/run/v1); returns how many exist."""
+
+    try:
+        from openadapt_flow.offline_seal import seal_home, signer_for
+        from openadapt_flow.receipt_record import write_receipt_record
+    except ImportError:
+        return 0
+    written = 0
+    for run_dir in run_dirs:
+        if not (Path(run_dir) / "report.json").is_file():
+            continue
+        try:
+            home = seal_home()
+            write_receipt_record(Path(run_dir), signer=signer_for(home), home=home)
+        except Exception:  # noqa: BLE001 - a receipt failure never ends the finale
+            continue
+        written += 1
+    return written
 
 
 def return_focus_to_terminal(

@@ -31,6 +31,7 @@ import pytest
 
 from openadapt_flow.tx.induce import (
     DefaultFrameAndIntentJudge,
+    InductionRefused,
     SandboxSafetyError,
     certify_lens_on_sandbox,
     induce_lens_from_har,
@@ -1128,9 +1129,12 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         },
     )
     create_only_har = {"log": {"version": "1.2", "entries": [h_post]}}
+    with pytest.raises(InductionRefused):
+        induce_lens_from_har(create_only_har)
     create_lens = induce_lens_from_har(
         create_only_har,
         intended_inputs={"title": "Massachusetts"},
+        allow_unobserved_item_route=True,
     )
     assert create_lens.write_mode == "create"
     assert create_lens.get_one.path_template == "/api/tasks/{id}"

@@ -14,7 +14,6 @@ from PIL import Image
 
 from openadapt_flow.approval_mode import item_approval
 from openadapt_flow.approval_mode.model import ApprovalMode
-from openadapt_flow.eligibility import artifact
 from openadapt_flow.private_file import open_binary
 from tests._binary_descriptor_contract import (
     assert_descriptor_roundtrip,
@@ -39,9 +38,7 @@ def test_descriptor_model_preserves_arbitrary_bytes(
     assert_descriptor_roundtrip(tmp_path, open_binary, payload)
 
 
-@pytest.mark.parametrize(
-    "writer", [item_approval._write_exclusive, artifact._write_exclusive]
-)
+@pytest.mark.parametrize("writer", [item_approval._write_exclusive])
 @settings(
     max_examples=30,
     deadline=None,
@@ -103,6 +100,7 @@ def test_raw_descriptor_entry_points_cannot_fall_back_to_text_open():
     covered = raw_descriptor_owners(source)
     assert "approval_mode/item_approval.py" in covered
     assert "write_ledger.py" in covered
+    assert "exceptions/registry.py" in covered
 
 
 def test_binary_open_refuses_an_explicit_text_mode(

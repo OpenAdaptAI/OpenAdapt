@@ -153,6 +153,9 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
     # Never the OS keychain from tests: no dialog, no login-keychain write.
     monkeypatch.setenv("OPENADAPT_FLOW_KEY_STORE", "file")
+    # The stop queue also lists Flow's exception registry under
+    # OPENADAPT_HOME; keep a developer's real cards out of every test.
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path_factory.mktemp("openadapt-home")))
 
 
 @pytest.fixture(autouse=True)

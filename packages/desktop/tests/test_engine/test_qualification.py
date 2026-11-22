@@ -1744,3 +1744,155 @@ def test_review_graph_carries_the_named_sections_and_edits_them(tmp_path: Path) 
                 "other": graph["sections"][1]["section"],
             },
         )
+
+
+def test_default_policy_falls_back_when_bundled_flow_lacks_record_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openadapt_desktop import qualification as desktop_qual
+
+    real_api = desktop_qual._flow_api()
+    real_load = real_api["load_policy"]
+
+    def _legacy_load_policy(name: str):
+        if name == "record-write":
+            raise FileNotFoundError("Policy 'record-write' not found")
+        return real_load(name)
+
+    monkeypatch.setattr(
+        desktop_qual,
+        "_flow_api",
+        lambda: {**real_api, "load_policy": _legacy_load_policy},
+    )
+
+    fallback = desktop_qual._policy(desktop_qual.DEFAULT_QUALIFICATION_POLICY)
+    assert fallback.name == "clinical-write"
+
+    # Explicit unknown policies still fail closed instead of falling back.
+    with pytest.raises(QualificationError):
+        desktop_qual._policy("nonexistent-policy")
+
+
+def test_inspect_bundle_preserves_recorded_policy_for_existing_certified_bundle(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    workflow = Workflow.load(bundle)
+    workflow.stamp_certification("clinical-write", True)
+    workflow.save(bundle)
+
+    # Opening a bundle with recorded clinical-write provenance under the new
+    # domain-neutral default preserves its recorded policy identity.
+    reopened_legacy = inspect_bundle(bundle, workflow_id="wf-1")
+    assert reopened_legacy["policy"] == "clinical-write"
+
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    certified = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source="clinical-write",
+    )
+    assert certified["policy"] == "clinical-write"
+    assert certified["project"]["last_certification"]["policy_name"] == "clinical-write"
+
+    # Re-opening under the new domain-neutral default keeps the recorded policy
+    # identity from last_certification.
+    reopened = inspect_bundle(bundle, workflow_id="wf-1")
+    assert reopened["policy"] == "clinical-write"
+
+    # Re-running certification with the UI's default policy ("record-write") also
+    # keeps the recorded policy identity instead of switching policies mid-flight.
+    recertified = certify_bundle(bundle, workflow_id="wf-1")
+    assert recertified["policy"] == "clinical-write"
+    assert recertified["project"]["last_certification"]["policy_name"] == "clinical-write"
+
+
+def test_certify_bundle_with_custom_policy_yaml_path_succeeds_on_readback(
+    tmp_path: Path,
+) -> None:
+    custom_policy = tmp_path / "custom-policy.yaml"
+    custom_policy.write_text(
+        "name: custom-campaign-policy\n"
+        "description: Custom YAML policy whose internal name is not a built-in.\n"
+        "prohibit_unarmed_clicks: false\n"
+        "prohibit_vacuous_postconditions: false\n"
+        "max_unverified_steps: 99\n",
+        encoding="utf-8",
+    )
+    bundle = _bundle(
+        tmp_path / "bundle",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    certified = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source=str(custom_policy),
+    )
+    assert certified["ok"] is True
+    assert certified["policy"] == "custom-campaign-policy"
+    assert certified["project"]["last_certification"]["policy_name"] == "custom-campaign-policy"
+
+
+def test_dispatcher_distinguishes_omitted_policy_from_explicit_stricter_policy(
+    tmp_path: Path,
+) -> None:
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    bundle = _bundle(
+        config.data_dir / "bundles" / "wf-1",
+        Step(id="settle", intent="Wait", action=ActionKind.WAIT),
+    )
+    initialize_qualification(
+        bundle,
+        workflow_id="wf-1",
+        target_kind="web",
+        application="Sample app",
+        application_version="1.0",
+        environment_label="local-test",
+    )
+    # First certify under permissive so the bundle records permissive.
+    permissive_result = certify_bundle(
+        bundle,
+        workflow_id="wf-1",
+        policy_source="permissive",
+    )
+    assert permissive_result["policy"] == "permissive"
+    assert permissive_result["project"]["last_certification"]["policy_name"] == "permissive"
+
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-1", str(bundle))
+    dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
+    try:
+        # Omitted policy reuses the recorded permissive policy.
+        reused = dispatcher.certify_qualification(workflow_id="wf-1")
+        assert reused["policy"] == "permissive"
+        assert reused["project"]["last_certification"]["policy_name"] == "permissive"
+
+        # Explicit record-write overrides permissive instead of reusing it.
+        upgraded = dispatcher.certify_qualification(
+            workflow_id="wf-1",
+            policy="record-write",
+        )
+        assert upgraded["policy"] in {"record-write", "clinical-write"}
+        assert upgraded["policy"] != "permissive"
+        assert upgraded["project"]["last_certification"]["policy_name"] == upgraded["policy"]
+    finally:
+        db.close()

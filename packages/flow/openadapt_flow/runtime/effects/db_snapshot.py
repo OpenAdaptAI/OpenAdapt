@@ -812,8 +812,8 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
 
 #: MySQL and MariaDB types whose value ``JSON_OBJECT`` can't carry as text:
 #: a bit string, a geometry or a vector is bytes, which turns the whole
-#: object into a binary string that isn't valid JSON (Dolibarr's
-#: ``llx_societe.geopoint``). They are read as the hex of their stored bytes.
+#: object into a binary string that isn't valid JSON (such as a binary
+#: spatial column). They are read as the hex of their stored bytes.
 _MYSQL_HEX_TYPES = frozenset(
     {
         "bit",

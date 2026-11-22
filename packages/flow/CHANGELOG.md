@@ -17,17 +17,24 @@
 
 ## Unreleased
 
-### Fixes
+### Features
 
-- `wrap publish` no longer refuses programs whose identity templates carry
-  `punctuation_body_keys`. These values are salted token hashes, the same
-  generated shape as the `c` and `r` keys, but the sanitizer sent them to
-  the PHI recognizer. It sometimes read one as an organization or a group
-  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
-  Only an index key with a hex hash of 16 or more characters is kept. Free
-  text in that slot is still scrubbed.
+- Effect locations (`openadapt.effect-location/v1`,
+  `openadapt_flow/effect_location/`): the place a careful person would look
+  again to see an intended value, stored as pack data. Each record holds the
+  demonstration path and start condition (`same_screen`, `fresh_navigation`,
+  `new_session`, `other_channel`), a locator (label, row key or region), the
+  expected value, a codec (including a `template` codec that reads one
+  summary row as two values and a `split_date` codec), the expected count
+  and an optional baseline. `evaluate_all` judges every planned value as
+  `held`, `refuted` or `not_checked`. A location that can't be reached,
+  found or read is `not_checked`, never a pass. The check level comes from
+  the start condition; the receipt word comes from
+  `check_level.outcome_word` when it is available. The engine holds no
+  application vocabulary: month names, yes and no words, currency signs and
+  tables come from the pack. See docs/EFFECT_LOCATION.md.
 
-## v3.4.0 (held until PyPI serves openadapt-privacy 1.1.4)
+## v3.4.0 (2026-11-21)
 
 ### Encryption at rest by default
 
@@ -63,6 +70,32 @@
 - Core dependency: `cryptography>=50` (HPKE). The keychain store uses `keyring`, which `pip install openadapt` includes; a bare `openadapt-flow` install needs the `keychain` extra, and otherwise keeps the device key in a 0600 file with a warning.
 
 ### Features
+
+- Agent-to-agent handoffs. `openadapt-flow handoff send` attaches a run's
+  `record/run/v1` receipt to what one agent hands another: inline, detached
+  beside a file (`FILE.handoff.json`), or POSTed to a webhook.
+  `openadapt-flow handoff verify` checks one against the receiver's pinned
+  keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
+  gives the signer role, integrity, the checks passed and not checked, and
+  counterparty confirmation lines. It always says that a valid signature
+  proves who signed, not that the claim is true. `send` binds the payload as
+  the receipt's `payload` subject, re-signed by the run's own key, so a
+  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
+  no payload (`payload_not_bound`). The private openings file never
+  travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
+- `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
+  `verify_handoff`. `serve --a2a` serves the same workflows over the A2A
+  (Agent2Agent) protocol 1.0 with the official `a2a-sdk` (new `a2a` extra):
+  - an Agent Card at `/.well-known/agent-card.json`;
+  - JSON-RPC and HTTP+JSON bindings;
+  - one skill per workflow plus `verify_handoff`;
+  - the draft extension `https://openadapt.ai/extensions/handoff-receipt/v1`.
+
+  It listens on 127.0.0.1 by default, needs a bearer token on any other
+  address, and refuses browser `Origin` and unknown `Host` headers. Every A2A
+  call goes through the MCP server's gate (`agent/contract_call.py`). Person
+  confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
+  (docs/A2A.md).
 
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a
@@ -109,9 +142,20 @@
   registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
   otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
   and public key an owner or admin must register.
+- `openadapt login` with no token signs in through the browser: a PKCE
+  loopback grant on `127.0.0.1` that stores the same credential `push` and
+  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
+  the old path (#2379).
 
 ### Fixes
 
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
 - Choice labels, values, shape metadata and browser-dialog messages are
   checked against declared secrets before capture. A matching or opaque
   secret boundary stops recording before that text reaches its artifacts.
@@ -141,6 +185,44 @@
   derived from its explicit key for its own lifetime. Without that, each
   checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
   instead of 3.5 s (131 derivations, now 1).
+- In reverse-proxy mode the wire tap relays a redirect to a path on the
+  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
+  so it can front a form app that answers a save with Post/Redirect/Get. The
+  client's next request comes back through the tap. Browser route mode still
+  refuses every redirect, and the tap never follows one itself (#2392).
+- Guarded native keyboard delivery on a Windows agent that advertises
+  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
+  control and frame. #2313 describes when it applies and what it checks.
+- A repair candidate id that would leave the repair store is refused (#2369).
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+- An admitted managed run, and its resume, keep the policy the local Standard
+  gate chose when neither the CLI nor the deployment names one, instead of
+  exiting with code 2 (#2401).
+- Lens route induction can use a trace's observed effects, not only HTTP
+  methods, to assign route roles (#2393).
+- Generated verify contracts stop fewer correct writes: five generator causes
+  of false stops are fixed, each by one schema-independent rule (#2418).
+- `import openadapt_flow` loads its `ir` re-exports on first use, and the
+  qualification models and several replayer helpers moved into their own
+  modules. Names still import explicitly from their old modules;
+  `from openadapt_flow.qualification import *` no longer includes
+  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
+  #2455, #2456, #2459).
+
+### Requirements
+
+- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
+  release with `sanitization_config()`, which sanitized reuse and approval bind
+  to.
+- On Python 3.11 and newer, the lock moves Pillow, filelock and other
+  dependencies to a release that fixes an open security advisory. The
+  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
 
 ## v3.3.0 (2026-11-19)
 

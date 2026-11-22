@@ -1,6 +1,6 @@
 """Identify a web application by its address and signed-in session.
 
-Real systems such as OpenEMR or openIMIS carry none of OpenAdapt's
+Real production web systems carry none of OpenAdapt's
 ``openadapt-*`` ``<meta>`` markers, so the backend's built-in observer cannot
 label them. This observer identifies them by what any web application has:
 
