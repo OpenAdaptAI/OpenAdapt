@@ -66,20 +66,14 @@ runs:
         INSTALL_MODE: ${{ inputs.install-mode }}
       run: |
         set -euo pipefail
-        LOCAL_TYPES="${ACTION_PATH}/../../../packages/types"
-        if [ "$INSTALL_MODE" = "auto" ] && [ -f "${LOCAL_TYPES}/pyproject.toml" ]; then
-          python -m pip install --quiet --disable-pip-version-check --no-build-isolation --no-deps -e "$LOCAL_TYPES"
-          python -c "import cryptography, pydantic" >/dev/null 2>&1 || \
-            python -m pip install --quiet --disable-pip-version-check "pydantic>=2.5" "cryptography>=42.0"
-        else
-          python -m pip install --quiet --disable-pip-version-check "openadapt-types>=0.24.1,<0.25" "cryptography>=42.0"
-        fi
+        python -m pip install --quiet --disable-pip-version-check --require-hashes -r "${ACTION_PATH}/requirements.lock.txt"
 
     - name: Verify OpenAdapt Seal offline
       id: verify
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
+        INSTALL_MODE: ${{ inputs.install-mode }}
         INPUT_RECEIPT: ${{ inputs.receipt }}
         INPUT_PUBLIC_KEY: ${{ inputs.public-key }}
         INPUT_KEYS: ${{ inputs.keys }}
@@ -87,6 +81,10 @@ runs:
         INPUT_OPENINGS: ${{ inputs.openings }}
       run: |
         set -euo pipefail
+        LOCAL_TYPES="${ACTION_PATH}/../../../packages/types"
+        if [ "$INSTALL_MODE" = "auto" ] && [ -f "${LOCAL_TYPES}/pyproject.toml" ]; then
+          export PYTHONPATH="${LOCAL_TYPES}${PYTHONPATH:+:${PYTHONPATH}}"
+        fi
         python "${ACTION_PATH}/verify_seal.py" \
           --receipt "${INPUT_RECEIPT}" \
           --public-key "${INPUT_PUBLIC_KEY}" \
