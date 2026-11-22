@@ -32,12 +32,20 @@ SIGN_IN = """<html><body><h1>Sign in</h1><form>
 <label for="p">Password</label><input id="p" name="p" type="password">
 <button>Sign in</button></form></body></html>"""
 
-MODAL = """<html><body>""" + FORM + """
+MODAL = (
+    """<html><body>"""
+    + FORM
+    + """
 <div role="dialog" aria-modal="true"><p>Your changes may be lost.</p><button>OK</button></div>
 </body></html>"""
+)
 
-HIDDEN_MODAL = """<html><body>""" + FORM + """
+HIDDEN_MODAL = (
+    """<html><body>"""
+    + FORM
+    + """
 <div role="dialog" aria-modal="true" hidden><p>Later</p></div></body></html>"""
+)
 
 
 def _obs(html: str, **fields) -> Observation:
@@ -54,7 +62,10 @@ def test_a_code_prompt_is_a_second_factor(page):
 
 
 def test_screen_text_alone_still_asks():
-    assert d.second_factor((), "Two-factor authentication: enter the code") == "second_factor"
+    assert (
+        d.second_factor((), "Two-factor authentication: enter the code")
+        == "second_factor"
+    )
 
 
 def test_an_ordinary_form_is_not_a_second_factor():
@@ -117,26 +128,34 @@ def test_a_non_modal_dialog_covering_the_target_is_in_the_way():
 
 
 def test_a_dialog_with_no_geometry_asks():
-    assert d.unexpected_dialog([{"role": "alertdialog"}], target={"bbox": [1, 1, 1, 1]}) == (
-        "unexpected_dialog"
-    )
+    assert d.unexpected_dialog(
+        [{"role": "alertdialog"}], target={"bbox": [1, 1, 1, 1]}
+    ) == ("unexpected_dialog")
 
 
 # -- stalls -------------------------------------------------------------------------
 
 
 def test_no_action_and_no_change_for_too_long_is_a_stall():
-    assert detect(Observation(now=1000.0, last_action_at=700.0, last_change_at=800.0, stall_s=120)) == (
-        "timeout_or_stall"
-    )
+    assert detect(
+        Observation(now=1000.0, last_action_at=700.0, last_change_at=800.0, stall_s=120)
+    ) == ("timeout_or_stall")
 
 
 def test_a_recent_change_is_not_a_stall():
-    assert d.timeout_or_stall(now=1000.0, last_action_at=700.0, last_change_at=950.0, stall_s=120) is None
+    assert (
+        d.timeout_or_stall(
+            now=1000.0, last_action_at=700.0, last_change_at=950.0, stall_s=120
+        )
+        is None
+    )
 
 
 def test_a_clock_with_no_last_event_asks():
-    assert d.timeout_or_stall(now=5.0, last_action_at=None, last_change_at=None) == "timeout_or_stall"
+    assert (
+        d.timeout_or_stall(now=5.0, last_action_at=None, last_change_at=None)
+        == "timeout_or_stall"
+    )
 
 
 def test_no_clock_means_no_stall_check():
@@ -145,7 +164,10 @@ def test_no_clock_means_no_stall_check():
 
 # -- duplicates ---------------------------------------------------------------------
 
-ROWS = [{"last_name": "Okafor", "dob": "1950-01-01"}, {"last_name": "Vance", "dob": "1972-03-04"}]
+ROWS = [
+    {"last_name": "Okafor", "dob": "1950-01-01"},
+    {"last_name": "Vance", "dob": "1972-03-04"},
+]
 
 
 def test_a_row_with_the_same_key_is_a_possible_duplicate():
@@ -166,7 +188,11 @@ def test_no_matching_row_is_not_a_duplicate():
     [
         (["last_name", "dob"], {"last_name": "Vance"}, ROWS),  # no key value
         ("last_name", {"last_name": "Vance"}, None),  # the read failed
-        ("last_name", {"last_name": "Nobody"}, [{"dob": "1950-01-01"}]),  # row lacks key
+        (
+            "last_name",
+            {"last_name": "Nobody"},
+            [{"dob": "1950-01-01"}],
+        ),  # row lacks key
         ([], {"last_name": "Vance"}, ROWS),  # a key with no fields
         ({"weird": 1}, {"last_name": "Vance"}, ROWS),  # a key shape we can't check
     ],
@@ -190,7 +216,16 @@ def test_the_key_comes_from_verify_yaml_record_duplicate_key():
 
 def test_the_detectors_name_no_app():
     source = Path(d.__file__).read_text(encoding="utf-8").casefold()
-    for name in ("openemr", "mockmed", "epic", "cerner", "salesforce", "okta", "google", "microsoft"):
+    for name in (
+        "openemr",
+        "mockmed",
+        "epic",
+        "cerner",
+        "salesforce",
+        "okta",
+        "google",
+        "microsoft",
+    ):
         assert name not in source
 
 

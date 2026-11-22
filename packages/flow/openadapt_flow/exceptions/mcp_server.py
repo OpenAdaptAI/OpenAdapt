@@ -104,7 +104,11 @@ class RaiseException:
 
 
 def _error(types: Any, error_field: str, code: str) -> Any:
-    body = {"error": code, "proceed": False, "instruction": "Stop now. Make no further writes for this task."}
+    body = {
+        "error": code,
+        "proceed": False,
+        "instruction": "Stop now. Make no further writes for this task.",
+    }
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=json.dumps(body))],
         **{error_field: True},
@@ -210,4 +214,11 @@ def serve(tool: RaiseException) -> None:
     anyio.run(run)
 
 
-__all__ = ["DESCRIPTION", "INPUT_SCHEMA", "TOOL_NAME", "RaiseException", "build_server", "serve"]
+__all__ = [
+    "DESCRIPTION",
+    "INPUT_SCHEMA",
+    "TOOL_NAME",
+    "RaiseException",
+    "build_server",
+    "serve",
+]

@@ -49,6 +49,7 @@ SUMMARY = (
     "mail maribel@example.test"
 )
 
+
 def _png_1x1() -> bytes:
     """A valid one-pixel RGB PNG, built without an imaging library."""
 
@@ -58,7 +59,12 @@ def _png_1x1() -> bytes:
 
     header = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
     pixels = zlib.compress(b"\x00\xff\xff\xff")
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", pixels)
+        + chunk(b"IEND", b"")
+    )
 
 
 PNG = _png_1x1()
@@ -90,7 +96,12 @@ def registry(tmp_path: Path) -> ExceptionRegistry:
 def roster(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     key_dir = tmp_path / "keys"
     key = Ed25519PrivateKey.generate()
-    init_root(key_dir, principal="front-desk", public_key=public_hex(key), sign=file_key_signer(key))
+    init_root(
+        key_dir,
+        principal="front-desk",
+        public_key=public_hex(key),
+        sign=file_key_signer(key),
+    )
     monkeypatch.setenv(ROOT_ENV, public_hex(key))
     return key_dir, key
 
@@ -168,7 +179,9 @@ def _bytes_under(root: Path) -> bytes:
 
 
 def test_the_summary_is_scrubbed_and_cut(registry):
-    card = registry.open("run-1", "second_factor", SUMMARY + " " + "x" * 400, task_id="T-12345678")
+    card = registry.open(
+        "run-1", "second_factor", SUMMARY + " " + "x" * 400, task_id="T-12345678"
+    )
 
     assert len(card.summary) <= 200
     blob = _bytes_under(registry.root)
@@ -202,7 +215,9 @@ def test_a_broken_scrubber_is_no_scrubber(registry):
 def test_a_screenshot_is_kept_only_as_a_scrubbed_private_copy(registry, tmp_path):
     shot = tmp_path / "screen.png"
     shot.write_bytes(PNG)
-    card = registry.open("run-1", "unexpected_dialog", "A dialog", screenshot_path=str(shot))
+    card = registry.open(
+        "run-1", "unexpected_dialog", "A dialog", screenshot_path=str(shot)
+    )
 
     assert card.screenshot_ref is not None
     copy = registry.root / "run-1" / card.screenshot_ref
@@ -218,11 +233,31 @@ def test_no_screenshot_without_a_scrubber_a_png_or_a_plain_file(registry, tmp_pa
     text = tmp_path / "notes.png"
     text.write_text("not an image")
 
-    assert registry.open("r", "cannot_complete", "x", screenshot_path=str(link)).screenshot_ref is None
-    assert registry.open("r", "cannot_complete", "y", screenshot_path=str(text)).screenshot_ref is None
-    assert registry.open("r", "cannot_complete", "z", screenshot_path=str(tmp_path)).screenshot_ref is None
+    assert (
+        registry.open(
+            "r", "cannot_complete", "x", screenshot_path=str(link)
+        ).screenshot_ref
+        is None
+    )
+    assert (
+        registry.open(
+            "r", "cannot_complete", "y", screenshot_path=str(text)
+        ).screenshot_ref
+        is None
+    )
+    assert (
+        registry.open(
+            "r", "cannot_complete", "z", screenshot_path=str(tmp_path)
+        ).screenshot_ref
+        is None
+    )
     privacy.set_text_scrubber(None)
-    assert registry.open("r", "cannot_complete", "w", screenshot_path=str(shot)).screenshot_ref is None
+    assert (
+        registry.open(
+            "r", "cannot_complete", "w", screenshot_path=str(shot)
+        ).screenshot_ref
+        is None
+    )
 
 
 # -- answers -----------------------------------------------------------------------
@@ -281,7 +316,9 @@ def test_without_a_pinned_root_no_answer_counts(registry, roster):
     card = registry.open("run-1", "second_factor", "A code prompt")
     registry.write_answer(card, _signed(registry, card, "done_by_person", key))
 
-    outcome = registry.wait(card, verify=roster_verifier(key_dir, None), sleep=_no_sleep)
+    outcome = registry.wait(
+        card, verify=roster_verifier(key_dir, None), sleep=_no_sleep
+    )
     assert outcome.proceed is False
 
 
@@ -303,7 +340,11 @@ def test_a_choice_the_card_doesnt_offer_never_proceeds(registry, roster):
     }
     registry.write_answer(
         card,
-        {**unsigned, "public_key": public_hex(key), "signature": sign_bytes(key, answer_message(unsigned))},
+        {
+            **unsigned,
+            "public_key": public_hex(key),
+            "signature": sign_bytes(key, answer_message(unsigned)),
+        },
     )
     outcome = registry.wait(card, verify=_verify(roster), sleep=_no_sleep)
     assert outcome.proceed is False
@@ -314,7 +355,9 @@ def test_an_answer_decided_after_the_deadline_never_proceeds(registry, roster):
     _key_dir, key = roster
     card = registry.open("run-1", "second_factor", "A code prompt", deadline_s=5)
     late = datetime.now(timezone.utc) + timedelta(seconds=60)
-    registry.write_answer(card, _signed(registry, card, "done_by_person", key, now=late))
+    registry.write_answer(
+        card, _signed(registry, card, "done_by_person", key, now=late)
+    )
 
     outcome = registry.wait(card, verify=_verify(roster), sleep=_no_sleep)
     assert outcome.proceed is False
@@ -343,7 +386,9 @@ def test_a_card_has_one_answer(registry, roster):
 
 def test_an_unreadable_answer_stops_the_run(registry, roster):
     card = registry.open("run-1", "second_factor", "A code prompt")
-    (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").write_text("{not json")
+    (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").write_text(
+        "{not json"
+    )
 
     outcome = registry.wait(card, verify=_verify(roster), sleep=_no_sleep)
     assert outcome.proceed is False
@@ -362,7 +407,9 @@ def test_an_unsigned_answer_that_claims_to_be_a_persons_is_unreadable(registry, 
         "approver_kind": "person",
         "route": "cli",
     }
-    (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").write_text(json.dumps(answer))
+    (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").write_text(
+        json.dumps(answer)
+    )
     outcome = registry.wait(card, verify=_verify(roster), sleep=_no_sleep)
     assert outcome.proceed is False
 
@@ -388,7 +435,9 @@ def test_expiry_writes_a_decline_with_no_decision_time(registry, roster):
     assert outcome.reason == "expired"
     assert outcome.decided_at is None
     record = ExceptionAnswerV1.model_validate(
-        json.loads((registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").read_text())
+        json.loads(
+            (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").read_text()
+        )
     )
     assert record.approver_kind == "expiry"
     assert record.decided_at is None
@@ -399,7 +448,8 @@ def test_expiry_writes_a_decline_with_no_decision_time(registry, roster):
 def test_the_wait_beats_and_then_expires(registry, roster):
     card = registry.open("run-1", "timeout_or_stall", "Stalled", deadline_s=60)
     times = iter(
-        [datetime.now(timezone.utc)] * 3 + [datetime.now(timezone.utc) + timedelta(seconds=120)] * 5
+        [datetime.now(timezone.utc)] * 3
+        + [datetime.now(timezone.utc) + timedelta(seconds=120)] * 5
     )
     beats: list[float] = []
     outcome = registry.wait(
@@ -414,7 +464,9 @@ def test_the_wait_beats_and_then_expires(registry, roster):
     assert beats and all(b > 0 for b in beats)
 
 
-def test_a_person_who_answers_at_the_deadline_wins_the_race(registry, roster, monkeypatch):
+def test_a_person_who_answers_at_the_deadline_wins_the_race(
+    registry, roster, monkeypatch
+):
     _key_dir, key = roster
     card = registry.open("run-1", "second_factor", "A code prompt", deadline_s=60)
     answer = _signed(registry, card, "done_by_person", key)
@@ -426,14 +478,21 @@ def test_a_person_who_answers_at_the_deadline_wins_the_race(registry, roster, mo
 
     monkeypatch.setattr(registry, "_expire", expire_after_the_person)
     after = datetime.now(timezone.utc) + timedelta(seconds=61)
-    outcome = registry.wait(card, verify=_verify(roster), clock=lambda: after, sleep=_no_sleep)
+    outcome = registry.wait(
+        card, verify=_verify(roster), clock=lambda: after, sleep=_no_sleep
+    )
     assert outcome.proceed is True
 
 
 def test_the_heartbeat_goes_to_stderr_never_stdout(registry, roster, capsys):
     card = registry.open("run-1", "timeout_or_stall", "Stalled", deadline_s=60)
-    times = iter([datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(seconds=99)] * 3)
-    registry.wait(card, verify=_verify(roster), clock=lambda: next(times), sleep=_no_sleep)
+    times = iter(
+        [datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(seconds=99)]
+        * 3
+    )
+    registry.wait(
+        card, verify=_verify(roster), clock=lambda: next(times), sleep=_no_sleep
+    )
     out, err = capsys.readouterr()
     assert out == ""
     assert "waiting for a person" in err
@@ -464,7 +523,9 @@ def _parse(argv: list[str]):
     return parser.parse_args(argv)
 
 
-def test_the_cli_answers_with_a_key_on_the_roster(registry, roster, tmp_path, monkeypatch, capsys):
+def test_the_cli_answers_with_a_key_on_the_roster(
+    registry, roster, tmp_path, monkeypatch, capsys
+):
     key_dir, key = roster
     monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "synthetic-passphrase")
     pem = _encrypted(tmp_path, key, "synthetic-passphrase")
@@ -477,8 +538,16 @@ def test_the_cli_answers_with_a_key_on_the_roster(registry, roster, tmp_path, mo
 
     args = _parse(
         [
-            "exceptions", "answer", card.card_id, "done_by_person",
-            "--registry", str(registry.root), "--key", str(pem), "--key-dir", str(key_dir),
+            "exceptions",
+            "answer",
+            card.card_id,
+            "done_by_person",
+            "--registry",
+            str(registry.root),
+            "--key",
+            str(pem),
+            "--key-dir",
+            str(key_dir),
         ]
     )
     assert args.func(args) == 0
@@ -486,7 +555,9 @@ def test_the_cli_answers_with_a_key_on_the_roster(registry, roster, tmp_path, mo
     assert outcome.proceed is True
 
 
-def test_the_cli_refuses_a_key_off_the_roster(registry, roster, tmp_path, monkeypatch, capsys):
+def test_the_cli_refuses_a_key_off_the_roster(
+    registry, roster, tmp_path, monkeypatch, capsys
+):
     key_dir, _key = roster
     monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "synthetic-passphrase")
     pem = _encrypted(tmp_path, Ed25519PrivateKey.generate(), "synthetic-passphrase")
@@ -494,8 +565,16 @@ def test_the_cli_refuses_a_key_off_the_roster(registry, roster, tmp_path, monkey
 
     args = _parse(
         [
-            "exceptions", "answer", card.card_id, "done_by_person",
-            "--registry", str(registry.root), "--key", str(pem), "--key-dir", str(key_dir),
+            "exceptions",
+            "answer",
+            card.card_id,
+            "done_by_person",
+            "--registry",
+            str(registry.root),
+            "--key",
+            str(pem),
+            "--key-dir",
+            str(key_dir),
         ]
     )
     assert args.func(args) == 2
@@ -503,15 +582,25 @@ def test_the_cli_refuses_a_key_off_the_roster(registry, roster, tmp_path, monkey
     assert not (registry.root / "run-1" / f"answer-{card.card_id[7:]}.json").exists()
 
 
-def test_the_cli_refuses_a_choice_the_card_doesnt_offer(registry, roster, tmp_path, monkeypatch):
+def test_the_cli_refuses_a_choice_the_card_doesnt_offer(
+    registry, roster, tmp_path, monkeypatch
+):
     key_dir, key = roster
     monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "synthetic-passphrase")
     pem = _encrypted(tmp_path, key, "synthetic-passphrase")
     card = registry.open("run-1", "second_factor", "A code prompt")
     args = _parse(
         [
-            "exceptions", "answer", card.card_id, "continue",
-            "--registry", str(registry.root), "--key", str(pem), "--key-dir", str(key_dir),
+            "exceptions",
+            "answer",
+            card.card_id,
+            "continue",
+            "--registry",
+            str(registry.root),
+            "--key",
+            str(pem),
+            "--key-dir",
+            str(key_dir),
         ]
     )
     assert args.func(args) == 2

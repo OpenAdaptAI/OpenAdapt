@@ -1,7 +1,8 @@
-"""CLI: ``openadapt-flow exceptions serve|list|answer``. See
+"""CLI: ``openadapt-flow exceptions serve|watch|list|answer``. See
 ``docs/EXCEPTION_QUEUE.md``.
 
     openadapt-flow exceptions serve --run-ref intake-0412
+    openadapt-flow exceptions watch --cdp http://127.0.0.1:9222 --config guard.yaml
     openadapt-flow exceptions list
     openadapt-flow exceptions answer sha256:… done_by_person
 
@@ -31,7 +32,9 @@ def _common(p: argparse.ArgumentParser) -> None:
 
 
 def _roster(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--key-dir", help="the approver roster's folder (default: ~/.openadapt/jit)")
+    p.add_argument(
+        "--key-dir", help="the approver roster's folder (default: ~/.openadapt/jit)"
+    )
     p.add_argument(
         "--approver-root",
         help="the roster's root public key (default: OPENADAPT_APPROVER_ROOT)",
@@ -64,7 +67,46 @@ def register(sub: argparse._SubParsersAction) -> None:
     _common(s)
     s.set_defaults(func=cmd_serve)
 
-    ls = ops.add_parser("list", allow_abbrev=False, help="Show cards waiting for a person")
+    w = ops.add_parser(
+        "watch",
+        allow_abbrev=False,
+        help="Watch the agent's Chromium, raise cards without the agent, and "
+        "block its saves while a card is open",
+    )
+    w.add_argument("--cdp", required=True, help="the agent's DevTools endpoint")
+    w.add_argument(
+        "--config",
+        required=True,
+        help="the guard's guard.yaml: the app's origin and its not_saves",
+    )
+    w.add_argument("--page-url", help="watch the tab whose URL starts with this")
+    w.add_argument(
+        "--run-dir",
+        help="write exceptions_watch.jsonl here (the guard's --out)",
+    )
+    w.add_argument(
+        "--run-ref",
+        help="this run's folder name in the registry (default: --run-dir's "
+        "name, else a new one)",
+    )
+    w.add_argument("--task-id", help="the task the cards belong to")
+    w.add_argument("--deadline-s", type=float, default=None, help="default 900")
+    w.add_argument(
+        "--stall-s",
+        type=float,
+        default=None,
+        help="raise timeout_or_stall after this long with no request and no "
+        "screen change (default: off)",
+    )
+    w.add_argument("--poll-s", type=float, default=0.5, help="look every N seconds")
+    w.add_argument("--max-s", type=float, default=None, help="stop after N seconds")
+    _roster(w)
+    _common(w)
+    w.set_defaults(func=cmd_watch)
+
+    ls = ops.add_parser(
+        "list", allow_abbrev=False, help="Show cards waiting for a person"
+    )
     ls.add_argument("--run-ref", help="only this run's cards")
     ls.add_argument("--json", action="store_true", help="print JSON")
     _common(ls)
@@ -130,6 +172,93 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _watch_run_ref(args: argparse.Namespace) -> str:
+    import re
+
+    from openadapt_flow.exceptions.registry import RUN_REF_PATTERN
+
+    if args.run_ref:
+        return str(args.run_ref)
+    name = Path(args.run_dir).name if args.run_dir else ""
+    if name and re.fullmatch(RUN_REF_PATTERN, name):
+        return name
+    return f"watch-{uuid.uuid4().hex[:16]}"
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    from openadapt_flow.agent_guard.config import ConfigError, load_config
+    from openadapt_flow.exceptions.registry import (
+        DEFAULT_DEADLINE_S,
+        ExceptionRegistryError,
+        roster_verifier,
+    )
+    from openadapt_flow.exceptions.watch import (
+        WATCH_EVENTS,
+        ExceptionWatch,
+        watch_browser,
+    )
+
+    key_dir, root = _pin(args)
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"exceptions: {getattr(exc, 'message', exc)}", file=sys.stderr)
+        return 2
+    run_ref = _watch_run_ref(args)
+    try:
+        watch = ExceptionWatch(
+            _registry(args),
+            run_ref=run_ref,
+            verify=roster_verifier(key_dir, root),
+            app_origin=cfg.app_origin,
+            not_saves=cfg.not_saves,
+            task_id=args.task_id,
+            deadline_s=args.deadline_s or DEFAULT_DEADLINE_S,
+            stall_s=args.stall_s,
+            events_path=Path(args.run_dir) / WATCH_EVENTS if args.run_dir else None,
+        )
+    except ExceptionRegistryError as exc:
+        print(f"exceptions: REFUSED ({exc.code}): {exc}", file=sys.stderr)
+        return 2
+    import signal
+
+    stopping: list[int] = []
+
+    def _stop(signum: int, _frame: object) -> None:
+        stopping.append(signum)  # the loop ends; paused saves are decided first
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, _stop)
+    try:
+        code = watch_browser(
+            watch,
+            cdp_endpoint=args.cdp,
+            page_url=args.page_url,
+            poll_s=args.poll_s,
+            max_s=args.max_s,
+            stop=lambda: bool(stopping),
+            on_attached=lambda: print(
+                f"exceptions: watching for run {run_ref}; saves are blocked "
+                "while a card is open",
+                file=sys.stderr,
+                flush=True,
+            ),
+        )
+    except RuntimeError as exc:
+        print(f"exceptions: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "run_ref": run_ref,
+                "stopped": watch.stopped,
+                "outcomes": [o.wire() for o in watch.outcomes],
+            }
+        )
+    )
+    return code
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     from openadapt_flow.exceptions.registry import ExceptionRegistryError
 
@@ -145,7 +274,9 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("Nothing is waiting for a person.")
         return 0
     for card in cards:
-        print(f"{card.card_id}  {card.kind}  run {card.run_ref}  until {card.deadline_at}")
+        print(
+            f"{card.card_id}  {card.kind}  run {card.run_ref}  until {card.deadline_at}"
+        )
         print(f"  {card.summary}")
         for choice in card.choices:
             print(f"  - {choice.id}: {choice.label}. {choice.consequence}")
@@ -175,7 +306,9 @@ def cmd_answer(args: argparse.Namespace) -> int:
         return 2
 
     registry = _registry(args)
-    card_id = args.card_id if args.card_id.startswith("sha256:") else f"sha256:{args.card_id}"
+    card_id = (
+        args.card_id if args.card_id.startswith("sha256:") else f"sha256:{args.card_id}"
+    )
     try:
         found = registry.card(card_id)
     except ExceptionRegistryError as exc:

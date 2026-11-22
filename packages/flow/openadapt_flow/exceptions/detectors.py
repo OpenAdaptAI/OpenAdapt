@@ -78,7 +78,20 @@ SESSION_PHRASES = (
 DIALOG_ROLES = frozenset({"dialog", "alertdialog"})
 _TEXT_INPUT_TYPES = frozenset({"", "text", "tel", "number", "search"})
 _VOID = frozenset(
-    {"input", "br", "img", "meta", "link", "hr", "area", "base", "col", "embed", "source", "wbr"}
+    {
+        "input",
+        "br",
+        "img",
+        "meta",
+        "link",
+        "hr",
+        "area",
+        "base",
+        "col",
+        "embed",
+        "source",
+        "wbr",
+    }
 )
 DEFAULT_STALL_S = 120.0
 
@@ -342,8 +355,12 @@ def detect_all(observation: Observation) -> list[str]:
     o = observation
     for kind in (
         second_factor(o.elements, o.screen_text),
-        session_expired(o.elements, o.screen_text, save_eligible_seen=o.save_eligible_seen),
-        unexpected_dialog(o.elements, target=o.target, expected_dialog=o.expected_dialog),
+        session_expired(
+            o.elements, o.screen_text, save_eligible_seen=o.save_eligible_seen
+        ),
+        unexpected_dialog(
+            o.elements, target=o.target, expected_dialog=o.expected_dialog
+        ),
         None
         if o.now is None
         else timeout_or_stall(
@@ -454,7 +471,9 @@ def elements_from_html(html: str) -> tuple[list[dict[str, Any]], str]:
     return parser.elements, " ".join(parser._text)
 
 
-def elements_from_accessibility(nodes: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def elements_from_accessibility(
+    nodes: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     """Accessibility nodes (``role``, ``name``, optional ``bbox``, ``modal``,
     ``protected``, ``autocomplete``) as detector elements."""
 
@@ -463,7 +482,9 @@ def elements_from_accessibility(nodes: Iterable[Mapping[str, Any]]) -> list[dict
         role = _s(node.get("role"))
         out.append(
             {
-                "tag": "input" if role in {"textbox", "textfield", "axtextfield"} else "",
+                "tag": "input"
+                if role in {"textbox", "textfield", "axtextfield"}
+                else "",
                 "type": "password" if node.get("protected") is True else "text",
                 "role": "textbox" if role in {"textfield", "axtextfield"} else role,
                 "name": node.get("name", ""),

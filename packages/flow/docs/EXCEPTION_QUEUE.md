@@ -54,8 +54,60 @@ The tool opens a card and blocks until a person answers or the card expires
 Go on only when `proceed` is `true`. Otherwise stop and write nothing.
 
 The tool can tell an agent to stop. It can't make an agent that ignores the
-result stop. To hold an agent at the boundary whatever it does, run it under a
-guard (`openadapt-flow guard`) or `openadapt wrap`.
+result stop, and an agent that never calls it never asks anyone. For a browser
+agent, run the watch below: it raises cards without the agent and holds its
+saves.
+
+## Without the agent: the browser watch
+
+```bash
+openadapt-flow exceptions watch --cdp http://127.0.0.1:9222 \
+    --config guard.yaml --run-dir runs/intake-0412
+```
+
+`watch` attaches to the agent's Chromium over CDP, the same endpoint
+`openadapt-flow guard` attaches to, and reads the guard's `guard.yaml` for the
+app's origin and its `not_saves`. Every half second (`--poll-s`) it reads the
+page (its inputs, dialogs and text, with their positions) and runs the
+detectors. When one fires, it opens a card itself, with the kind's own
+sentence as the summary: nothing from the page goes on the card.
+
+While the card is open, the watch blocks every save the page sends, whatever
+the agent does. The page gets a `409` with an `X-OpenAdapt-Exception` header,
+and nothing reaches the app. A save is what the guard calls one: a write to
+the app's origin that `not_saves` doesn't list, or a write to another origin.
+Reads go through, and so does a write `not_saves` lists, so list the form a
+person submits a code or a sign-in with, and they can do it in the live
+browser. A verified `continue` or `done_by_person` lifts the hold. Any other
+outcome (a stop answer, an expiry, an answer off the roster) blocks every
+later save for the rest of the run, and the watch exits 3.
+
+The watch and the guard each pause requests in their own DevTools session.
+Chromium hands a paused request to each session in turn, so a save the watch
+blocks is never sent, whichever of the two attached first.
+
+The run's folder in the registry is `--run-ref`, or else the `--run-dir`
+folder's name. `--run-dir` also gets `exceptions_watch.jsonl`: each card
+opened, each answer and each blocked save, with no values.
+
+What the watch sees and raises:
+
+| Kind | Raised by the watch |
+| --- | --- |
+| `second_factor` | Yes |
+| `unexpected_dialog` | Yes. The watch can't tell a dialog the task expects (a confirm box) from one it doesn't, so it asks about both |
+| `session_expired` | Yes, once the watch has seen a save |
+| `timeout_or_stall` | Only with `--stall-s N`: no request and no screen change for N seconds |
+| `possible_duplicate` | No: it needs a read of the app's records |
+| `ambiguous_record`, `cannot_complete` | No: only the agent knows |
+
+Not covered: agents that don't drive a Chromium, saves over a WebSocket (CDP
+`Fetch` doesn't see them), and a run with no watch running. The watch is not a
+sandbox: an agent with another way to reach the app, or that stops the watch,
+gets past it. Tested in headless Chromium on MockMed with the guard attached:
+an agent that never calls the tool hits a synthetic code prompt, its save is
+blocked while the card is open, and after `done_by_person` its next save
+lands once and reads back VERIFIED.
 
 ## For a person: answering
 
@@ -74,7 +126,8 @@ answer the waiting run wouldn't accept.
 
 Desktop lists every open card from every run on the computer in its stop
 queue, beside the saves and stops of its own runs, and shows each one on a
-paired phone. An answer from Desktop is signed with the same approver key as
+paired phone. (Desktop's part ships with openadapt-desktop 0.31.0, in
+[#2492](https://github.com/OpenAdaptAI/OpenAdapt/pull/2492).) An answer from Desktop is signed with the same approver key as
 its other stop answers (Touch ID on a Mac). An answer from the phone is signed
 with the decision portal's key. Exception cards are answered one at a time,
 never in a batch.
@@ -152,5 +205,6 @@ nothing and name no app. A caller passes in what it already saw.
   type the code through the existing second-factor handoff, so the agent never
   sees it.
 - `raise_exception` on the `openadapt wrap -- COMMAND` MCP surface.
-- Calling the detectors from the flight gate and the guard's observe path.
+- Calling the detectors from the flight gate (`openadapt-flow flight`). The
+  browser watch covers a Chromium agent, with or without the guard.
 - A Cloud intake for exception cards and web push.

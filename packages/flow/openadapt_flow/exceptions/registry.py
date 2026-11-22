@@ -69,7 +69,9 @@ def _c(answer: str, label: str, consequence: str) -> ExceptionChoice:
     return ExceptionChoice(id=answer, label=label, consequence=consequence)  # type: ignore[arg-type]
 
 
-_SKIP = _c("skip", "Skip this item", "Nothing is saved. The run moves to the next item.")
+_SKIP = _c(
+    "skip", "Skip this item", "Nothing is saved. The run moves to the next item."
+)
 _ABORT = _c("abort", "Stop the run", "Nothing more is saved. The whole run stops.")
 
 #: Each kind's choices, in the order a card shows them. The first is the
@@ -502,9 +504,13 @@ class ExceptionRegistry:
             "choices": [c.model_dump(mode="json") for c in CHOICES[kind]],
         }
         for _attempt in range(3):
-            card = ExceptionCardV1.model_validate({**body, "card_id": card_digest(body)})
+            card = ExceptionCardV1.model_validate(
+                {**body, "card_id": card_digest(body)}
+            )
             try:
-                _write_exclusive(folder / f"card-{_hex(card.card_id)}.json", _json(card.wire()))
+                _write_exclusive(
+                    folder / f"card-{_hex(card.card_id)}.json", _json(card.wire())
+                )
                 return card
             except FileExistsError:
                 opened = opened + timedelta(microseconds=1)
@@ -514,7 +520,7 @@ class ExceptionRegistry:
 
     # -- reading -----------------------------------------------------------
 
-    def _load(self, path: Path, model: type) -> Any:
+    def _load(self, path: Path, model: Any) -> Any:
         data = _read_regular(path)
         if data is None:
             return None
@@ -572,7 +578,12 @@ class ExceptionRegistry:
     # -- answering ---------------------------------------------------------
 
     def unsigned_answer(
-        self, card: ExceptionCardV1, answer: str, *, route: str, now: Optional[datetime] = None
+        self,
+        card: ExceptionCardV1,
+        answer: str,
+        *,
+        route: str,
+        now: Optional[datetime] = None,
     ) -> dict[str, Any]:
         """The answer a person's key signs (no key or signature yet)."""
 
@@ -592,16 +603,22 @@ class ExceptionRegistry:
             "reason": None,
         }
 
-    def write_answer(self, card: ExceptionCardV1, answer: Mapping[str, Any]) -> ExceptionAnswerV1:
+    def write_answer(
+        self, card: ExceptionCardV1, answer: Mapping[str, Any]
+    ) -> ExceptionAnswerV1:
         """Write the card's one answer. Raises ``ExceptionRegistryError``."""
 
         model = ExceptionAnswerV1.model_validate(dict(answer))
         if model.card_id != card.card_id or model.kind != card.kind:
-            raise ExceptionRegistryError("answer_mismatch", "the answer names another card")
+            raise ExceptionRegistryError(
+                "answer_mismatch", "the answer names another card"
+            )
         folder = self.run_dir(card.run_ref)
         self._ensure(folder)
         try:
-            _write_exclusive(folder / f"answer-{_hex(card.card_id)}.json", _json(model.wire()))
+            _write_exclusive(
+                folder / f"answer-{_hex(card.card_id)}.json", _json(model.wire())
+            )
         except FileExistsError:
             raise ExceptionRegistryError(
                 "already_answered", "this card already has an answer"
@@ -675,6 +692,39 @@ class ExceptionRegistry:
             return _stop(card, "answer_already_used", outcome.answer)
         return outcome
 
+    def poll(
+        self,
+        card: ExceptionCardV1,
+        *,
+        verify: AnswerVerifier,
+        deadline: Optional[datetime] = None,
+        clock: Callable[[], datetime] = _now,
+        now: Optional[datetime] = None,
+    ) -> Optional[Outcome]:
+        """One look at the card: what to do once it is answered or expired,
+        ``None`` while it is still open. Never blocks; :meth:`wait` loops on
+        it, and a caller with its own loop (the browser watch) calls it."""
+
+        end = parse_time(card.deadline_at)
+        if deadline is not None:
+            end = min(end, deadline.astimezone(timezone.utc))
+        for _attempt in range(3):
+            try:
+                answer = self.read_answer(card)
+            except (OSError, ValueError):
+                return _stop(card, "answer_unreadable")
+            if answer is not None:
+                return self._settle(card, answer, verify)
+            if (now if now is not None else clock()) < end:
+                return None
+            try:
+                self._expire(card)
+            except FileExistsError:
+                continue  # a person's answer won the race: read it
+            except OSError:
+                return _stop(card, "expired")
+        return _stop(card, "answer_unreadable")
+
     def wait(
         self,
         card: ExceptionCardV1,
@@ -705,20 +755,14 @@ class ExceptionRegistry:
         started = time.monotonic()
         while True:
             try:
-                answer = self.read_answer(card)
+                answered = self.read_answer(card) is not None
             except (OSError, ValueError):
-                return _stop(card, "answer_unreadable")
-            if answer is not None:
-                return self._settle(card, answer, verify)
-            now = clock()
-            if now >= end:
-                try:
-                    self._expire(card)
-                except FileExistsError:
-                    continue  # a person's answer won the race: read it
-                except OSError:
-                    return _stop(card, "expired")
-                continue
+                answered = True  # poll() reports the unreadable answer
+            now = None if answered else clock()
+            outcome = self.poll(card, verify=verify, deadline=deadline, now=now)
+            if outcome is not None:
+                return outcome
+            assert now is not None
             elapsed = time.monotonic() - started
             if elapsed >= next_beat:
                 beat(card.card_id, (end - now).total_seconds())
