@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.31.1 (2026-11-22)
+
+### Bug Fixes
+
+- Exception cards are checked on Windows as on macOS and Linux: a link or junction is
+  refused, and a card must be private to this user by its access control list (only this
+  user, SYSTEM and Administrators). Answers are written only where they come out private,
+  and card and answer files are read and written as raw bytes.
+
+
+
 ## v0.31.0 (2026-11-21)
 
 ### Features
