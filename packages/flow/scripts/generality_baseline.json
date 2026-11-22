@@ -45,18 +45,6 @@
     "openemr": 1,
     "textedit": 1
   },
-  "eligibility/__init__.py": {
-    "stedi": 6
-  },
-  "eligibility/client.py": {
-    "stedi": 28
-  },
-  "eligibility/payer_routes.yaml": {
-    "stedi": 5
-  },
-  "eligibility/waterfall.py": {
-    "stedi": 9
-  },
   "ensure_record.py": {
     "medplum": 3
   },

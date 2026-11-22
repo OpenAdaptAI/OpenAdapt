@@ -45,7 +45,7 @@ the shipped `clinical-write` policy, admits the run through the fail-closed gate
 under the **Standard** profile, and verifies the write by reading the system of
 record out of band — a path the application itself never calls, so the screen
 cannot influence it. It ends `VERIFIED` with zero model calls, and writes a
-shareable `receipt.png` / `receipt.json` beside the run.
+shareable `run-summary.png` / `run-summary.json` beside the run, and every run gets its signed `receipt.json` (see [RECEIPTS.md](RECEIPTS.md)).
 
 ```
 [1/5] Record the demonstration against a real persistence boundary
@@ -54,7 +54,7 @@ shareable `receipt.png` / `receipt.json` beside the run.
 [3/5] Certify against the clinical-write policy
 [4/5] Admit and execute under the standard profile
       VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
-[5/5] Emit the local run receipt
+[5/5] Write the run summary
 
 VERIFIED: <out>/run/REPORT.md
   transaction     VERIFIED
