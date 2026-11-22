@@ -282,8 +282,9 @@ class RewardScoringPolicyV1(_StrictContract):
     ``v = 1``, ``w = -1`` and ``x = 0.5`` that is 75%.  The default is zero:
     a contract that doesn't declare it gives no credit for asking, so a
     contract certified before this outcome existed never starts paying for
-    it.  A value at or above the verified reward is refused, because asking
-    would then pay as much as finishing.
+    it.  The value is at least 0 and below 1; a value at or above the
+    verified reward is refused too, because asking would then pay as much as
+    finishing.
     """
 
     verified_reward: StrictFloat = Field(

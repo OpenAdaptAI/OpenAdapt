@@ -35,8 +35,8 @@ package repairs a Flow 3.4.0 install.
 - Reward contracts: the `escalated_after_effect` outcome, for an episode
   whose required effects are all in the system of record but which asked a
   person instead of declaring the task done. It earns the contract's
-  `escalated_after_effect_reward`, at least 0 and below its
-  `verified_reward`; a declared value at or above `verified_reward` is
+  `escalated_after_effect_reward`: at least 0, below 1 and below its
+  `verified_reward`. A declared value at or above `verified_reward` is
   refused, because asking would then pay as much as finishing. The default
   is 0: a contract that doesn't declare it earns nothing for this outcome
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
