@@ -138,14 +138,19 @@ def single_table_read(query: str, field: str) -> Optional[tuple[str, str]]:
     main = _MAIN_FROM.search(text)
     if main is None:
         return None
+    # fail-open class: ambiguous-subject-binding. The whole select item must
+    # be the column itself (or its text cast): an expression that merely
+    # ends with the column returns another value than the one the row is
+    # looked up by.
     column = re.search(
-        rf'(?:CAST\(\s*)?t\.({_IDENT})(?:\s+AS\s+TEXT\s*\))?\s+AS\s+"?{re.escape(field)}"?\s*,',
+        rf"(?:\bSELECT\s+|,\s*)(?:CAST\(\s*t\.({_IDENT})\s+AS\s+TEXT\s*\)|t\.({_IDENT}))"
+        rf'\s+AS\s+"?{re.escape(field)}"?\s*(?:,|\bFROM\b)',
         text,
         re.IGNORECASE,
     )
     if column is None:
         return None
-    return _unquote(main.group(1)), _unquote(column.group(1))
+    return _unquote(main.group(1)), _unquote(column.group(1) or column.group(2))
 
 
 def binding_problem(
@@ -218,6 +223,23 @@ def _relkind_query(spec: FrameRowVersions) -> tuple[str, tuple[str, ...]]:
     )
 
 
+class DuplicateKey(ValueError):
+    """A key column value names more than one physical row."""
+
+
+def _unique_rows(fetched: Sequence[tuple]) -> dict[str, tuple]:
+    """``key -> (xmin, xmax)``. fail-open class: ambiguous-subject-binding:
+    when a key maps to several rows, one version would silently replace the
+    other, so the read refuses instead."""
+
+    out: dict[str, tuple] = {}
+    for k, x, m in fetched:
+        if str(k) in out:
+            raise DuplicateKey(str(k))
+        out[str(k)] = (x, m)
+    return out
+
+
 @dataclass
 class HeldRead:
     """An open read-only REPEATABLE READ transaction from the baseline."""
@@ -228,7 +250,7 @@ class HeldRead:
     def rows(self, spec: FrameRowVersions, keys: Sequence[str]) -> dict[str, tuple]:
         cur = self.conn.cursor()
         cur.execute(_query(spec), (list(keys),))
-        return {str(k): (x, m) for k, x, m in cur.fetchall()}
+        return _unique_rows(cur.fetchall())
 
     def close(self) -> None:
         try:
@@ -301,11 +323,11 @@ def take(token: str) -> Optional[HeldRead]:
         return _HELD.pop(token, None)
 
 
-#: PostgreSQL's errors for a number that names no multixact (multixact.c):
-#: only these mean the old ``xmax`` is a plain transaction id.
-_NO_SUCH_MULTIXACT = re.compile(
-    r"MultiXactId \d+ (?:has not been created yet|does no longer exist)"
-)
+#: PostgreSQL's error for a number past every multixact made (multixact.c):
+#: only this means the old ``xmax`` is a plain transaction id. "does no
+#: longer exist" is also raised for an expired multixact, whose members are
+#: gone (fail-open class: absent-evidence-as-success), so it is not checked.
+_NO_SUCH_MULTIXACT = re.compile(r"MultiXactId \d+ has not been created yet")
 #: ``pg_get_multixact_members`` modes that update a row (not just lock it).
 _UPDATE_MODES = frozenset({"nokeyupd", "upd"})
 
@@ -313,9 +335,10 @@ _UPDATE_MODES = frozenset({"nokeyupd", "upd"})
 def _multixact_updater_other_than(cur: Any, value: str, writer: str) -> bool:
     """Could ``value``, read as the old version's ``xmax``, be a multixact id
     (a shared lock) whose updater is a transaction other than ``writer``?
-    Then two writers could read as one. A value that is no multixact (the
-    function's "has not been created yet" or "does no longer exist" error)
-    can't. Any other error is raised, so the target is not checked."""
+    Then two writers could read as one. A value past every multixact made
+    (the function's "has not been created yet" error) can't. Any other error,
+    an expired multixact's "does no longer exist" among them, is raised, so
+    the target is not checked."""
 
     try:
         cur.execute(
@@ -355,7 +378,7 @@ def judge_row_versions(
             conn.autocommit = True
             cur = conn.cursor()
             cur.execute(_query(spec), (keys,))
-            now = {str(k): (x, m) for k, x, m in cur.fetchall()}
+            now = _unique_rows(cur.fetchall())
             ambiguous = {
                 k
                 for k, (base_xmin, base_xmax) in old.items()
@@ -366,6 +389,13 @@ def judge_row_versions(
             }
         finally:
             conn.close()
+    except DuplicateKey:
+        return VersionVerdict(
+            "not_checked",
+            "unreadable",
+            reason="frame.row_versions.key_column names more than one row "
+            "for a target, so the target's own versions can't be told",
+        )
     except Exception:  # noqa: BLE001 - unreadable -> the check stops the run
         return VersionVerdict(
             "not_checked",

@@ -569,3 +569,69 @@ def test_row_versions_must_be_the_target_surfaces_own_table() -> None:
     assert _bound({"table": "part_part", "key_column": "id"}) is not None
     joined = GENERATED.replace('FROM "part_part" t', 'FROM "part_part" t JOIN x ON 1=1')
     assert _bound(good, query=joined) is not None
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        'CAST(t."id" + 0 AS TEXT) AS "id"',
+        'COALESCE(NULL, t."id") AS "id"',
+        'lower(t."code") || t."id" AS "id"',
+    ],
+)
+def test_a_computed_identity_is_not_the_key_column(item: str) -> None:
+    """The returned identity must be the column itself (or its text cast),
+    not an expression that ends with it."""
+
+    query = f'SELECT {item}, t."n" AS "n" FROM "part_part" t'
+    assert rv.single_table_read(query, "id") is None
+
+
+def test_a_direct_or_cast_identity_is_the_key_column() -> None:
+    for item in ('CAST(t."id" AS TEXT) AS "id"', 't."id" AS "id"'):
+        query = f'SELECT t."n" AS "n", {item} FROM "part_part" t'
+        assert rv.single_table_read(query, "id") == ("part_part", "id")
+
+
+def test_a_key_naming_two_rows_is_not_checked() -> None:
+    spec = rv.FrameRowVersions(**SPEC)
+    two_now = rv.judge_row_versions(
+        spec,
+        _Held({"1": ("100", "105")}),
+        lambda: _Conn([("1", "105", "0"), ("1", "107", "0")]),
+        [("1", True, True)],
+    )
+    assert two_now.status == "not_checked"
+    assert "more than one row" in two_now.reason
+
+    class TwoHeld(_Held):
+        def rows(self, spec: Any, keys: Any) -> dict[str, tuple]:
+            return rv._unique_rows([("1", "100", "105"), ("1", "101", "0")])
+
+    two_before = rv.judge_row_versions(
+        spec, TwoHeld({}), lambda: _Conn([("1", "105", "0")]), [("1", True, True)]
+    )
+    assert two_before.status == "not_checked"
+
+
+def test_an_expired_multixact_is_not_checked() -> None:
+    """PostgreSQL says "does no longer exist" for a multixact older than its
+    retained range too; its members are gone, so one writer can't be told."""
+
+    class ExpiredCur(_Cur):
+        def execute(self, sql: str, *a: Any) -> None:
+            self._sql = sql
+            if "multixact" in sql:
+                raise RuntimeError("MultiXactId 105 does no longer exist -- wraparound")
+
+    class Conn(_Conn):
+        def cursor(self) -> _Cur:
+            return ExpiredCur(self._rows, self._members)
+
+    v = rv.judge_row_versions(
+        rv.FrameRowVersions(**SPEC),
+        _Held({"1": ("100", "105")}),
+        lambda: Conn([("1", "105", "0")]),
+        [("1", True, True)],
+    )
+    assert v.status == "not_checked"
