@@ -253,10 +253,12 @@ def cmd_watch(args: argparse.Namespace) -> int:
     except WatchAttachError as exc:
         print(f"exceptions: {exc}", file=sys.stderr)
         return 2
-    except BaseException as exc:  # noqa: BLE001 - any failure is loud, never 1
-        if isinstance(exc, (SystemExit, KeyboardInterrupt)) and not watch.holding:
-            raise
-        watch.fail(exc if isinstance(exc, Exception) else RuntimeError(str(exc)))
+    except KeyboardInterrupt:
+        # An interrupt ends the watch like a signal: paused saves were
+        # decided on the way out; 6 when a card is still unanswered.
+        code = watch.stop_code()
+    except Exception as exc:  # noqa: BLE001 - any failure is loud, never 1
+        watch.fail(exc)
         code = watch.stop_code()
     print(
         json.dumps(

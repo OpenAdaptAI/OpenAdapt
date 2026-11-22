@@ -297,7 +297,7 @@ def test_a_registry_it_cannot_write_refuses_every_write_and_exits_4(
 
     import os
 
-    from openadapt_flow.exceptions.watch import _decide, run_loop
+    from openadapt_flow.exceptions.watch import run_loop
 
     key_dir, key = roster
     root = tmp_path / "registry"
@@ -312,12 +312,26 @@ def test_a_registry_it_cannot_write_refuses_every_write_and_exits_4(
             events_path=tmp_path / "run" / WATCH_EVENTS,
         )
         cdp = _Cdp()
-        run_loop(watch, _Page(CODE_SCREEN), cdp, [], poll_s=0.01, max_s=5)
+        paused: list[dict] = []
+        ticks = [0]
+
+        class _Arrives(_Page):
+            """Saves the agent sends after the failure, as CDP delivers them."""
+
+            def wait_for_timeout(self, _ms: int) -> None:
+                ticks[0] += 1
+                if watch.failed is not None and ticks[0] in (3, 6):
+                    paused.append(_paused(rid=str(ticks[0])))
+
+        def stop() -> bool:
+            return ticks[0] >= 10
+
+        # The real loop: the card write fails on the first look, and the loop
+        # stays, refusing the two saves that arrive afterwards.
+        run_loop(watch, _Arrives(CODE_SCREEN), cdp, paused, poll_s=0.01, stop=stop)
         assert watch.failed is not None and watch.lost == "watch_failed"
         assert watch.stop_code() == 4
-        # A save paused at that moment, and any later one, is refused.
-        for rid in ("2", "3"):
-            assert _decide(cdp, watch, _paused(rid=rid)) is True
+        assert paused == []
         assert _decisions(cdp) == ["Fetch.fulfillRequest", "Fetch.fulfillRequest"]
         assert all(
             p["responseCode"] == 409 for m, p in cdp.sent if m.startswith("Fetch.")
@@ -391,3 +405,87 @@ def test_cmd_watch_turns_any_failure_into_a_documented_code(
     assert cli.cmd_watch(args) == 4
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out["lost"] == "watch_failed" and out["failed"] == "ValueError"
+
+
+def test_cleanup_decides_every_paused_save_when_one_is_refused(
+    tmp_path: Path, roster
+) -> None:
+    """Paused saves go on when the session detaches, so each one is decided
+    first; a decision the browser refuses doesn't stop the rest."""
+
+    from openadapt_flow.exceptions.watch import drain
+
+    class _Refuses(_Cdp):
+        def send(self, method: str, params: dict | None = None) -> dict:
+            self.sent.append((method, params or {}))
+            if (params or {}).get("requestId") == "2":
+                raise RuntimeError("Invalid InterceptionId")
+            return {}
+
+    watch = _watch(tmp_path, roster)
+    watch.observe(CODE_SCREEN)  # a card is open: every save is refused
+    cdp = _Refuses()
+    paused = [_paused(rid=r) for r in ("1", "2", "3")]
+    drain(cdp, watch, paused)
+    assert paused == []
+    assert [(m, p["requestId"]) for m, p in cdp.sent] == [
+        ("Fetch.fulfillRequest", "1"),
+        ("Fetch.fulfillRequest", "2"),
+        ("Fetch.fulfillRequest", "3"),
+    ]
+
+
+def test_an_interrupt_with_a_card_open_exits_6(
+    tmp_path: Path, roster, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import argparse
+
+    from openadapt_flow.exceptions import cli, watch
+
+    (tmp_path / "verify.yaml").write_text(
+        "schema_version: openadapt.verify/v1\n"
+        "verifier: {kind: rest, base_url: 'http://127.0.0.1:8123',"
+        " records_path: /api/records}\n"
+        "effects: [{kind: record_written, match: {note: {param: note}}}]\n"
+    )
+    config = tmp_path / "guard.yaml"
+    config.write_text(
+        "schema_version: openadapt.agent-guard/v1\n"
+        f"app_url: {APP}/\n"
+        "verify: verify.yaml\n"
+    )
+
+    def interrupted(w: ExceptionWatch, **_kw: object) -> int:
+        w.observe(CODE_SCREEN)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(watch, "watch_browser", interrupted)
+    key_dir, key = roster
+    args = argparse.Namespace(
+        approver_root=public_hex(key),
+        key_dir=str(key_dir),
+        config=str(config),
+        run_ref="watch-run",
+        run_dir=str(tmp_path / "run"),
+        registry=str(tmp_path / "registry"),
+        task_id=None,
+        deadline_s=None,
+        stall_s=None,
+        cdp="http://127.0.0.1:9",
+        page_url=None,
+        poll_s=0.5,
+        max_s=None,
+    )
+    assert cli.cmd_watch(args) == 6
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["lost"] is None and out["failed"] is None
+
+
+def test_the_lost_message_names_no_card_when_none_was_open(
+    tmp_path: Path, roster, capsys
+) -> None:
+    watch = _watch(tmp_path, roster)
+    watch.fail(OSError("disk full"))
+    err = capsys.readouterr().err
+    assert "every write is refused until the watch exits" in err
+    assert "card was open" not in err and "run was stopped" not in err

@@ -91,9 +91,11 @@ DevTools session while the tab is still open, it says so on stderr, writes
 `watch_lost` to `exceptions_watch.jsonl`, reports `"lost"` in its output and
 exits 4 when it was holding saves (a card open or a stop) or 5 otherwise.
 If the watch's own code fails (a detector, opening a card on a full disk or
-an unwritable registry, reading an answer), it refuses every paused and later
-write with a `409` until it exits, logs `watch_lost` with reason
-`watch_failed`, and exits 4. A request it can't classify is refused, not let
+an unwritable registry, reading an answer), it keeps running and refuses
+every paused and later write with a `409` until the tab closes, its session
+is lost, a signal arrives or `--max-s` passes. It logs `watch_lost` with
+reason `watch_failed` and exits 4. Before it detaches, it decides every
+paused request, even when the browser refuses one of those decisions. A request it can't classify is refused, not let
 through. A
 dead watch blocks nothing from then on, so run it beside the guard
 (`openadapt-flow guard`): the guard still holds each save until the record on

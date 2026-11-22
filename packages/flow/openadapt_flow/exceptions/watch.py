@@ -64,6 +64,7 @@ __all__ = [
     "WATCH_EVENTS",
     "ExceptionWatch",
     "WatchAttachError",
+    "drain",
     "run_loop",
     "watch_browser",
 ]
@@ -315,9 +316,15 @@ class ExceptionWatch:
             if self.failed is not None
             else "saves are no longer held by the watch"
         )
+        held = (
+            "; a card was open"
+            if self.card is not None
+            else "; the run was stopped"
+            if self.stopped is not None
+            else ""
+        )
         print(
-            f"exceptions: WATCH LOST ({reason}): {what}"
-            + ("; a card was open or the run was stopped" if self.holding else ""),
+            f"exceptions: WATCH LOST ({reason}): {what}{held}",
             file=sys.stderr,
             flush=True,
         )
@@ -325,6 +332,8 @@ class ExceptionWatch:
     def fail(self, error: BaseException) -> None:
         """The watch's own code failed: refuse every write from here on."""
 
+        if self.failed is not None:
+            return
         self.failed = type(error).__name__
         self.mark_lost("watch_failed")
 
@@ -403,6 +412,17 @@ def _decide(cdp: Any, watch: ExceptionWatch, params: Mapping[str, Any]) -> bool:
     return True
 
 
+def drain(cdp: Any, watch: ExceptionWatch, paused: list[Mapping[str, Any]]) -> None:
+    """Decide every paused request before the session detaches. A decision
+    the browser refuses is skipped; the rest are still decided."""
+
+    while paused:
+        try:
+            _decide(cdp, watch, paused.pop(0))
+        except Exception:  # noqa: BLE001 - one request never stops the rest
+            continue
+
+
 def _alive(cdp: Any) -> bool:
     """The watch's own DevTools session still answers."""
 
@@ -442,19 +462,23 @@ def run_loop(
                     return
                 watch.mark_lost("session_lost")
                 return
-            try:
-                snapshot = page.evaluate(SNAPSHOT_JS)
-            except Exception:  # noqa: BLE001 - navigating: look again
-                snapshot = None
-            try:
-                if isinstance(snapshot, Mapping):
-                    watch.observe(snapshot)
-                watch.poll()
-            except Exception as exc:  # noqa: BLE001 - fail closed
-                # Detection, the card, or its answer broke (a full disk, an
-                # unwritable registry): refuse every write until exit.
-                watch.fail(exc)
-                return
+            snapshot = None
+            if watch.failed is None:
+                try:
+                    snapshot = page.evaluate(SNAPSHOT_JS)
+                except Exception:  # noqa: BLE001 - navigating: look again
+                    snapshot = None
+            if watch.failed is None:
+                try:
+                    if isinstance(snapshot, Mapping):
+                        watch.observe(snapshot)
+                    watch.poll()
+                except Exception as exc:  # noqa: BLE001 - fail closed
+                    # Detection, the card, or its answer broke (a full disk,
+                    # an unwritable registry). The loop goes on, refusing
+                    # every write, until the tab closes, the session is
+                    # lost, a signal or max_s ends it.
+                    watch.fail(exc)
             next_look = time.monotonic() + poll_s
         if stop is not None and stop():
             return
@@ -529,14 +553,29 @@ def watch_browser(
         )
         if on_attached is not None:
             on_attached()
+        started = time.monotonic()
         try:
-            run_loop(watch, page, cdp, paused, poll_s=poll_s, max_s=max_s, stop=stop)
-        except Exception as exc:  # noqa: BLE001 - fail closed, then exit 4
-            watch.fail(exc)
+            try:
+                run_loop(
+                    watch, page, cdp, paused, poll_s=poll_s, max_s=max_s, stop=stop
+                )
+            except Exception as exc:  # noqa: BLE001 - fail closed, then exit 4
+                watch.fail(exc)
+                # Keep refusing writes in the failed state until the run ends.
+                left = (
+                    None
+                    if max_s is None
+                    else max(0.0, max_s - (time.monotonic() - started))
+                )
+                try:
+                    run_loop(
+                        watch, page, cdp, paused, poll_s=poll_s, max_s=left, stop=stop
+                    )
+                except Exception:  # noqa: BLE001 - the tab or session is gone
+                    pass
         finally:
             # Paused requests go on when the session detaches: decide them first.
-            while paused and _decide(cdp, watch, paused.pop(0)):
-                pass
+            drain(cdp, watch, paused)
             try:
                 cdp.detach()
             except Exception:  # noqa: BLE001 - the tab is gone
