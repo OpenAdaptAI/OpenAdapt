@@ -53,7 +53,9 @@ def compiled_only(cache: Any, prompt: str, params: Mapping[str, Any]) -> SkillRu
 
 class CompiledOnly:
     """A TaskCache for :class:`~openadapt_flow.wrap.WrappedTask` that only
-    replays. The agent ``WrappedTask`` passes is never used."""
+    replays. The agent ``WrappedTask`` passes is never used. A halt it sees
+    keeps its record check as the fallback policy does, so ``wrap-dispatch
+    release`` can tell a proved clean halt from one that may have written."""
 
     def __init__(self, cache: Any) -> None:
         self.cache = cache
@@ -65,4 +67,22 @@ class CompiledOnly:
         return self.cache.key(prompt, params)
 
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
-        return compiled_only(self.cache, prompt, params)
+        served = compiled_only(self.cache, prompt, params)
+        if (
+            served.path == "skill"
+            and not served.verified
+            and served.status
+            not in (
+                "CACHE_HALTED",
+                NO_ADMITTED_PROGRAM,
+            )
+        ):
+            # Keep the halted run's record check beside its halt when it
+            # proves nothing was written, so release can rely on it.
+            from openadapt_flow.wrap.fallback import keep_halt_evidence
+
+            try:
+                keep_halt_evidence(self.cache, prompt, params, served)
+            except OSError:
+                pass  # No evidence kept: release then needs reconciling.
+        return served

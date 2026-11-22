@@ -61,6 +61,16 @@ NEVER_FALL_BACK = frozenset(
 )
 
 _ACTIVE = fallback_marker.ACTIVE
+#: Fallback statuses that already say a save went wrong (a check caught it):
+#: kept as they are when the final read also shows a change.
+_WROTE_WRONG = frozenset(
+    {
+        "GATE_NOT_PROVED",
+        "record_check_failed",
+        "readback_wrong_record",
+        "readback_refused",
+    }
+)
 _HALT = "halt-evidence.json"
 _RESULT = "result.json"
 _REQUEST_CHARS = frozenset(
@@ -241,6 +251,60 @@ def fallback_root(cache: Any, prompt: str, params: Mapping[str, Any]) -> Path:
     return task_dir.parent / "fallback" / task_dir.name
 
 
+def keep_halt_evidence(
+    cache: Any, prompt: str, params: Mapping[str, Any], halted: SkillRun
+) -> Eligibility:
+    """After a program run that just stopped: keep its record check beside
+    the halt when it proves nothing was written. Returns that halt's
+    eligibility (without the kept-evidence check of :func:`halt_evidence`)."""
+
+    found = proved_before_effect(cache, prompt, params)
+    if not found.eligible:
+        return found
+    if not (_int_zero(halted.model_calls) and _nothing_written(halted.record_check)):
+        return Eligibility(False, "record_changed_or_unproved")
+    root = fallback_root(cache, prompt, params)
+    root.mkdir(parents=True, exist_ok=True)
+    _write(
+        root / _HALT,
+        {
+            "run_dir": str(found.run_dir),
+            "bundle_digest": found.bundle_digest,
+            "record_check": halted.record_check,
+        },
+    )
+    return found
+
+
+def halt_evidence(cache: Any, prompt: str, params: Mapping[str, Any]) -> Eligibility:
+    """Whether the task's hold is proved to have written nothing.
+
+    :func:`proved_before_effect`, plus the record check kept beside that
+    same halt (:func:`keep_halt_evidence`): both reads succeeded and found
+    no change to the task's record. A halt nobody kept a clean check for is
+    not proved. The fallback, ``wrap-dispatch status`` and ``release`` all
+    use this one rule.
+    """
+
+    found = proved_before_effect(cache, prompt, params)
+    if not found.eligible:
+        return found
+    try:
+        halt = json.loads(
+            (fallback_root(cache, prompt, params) / _HALT).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        halt = None
+    if not (
+        isinstance(halt, dict)
+        and halt.get("run_dir") == str(found.run_dir)
+        and halt.get("bundle_digest") == found.bundle_digest
+        and _nothing_written(halt.get("record_check"))
+    ):
+        return Eligibility(False, "no_record_check_for_halt")
+    return found
+
+
 class FallbackPolicy:
     """A TaskCache that may hand a proved pre-effect drift to the agent.
 
@@ -313,38 +377,13 @@ class FallbackPolicy:
         ):
             return first
         root = fallback_root(self.cache, prompt, params)
-        found = proved_before_effect(self.cache, prompt, params)
+        found = Eligibility(True, "")
         if first.status != "CACHE_HALTED":
             # The run that just halted: keep its record check with the halt,
             # so a later held call can rely on it too.
-            if (
-                found.eligible
-                and _int_zero(first.model_calls)
-                and _nothing_written(first.record_check)
-            ):
-                root.mkdir(parents=True, exist_ok=True)
-                _write(
-                    root / _HALT,
-                    {
-                        "run_dir": str(found.run_dir),
-                        "bundle_digest": found.bundle_digest,
-                        "record_check": first.record_check,
-                    },
-                )
-            elif found.eligible:
-                found = Eligibility(False, "record_changed_or_unproved")
+            found = keep_halt_evidence(self.cache, prompt, params, first)
         if found.eligible:
-            try:
-                halt = json.loads((root / _HALT).read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                halt = None
-            if not (
-                isinstance(halt, dict)
-                and halt.get("run_dir") == str(found.run_dir)
-                and halt.get("bundle_digest") == found.bundle_digest
-                and _nothing_written(halt.get("record_check"))
-            ):
-                found = Eligibility(False, "no_record_check_for_halt")
+            found = halt_evidence(self.cache, prompt, params)
         if not found.eligible:
             self.last = {"fallback": False, "reason": found.reason}
             return first
@@ -419,21 +458,21 @@ class FallbackPolicy:
             )
         run_root = root / request_id
         try:
-            run_root.mkdir()
-        except FileExistsError:
-            marker.clear()
-            return self._refused(
-                first,
-                "FALLBACK_REQUEST_REUSED",
-                "This fallback request id already ran.",
-                started,
-                request_id=request_id,
-            )
-        bind = getattr(self.gate, "bind", None)
-        if callable(bind):
-            # A gate that keeps its own evidence learns which run it serves.
-            bind(run_root, request_id)
-        try:
+            try:
+                run_root.mkdir()
+            except FileExistsError:
+                marker.clear()
+                return self._refused(
+                    first,
+                    "FALLBACK_REQUEST_REUSED",
+                    "This fallback request id already ran.",
+                    started,
+                    request_id=request_id,
+                )
+            bind = getattr(self.gate, "bind", None)
+            if callable(bind):
+                # A gate that keeps its own evidence learns which run it serves.
+                bind(run_root, request_id)
             return self._run_agent(
                 prompt, params, agent, first, marker, run_root, started
             )
@@ -558,7 +597,7 @@ class FallbackPolicy:
             verified = False
             status = "RECONCILIATION_REQUIRED"
             detail = "The final read of the record does not confirm the save."
-        elif not verified and not unchanged and status != "GATE_NOT_PROVED":
+        elif not verified and not unchanged and status not in _WROTE_WRONG:
             status = "RECONCILIATION_REQUIRED"
             detail = "The final read of the record can't show that nothing was saved."
         repair = self._open_repair(prompt, params, run_root) if verified else None

@@ -186,14 +186,15 @@ def add_run_arguments(p: argparse.ArgumentParser) -> None:
         choices=("terminal", "item-approval"),
         default="terminal",
         help="Who approves each fallback save: a person at this terminal "
-        "(terminal, the default), or a person in Desktop's Run it or on a "
-        "paired phone, through a signed item approval (item-approval; no "
-        "terminal needed)",
+        "(terminal, the default), or a person on a paired phone or with "
+        "openadapt-flow item-approval approve, through a signed item "
+        "approval (item-approval; no terminal needed)",
     )
     p.add_argument(
         "--fallback-approvals-dir",
-        help="With --fallback-gate item-approval: the runs root Desktop or the "
-        "decision portal scans (default: inside the fallback run's directory)",
+        help="With --fallback-gate item-approval: where each fallback's "
+        "approval folder goes, such as the runs root the decision portal "
+        "scans (default: inside the fallback run's directory)",
     )
     p.add_argument(
         "--fallback-approval-wait-s",
@@ -437,7 +438,7 @@ def _hold_file(setup: Any) -> Path:
 
 def status(args: argparse.Namespace) -> dict[str, Any]:
     from openadapt_flow.privacy import scrub_text
-    from openadapt_flow.wrap.fallback import fallback_runs, proved_before_effect
+    from openadapt_flow.wrap.fallback import fallback_runs, halt_evidence
 
     setup = _setup(args.task, args.key_dir)
     names = _names(setup)
@@ -457,7 +458,7 @@ def status(args: argparse.Namespace) -> dict[str, Any]:
             }
         except (OSError, ValueError, AttributeError):
             hold = {"phase": "unreadable"}
-    found = proved_before_effect(cache, setup.instruction, names)
+    found = halt_evidence(cache, setup.instruction, names)
     return {
         "task_id": cache.task_id(setup.instruction, names),
         "held": cache.held(setup.instruction, names),
@@ -471,25 +472,11 @@ def status(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _hold_is_proved_clean(setup: Any, names: Mapping[str, str]) -> bool:
-    """The hold's own evidence shows nothing was written: a halt the report
-    proves before effect, bound to the admitted bundle, or a hold whose
-    program never ran (no baseline, or no repair selection)."""
-    from openadapt_flow.wrap.fallback import proved_before_effect
+    """The hold's own evidence shows nothing was written: the same rule the
+    fallback uses (:func:`~openadapt_flow.wrap.fallback.halt_evidence`)."""
+    from openadapt_flow.wrap.fallback import halt_evidence
 
-    try:
-        stopped = json.loads(_hold_file(setup).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    if not isinstance(stopped, dict) or stopped.get("phase") != "halted":
-        return False
-    replay = stopped.get("replay")
-    if replay is None:
-        return stopped.get("reason") == "repair_selection_unavailable"
-    if not isinstance(replay, dict):
-        return False
-    if replay.get("status") == "BASELINE_UNAVAILABLE":
-        return replay.get("verified") is False
-    return proved_before_effect(setup.cache, setup.instruction, names).eligible
+    return halt_evidence(setup.cache, setup.instruction, names).eligible
 
 
 def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:

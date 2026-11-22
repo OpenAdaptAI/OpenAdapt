@@ -252,6 +252,16 @@ class FakeRun1:
                 record_check=None,
                 to_dict=lambda: {"status": "refused_by_hold"},
             )
+        if getattr(self, "wrong", False):
+            # The agent saved a wrong value; run 1's record check caught it.
+            self.rows.append({"id": "f1", "kind": "synthetic", "value": "wrong"})
+            return SimpleNamespace(
+                status="record_check_failed",
+                detail="input 'value' is not in the new record",
+                run1={"agent": ledger, "gates": gates, "readbacks": [{}]},
+                record_check={"passed": False, "created": 1, "changed": 0},
+                to_dict=lambda: {"status": "record_check_failed"},
+            )
         self.rows.append({"id": "f1", "kind": "synthetic", "value": params["value"]})
         return SimpleNamespace(
             status="draft",
@@ -275,13 +285,14 @@ class Agent:
 
 @pytest.fixture
 def run1(model, monkeypatch) -> SimpleNamespace:
-    state = SimpleNamespace(spend=None, after=None)
+    state = SimpleNamespace(spend=None, after=None, wrong=False)
     FakeRun1.made = []
 
     def factory(prompt: str, **kw: Any) -> FakeRun1:
         made = FakeRun1(
             prompt, rows=model.rows, spend=state.spend, after=state.after, **kw
         )
+        made.wrong = state.wrong
         made.observer = made  # observer.system_of_record reads the same rows
         return made
 
@@ -755,3 +766,39 @@ def test_release_never_drops_a_live_fallbacks_marker(model, monkeypatch, run1) -
     assert seen[0]["cleared"] is False and seen[0]["owner"] == "running"
     assert result.verified
     assert not (model.tmp / "cache" / "fallback" / "task" / fb._ACTIVE).exists()
+
+
+def test_a_caught_wrong_save_keeps_its_own_status(model, monkeypatch, run1) -> None:
+    """A check already caught the wrong write: it stays a caught error (not
+    reconciliation), and the marker stays for a person."""
+    from openadapt_flow.wrap.dispatch_cli import outcome
+
+    install_reply(model, monkeypatch)
+    run1.wrong = True
+    chosen = policy(model)
+    result = chosen.run(PROMPT, PARAMS, Agent())
+    assert result.status == "record_check_failed" and not result.verified
+    assert outcome(result.to_dict()) == "CAUGHT_ERROR"
+    assert chosen.last["repair"] is None
+    assert (model.tmp / "cache" / "fallback" / "task" / fb._ACTIVE).exists()
+
+
+def test_a_gate_that_fails_to_bind_leaves_an_ended_marker(
+    model, monkeypatch, run1
+) -> None:
+    install_reply(model, monkeypatch)
+
+    class Broken:
+        attended = True
+
+        def bind(self, run_root, request_id):
+            raise RuntimeError("no approvals folder")
+
+        def __call__(self, request):
+            return True
+
+    with pytest.raises(RuntimeError):
+        policy(model, gate=Broken()).run(PROMPT, PARAMS, Agent())
+    runs = fb.fallback_runs(model.cache, PROMPT, PARAMS)
+    assert runs["in_flight"] and runs["in_flight_owner"] == "ended"
+    assert fb.clear_in_flight(model.cache, PROMPT, PARAMS)

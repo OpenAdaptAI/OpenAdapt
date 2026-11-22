@@ -18,14 +18,14 @@ openadapt-flow wrap-dispatch --task task.json --request-id r-118 \
 
 In Python, wrap the task's `SkillCache`:
 
-With no terminal (a service), a person approves each save from Desktop's Run
-it or a paired phone instead:
+With no terminal (a service), a person approves each save from a paired phone
+or with `openadapt-flow item-approval approve` instead:
 
 ```bash
 openadapt-flow wrap-dispatch --task task.json --request-id r-118 \
     --param note="Synthetic follow-up" \
     --fallback agent --fallback-max-cost-usd 0.50 \
-    --fallback-gate item-approval --fallback-approvals-dir ~/.openadapt/runs
+    --fallback-gate item-approval --fallback-approvals-dir PORTAL_RUNS_ROOT
 ```
 
 In Python, wrap the task's `SkillCache`:
@@ -133,9 +133,11 @@ guard use. Before each save, the fallback run writes
 `item-approval/request-<id>.json` with the gate screenshot under
 `--fallback-approvals-dir/<fallback request id>/` (default: the fallback
 run's directory), and waits up to `--fallback-approval-wait-s` (default 60).
-A person answers in Desktop's Run it (`openadapt-flow item-approval approve`)
-or on a paired phone through the decision portal, when that runs root is one
-they scan.
+A person answers on a paired phone through the decision portal, when the
+portal's runs root holds that folder, or with
+`openadapt-flow item-approval approve` and their registered approver key.
+Desktop's Run it screen lists only runs Desktop started, so it does not show
+these requests yet.
 
 The save goes through only for an answer decided by a person, signed by an
 approver key on the pinned approver roster, for that exact request, before
@@ -182,9 +184,10 @@ The hold verbs:
 - `wrap-dispatch release TASK --person NAME`: a person at a terminal types
   `release`. The hold file is archived next to a record of who released it.
   Without `--after-reconciling`, only a hold whose own evidence proves
-  nothing was written is released: a halt that may fall back (the checks
-  above, without the record check), or a hold whose program never ran. Any
-  other hold (a `RECONCILIATION_REQUIRED` reply, a write, `running`,
+  nothing was written is released: a halt that meets every check above,
+  including the kept record check (`wrap-dispatch` keeps it for a halt it
+  saw, with or without `--fallback agent`). Any other hold (a
+  `RECONCILIATION_REQUIRED` reply, a write, an unreadable read, `running`,
   unreadable) and an unfinished fallback need `--after-reconciling`. A
   fallback that is still running, or whose owner is on another host or
   can't be identified, is never released (`FALLBACK_RUNNING`).
@@ -200,6 +203,13 @@ The hold verbs:
 - A program hold left `running` by a live program replay is not told apart
   from a lost reply; release with `--after-reconciling` can archive it while
   that replay still runs.
+- A fallback marker whose owner is on another host, or that can't be read,
+  has no release command: a person checks the record and removes
+  `in-flight.json` by hand.
+- The gate's wait is checked against `--max-run-seconds`, not against the
+  time the agent took to reach the save. An approval that arrives after the
+  agent's run deadline can still let the click through; the final read then
+  decides the outcome.
 - The item-approval gate's request shows the gate screenshot and the
   control; it does not list the field values being saved (no `fields`).
 - No real model agent has run the fallback; the benchmark's agent is

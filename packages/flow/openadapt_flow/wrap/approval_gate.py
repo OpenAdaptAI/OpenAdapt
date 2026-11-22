@@ -1,4 +1,4 @@
-"""A pre-commit gate a person answers from Desktop or a paired phone.
+"""A pre-commit gate a person answers from a paired phone or the CLI.
 
 :class:`~openadapt_flow.wrap.fallback.TerminalGate` needs a person at the
 terminal, so a fallback started by a service (no TTY) never starts the
@@ -6,8 +6,10 @@ agent. :class:`ItemApprovalGate` asks through the item-approval store that
 ``each_item`` runs and the agent guard use
 (:mod:`openadapt_flow.approval_mode.item_approval`): before each save the
 fallback run writes ``item-approval/request-<id>.json`` with the gate
-screenshot, and waits. Desktop's Run it (``openadapt-flow item-approval
-approve``) or the decision portal on a paired phone writes the answer.
+screenshot, and waits. The decision portal on a paired phone (when its runs
+root holds the approvals folder) or ``openadapt-flow item-approval approve``
+with the person's approver key writes the answer. Desktop's Run it screen
+lists only runs Desktop started, so it does not show these requests.
 
 The gate lets the save through only for an answer that
 :func:`~openadapt_flow.approval_mode.item_approval.answer_refusal` accepts:
@@ -68,8 +70,8 @@ class ItemApprovalGate:
 
     Args:
         approvals_dir: Where each fallback run's approval folder goes
-            (``<approvals_dir>/<fallback request id>/item-approval``), for a
-            Desktop or portal that scans that runs root. Default: inside the
+            (``<approvals_dir>/<fallback request id>/item-approval``), for
+            a decision portal that scans that runs root. Default: inside the
             fallback run's own directory.
         wait_s: How long to wait for each answer. The request expires then,
             so a later answer is refused.

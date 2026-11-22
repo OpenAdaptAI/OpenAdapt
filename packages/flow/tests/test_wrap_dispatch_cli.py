@@ -283,10 +283,10 @@ def test_a_retry_replays_the_whole_dispatch_envelope(
         parameters=("value",),
         runs_dir=task.runs,
     )
-    try:
+    with pytest.raises(BindingError) as raised:
         wrapped.verify_reply("r1", {"value": "one"}, first)
-    except BindingError as exc:
-        assert str(exc) != "terminal_result_mismatch"
+    # Past the reply/record and identity checks; a fallback has no receipt.
+    assert str(raised.value) == "receipt_unbound"
 
 
 @pytest.mark.parametrize("parent", ["p" * 128, "tenant/a:b c", ".hidden"])
@@ -361,3 +361,179 @@ def test_release_after_a_crashed_fallback(task, monkeypatch, run1) -> None:
     done = dc.release(args, ask=lambda _: "release")
     assert done["released"] and done["fallback_cleared"]
     assert done["fallback_request_id"] == dc.child_request_id("r1")
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"fail_read_after": True},  # the read after the halt failed
+        {"write": {"id": "1", "kind": "synthetic", "value": "one"}},  # it wrote
+    ],
+)
+def test_release_of_an_unproved_halt_needs_the_acknowledgement(
+    task, monkeypatch, reply
+) -> None:
+    """The report says HALTED_BEFORE_EFFECT, but the record check does not
+    prove nothing was written: the same rule as the fallback's."""
+    install_reply(task.model, monkeypatch, **reply)
+    assert dc.run(run_args(task, "r1", "one"))["status"] == "HALTED"
+    shown = dc.status(parse("status", "task.json"))
+    assert shown["fallback_eligible"] is False
+    monkeypatch.setattr(compile_cli, "_interactive", lambda: True)
+    args = parse("release", "task.json", "--person", "dana")
+    assert dc.release(args, ask=lambda _: "release")["reason"] == "RECONCILE_FIRST"
+    assert task.model.stop.exists()
+
+
+# -- the item-approval gate through wrap-dispatch (no injected gate) -------------
+
+
+def _approve_with_cli(approvals: Path, key_path: Path, root: str) -> tuple:
+    """A person answers with openadapt-flow item-approval approve and their
+    approver key, from a thread, while the fallback waits at its gate."""
+    import threading
+    import time
+
+    from openadapt_flow.__main__ import main
+
+    done: list = []
+
+    def answer() -> None:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and not done:
+            for request in approvals.glob("*/item-approval/request-*.json"):
+                data = json.loads(request.read_text())
+                from openadapt_flow.approval_mode.item_approval import (
+                    ItemApprovalRequest,
+                )
+
+                asked = ItemApprovalRequest.model_validate(data)
+                done.append(
+                    main(
+                        [
+                            "item-approval",
+                            "approve",
+                            str(request.parent.parent),
+                            "--request-id",
+                            asked.request_id,
+                            "--request-sha256",
+                            asked.digest(),
+                            "--decided-by",
+                            "human",
+                            "--route",
+                            "desktop_run_it",
+                            "--unauthenticated",
+                            "--approver-key",
+                            str(key_path),
+                            "--approver-root",
+                            root,
+                        ]
+                    )
+                )
+                return
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=answer, daemon=True)
+    thread.start()
+    return thread, done
+
+
+GATE = ("--fallback-gate", "item-approval", "--fallback-approval-wait-s", "15")
+
+
+def test_wrap_dispatch_item_approval_gate_saves_after_a_signed_answer(
+    task, monkeypatch, run1, approver, tmp_path
+) -> None:
+    import os
+
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+
+    install_reply(task.model, monkeypatch)
+    approvals = tmp_path / "approvals"
+    key_path, _signer = approver
+    thread, done = _approve_with_cli(approvals, key_path, os.environ[ROOT_ENV])
+    agent = Agent()
+    result = dc.run(
+        run_args(
+            task,
+            "r1",
+            "one",
+            *FALLBACK,
+            *GATE,
+            "--fallback-approvals-dir",
+            str(approvals),
+        ),
+        agent=agent,
+    )
+    thread.join(timeout=5)
+    assert done == [0]
+    assert result["verified"] and result["outcome"] == "VERIFIED"
+    [answer] = result["fallback"]["gate_answers"]
+    assert answer["decision"] == "approved" and answer["signer"] == "front-desk"
+    assert task.model.rows == [{"id": "f1", "kind": "synthetic", "value": "one"}]
+
+
+def test_wrap_dispatch_item_approval_gate_with_a_config_pin(
+    task, monkeypatch, run1, approver, tmp_path
+) -> None:
+    import os
+
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from tests._approver_keys import approver_config
+
+    install_reply(task.model, monkeypatch)
+    root = os.environ[ROOT_ENV]
+    monkeypatch.delenv(ROOT_ENV)
+    config = approver_config(tmp_path / "deployment.yaml", root)
+    approvals = tmp_path / "approvals"
+    key_path, _signer = approver
+    thread, done = _approve_with_cli(approvals, key_path, root)
+    result = dc.run(
+        run_args(
+            task,
+            "r1",
+            "one",
+            *FALLBACK,
+            *GATE,
+            "--fallback-approvals-dir",
+            str(approvals),
+            "--fallback-approvers-config",
+            str(config),
+        ),
+        agent=Agent(),
+    )
+    thread.join(timeout=5)
+    assert done == [0] and result["verified"]
+
+
+def test_wrap_dispatch_item_approval_gate_without_a_pin_never_builds_the_agent(
+    task, monkeypatch, run1, approver
+) -> None:
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+
+    install_reply(task.model, monkeypatch)
+    monkeypatch.delenv(ROOT_ENV)
+    monkeypatch.setattr(
+        dc, "_fallback_agent", lambda *_: pytest.fail("agent built with no pin")
+    )
+    result = dc.run(run_args(task, "r1", "one", *FALLBACK, *GATE))
+    assert result["status"] == "FALLBACK_GATE_UNATTENDED"
+    assert result["outcome"] == "ESCALATED" and task.model.rows == []
+
+
+def test_the_gate_flags_need_the_fallback(task) -> None:
+    with pytest.raises(SystemExit):
+        dc.run(run_args(task, "r1", "one", *GATE))
+    with pytest.raises(SystemExit):
+        dc.run(
+            run_args(
+                task,
+                "r1",
+                "one",
+                *FALLBACK,
+                "--fallback-gate",
+                "item-approval",
+                "--fallback-approval-wait-s",
+                "200",
+            )
+        )
