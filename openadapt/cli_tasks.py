@@ -86,6 +86,7 @@ FLOW_NAMES = {
     "pull": "workflow pull",
     "push": "workflow push",
     "qualify": "qualify",
+    "readiness": "qualify readiness",
     "receipt": "verify receipt",
     "reconcile": "verify reconcile",
     "record": "record",
