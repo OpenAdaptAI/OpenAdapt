@@ -3113,6 +3113,7 @@ def test_commit_confirmation_requires_response_for_request_started_by_commit_cli
 
     class _FakePage:
         context = _FakeContext()
+        url = "https://example.test/"
 
         def evaluate(self, *_a: Any, **_kw: Any) -> None:
             return None
