@@ -6,6 +6,8 @@
   key material.
 - ``recovery create`` makes a solo recovery key: the code is shown once and
   never stored; its public half becomes a recipient of every new run.
+- ``restore DIR --yes`` lets this computer open a backup that only the
+  recovery code opens (it is never opened by the code silently).
 - ``shred DIR --yes`` destroys an encrypted set's bucket key (every tracked
   copy), so nobody can open it. It can't be undone.
 
@@ -140,6 +142,30 @@ def _cmd_shred(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_restore(args: argparse.Namespace) -> int:
+    from openadapt_flow import key_hierarchy as kh
+    from openadapt_flow import sealed_set
+
+    root = Path(args.dir)
+    if not sealed_set.is_sealed(root):
+        print(f"at-rest restore: {root} is not an encrypted set", file=sys.stderr)
+        return 2
+    if not args.yes:
+        print(
+            f"at-rest restore: this lets this computer open {root} from now on, "
+            "with the recovery code. Restore only a backup you made. Pass --yes.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        fpr = sealed_set.restore(root)
+    except sealed_set.SealedSetError as exc:
+        print(f"at-rest restore: {exc} (set {kh.RECOVERY_CODE_ENV})", file=sys.stderr)
+        return 2
+    print(f"Restored {root}: it now opens with this computer's device key ({fpr}).")
+    return 0
+
+
 #: Commands that read sealed input without decrypting it to disk:
 #: ``inspect report-run`` and ``local-seal verify`` read the report in
 #: memory; ``shred`` touches keys.
@@ -147,6 +173,7 @@ SEALED_READY: frozenset[str] = frozenset(
     {
         "openadapt_flow.__main__:_cmd_report_run",
         "openadapt_flow.cli_at_rest:_cmd_shred",
+        "openadapt_flow.cli_at_rest:_cmd_restore",
         "openadapt_flow.cli_local_seal:_cmd_verify",
     }
 )
@@ -194,7 +221,10 @@ def precheck_open(root: object) -> None:
 
     if sealed_set.read_header(root).get("shredded"):  # type: ignore[arg-type]
         return
-    sealed_set.open_set(root)  # type: ignore[arg-type]
+    try:
+        sealed_set.open_set(root)  # type: ignore[arg-type]
+    except sealed_set.SealedSetRestoreRequired:
+        return  # `at-rest restore` opens it; any other command still refuses
 
 
 def add_no_encrypt(p: argparse.ArgumentParser) -> None:
@@ -269,6 +299,14 @@ def register(sub: argparse._SubParsersAction) -> None:
     )
     c.add_argument("--replace", action="store_true")
     c.set_defaults(func=_cmd_recovery_create)
+    s = rsub.add_parser(
+        "restore",
+        help="Let this computer open a backup that only the recovery code opens",
+        allow_abbrev=False,
+    )
+    s.add_argument("dir", help="The encrypted directory")
+    s.add_argument("--yes", action="store_true", help="Confirm it is your backup")
+    s.set_defaults(func=_cmd_restore)
     s = rsub.add_parser(
         "shred",
         help="Destroy an encrypted set's bucket key; nobody can open it after",

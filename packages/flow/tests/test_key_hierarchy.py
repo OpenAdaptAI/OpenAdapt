@@ -498,6 +498,12 @@ def test_a_recovery_code_opens_a_backup_on_a_new_computer(home, monkeypatch) -> 
     with pytest.raises(sealed_set.SealedSetKeyError):
         sealed_set.read_bytes(run / "report.json")
     monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    # The code alone does not open a set this computer didn't write: the
+    # person restores it on purpose, and from then on the device key opens it.
+    with pytest.raises(sealed_set.SealedSetRestoreRequired, match="restore"):
+        sealed_set.read_bytes(run / "report.json")
+    sealed_set.restore(run)
+    monkeypatch.delenv(kh.RECOVERY_CODE_ENV)
     assert sealed_set.read_bytes(run / "report.json") == TYPED
 
 
@@ -825,6 +831,9 @@ def test_a_lost_keychain_entry_does_not_hide_the_recovery_code(
     with pytest.raises(sealed_set.SealedSetError, match="missing"):
         sealed_set.read_bytes(run / "report.json")
     monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    with pytest.raises(sealed_set.SealedSetRestoreRequired):
+        sealed_set.read_bytes(run / "report.json")  # never silently
+    monkeypatch.setenv(kh.RECOVERY_RESTORE_ENV, "1")  # the person restores
     assert sealed_set.read_bytes(run / "report.json") == TYPED
     # Writing still needs the device key, and still fails closed without it.
     with pytest.raises((sealed_set.SealedSetError, at_rest.LocalKeyError)):
@@ -938,3 +947,50 @@ def test_a_checkpoint_store_without_a_key_encrypts_by_default(home) -> None:
         plain / "s1.json", Bindings(typed=TYPED.decode())
     )
     assert written.name.endswith(".enc") and TYPED not in written.read_bytes()
+
+
+def test_a_set_forged_to_the_recovery_public_key_is_refused(home, monkeypatch) -> None:
+    """Whoever reads keys/recovery.pub.json can wrap a bucket to it. Such a set
+    does not open here: the recovery code opens only what the person restores
+    on purpose, and a restore is refused without the code."""
+    root, _keychain = home
+    code, recipient = kh.new_recovery_code()
+    kh.save_recovery_recipient(recipient)
+    genuine = root.parent / "genuine"
+    _seal(genuine, {"report.json": TYPED})
+    # The forger: another computer, with only the public recovery key.
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "forger"))
+    at_rest.use_key_store(MemoryKeychain())
+    kh.save_recovery_recipient(recipient)
+    forged = root.parent / "forged"
+    _seal(forged, {"report.json": b"forged evidence"})
+    # Back on the person's computer, with the recovery code configured.
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root))
+    at_rest.use_key_store(_keychain)
+    monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    assert sealed_set.read_bytes(genuine / "report.json") == TYPED  # device key
+    with pytest.raises(sealed_set.SealedSetRestoreRequired):
+        sealed_set.read_bytes(forged / "report.json")
+    monkeypatch.delenv(kh.RECOVERY_CODE_ENV)
+    with pytest.raises(sealed_set.SealedSetKeyError):
+        sealed_set.restore(forged)
+    header = _header(forged)
+    with pytest.raises(sealed_set.SealedSetError):
+        sealed_set._open_v3(header)
+
+
+def test_the_cli_restores_a_backup_with_the_recovery_code(home, monkeypatch) -> None:
+    from openadapt_flow.__main__ import main
+
+    root, _keychain = home
+    code, recipient = kh.new_recovery_code()
+    kh.save_recovery_recipient(recipient)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "new-laptop"))
+    at_rest.use_key_store(MemoryKeychain())
+    monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    assert main(["at-rest", "restore", str(run)]) == 2  # needs --yes
+    assert main(["at-rest", "restore", str(run), "--yes"]) == 0
+    monkeypatch.delenv(kh.RECOVERY_CODE_ENV)
+    assert sealed_set.read_bytes(run / "report.json") == TYPED

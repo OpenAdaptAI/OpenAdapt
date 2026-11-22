@@ -882,6 +882,20 @@ jobs:
           fi
           exit "$unit_rc"
       # Before the claims upload, which tests expect to be the last step.
+      - name: Rollback, checkpoint and key tests under the default (encrypted) mode
+        # The suite above runs with a recorded plaintext opt-out. Encryption is
+        # the default, so run the stores that keep their own state inside a
+        # run directory (rollback, durable checkpoints, the key hierarchy)
+        # with it off as well: a plaintext write inside an encrypted run, or a
+        # reader that assumes plaintext, fails here.
+        if: matrix.shard == 1
+        env:
+          OPENADAPT_TEST_DEFAULT_AT_REST: "1"
+        run: >-
+          pytest -n logical --dist loadfile -q --basetemp=runs/ci-default-at-rest
+          tests/test_rollback.py tests/test_rollback_qualify.py
+          tests/test_checkpoint_key_derivations.py tests/test_key_hierarchy.py
+          tests/test_at_rest_review_round3.py
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

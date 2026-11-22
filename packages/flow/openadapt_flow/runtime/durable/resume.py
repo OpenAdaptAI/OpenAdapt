@@ -1086,9 +1086,17 @@ def _begin_continuation(
 def was_compensated(run_dir: Path | str) -> bool:
     """Did a compensating rollback start undoing this run (docs/ROLLBACK.md)?
     Every resume path checks it: the CLI, the attended console and the relay."""
+    from openadapt_flow import sealed_set
     from openadapt_flow.rollback import COMPENSATED_MARKER
 
-    return (Path(run_dir) / COMPENSATED_MARKER).exists()
+    marker = Path(run_dir) / COMPENSATED_MARKER
+    if marker.exists():
+        return True
+    try:
+        # An encrypted run keeps the marker in its sealed set.
+        return sealed_set.exists(marker)
+    except (OSError, ValueError):  # a SealedSetError is a ValueError
+        return True  # can't tell: never resume a run that may be undone
 
 
 def resume(

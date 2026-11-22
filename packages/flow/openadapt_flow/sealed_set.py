@@ -94,6 +94,11 @@ class SealedSetKeyError(SealedSetError):
     """A sealed set was found but no key was configured to open it."""
 
 
+class SealedSetRestoreRequired(SealedSetKeyError):
+    """Only the recovery code opens this set; it opens only through an
+    explicit restore (:func:`restore`)."""
+
+
 @dataclass(frozen=True)
 class FileKind:
     """One kind of file a bundle or recording can contain."""
@@ -633,7 +638,7 @@ class V3Key:
             )
 
 
-def _open_v3(header: dict[str, object]) -> V3Key:
+def _open_v3(header: dict[str, object], *, restore: bool = False) -> V3Key:
     """Open a version 3 set: find its bucket record, unwrap the bucket key
     with a key this computer holds, unwrap the DEK, check the header MACs."""
     from openadapt_flow import key_hierarchy as kh
@@ -659,7 +664,9 @@ def _open_v3(header: dict[str, object]) -> V3Key:
             raise SealedSetError("the bucket record belongs to another set")
         # A record the header supplies proves nothing about who wrote the
         # set: only this computer's device keys or a recovery key open it.
-        bucket = kh.open_bucket(record, from_header=record is inline)
+        bucket = kh.open_bucket(record, from_header=record is inline, restore=restore)
+    except kh.RecoveryRestoreRequired as exc:
+        raise SealedSetRestoreRequired(str(exc)) from exc
     except kh.NoRecipientKey as exc:
         raise SealedSetKeyError(str(exc)) from exc
     except kh.KeyHierarchyError as exc:
@@ -1562,6 +1569,42 @@ def _replace_header(root: Path, header: dict[str, object]) -> None:
             os.close(fd)
 
 
+def restore(root: Path | str) -> str:
+    """Restore a set that only the recovery code opens (a backup on a new or
+    reset computer): open it with ``OPENADAPT_RECOVERY_CODE``, wrap its
+    bucket to this computer's device key, and re-stamp the header MACs. From
+    then on it opens here like a set written here. The person runs this on
+    purpose (``at-rest restore DIR --yes``); a set from a header is never
+    opened by the recovery code silently. Returns the device fingerprint."""
+    from openadapt_flow import key_hierarchy as kh
+
+    base = Path(_abs(root))
+    with mutation_lock(base):
+        header = read_header(base)
+        if header.get("version") != ENVELOPE_VERSION or not isinstance(
+            header.get("bucket_record"), dict
+        ):
+            raise SealedSetError(
+                f"{base} keeps no key record in its header; only a solo-mode "
+                "encrypted set is restored with the recovery code"
+            )
+        key = _open_v3(header, restore=True)
+        bucket = key.bucket
+        try:
+            stanza = kh.device_stanza(bucket)  # type: ignore[arg-type]
+        except kh.KeyHierarchyError as exc:
+            raise SealedSetError(f"Not restoring {base}: {exc}") from exc
+        record = dict(header["bucket_record"])  # type: ignore[arg-type]
+        stanzas = [
+            s for s in record.get("stanzas", []) if s.get("fpr") != stanza["fpr"]
+        ]
+        record["stanzas"] = [*stanzas, stanza]
+        header["bucket_record"] = record
+        key.stamp(header)
+        _replace_header(base, header)
+        return stanza["fpr"]
+
+
 def key_record_of(root: Path | str) -> Optional[dict[str, object]]:
     """The bucket record of a version 3 set (no key material in the clear):
     inline in the header, or this computer's local copy. None otherwise."""
@@ -1732,6 +1775,8 @@ __all__ = [
     "SealedSet",
     "SealedSetError",
     "SealedSetKeyError",
+    "SealedSetRestoreRequired",
+    "restore",
     "SealedSetWriter",
     "append_line",
     "classify",

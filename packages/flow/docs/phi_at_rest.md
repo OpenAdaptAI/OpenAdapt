@@ -253,9 +253,19 @@ not built yet.
 `openadapt-flow at-rest recovery create` makes a recovery key: 32 random
 bytes shown once as a 52-character code, turned into a P-256 key with HPKE's
 DeriveKeyPair. Only its public half is stored; it becomes a recipient of
-every new set. Open with it on another computer by setting
-`OPENADAPT_RECOVERY_CODE`. Without one, a lost or reset computer means its
-encrypted runs can't be opened.
+every new set. Without one, a lost or reset computer means its encrypted
+runs can't be opened.
+
+A set's own header carries its key record in solo mode, so the set is bound
+to the computer that wrote it: only that computer's device key opens it
+silently (the device's public key is never written out). The recovery
+public key is on disk, so anyone who reads it could make a set the code
+opens. The code therefore never opens a set silently. To use a backup on a
+new or reset computer, set `OPENADAPT_RECOVERY_CODE` and run
+`openadapt-flow at-rest restore DIR --yes`, which wraps that set to this
+computer's device key so it opens here from then on. Where no device key can
+be made (a restored home whose keychain entry is gone),
+`OPENADAPT_RECOVERY_RESTORE=1` with the code reads backups in place.
 
 ### Legacy keys
 
@@ -335,7 +345,8 @@ recorder, before the first write, is not built yet.
 | Variable | Used for |
 | --- | --- |
 | `OPENADAPT_POLICY` | A policy file, when no machine policy exists. |
-| `OPENADAPT_RECOVERY_CODE` | The solo recovery code, to open sets on another computer. |
+| `OPENADAPT_RECOVERY_CODE` | The solo recovery code, for `at-rest restore` on another computer. |
+| `OPENADAPT_RECOVERY_RESTORE` | `1`: read backups in place with the recovery code (an explicit restore). |
 | `OPENADAPT_ORG_KEY_FILE` | An organization recipient's PEM private key, for a reviewer. |
 | `OPENADAPT_FLOW_KEY_STORE` | Where the software device key is kept: `auto`, `keychain` or `file`. |
 | `OPENADAPT_BUNDLE_KEY` | Deprecated: a passphrase for bundles and their run directories (version 1 header). |

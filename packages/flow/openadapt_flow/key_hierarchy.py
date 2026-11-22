@@ -70,6 +70,10 @@ POLICY_ENV: Final[str] = "OPENADAPT_POLICY"
 #: (development and tests); machine policies never need it.
 TRUST_USER_POLICY_ENV: Final[str] = "OPENADAPT_POLICY_TRUST_USER_FILE"
 RECOVERY_CODE_ENV: Final[str] = "OPENADAPT_RECOVERY_CODE"
+#: ``1``: the person is restoring backups with the recovery code, so a set
+#: that only the code opens may be read (``at-rest restore`` rewraps one to
+#: this computer instead). Never set by Flow itself.
+RECOVERY_RESTORE_ENV: Final[str] = "OPENADAPT_RECOVERY_RESTORE"
 #: A PEM private key of an organization or break-glass recipient, for a
 #: reviewer opening evidence without a KMS (KMS unwrap is not built yet).
 ORG_KEY_FILE_ENV: Final[str] = "OPENADAPT_ORG_KEY_FILE"
@@ -114,6 +118,12 @@ class KeyHierarchyError(ValueError):
 
 class NoRecipientKey(KeyHierarchyError):
     """No key this computer holds opens the bucket record."""
+
+
+class RecoveryRestoreRequired(NoRecipientKey):
+    """Only the recovery code opens this set, and it was not written on this
+    computer (or its device key is gone): it opens only through an explicit
+    restore (``at-rest restore``), never silently."""
 
 
 # -- primitives --------------------------------------------------------------
@@ -1142,13 +1152,22 @@ _HEADER_ROLES: Final[frozenset[str]] = frozenset(
 
 
 def open_bucket(
-    record: dict[str, Any], *, prefer_runtime: bool = True, from_header: bool = False
+    record: dict[str, Any],
+    *,
+    prefer_runtime: bool = True,
+    from_header: bool = False,
+    restore: bool = False,
 ) -> Bucket:
     """Unwrap a bucket's private half with the first key this computer holds.
 
     ``from_header``: the record came from the set's own header, not from
-    this computer's key store. Only a device key or a recovery key may open
-    it then, through a stanza of that role.
+    this computer's key store. Only this computer's device key opens it then,
+    which binds the set to the device that wrote it: its public key is never
+    written out, so nobody else can wrap a bucket to it. The recovery public
+    key is on disk, so a set that only the recovery code opens could have
+    been made by anyone who read that file. It opens only with ``restore``
+    (``at-rest restore DIR``, the person's explicit choice), and otherwise
+    raises :class:`RecoveryRestoreRequired`.
     """
     if record.get("schema") != BUCKET_SCHEMA:
         raise KeyHierarchyError("not a bucket record")
@@ -1162,6 +1181,7 @@ def open_bucket(
         )
     stanzas = {s.get("fpr"): s for s in record.get("stanzas") or []}
     keys, deferred = _candidates(from_header=from_header)
+    needs_restore = False
     for key in keys:
         try:
             fpr = key.fpr
@@ -1171,6 +1191,13 @@ def open_bucket(
         if stanza is None:
             continue
         if from_header and str(stanza.get("role")) not in _HEADER_ROLES:
+            continue
+        if (
+            from_header
+            and stanza.get("role") == ROLE_RECOVERY
+            and not (restore or os.environ.get(RECOVERY_RESTORE_ENV) == "1")
+        ):
+            needs_restore = True
             continue
         info = _stanza_info(bucket_id, str(stanza["role"]), fpr)
         try:
@@ -1187,6 +1214,15 @@ def open_bucket(
                 "the unwrapped bucket key does not match the record"
             )
         return Bucket(bucket_id, private, private.public_key(), record)  # type: ignore[arg-type]
+    if needs_restore:
+        raise RecoveryRestoreRequired(
+            "this encrypted set opens only with the recovery code: this computer's "
+            "device key does not open it, so Flow can't tell it was written here "
+            "rather than made by someone who read the recovery public key. If it "
+            "is your backup, restore it with the code: `openadapt-flow at-rest "
+            f"restore DIR --yes`, or set {RECOVERY_RESTORE_ENV}=1 to read your "
+            "backups with it. Nothing was read."
+        )
     if deferred is not None:
         raise deferred
     raise NoRecipientKey(
@@ -1195,6 +1231,16 @@ def open_bucket(
         + ". Open it with its organization key, or set "
         f"{RECOVERY_CODE_ENV}. Nothing was read."
     )
+
+
+def device_stanza(bucket: Bucket) -> dict[str, str]:
+    """A stanza wrapping ``bucket`` to this computer's viewer key (made if
+    missing), for a set restored with the recovery code."""
+    device = device_keys(create=True)
+    assert device is not None and bucket.private is not None
+    viewer = device[1]
+    recipient = Recipient(viewer.role or ROLE_VIEWER, HPKE_P256, viewer.public())
+    return _stanza(recipient, bucket.bucket_id, _scalar(bucket.private))
 
 
 def _pending_dir() -> Path:
@@ -1387,6 +1433,7 @@ __all__ = [
     "HardwareDouble",
     "KeyHierarchyError",
     "NoRecipientKey",
+    "RecoveryRestoreRequired",
     "Policy",
     "Recipient",
     "SoftwareKey",

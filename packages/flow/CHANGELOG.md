@@ -56,7 +56,10 @@
   file is gone. Organization mode requires `records: archive`. Durable
   checkpoints in an encrypted run are keyed from the run's own data key.
   `--no-encrypt` lasts for one command, and the Python recorders follow the
-  at-rest policy by default.
+  at-rest policy by default. A solo set opens silently only with the device
+  key that wrote it; a backup that only the recovery code opens needs
+  `openadapt-flow at-rest restore DIR --yes`. Rollback records in an
+  encrypted run stay inside its sealed set.
 
 
 ### Features

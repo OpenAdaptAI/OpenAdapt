@@ -210,3 +210,36 @@ def test_an_explicit_none_recorder_is_refused_in_strict_and_ledgered_otherwise(
     Recorder(_Backend(), tmp_path / "b", encryption_key=None)
     ledger = at_rest.ledger_path().read_text()
     assert str(tmp_path / "b") in ledger and "encryption_key=None" in ledger
+
+
+def test_a_rollback_in_an_encrypted_run_keeps_its_marker_sealed(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    """Rollback proof in the default (encrypted) mode: the compensated marker
+    and the remaining-difference file go through the run's sealed set, the
+    run still opens, and resume still sees that the run was undone."""
+    from openadapt_flow import rollback
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    run = tmp_path / "run"
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    sealed_set.register_writer(writer)
+    try:
+        writer.write("report.json", b"{}")
+        rollback._mark_compensated(run)
+        rollback._write_private(
+            run / rollback.ROLLBACK_DIRNAME / rollback.DIFF_FILENAME,
+            {"row": TYPED.decode()},
+        )
+    finally:
+        sealed_set.unregister_writer(writer)
+    writer.finalize(adopt_external=True)
+    assert not (run / rollback.COMPENSATED_MARKER).exists()  # no stray plaintext
+    for path in run.rglob("*"):
+        if path.is_file():
+            assert TYPED not in path.read_bytes(), path
+    sealed_set.SealedSet.open(run).verify_all()
+    assert was_compensated(run) is True
+    # A run whose state can't be read is never treated as resumable.
+    sealed_set.shred(run)
+    assert was_compensated(run) is True

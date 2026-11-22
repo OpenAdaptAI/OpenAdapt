@@ -15,10 +15,11 @@
   "openadapt-flow approver-grant": "usage: openadapt-flow approver-grant [-h] {sign,verify} ...\n\npositional arguments:\n  {sign,verify}\n    sign         Sign a grant with your policy-signer key\n    verify       Check a signed grant against the registry\n\noptions:\n  -h, --help     show this help message and exit\n\nAlso available as: openadapt-flow setup approver-grant\n",
   "openadapt-flow approver-grant sign": "usage: openadapt-flow approver-grant sign [-h] --key KEY --out OUT [--key-dir KEY_DIR] grant\n\npositional arguments:\n  grant              Unsigned openadapt-flow/approver-grant/v1 JSON\n\noptions:\n  -h, --help         show this help message and exit\n  --key KEY          Your encrypted policy-signer key\n  --out OUT\n  --key-dir KEY_DIR\n\nAlso available as: openadapt-flow setup approver-grant sign\n",
   "openadapt-flow approver-grant verify": "usage: openadapt-flow approver-grant verify [-h] [--key-dir KEY_DIR] grant\n\npositional arguments:\n  grant              Signed grant JSON\n\noptions:\n  -h, --help         show this help message and exit\n  --key-dir KEY_DIR\n\nAlso available as: openadapt-flow setup approver-grant verify\n",
-  "openadapt-flow at-rest": "usage: openadapt-flow at-rest [-h] {status,archive,recovery,shred} ...\n\npositional arguments:\n  {status,archive,recovery,shred}\n    status              Where the keys are and who can open new runs\n    archive             Send key records and pending shreds to the organization archive\n    recovery            The solo recovery key\n    shred               Destroy an encrypted set's bucket key; nobody can open it after\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow setup at-rest\n",
+  "openadapt-flow at-rest": "usage: openadapt-flow at-rest [-h] {status,archive,recovery,restore,shred} ...\n\npositional arguments:\n  {status,archive,recovery,restore,shred}\n    status              Where the keys are and who can open new runs\n    archive             Send key records and pending shreds to the organization archive\n    recovery            The solo recovery key\n    restore             Let this computer open a backup that only the recovery code opens\n    shred               Destroy an encrypted set's bucket key; nobody can open it after\n\noptions:\n  -h, --help            show this help message and exit\n\nAlso available as: openadapt-flow setup at-rest\n",
   "openadapt-flow at-rest archive": "usage: openadapt-flow at-rest archive [-h]\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup at-rest archive\n",
   "openadapt-flow at-rest recovery": "usage: openadapt-flow at-rest recovery [-h] {create} ...\n\npositional arguments:\n  {create}\n    create    Make a recovery key; the code is shown once\n\noptions:\n  -h, --help  show this help message and exit\n\nAlso available as: openadapt-flow setup at-rest recovery\n",
   "openadapt-flow at-rest recovery create": "usage: openadapt-flow at-rest recovery create [-h] [--replace]\n\noptions:\n  -h, --help  show this help message and exit\n  --replace\n\nAlso available as: openadapt-flow setup at-rest recovery create\n",
+  "openadapt-flow at-rest restore": "usage: openadapt-flow at-rest restore [-h] [--yes] dir\n\npositional arguments:\n  dir         The encrypted directory\n\noptions:\n  -h, --help  show this help message and exit\n  --yes       Confirm it is your backup\n\nAlso available as: openadapt-flow setup at-rest restore\n",
   "openadapt-flow at-rest shred": "usage: openadapt-flow at-rest shred [-h] [--yes] dir\n\npositional arguments:\n  dir         The encrypted directory\n\noptions:\n  -h, --help  show this help message and exit\n  --yes       Confirm; this can't be undone\n\nAlso available as: openadapt-flow setup at-rest shred\n",
   "openadapt-flow at-rest status": "usage: openadapt-flow at-rest status [-h] [--json]\n\noptions:\n  -h, --help  show this help message and exit\n  --json\n\nAlso available as: openadapt-flow setup at-rest status\n",
   "openadapt-flow attach-seal": "usage: openadapt-flow attach-seal [-h] --execution-id EXECUTION_ID [--cloud-url CLOUD_URL] run_dir\n\npositional arguments:\n  run_dir               Run directory holding a VERIFIED report.json\n\noptions:\n  -h, --help            show this help message and exit\n  --execution-id EXECUTION_ID\n                        Cloud Execute execution id\n  --cloud-url CLOUD_URL\n                        Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)\n\nAlso available as: openadapt-flow verify attach-seal\n",
@@ -1235,6 +1236,7 @@
    "commands": {
     "archive": [],
     "recovery": [],
+    "restore": [],
     "shred": [],
     "status": []
    },
@@ -1311,6 +1313,53 @@
      "nargs": 0,
      "options": [
       "--replace"
+     ],
+     "required": false,
+     "type": null
+    }
+   ],
+   "commands": {},
+   "exclusive": []
+  },
+  "openadapt-flow at-rest restore": {
+   "arguments": [
+    {
+     "action": "_HelpAction",
+     "choices": null,
+     "default": "==SUPPRESS==",
+     "dest": "help",
+     "help": "show this help message and exit",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "-h",
+      "--help"
+     ],
+     "required": false,
+     "type": null
+    },
+    {
+     "action": "_StoreAction",
+     "choices": null,
+     "default": null,
+     "dest": "dir",
+     "help": "The encrypted directory",
+     "metavar": null,
+     "nargs": null,
+     "options": [],
+     "required": true,
+     "type": null
+    },
+    {
+     "action": "_StoreTrueAction",
+     "choices": null,
+     "default": false,
+     "dest": "yes",
+     "help": "Confirm it is your backup",
+     "metavar": null,
+     "nargs": 0,
+     "options": [
+      "--yes"
      ],
      "required": false,
      "type": null
