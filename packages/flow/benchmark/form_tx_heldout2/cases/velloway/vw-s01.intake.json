@@ -1,0 +1,31 @@
+{
+  "case_id": "vw-s01",
+  "facts": {
+    "applicant.date_of_birth": "1964-02-07",
+    "applicant.email": "leopold.s@example.test",
+    "applicant.first_name": "Leopold",
+    "applicant.last_name": "Szymanski",
+    "applicant.occupation": "Retired",
+    "applicant.phone": "706-555-0145",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 2000000,
+    "home.address_line1": "48 Lakeshore Cove",
+    "home.city": "Hartwell Point",
+    "home.state": "GA",
+    "home.zip": "30643",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 2,
+    "household.watercraft": [
+      {
+        "type": "Personal watercraft",
+        "length_ft": 11
+      }
+    ],
+    "household.watercraft_count": 1,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 300000
+  }
+}

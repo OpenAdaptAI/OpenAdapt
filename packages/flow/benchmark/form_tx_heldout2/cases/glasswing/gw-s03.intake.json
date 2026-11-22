@@ -1,0 +1,21 @@
+{
+  "case_id": "gw-s03",
+  "facts": {
+    "applicant.date_of_birth": "1987-03-22",
+    "applicant.email": "tobiah.fc@example.test",
+    "applicant.first_name": "Tobiah",
+    "applicant.last_name": "Ferreira-Count",
+    "building.sprinklered": true,
+    "contents.furnished": "typically",
+    "contents.rooms": 5,
+    "contents.valuables": 8500,
+    "coverage.deductible": 250,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2026-12-20",
+    "household.adults": 1,
+    "residence.address_line1": "3020 Basswood Ter",
+    "residence.city": "Mill Oak",
+    "residence.state": "MN",
+    "residence.zip": "55408"
+  }
+}

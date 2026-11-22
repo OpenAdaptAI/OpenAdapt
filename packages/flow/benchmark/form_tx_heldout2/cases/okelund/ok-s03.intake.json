@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s03",
+  "facts": {
+    "applicant.date_of_birth": "1969-08-08",
+    "applicant.email": "pstrathmore@example.test",
+    "applicant.first_name": "Philippa",
+    "applicant.last_name": "Strathmore",
+    "applicant.marital_status": "Widowed",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "50",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "MT",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 35,
+    "garaging.address_line1": "1300 Bitterroot Way",
+    "garaging.city": "Elkhorn Gap",
+    "garaging.state": "MT",
+    "garaging.zip": "59801",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 7500,
+    "vehicle.make": "Sarrow",
+    "vehicle.model": "Kite Wagon",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "pleasure",
+    "vehicle.year": 2018
+  }
+}

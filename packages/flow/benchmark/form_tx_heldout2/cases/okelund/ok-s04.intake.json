@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s04",
+  "facts": {
+    "applicant.date_of_birth": "2007-03-11",
+    "applicant.email": "lachlan.oduya@example.test",
+    "applicant.first_name": "Lachlan",
+    "applicant.last_name": "Oduya",
+    "applicant.marital_status": "Single",
+    "coverage.bi_limits": "50/100",
+    "coverage.collision_deductible": 1000,
+    "coverage.comprehensive_deductible": 1000,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "none",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "ID",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 2,
+    "garaging.address_line1": "65 Chokecherry Ln",
+    "garaging.city": "Sagebrook",
+    "garaging.state": "ID",
+    "garaging.zip": "83402",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 8000,
+    "vehicle.make": "Torvane",
+    "vehicle.model": "Ridge 6",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2014
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "case_id": "vw-s06",
+  "facts": {
+    "applicant.date_of_birth": "1977-12-01",
+    "applicant.email": "henrike.v@example.test",
+    "applicant.first_name": "Henrike",
+    "applicant.last_name": "Vandermolen",
+    "applicant.occupation": "Electrician",
+    "applicant.phone": "423-555-0194",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 2000000,
+    "home.address_line1": "3100 Lookout Crest",
+    "home.city": "Signal Ridge",
+    "home.state": "TN",
+    "home.zip": "37377",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 2,
+    "household.watercraft": [
+      {
+        "type": "Sailboat",
+        "length_ft": 18
+      }
+    ],
+    "household.watercraft_count": 1,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "500/500",
+    "underlying.home_liability": 300000
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "case_id": "vw-s09",
+  "facts": {
+    "applicant.date_of_birth": "1979-03-03",
+    "applicant.email": "seraphina.dw@example.test",
+    "applicant.first_name": "Seraphina",
+    "applicant.last_name": "Delacroix-Wynn",
+    "applicant.occupation": "Dentist",
+    "applicant.phone": "919-555-0181",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 3000000,
+    "history.household_account": "VH-425501",
+    "home.address_line1": "14 Heron Marsh Way",
+    "home.city": "Calder Sound",
+    "home.state": "NC",
+    "home.zip": "28480",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 2,
+    "household.watercraft": [
+      {
+        "type": "Sailboat",
+        "length_ft": 24
+      }
+    ],
+    "household.watercraft_count": 1,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 500000
+  }
+}

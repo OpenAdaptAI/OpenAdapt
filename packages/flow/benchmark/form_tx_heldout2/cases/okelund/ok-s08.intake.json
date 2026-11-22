@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-s08",
+  "facts": {
+    "applicant.date_of_birth": "1972-01-15",
+    "applicant.email": "o.lisowski@example.test",
+    "applicant.first_name": "Octavian",
+    "applicant.last_name": "Lisowski",
+    "applicant.marital_status": "Married",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "30",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "NV",
+    "driver.violations_3yr": 1,
+    "driver.years_licensed": 33,
+    "garaging.address_line1": "88 Cottonwood Wash",
+    "garaging.city": "Coldwater Flats",
+    "garaging.state": "NV",
+    "garaging.zip": "89502",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 14000,
+    "vehicle.make": "Arvonne",
+    "vehicle.model": "Meridian Hybrid",
+    "vehicle.ownership": "leased",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2024
+  }
+}

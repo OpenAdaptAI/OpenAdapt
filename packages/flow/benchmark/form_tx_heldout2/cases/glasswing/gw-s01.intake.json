@@ -1,0 +1,22 @@
+{
+  "case_id": "gw-s01",
+  "facts": {
+    "applicant.date_of_birth": "1998-07-30",
+    "applicant.email": "desmond.oh@example.test",
+    "applicant.first_name": "Desmond",
+    "applicant.last_name": "Okonkwo-Hale",
+    "building.sprinklered": true,
+    "contents.furnished": "lightly",
+    "contents.rooms": 2,
+    "contents.valuables": 0,
+    "coverage.deductible": 1000,
+    "coverage.liability_limit": 100000,
+    "coverage.start_date": "2026-12-10",
+    "household.adults": 1,
+    "residence.address_line1": "77 Marlpit Ave",
+    "residence.address_line2": "Apt 2C",
+    "residence.city": "Thistlebury",
+    "residence.state": "IL",
+    "residence.zip": "60614"
+  }
+}

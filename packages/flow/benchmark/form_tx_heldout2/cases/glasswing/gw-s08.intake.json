@@ -1,0 +1,20 @@
+{
+  "case_id": "gw-s08",
+  "facts": {
+    "applicant.date_of_birth": "1999-01-09",
+    "applicant.email": "elodie.k@example.test",
+    "applicant.first_name": "Elodie",
+    "applicant.last_name": "Kristiansen",
+    "contents.furnished": "typically",
+    "contents.rooms": 2,
+    "contents.valuables": 0,
+    "coverage.deductible": 1000,
+    "coverage.liability_limit": 300000,
+    "coverage.start_date": "2026-12-12",
+    "household.adults": 1,
+    "residence.address_line1": "88 Pine Hollow Rd",
+    "residence.city": "Fairbourne",
+    "residence.state": "MN",
+    "residence.zip": "55344"
+  }
+}

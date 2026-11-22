@@ -1,0 +1,944 @@
+[remote-run] sync 5s on zenbook, copy 13s
+{"portal": "ferncastle", "case_id": "fc-s01", "outcome": "submitted", "correct": false}
+{"portal": "ferncastle", "case_id": "fc-s02", "outcome": "submitted", "correct": true}
+{"portal": "ferncastle", "case_id": "fc-s03", "outcome": "submitted", "correct": false}
+{"portal": "ferncastle", "case_id": "fc-s04", "outcome": "submitted", "correct": false}
+{"portal": "ferncastle", "case_id": "fc-s05", "outcome": "submitted", "correct": false}
+{"portal": "ferncastle", "case_id": "fc-s06", "outcome": "submitted", "correct": true}
+{"portal": "ferncastle", "case_id": "fc-s07", "outcome": "submitted", "correct": false}
+{"portal": "ferncastle", "case_id": "fc-s08", "outcome": "submitted", "correct": true}
+<<<FORM_TX_HELDOUT_RESULTS
+[
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "occupancy"
+  ],
+  "wrong_details": [
+   {
+    "field": "occupancy",
+    "expected": "All units rented to tenants",
+    "stored": "Owner occupies one unit"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.2,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean",
+   "prefill_agree"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "mortgagee",
+   "occupancy"
+  ],
+  "wrong_details": [
+   {
+    "field": "mortgagee",
+    "expected": "",
+    "stored": "Brannock Federal Credit Union"
+   },
+   {
+    "field": "occupancy",
+    "expected": "All units rented to tenants",
+    "stored": "Owner occupies one unit"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "prefill_conflict"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.7,
+  "events": [
+   "session_expired"
+  ],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "loss_of_rents",
+   "deductible"
+  ],
+  "wrong_details": [
+   {
+    "field": "loss_of_rents",
+    "expected": "12 months",
+    "stored": "None"
+   },
+   {
+    "field": "deductible",
+    "expected": "2500",
+    "stored": "1000"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "session_timeout",
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.2,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "occupancy"
+  ],
+  "wrong_details": [
+   {
+    "field": "occupancy",
+    "expected": "All units rented to tenants",
+    "stored": "Owner occupies one unit"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "occupancy"
+  ],
+  "wrong_details": [
+   {
+    "field": "occupancy",
+    "expected": "One or more units vacant",
+    "stored": "Owner occupies one unit"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "recurring_rule",
+   "rule_trap"
+  ]
+ },
+ {
+  "portal": "ferncastle",
+  "case_id": "fc-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ }
+]
+FORM_TX_HELDOUT_RESULTS>>>
+{"portal": "glasswing", "case_id": "gw-s01", "outcome": "submitted", "correct": true}
+{"portal": "glasswing", "case_id": "gw-s02", "outcome": "submitted", "correct": false}
+{"portal": "glasswing", "case_id": "gw-s03", "outcome": "submitted", "correct": false}
+{"portal": "glasswing", "case_id": "gw-s04", "outcome": "submitted", "correct": false}
+{"portal": "glasswing", "case_id": "gw-s05", "outcome": "submitted", "correct": false}
+{"portal": "glasswing", "case_id": "gw-s06", "outcome": "submitted", "correct": true}
+{"portal": "glasswing", "case_id": "gw-s07", "outcome": "submitted", "correct": true}
+{"portal": "glasswing", "case_id": "gw-s08", "outcome": "submitted", "correct": false}
+<<<FORM_TX_HELDOUT_RESULTS
+[
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "unit"
+  ],
+  "wrong_details": [
+   {
+    "field": "unit",
+    "expected": "Apt 3",
+    "stored": "Apt 31"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "personal_property"
+  ],
+  "wrong_details": [
+   {
+    "field": "personal_property",
+    "expected": 40500,
+    "stored": 32000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "estimator_wrong"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "roommate"
+  ],
+  "wrong_details": [
+   {
+    "field": "roommate",
+    "expected": "",
+    "stored": "Jasper Vellacott"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "prefill_conflict",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "sprinklered",
+   "personal_property"
+  ],
+  "wrong_details": [
+   {
+    "field": "sprinklered",
+    "expected": "No",
+    "stored": "Yes"
+   },
+   {
+    "field": "personal_property",
+    "expected": 49200,
+    "stored": 37200
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question",
+   "estimator_wrong"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean",
+   "prefill_agree",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean",
+   "estimator_ok"
+  ]
+ },
+ {
+  "portal": "glasswing",
+  "case_id": "gw-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.4,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "city",
+   "zip",
+   "sprinklered"
+  ],
+  "wrong_details": [
+   {
+    "field": "city",
+    "expected": "Fairbourne",
+    "stored": "Fairbourne Heights"
+   },
+   {
+    "field": "zip",
+    "expected": "55344",
+    "stored": "55346"
+   },
+   {
+    "field": "sprinklered",
+    "expected": "No",
+    "stored": "Yes"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous",
+   "unknown_question",
+   "estimator_ok"
+  ]
+ }
+]
+FORM_TX_HELDOUT_RESULTS>>>
+{"portal": "okelund", "case_id": "ok-s01", "outcome": "submitted", "correct": true}
+{"portal": "okelund", "case_id": "ok-s02", "outcome": "submitted", "correct": false}
+{"portal": "okelund", "case_id": "ok-s03", "outcome": "submitted", "correct": false}
+{"portal": "okelund", "case_id": "ok-s04", "outcome": "submitted", "correct": false}
+{"portal": "okelund", "case_id": "ok-s05", "outcome": "submitted", "correct": false}
+{"portal": "okelund", "case_id": "ok-s06", "outcome": "submitted", "correct": true}
+{"portal": "okelund", "case_id": "ok-s07", "outcome": "submitted", "correct": false}
+{"portal": "okelund", "case_id": "ok-s08", "outcome": "submitted", "correct": true}
+<<<FORM_TX_HELDOUT_RESULTS
+[
+ {
+  "portal": "okelund",
+  "case_id": "ok-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.8,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.7,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "model"
+  ],
+  "wrong_details": [
+   {
+    "field": "model",
+    "expected": "Ostro",
+    "stored": "Ostro LX"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.0,
+  "events": [
+   "session_expired"
+  ],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "model",
+   "annual_miles"
+  ],
+  "wrong_details": [
+   {
+    "field": "model",
+    "expected": "Kite Wagon",
+    "stored": "Kite"
+   },
+   {
+    "field": "annual_miles",
+    "expected": 7500,
+    "stored": 12000
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "session_timeout",
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "driver_training"
+  ],
+  "wrong_details": [
+   {
+    "field": "driver_training",
+    "expected": "N",
+    "stored": "Y"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.6,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "city"
+  ],
+  "wrong_details": [
+   {
+    "field": "city",
+    "expected": "Ashgrove Village",
+    "stored": "Corwin Falls"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 0.7,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "model",
+   "aftermarket"
+  ],
+  "wrong_details": [
+   {
+    "field": "model",
+    "expected": "Ridge 4",
+    "stored": "Ridge 4 Hybrid"
+   },
+   {
+    "field": "aftermarket",
+    "expected": "N",
+    "stored": "Y"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous",
+   "unknown_question"
+  ]
+ },
+ {
+  "portal": "okelund",
+  "case_id": "ok-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.5,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ }
+]
+FORM_TX_HELDOUT_RESULTS>>>
+{"portal": "velloway", "case_id": "vw-s01", "outcome": "submitted", "correct": true}
+{"portal": "velloway", "case_id": "vw-s02", "outcome": "submitted", "correct": true}
+{"portal": "velloway", "case_id": "vw-s03", "outcome": "submitted", "correct": false}
+{"portal": "velloway", "case_id": "vw-s04", "outcome": "submitted", "correct": false}
+{"portal": "velloway", "case_id": "vw-s05", "outcome": "submitted", "correct": false}
+{"portal": "velloway", "case_id": "vw-s06", "outcome": "submitted", "correct": false}
+{"portal": "velloway", "case_id": "vw-s07", "outcome": "submitted", "correct": false}
+{"portal": "velloway", "case_id": "vw-s08", "outcome": "submitted", "correct": true}
+{"portal": "velloway", "case_id": "vw-s09", "outcome": "submitted", "correct": false}
+<<<FORM_TX_HELDOUT_RESULTS
+[
+ {
+  "portal": "velloway",
+  "case_id": "vw-s01",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.3,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s02",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.0,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean",
+   "prefill_agree"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s03",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.0,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "watercraft"
+  ],
+  "wrong_details": [
+   {
+    "field": "watercraft",
+    "expected": [],
+    "stored": [
+     {
+      "type": "Powerboat",
+      "length_ft": 19
+     }
+    ]
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "prefill_conflict"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s04",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "youthful_violations"
+  ],
+  "wrong_details": [
+   {
+    "field": "youthful_violations",
+    "expected": "No",
+    "stored": "Yes"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s05",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "occupation"
+  ],
+  "wrong_details": [
+   {
+    "field": "occupation",
+    "expected": "Teacher",
+    "stored": "Teacher aide"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "typeahead_ambiguous"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s06",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.2,
+  "events": [
+   "session_expired"
+  ],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "watercraft",
+   "umbrella_limit"
+  ],
+  "wrong_details": [
+   {
+    "field": "watercraft",
+    "expected": [
+     {
+      "type": "Sailboat",
+      "length_ft": 18
+     }
+    ],
+    "stored": []
+   },
+   {
+    "field": "umbrella_limit",
+    "expected": "2000000",
+    "stored": "1000000"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "session_timeout",
+   "summary_differs"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s07",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.9,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "needs_operator_answer",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "nonprofit_board"
+  ],
+  "wrong_details": [
+   {
+    "field": "nonprofit_board",
+    "expected": "No",
+    "stored": "Yes"
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "unknown_question"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s08",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 2.0,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "submit_clean",
+  "record_correct": true,
+  "correct": true,
+  "wrong_fields": [],
+  "wrong_details": [],
+  "missing_fields": [],
+  "traps": [
+   "clean"
+  ]
+ },
+ {
+  "portal": "velloway",
+  "case_id": "vw-s09",
+  "filler": "naive",
+  "outcome": "submitted",
+  "seconds": 1.1,
+  "events": [],
+  "submitted": true,
+  "submit_count": 1,
+  "expected_behavior": "must_stop_before_submit",
+  "record_correct": false,
+  "correct": false,
+  "wrong_fields": [
+   "watercraft"
+  ],
+  "wrong_details": [
+   {
+    "field": "watercraft",
+    "expected": [
+     {
+      "type": "Sailboat",
+      "length_ft": 24
+     }
+    ],
+    "stored": [
+     {
+      "type": "Sailboat",
+      "length_ft": 24
+     },
+     {
+      "type": "Sailboat",
+      "length_ft": 24
+     }
+    ]
+   }
+  ],
+  "missing_fields": [],
+  "traps": [
+   "prefill_conflict"
+  ]
+ }
+]
+FORM_TX_HELDOUT_RESULTS>>>

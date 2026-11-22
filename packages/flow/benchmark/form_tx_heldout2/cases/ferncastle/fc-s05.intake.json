@@ -1,0 +1,26 @@
+{
+  "case_id": "fc-s05",
+  "facts": {
+    "applicant.email": "b.orkney@example.test",
+    "applicant.first_name": "Benedetta",
+    "applicant.last_name": "Orkney",
+    "applicant.phone": "718-555-0190",
+    "coverage.deductible": 1000,
+    "coverage.dwelling_limit": 488000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 500000,
+    "coverage.loss_of_rents": "6 months",
+    "property.address_line1": "3311 Halyard St",
+    "property.city": "Cresthaven",
+    "property.construction": "joisted masonry",
+    "property.has_mortgage": false,
+    "property.roof_year": 2015,
+    "property.square_feet": 2560,
+    "property.state": "NY",
+    "property.units": 2,
+    "property.year_built": 1926,
+    "property.zip": "11420",
+    "rental.monthly_rent": 2300,
+    "rental.units_rented": 2
+  }
+}

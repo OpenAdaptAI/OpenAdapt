@@ -1,0 +1,26 @@
+{
+  "case_id": "fc-s04",
+  "facts": {
+    "applicant.email": "rosamund.al@example.test",
+    "applicant.first_name": "Rosamund",
+    "applicant.last_name": "Achebe-Lyle",
+    "applicant.phone": "443-555-0128",
+    "coverage.deductible": 2500,
+    "coverage.dwelling_limit": 352000,
+    "coverage.effective_date": "2027-01-01",
+    "coverage.liability_limit": 300000,
+    "coverage.loss_of_rents": "12 months",
+    "property.address_line1": "9 Weatherstone Ct",
+    "property.city": "Calvert Mill",
+    "property.construction": "frame",
+    "property.has_mortgage": false,
+    "property.roof_year": 2021,
+    "property.square_feet": 1910,
+    "property.state": "MD",
+    "property.units": 1,
+    "property.year_built": 2004,
+    "property.zip": "21043",
+    "rental.monthly_rent": 2475,
+    "rental.units_rented": 1
+  }
+}

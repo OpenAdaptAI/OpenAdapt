@@ -1,0 +1,30 @@
+{
+  "case_id": "ok-dev",
+  "facts": {
+    "applicant.date_of_birth": "1983-05-17",
+    "applicant.email": "a.pellerin@example.test",
+    "applicant.first_name": "Augustin",
+    "applicant.last_name": "Pellerin",
+    "applicant.marital_status": "Married",
+    "coverage.bi_limits": "100/300",
+    "coverage.collision_deductible": 500,
+    "coverage.comprehensive_deductible": 500,
+    "coverage.effective_date": "2026-12-15",
+    "coverage.rental_reimbursement": "none",
+    "driver.accidents_3yr": 0,
+    "driver.license_state": "NM",
+    "driver.violations_3yr": 0,
+    "driver.years_licensed": 22,
+    "garaging.address_line1": "4410 Sandcherry Dr",
+    "garaging.city": "Redmesa",
+    "garaging.state": "NM",
+    "garaging.zip": "87112",
+    "vehicle.aftermarket_equipment": false,
+    "vehicle.annual_miles": 11000,
+    "vehicle.make": "Arvonne",
+    "vehicle.model": "Meridian",
+    "vehicle.ownership": "owned",
+    "vehicle.primary_use": "commute",
+    "vehicle.year": 2020
+  }
+}

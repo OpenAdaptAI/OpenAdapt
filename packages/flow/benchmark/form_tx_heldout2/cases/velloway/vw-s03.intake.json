@@ -1,0 +1,26 @@
+{
+  "case_id": "vw-s03",
+  "facts": {
+    "applicant.date_of_birth": "1975-11-30",
+    "applicant.email": "barnaby.okwuosa@example.test",
+    "applicant.first_name": "Barnaby",
+    "applicant.last_name": "Okwuosa",
+    "applicant.occupation": "Pharmacist",
+    "applicant.phone": "502-555-0168",
+    "coverage.start_date": "2027-01-01",
+    "coverage.umbrella_limit": 1000000,
+    "history.household_account": "VH-402277",
+    "home.address_line1": "61 Bluegrass Commons",
+    "home.city": "Lexmoor",
+    "home.state": "KY",
+    "home.zip": "40502",
+    "household.drivers": 2,
+    "household.nonprofit_board": false,
+    "household.rental_properties": 0,
+    "household.vehicles": 2,
+    "household.watercraft_count": 0,
+    "household.youthful_drivers": 0,
+    "underlying.auto_liability": "250/500",
+    "underlying.home_liability": 300000
+  }
+}
