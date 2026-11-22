@@ -202,14 +202,8 @@ class TestIsAvailable:
         assert "OPENADAPT_SUPABASE_" not in source
 
     def test_missing_system_browser_is_unavailable(self, monkeypatch) -> None:
-        import webbrowser
-
         _desktop_available(monkeypatch)
-        monkeypatch.setattr(
-            webbrowser,
-            "get",
-            lambda: (_ for _ in ()).throw(webbrowser.Error("no browser")),
-        )
+        monkeypatch.setattr("openadapt_desktop.system_browser.is_available", lambda: False)
         assert BrowserPkceProvider().is_available() is False
 
     def test_locked_keychain_refuses_before_opening_browser(self, monkeypatch) -> None:

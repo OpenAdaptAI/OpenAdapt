@@ -340,32 +340,22 @@ class IdentityTemplate(BaseModel):
         ),
     )
     structured: Optional[str] = Field(
-        default=None, description="salted hash of the structured identity string"
+        default=None, description="salted hash of structured identity"
     )
     structured_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters embedded in the structured identity. Their "
-            "demonstrated values are replaced by fixed sentinels before "
-            "hashing; replay substitutes the run's value before exact compare."
-        ),
+        description="Workflow params replaced by fixed sentinels in structured identity.",
     )
     signal_hashes: dict[str, str] = Field(
         default_factory=dict,
-        description=(
-            "Salted hashes of strict exact/explicitly-normalized identity "
-            "evidence, including operator-selected extracted fields. Keys are "
-            "produced by identity_signals."
-        ),
+        description="Salted hashes of strict identity_signals evidence.",
     )
     context_params: list[str] = Field(
         default_factory=list,
-        description=(
-            "Workflow parameters replaced by fixed sentinels before the "
-            "captured-context signal hashes were computed."
-        ),
+        description="Workflow params replaced by sentinels in captured-context signal hashes.",
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
+    sibling_generic_hashes: list[str] = Field(default_factory=list)
     rests_on_confusable_identifier: bool = False
     record_key: Optional[str] = Field(
         default=None,
@@ -421,6 +411,8 @@ class IdentityTemplate(BaseModel):
             data.pop("signal_hashes", None)
         if not self.context_params:
             data.pop("context_params", None)
+        if not self.sibling_generic_hashes:
+            data.pop("sibling_generic_hashes", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:
@@ -6194,7 +6186,7 @@ class ReportRedaction(BaseModel):
 
     pointer: str = Field(description="RFC 6901 JSON pointer to the string.")
     reason: str = Field(
-        description="What was removed, e.g. url_param:token_main or header:cookie."
+        description="What was removed, e.g. url_param:session_token or header:cookie."
     )
     by: Optional[str] = Field(
         default=None,
