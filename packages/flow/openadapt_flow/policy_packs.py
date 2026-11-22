@@ -38,7 +38,7 @@ COMMUNITY_PACK: Final[PolicyPack] = PolicyPack(
     allow_local_dev_signer=True,
     require_identity_on_writes=True,
     require_system_of_record_effect=True,
-    summary="Local and MockMed. Local-dev admission only. Same identity and effect pins.",
+    summary="Local and demo apps. Local-dev admission only. Same identity and effect pins.",
 )
 
 CLOUD_PACK: Final[PolicyPack] = PolicyPack(

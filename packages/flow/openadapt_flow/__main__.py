@@ -6,7 +6,7 @@ imported lazily inside each handler so ``--help`` always works):
 - ``record`` — record a demonstration into the format ``compile`` consumes.
   With no ``--backend`` and no ``--url``, capture the desktop on this OS.
   ``--url`` without ``--backend`` still records the browser.
-- ``demo-record`` — serve MockMed locally and record the canonical demo.
+- ``demo-record`` — serve the bundled demo locally and record the canonical demo.
 - ``compile`` — compile a recording directory into a workflow bundle.
 - ``induce`` — induce a parameterized PROGRAM bundle from MULTIPLE recordings
   (multi-trace induction); refuses (nonzero exit) when intent is
@@ -24,7 +24,7 @@ imported lazily inside each handler so ``--help`` always works):
   capabilities (each child a ``QualificationAdmissionEnvelope``). Not compose.
   ``certify`` / ``run`` execute the parent; ``replay`` refuses it. The
   launcher form is ``openadapt flow process``.
-- ``replay`` — replay a bundle; serves the bundled MockMed demo app when no
+- ``replay`` — replay a bundle; serves the bundled demo app when --demo-app is passed
   ``--url`` is given (with optional ``--drift`` to demonstrate healing).
   ``--worklist`` drives a program's loop over a CLI-supplied relation; effect
   verification and API actuation are wired from ``--config`` / flags.
@@ -36,7 +36,7 @@ imported lazily inside each handler so ``--help`` always works):
   demonstration (induce + gate + validate the correction, promote only a
   verified revision), writing an updated bundle. Refuses bad fixes.
 - ``approve`` — mark a durably-paused run's pending escalation approved.
-- ``bench`` — replay a bundle N times against MockMed and aggregate.
+- ``bench`` — replay a bundle N times against the demo app and aggregate.
 - ``visualize`` — SEE what a demonstration compiled into: emit a program-graph
   view of a bundle or a composed parent (child bundles, --after DAG,
   effect-bound handoffs) as self-contained HTML, Mermaid, or the shared JSON
@@ -282,7 +282,7 @@ def _resolve_record_capture_window(
 
 
 def _with_drift(url: str, drift: str | None) -> str:
-    """Append a ``?drift=...`` query to a MockMed base URL."""
+    """Append a ``?drift=...`` query to a demo app base URL."""
     if not drift:
         return url
     return f"{url.rstrip('/')}/?drift={drift}"
@@ -1109,7 +1109,7 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
 
     Resolves ``--config`` and the backend flags the way replay does. A web
     target with no URL and no attached browser would start the bundled
-    MockMed demo, so the undo would act on the demo and use up its approval.
+    bundled demo, so the undo would act on the demo and use up its approval.
     """
     from openadapt_flow.backends.factory import _normalize_kind
 
@@ -1233,8 +1233,8 @@ def _replay_desktop(
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
-    No Playwright browser, no bundled MockMed, no session video — those are
-    web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
+    No Playwright browser, no bundled demo app, no session video — those are
+    web-only. ``--drift`` (a demo teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
     exactly as it does for the web path. With ``rollback_plan``, a GUI
     compensation starts from the run's start screen (the halt cleanup and its
@@ -1246,7 +1246,7 @@ def _replay_desktop(
 
     if args.drift:
         raise SystemExit(
-            "--drift only demonstrates healing on the bundled MockMed web demo; "
+            "--drift only demonstrates healing on the bundled web demo; "
             f"it does not apply to the {backend_cfg.kind!r} backend."
         )
     try:
@@ -1268,7 +1268,7 @@ def _replay_desktop(
             effect_verifier=effect_verifier,
             api_actuator=api_actuator,
             durable=durable,
-            # No MockMed drift here, so the deterministic structural rung is
+            # No demo drift here, so the deterministic structural rung is
             # preferred exactly as in a non-drift web replay.
             use_structural=True,
             pixel_verify_enabled=pixel_verify_enabled,
@@ -1984,7 +1984,7 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
 
 def _cmd_demo_record(args: argparse.Namespace) -> int:
     from openadapt_flow.demo_driver import record_triage_demo
-    from openadapt_flow.mockmed.server import serve
+    from openadapt_flow.tutorial import serve_demo_app as serve
 
     url, stop = serve(port=0)
     try:
@@ -3115,7 +3115,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         )
     if args.drift and not demo_app:
         raise SystemExit(
-            "--drift only applies to the bundled MockMed demo app (--demo-app); "
+            "--drift only applies to the bundled demo app (--demo-app); "
             "drift your own app for real."
         )
     if (
@@ -3125,7 +3125,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     ):
         raise SystemExit(
             "replay needs a target: pass --url, set backend.url in --config, or "
-            "pass --demo-app to replay against the bundled MockMed demo app."
+            "pass --demo-app to replay against the bundled demo app."
         )
     refuse_unqualified_skill(bundle, target_url=url)
 
@@ -3137,7 +3137,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         # The browser backend is built through the same factory as the
         # desktop backends; the grounding / identity / deployment wiring and
         # the run are shared (see _build_and_run_replayer). ``--drift`` (a
-        # MockMed teaching aid) forces the visual floor so the healing ladder
+        # demo teaching aid) forces the visual floor so the healing ladder
         # is exercised instead of the structural rung resolving it.
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
@@ -3215,12 +3215,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     stop = None
     if url is None and demo_app:
-        from openadapt_flow.mockmed.server import serve
+        from openadapt_flow.tutorial import serve_demo_app as serve
 
         url, stop = serve(port=0)
         url = _with_drift(url, args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
-        print(f"--demo-app: replaying against bundled MockMed{drift_note}")
+        print(f"--demo-app: replaying against bundled demo app{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
     from playwright.sync_api import sync_playwright
@@ -4048,7 +4048,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     ``--dry-run`` / ``--explain`` print the coverage report and stop before
     execution. Once admitted, it delegates to the shared executor (the same
     backend / effect / actuation / durable runtime as ``replay``), with
-    ``--drift`` (a MockMed-only teaching aid) forced off.
+    ``--drift`` (a demo-only teaching aid) forced off.
     """
     from openadapt_flow.composition import is_composition_artifact
     from openadapt_flow.execution_profiles import (
@@ -5919,8 +5919,8 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from openadapt_flow.bench import run_bench
     from openadapt_flow.emit.skill import bundle_surface
     from openadapt_flow.ir import Workflow
-    from openadapt_flow.mockmed.server import serve
     from openadapt_flow.report import render_bench_report
+    from openadapt_flow.tutorial import serve_demo_app as serve
 
     try:
         surface = bundle_surface(Workflow.load(Path(args.bundle)))
@@ -5930,7 +5930,7 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_hints import command
 
         print(
-            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            "BENCH REFUSED: bench replays a bundle against the bundled demo "
             f"web app, and this bundle was recorded on {surface!r}. Measure it "
             "on its own app with repeated "
             f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
@@ -8792,7 +8792,7 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="APP",
         help=(
-            "Owner application for --backend macos (e.g. TextEdit). During "
+            "Owner application for --backend macos (e.g. MyApp). During "
             "record this scopes Capture to that local app window; during "
             "replay/run it overrides backend.macos_app."
         ),
@@ -9368,6 +9368,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command", required=True, parser_class=argparse.ArgumentParser
     )
+    __import__("openadapt_flow.exceptions.cli", fromlist=["register"]).register(sub)
 
     p = sub.add_parser(
         "demo",
@@ -9662,7 +9663,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "demo-record",
-        help="Serve MockMed and record the canonical triage demo",
+        help="Serve the bundled demo app and record the canonical demo",
         allow_abbrev=False,
     )
     p.add_argument("--out", required=True, help="Recording output directory")
@@ -9672,7 +9673,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Note text typed during the demo (recorded as a parameter)",
     )
     p.add_argument("--param-name", default="note", help="Parameter name for the note")
-    p.add_argument("--drift", default=None, help="Comma-separated MockMed drift modes")
+    p.add_argument("--drift", default=None, help="Comma-separated demo drift modes")
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     p.add_argument(
         "--record-video",
@@ -10193,7 +10194,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
-
+    __import__("openadapt_flow.wrap.dispatch_cli", fromlist=["_"]).register(sub)
     p = sub.add_parser(
         "route",
         help=(
@@ -10242,7 +10243,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--demo-app",
         action="store_true",
         help=(
-            "Serve the bundled MockMed demo app and replay against it (for a "
+            "Serve the bundled demo app and replay against it (for a "
             "bundle recorded on it, such as the tutorial's)"
         ),
     )
@@ -10250,7 +10251,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--drift",
         default=None,
         help=(
-            "Comma-separated MockMed drift modes (theme,move,rename,modal) "
+            "Comma-separated demo drift modes (theme,move,rename,modal) "
             "to demonstrate bounded drift resolution; only with --demo-app"
         ),
     )
@@ -11039,7 +11040,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "bench",
-        help="Replay a bundle N times against MockMed and aggregate",
+        help="Replay a bundle N times against the bundled demo and aggregate",
         allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
@@ -11047,7 +11048,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--drift",
         default=None,
-        help="Comma-separated drift modes forwarded to the MockMed URL",
+        help="Comma-separated drift modes forwarded to the demo URL",
     )
     p.add_argument("--run-root", required=True, help="Directory for per-iteration runs")
     p.add_argument(
@@ -11063,7 +11064,7 @@ def build_parser() -> argparse.ArgumentParser:
         "benchmark",
         help=(
             "Benchmark compiled replay vs. a Claude computer-use agent on "
-            "the MockMed triage task (agent arm needs an Anthropic API key "
+            "the bundled demo task (agent arm needs an Anthropic API key "
             "and costs real money)"
         ),
         allow_abbrev=False,
@@ -11575,7 +11576,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--admit-local",
         action="store_true",
-        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+        help="Sign a local-dev admission that production trust maps refuse",
     )
     q.add_argument("--replace", action="store_true", help="Replace an existing project")
     q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
@@ -11618,7 +11619,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--admit-local",
         action="store_true",
-        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+        help="Sign a local-dev admission that production trust maps refuse",
     )
     q.add_argument(
         "--proposer",
@@ -13054,7 +13055,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--seed-mockmed",
         action="store_true",
-        help="Write the synthetic MockMed ok and banner-lie admissions",
+        help="Write the synthetic demo ok and banner-lie admissions",
     )
     p.add_argument(
         "--config",
@@ -13083,7 +13084,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Reward contract bundle directory (contract.json, "
             "required_effects.json, forbidden_effects.json, oracle.json, "
-            "optional certificate.json). Defaults to the seeded MockMed "
+            "optional certificate.json). Defaults to the seeded demo "
             "tier-2 bundle when --seed-mockmed is given."
         ),
     )
@@ -13112,7 +13113,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed-mockmed",
         action="store_true",
         help=(
-            "Write the synthetic MockMed reward bundles (tier-2 read-only "
+            "Write the synthetic demo reward bundles (tier-2 read-only "
             "SQLite oracle with a calibrated synthetic certificate; tier-0 "
             "screen dump)"
         ),
@@ -13150,21 +13151,21 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
     ps.set_defaults(func=_cmd_business_decisions_serve)
 
-    from openadapt_flow.cli_connector import register_connector_parser
+    from openadapt_flow.connector.cli import register_connector_parser
 
     register_connector_parser(sub, _cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
+    from openadapt_flow.cli_deferred import register_deferred_parser
+    from openadapt_flow.run_ledger.cli import register as _register_ledger
 
     register_admit_parser(sub)
     register_check_parser(sub)
     register_api_parser(sub)
-
-    from openadapt_flow.cli_deferred import register_deferred_parser
-
     register_deferred_parser(sub)
+    _register_ledger(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
@@ -13179,49 +13180,41 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+    from openadapt_flow.cli_fleet import register_fleet_parser
+    from openadapt_flow.cli_receipt import register as _register_receipt
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
     from openadapt_flow.cli_rollback import register as _register_rollback
+    from openadapt_flow.cli_shadow import register as _register_shadow
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+    from openadapt_flow.learn import register as _register_learn
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     _register_rollback(sub)
-
-    from openadapt_flow.cli_shadow import register as _register_shadow
-
     _register_shadow(sub)
-
-    from openadapt_flow.cli_receipt import register as _register_receipt
-
+    __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
     _register_receipt(sub)
-
-    from openadapt_flow.learn import register as _register_learn
-
     _register_learn(sub)
-
-    from openadapt_flow.cli_reconcile import register as _register_reconcile
-
     _register_reconcile(sub)
-
-    from openadapt_flow.cli_cleanup import register as _register_cleanup
-
     _register_cleanup(sub)
-
-    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
-
     _add_jit_parser(sub)
-
-    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-
     _add_compile_agent_parser(sub)
-
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
-
     _add_guard_parser(sub)
-
-    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
-
+    _add_flight_parser(sub)
     _add_hooks_parser(sub)
-
-    from openadapt_flow.cli_fleet import register_fleet_parser
-
+    _add_plan_parser(sub)
+    _add_proxy_parser(sub)
     register_fleet_parser(sub)
+
+    # After any other ``handoff`` verbs: it adds ``list`` to the same group.
+    from openadapt_flow.cli_handoff_list import register_handoff_list
+
+    register_handoff_list(sub)
 
     parser.add_task_help()
     return parser
@@ -13402,43 +13395,28 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
 
     missing = [
-        name
-        for name in ("fastapi", "uvicorn", "openadapt_types")
-        if find_spec(name) is None
+        n for n in ("fastapi", "uvicorn", "openadapt_types") if find_spec(n) is None
     ]
     if missing:
         raise SystemExit(
             f"serve-execute needs {', '.join(missing)} — install the "
             "execute extra:  pip install 'openadapt-flow[execute]'"
         )
-    from openadapt_flow.execute import SELF_SIGNED_NOTICE
-    from openadapt_flow.execute.app import serve
-    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+    from openadapt_flow.execute.app import run_serve_execute
 
-    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
-    store = ExecuteService(
-        data_dir,
-        token=args.token,
-        seed_mockmed=bool(args.seed_mockmed),
-        deployment=getattr(args, "config", None),
-    )
-    print("openadapt-flow reference Execute")
-    print(f"  http://{args.host}:{args.port}")
-    print(f"  data dir     {data_dir}")
-    print(f"  token        {store.token}")
-    print("  issuer       self_signed")
-    print(f"  fingerprint  {store.fingerprint}")
-    print(f"  {SELF_SIGNED_NOTICE}")
+    seeded = ()
     if args.seed_mockmed:
-        print("  seeded MockMed admissions (ok + banner-lie)")
-    serve(
-        data_dir,
+        from openadapt_flow.tutorial import demo_execute_admissions
+
+        seeded = demo_execute_admissions()
+    return run_serve_execute(
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         host=args.host,
         port=args.port,
-        token=store.token,
-        service=store,
+        token=args.token,
+        seed_admissions=seeded,
+        deployment=getattr(args, "config", None),
     )
-    return 0
 
 
 def _cmd_serve_reward(args: argparse.Namespace) -> int:
@@ -13461,16 +13439,20 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
     data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
     contract = args.contract
     seeded_paths: dict[str, Path] = {}
+    seeded_store: Optional[tuple[Path, Path]] = None
     if args.seed_mockmed:
         from openadapt_flow.execute.keys import (
             fingerprint_of,
             load_or_create_private_key,
         )
-        from openadapt_flow.reward.seed import seed_mockmed
+        from openadapt_flow.tutorial import seed_demo_reward
 
         key = load_or_create_private_key(data_dir)
         issuer_key_id = "self_signed:" + fingerprint_of(key.public_key())
-        seeded_paths = seed_mockmed(data_dir, key, issuer_key_id)
+        seeded_paths, store_db, store_screen = seed_demo_reward(
+            data_dir, key, issuer_key_id
+        )
+        seeded_store = (store_db, store_screen)
         if contract is None:
             contract = str(seeded_paths["tier2"])
     if contract is None:
@@ -13492,9 +13474,9 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
     print(f"  {REWARD_NOTICE}")
     for label, path in seeded_paths.items():
         print(f"  seeded {label:<6} {path}")
-    if seeded_paths:
-        print(f"  store        {data_dir / 'mockmed' / 'records.db'}")
-        print(f"  screen       {data_dir / 'mockmed' / 'screen.json'}")
+    if seeded_store is not None:
+        print(f"  store        {seeded_store[0]}")
+        print(f"  screen       {seeded_store[1]}")
         print(
             "  Register each episode with POST /v1/episodes BEFORE the "
             "rollout runs. A required effect asserts a change, so the worker "
@@ -13505,93 +13487,17 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
 
 
 def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
-    """Collect the connector CLI flags into the settings-resolution dict."""
-    keys = (
-        "control_plane_url",
-        "token",
-        "org_id",
-        "name",
-        "profile",
-        "policy",
-        "storage_backend",
-        "storage_root",
-        "poll_wait",
-    )
-    return {
-        k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
-    }
+    """Keep the historical connector settings helper importable."""
+    from openadapt_flow.connector.cli import _connector_flags as collect
+
+    return collect(args)
 
 
 def _cmd_connector(args: argparse.Namespace) -> int:
-    """The BYOC connector: enroll this machine, or run governed jobs locally.
+    """Dispatch connector commands through the focused CLI helper."""
+    from openadapt_flow.connector.cli import _cmd_connector as command
 
-    Both sub-verbs are thin wrappers over :mod:`openadapt_flow.connector`. The
-    engine ships the connector so a dispatched run is the SAME fail-closed
-    ``openadapt-flow run`` admission gate + governed Replayer the local CLI uses,
-    executed inside the customer perimeter against the customer's own storage.
-    """
-    import os
-
-    from openadapt_flow.connector import (
-        ConnectorClient,
-        ConnectorClientError,
-        load_settings,
-        run_loop,
-        save_enrollment,
-    )
-    from openadapt_flow.connector.config import ConnectorConfigError
-    from openadapt_flow.connector.executor import _subprocess_runner
-
-    verb = getattr(args, "connector_cmd", None)
-    try:
-        settings = load_settings(_connector_flags(args))
-    except ConnectorConfigError as exc:
-        print(f"connector: {exc}")
-        return 2
-
-    if verb == "enroll":
-        enrollment_secret = getattr(args, "enrollment_secret", None) or os.environ.get(
-            "BYOC_ENROLLMENT_SECRET"
-        )
-        client = ConnectorClient(settings.control_plane_url)
-        try:
-            data = client.enroll(
-                enrollment_secret=enrollment_secret,
-                org_id=settings.org_id,
-                name=settings.name,
-            )
-        except ConnectorClientError as exc:
-            print(f"connector enroll failed: {exc}")
-            return 1
-        finally:
-            client.close()
-        settings.token = data.get("token") or settings.token
-        settings.org_id = data.get("org_id") or settings.org_id
-        path = save_enrollment(settings)
-        print(
-            f"enrolled connector {data.get('connector_id', '?')} for org "
-            f"{settings.org_id}; token persisted to {path} (0600)."
-        )
-        return 0
-
-    # verb == "run"
-    if not settings.token:
-        print(
-            "connector run: no token. Create an organization connector in "
-            "OpenAdapt Cloud → Settings, then pass --token or set "
-            "BYOC_CONNECTOR_TOKEN."
-        )
-        return 2
-    client = ConnectorClient(settings.control_plane_url, token=settings.token)
-    try:
-        return run_loop(
-            client,
-            settings,
-            runner=_subprocess_runner,
-            once=bool(getattr(args, "once", False)),
-        )
-    finally:
-        client.close()
+    return command(args)
 
 
 def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:

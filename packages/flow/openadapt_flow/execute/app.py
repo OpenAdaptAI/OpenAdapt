@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import html
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from openadapt_flow import __version__
 from openadapt_flow.execute.dispatch import Runner
-from openadapt_flow.execute.models import SelfSignedSealV1
+from openadapt_flow.execute.models import AdmittedBundle, SelfSignedSealV1
 from openadapt_flow.execute.service import ExecuteService, ExecuteServiceError
 
 _JSON = "application/json"
@@ -26,7 +27,7 @@ def create_app(
     token: str | None = None,
     runner: Runner | None = None,
     process_inline: bool = True,
-    seed_mockmed: bool = False,
+    seed_admissions: Iterable[AdmittedBundle] = (),
     service: ExecuteService | None = None,
 ) -> FastAPI:
     """Build the one-process HTTP+MCP app over a local data directory."""
@@ -36,7 +37,7 @@ def create_app(
         token=token,
         runner=runner,
         process_inline=process_inline,
-        seed_mockmed=seed_mockmed,
+        seed_admissions=seed_admissions,
     )
     app = FastAPI(
         title="OpenAdapt reference Execute",
@@ -138,7 +139,7 @@ def serve(
     host: str = "127.0.0.1",
     port: int = 8787,
     token: str | None = None,
-    seed_mockmed: bool = False,
+    seed_admissions: Iterable[AdmittedBundle] = (),
     service: ExecuteService | None = None,
 ) -> None:
     """Block on uvicorn. Caller prints the banner before this."""
@@ -148,10 +149,47 @@ def serve(
     app = create_app(
         data_dir,
         token=token,
-        seed_mockmed=seed_mockmed,
+        seed_admissions=seed_admissions,
         service=service,
     )
     uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+def run_serve_execute(
+    *,
+    data_dir: Path | None,
+    host: str,
+    port: int,
+    token: str | None,
+    seed_admissions: Iterable[AdmittedBundle] = (),
+    deployment: Path | str | None = None,
+) -> int:
+    """Create the reference Execute store, print its startup banner, and serve."""
+
+    from openadapt_flow.execute import SELF_SIGNED_NOTICE
+    from openadapt_flow.execute.service import default_data_dir
+
+    resolved_dir = data_dir if data_dir is not None else default_data_dir()
+    seeded = tuple(seed_admissions)
+    store = ExecuteService(
+        resolved_dir,
+        token=token,
+        seed_admissions=seeded,
+        deployment=deployment,
+    )
+    print(
+        f"openadapt-flow reference Execute\n"
+        f"  http://{host}:{port}\n"
+        f"  data dir     {resolved_dir}\n"
+        f"  token        {store.token}\n"
+        f"  issuer       self_signed\n"
+        f"  fingerprint  {store.fingerprint}\n"
+        f"  {SELF_SIGNED_NOTICE}"
+    )
+    if seeded:
+        print("  seeded demo admissions (ok + banner-lie)")
+    serve(resolved_dir, host=host, port=port, token=store.token, service=store)
+    return 0
 
 
 def _require_bearer(store: ExecuteService, authorization: Optional[str]) -> None:

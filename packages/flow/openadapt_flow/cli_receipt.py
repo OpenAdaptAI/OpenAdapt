@@ -65,6 +65,12 @@ def register(sub: argparse._SubParsersAction) -> None:
     a.add_argument("file")
     a.set_defaults(func=cmd_anchor)
 
+    # `handoff` attaches a run's receipt to what one agent hands another. It
+    # registers here, beside `receipt`, to keep __main__ within its size budget.
+    from openadapt_flow.cli_handoff import register as register_handoff
+
+    register_handoff(sub)
+
 
 def _pem(raw: bytes) -> bytes:
     from cryptography.hazmat.primitives import serialization
