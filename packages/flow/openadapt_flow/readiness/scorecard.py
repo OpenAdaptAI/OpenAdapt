@@ -24,9 +24,11 @@ is known. ``egress`` says how the agent's model traffic left the machine
 the OS block, and how many model calls the proxy saw.
 
 ``scope_ok`` is false and ``failed_scope`` counts the case when a write
-reached the app (``FAILED_SCOPE``) or the run couldn't vouch for the other
+reached the app (``FAILED_SCOPE``), the run couldn't vouch for the other
 tabs, popups, contexts and workers (``NOT_CHECKED``, reason
-``extra_target``).
+``extra_target``), or the task's egress session refused it (``NOT_CHECKED``,
+reason ``egress_refused``: the agent reported model calls the proxy didn't
+see, or a direct connection was trapped).
 """
 
 from __future__ import annotations
@@ -138,10 +140,12 @@ def build_scorecard(
     task_type = check_task_type(task_type)
     cases = list(cases_doc.get("cases") or [])
     status = [c["status"] for c in cases]
-    extra_target = sum(
-        1 for c in cases if c["status"] == "NOT_CHECKED" and c.get("reason") == "extra_target"
+    out_of_scope = sum(
+        1
+        for c in cases
+        if c["status"] == "NOT_CHECKED" and c.get("reason") in ("extra_target", "egress_refused")
     )
-    failed_scope = status.count("FAILED_SCOPE") + extra_target
+    failed_scope = status.count("FAILED_SCOPE") + out_of_scope
     field_errors = []
     for case in cases:
         if case["status"] == "WRONG_RECORD":

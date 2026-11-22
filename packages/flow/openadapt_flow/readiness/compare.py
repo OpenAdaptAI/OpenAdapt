@@ -42,7 +42,9 @@ PATCH, a DELETE, a write to another record, the same save twice) makes the
 case ``MISMATCHED`` with reason ``extra_held_writes``: the person made one
 save. A case whose run couldn't vouch for the other tabs, popups, contexts
 and workers (:func:`openadapt_flow.readiness.runner.extra_target`) is
-``NOT_CHECKED`` with reason ``extra_target``.
+``NOT_CHECKED`` with reason ``extra_target``; one whose egress session
+refused it (:mod:`openadapt_flow.readiness.egress`) is ``NOT_CHECKED`` with
+reason ``egress_refused``.
 
 A case is ``MATCHED`` only when the identity check passed, every human field
 matched, the write has no field outside the declared ones, and the case is
@@ -237,10 +239,13 @@ def compare_case(
         case["status"] = "FAILED_SCOPE"
         case["reason"] = "a write reached the app"
         return case
-    from openadapt_flow.readiness.runner import extra_target
+    from openadapt_flow.readiness.runner import egress_refused, extra_target
 
     if extra_target(run):
         case["reason"] = "extra_target"
+        return case
+    if egress_refused(run):
+        case["reason"] = "egress_refused"
         return case
     if proposed is None:
         case["reason"] = str(run.get("status") or "no_write_held").lower()

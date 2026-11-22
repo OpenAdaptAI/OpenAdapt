@@ -71,6 +71,27 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="a Playwright storage state (cookies, local storage) loaded into each task",
     )
     run.add_argument(
+        "--egress",
+        choices=("scrubbed", "blocked", "unscrubbed"),
+        default="scrubbed",
+        help="the candidate's model traffic: scrubbed through the flight proxy "
+        "(default; refuses if it can't start), blocked (no model calls at all), "
+        "or unscrubbed (synthetic data only; recorded on the scorecard)",
+    )
+    run.add_argument(
+        "--spend-cap",
+        type=float,
+        default=None,
+        help="USD of model calls per task; the proxy answers 429 past it",
+    )
+    run.add_argument(
+        "--upstream",
+        action="append",
+        default=[],
+        metavar="PROVIDER=URL",
+        help="where the proxy forwards a provider's calls (anthropic, openai; repeatable)",
+    )
+    run.add_argument(
         "--keep-session",
         action="store_true",
         help="carry the signed-in session from each task to the next",
@@ -167,13 +188,25 @@ def _cmd_import(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    from openadapt_flow.readiness.launcher import ProgramLauncher, SubprocessLauncher
+    from openadapt_flow.readiness.egress import EgressRefused
+    from openadapt_flow.readiness.launcher import (
+        EgressOptions,
+        ProgramLauncher,
+        SubprocessLauncher,
+    )
     from openadapt_flow.readiness.runner import RunnerConfig, run_episodes
 
+    upstreams: dict[str, str] = {}
+    for value in args.upstream:
+        name, sep, url = value.partition("=")
+        if not sep or name not in ("anthropic", "openai") or not url.startswith("http"):
+            raise SystemExit(f"readiness: --upstream must be anthropic=URL or openai=URL, got {value!r}")
+        upstreams[name] = url
+    egress = EgressOptions(mode=args.egress, spend_cap_usd=args.spend_cap, upstreams=upstreams)
     launcher: Any = (
-        SubprocessLauncher(args.agent_cmd, label=args.label)
+        SubprocessLauncher(args.agent_cmd, label=args.label, egress=egress)
         if args.agent_cmd
-        else ProgramLauncher(args.program, label=args.label)
+        else ProgramLauncher(args.program, label=args.label, egress=egress)
     )
     cfg = RunnerConfig(
         app_url=args.app_url,
@@ -188,12 +221,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         storage_state=Path(args.storage_state) if args.storage_state else None,
         keep_session=args.keep_session,
     )
-    manifest = run_episodes(args.episodes, args.out, launcher, cfg)
+    try:
+        manifest = run_episodes(args.episodes, args.out, launcher, cfg)
+    except EgressRefused as exc:
+        print(f"readiness run: refused, {exc}", file=sys.stderr)
+        return 2
+    refused = (manifest.get("egress") or {}).get("refused_tasks") or 0
     print(
         f"readiness run: {len(manifest['tasks'])} task(s), "
-        f"{manifest['landed_writes']} write(s) reached the app"
+        f"{manifest['landed_writes']} write(s) reached the app, "
+        f"{refused} refused for egress (egress: {args.egress})"
     )
-    return 0 if manifest["landed_writes"] == 0 else 2
+    return 0 if manifest["landed_writes"] == 0 and not refused else 2
 
 
 def _cmd_compare(args: argparse.Namespace) -> int:

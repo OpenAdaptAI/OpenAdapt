@@ -17,10 +17,18 @@ On main there are two launchers:
       OPENADAPT_RUN_DIR         its own folder for this task
 
   ``usage.json`` (``openadapt.agent-usage/v1``): ``{calls, input_tokens,
-  output_tokens, cost_usd, model}``. ``cost_usd`` is used as given; without
-  it, tokens are priced with
+  output_tokens, cost_usd, model}``. With an egress session (the default,
+  see :mod:`openadapt_flow.readiness.egress`) the cost is the flight proxy's
+  metered cost and ``usage.json`` is only a cross-check. Without one (the
+  Python API's ``egress=None``), ``cost_usd`` is used as given; without it,
+  tokens are priced with
   :data:`openadapt_flow.compile_agent.agents.PRICES_PER_MTOK` for a known
   ``model``. Otherwise the cost is unknown (``null``), never zero.
+
+  The candidate runs under the task's egress session: its model base URLs
+  point at the flight proxy (or nowhere, ``blocked``) and the process is
+  wrapped in the OS egress block, so it can reach only the guarded browser's
+  DevTools port and the proxy.
 
 * :class:`ProgramLauncher` (``--program BUNDLE``): ``openadapt-flow run`` on
   the guarded browser with ``--approval-mode each_item`` and a one-second
@@ -47,6 +55,7 @@ __all__ = [
     "USAGE_SCHEMA",
     "AgentLauncher",
     "AgentResult",
+    "EgressOptions",
     "LaunchJob",
     "ProgramLauncher",
     "RunningAgent",
@@ -88,6 +97,9 @@ class AgentResult:
     #: before its save): fields in the proposed-write shape.
     proposed_fields: Optional[list[dict[str, Any]]] = None
     notes: list[str] = field(default_factory=list)
+    #: The egress session's summary (:meth:`EgressSession.finish`), or None
+    #: when the candidate ran without one.
+    egress: Optional[dict[str, Any]] = None
 
 
 class RunningAgent(Protocol):
@@ -177,9 +189,36 @@ class _Process:
         self._log.close()
 
 
+def _cdp_port(cdp_url: str) -> int:
+    from urllib.parse import urlsplit
+
+    port = urlsplit(cdp_url).port
+    if port is None:
+        raise ValueError("the DevTools URL has no port")
+    return int(port)
+
+
 class _RunningCommand:
-    def __init__(self, job: LaunchJob, argv: Sequence[str]) -> None:
+    def __init__(
+        self, job: LaunchJob, argv: Sequence[str], egress: Optional["EgressOptions"] = None
+    ) -> None:
         self.job = job
+        self.egress = None
+        argv = list(argv)
+        extra: dict[str, str] = {}
+        if egress is not None:
+            from openadapt_flow.readiness.egress import EgressSession
+
+            self.egress = EgressSession(
+                egress.mode,
+                job.run_dir,
+                cdp_port=_cdp_port(job.cdp_url),
+                spend_cap_usd=egress.spend_cap_usd,
+                upstreams=egress.upstreams,
+                scrubber=egress.scrubber,
+            ).start()
+            extra = self.egress.env
+            argv = self.egress.wrap(argv)
         env = {
             "OPENADAPT_GUARD_CDP_URL": job.cdp_url,
             "OPENADAPT_GUARD_PAGE_URL": job.page_url,
@@ -187,8 +226,16 @@ class _RunningCommand:
             "OPENADAPT_TASK_ID": job.task_id,
             "OPENADAPT_USAGE_PATH": str(job.usage_path),
             "OPENADAPT_RUN_DIR": str(job.run_dir),
+            **extra,
         }
-        self._process = _Process(argv, env, job.run_dir / "agent.log")
+        if self.egress is not None:
+            env["OPENADAPT_EGRESS"] = self.egress.mode
+        try:
+            self._process = _Process(argv, env, job.run_dir / "agent.log")
+        except Exception:
+            if self.egress is not None:
+                self.egress.finish()
+            raise
 
     def poll(self) -> Optional[int]:
         return self._process.poll()
@@ -196,24 +243,50 @@ class _RunningCommand:
     def stop(self) -> None:
         self._process.stop()
 
+    def _egress_summary(self) -> Optional[dict[str, Any]]:
+        return self.egress.finish() if self.egress is not None else None
+
     def result(self) -> AgentResult:
         return AgentResult(
             exit_code=self._process.proc.returncode,
             usage=read_usage(self.job.usage_path),
+            egress=self._egress_summary(),
         )
 
 
-class SubprocessLauncher:
-    """Run ``--agent-cmd`` for each task (see the module docstring)."""
+@dataclass(frozen=True)
+class EgressOptions:
+    """How every task's candidate reaches a model (see
+    :mod:`openadapt_flow.readiness.egress`)."""
 
-    def __init__(self, command: str | Sequence[str], *, label: Optional[str] = None):
+    mode: str = "scrubbed"
+    spend_cap_usd: Optional[float] = None
+    upstreams: Mapping[str, str] = field(default_factory=dict)
+    #: An already checked scrubber (tests); None loads the real one.
+    scrubber: Any = field(default=None, compare=False)
+
+
+class SubprocessLauncher:
+    """Run ``--agent-cmd`` for each task (see the module docstring).
+
+    ``egress`` defaults to ``scrubbed``; pass ``None`` only from Python, for
+    a candidate whose traffic is controlled some other way."""
+
+    def __init__(
+        self,
+        command: str | Sequence[str],
+        *,
+        label: Optional[str] = None,
+        egress: Optional[EgressOptions] = EgressOptions(),
+    ):
         self.argv = shlex.split(command) if isinstance(command, str) else list(command)
         if not self.argv:
             raise ValueError("the agent command is empty")
         self.label = label or Path(self.argv[0]).name
+        self.egress = egress
 
     def start(self, job: LaunchJob) -> RunningAgent:
-        return _RunningCommand(job, self.argv)
+        return _RunningCommand(job, self.argv, self.egress)
 
 
 def approval_fields(run_dir: Path) -> Optional[list[dict[str, Any]]]:
@@ -254,6 +327,7 @@ class _RunningProgram(_RunningCommand):
             usage=usage,
             proposed_fields=fields,
             notes=[] if fields else ["the program wrote no approval request with fields"],
+            egress=self._egress_summary(),
         )
 
 
@@ -266,10 +340,12 @@ class ProgramLauncher:
         *,
         flow_cmd: Sequence[str] = (sys.executable, "-m", "openadapt_flow"),
         label: Optional[str] = None,
+        egress: Optional[EgressOptions] = EgressOptions(),
     ) -> None:
         self.bundle = Path(bundle)
         self.flow_cmd = list(flow_cmd)
         self.label = label or f"program:{self.bundle.name}"
+        self.egress = egress
 
     def argv(self, job: LaunchJob) -> list[str]:
         argv = [
@@ -292,7 +368,7 @@ class ProgramLauncher:
         return argv
 
     def start(self, job: LaunchJob) -> RunningAgent:
-        return _RunningProgram(job, self.argv(job))
+        return _RunningProgram(job, self.argv(job), self.egress)
 
 
 def wait_exit(agent: RunningAgent, timeout_s: float) -> Optional[int]:

@@ -177,6 +177,9 @@ pytestmark = pytest.mark.timeout(900)
 
 
 def _chromium_or_skip() -> None:
+    from tests.e2e.test_readiness_e2e import _egress_block_or_skip
+
+    _egress_block_or_skip()
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
 
@@ -202,10 +205,12 @@ def _episodes(tmp_path: Path, app: Any, n: int) -> tuple[str, Path]:
 
 
 def _launcher() -> Any:
-    from openadapt_flow.readiness.launcher import SubprocessLauncher
+    from openadapt_flow.readiness.launcher import EgressOptions, SubprocessLauncher
 
     return SubprocessLauncher(
-        [sys.executable, str(Path(__file__).resolve())], label="adversarial-agent"
+        [sys.executable, str(Path(__file__).resolve())],
+        label="adversarial-agent",
+        egress=EgressOptions(mode="blocked"),
     )
 
 

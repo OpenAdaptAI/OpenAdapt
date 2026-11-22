@@ -100,10 +100,12 @@ def agent_main() -> int:
         json.dumps(
             {
                 "schema": "openadapt.agent-usage/v1",
-                "calls": 6,
-                "input_tokens": 12000,
-                "output_tokens": 600,
-                "model": "claude-sonnet-5-5",
+                # A scripted agent: no model calls (it runs with --egress
+                # blocked, so a claimed call would refuse the task).
+                "calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "model": None,
                 "cost_usd": None,
             }
         )
@@ -123,7 +125,16 @@ import pytest  # noqa: E402
 pytestmark = pytest.mark.timeout(1200)
 
 
+def _egress_block_or_skip() -> None:
+    from openadapt_flow.flight.egress import egress_block_available
+
+    ok, why = egress_block_available()
+    if not ok:
+        pytest.skip(f"the scripted agent runs with --egress blocked: {why}")
+
+
 def _chromium_or_skip() -> None:
+    _egress_block_or_skip()
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
 
@@ -204,7 +215,7 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     _chromium_or_skip()
     from benchmark.agent_guard.app import serve
     from openadapt_flow.readiness.compare import compare_runs
-    from openadapt_flow.readiness.launcher import SubprocessLauncher
+    from openadapt_flow.readiness.launcher import EgressOptions, SubprocessLauncher
     from openadapt_flow.readiness.reference import import_episodes
     from openadapt_flow.readiness.runner import RunnerConfig, run_episodes
     from openadapt_flow.readiness.scorecard import write_scorecard
@@ -232,7 +243,9 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         plan.write_text(json.dumps({_episode(i)["task_id"]: _agent_plan(i) for i in range(n)}))
         monkeypatch.setenv("READINESS_E2E_PLAN", str(plan))
         launcher = SubprocessLauncher(
-            [sys.executable, str(Path(__file__).resolve())], label="scripted-agent"
+            [sys.executable, str(Path(__file__).resolve())],
+            label="scripted-agent",
+            egress=EgressOptions(mode="blocked"),
         )
         cfg = RunnerConfig(
             app_url=app_url,
@@ -290,7 +303,15 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     for name in PATIENTS.values():
         assert name not in text
     assert card["model_cost_usd"]["unknown_count"] == 0
+    assert card["model_cost_usd"]["source"] == "metered"
+    assert card["model_cost_usd"]["total"] == 0.0
+    assert card["egress"] == {"mode": "blocked", "enforced": True, "model_calls": 0}
+    assert card["task_type"] == "unspecified"
     assert card["savings"]["est_value_usd"] is not None
+    for i in range(n):
+        run_dir = tmp_path / "runs" / _episode(i)["task_id"]
+        egress = json.loads((run_dir / "egress.json").read_text())
+        assert egress["model_calls"] == 0 and egress["enforced"] is True
 
     if os.environ.get("OPENADAPT_WRITE_EVIDENCE") == "1":
         EVIDENCE.parent.mkdir(parents=True, exist_ok=True)

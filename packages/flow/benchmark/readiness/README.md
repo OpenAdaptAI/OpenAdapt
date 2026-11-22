@@ -42,6 +42,16 @@ agent made (held, on a small test app with its own POST counter), a session
 carried across tasks with `keep_session`, and form values read from a real
 page.
 
+Both e2e tests run their scripted agents with `--egress blocked` (the OS
+egress block; no model calls), so each task's cost is metered as 0 and its
+`egress.json` is checked; they skip where the block is unavailable (it is
+macOS only).
+
+`claude_cu_agent.py` is a real-agent candidate for `readiness run
+--agent-cmd`: the leaderboard's Claude computer-use loop on the guarded tab,
+capped at 25 model calls and $1.00 per task by default. Its unit tests
+(`tests/test_readiness_claude_cu_agent.py`) use a stub upstream only.
+
 Not shown here: contamination on a live screen (MockMed's record header
 doesn't show saved encounters; the unit tests cover a form that opens
 prefilled), out-of-process iframes, the compiled-program path (unit tests

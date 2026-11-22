@@ -224,10 +224,56 @@ run `FAILED_SCOPE` and flags the whole scorecard; `run` exits 2.
 | `OPENADAPT_RUN_DIR` | its own folder for this task |
 
 `usage.json` (`openadapt.agent-usage/v1`): `{calls, input_tokens,
-output_tokens, cost_usd, model}`. `cost_usd` is used as given. Without it,
-tokens are priced with `compile_agent.agents.PRICES_PER_MTOK` when `model`
-is listed there. Otherwise the cost is unknown and shown as "unknown", never
-as zero.
+output_tokens, cost_usd, model}`. It is a cross-check only: the cost on the
+scorecard is metered by the flight proxy (`model_cost_usd.source:
+metered`; see [Model traffic](#model-traffic)). A cost the proxy
+can't price is unknown and shown as "unknown", never as zero.
+
+`benchmark/readiness/claude_cu_agent.py` is a ready candidate: it attaches
+to the guarded tab and runs the leaderboard's Claude computer-use loop
+(reused, with a preamble that names no app), capped per task at 25 model
+calls, $1.00 and 600 s by default (`OPENADAPT_CU_MAX_STEPS`,
+`OPENADAPT_CU_MAX_USD`, `OPENADAPT_CU_MAX_S`; never above 50, $5.00 and
+1800 s). Its unit tests use a stub upstream only; no real model has been run
+through it yet.
+
+### Model traffic
+
+Every task's candidate process runs under the flight recorder's
+`ScrubbedEgress` (`openadapt_flow.flight.egress`, the J7 API), through
+`readiness/egress.py`:
+
+- `--egress scrubbed` (default): the candidate's model base URLs
+  (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`) point at the flight proxy on
+  loopback, which scrubs every text and image before forwarding and meters
+  the cost. The process runs under the OS egress block (macOS
+  `sandbox-exec`) and can reach only the guarded browser's DevTools port and
+  the proxy. `run` refuses to start (exit 2) when the scrubber or the block
+  is unavailable.
+- `--egress blocked`: no model calls at all, for a scripted or local
+  candidate. The same OS block, with the DevTools port the only address it
+  can reach. The cost is 0, known because nothing could pass.
+- `--egress unscrubbed`: the proxy and the block without the scrubber. An
+  explicit opt-in for synthetic data only; the scorecard's `egress.mode`
+  says so.
+
+`--spend-cap USD` caps each task's model spend at the proxy (429 past it,
+and at once for a model with no price); `--upstream anthropic=URL` points
+the proxy elsewhere.
+
+A task is refused (`EGRESS_REFUSED`; its case `NOT_CHECKED`, reason
+`egress_refused`, counted in `failed_scope`) when its `usage.json` reports
+more model calls than the proxy saw, or a direct connection outside the
+proxy was trapped; `run` then exits 2. Each task's run folder gets
+`egress.json` (`mode, enforced, model_calls, cost_usd, cost_source,
+refused_requests`, the flight recorder's summary) and the proxy's scrubbed
+record in `egress/`; `run.json` gets `egress` (that summary with the
+session's mode, `refused` and `reason`).
+
+The OS block exists on macOS only, so outside macOS every `--egress` mode
+refuses to run. The scrubber also hides personal data from the candidate
+(the model can't read a name it must check); task success with scrubbing on
+has not been measured.
 
 `--program BUNDLE` (`ProgramLauncher`) runs `openadapt-flow run` on the
 guarded browser with `--approval-mode each_item` and a one-second approval

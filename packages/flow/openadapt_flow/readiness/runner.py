@@ -57,6 +57,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 from openadapt_flow.agent_guard.requests import NotASave, origin_of
+from openadapt_flow.readiness.egress import EgressRefused
 from openadapt_flow.readiness.launcher import AgentLauncher, AgentResult, LaunchJob
 
 __all__ = [
@@ -222,6 +223,7 @@ def run_one(
         "usage": None,
         "model_cost_usd": None,
         "model_cost_source": None,
+        "egress": None,
         "landed_writes": 0,
         "held": 0,
         "double_save": False,
@@ -331,11 +333,23 @@ def run_one(
         _program_proposal(guard, result, cdp_page, run_dir)
         record["exit_code"] = result.exit_code
         record["usage"] = result.usage
-        record["model_cost_usd"] = (result.usage or {}).get("cost_usd")
-        record["model_cost_source"] = (
-            "reported" if record["model_cost_usd"] is not None else None
-        )
+        record["egress"] = result.egress
+        if result.egress is not None:
+            # Metered by the flight proxy; usage.json is only a cross-check.
+            from openadapt_flow.readiness.egress import metered_cost
+
+            record["model_cost_usd"], record["model_cost_source"] = metered_cost(
+                result.egress
+            )
+        else:
+            record["model_cost_usd"] = (result.usage or {}).get("cost_usd")
+            record["model_cost_source"] = (
+                "reported" if record["model_cost_usd"] is not None else None
+            )
         record["notes"] += result.notes
+    except EgressRefused as exc:
+        record["egress"] = {"refused": True, "reason": str(exc)}
+        record["notes"].append(f"egress refused: {exc}")
     except Exception as exc:  # noqa: BLE001 - recorded; the next task still runs
         record["notes"].append(f"runner error: {type(exc).__name__}: {exc}")
     finally:
@@ -344,6 +358,11 @@ def run_one(
                 agent.stop()
             except Exception:  # noqa: BLE001
                 pass
+            session = getattr(agent, "egress", None)
+            if session is not None:
+                summary = session.finish()  # idempotent: stops the proxy
+                if record.get("egress") is None:
+                    record["egress"] = summary
         if gate is not None:
             # From here every request the gate sees is blocked, until the
             # browser is gone; the tab's own hold is released after it.
@@ -385,6 +404,8 @@ def run_one(
             record["status"] = "FAILED_SCOPE"
         elif extra_target(record):
             record["status"] = "EXTRA_TARGET"
+        elif egress_refused(record):
+            record["status"] = "EGRESS_REFUSED"
         elif guard.proposed is not None:
             record["status"] = "HELD"
         elif record["ended"] == "timeout":
@@ -408,6 +429,12 @@ def extra_target(run: Any) -> bool:
         or gate.get("ungated_targets")
         or int(run.get("extra_target_writes") or 0)
     )
+
+
+def egress_refused(run: Any) -> bool:
+    """The task's egress session refused it (see :mod:`openadapt_flow.readiness.egress`)."""
+
+    return bool((run.get("egress") or {}).get("refused"))
 
 
 def run_episodes(
@@ -437,6 +464,16 @@ def run_episodes(
         ),
         "tasks": [],
     }
+    options = getattr(launcher, "egress", None)
+    if options is not None:
+        import dataclasses
+
+        from openadapt_flow.readiness.egress import preflight
+
+        # Refuses the whole run before any task; the scrubber is loaded once.
+        scrubber = preflight(options.mode, scrubber=options.scrubber)
+        if scrubber is not None and options.scrubber is None:
+            launcher.egress = options = dataclasses.replace(options, scrubber=scrubber)
     carry = _session_carry(out)
     carry.unlink(missing_ok=True)  # never a session from an earlier run
     try:
@@ -450,6 +487,19 @@ def run_episodes(
     finally:
         carry.unlink(missing_ok=True)
     manifest["finished_at"] = _now()
+    if options is not None:
+        runs = [
+            json.loads((out / t["task_id"] / "run.json").read_text("utf-8")).get("egress") or {}
+            for t in manifest["tasks"]
+        ]
+        manifest["egress"] = {
+            "mode": options.mode,
+            "enforced": bool(runs) and all(r.get("enforced") for r in runs),
+            "spend_cap_usd": options.spend_cap_usd,
+            "refused_tasks": sum(1 for r in runs if r.get("refused")),
+        }
+    else:
+        manifest["egress"] = None
     manifest["landed_writes"] = sum(
         json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))["landed_writes"]
         for t in manifest["tasks"]
