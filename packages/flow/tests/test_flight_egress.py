@@ -316,3 +316,17 @@ def test_env_before_enter_is_an_error(tmp_path):
     egress = ScrubbedEgress(Path(tmp_path), spend_cap_usd=None)
     with pytest.raises(RuntimeError):
         _ = egress.env
+
+
+def test_use_block_false_drops_the_trap_too(tmp_path, provider):
+    with ScrubbedEgress(
+        tmp_path / "run",
+        spend_cap_usd=None,
+        allow_unenforced=True,
+        use_block=False,
+        upstreams={"anthropic": provider.url},
+        scrubber=FakeScrubber(),
+    ) as egress:
+        assert egress.enforced is False
+        assert "HTTPS_PROXY" not in egress.env and "NO_PROXY" not in egress.env
+        assert egress.env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")

@@ -11,7 +11,9 @@ number and name) and once as a rendered form screenshot.
 - `presidio`: the openadapt-privacy scrubber alone, which is what the flight
   proxy used before 2026-11-21;
 - `flight`: what the proxy sends now (`openadapt_flow.flight.scrub`), with
-  each text sent as a tool result.
+  each text sent as a tool result. A JSON text there is scrubbed value by
+  value; the same JSON sent as plain message text is scrubbed as one string,
+  which is weaker and was not measured.
 
 A field leaks when its value, lower-cased with everything but letters and
 digits removed, is a substring of the output treated the same way. A name

@@ -15,9 +15,12 @@ exception that must reach the provider unchanged:
 
 Inside a tool call's arguments (Anthropic ``tool_use.input``, OpenAI
 ``function_call.arguments`` and Chat Completions ``function.arguments``) and
-inside a tool result, no key is exempt: every string value is scrubbed.
-Arguments sent as a JSON string are parsed, scrubbed leaf by leaf and
-serialised again, so they stay valid JSON.
+in a tool result's fields, no key and no block type is exempt: every string
+is scrubbed, and a base64 image is redacted. Arguments sent as a JSON object
+or array in a string are parsed, scrubbed leaf by leaf and serialised again,
+so they stay valid JSON. The content list of a tool result is a list of
+protocol blocks (text, image), walked like message content. Numbers of five
+or more digits anywhere outside the request settings become ``"<ID>"``.
 
 Each string goes through two passes:
 
@@ -512,30 +515,57 @@ def scrub_request(
             raise ScrubRefused("the text scrubber returned no text")
         return out
 
+    def number(value: Any) -> Any:
+        """A number of five or more digits is an identifier until shown
+        otherwise (a record number, a phone, a ZIP code)."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return value
+        if sum(ch.isdigit() for ch in repr(value)) >= 5:
+            return "<ID>"
+        return value
+
     def arguments(value: str) -> str:
-        """A JSON-string argument list: scrub its leaves, keep it JSON."""
+        """A JSON-string argument list: scrub its leaves, keep it JSON.
+        Only an object or array is parsed; anything else is text."""
         try:
             parsed = json.loads(value)
         except ValueError:
             return string(value, image_slot=False)
-        if isinstance(parsed, str):
-            return json.dumps(payload(parsed, None))
+        if not isinstance(parsed, (dict, list)):
+            return string(value, image_slot=False)
         return json.dumps(payload(parsed, None), ensure_ascii=False)
 
     def payload(node: Any, key: Optional[str]) -> Any:
-        """Tool arguments and results: every string is data."""
+        """Tool arguments and results: every value is data. No key and no
+        block type is exempt; only a base64 image is handled as an image."""
         if isinstance(node, str):
             return string(node, image_slot=False)
         if isinstance(node, list):
             return [payload(item, key) for item in node]
         if isinstance(node, dict):
             kind = node.get("type")
-            if kind in _OPAQUE_TYPES:
-                return node
-            if kind in ("image", "document", "input_image", "image_url", "input_file"):
-                return structural(node, key)
+            source = node.get("source")
+            if kind in ("image", "document") and isinstance(source, dict):
+                if kind == "image" and source.get("type") == "base64":
+                    png = image(_b64(str(source.get("data", ""))))
+                    return {
+                        **{k: payload(v, k) for k, v in node.items() if k != "source"},
+                        "source": {
+                            **{k: payload(v, k) for k, v in source.items()},
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": base64.b64encode(png).decode("ascii"),
+                        },
+                    }
+                raise ScrubRefused(f"a {kind} in a tool payload can't be scrubbed")
+            if kind in ("input_image", "image_url", "input_file", "file"):
+                url = node.get("image_url")
+                if isinstance(url, dict):
+                    url = url.get("url")
+                if not (isinstance(url, str) and url.startswith("data:image/")):
+                    raise ScrubRefused(f"a {kind} by reference can't be scrubbed")
             return {k: payload(v, k) for k, v in node.items()}
-        return node
+        return number(node)
 
     def structural(node: Any, key: Optional[str], parent_type: Any = None) -> Any:
         if isinstance(node, str):
@@ -546,7 +576,7 @@ def scrub_request(
         if isinstance(node, list):
             return [structural(item, key, parent_type) for item in node]
         if not isinstance(node, dict):
-            return node
+            return number(node)
         kind = node.get("type")
         if kind in _OPAQUE_TYPES:
             return node

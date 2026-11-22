@@ -21,9 +21,9 @@ For that one run you get:
   results, URLs) and redacts every base64 screenshot before it forwards the
   request. See [What the scrubber does](#what-the-scrubber-does).
 - **An egress block.** On macOS your command runs under `sandbox-exec` with
-  every outbound connection denied except to loopback, so a model call that
-  skips the proxy can't leave the machine. Elsewhere `flight` refuses to run
-  unless you opt out. See [The egress block](#the-egress-block).
+  every outbound connection denied except to loopback, so a direct
+  connection from your command or anything it starts fails. Elsewhere
+  `flight` refuses to run unless you opt out. See [The egress block](#the-egress-block).
 - **A redacted timeline.** `timeline.jsonl` lists each model call, each
   computer action the model asked for, each action your executor performed
   and each gate decision. Frames are written as scrubbed thumbnails.
@@ -68,9 +68,9 @@ What is enforced, by system:
 | macOS | Runs your command under `/usr/bin/sandbox-exec` with a profile that denies every outbound network connection except to loopback, and denies DNS lookups. It checks the block first: a sandboxed connect to a TEST-NET address must fail with "operation not permitted". Everything your command starts inherits the block, so a browser it launches reaches loopback only. |
 | Any other system | No OS block yet. `flight` refuses to start unless you give `--allow-unenforced-egress`. |
 
-`--no-egress-block` runs without the block on macOS too (the behaviour before
-the block). Both opt-outs are recorded in `flight.json` under
-`details.egress.opt_out`.
+`--no-egress-block` runs without the block on macOS too, and without the
+proxy-variable trap: the behaviour before the block. Both opt-outs are
+recorded in `flight.json` under `details.egress.opt_out`.
 
 `flight` marks the run refused, and exits 3, when model calls went around
 the proxy:
@@ -78,25 +78,28 @@ the proxy:
 - your agent wrote `usage.json` (`openadapt.agent-usage/v1`, at
   `OPENADAPT_USAGE_PATH`) with more calls than the proxy saw; or
 - a client that ignored the base URLs but honoured `HTTPS_PROXY` reached the
-  trap. The trap refuses it and records the host.
+  trap. The trap refuses it and records the host. Anything else that honours
+  the proxy variables is trapped too and refuses the run: an agent's
+  telemetry, or on Linux a browser your command starts.
 
 `details.egress` in `flight.json` holds `refused`, the reason and the
 numbers. A connection that the kernel refuses without going through the trap
 is blocked but not counted: macOS doesn't log these denials to an
 unprivileged process. Without a `usage.json` the agent's own count can't be
-compared. Under the block such a call still can't leave; without the block
+compared. Under the block such a direct call still fails; without the block
 it is not detected.
 
 Other limits of the block:
 
 - Anything listening on loopback can still be reached. A local forward proxy
   or SSH tunnel on this machine would carry traffic out.
-- The block covers the process tree `flight` starts. A process the agent
-  hands work to over a local socket (an already running browser, a daemon)
-  is not under it.
+- The block covers direct connections from the process tree `flight`
+  starts. Work the agent hands to a process outside it is not covered: `open`
+  (LaunchServices), Apple Events, XPC helpers, an already running browser or
+  a daemon reached over a local socket.
 
 The same API is available in Python as
-`openadapt_flow.flight.egress.ScrubbedEgress`. The readiness runner uses it.
+`openadapt_flow.flight.egress.ScrubbedEgress`.
 
 ## What the scrubber does
 
@@ -105,8 +108,10 @@ exceptions that must reach the provider unchanged: thinking and reasoning
 blocks (their signatures must verify; they came from the provider), tool
 definitions, request settings (`model`, `tool_choice`, `metadata`...) and
 protocol fields (`type`, `role`, ids, the tool name of a tool call). Inside
-tool-call arguments and tool results no key is exempt. Arguments sent as a
-JSON string are parsed, scrubbed value by value and serialised again.
+tool-call arguments and a tool result's fields no key and no block type is
+exempt. Arguments sent as a JSON object or array in a string are parsed,
+scrubbed value by value and serialised again. A number of five or more
+digits becomes `"<ID>"`.
 
 Each string goes through these steps:
 
@@ -122,7 +127,7 @@ with tesseract. Every word the patterns or the text scrubber remove from its
 OCR line is painted over too.
 
 Recall measured on 50 synthetic records (five fields each, written as text
-and as rendered form screenshots;
+sent in a tool result, and as rendered form screenshots;
 [benchmark](../benchmark/flight/scrub_recall/README.md)): 246 of 250 fields
 in text (98.4%) and 245 of 249 readable fields in images (98.4%). Every miss
 was a name. Presidio alone, as the proxy used it before, caught 78.4% in
@@ -320,9 +325,9 @@ actions the executor reported.
 ## Limits
 
 - The proxy only sees calls that use `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL`.
-  On macOS a client with a hard-coded base URL is blocked by the egress
-  block; elsewhere, with `--allow-unenforced-egress`, it is not, and `flight`
-  warns when no call came through.
+  On macOS a direct connection from a client with a hard-coded base URL is
+  blocked; elsewhere, with `--allow-unenforced-egress`, it is not (unless it
+  honours `HTTPS_PROXY`), and `flight` warns when no call came through.
 - Scrubbing blinds the agent to the personal data it scrubs (see above).
 - OpenAI models are not in the price table, so their cost is recorded as
   unknown.

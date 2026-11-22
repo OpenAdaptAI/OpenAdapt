@@ -140,7 +140,13 @@ def _anthropic(png_b64: str) -> dict:
                         "type": "tool_use",
                         "id": "toolu_1",
                         "name": "lookup_patient",
-                        "input": {"name": NAME, "dob": DOB, "query": f"MRN {MRN}"},
+                        "input": {
+                            "name": NAME,
+                            "dob": DOB,
+                            "query": f"MRN {MRN}",
+                            "mrn_number": int(MRN),
+                            "phone_digits": int(re.sub(r"\D", "", PHONE)),
+                        },
                     }
                 ],
             },

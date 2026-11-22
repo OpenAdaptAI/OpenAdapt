@@ -237,3 +237,37 @@ def test_the_image_pattern_pass_paints_over_a_matching_ocr_line():
     out = Image.open(io.BytesIO(redact_image_patterns(buf.getvalue(), lambda _: words)))
     assert out.getpixel((90, 15)) == (0, 0, 0)  # the number is covered
     assert out.getpixel((20, 33)) == (255, 255, 255)  # "Notes" is not
+
+
+def test_payload_values_have_no_exemptions():
+    body = {
+        "input": [
+            {
+                "type": "custom_tool_call",
+                "call_id": "c1",
+                "name": "lookup",
+                "input": "4471923",
+            },
+            {
+                "type": "function_call",
+                "call_id": "c2",
+                "name": "set",
+                "arguments": json.dumps(
+                    {
+                        "mrn": 4471923,
+                        "doc": {"type": "document", "id": "4471923", "status": NAME},
+                        "t": {"type": "thinking", "thinking": NAME, "signature": "s"},
+                    }
+                ),
+            },
+            {"type": "function_call_output", "call_id": "c2", "output": "[6175550143]"},
+        ]
+    }
+    out = scrub_request(body, _scrub())
+    raw = json.dumps(out)
+    for planted in (NAME, "4471923", "6175550143"):
+        assert planted not in raw
+    assert out["input"][0]["call_id"] == "c1" and out["input"][0]["name"] == "lookup"
+    args = json.loads(out["input"][1]["arguments"])
+    assert args["mrn"] == "<ID>"
+    assert args["doc"]["type"] == "document"  # the word is not personal data
