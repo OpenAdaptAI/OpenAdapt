@@ -321,6 +321,7 @@ def test_all_cdp_acquisitions_check_their_selected_page() -> None:
         "cli_worklist_pool.py": "_open",
         "agent_guard/session.py": "_connect",
         "copilot_runtime.py": "main",
+        "readiness/runner.py": "run_one",
         "exceptions/watch.py": "watch_browser",
     }
     observed = {}
