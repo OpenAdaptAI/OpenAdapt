@@ -327,7 +327,8 @@ identifier (one with a word such as id, mrn, zip, postal, phone, account,
 ssn, npi, code, number, no, ref or card in it, like `patient_id`, `zipCode`
 or `account_no`). Everything else is compared as exact text after the
 whitespace trim, so `02134` is not `2134`, `007` is not `7` and `1e3` is not
-`1000`. Record fields (`expected_record`) are always exact text.
+`1000`. Record fields (`expected_record`) never compare as numbers; the
+date rule and a lens codec still apply to them.
 
 Extra held writes: the hold keeps every write the candidate sent. Any held
 write besides the proposed one (a second PATCH, a DELETE, a write to another

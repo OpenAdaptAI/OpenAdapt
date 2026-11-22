@@ -101,6 +101,18 @@ def test_a_leading_zero_record_id_is_another_record() -> None:
     assert case["status"] == "WRONG_RECORD"
 
 
+def test_a_record_date_still_matches_at_midnight() -> None:
+    ref = _ref(type="Triage")
+    ref["expected_record"] = {"patient_id": "p1", "dob": "1980-01-01"}
+    case = compare_case(ref, _run(), _proposed(patient_id="p1", dob="1980-01-01T00:00:00Z",
+                                               type="Triage"), before_screen=SCREEN)
+    assert case["status"] == "MATCHED", case
+    ref["expected_record"] = {"patient_id": "p1", "visits": "10"}
+    case = compare_case(ref, _run(), _proposed(patient_id="p1", visits="10.0",
+                                               type="Triage"), before_screen=SCREEN)
+    assert case["status"] == "WRONG_RECORD"  # a record field is never a number
+
+
 def test_a_leading_zero_field_is_a_field_error() -> None:
     case = compare_case(_ref(zip="02134"), _run(), _proposed(zip="2134"),
                         before_screen=SCREEN)

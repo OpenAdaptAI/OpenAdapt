@@ -65,6 +65,24 @@ def test_the_loop_acts_and_reports_usage(upstream: FakeProvider) -> None:
     assert "Medplum" not in first and "Add the note and save." in first
 
 
+def test_usage_json_is_written_after_every_call(upstream: FakeProvider, tmp_path: Path) -> None:
+    import json
+
+    upstream.anthropic_turns = [[anthropic_click(10, 10, f"t{i}")] for i in range(5)]
+    agent = _agent()
+    path = tmp_path / "usage.json"
+    seen: list[int] = []
+
+    class Watching(FakeScreen):
+        def click(self, x: float, y: float, **kw: Any) -> None:
+            seen.append(json.loads(path.read_text())["calls"])
+
+    agent.run_task("x", Watching(), limits=agent.caps({"OPENADAPT_CU_MAX_STEPS": "3"}),
+                   usage_path=path)
+    assert seen == [1, 2, 3]  # on disk before each action, so a stop loses nothing
+    assert json.loads(path.read_text())["calls"] == 3
+
+
 def test_the_step_cap_holds(upstream: FakeProvider) -> None:
     upstream.anthropic_turns = [[anthropic_click(10, 10, f"t{i}")] for i in range(40)]
     agent = _agent()

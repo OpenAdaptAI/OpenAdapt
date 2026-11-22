@@ -13,9 +13,10 @@ guarded tab over CDP, and runs the leaderboard's Claude computer-use loop
 with a preamble that names no app. The Anthropic SDK reads
 ``ANTHROPIC_API_KEY`` and ``ANTHROPIC_BASE_URL`` from the environment, so
 under ``--egress scrubbed`` every call goes through the flight proxy. It
-writes ``usage.json`` (``openadapt.agent-usage/v1``); the proxy's metered
-count and cost are what the scorecard uses, and this file is the
-cross-check.
+writes ``usage.json`` (``openadapt.agent-usage/v1``) after every model call
+(the runner stops the process once the save is held, so a file written only
+at the end would be lost); the proxy's metered count and cost are what the
+scorecard uses, and this file is the cross-check.
 
 Hard caps per task (environment, never raised past the maximum):
 
@@ -87,8 +88,35 @@ def _loop_modules() -> tuple[Any, Any]:
     return claude_cu, common
 
 
-def make_meter(label: str, limits: dict[str, float]) -> Any:
-    """The loop's ``Meter`` with this task's caps and no shared ledger."""
+def _usage(meter: Any, model: str, **extra: Any) -> dict[str, Any]:
+    return {
+        "schema": "openadapt.agent-usage/v1",
+        "calls": meter.calls,
+        "input_tokens": meter.tokens_in,
+        "output_tokens": meter.tokens_out,
+        "model": model,
+        "cost_usd": round(meter.usd, 6),
+        **extra,
+    }
+
+
+def _write_usage(path: Optional[Path], usage: dict[str, Any]) -> None:
+    if path is None:
+        return
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(usage, indent=2, sort_keys=True))
+    os.replace(tmp, path)
+
+
+def make_meter(
+    label: str,
+    limits: dict[str, float],
+    *,
+    model: str = DEFAULT_MODEL,
+    usage_path: Optional[Path] = None,
+) -> Any:
+    """The loop's ``Meter`` with this task's caps, no shared ledger, and
+    ``usage.json`` rewritten after every call."""
 
     _, common = _loop_modules()
 
@@ -107,6 +135,7 @@ def make_meter(label: str, limits: dict[str, float]) -> Any:
             self.tokens_in += tokens_in
             self.tokens_out += tokens_out
             self.usage.append({"in": tokens_in, "out": tokens_out, "usd": round(usd, 6)})
+            _write_usage(usage_path, _usage(self, model))
 
     return TaskMeter(label=label)
 
@@ -117,30 +146,28 @@ def run_task(
     *,
     model: str = DEFAULT_MODEL,
     limits: Optional[dict[str, float]] = None,
+    usage_path: Optional[Path] = None,
 ) -> dict[str, Any]:
-    """One task through the reused loop; returns ``usage.json``'s content."""
+    """One task through the reused loop; returns ``usage.json``'s content
+    (also written to ``usage_path`` after every call and at the end)."""
 
     claude_cu, _ = _loop_modules()
     if model not in claude_cu.PRICES:
         raise SystemExit(f"model {model!r} has no price in the loop's table; the spend cap can't hold")
     limits = limits or caps()
-    meter = make_meter(f"claude {model}", limits)
+    meter = make_meter(f"claude {model}", limits, model=model, usage_path=usage_path)
+    _write_usage(usage_path, _usage(meter, model))
     claude_cu.PREAMBLE = PREAMBLE  # the loop prepends it; this one names no app
     try:
         result = claude_cu.run(instruction, screen, meter, model=model)
         stopped, final = result.stopped, (result.final_text or "").strip().splitlines()[-1:]
     except Exception as exc:  # noqa: BLE001 - the calls made so far are still reported
         stopped, final = f"error: {type(exc).__name__}", []
-    return {
-        "schema": "openadapt.agent-usage/v1",
-        "calls": meter.calls,
-        "input_tokens": meter.tokens_in,
-        "output_tokens": meter.tokens_out,
-        "model": model,
-        "cost_usd": round(meter.usd, 6),
-        "stopped": stopped,
-        "final_line": final[0][:300] if final else None,
-    }
+    usage = _usage(
+        meter, model, stopped=stopped, final_line=final[0][:300] if final else None
+    )
+    _write_usage(usage_path, usage)
+    return usage
 
 
 def main() -> int:
@@ -155,22 +182,16 @@ def main() -> int:
     usage_path = Path(os.environ["OPENADAPT_USAGE_PATH"])
     model = os.environ.get("OPENADAPT_CU_MODEL", DEFAULT_MODEL)
     base = page_url.split("#", 1)[0].split("?", 1)[0]
-    usage: dict[str, Any] = {"schema": "openadapt.agent-usage/v1", "calls": 0,
-                             "input_tokens": 0, "output_tokens": 0, "model": model,
-                             "cost_usd": 0.0}
-    try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.connect_over_cdp(cdp_url)
-            page = next(
-                (p for c in browser.contexts for p in c.pages if p.url.startswith(base)),
-                None,
-            )
-            if page is None:
-                print("the guarded tab was not found", file=sys.stderr)
-                return 3
-            usage = run_task(instruction, Screen(page), model=model)
-    finally:
-        usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True))
+    with sync_playwright() as pw:
+        browser = pw.chromium.connect_over_cdp(cdp_url)
+        page = next(
+            (p for c in browser.contexts for p in c.pages if p.url.startswith(base)),
+            None,
+        )
+        if page is None:
+            print("the guarded tab was not found", file=sys.stderr)
+            return 3
+        usage = run_task(instruction, Screen(page), model=model, usage_path=usage_path)
     print(json.dumps({k: usage.get(k) for k in ("calls", "cost_usd", "stopped")}))
     return 0
 

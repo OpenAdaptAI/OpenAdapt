@@ -34,7 +34,8 @@ mobile, account, acct, ssn, npi, code, number, num, no, ref, sku, iban,
 routing, card or member (``patient_id``, ``zipCode``, ``account_no``).
 Everything else compares as exact text after the whitespace trim, so
 ``02134`` is not ``2134`` and ``1e3`` is not ``1000``. Record fields
-(``expected_record``) always compare as exact text.
+(``expected_record``) never compare as numbers (the date rule and a codec
+still apply).
 
 Extra held writes. The hold keeps every write the agent sent
 (``held/<n>.json``). Any held write besides the proposed one (a second
@@ -123,19 +124,19 @@ def values_equal(
     codec: Any = None,
     *,
     name: Optional[str] = None,
-    exact: bool = False,
+    numbers: bool = True,
 ) -> bool:
     """Whether two field values are the same write (see the module docstring).
 
-    ``exact`` (record fields) compares the trimmed text only."""
+    ``numbers=False`` (record fields) never compares as decimals; the date
+    rule and a codec still apply."""
 
     left, right = _text(human), _text(proposed)
     if left == right:
         return True
-    if exact:
-        return False
     if (
-        not identifier_like(name)
+        numbers
+        and not identifier_like(name)
         and _AMOUNT.match(left)
         and _AMOUNT.match(right)
     ):
@@ -267,7 +268,9 @@ def compare_case(
     rows: list[dict[str, Any]] = []
     for name, value in expected.items():
         if name in got and got[name].get("parse") != "uncompared":
-            if not values_equal(value, got[name].get("value"), name=name, exact=True):
+            if not values_equal(
+                value, got[name].get("value"), codecs.get(name), name=name, numbers=False
+            ):
                 rows.append(
                     {
                         "name": name,
