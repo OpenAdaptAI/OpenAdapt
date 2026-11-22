@@ -58,6 +58,7 @@ __all__ = [
     "matching_records",
     "read_records",
     "read_sources_for",
+    "read_values_for",
     "write_sources",
 ]
 
@@ -430,6 +431,33 @@ def read_sources_for(run_dir: Path, request: Any) -> Optional[list[dict[str, Any
             }
         )
     return rows
+
+
+def read_values_for(run_dir: Path, request: Any) -> Optional[dict[str, Any]]:
+    """The card's ``values`` summary kept for exactly this request
+    (``read``, ``how``, ``screen_read``), or None."""
+
+    path = Path(run_dir) / SOURCES_FILENAME
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (
+        not isinstance(raw, dict)
+        or raw.get("schema") != SOURCES_SCHEMA
+        or raw.get("request_id") != request.request_id
+        or raw.get("request_sha256") != request.digest()
+        or not isinstance(raw.get("values"), dict)
+    ):
+        return None
+    values = raw["values"]
+    return {
+        "read": values.get("read") is True,
+        "how": str(values.get("how") or "")[:32],
+        "screen_read": values.get("screen_read") is True,
+    }
 
 
 def card_for_request(

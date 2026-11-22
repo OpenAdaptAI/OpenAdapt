@@ -1008,6 +1008,17 @@ function saveSources(presentation) {
   );
 }
 
+const UNCHECKED_EXPLANATION =
+  "OpenAdapt didn't confirm that these are the values this save will send, so they were not checked before saving. Compare the screen with what the task says before you approve.";
+
+// A Flow that doesn't say `values_checked: true` can't back an "exactly":
+// its wording is replaced whenever it claims one.
+function saveExplanation(presentation) {
+  const text = typeof presentation.explanation === "string" ? presentation.explanation : "";
+  if (presentation.values_checked !== true && (!text || /exactly/i.test(text))) return UNCHECKED_EXPLANATION;
+  return text || "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.";
+}
+
 // `presentation.provenance`: why an agent asked for this save. The agent's
 // reason is its own account and is shown as a quote, never as a finding.
 // Lines of what it saw that read like an instruction to an agent are shown
@@ -1065,14 +1076,13 @@ async function openSave(item) {
     step,
     question: presentation.question || "Save this?",
     why: String(presentation.step_intent || "").trim() || "OpenAdapt filled the form and stopped before saving.",
-    then:
-      presentation.explanation ||
-      "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.",
+    then: saveExplanation(presentation),
     fields: saveFields(presentation),
     sources: saveSources(presentation),
-    // Flow sets this false for an agent's save whose values it couldn't read
-    // from the held request; the card then never says "exactly".
-    exact: presentation.values_checked !== false,
+    // "Exactly what will be saved" only when Flow says the values were
+    // checked. An older Flow (Desktop pins 2.4.1) sends no values_checked:
+    // not checked, so the card never says "exactly" on its word alone.
+    exact: presentation.values_checked === true,
     provenance: saveProvenance(presentation),
     frameUrl: null,
     frameOk: false,

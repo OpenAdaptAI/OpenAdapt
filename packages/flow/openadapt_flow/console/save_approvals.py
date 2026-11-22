@@ -261,11 +261,20 @@ def save_approval_task(
 GUARDED_SAVE_WORKFLOW = "guarded-save"
 
 
-def _guarded_wording(presentation: dict[str, Any], request: Any) -> None:
-    from openadapt_flow.agent_guard.approval_fields import NOT_READ
+def _guarded_wording(presentation: dict[str, Any], request: Any, run_dir: Path) -> None:
+    from openadapt_flow.agent_guard.approval_fields import NOT_READ, read_values_for
 
     fields = list(request.fields or [])
-    checked = bool(fields) and all(f.after != NOT_READ for f in fields)
+    # Every field shown was read from the held request, and the card kept
+    # none out (a task over the field cap): the sources file, bound to this
+    # request's digest, says so. A missing or other file: not checked.
+    values = read_values_for(run_dir, request)
+    checked = (
+        bool(fields)
+        and all(f.after != NOT_READ for f in fields)
+        and values is not None
+        and values.get("read") is True
+    )
     presentation["values_checked"] = checked
     if checked:
         presentation["explanation"] = (
@@ -340,7 +349,10 @@ def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
         # An agent's save the guard holds. The card says "exactly" only when
         # every value came from the held request (request.fields, inside the
         # digest); otherwise it says plainly they were not read or checked.
-        _guarded_wording(presentation, request)
+        _guarded_wording(presentation, request, run_dir)
+    elif request.workflow_name != LEDGER_QUESTION_WORKFLOW:
+        # A compiled program's own save: the form it filled is the save.
+        presentation["values_checked"] = True
     if request.workflow_name == LEDGER_QUESTION_WORKFLOW:
         # An agent's question from its task ledger, not a save. Approve is
         # yes and decline is no; the answer saves nothing in any app.

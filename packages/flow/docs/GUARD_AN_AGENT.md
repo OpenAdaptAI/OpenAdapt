@@ -142,8 +142,10 @@ that paused them goes away.
 ## The approval card
 
 With `approval: each_item`, or when a second reading of the source doesn't
-confirm a value, the save waits for a person. The card they answer (Desktop
-or the paired phone) lists every field the task writes:
+confirm a value, the save waits for a person. They answer it in Desktop or on
+the paired phone. The phone card lists every field the task writes, in these
+columns; Desktop's own window shows the screenshot and the step's
+description (which says when values were not read or checked):
 
 | Column | Where it comes from |
 |---|---|
@@ -163,14 +165,16 @@ save is held, beside the task's values. If no value could be read and there
 is no readable screenshot, no card is offered at all, so nobody can approve
 what nobody could see: the guard blocks the save with `values_unread` and the
 run ends `ESCALATED` for a person to check the record. It says "exactly what will be saved" only when every value came
-from the held request. With a `write_adapter`, a save whose values differ
+from the held request and the card left no field out (a task with more fields
+than the card holds is never "checked"). With a `write_adapter`, a save whose values differ
 from the task's is blocked before any card is shown. Either way, the read-back
 after the save still catches a value that differs.
 
 The Now and Saved values are in the approval request and its digest, so the
 person's answer covers exactly them. The source column is kept beside the
 request in `approval_sources.json` (mode 0600), bound to the request's digest.
-None of these values leave the computer: they aren't in a notification, the
+The values go to the paired phone that shows the card, through the decision
+portal on this computer, and nowhere else: they aren't in a notification, the
 run report, or anything Cloud receives.
 
 Turn the values off with `approval_fields: false`; the card then shows the

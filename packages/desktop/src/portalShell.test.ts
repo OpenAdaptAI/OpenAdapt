@@ -375,6 +375,22 @@ describe("the card shows what will be saved", () => {
     expect(q("#evidence")!.classList).toContain("big");
   });
 
+  it("an older Flow that sends no values_checked never gets an exactly", async () => {
+    // The shape Flow 2.4.1's console sends (Desktop 0.31.0 pins it): no
+    // values_checked, no sources, and its own "exactly" explanation.
+    onlySave(
+      saveDetail({
+        presentation: {
+          explanation:
+            "This is exactly what OpenAdapt will save. Before it saves, it reads the form again; if anything changed, it stops and asks again.",
+        },
+      }),
+    );
+    await boot();
+    expect(q("#card")!.textContent!).not.toMatch(/exactly/i);
+    expect(q("#card")!.textContent!).toContain("were not checked before saving");
+  });
+
   it("an agent's save whose values Flow couldn't read never says exactly", async () => {
     onlySave(
       saveDetail({

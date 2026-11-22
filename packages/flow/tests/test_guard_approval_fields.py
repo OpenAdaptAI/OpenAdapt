@@ -311,3 +311,34 @@ def test_the_page_read_skips_controls_that_are_not_rendered() -> None:
     assert controls is not None
     assert [c["value"] for c in controls if c["visible"]] == ["seen"]
     assert match_fields(controls, ["note", "dob"]) == {"note": "seen"}
+
+
+@pytest.mark.parametrize("count,checked", [(1, True), (25, False)])
+def test_values_checked_only_when_the_card_left_no_field_out(
+    sor, tmp_path: Path, count: int, checked: bool
+) -> None:
+    """A task over the card's field cap never reads as checked, even when
+    every field the card shows came from the held request."""
+
+    from openadapt_flow.approval_mode.item_approval import MAX_SAVE_FIELDS
+    from openadapt_flow.console.save_approvals import (
+        list_save_approvals,
+        save_approval_detail,
+    )
+
+    assert MAX_SAVE_FIELDS < 25
+    fields = {"note": NOTE, **{f"extra{i:02d}": "x" for i in range(count - 1)}}
+    task = GuardTask(
+        task_id=f"card-cap-{count:04d}",
+        expected_record={"patient_id": "p1"},
+        intended_fields=fields,
+    )
+    cfg = parse_verify_config(verify_yaml(sor[0]))
+    guarded = GuardedSave(cfg, tmp_path / "g")
+    guard = guarded.begin(task, screen_text=FakeAgent(sor[0]).open_chart("p1"))
+    guard.approval_card = build_card(task, cfg, claim_fields=dict(fields))
+    guard.commit(screenshot_png=tiny_png())
+    [row] = list_save_approvals(tmp_path)
+    shown = save_approval_detail(tmp_path, row.request_id)["presentation"]
+    assert shown["values_checked"] is checked
+    assert ("exactly" in shown["explanation"].lower()) is False
