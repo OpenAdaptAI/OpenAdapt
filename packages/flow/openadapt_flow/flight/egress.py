@@ -192,14 +192,17 @@ class ScrubbedEgress:
         scrubber: Any = None,
         loopback_ports: Optional[Sequence[int]] = None,
         usage_path: Optional[Path] = None,
+        use_block: bool = True,
     ) -> None:
         """The J7 arguments, plus keyword-only extras for ``openadapt-flow
         flight``: ``gate`` (the pre-commit gate the proxy answers for
         :class:`~openadapt_flow.flight.computer.GatedComputer`), ``timeline``
         (record into this Timeline instead of ``run_dir/egress/``),
         ``scrub=False`` with a ``scrubber`` of None (the CLI's recorded
-        ``--no-scrub`` opt-out; mode ``"unscrubbed"``), ``loopback_ports``
-        and ``usage_path`` (default ``run_dir/usage.json``)."""
+        ``--no-scrub`` opt-out; mode ``"unscrubbed"``), ``scrubber`` (an
+        already checked provider), ``loopback_ports``, ``usage_path``
+        (default ``run_dir/usage.json``) and ``use_block=False`` (don't use
+        the OS block even where it works; needs ``allow_unenforced``)."""
         if spend_cap_usd is not None and spend_cap_usd < 0:
             raise ValueError("spend_cap_usd must be zero or more")
         self.run_dir = Path(run_dir)
@@ -212,6 +215,7 @@ class ScrubbedEgress:
         self.usage_path = (
             Path(usage_path) if usage_path else self.run_dir / "usage.json"
         )
+        self.use_block = use_block
         self._timeline = timeline
         self._scrubber = scrubber
         self._proxy: Any = None
@@ -236,7 +240,10 @@ class ScrubbedEgress:
                     f"nothing was started: {exc}. Screenshots and text can't be "
                     "scrubbed before they are sent."
                 ) from None
-        ok, why = egress_block_available()
+        if self.use_block:
+            ok, why = egress_block_available()
+        else:
+            ok, why = False, "turned off by the caller"
         if not ok and not self.allow_unenforced:
             raise EgressRefused(
                 f"nothing was started: the OS egress block is not available ({why}), "

@@ -17,14 +17,28 @@ target it can't read) for a person: --gate terminal asks y/N on this
 terminal, --gate file writes an item-approval request Desktop or a paired
 phone answers, --gate refuse holds every one.
 
+CMD runs under an OS egress block (openadapt_flow.flight.egress): on macOS,
+sandbox-exec denies every outbound connection except to loopback, so a model
+call that skips the proxy can't leave the machine; everything CMD starts
+(a browser included) reaches loopback only. Where the block isn't available
+(any other system) the run refuses to start unless --allow-unenforced-egress
+is given; --no-egress-block turns it off on macOS too. Either is recorded in
+flight.json and egress.json.
+
+The run is marked refused (exit 3, flight.json details.egress.refused) when
+model calls went around the proxy: CMD's usage.json (OPENADAPT_USAGE_PATH,
+openadapt.agent-usage/v1) reports more calls than the proxy saw, or a direct
+connection through the proxy variables was trapped.
+
 With --cdp (or when CMD starts Chromium with --remote-debugging-port), the
 existing `openadapt-flow guard` also attaches to the browser, given
 --guard-config and --guard-task.
 
-Writes flight.json (openadapt.flight-run/v1), timeline.jsonl, scrubbed frame
-thumbnails and timeline.html in the run directory, and prints its path.
-Exit status: CMD's own; 2 when the run could not start (no scrubber, a bad
-option, CMD not found).
+Writes flight.json (openadapt.flight-run/v1), egress.json, timeline.jsonl,
+scrubbed frame thumbnails and timeline.html in the run directory, and prints
+its path. Exit status: CMD's own; 3 when the run is refused for egress
+outside the proxy; 2 when the run could not start (no scrubber, no egress
+block, a bad option, CMD not found).
 """
 
 from __future__ import annotations
@@ -100,6 +114,18 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="confirm --no-scrub; recorded in flight.json and the local ledger",
     )
+    p.add_argument(
+        "--allow-unenforced-egress",
+        action="store_true",
+        help="run even where the OS egress block is not available (any system but "
+        "macOS); a call that skips the proxy is then not blocked. Recorded",
+    )
+    p.add_argument(
+        "--no-egress-block",
+        action="store_true",
+        help="don't put CMD under the OS egress block even where it is available "
+        "(the behaviour before the block); recorded",
+    )
     p.add_argument("--json", action="store_true", help="print flight.json")
     p.add_argument("command", nargs=argparse.REMAINDER, help="-- CMD ...")
     p.set_defaults(func=cmd_flight)
@@ -146,8 +172,8 @@ def _upstreams() -> dict[str, str]:
 
 
 def cmd_flight(args: argparse.Namespace) -> int:
+    from openadapt_flow.flight.egress import EgressRefused, ScrubbedEgress
     from openadapt_flow.flight.gate import FileGate, RefuseGate, TerminalGate
-    from openadapt_flow.flight.proxy import FlightProxy
     from openadapt_flow.flight.timeline import Timeline
 
     command = list(args.command or [])
@@ -174,19 +200,17 @@ def cmd_flight(args: argparse.Namespace) -> int:
         scrub_record: dict[str, Any] = {"mode": "off", "reason": reason}
         scrub_image = scrub_text = None
     else:
-        from openadapt_flow.privacy import (
-            get_scrubber,
-            scrub_outbound_image,
-            scrub_outbound_text,
-        )
+        from openadapt_flow.flight.scrub import ScrubberUnavailable, require_scrubber
+        from openadapt_flow.privacy import scrub_outbound_image, scrub_outbound_text
 
-        scrubber = get_scrubber()
-        if scrubber is None:
+        try:
+            scrubber = require_scrubber()
+        except ScrubberUnavailable as exc:
             return _err(
-                "openadapt-privacy is not installed, so screenshots can't be scrubbed "
-                "before they are sent; nothing was started. Install it with "
-                "pip install 'openadapt-flow[privacy]' and python -m spacy download "
-                "en_core_web_sm."
+                f"{exc}, so screenshots and text can't be scrubbed before they are "
+                "sent; nothing was started. Install it with pip install "
+                "'openadapt-flow[privacy]', python -m spacy download en_core_web_sm "
+                "and tesseract."
             )
         scrub_record = {"mode": "on", "provider": type(scrubber).__name__}
 
@@ -230,19 +254,51 @@ def cmd_flight(args: argparse.Namespace) -> int:
     else:
         gate = TerminalGate()
 
+    no_block = bool(getattr(args, "no_egress_block", False))
+    allow_unenforced = no_block or bool(getattr(args, "allow_unenforced_egress", False))
+    usage_path = run_dir / "usage.json"
+    egress = ScrubbedEgress(
+        run_dir,
+        spend_cap_usd=args.max_cost_usd,
+        allow_unenforced=allow_unenforced,
+        upstreams=_upstreams(),
+        gate=gate,
+        timeline=timeline,
+        scrub=not args.no_scrub,
+        scrubber=scrubber,
+        usage_path=usage_path,
+        use_block=not no_block,
+    )
     try:
-        proxy = FlightProxy(
-            timeline,
-            upstreams=_upstreams(),
-            scrubber=scrubber,
-            scrub=not args.no_scrub,
-            max_cost_usd=args.max_cost_usd,
-            gate=gate,
-        ).start()
-    except ValueError as exc:
+        egress.__enter__()
+    except (EgressRefused, ValueError) as exc:
         return _err(str(exc))
+    proxy = egress.proxy
+    egress_record: dict[str, Any] = {
+        "enforced": egress.enforced,
+        "block": "sandbox-exec" if egress.enforced else None,
+        "unenforced_reason": egress.unenforced_reason or None,
+        "opt_out": (
+            "--no-egress-block"
+            if no_block
+            else ("--allow-unenforced-egress" if not egress.enforced else None)
+        ),
+    }
+    if not egress.enforced:
+        print(
+            "[openadapt flight] the agent runs without an OS egress block "
+            f"({egress.unenforced_reason}): a model call that skips the proxy is "
+            "not blocked",
+            file=sys.stderr,
+        )
+    command = egress.wrap(command)
 
-    env = {**os.environ, **proxy.child_env(), "OPENADAPT_FLIGHT_RUN_DIR": str(run_dir)}
+    env = {
+        **os.environ,
+        **egress.env,
+        "OPENADAPT_FLIGHT_RUN_DIR": str(run_dir),
+        "OPENADAPT_USAGE_PATH": str(usage_path),
+    }
     guard_proc: Optional[subprocess.Popen[bytes]] = None
     guard_info: dict[str, Any] = {"cdp": cdp, "started": False}
     if want_guard:
@@ -307,11 +363,24 @@ def cmd_flight(args: argparse.Namespace) -> int:
             except subprocess.TimeoutExpired:
                 guard_proc.kill()
                 guard_info["exit_code"] = guard_proc.wait()
-        proxy.stop()
-        timeline.record("run_ended", exit_code=exit_code)
+        egress.finish()
+        final_code = 3 if egress.refusal is not None else exit_code
+        egress_record.update(
+            {
+                "summary": egress.summary(),
+                "checks": egress.checks,
+                "refused": egress.refusal is not None,
+                "refusal": egress.refusal,
+            }
+        )
+        timeline.record(
+            "run_ended", exit_code=exit_code, egress_refused=egress.refusal is not None
+        )
         summary = timeline.finish(
             details={
-                "exit_code": exit_code,
+                "exit_code": final_code,
+                "agent_exit_code": exit_code,
+                "egress": egress_record,
                 "gate": args.gate,
                 "guard": guard_info,
                 "spend_cap_usd": args.max_cost_usd,
@@ -321,7 +390,14 @@ def cmd_flight(args: argparse.Namespace) -> int:
             }
         )
 
-    if summary["model"]["calls"] == 0:
+    if egress.refusal is not None:
+        print(
+            f"[openadapt flight] refused: {egress.refusal}. The run is marked "
+            "refused in flight.json.",
+            file=sys.stderr,
+        )
+        exit_code = final_code
+    elif summary["model"]["calls"] == 0:
         print(
             "[openadapt flight] no model call came through the proxy: does the agent "
             "read ANTHROPIC_BASE_URL / OPENAI_BASE_URL?",

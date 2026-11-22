@@ -32,8 +32,9 @@ PLANTED = "Zyxwv Qtest"
 
 
 class _Scrubber:
+    # Also scrubs the name in the start-up probe (require_scrubber).
     def scrub_text(self, text, is_separated=False):
-        return text.replace(PLANTED, "<PERSON>")
+        return text.replace(PLANTED, "<PERSON>").replace("John Smith", "<PERSON>")
 
     def scrub_image(self, image, fill_color=None):
         return image  # the screenshots carry no planted value
@@ -121,6 +122,10 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
             max_cost_usd=None,
             no_scrub=False,
             i_accept_unscrubbed=False,
+            # macOS runs the agent under the sandbox-exec egress block; other
+            # systems have none and must opt out to run at all.
+            allow_unenforced_egress=sys.platform != "darwin",
+            no_egress_block=False,
             json=False,
         )
         code = cmd_flight(args)
@@ -140,6 +145,10 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     summary = json.loads((run_dir / "flight.json").read_text())
     assert validate_flight(summary) == []
     assert summary["task_id"] == "mockmed-triage-1"
+    egress = summary["details"]["egress"]
+    assert egress["enforced"] is (sys.platform == "darwin")
+    assert egress["refused"] is False
+    assert json.loads((run_dir / "egress.json").read_text())["mode"] == "scrubbed"
     calls = len(script)
     assert summary["model"]["calls"] == calls
     assert summary["model"]["input_tokens"] == calls * ANTHROPIC_USAGE["input_tokens"]
