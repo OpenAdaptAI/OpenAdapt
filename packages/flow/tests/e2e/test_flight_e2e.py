@@ -196,6 +196,12 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     assert len(requests) == 1
     page = (run_dir / "timeline.html").read_text()
     assert "held" in page
+    # The run's token map holds the real value by design: local, owner-only,
+    # never forwarded. Nothing else in the run directory does.
+    pseudonyms = run_dir / "pseudonyms.json"
+    assert (pseudonyms.stat().st_mode & 0o777) == 0o600
     for path in run_dir.rglob("*"):
+        if path == pseudonyms:
+            continue
         if path.is_file() and path.suffix in (".json", ".jsonl", ".html"):
             assert PLANTED not in path.read_text("utf-8")

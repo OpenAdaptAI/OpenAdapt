@@ -34,7 +34,16 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from corpus import LONG_PREAMBLE, build, render_form  # noqa: E402
+from corpus import (  # noqa: E402
+    LONG_PREAMBLE,
+    REASONS,
+    UI_WORDS,
+    Record,
+    build,
+    render_form,
+    ui_instruction,
+    ui_screen,
+)
 
 FIELDS = ("name", "dob", "mrn", "phone", "address")
 
@@ -86,11 +95,18 @@ def _ocr(png: bytes) -> str:
 
 
 def run(seed: int, count: int) -> dict[str, Any]:
+    from openadapt_flow.flight.pseudonym import Pseudonyms
     from openadapt_flow.flight.scrub import Scrub, require_scrubber
     from openadapt_flow.privacy import scrub_outbound_image, scrub_outbound_text
 
     scrubber = require_scrubber()
-    flight = Scrub(scrubber)
+    base = Scrub(scrubber)
+
+    def fresh() -> Scrub:
+        """A new run's scrubber (its own token map), sharing the NER memo."""
+        scrub = Scrub(scrubber, pseudonyms=Pseudonyms())
+        scrub._ner = base._ner
+        return scrub
 
     def presidio_text(t: str) -> str:
         return scrub_outbound_text(t, scrubber) or ""
@@ -110,11 +126,11 @@ def run(seed: int, count: int) -> dict[str, Any]:
         ),
         "flight": (
             {
-                "text": lambda t: _through_proxy(t, flight),
-                "text_message": lambda t: _as_message(t, flight),
-                "text_long": lambda t: _as_message(LONG_PREAMBLE + t, flight),
+                "text": lambda t: _through_proxy(t, fresh()),
+                "text_message": lambda t: _as_message(t, fresh()),
+                "text_long": lambda t: _as_message(LONG_PREAMBLE + t, fresh()),
             },
-            lambda png: flight.image(png)[0],
+            lambda png: fresh().image(png)[0],
         ),
     }
     corpus = build(seed, count)
@@ -165,7 +181,9 @@ def run(seed: int, count: int) -> dict[str, Any]:
                 "recall": round((total - missed) / total, 4) if total else None,
             }
         results[name] = stats
+    precision = _precision(corpus, configs, scrubber, fresh)
     return {
+        "precision": precision,
         "schema": "openadapt.flight-scrub-recall/v1",
         "seed": seed,
         "records": count,
@@ -177,6 +195,72 @@ def run(seed: int, count: int) -> dict[str, Any]:
         "seconds": round(time.time() - started, 1),
         "configs": results,
     }
+
+
+def _words_kept(words: list[str], text: str) -> list[str]:
+    found = set(re.findall(r"[a-z0-9-]+", text.lower()))
+    return [w for w in words if w.lower() in found]
+
+
+def _precision(
+    corpus: list[dict[str, Any]], configs: dict[str, Any], scrubber: Any, fresh: Any
+) -> dict[str, Any]:
+    """How much that is not personal data stays readable.
+
+    For the first 20 records: a work-list screenshot (app name, navigation,
+    headers, the patient's row with a referral reason and a priority) and a
+    task instruction naming the patient. Counted: the non-PHI words
+    tesseract reads on the original screen (UI_WORDS and the reason's
+    words), and the fraction of them it still reads after scrubbing; the
+    instruction's non-PHI words, and the fraction kept. The patient's name
+    and record number on the same screen are counted too.
+    """
+    out: dict[str, Any] = {}
+    items = corpus[:20]
+    for name, (text_fns, image_fn) in configs.items():
+        screen = {"ui_words": 0, "kept": 0, "phi": 0, "phi_hidden": 0}
+        text = {"words": 0, "kept": 0, "phi": 0, "phi_hidden": 0}
+        lost: dict[str, int] = {}
+        for i, item in enumerate(items):
+            record = Record(**item["record"])
+            reason = REASONS[i % len(REASONS)]
+            ui = UI_WORDS + reason.split()
+            png = ui_screen(record, reason)
+            before = _ocr(png)
+            readable = _words_kept(ui, before)
+            after = _ocr(image_fn(png))
+            kept = _words_kept(readable, after)
+            screen["ui_words"] += len(readable)
+            screen["kept"] += len(kept)
+            for w in set(readable) - set(kept):
+                lost[w] = lost.get(w, 0) + 1
+            for field in ("name", "mrn"):
+                if leaked(field, item["record"][field], before):
+                    screen["phi"] += 1
+                    screen["phi_hidden"] += not leaked(
+                        field, item["record"][field], after
+                    )
+            instruction = ui_instruction(record, reason)
+            plain = [
+                w
+                for w in re.findall(r"[A-Za-z-]+", instruction)
+                if w not in record.name.split() and w != "MRN"
+            ]
+            scrubbed = text_fns["text_message"](instruction)
+            text["words"] += len(plain)
+            text["kept"] += len(_words_kept(plain, scrubbed))
+            for field in ("name", "mrn"):
+                text["phi"] += 1
+                text["phi_hidden"] += not leaked(field, item["record"][field], scrubbed)
+        for part in (screen, text):
+            total = part.get("ui_words", part.get("words"))
+            part["kept_fraction"] = round(part["kept"] / total, 4) if total else None
+        out[name] = {
+            "screen": screen,
+            "instruction": text,
+            "screen_words_lost": dict(sorted(lost.items())),
+        }
+    return out
 
 
 def render_form_from(item: dict[str, Any]) -> bytes:
@@ -196,6 +280,7 @@ def main() -> None:
     Path(args.out).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     for name, stats in data["configs"].items():
         print(name, {k: v for k, v in stats.items() if k.endswith("_recall")})
+        print("  precision", json.dumps(data["precision"][name]))
 
 
 if __name__ == "__main__":

@@ -22,24 +22,32 @@ so they stay valid JSON. The content list of a tool result is a list of
 protocol blocks (text, image), walked like message content. Numbers of five
 or more digits anywhere outside the request settings become ``"<ID>"``.
 
-Each string goes through two passes:
+Each string is handled in three steps:
 
 1. URLs are cut to their origin (``https://emr.example/<path removed>``):
    record ids and names in paths and query strings are not left to NER.
-2. The deterministic patterns in :data:`PATTERNS` (dates, phone numbers,
-   e-mail, street addresses, numbers of five or more digits, and values
-   after a ``Name:``/``MRN:``/``DOB:`` style label); then the
-   openadapt-privacy text scrubber (Presidio) on the whole string, then
-   again on each line, sentence and quoted string separately (it misses
-   names in long text that it finds in the same sentence alone); then the
-   patterns again.
+2. Personal values are found (:func:`detect`): values already in the run's
+   token map, the deterministic patterns in :data:`PATTERNS` (dates, phone
+   numbers, e-mail, street addresses, numbers of five or more digits, and
+   values after a ``Name:``/``MRN:``/``DOB:`` style label), and the
+   openadapt-privacy text scrubber (Presidio) on the whole string and again
+   on each line, sentence and quoted string (it misses names in long text
+   that it finds in the same sentence alone). Presidio's ORGANIZATION and
+   NRP hits are not identifiers and are left alone, unless Presidio asked
+   about the same words alone names an identifier; a DATE_TIME with no
+   digit ("today") too.
+3. Each value is replaced with its run token (``[PERSON_1]``, see
+   :mod:`openadapt_flow.flight.pseudonym`), or with a bare ``<PERSON>``
+   placeholder when there is no token map.
 
 Images (Anthropic base64 ``image`` blocks, ``data:image/...`` URLs) are
-always redacted with openadapt-privacy image redaction, then OCR'd with
-tesseract: each OCR line goes through the patterns and the text scrubber, and
-every word either of them removes is painted over too. An image by
-remote URL, a file input, a document that is not plain text, a string the
-scrubber returns no text for, or any scrubber error raises
+OCR'd with tesseract. Each OCR line, split into table cells at wide gaps,
+goes through the same detection (without the whole-screen pass: NER over a
+screen's lines joined together tags menu and header words as a person), and
+each value is painted over with its token written in the box, so a name has
+the same token in the instructions and on screen. An image by remote URL, a
+file input, a document that is not plain text, a string the scrubber
+returns no text for, or any scrubber or OCR error raises
 :class:`ScrubRefused`, and the caller must not send the request.
 
 :func:`require_scrubber` probes all of this once (the provider, its spaCy
@@ -197,17 +205,236 @@ def _apply_patterns(text: str) -> str:
     return text
 
 
-def _pattern_spans(text: str) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
-    for _placeholder, pattern in PATTERNS:
+#: Token kind for each pattern placeholder.
+_PATTERN_KINDS = {
+    "<EMAIL>": "EMAIL",
+    "<ADDRESS>": "ADDRESS",
+    "<DATE>": "DATE",
+    "<PHONE>": "PHONE",
+    "<ID>": "ID",
+}
+#: Token kind for the value after a label, by the label's first word.
+_LABEL_KINDS = (
+    (re.compile(r"(?i)^(patient(\s+name)?|name|pt)\b"), "PERSON"),
+    (re.compile(r"(?i)^(dob|date\s+of\s+birth|birth\s*date)\b"), "DATE"),
+    (re.compile(r"(?i)^(phone|tel|mobile)\b"), "PHONE"),
+    (re.compile(r"(?i)^(address|addr)\b"), "ADDRESS"),
+    (re.compile(r"(?i)^e-?mail\b"), "EMAIL"),
+)
+#: Presidio entity types and the token kind each becomes. A type not listed
+#: becomes ID (fail closed); the types in _NER_DROP are not identifiers.
+_NER_KINDS = {
+    "PERSON": "PERSON",
+    "DATE_TIME": "DATE",
+    "PHONE_NUMBER": "PHONE",
+    "EMAIL_ADDRESS": "EMAIL",
+    "LOCATION": "LOCATION",
+    "URL": "URL",
+    "AGE": "AGE",
+}
+#: Presidio types that are not one of HIPAA's 18 identifiers and that hit
+#: app names, headers and ordinary words ("DONE", "Triage"): not redacted,
+#: unless a deterministic pattern matches the same text, or NER asked about
+#: the same words alone names an identifier (a name it read in a sentence
+#: as an organisation).
+_NER_DROP = {"ORGANIZATION", "NRP"}
+Span = tuple[int, int, str]
+
+
+def _pattern_spans(text: str) -> list[Span]:
+    """(start, end, kind) for every pattern match outside URLs."""
+    spans: list[Span] = []
+    for placeholder, pattern in PATTERNS:
         for m in pattern.finditer(text):
             if "value" in pattern.groupindex:
-                spans.append((m.start("value"), m.end("value")))
+                label = m.group(0)[: m.start("value") - m.start()]
+                kind = next(
+                    (k for rx, k in _LABEL_KINDS if rx.match(label.strip())), "ID"
+                )
+                spans.append((m.start("value"), m.end("value"), kind))
             else:
-                spans.append((m.start(), m.end()))
-    for m in _URL.finditer(text):
-        spans.append((m.start(), m.end()))
+                spans.append((m.start(), m.end(), _PATTERN_KINDS[placeholder]))
     return spans
+
+
+_WORDISH = re.compile(r"\w+|\s+|[^\w\s]")
+
+
+def ner_spans(
+    text: str, scrubbed: str, dropped: Optional[list[tuple[int, int]]] = None
+) -> list[Span]:
+    """Where the NER scrubber replaced text, and the kind it named.
+
+    ``scrubbed`` is the scrubber's output for ``text``, with ``<TYPE>``
+    placeholders. The two are aligned word by word; every original run the
+    scrubber replaced or deleted is a span. A run it replaced only with a
+    type in _NER_DROP is left out (and added to ``dropped``), and a
+    DATE_TIME with no digit ("today") too.
+    """
+    import difflib
+
+    a = [(m.start(), m.end(), m.group(0)) for m in _WORDISH.finditer(text)]
+    b = [m.group(0) for m in _WORDISH.finditer(scrubbed)]
+    matcher = difflib.SequenceMatcher(None, [t for _, _, t in a], b, autojunk=False)
+    spans: list[Span] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag not in ("replace", "delete") or i1 == i2:
+            continue
+        start, end = a[i1][0], a[i2 - 1][1]
+        while start < end and text[start].isspace():
+            start += 1
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        if start >= end:
+            continue
+        types = _PLACEHOLDER.findall("".join(b[j1:j2]))
+        types = [t[1:-1] for t in types]
+        kept = [t for t in types if t not in _NER_DROP]
+        if types and not kept:
+            if dropped is not None:
+                dropped.append((start, end))
+            continue
+        kind = _NER_KINDS.get(kept[0], "ID") if kept else "ID"
+        value = text[start:end]
+        if kind == "DATE" and not any(ch.isdigit() for ch in value):
+            continue
+        spans.append((start, end, kind))
+    return spans
+
+
+#: Longest piece of text sent to the NER scrubber in one call.
+_CHUNK_MAX = 200
+#: A JSON-style quoted string inside text: its value is scrubbed alone.
+_QUOTED = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+_PLACEHOLDER = re.compile(r"<[A-Z_]+>")
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+#: Text no detector may touch: tokens, placeholders, cut URL paths.
+_PROTECTED = re.compile(r"\[[A-Z]+_\d+\]|<[A-Z_]+>|<path removed>")
+
+
+def piece_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each line, sentence and quoted string of ``text``,
+    each at most _CHUNK_MAX characters (cut at a space)."""
+    out: list[tuple[int, int]] = []
+
+    def add(start: int, end: int) -> None:
+        while end - start > _CHUNK_MAX:
+            cut = text.rfind(" ", start, start + _CHUNK_MAX)
+            cut = cut if cut > start else start + _CHUNK_MAX
+            out.append((start, cut))
+            start = cut
+        if end > start:
+            out.append((start, end))
+
+    for line in re.finditer(r"[^\n]+", text):
+        ls, le = line.span()
+        add(ls, le)
+        last = ls
+        for m in _SENTENCE_END.finditer(text, ls, le):
+            add(last, m.start())
+            last = m.end()
+        if last != ls:
+            add(last, le)
+        for m in _QUOTED.finditer(text, ls, le):
+            add(m.start(1), m.end(1))
+    return out
+
+
+def detect(
+    text: str,
+    ner: Callable[[str], Any],
+    known: Callable[[str], list[Span]],
+    *,
+    whole: bool = True,
+) -> list[Span]:
+    """Every personal value in ``text`` as merged (start, end, kind) spans.
+
+    Values already in the run's map (``known``), the deterministic
+    patterns, NER on the whole string and NER on each line, sentence and
+    quoted string (Presidio can miss a name in a long prompt that it finds
+    in the same sentence alone). ``whole=False`` skips the whole-string
+    pass: for a screenshot's OCR text, lines joined by newlines are no
+    sentence, and NER over all of them tags runs of menu and header words as
+    one person. Raises ScrubRefused when ``ner`` returns no text.
+    """
+    found: list[tuple[int, int, str, int]] = []
+    for s, e, k in known(text):
+        found.append((s, e, k, 0))
+    for s, e, k in _pattern_spans(text):
+        found.append((s, e, k, 1))
+    for m in _URL.finditer(text):
+        # A URL in a screenshot (an address bar): its path and query can
+        # carry record ids and names. Request text has its URLs cut first.
+        cut = _cut_url(m)
+        if cut != m.group(0):
+            origin = cut.split("/<path removed>")[0]
+            found.append((m.start() + len(origin), m.end(), "URL", 1))
+    pieces = [p for p in piece_spans(text) if p != (0, len(text))]
+    if whole:
+        pieces.insert(0, (0, len(text)))
+    elif "\n" not in text:
+        pieces.insert(0, (0, len(text)))
+    for ps, pe in pieces:
+        piece = text[ps:pe]
+        if not any(ch.isalpha() for ch in piece):
+            continue
+        out = ner(piece)
+        if not isinstance(out, str):
+            raise ScrubRefused("the text scrubber returned no text")
+        dropped: list[tuple[int, int]] = []
+        spans = ner_spans(piece, out, dropped)
+        for ds, de in dropped:
+            # NER reads a name in a sentence as an organisation as often as
+            # it reads a header as one. Asked again about the run alone, it
+            # names the person; a header stays an organisation or nothing.
+            alone = piece[ds:de]
+            again = ner(alone)
+            if not isinstance(again, str):
+                raise ScrubRefused("the text scrubber returned no text")
+            spans += [(ds + s, ds + e, k) for s, e, k in ner_spans(alone, again)]
+        for s, e, k in spans:
+            # An entity never runs across a line break.
+            for m in re.finditer(r"[^\n]+", piece[s:e]):
+                found.append((ps + s + m.start(), ps + s + m.end(), k, 2))
+    protected = [m.span() for m in _PROTECTED.finditer(text)]
+    found = [
+        f for f in found if not any(f[0] < pe and ps < f[1] for ps, pe in protected)
+    ]
+    # Higher-ranked spans (values already in the map, then patterns, then
+    # NER) are taken whole; a lower-ranked span keeps only the parts no
+    # taken span covers. Every detected character stays covered, and a
+    # known value keeps its own token even when NER reads it with a
+    # neighbouring word.
+    found.sort(key=lambda f: (f[3], -(f[1] - f[0]), f[0]))
+    taken: list[Span] = []
+    for s, e, k, _rank in found:
+        parts = [(s, e)]
+        for ts, te, _ in taken:
+            parts = [
+                piece
+                for ps, pe in parts
+                for piece in ((ps, min(pe, ts)), (max(ps, te), pe))
+                if piece[0] < piece[1]
+            ]
+        for ps, pe in parts:
+            while ps < pe and not text[ps].isalnum():
+                ps += 1
+            while pe > ps and not text[pe - 1].isalnum():
+                pe -= 1
+            if ps < pe:
+                taken.append((ps, pe, k))
+    return sorted(taken)
+
+
+def apply_spans(text: str, spans: list[Span], token: Callable[[str, str], str]) -> str:
+    out = []
+    last = 0
+    for s, e, k in spans:
+        out.append(text[last:s])
+        out.append(token(k, text[s:e]))
+        last = e
+    out.append(text[last:])
+    return "".join(out)
 
 
 OcrWords = Callable[[Any], Sequence[tuple[str, tuple[int, int, int, int], int]]]
@@ -228,164 +455,166 @@ def _tesseract_words(image: Any) -> list[tuple[str, tuple[int, int, int, int], i
     return out
 
 
-def redact_image_patterns(
+def _font(size: int) -> Any:
+    from PIL import ImageFont
+
+    for name in ("Arial.ttf", "DejaVuSans.ttf", "Helvetica.ttc"):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1
+        return ImageFont.load_default()
+
+
+def redact_image(
     png: bytes,
+    detect_text: Callable[[str], list[Span]],
+    token: Callable[[str, str], str],
     ocr_words: Optional[OcrWords] = None,
-    text_scrub: Optional[Callable[[str], str]] = None,
 ) -> bytes:
-    """``png`` with each OCR'd word inside a :data:`PATTERNS` match painted
-    over, and, given ``text_scrub``, each word the text scrubber removes from
-    its OCR line (a name the image redactor's own pass missed). OCR and
-    scrubber errors propagate (the caller refuses the send)."""
+    """``png`` with each detected value painted over and its token written
+    in the box. The image's OCR text (lines joined by newlines) goes through
+    the same detection as request text, so a value gets the same token in
+    both. OCR and detection errors propagate (the caller refuses the send).
+    """
     from PIL import Image, ImageDraw
 
     image = Image.open(io.BytesIO(png)).convert("RGB")
     words = list((ocr_words or _tesseract_words)(image))
-    lines: dict[int, list[tuple[str, tuple[int, int, int, int]]]] = {}
+    lines: dict[Any, list[tuple[str, tuple[int, int, int, int]]]] = {}
+    gaps: dict[Any, int] = {}
     for word, box, key in words:
-        lines.setdefault(key, []).append((word, box))
-    boxes: list[tuple[int, int, int, int]] = []
-    for line in lines.values():
-        text = ""
-        offsets = []
-        for word, box in line:
-            if text:
+        # A wide gap on one OCR line is a new table cell: NER reads each
+        # cell on its own, as a person reads the column.
+        line = lines.get((key, gaps.get(key, 0)))
+        if line:
+            px, _, pw, ph = line[-1][1]
+            if box[0] - (px + pw) > 2 * max(ph, box[3], 8):
+                gaps[key] = gaps.get(key, 0) + 1
+        lines.setdefault((key, gaps.get(key, 0)), []).append((word, box))
+    text = ""
+    offsets: list[tuple[int, int, tuple[int, int, int, int], int]] = []
+    for n, line in enumerate(lines.values()):
+        if text:
+            # Each table cell is a line of its own (see the gap split).
+            text += "\n"
+        for i, (word, box) in enumerate(line):
+            if i:
                 text += " "
-            offsets.append((len(text), len(text) + len(word), box))
+            offsets.append((len(text), len(text) + len(word), box, n))
             text += word
-        for start, end in _pattern_spans(text):
-            for w_start, w_end, box in offsets:
-                if w_start < end and start < w_end:
-                    boxes.append(box)
-        if text_scrub is not None:
-            kept = text_scrub(text)
-            if not isinstance(kept, str):
-                raise ScrubRefused("the text scrubber returned no text")
-            survivors = set(re.findall(r"\w+", kept))
-            for w_start, w_end, box in offsets:
-                if any(
-                    t not in survivors for t in re.findall(r"\w+", text[w_start:w_end])
-                ):
-                    boxes.append(box)
-    if not boxes:
+    if not text.strip():
+        return png
+    spans = detect_text(text)
+    if not spans:
         return png
     draw = ImageDraw.Draw(image)
-    for x, y, w, h in boxes:
-        draw.rectangle((x - 2, y - 2, x + w + 2, y + h + 2), fill=(0, 0, 0))
+    for s, e, kind in spans:
+        label = token(kind, text[s:e])
+        per_line: dict[int, list[int]] = {}
+        for w_start, w_end, (x, y, w, h), n in offsets:
+            if w_start < e and s < w_end:
+                cover = per_line.setdefault(n, [x, y, x + w, y + h])
+                cover[0], cover[1] = min(cover[0], x), min(cover[1], y)
+                cover[2], cover[3] = max(cover[2], x + w), max(cover[3], y + h)
+        for x0, y0, x1, y1 in per_line.values():
+            height = max(y1 - y0, 8)
+            font = _font(max(8, int(height * 0.9)))
+            tw = draw.textlength(label, font=font)
+            while tw > (x1 - x0) and font.size > 8:
+                font = _font(font.size - 1)
+                tw = draw.textlength(label, font=font)
+            # Cover the value whole; widen the box if the token is longer.
+            right = max(x1 + 3, int(x0 + tw + 6))
+            draw.rectangle((x0 - 3, y0 - 3, right, y1 + 3), fill=(235, 235, 235))
+            draw.text((x0, y0 - 1), label, fill=(0, 0, 0), font=font)
     out = io.BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()
 
 
-# -- chunked NER -------------------------------------------------------------
+def redact_image_patterns(
+    png: bytes,
+    ocr_words: Optional[OcrWords] = None,
+    text_scrub: Optional[Callable[[str], str]] = None,
+) -> bytes:
+    """:func:`redact_image` with the patterns and, given ``text_scrub``, NER;
+    values become bare ``<KIND>`` placeholders."""
 
-#: Longest piece of text sent to the NER scrubber in one call.
-_CHUNK_MAX = 200
-#: A JSON-style quoted string inside text: its value is scrubbed alone.
-_QUOTED = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
-_PLACEHOLDER = re.compile(r"<[A-Z_]+>")
-#: Entity types the piece-by-piece pass does not act on by itself.
-_CONTEXT_ONLY = {"<ORGANIZATION>"}
-_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+    def found(text: str) -> list[Span]:
+        if text_scrub is None:
+            return detect(text, lambda t: t, lambda t: [])
+        return detect(text, text_scrub, lambda t: [])
 
-
-def _pieces(line: str) -> list[tuple[str, bool]]:
-    """(piece, scrub it) for one line: quoted strings and sentences apart."""
-    out: list[tuple[str, bool]] = []
-    last = 0
-    for m in _QUOTED.finditer(line):
-        out.extend(_sentences(line[last : m.start()]))
-        out.append(('"', False))
-        out.append((m.group(1), True))
-        out.append(('"', False))
-        last = m.end()
-    out.extend(_sentences(line[last:]))
-    return out
-
-
-def _sentences(text: str) -> list[tuple[str, bool]]:
-    out: list[tuple[str, bool]] = []
-    last = 0
-    for m in _SENTENCE_END.finditer(text):
-        out.append((text[last : m.start()], True))
-        out.append((m.group(0), False))
-        last = m.end()
-    out.append((text[last:], True))
-    # A sentence longer than the limit is cut at word boundaries, with
-    # overlap-free pieces; NER still sees each word in some context.
-    split: list[tuple[str, bool]] = []
-    for piece, scrub in out:
-        while scrub and len(piece) > _CHUNK_MAX:
-            cut = piece.rfind(" ", 0, _CHUNK_MAX)
-            cut = cut if cut > 0 else _CHUNK_MAX
-            split.append((piece[:cut], True))
-            piece = piece[cut:]
-        split.append((piece, scrub))
-    return split
-
-
-def _ner_chunked(text: str, ner: Callable[[str], Optional[str]]) -> str:
-    """``text`` with ``ner`` run on each line, sentence and quoted string
-    separately; separators are kept. Raises ScrubRefused when ``ner``
-    returns no text."""
-    lines = text.split("\n")
-    out_lines = []
-    for line in lines:
-        parts = []
-        for piece, scrub in _pieces(line):
-            if scrub and any(ch.isalpha() for ch in piece):
-                cleaned = ner(piece)
-                if not isinstance(cleaned, str):
-                    raise ScrubRefused("the text scrubber returned no text")
-                added = set(_PLACEHOLDER.findall(cleaned)) - set(
-                    _PLACEHOLDER.findall(piece)
-                )
-                if added and added <= _CONTEXT_ONLY:
-                    # Out of context, NER calls a capitalised word ("DONE")
-                    # an organisation; that alone is left to the whole-string
-                    # pass, which sees the context.
-                    cleaned = piece
-                parts.append(cleaned)
-            else:
-                parts.append(piece)
-        out_lines.append("".join(parts))
-    return "\n".join(out_lines)
+    return redact_image(png, found, lambda k, v: f"<{k}>", ocr_words)
 
 
 # -- the scrubber ------------------------------------------------------------
 
 
 class Scrub:
-    """Memoised scrubbing of one run's strings and images (deterministic, so
-    the provider's prompt cache still matches across turns)."""
+    """Scrubbing of one run's strings and images, memoised (deterministic,
+    so the provider's prompt cache still matches across turns).
 
-    def __init__(self, scrubber: Any, *, ocr_words: Optional[OcrWords] = None) -> None:
+    With ``pseudonyms`` (:class:`openadapt_flow.flight.pseudonym.Pseudonyms`)
+    each value becomes its run token (``[PERSON_1]``); without, a bare
+    ``<PERSON>`` placeholder.
+    """
+
+    def __init__(
+        self,
+        scrubber: Any,
+        *,
+        ocr_words: Optional[OcrWords] = None,
+        pseudonyms: Any = None,
+    ) -> None:
+        from openadapt_flow.flight.pseudonym import Placeholders
+
         self.scrubber = scrubber
         self.ocr_words = ocr_words
+        self.pseudonyms = pseudonyms if pseudonyms is not None else Placeholders()
         self._images: OrderedDict[str, bytes] = OrderedDict()
         self._texts: OrderedDict[str, str] = OrderedDict()
+        self._ner: OrderedDict[str, str] = OrderedDict()
         self._lock = threading.Lock()
 
-    def text(self, value: str) -> str:
+    def ner(self, piece: str) -> Any:
         from openadapt_flow.privacy import scrub_outbound_text
 
+        with self._lock:
+            hit = self._ner.get(piece)
+        if hit is not None:
+            return hit
+        out = scrub_outbound_text(piece, self.scrubber)
+        if isinstance(out, str):
+            with self._lock:
+                self._ner[piece] = out
+                while len(self._ner) > 16384:
+                    self._ner.popitem(last=False)
+        return out
+
+    def detect(self, text: str) -> list[Span]:
+        return detect(text, self.ner, self.pseudonyms.known_spans)
+
+    def detect_screen(self, text: str) -> list[Span]:
+        return detect(text, self.ner, self.pseudonyms.known_spans, whole=False)
+
+    def token(self, kind: str, value: str) -> str:
+        return self.pseudonyms.token(kind, value)
+
+    def text(self, value: str) -> str:
         if not value or not value.strip():
             return value
         key = hashlib.sha256(value.encode("utf-8")).hexdigest()
         with self._lock:
             hit = self._texts.get(key)
-        if hit is not None:
+        if hit is not None and not self.pseudonyms.active:
             return hit
-        # Patterns first (NER can split a street number or a record
-        # number into a date and leave the rest), then NER on the whole
-        # string, then NER again on each line, sentence and quoted string
-        # (Presidio misses a name in a long prompt that it finds in the same
-        # sentence alone), then the patterns again on what NER left.
-        out = scrub_outbound_text(scrub_pattern_text(value), self.scrubber)
-        if not isinstance(out, str):
-            raise ScrubRefused("the text scrubber returned no text")
-        out = _ner_chunked(out, lambda t: scrub_outbound_text(t, self.scrubber))
-        out = scrub_pattern_text(out)
+        cut = scrub_urls(value)
+        out = apply_spans(cut, self.detect(cut), self.token)
         with self._lock:
             self._texts[key] = out
             while len(self._texts) > 8192:
@@ -395,8 +624,6 @@ class Scrub:
     def image(self, raw: bytes) -> tuple[bytes, bool]:
         """(scrubbed PNG, whether it is new this run)."""
         from PIL import Image
-
-        from openadapt_flow.privacy import scrub_outbound_image, scrub_outbound_text
 
         key = hashlib.sha256(raw).hexdigest()
         with self._lock:
@@ -408,11 +635,10 @@ class Scrub:
             before.load()
         except Exception as exc:  # noqa: BLE001 - undecodable: refuse
             raise ScrubRefused(f"an image could not be decoded ({type(exc).__name__})")
-        out = scrub_outbound_image(raw, self.scrubber)
-        out = redact_image_patterns(
-            out,
-            self.ocr_words,
-            lambda line: scrub_outbound_text(line, self.scrubber) or "",
+        buf = io.BytesIO()
+        before.convert("RGB").save(buf, format="PNG")
+        out = redact_image(
+            buf.getvalue(), self.detect_screen, self.token, self.ocr_words
         )
         after = Image.open(io.BytesIO(out))
         if after.size != before.size:
@@ -602,7 +828,7 @@ def scrub_request(
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return value
         if sum(ch.isdigit() for ch in repr(value)) >= 5:
-            return "<ID>"
+            return getattr(scrub, "token", lambda k, v: "<ID>")("ID", repr(value))
         return value
 
     def arguments(value: str) -> str:
