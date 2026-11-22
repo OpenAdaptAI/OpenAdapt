@@ -1,6 +1,6 @@
 """Local-dev qualification signer that cannot enter a production trust map.
 
-Quickstart and MockMed can sign a local pin-confirmation admission with this
+Quickstart and local demos can sign a local pin-confirmation admission with this
 key. The key, its issuer workflow, and its ref prefix are public and
 intentional. Production verification refuses them. Loading a production
 signer registry that contains this public key fails closed.

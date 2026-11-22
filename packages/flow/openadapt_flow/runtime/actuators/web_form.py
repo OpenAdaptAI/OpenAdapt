@@ -42,7 +42,7 @@ import re
 import urllib.parse as up
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Any, Iterable, Optional, Protocol
+from typing import Any, Callable, Iterable, Optional, Protocol
 
 from openadapt_flow.runtime.actuators.api import (
     ActuationStatus,
@@ -314,8 +314,8 @@ def form_scripts(html: str, action_path: str, sent: Iterable[str]) -> list[str]:
     return found
 
 
-#: validate.js rule kinds the API step evaluates. Any other kind is script it
-#: can't run (for example OpenEMR's ``pastDate``).
+#: validate.js rule kinds the API step evaluates. Any other kind is custom
+#: client script it can't run (for example a custom date-range validator).
 CLIENT_RULE_KINDS = frozenset({"presence", "length", "format", "numericality", "email"})
 
 
@@ -485,7 +485,7 @@ def client_rules(html: str) -> Optional[dict[str, Any]]:
     """The page's client-side validation rules, when it declares them.
 
     Recognizes the ``var constraints = {...}`` object that validate.js-style
-    pages (OpenEMR among them) emit. The browser enforces these before it
+    pages emit. The browser enforces these before it
     submits; a direct request skips them, so the API step records them,
     refuses when they change, and enforces their ``presence`` rules.
     """
@@ -1295,8 +1295,18 @@ class WebFormActuator:
             )
         return None
 
-    def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
-        """Send exactly ``prepared``, once. Never retried."""
+    def send(
+        self,
+        binding: Any,
+        prepared: "PreparedSave",
+        *,
+        delivery_boundary: Optional[Callable[[Callable[[], Any]], Any]] = None,
+    ) -> ApiActuationResult:
+        """Send exactly ``prepared``, guarding each request. Never retried."""
+        from openadapt_flow.backend import StructuralResolutionRefused
+
+        def deliver(call: Callable[[], Any]) -> Any:
+            return call() if delivery_boundary is None else delivery_boundary(call)
 
         spec = binding.web_form
         summary = f"{binding.method} {binding.url_template}"
@@ -1305,9 +1315,14 @@ class WebFormActuator:
             what = f"{write.method} {write.path}"
             done = f"; the {i - 1} write(s) before it were accepted" if i > 1 else ""
             try:
-                wresp = self.transport.post_form(
-                    write.path, write.encoded(), referer=prepared.referer
+                encoded = write.encoded()
+                wresp = deliver(
+                    lambda: self.transport.post_form(
+                        write.path, encoded, referer=prepared.referer
+                    )
                 )
+            except StructuralResolutionRefused:
+                raise
             except Exception as exc:  # noqa: BLE001 - after dispatch began
                 self.log.append({"stage": "write", "n": i, "error": type(exc).__name__})
                 return ApiActuationResult(
@@ -1358,9 +1373,16 @@ class WebFormActuator:
                         ),
                         request_summary=summary,
                     )
-        try:
+        # Encoding and all read-only rechecks finish before the runtime's
+        # final receiver-clock sample for this particular write.
+        encoded = prepared.encoded() if prepared.encoding != "json" else ""
+        content_type = (
+            prepared.content_type() if prepared.encoding == "multipart" else ""
+        )
+
+        def save() -> Any:
             if prepared.encoding == "json":
-                resp = self.transport.send_json(  # type: ignore[attr-defined]
+                return self.transport.send_json(  # type: ignore[attr-defined]
                     prepared.method,
                     prepared.path,
                     prepared.json_text,
@@ -1368,17 +1390,21 @@ class WebFormActuator:
                     headers=dict(prepared.headers),
                     **({"origin": prepared.origin} if prepared.origin else {}),
                 )
-            elif prepared.encoding == "urlencoded":
-                resp = self.transport.post_form(
-                    prepared.path, prepared.encoded(), referer=prepared.referer
+            if prepared.encoding == "urlencoded":
+                return self.transport.post_form(
+                    prepared.path, encoded, referer=prepared.referer
                 )
-            else:
-                resp = self.transport.post_form(
-                    prepared.path,
-                    prepared.encoded(),
-                    referer=prepared.referer,
-                    content_type=prepared.content_type(),
-                )
+            return self.transport.post_form(
+                prepared.path,
+                encoded,
+                referer=prepared.referer,
+                content_type=content_type,
+            )
+
+        try:
+            resp = deliver(save)
+        except StructuralResolutionRefused:
+            raise
         except Exception as exc:  # noqa: BLE001 - after dispatch began
             self.log.append({"stage": "save", "error": type(exc).__name__})
             return ApiActuationResult(

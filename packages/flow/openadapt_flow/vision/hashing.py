@@ -7,7 +7,7 @@ Hashes are *structural*: the image is reduced to its edge map (PIL
 text placement rather than palette. Identical frames still hash identically
 (distance 0), a dark-theme re-render of the same screen stays within a small
 distance, while a genuinely different screen state (e.g. an unexpected
-modal) remains far away. Measured on MockMed: same-screen theme drift
+modal) remains far away. Measured on synthetic fixtures: same-screen theme drift
 distances are <= 12 versus >= 30 for a blocking modal.
 """
 

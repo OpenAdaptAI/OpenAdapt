@@ -1,25 +1,22 @@
-> ## Important Notice: New Modular Architecture Available
+> ## This page describes the pre-1.0 project
 >
-> **This repository contains the legacy monolithic OpenAdapt codebase (v0.46.0), which is now frozen.**
+> **This directory holds the frozen v0.46.0 codebase.** Its description below
+> ("generative process automation", replay driven by model calls) is outdated.
 >
-> Active development has moved to a new **modular meta-package architecture** with better maintainability and cleaner separation of concerns.
+> **Current OpenAdapt:** give your agent a program, not a mouse. OpenAdapt is
+> the open-source, verified execution layer for computer-use agents. An agent,
+> or a person, does a task once in a web, desktop or remote-desktop app;
+> OpenAdapt compiles that run into a program that makes no model calls, reads
+> each save back from the system of record, and stops instead of guessing.
 >
-> **New packages:**
-> | Package | Description |
-> |---------|-------------|
-> | `openadapt` | Meta-package with unified CLI (v1.0.0+) |
-> | `openadapt-ml` | ML engine, training, inference |
-> | `openadapt-capture` | Event recording and storage |
-> | `openadapt-evals` | Benchmark evaluation |
-> | `openadapt-viewer` | HTML visualization |
-> | `openadapt-grounding` | UI element localization |
-> | `openadapt-retrieval` | Demo retrieval |
+> - Current documentation: [docs.openadapt.ai](https://docs.openadapt.ai)
+> - What it can do today: [CAPABILITIES.md](../CAPABILITIES.md)
+> - Current README: [README.md](../README.md)
+> - Try it: `uvx --python 3.12 openadapt@latest quickstart --break-it`
 >
-> **Quick start:** `pip install openadapt[all]`
->
-> **Migration guide:** See [docs/LEGACY_FREEZE.md](../docs/LEGACY_FREEZE.md) for migration instructions.
->
-> **Legacy users:** This codebase remains available. Install it with the steps in [Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version).
+> **Legacy users:** this codebase remains available. Install it with the steps
+> in [Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version),
+> and see [docs/LEGACY_FREEZE.md](../docs/LEGACY_FREEZE.md) for migration notes.
 
 ---
 

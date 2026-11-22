@@ -1,0 +1,13 @@
+{
+  "answer": "done_by_person",
+  "approver_kind": "person",
+  "card_id": "sha256:fd52ae1ac43000c818e91aac1a2df6cfe5bc127c9da805a829df29744519079f",
+  "decided_at": "2026-11-22T05:58:31.040161Z",
+  "kind": "second_factor",
+  "opened_at": "2026-11-22T05:58:30.981124Z",
+  "public_key": "be9b6c8a4ea4b4e7944adbbdf3619815329836db18beac60f0e1c456ab5007b7",
+  "reason": null,
+  "route": "cli",
+  "schema": "openadapt.exception-answer/v1",
+  "signature": "ed25519:3902f860ae6dac13d277b96e02e0b1caedd0e99a498a6b667b25d115ee8b6ec673d5b02ec9e2c4a47fabbcb5fcb940969b90170feab73a5baa975046e11a030e"
+}
