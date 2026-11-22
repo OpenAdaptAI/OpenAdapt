@@ -119,6 +119,16 @@ def _primary_entity_kinds() -> object:
     return reconciler._PRIMARY_ENTITY_KINDS
 
 
+def _next_button_pattern() -> object:
+    import inspect
+
+    return (
+        inspect.signature(pack_compiler.induce_form_pack)
+        .parameters["next_button_pattern"]
+        .default
+    )
+
+
 #: word list: (current value, the commit before the move, file, constant)
 MOVED_WORDS = {
     "primary_entity_kinds": (
@@ -128,6 +138,11 @@ MOVED_WORDS = {
         "_PRIMARY_ENTITY_KINDS",
     ),
 }
+
+
+def test_the_next_button_default_is_unchanged() -> None:
+    assert _next_button_pattern() == r"next|continue"
+    assert pack_compiler.NEXT_BUTTON_PATTERN == r"next|continue"
 
 
 @pytest.mark.parametrize("words", sorted(MOVED_WORDS))

@@ -1,0 +1,9 @@
+{
+  "schema": "openadapt.form-word-list/v1",
+  "name": "next_button",
+  "about": "Words on the button that moves a wizard to its next screen, when the caller gives no pattern. They are matched as a case-insensitive regular expression, joined with |.",
+  "words": [
+    "next",
+    "continue"
+  ]
+}

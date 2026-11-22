@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.form_tx.codecs import collapse_whitespace
+from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     match_anchor_in_snapshot,
@@ -102,6 +103,11 @@ _SECONDARY_ROLE_QUALIFIERS = frozenset(
         "witness",
     }
 )
+
+
+#: The default "next screen" button pattern for induction (data:
+#: ``presets/words/next_button.json``).
+NEXT_BUTTON_PATTERN = "|".join(re.escape(w) for w in load_words("next_button"))
 
 
 class CanonicalFieldSpec(BaseModel):
@@ -651,7 +657,7 @@ def induce_form_pack(
     form_snapshots: Sequence[FormSnapshot],
     summary_snapshot: Optional[FormSnapshot] = None,
     commit_button_pattern: Optional[str] = None,
-    next_button_pattern: str = r"next|continue",
+    next_button_pattern: str = NEXT_BUTTON_PATTERN,
 ) -> PackInductionReport:
     """Deterministically induce a ``FormPack`` from scrubbed structural snapshots."""
     scrubbed_forms = tuple(_scrub_snapshot_values(snap) for snap in form_snapshots)
