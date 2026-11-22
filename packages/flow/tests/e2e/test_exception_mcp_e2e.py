@@ -133,7 +133,12 @@ def env(tmp_path: Path) -> dict[str, str]:
 
     key_dir = tmp_path / "keys"
     key = Ed25519PrivateKey.generate()
-    init_root(key_dir, principal="front-desk", public_key=public_hex(key), sign=file_key_signer(key))
+    init_root(
+        key_dir,
+        principal="front-desk",
+        public_key=public_hex(key),
+        sign=file_key_signer(key),
+    )
     pem = tmp_path / "approver.pem"
     pem.write_bytes(
         key.private_bytes(
@@ -198,15 +203,28 @@ def _desktop_cards(env: dict[str, str]) -> list[dict[str, Any]] | None:
         sys.path.insert(0, str(DESKTOP))
     from openadapt_desktop import exception_queue, stop_queue
 
-    cards = [stop_queue.card_for_exception(raw) for raw in exception_queue.open_cards(_registry(env))]
+    cards = [
+        stop_queue.card_for_exception(raw)
+        for raw in exception_queue.open_cards(_registry(env))
+    ]
     return [c for c in cards if c is not None]
 
 
-def _answer(env: dict[str, str], card_id: str, choice: str) -> subprocess.CompletedProcess:
+def _answer(
+    env: dict[str, str], card_id: str, choice: str
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         [
-            sys.executable, "-m", "openadapt_flow", "exceptions", "answer", card_id, choice,
-            "--key", env["OPENADAPT_TEST_KEY_PEM"], "--json",
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "exceptions",
+            "answer",
+            card_id,
+            choice,
+            "--key",
+            env["OPENADAPT_TEST_KEY_PEM"],
+            "--json",
         ],
         env=env,
         capture_output=True,
@@ -221,9 +239,16 @@ async def _agent(base: str, env: dict[str, str], deadline_s: float) -> dict[str,
     params = StdioServerParameters(
         command=sys.executable,
         args=[
-            "-m", "openadapt_flow", "exceptions", "serve",
-            "--run-ref", "e2e-run", "--task-id", "note-intake",
-            "--deadline-s", str(deadline_s),
+            "-m",
+            "openadapt_flow",
+            "exceptions",
+            "serve",
+            "--run-ref",
+            "e2e-run",
+            "--task-id",
+            "note-intake",
+            "--deadline-s",
+            str(deadline_s),
         ],
         env=env,
     )
@@ -247,13 +272,17 @@ async def _agent(base: str, env: dict[str, str], deadline_s: float) -> dict[str,
                         return log  # stop before any write
                     continue
                 if "Save" in page:
-                    await anyio.to_thread.run_sync(_post, base + "/save", {"note": "synthetic note"})
+                    await anyio.to_thread.run_sync(
+                        _post, base + "/save", {"note": "synthetic note"}
+                    )
                     log["wrote"] = True
                     return log
     return log
 
 
-def _run_agent(base: str, env: dict[str, str], deadline_s: float, person: Callable[[], None]):
+def _run_agent(
+    base: str, env: dict[str, str], deadline_s: float, person: Callable[[], None]
+):
     result: dict[str, Any] = {}
 
     def agent() -> None:
@@ -296,7 +325,12 @@ def test_done_by_person_after_a_code_prompt_lets_the_agent_save_once(app, env):
         (desktop_card,) = seen["desktop"]
         assert desktop_card["exception_kind"] == "second_factor"
         assert desktop_card["source"]["id"] == seen["card"]["card_id"]
-        assert [c["id"] for c in desktop_card["choices"]] == ["done_by_person", "skip", "abort", "leave"]
+        assert [c["id"] for c in desktop_card["choices"]] == [
+            "done_by_person",
+            "skip",
+            "abort",
+            "leave",
+        ]
         _no_planted(json.dumps(desktop_card).encode())
     (asked,) = log["asked"]
     assert asked["answer"] == "done_by_person" and asked["proceed"] is True
@@ -346,7 +380,9 @@ def test_an_expired_card_is_a_decline_and_no_write(app, env):
     assert record["approver_kind"] == "expiry" and record["decided_at"] is None
 
 
-def test_an_answer_from_a_key_off_the_roster_is_refused_and_nothing_is_written(app, env, tmp_path):
+def test_an_answer_from_a_key_off_the_roster_is_refused_and_nothing_is_written(
+    app, env, tmp_path
+):
     base, state = app
     stranger = tmp_path / "stranger.pem"
     stranger.write_bytes(
@@ -356,16 +392,30 @@ def test_an_answer_from_a_key_off_the_roster_is_refused_and_nothing_is_written(a
             serialization.BestAvailableEncryption(PASSPHRASE.encode()),
         )
     )
+    seen: dict[str, Any] = {}
 
     def person() -> None:
         card = _wait_for_card(env)
-        forged = _answer({**env, "OPENADAPT_TEST_KEY_PEM": str(stranger)}, card["card_id"], "done_by_person")
-        assert forged.returncode == 2
-        assert "human_approver_unregistered" in forged.stdout
-        # nobody else answers: the card expires
+        forged = _answer(
+            {**env, "OPENADAPT_TEST_KEY_PEM": str(stranger)},
+            card["card_id"],
+            "done_by_person",
+        )
+        seen["forged"] = forged
+        # Refused before anything is written: the card is still open, so the
+        # run never saw an answer from the stranger.
+        seen["answers_after_forged"] = list(_registry(env).rglob("answer-*.json"))
+        # A rostered person then stops the run (not an expiry race: the card's
+        # deadline is long enough that a loaded machine can't expire it first).
+        done = _answer(env, card["card_id"], "abort")
+        assert done.returncode == 0, done.stderr
 
-    log = _run_agent(base, env, 3, person)
+    log = _run_agent(base, env, 600, person)
+
+    assert seen["forged"].returncode == 2, seen["forged"].stderr
+    assert "human_approver_unregistered" in seen["forged"].stdout
+    assert seen["answers_after_forged"] == []
     (asked,) = log["asked"]
-    assert asked["proceed"] is False
+    assert asked["proceed"] is False and asked["answer"] == "abort"
+    assert log["wrote"] is False
     assert json.loads(_get(base + "/api/records")) == []
-
