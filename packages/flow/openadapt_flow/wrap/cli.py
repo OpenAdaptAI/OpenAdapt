@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
+import signal
 import sys
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
@@ -229,6 +232,11 @@ def _task(
         compiler, _key = setup.cache._compiler(setup.instruction, names)
         draft = compiler._jit().candidate() is not None
         raise NoAdmittedProgram(compiler.dir if draft else None)
+    if command_agent is not None:
+        from openadapt_flow.wrap.process import verify_env_names
+
+        # The system of record's credentials never reach the wrapped command.
+        command_agent.withheld_env = verify_env_names(setup.cache.common["verify"])
     if cached is None and not halted and command_agent is not None:
         # The wrapped command brings its own model; OpenAdapt sends none.
         agent = command_agent
@@ -415,6 +423,36 @@ def example_main(rows: Sequence[str], *, client: Any = None) -> int:
         return 2
 
 
+@contextlib.contextmanager
+def _commands_stopped_on_signal(active: bool) -> Iterator[None]:
+    """End the wrapped command's process group on Ctrl-C, SIGTERM or any exit.
+
+    The command runs in its own session, so a terminal's Ctrl-C and a SIGTERM
+    sent to OpenAdapt never reach it. SIGTERM is turned into an interrupt
+    here, and every exit from this block stops what is still running.
+    """
+
+    if not active:
+        yield
+        return
+    from openadapt_flow.wrap.process import stop_running_commands
+
+    previous = None
+    main_thread = threading.current_thread() is threading.main_thread()
+
+    def on_term(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    if main_thread:
+        previous = signal.signal(signal.SIGTERM, on_term)
+    try:
+        yield
+    finally:
+        stop_running_commands()
+        if main_thread and previous is not None:
+            signal.signal(signal.SIGTERM, previous)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     rows = list(sys.argv[1:] if argv is None else argv)
     head = rows[: rows.index("--")] if "--" in rows else rows
@@ -447,15 +485,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.serve and not args.request_id:
         if command is None and not replay_only:
             parser.error("a run requires --request-id")
-        import uuid
-
-        # A wrapped command or a replay is one new request unless named.
-        args.request_id = "wrap-" + uuid.uuid4().hex
     from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
 
     agent = None
     try:
         values = _params(args.param)
+        if not args.serve and not args.request_id:
+            from openadapt_flow.wrap.process import request_id_for
+
+            # Never random: asking for the same run again must dedupe.
+            args.request_id = request_id_for(args.task, command or [], values)
         if command is not None:
             from openadapt_flow.wrap.process import ProcessAgent
 
@@ -475,7 +514,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             serve(task)
             return 0
-        result = task.call(args.request_id, _with_secret_env(values, task.parameters))
+        with _commands_stopped_on_signal(agent is not None):
+            result = task.call(
+                args.request_id, _with_secret_env(values, task.parameters)
+            )
+    except KeyboardInterrupt:
+        print(
+            "openadapt wrap: interrupted; the wrapped command was stopped",
+            file=sys.stderr,
+        )
+        return 130
     except TaskArgumentsError as exc:
         parser.error(str(exc))
     except NoAdmittedProgram as exc:

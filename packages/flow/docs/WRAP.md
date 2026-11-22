@@ -95,8 +95,16 @@ checks:
 
 The command gets no handle to the browser itself, so it can't act around
 these checks. It also gets your environment without any `OPENADAPT_*`
-variable, so OpenAdapt's own keys and settings never reach it; its own
-variables, such as its model key, pass through.
+variable and without any variable the task's `verify.yaml` reads (each
+`${NAME}` reference and each `*_env` value, such as a database password), so
+OpenAdapt's own keys and settings and the system of record's credentials
+never reach it; its own variables, such as its model key, pass through.
+
+The command runs in its own process group. `--command-timeout` (default 600
+seconds) ends the whole group, and so do Ctrl-C and SIGTERM sent to
+`openadapt wrap`. Without `--request-id`, the run's request ID is derived from
+the task, the command and its inputs, so asking for the same run again
+dedupes instead of saving twice.
 
 When the command exits, the endpoint closes. Then the run goes through the
 same record check, proposed checks, canary and admission as any

@@ -167,3 +167,146 @@ def test_run_names_a_draft_that_was_not_admitted(monkeypatch, capsys, tmp_path):
     assert cli.main(["run", "--task", "t.json", "--param", "note=x"]) == 2
     err = capsys.readouterr().err
     assert "DRAFT_NOT_ADMITTED" in err and str(tmp_path / "task-dir") in err
+
+
+def test_a_retried_wrapped_run_gets_the_same_request_id(monkeypatch):
+    ids: list[str] = []
+
+    def task(args, parser, *, command_agent=None, replay_only=False):
+        t = _Task(command_agent, {"verified": True})
+        t.call = lambda request_id, values: (
+            ids.append(request_id)
+            or {  # type: ignore[method-assign]
+                "verified": True
+            }
+        )
+        return t
+
+    monkeypatch.setattr(cli, "_task", task)
+    argv = ["--task", "t.json", "--param", "note=x", "--", "my-agent"]
+    assert cli.main(argv) == 0
+    assert cli.main(argv) == 0
+    assert cli.main(["--task", "t.json", "--param", "note=y", "--", "my-agent"]) == 0
+    assert ids[0] == ids[1] and ids[0] != ids[2]
+    assert all(i.startswith("wrap-") for i in ids)
+    # An explicit --request-id still wins.
+    assert cli.main(["--task", "t.json", "--request-id", "r1", "--", "my-agent"]) == 0
+    assert ids[-1] == "r1"
+
+
+def test_every_credential_the_verifier_reads_is_withheld_from_the_command(tmp_path):
+    from openadapt_flow.wrap.process import child_environment, verify_env_names
+
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n"
+        "  base_url: ${APP_URL}\n"
+        "  headers: {Authorization: 'Bearer ${APP_TOKEN:-none}'}\n"
+        "  frame:\n"
+        "    database:\n"
+        "      read: {sql_password_env: DB_PASSWORD, dsn_env: [DB_DSN]}\n"
+        "  auth: {basic_env: APP_BASIC}\n",
+        encoding="utf-8",
+    )
+    names = verify_env_names(verify)
+    assert names == {"APP_URL", "APP_TOKEN", "DB_PASSWORD", "DB_DSN", "APP_BASIC"}
+    env = child_environment(
+        {
+            "PATH": "/bin",
+            "ANTHROPIC_API_KEY": "the agent's own key",
+            "DB_PASSWORD": "s3cret",
+            "app_token": "tok",
+            "APP_BASIC": "u:p",
+            "DB_DSN": "postgres://x",
+            "APP_URL": "http://127.0.0.1",
+        },
+        names,
+    )
+    assert env == {"PATH": "/bin", "ANTHROPIC_API_KEY": "the agent's own key"}
+
+
+def test_a_real_child_never_sees_a_verifier_credential(tmp_path, monkeypatch):
+    import sys
+
+    from openadapt_flow.integrations.agents.skills import BrowserTools
+
+    monkeypatch.setenv("DB_PASSWORD", "s3cret")
+    out = tmp_path / "seen.txt"
+    script = (
+        "import os, pathlib\n"
+        f"pathlib.Path({str(out)!r}).write_text(repr(os.environ.get('DB_PASSWORD')))\n"
+    )
+    ProcessAgent(
+        [sys.executable, "-c", script], timeout_s=60, withheld_env={"DB_PASSWORD"}
+    )._run_command("Task: x", BrowserTools(SimpleNamespace()))
+    assert out.read_text() == "None"
+
+
+def _wait_gone(pid: int, timeout_s: float = 10.0) -> bool:
+    import os
+    import time
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _group_script(pid_file: Any) -> str:
+    # The command starts a grandchild in its own group and waits forever.
+    return (
+        "import pathlib, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'])\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+        "time.sleep(600)\n"
+    )
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="process groups")
+def test_the_command_timeout_ends_the_whole_process_group(tmp_path):
+    import sys
+    import time
+
+    from openadapt_flow.wrap.process import CommandFailed, _run_group
+
+    pid_file = tmp_path / "grandchild.pid"
+    started = time.monotonic()
+    with pytest.raises(CommandFailed):
+        _run_group([sys.executable, "-c", _group_script(pid_file)], {}, 2.0)
+    assert time.monotonic() - started < 30
+    assert _wait_gone(int(pid_file.read_text()))
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="process groups")
+@pytest.mark.parametrize("how", ["SIGTERM", "SIGINT"])
+def test_a_signal_to_openadapt_ends_the_wrapped_command_group(tmp_path, how):
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    pid_file = tmp_path / "grandchild.pid"
+    driver = tmp_path / "driver.py"
+    driver.write_text(
+        "import sys\n"
+        "from openadapt_flow.wrap import cli\n"
+        "from openadapt_flow.wrap.process import _run_group\n"
+        "with cli._commands_stopped_on_signal(True):\n"
+        f"    _run_group([sys.executable, '-c', {_group_script(pid_file)!r}], {{}}, 600)\n",
+        encoding="utf-8",
+    )
+    parent = subprocess.Popen(
+        [sys.executable, str(driver)], env=dict(os.environ), stderr=subprocess.PIPE
+    )
+    deadline = time.monotonic() + 30
+    while not pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    grandchild = int(pid_file.read_text())
+    parent.send_signal(getattr(signal, how))
+    parent.wait(timeout=30)
+    assert _wait_gone(grandchild)

@@ -12,7 +12,9 @@ OpenAdapt opens the task's app in its own headless browser and starts
     The task, with its inputs, as the agent should read it.
 
 The command gets the caller's environment without any ``OPENADAPT_*``
-variable, so OpenAdapt's own keys and settings never reach the agent being
+variable and without any variable the task's ``verify.yaml`` reads (a
+``${NAME}`` reference or a ``*_env`` value), so OpenAdapt's own keys and
+settings and the system of record's credentials never reach the agent being
 admitted. When the privacy extra scrubs listings, the task's own values
 (its record's identity and its inputs) appear as placeholders such as
 ``⟦task.identity_1⟧`` in ``OPENADAPT_TASK`` and in every listing; typing a
@@ -37,15 +39,19 @@ only the browser it drives is OpenAdapt's.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import hmac
+import json
 import os
+import re
 import secrets
 import signal
 import socket
 import subprocess
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, Optional
 
 from openadapt_flow.integrations.agents.skills import BrowserTools, FrameworkAgent
@@ -58,6 +64,9 @@ __all__ = [
     "ProcessAgent",
     "ToolEndpoint",
     "child_environment",
+    "request_id_for",
+    "stop_running_commands",
+    "verify_env_names",
 ]
 
 ENV_URL = "OPENADAPT_MCP_URL"
@@ -76,16 +85,120 @@ class CommandFailed(RuntimeError):
         self.exit_code = exit_code
 
 
-def child_environment(environ: Mapping[str, str]) -> dict[str, str]:
+def child_environment(
+    environ: Mapping[str, str], withheld: Iterable[str] = ()
+) -> dict[str, str]:
     """The command's environment: the caller's, without OpenAdapt's own settings.
 
     The command is the agent whose run is being admitted, so it gets none of
     OpenAdapt's configuration or credentials (``OPENADAPT_*``: the admission
     key passphrase, ``OPENADAPT_FLOW_SECRET_<NAME>`` sign-in values, Cloud
-    keys). Its own variables, such as its model key, pass through.
+    keys), and none of the ``withheld`` names (the variables the task's
+    verifier reads, such as its database password). Its own variables, such
+    as its model key, pass through.
     """
 
-    return {k: v for k, v in environ.items() if not k.upper().startswith("OPENADAPT_")}
+    drop = {name.upper() for name in withheld}
+    return {
+        k: v
+        for k, v in environ.items()
+        if not k.upper().startswith("OPENADAPT_") and k.upper() not in drop
+    }
+
+
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}")
+
+
+def verify_env_names(verify: Any) -> frozenset[str]:
+    """Every environment variable a ``verify.yaml`` reads.
+
+    That is each ``${NAME}`` (or ``${NAME:-default}``) reference anywhere in
+    the file, and each value of a key ending in ``_env`` (for example
+    ``sql_password_env`` or ``basic_env``). An unreadable file raises, so a
+    wrapped command never starts with credentials that could not be checked.
+    """
+
+    import yaml
+
+    text = Path(verify).read_text(encoding="utf-8")
+    names = set(_ENV_REF.findall(text))
+
+    def walk(node: Any) -> None:
+        if isinstance(node, Mapping):
+            for key, value in node.items():
+                if isinstance(key, str) and key.endswith("_env"):
+                    values = value if isinstance(value, (list, tuple)) else [value]
+                    names.update(v for v in values if isinstance(v, str) and v)
+                walk(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+
+    walk(yaml.safe_load(text))
+    return frozenset(names)
+
+
+def request_id_for(task: str, command: Sequence[str], values: Mapping[str, str]) -> str:
+    """A request ID derived from the task, the command and its inputs.
+
+    The same wrapped run asked again gets the same ID, so a retry dedupes
+    instead of saving twice. A different input is a different request.
+    """
+
+    material = json.dumps(
+        {
+            "task": str(Path(task).expanduser().resolve()),
+            "command": list(command),
+            "inputs": dict(sorted(values.items())),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return "wrap-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+#: Wrapped commands still running, so a signal to OpenAdapt ends them too.
+_RUNNING: set["subprocess.Popen[Any]"] = set()
+_RUNNING_LOCK = threading.Lock()
+
+
+def stop_running_commands() -> None:
+    """End every wrapped command still running, with its whole process group."""
+
+    with _RUNNING_LOCK:
+        running = list(_RUNNING)
+    for process in running:
+        with contextlib.suppress(Exception):
+            _stop_group(process)
+
+
+def _run_group(command: Sequence[str], env: Mapping[str, str], timeout_s: float) -> int:
+    """Run ``command`` in its own process group and return its exit status.
+
+    The group is ended on a timeout (``CommandFailed``), on any exception in
+    this thread, and by :func:`stop_running_commands` (which the CLI calls on
+    Ctrl-C and SIGTERM, since the group's own session gets neither).
+    """
+
+    process = subprocess.Popen(
+        list(command), env=dict(env), start_new_session=os.name == "posix"
+    )
+    with _RUNNING_LOCK:
+        _RUNNING.add(process)
+    try:
+        try:
+            return process.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            _stop_group(process)
+            raise CommandFailed(
+                process.returncode if process.returncode else -9
+            ) from None
+        except BaseException:
+            _stop_group(process)
+            raise
+    finally:
+        with _RUNNING_LOCK:
+            _RUNNING.discard(process)
 
 
 def _tool_specs() -> list[dict[str, Any]]:
@@ -334,6 +447,7 @@ class ProcessAgent(FrameworkAgent):
         *,
         timeout_s: float = 600.0,
         principal_id: str = "agent:wrapped-process",
+        withheld_env: Iterable[str] = (),
     ) -> None:
         if not command or any(not isinstance(part, str) for part in command):
             raise ValueError("the wrapped command is empty")
@@ -342,6 +456,8 @@ class ProcessAgent(FrameworkAgent):
         super().__init__(self._run_command, principal_id=principal_id)
         self.command = list(command)
         self.timeout_s = timeout_s
+        #: Variables the task's verifier reads; the command never gets them.
+        self.withheld_env: frozenset[str] = frozenset(withheld_env)
         #: The command's exit status, once it has exited (negative: a signal).
         self.exit_code: Optional[int] = None
 
@@ -349,21 +465,14 @@ class ProcessAgent(FrameworkAgent):
         endpoint = ToolEndpoint(tools)
         endpoint.start()
         try:
-            env = child_environment(os.environ)
+            env = child_environment(os.environ, self.withheld_env)
             env.update(
                 {ENV_URL: endpoint.url, ENV_TOKEN: endpoint.token, ENV_TASK: task}
             )
-            process = subprocess.Popen(
-                self.command, env=env, start_new_session=os.name == "posix"
-            )
             try:
-                self.exit_code = process.wait(timeout=self.timeout_s)
-            except subprocess.TimeoutExpired:
-                _stop_group(process)
-                self.exit_code = process.returncode if process.returncode else -9
-                raise CommandFailed(self.exit_code) from None
-            except BaseException:
-                _stop_group(process)
+                self.exit_code = _run_group(self.command, env, self.timeout_s)
+            except CommandFailed as failed:
+                self.exit_code = failed.exit_code
                 raise
         finally:
             endpoint.stop()
