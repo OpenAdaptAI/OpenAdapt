@@ -115,6 +115,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help="confirm --no-scrub; recorded in flight.json and the local ledger",
     )
     p.add_argument(
+        "--safe-label",
+        action="append",
+        default=[],
+        metavar="LABEL",
+        help="a control label a click may pass on without a person, besides the "
+        "built-in Cancel, Close, Back, Search, Open, View... (repeatable; a label "
+        "with Save, Submit, Send... is refused); recorded in flight.json",
+    )
+    p.add_argument(
         "--allow-unenforced-egress",
         action="store_true",
         help="run even where the OS egress block is not available (any system but "
@@ -220,6 +229,13 @@ def cmd_flight(args: argparse.Namespace) -> int:
         def scrub_text(text: str) -> str:
             return scrub_outbound_text(text, scrubber) or ""
 
+    from openadapt_flow.flight.computer import SAFE_LABELS_ENV, parse_safe_labels
+
+    try:
+        safe_labels = sorted(parse_safe_labels(getattr(args, "safe_label", None)))
+    except ValueError as exc:
+        return _err(str(exc))
+
     cdp = args.cdp or _detect_cdp(command)
     want_guard = cdp is not None and bool(args.guard_config and args.guard_task)
     if args.cdp and not want_guard:
@@ -298,6 +314,7 @@ def cmd_flight(args: argparse.Namespace) -> int:
         **egress.env,
         "OPENADAPT_FLIGHT_RUN_DIR": str(run_dir),
         "OPENADAPT_USAGE_PATH": str(usage_path),
+        SAFE_LABELS_ENV: json.dumps(safe_labels),
     }
     guard_proc: Optional[subprocess.Popen[bytes]] = None
     guard_info: dict[str, Any] = {"cdp": cdp, "started": False}
@@ -382,6 +399,7 @@ def cmd_flight(args: argparse.Namespace) -> int:
                 "agent_exit_code": exit_code,
                 "egress": egress_record,
                 "gate": args.gate,
+                "safe_labels_added": safe_labels,
                 "guard": guard_info,
                 "spend_cap_usd": args.max_cost_usd,
                 "providers": {

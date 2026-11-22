@@ -9,12 +9,25 @@ Before a click, a double click, an Enter or Space key, a save shortcut
 (Ctrl/Cmd+S) or typed text that ends a line, the wrapper reads the target
 under the pointer: first from the executor's own accessibility hook
 (``inner.label_at(x, y)``; ``inner.focused_label()`` for keys) when it has
-one, else from OCR of a fresh screenshot near the pointer. The action is
-commit-class when that label holds one of the :data:`COMMIT_VERBS` or when no
-label could be read (unknown counts as commit-class). A commit-class action
-goes to :class:`~openadapt_flow.flight.gate.PreCommitGate`; unless the gate
-says ``allow`` the executor is never called and the agent is told the action
-was held for a person.
+one, else from OCR of a fresh screenshot. OCR names the target only with a
+text line whose box holds the click point (or overlaps the target's bounds,
+when the executor has ``inner.target_bounds(x, y)``); a nearby line is not
+the target's label.
+
+The gate fails closed. A click passes without a person only when its target
+is known to be safe: a role that only focuses or reveals (a text field, a
+combo box, a tab; given by the accessibility hook as the label's first word,
+``"textbox Note"``), or a whole label on the short :data:`SAFE_LABELS` list
+of navigation and reading controls (Cancel, Close, Back, Search, Open,
+View...). Every other click is commit-class and goes to
+:class:`~openadapt_flow.flight.gate.PreCommitGate`: Save, OK, Next, Done,
+Delete, a label in another language, an icon with no text, a target that
+can't be read. The same list decides Enter and Space on the focused control.
+Unless the gate says ``allow``, the executor is never called and the agent is
+told the action was held for a person. ``safe_labels`` (or
+``OPENADAPT_FLIGHT_SAFE_LABELS``, a JSON list, which ``openadapt-flow flight
+--safe-label`` sets) adds labels for one deployment; a label holding one of
+the :data:`COMMIT_VERBS` is refused there.
 
 Run under ``openadapt-flow flight``, the wrappers find the recorder and the
 gate through ``OPENADAPT_FLIGHT_GATE_URL`` (a loopback URL) by themselves;
@@ -52,6 +65,9 @@ from openadapt_flow.flight.gate import (
 __all__ = [
     "COMMIT_VERBS",
     "GATE_URL_ENV",
+    "SAFE_LABELS",
+    "SAFE_LABELS_ENV",
+    "SAFE_ROLES",
     "ActionHeld",
     "Classification",
     "GatedComputer",
@@ -62,6 +78,9 @@ __all__ = [
     "RemoteRecorder",
     "classify",
     "label_is_commit",
+    "label_is_safe",
+    "parse_safe_labels",
+    "split_role",
 ]
 
 #: The closed, general list of verbs a commit control carries.
@@ -77,9 +96,65 @@ COMMIT_VERBS: tuple[str, ...] = (
     "file",
     "finalize",
 )
+#: Whole labels (normalised: lower case, single spaces, no surrounding
+#: arrows or punctuation) a click may pass on without a person. Navigation
+#: and reading only. "Next" is not here: on a wizard's last step it submits.
+SAFE_LABELS: frozenset[str] = frozenset(
+    {
+        "back",
+        "go back",
+        "cancel",
+        "close",
+        "search",
+        "find",
+        "open",
+        "view",
+        "view details",
+        "details",
+        "show more",
+        "show less",
+        "more",
+        "expand",
+        "collapse",
+        "menu",
+        "previous page",
+        "next page",
+        "home",
+        "help",
+    }
+)
+#: Accessibility roles whose click only focuses a field or reveals a view.
+SAFE_ROLES: frozenset[str] = frozenset(
+    {"textbox", "searchbox", "textarea", "multiline", "combobox", "tab"}
+)
+#: Roles an accessibility hook may put before the name (``"button Save"``).
+KNOWN_ROLES: frozenset[str] = SAFE_ROLES | {
+    "button",
+    "link",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "checkbox",
+    "radio",
+    "switch",
+    "option",
+    "listbox",
+    "treeitem",
+    "cell",
+    "row",
+    "heading",
+    "img",
+    "image",
+    "statictext",
+    "text",
+    "generic",
+    "group",
+}
 GATE_URL_ENV = "OPENADAPT_FLIGHT_GATE_URL"
-#: How far from the pointer (pixels) an OCR line still names the target.
-OCR_NEAR_PX = 40
+SAFE_LABELS_ENV = "OPENADAPT_FLIGHT_SAFE_LABELS"
+#: Padding (pixels) around an OCR line's box when testing the click point.
+OCR_BOX_PAD_PX = 3
+_EDGE_MARKS = " \t\n\r.,:;!?'\"()[]{}<>«»‹›←→↑↓⟵⟶…*·•|-–—_/\\"
 _GATE_KIND = {"allow": "allowed", "hold": "held", "refuse": "refused"}
 _COMMIT_KEYS = {"Enter", "Space"}
 _SAVE_MODIFIERS = {"Control", "Meta"}
@@ -92,6 +167,71 @@ def label_is_commit(label: Optional[str]) -> Optional[str]:
     for token in re.findall(r"[a-z]+", label.lower()):
         if token in COMMIT_VERBS:
             return token
+    return None
+
+
+def split_role(label: Optional[str]) -> tuple[Optional[str], str]:
+    """(role, name) of an accessibility label (``"button Save"``); the role
+    is None when the first word is not a known role."""
+    text = (label or "").strip()
+    head, _, rest = text.partition(" ")
+    if head.lower() in KNOWN_ROLES:
+        return head.lower(), rest.strip()
+    return None, text
+
+
+def normalise_label(name: str) -> str:
+    """Lower case, single spaces, no surrounding arrows or punctuation."""
+    return " ".join(name.strip(_EDGE_MARKS).lower().split())
+
+
+def parse_safe_labels(values: Optional[Any]) -> frozenset[str]:
+    """Deployment-specific safe labels; raises ValueError for one that holds
+    a commit verb (a Save can't be declared safe)."""
+    out = set()
+    for value in values or ():
+        label = normalise_label(str(value))
+        if not label:
+            continue
+        verb = label_is_commit(label)
+        if verb:
+            raise ValueError(f"a safe label can't hold a commit verb: {value!r}")
+        out.add(label)
+    return frozenset(out)
+
+
+def _env_safe_labels() -> frozenset[str]:
+    raw = os.environ.get(SAFE_LABELS_ENV)
+    if not raw:
+        return frozenset()
+    try:
+        values = json.loads(raw)
+    except ValueError:
+        return frozenset()  # an unreadable list adds nothing (fail closed)
+    if not isinstance(values, list):
+        return frozenset()
+    try:
+        return parse_safe_labels(values)
+    except ValueError:
+        return frozenset()
+
+
+def label_is_safe(
+    label: Optional[str], extra: frozenset[str] = frozenset()
+) -> Optional[str]:
+    """Why a click on ``label`` may pass without a person, or None (held)."""
+    if not label:
+        return None
+    role, name = split_role(label)
+    if role in SAFE_ROLES:
+        return f"a {role} (focus or view only)"
+    if label_is_commit(name):
+        return None
+    key = normalise_label(name)
+    if not key.isascii():
+        return None
+    if key in SAFE_LABELS or key in extra:
+        return f"{key!r} is a known-safe control"
     return None
 
 
@@ -132,27 +272,38 @@ def _ops(dialect: str, raw: dict[str, Any]) -> tuple[list[Any], Optional[str]]:
         return [], str(exc)
 
 
-def _ocr_label(png: bytes, x: int, y: int) -> Optional[str]:
-    """The OCR line under (or nearest within OCR_NEAR_PX of) the point."""
+def _ocr_label(
+    png: bytes,
+    x: int,
+    y: int,
+    bounds: Optional[tuple[int, int, int, int]] = None,
+) -> Optional[str]:
+    """The target's own OCR text, or None.
+
+    Without ``bounds``: the OCR line whose box (padded by OCR_BOX_PAD_PX)
+    holds the click point. With ``bounds`` (the target's x, y, w, h): every
+    line whose box overlaps it, in reading order. A line next to the target
+    (a field label beside an icon-only button) is never its label.
+    """
     from openadapt_flow.vision.ocr import ocr
 
-    best: Optional[tuple[float, str]] = None
+    pad = OCR_BOX_PAD_PX
+    hits: list[tuple[int, int, str]] = []
     for line in ocr(png):
         lx, ly, lw, lh = line.region
         text = line.text.strip()
         if not text:
             continue
-        if lx - 6 <= x <= lx + lw + 6 and ly - 6 <= y <= ly + lh + 6:
-            dist = 0.0
+        if bounds is not None:
+            bx, by, bw, bh = bounds
+            inside = lx < bx + bw and bx < lx + lw and ly < by + bh and by < ly + lh
         else:
-            dx = max(lx - x, 0, x - (lx + lw))
-            dy = max(ly - y, 0, y - (ly + lh))
-            dist = float((dx * dx + dy * dy) ** 0.5)
-            if dist > OCR_NEAR_PX:
-                continue
-        if best is None or dist < best[0]:
-            best = (dist, text)
-    return best[1] if best else None
+            inside = lx - pad <= x <= lx + lw + pad and ly - pad <= y <= ly + lh + pad
+        if inside:
+            hits.append((ly, lx, text))
+    if not hits:
+        return None
+    return " ".join(text for _, _, text in sorted(hits))
 
 
 def classify(
@@ -162,10 +313,15 @@ def classify(
     screenshot: Callable[[], Optional[bytes]],
     label_at: Optional[Callable[[int, int], Optional[str]]] = None,
     focused_label: Optional[Callable[[], Optional[str]]] = None,
-    ocr: Callable[[bytes, int, int], Optional[str]] = _ocr_label,
+    ocr: Callable[..., Optional[str]] = _ocr_label,
     pointer: Optional[tuple[int, int]] = None,
+    target_bounds: Optional[
+        Callable[[int, int], Optional[tuple[int, int, int, int]]]
+    ] = None,
+    safe_labels: frozenset[str] = frozenset(),
 ) -> Classification:
-    """Classify one action. Any failure to read the target is commit-class."""
+    """Classify one action. A click or key passes only on a known-safe
+    target; any failure to read the target is commit-class."""
     ops, refused = _ops(dialect, raw)
     kind = str(raw.get("action") or raw.get("type") or "")
     if refused is not None:
@@ -235,7 +391,15 @@ def classify(
         if label is None:
             try:
                 png = screenshot()
-                label = ocr(png, int(x), int(y)) if png else None
+                bounds = None
+                if target_bounds is not None:
+                    bounds = target_bounds(int(x), int(y))
+                if not png:
+                    label = None
+                elif bounds is not None:
+                    label = ocr(png, int(x), int(y), tuple(bounds))
+                else:
+                    label = ocr(png, int(x), int(y))
             except Exception:  # noqa: BLE001 - an unreadable target is unknown
                 label = None
             source = "ocr" if label else "none"
@@ -246,8 +410,13 @@ def classify(
             )
         elif verb:
             reason = f"the target reads {label!r} ({verb})"
-        else:
+        elif label_is_safe(label, safe_labels):
             return Classification(False, kind, x, y, label, source, "", op_dicts)
+        else:
+            reason = (
+                f"the target reads {label!r}, which is not a known-safe control "
+                "(unknown counts as commit)"
+            )
         return Classification(True, kind, x, y, label, source, reason, op_dicts)
     label = None
     source = "none"
@@ -259,10 +428,19 @@ def classify(
         source = "accessibility" if label else "none"
     verb = label_is_commit(label)
     if label is not None and not verb:
-        # Space on a control with no commit verb toggles or types; Enter
-        # adds a line in a multi-line text area. Enter anywhere else can
-        # submit the form, so it stays commit-class.
-        if not enter_like or _focused_is_text_area(label):
+        role, _name = split_role(label)
+        if enter_like:
+            # Enter adds a line in a multi-line text area and runs a search
+            # in a search box; on a known-safe control it activates it.
+            # Anywhere else it can submit the form.
+            if _focused_is_text_area(label) or role == "searchbox":
+                return Classification(
+                    False, kind, None, None, label, source, "", op_dicts
+                )
+        elif role in ("textbox", "searchbox", "textarea", "multiline", "combobox"):
+            # Space types a space in a field.
+            return Classification(False, kind, None, None, label, source, "", op_dicts)
+        if role not in SAFE_ROLES and label_is_safe(label, safe_labels):
             return Classification(False, kind, None, None, label, source, "", op_dicts)
     reason = key_reason or ""
     if verb:
@@ -270,7 +448,7 @@ def classify(
     elif label is None:
         reason = f"{reason} (the focused control can't be read)"
     else:
-        reason = f"{reason} (focused {label!r})"
+        reason = f"{reason} (focused {label!r}, not a known-safe control)"
     return Classification(True, kind, None, None, label, source, reason, op_dicts)
 
 
@@ -417,13 +595,19 @@ class _Gatekeeper:
         *,
         label_at: Optional[Callable[[int, int], Optional[str]]],
         focused_label: Optional[Callable[[], Optional[str]]],
-        ocr: Optional[Callable[[bytes, int, int], Optional[str]]],
+        ocr: Optional[Callable[..., Optional[str]]],
+        target_bounds: Optional[
+            Callable[[int, int], Optional[tuple[int, int, int, int]]]
+        ] = None,
+        safe_labels: Optional[Any] = None,
     ) -> None:
         self.dialect = dialect
         self.gate, self.recorder = _env_gate_and_recorder(gate, recorder)
         self.label_at = label_at
         self.focused_label = focused_label
         self.ocr = ocr or _ocr_label
+        self.target_bounds = target_bounds
+        self.safe_labels = parse_safe_labels(safe_labels) | _env_safe_labels()
         self.pointer: Optional[tuple[int, int]] = None
         self._index = 0
         self._lock = threading.Lock()
@@ -465,6 +649,8 @@ class _Gatekeeper:
                 focused_label=self.focused_label,
                 ocr=self.ocr,
                 pointer=self.pointer,
+                target_bounds=self.target_bounds,
+                safe_labels=self.safe_labels,
             )
         except Exception as exc:  # noqa: BLE001 - fail closed
             result = Classification(
@@ -598,7 +784,11 @@ class GatedComputer:
         screenshot: Optional[Callable[[], Any]] = None,
         label_at: Optional[Callable[[int, int], Optional[str]]] = None,
         focused_label: Optional[Callable[[], Optional[str]]] = None,
-        ocr: Optional[Callable[[bytes, int, int], Optional[str]]] = None,
+        ocr: Optional[Callable[..., Optional[str]]] = None,
+        target_bounds: Optional[
+            Callable[[int, int], Optional[tuple[int, int, int, int]]]
+        ] = None,
+        safe_labels: Optional[Any] = None,
     ) -> None:
         self._inner = inner
         self._held = held or (lambda message: HeldResult(error=message))
@@ -614,6 +804,8 @@ class GatedComputer:
             label_at=label_at or getattr(inner, "label_at", None),
             focused_label=focused_label or getattr(inner, "focused_label", None),
             ocr=ocr,
+            target_bounds=target_bounds or getattr(inner, "target_bounds", None),
+            safe_labels=safe_labels,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -714,7 +906,11 @@ class GatedComputerCall:
         on_held: str = "banner",
         label_at: Optional[Callable[[int, int], Optional[str]]] = None,
         focused_label: Optional[Callable[[], Optional[str]]] = None,
-        ocr: Optional[Callable[[bytes, int, int], Optional[str]]] = None,
+        ocr: Optional[Callable[..., Optional[str]]] = None,
+        target_bounds: Optional[
+            Callable[[int, int], Optional[tuple[int, int, int, int]]]
+        ] = None,
+        safe_labels: Optional[Any] = None,
     ) -> None:
         if on_held not in ("banner", "raise"):
             raise ValueError("on_held is 'banner' or 'raise'")
@@ -729,6 +925,8 @@ class GatedComputerCall:
             label_at=label_at or getattr(inner, "label_at", None),
             focused_label=focused_label or getattr(inner, "focused_label", None),
             ocr=ocr,
+            target_bounds=target_bounds or getattr(inner, "target_bounds", None),
+            safe_labels=safe_labels,
         )
 
     @property

@@ -7,6 +7,8 @@ The model's script opens a referral, starts an encounter, types a note and
 clicks Save Encounter. The flight run must meter every call, keep the
 planted patient name out of everything the provider received, hold the Save
 for a person (FileGate, no answer), and leave MockMed with nothing saved.
+The run declares New Encounter and Triage safe (--safe-label); without that
+the fail-closed gate holds them too.
 """
 
 from __future__ import annotations
@@ -120,6 +122,9 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
             guard_config=None,
             guard_task=None,
             max_cost_usd=None,
+            # The gate holds every button not known to be safe; this
+            # deployment declares its two navigation buttons safe.
+            safe_label=["New Encounter", "Triage"],
             no_scrub=False,
             i_accept_unscrubbed=False,
             # macOS runs the agent under the sandbox-exec egress block; other
@@ -145,6 +150,7 @@ def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     summary = json.loads((run_dir / "flight.json").read_text())
     assert validate_flight(summary) == []
     assert summary["task_id"] == "mockmed-triage-1"
+    assert summary["details"]["safe_labels_added"] == ["new encounter", "triage"]
     egress = summary["details"]["egress"]
     assert egress["enforced"] is (sys.platform == "darwin")
     assert egress["refused"] is False

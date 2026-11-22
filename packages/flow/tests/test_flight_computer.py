@@ -102,7 +102,13 @@ def test_a_non_commit_label_is_performed_without_asking():
 
 @pytest.mark.parametrize(
     "label,held",
-    [("Submit", True), ("Send now", True), ("Cancel", False), ("Saved filters", False)],
+    [
+        ("Submit", True),
+        ("Send now", True),
+        ("Cancel", False),
+        # Fail closed: a label that is not on the safe list is held.
+        ("Saved filters", True),
+    ],
 )
 def test_ocr_reads_the_label_when_there_is_no_accessibility_hook(label, held):
     tool = FakeTool()
@@ -208,7 +214,7 @@ def test_an_async_executor_stays_async_and_is_gated():
             return {"base64_image": base64.b64encode(_png()).decode()}
 
         def label_at(self, x: int, y: int) -> str:
-            return "Submit" if (x, y) == (10, 20) else "Name"
+            return "Submit" if (x, y) == (10, 20) else "textbox Name"
 
     tool = AsyncTool()
     computer = GatedComputer(tool, RefuseGate())
@@ -410,3 +416,165 @@ def test_the_file_gate_follows_a_persons_signed_answer(
     if expected == "allow":
         consumed = list((run_dir / "item-approval").glob("consumed-*"))
         assert len(consumed) == 1
+
+
+# -- fail-closed allowlist (not a blocklist of verbs) -----------------------
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "OK",
+        "Done",
+        "Apply",
+        "Update",
+        "Create",
+        "Add",
+        "Delete",
+        "Remove",
+        "Next",
+        "Finish",
+        "Book",
+        "Place order",
+        "Accept",
+        "Publish",
+        "Discharge",
+        "Cancel order",
+        "Close account",
+        "button Delete",
+        "menuitem Delete",
+        "link Remove",
+        "Speichern",
+        "Enregistrer",
+        "Guardar",
+        "保存",
+        "Cancelar",
+        "?",
+    ],
+)
+def test_a_click_on_a_label_not_known_to_be_safe_is_held(label):
+    tool = LabelledTool({(10, 20): label})
+    computer = GatedComputer(tool, RefuseGate())
+    assert isinstance(computer(**_click()), HeldResult)
+    assert tool.calls == []
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Cancel",
+        "Close",
+        "‹ Back",
+        "Back »",
+        "Search",
+        "View details",
+        "link Back",
+        "button Open",
+        "tab Demographics",
+        "textbox Note",
+        "combobox Reason",
+    ],
+)
+def test_a_click_on_a_known_safe_control_is_performed(label):
+    tool = LabelledTool({(10, 20): label})
+    gate = AllowGate()
+    computer = GatedComputer(tool, gate)
+    computer(**_click())
+    assert tool.calls == [_click()]
+    assert gate.asked == []
+
+
+@pytest.mark.parametrize(
+    "focused,key,held",
+    [
+        ("button Next", "space", True),
+        ("button Delete", "Return", True),
+        ("textbox Name", "space", False),
+        ("textbox Name", "Return", True),
+        ("searchbox Search", "Return", False),
+        ("button Cancel", "Return", False),
+        ("textarea Note", "Return", False),
+    ],
+)
+def test_keys_on_the_focused_control_use_the_same_list(focused, key, held):
+    class Focused(FakeTool):
+        def focused_label(self) -> str:
+            return focused
+
+    tool = Focused()
+    computer = GatedComputer(tool, RefuseGate())
+    computer(action="key", text=key)
+    assert (tool.calls == []) is held
+
+
+def _fake_ocr(monkeypatch, lines):
+    import importlib
+
+    ocr_mod = importlib.import_module("openadapt_flow.vision.ocr")
+
+    class Line:
+        def __init__(self, text, region):
+            self.text, self.region = text, region
+
+    monkeypatch.setattr(
+        ocr_mod, "ocr", lambda png: [Line(t, r) for t, r in lines], raising=True
+    )
+
+
+def test_an_icon_only_save_next_to_a_field_label_is_held(monkeypatch):
+    # "Notes" is 20 px left of the click: the old nearest-line rule named the
+    # icon "Notes" and let the click through.
+    _fake_ocr(monkeypatch, [("Notes", (40, 14, 40, 12))])
+    tool = FakeTool()
+    computer = GatedComputer(tool, RefuseGate())
+    assert isinstance(computer(**_click(100, 20)), HeldResult)
+    assert tool.calls == []
+    assert computer.gate_events == [{"decision": "hold", "label": None}]
+
+
+def test_ocr_names_the_target_only_with_a_line_that_holds_the_click(monkeypatch):
+    _fake_ocr(monkeypatch, [("Cancel", (5, 14, 40, 12)), ("Save", (60, 14, 30, 12))])
+    tool = FakeTool()
+    computer = GatedComputer(tool, RefuseGate())
+    computer(**_click(20, 20))  # inside "Cancel"
+    assert tool.calls == [_click(20, 20)]
+    assert isinstance(computer(**_click(70, 20)), HeldResult)  # inside "Save"
+    assert tool.calls == [_click(20, 20)]
+
+
+def test_target_bounds_join_every_line_inside_the_target(monkeypatch):
+    _fake_ocr(
+        monkeypatch,
+        [
+            ("Cancel", (12, 12, 40, 10)),
+            ("order", (12, 24, 30, 10)),
+            ("x", (200, 0, 5, 5)),
+        ],
+    )
+
+    class Bounded(FakeTool):
+        def target_bounds(self, x: int, y: int) -> tuple[int, int, int, int]:
+            return (10, 10, 60, 30)
+
+    tool = Bounded()
+    computer = GatedComputer(tool, RefuseGate())
+    assert isinstance(computer(**_click(30, 18)), HeldResult)
+    assert computer.gate_events[0]["label"] == "Cancel order"
+
+
+def test_a_deployment_can_add_safe_labels_but_not_a_commit(monkeypatch):
+    from openadapt_flow.flight.computer import SAFE_LABELS_ENV, parse_safe_labels
+
+    tool = LabelledTool({(10, 20): "button New Encounter"})
+    computer = GatedComputer(tool, RefuseGate(), safe_labels=["New encounter"])
+    computer(**_click())
+    assert tool.calls == [_click()]
+    with pytest.raises(ValueError):
+        parse_safe_labels(["Save draft"])
+    monkeypatch.setenv(SAFE_LABELS_ENV, '["Triage"]')
+    tool = LabelledTool({(10, 20): "button Triage"})
+    GatedComputer(tool, RefuseGate())(**_click())
+    assert tool.calls == [_click()]
+    monkeypatch.setenv(SAFE_LABELS_ENV, '["Triage", "Submit"]')  # refused whole
+    tool = LabelledTool({(10, 20): "button Triage"})
+    assert isinstance(GatedComputer(tool, RefuseGate())(**_click()), HeldResult)

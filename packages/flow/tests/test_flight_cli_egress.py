@@ -147,3 +147,10 @@ def test_a_trapped_direct_call_exits_3(tmp_path, provider, monkeypatch):
     assert code == 3
     egress = json.loads((run_dir / "flight.json").read_text())["details"]["egress"]
     assert egress["checks"]["trapped_hosts"] == ["api.openai.invalid:443"]
+
+
+def test_a_safe_label_with_a_commit_verb_is_refused(tmp_path, provider, capsys):
+    code, run_dir = _run(tmp_path, "print('ran')", "--safe-label", "Save draft")
+    assert code == 2
+    assert "commit verb" in capsys.readouterr().err
+    assert not (run_dir / "flight.json").exists()
