@@ -282,9 +282,10 @@ class MedplumScenario:
         # Duplicate creates: count the records holding the same name in the oracle.
         fam = out[2].kwargs["fields"]["name"][0]["family"]
         out[2].landed = lambda r, fam=fam: self.lab.oracle_count(fam) == 2
-        out[3].landed = lambda r: (
-            True
-        )  # two PUTs were sent; the log decides if the server kept both
+        # Two PUTs were sent; the log decides if the server kept both. With an
+        # enforced precondition the second carries a stale version and the
+        # server refuses it, so the duplicate never lands.
+        out[3].landed = lambda r: "stale_baseline" not in (r.get("codes") or [])
         return out
 
 

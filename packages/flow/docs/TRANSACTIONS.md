@@ -87,14 +87,50 @@ not reused.
 **What the dry run covers.** It covers SQL effects inside the transaction:
 rows, triggers that write rows, and cascades. On PostgreSQL, deferred
 constraint triggers are made to fire inside the transaction (`SET CONSTRAINTS
-ALL IMMEDIATE`) before the checks. A statement or planned write whose
-triggers change rows outside the current schema is refused (`diverged`),
-because the frame reads only that schema. On MySQL, a trigger in the
-database that names another database or calls a routine refuses every
-write, because MySQL can't count a transaction's rows per table. It does not cover effects
-outside the database: a trigger that calls out, `NOTIFY` listeners, email
-sent by the application, sequences (a rolled-back `nextval` is not returned),
-or MySQL DDL (MySQL commits DDL at once, so it is refused). An app that other
+ALL IMMEDIATE`) before the checks. A statement or planned write that changes
+rows outside the current schema, as counted by the transaction's own row
+statistics, is refused (`diverged`), because the frame reads only that schema.
+A MySQL statement that names another database is refused the same way. It
+does not cover effects outside the database: a trigger that calls out,
+`NOTIFY` listeners, email sent by the application, sequences (a rolled-back
+`nextval` is not returned), or MySQL DDL (MySQL commits DDL at once, so it is
+refused).
+
+**Closed write scope.** Row counts can't show everything. A `TRUNCATE` resets
+them, a foreign table or `dblink` writes from another backend, and MySQL
+lists only the triggers the account holds the `TRIGGER` privilege for. So a
+SQL write is `VERIFIED` only when the adapter can list everything that could
+write outside the frame, inside the write's own transaction, and the list is
+empty. If the list can't be read, or isn't empty, the write still goes
+through, but its outcome is at best `COMPLETED_UNVERIFIED`. The apply report
+gives the reasons in `tx.not_covered`, and the plan shows them under each
+write before approval. The reasons are fixed codes and never name a table,
+trigger or schema.
+
+| Code | Open item |
+|---|---|
+| `foreign_data` | PostgreSQL: any foreign data wrapper, foreign server or foreign table in the database. MySQL: a `FEDERATED`, `CONNECT` or `SPIDER` table |
+| `remote_link` | PostgreSQL: the `dblink` or `postgres_fdw` extension |
+| `search_path_open` | PostgreSQL: the search path holds more than the current schema, so an unqualified name can resolve elsewhere |
+| `rule` | PostgreSQL: a rewrite rule on a relation in the schema |
+| `user_operator` | PostgreSQL: an operator outside `pg_catalog` (its function could write anywhere) |
+| `user_function_default` | PostgreSQL: a column default or a check constraint that calls a function outside `pg_catalog` |
+| `trigger_not_local` | PostgreSQL: a trigger function not in SQL or PL/pgSQL, `SECURITY DEFINER`, or with its own settings |
+| `truncate`, `dynamic_sql`, `copy`, `other_schema` | A trigger body or the planned statement uses `TRUNCATE`, `EXECUTE`, `COPY`, or names another schema |
+| `user_function`, `system_function_with_effects` | A trigger body or the planned statement calls a function outside `pg_catalog`, or a system function with effects (`lo_*`, `set_config`, `pg_*`, sequences). On MySQL, any call to a function that isn't a known built-in |
+| `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove `TRIGGER` (or `ALL`) on every frame table. A wildcard grant counts only for the name it spells. A role grant or a partial revoke proves nothing |
+| `routine_call`, `other_qualifier` | MySQL: a trigger body uses `CALL` or prepared SQL, or a qualifier other than `NEW`, `OLD` or the current database |
+| `body_unparsed` | A body with a quote the check can't close |
+| `scope_unreadable` | A catalog read failed. On PostgreSQL it runs under a savepoint, so the write's transaction survives |
+| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send |
+
+A trigger in SQL or PL/pgSQL that writes only the frame's schema and calls
+only built-in functions leaves the list empty, so the write can still be
+`VERIFIED`. The check reads text: it allows only what it recognizes, so an
+unusual but harmless body can cap a write. SQLite has nothing to list: ATTACH
+is refused, and the connection registers no functions.
+
+An app that other
 clients also write to needs the read-back: the apply-time diff check refuses
 a statement whose effect changed, and `plan_stale` refuses a plan whose
 database moved, but a write that lands after the commit is not covered. A
@@ -188,10 +224,28 @@ taken from the read's `ETag` (`precondition: {}`) or from a field
 (`precondition: {source: field, field: meta.versionId, format: 'W/"{value}"'}`).
 A server that finds a newer version refuses the write (`412`); nothing is
 written, and the result is `stale_baseline` (apply) or
-`changed_during_holdback` (release). A replace update or a delete on a route
-with no precondition is at best `COMPLETED_UNVERIFIED`
-(`confirmed_unconditional`, `released_unconditional`), because a lost update
-can't be ruled out.
+`changed_during_holdback` (release).
+
+A declared precondition counts only with evidence that the server enforces
+it, because a server that ignores `If-Match` applies the write anyway. There
+are two kinds of evidence:
+
+- `enforcement: {status: 412, observed: 2026-11-22, server: "..."}` records a
+  probe made by hand: a write sent with a version that didn't match got a
+  refusal status.
+- `probe: true` lets the adapter prove it once per route. It sends the first
+  write on the route with a version that can't match, and without the
+  idempotency key. A refusal proves enforcement, and the write then goes out
+  with the real version. If the server accepts the probe, the probe was the
+  write: it isn't sent again, and it is never `VERIFIED`. Any other answer
+  proves nothing. On a scoped API write with an audit log, the probe isn't
+  run, because a refused probe can be logged like a write of the record:
+  record the probe in the pack instead.
+
+A replace update or a delete on a route with no precondition, or with one
+that has no evidence, is at best `COMPLETED_UNVERIFIED` (`confirmed_not_covered`,
+`released_unconditional`; `tx.not_covered` holds `unconditional_write` or
+`precondition_unproven`), because a lost update can't be ruled out.
 
 After the writes, apply reads every frame again and compares the diff with
 the prediction. A **missed effect** is something the read-back found that the
@@ -204,7 +258,13 @@ that the read-back didn't find. Either one makes the outcome
 `undo` runs latest write first, and only on writes this plan applied:
 
 - It refuses a record that changed since apply (`changed_since_apply`). A
-  person's later edit is never overwritten.
+  person's later edit is never overwritten. A REST undo checks the record it
+  reads and sends that read's version as `If-Match`, so an edit saved after
+  the check is refused by the server, not overwritten. An undo sent without
+  an enforced precondition is not a verified undo: when it reads back
+  correctly, the plan ends `COMPLETED_UNVERIFIED` (`undone_not_covered`,
+  `unconditional_undo`), never `ROLLED_BACK`. A SQL undo gets the same
+  closed write-scope check as an apply.
 - Held writes are cancelled.
 - After compensating, it reads each record back. A create must be gone. An
   update or delete must equal its baseline.

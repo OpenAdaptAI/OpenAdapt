@@ -1439,9 +1439,11 @@ def test_an_undo_carries_the_version_it_checked(
     # restore arrives. The restore names the version checked, so the server
     # refuses it and the edit stays.
     store, url = rest
-    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    # Declared only: the undo still sends the version (and is still capped).
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition={}))
     plan = _go(ctx, "T-uv", [_update(3, amount=7)])
-    assert engine.apply_plan(ctx, plan["digest"])["outcome"] == "VERIFIED"
+    engine.apply_plan(ctx, plan["digest"])
+    assert store.records[3]["amount"] == 7
     original = RestAdapter._call
 
     def call(self: RestAdapter, method: str, path: str, *a: Any, **kw: Any) -> Any:
