@@ -427,10 +427,17 @@ class PageQuiescence:
                 return None
         if verdict == "quiet" and self._root_frame is not None:
             try:
-                ticks = self._page.evaluate(TOP_TICKS_JS)
+                top = self._page.evaluate(TOP_TICKS_JS)
             except Exception:
                 return None
+            # TOP_TICKS_JS returns {ticks, stalled} since the paint-stall
+            # fallback: a top window that renders no frames lets the
+            # screenshot settle decide, as in the per-frame path above.
+            ticks = top.get("ticks") if isinstance(top, dict) else None
             if not ticks or not float(ticks[0]) > self._frame_last:
+                if isinstance(top, dict) and top.get("stalled"):
+                    self.last_reason = "unavailable"
+                    return None
                 verdict = "busy:paint"
         self.last_reason = str(verdict)
         if verdict != "quiet":
