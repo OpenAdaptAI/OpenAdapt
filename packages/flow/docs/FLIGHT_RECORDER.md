@@ -171,7 +171,15 @@ Two more layers catch what those shapes miss:
   a JSON array of chunks). An image the layers above scrubbed in place is
   taken out first; any other signature refuses the request.
 
+Both backstops run on each string and again on all of the request's strings
+joined, so encoded data split into short pieces refuses too.
+
 ### What the scrubber does not cover
+
+Images are recognised and scrubbed in PNG, JPEG, GIF, BMP, TIFF and WEBP.
+An image in another format (AVIF, QOI, PPM...) is not recognised: it is
+refused only when one of the density backstops catches it, and a flat-colour
+uncompressed image in another format can get through.
 
 The scrubber covers images and text in ordinary agent traffic, in standard
 encodings: base64 in any wrapping, and JSON escapes. An agent that

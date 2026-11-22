@@ -1477,9 +1477,9 @@ def scrub_request(
             else:
                 clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
         # Last check, over the whole scrubbed request: an image split across
-        # strings (text blocks, a JSON array of chunks) leaves its signature
-        # in their letters joined together. The images scrubbed above are
-        # taken out first.
+        # strings (text blocks, a JSON array of chunks) leaves its signature,
+        # or its density, in their letters joined together. The images
+        # scrubbed above are taken out first.
         joined = "".join(_leaf_strings(clean))
         for scrubbed_b64 in produced:
             joined = joined.replace(scrubbed_b64, "")
@@ -1487,6 +1487,15 @@ def scrub_request(
             raise ScrubRefused(
                 "the request holds a base64 image split across strings that "
                 "can't be scrubbed in place"
+            )
+        if len(joined) >= _DENSE_WINDOW and (
+            dense_payload(joined) or low_diversity(joined)
+        ):
+            # Encoded data split into strings too short for the backstop
+            # one by one (an image format with no signature checked here).
+            raise ScrubRefused(
+                "the request holds encoded data split across strings that "
+                "can't be scrubbed"
             )
         return clean
     except RecursionError:

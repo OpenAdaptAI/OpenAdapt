@@ -390,3 +390,51 @@ def test_an_image_split_across_text_blocks_refuses():
 )
 def test_tables_and_rules_are_not_refused_by_the_diversity_check(text):
     assert _outcome(text)[0] == "sent"
+
+
+def _other_format(kind: str) -> bytes:
+    """A small image in a format with no signature check here (random
+    pixels, so it does not compress to one letter)."""
+    rng = random.Random(kind)
+    pixels = rng.randbytes(1800)
+    if kind == "ppm":
+        return b"P6\n30 20\n255\n" + pixels
+    if kind == "qoi":
+        return (
+            b"qoif"
+            + (30).to_bytes(4, "big")
+            + (20).to_bytes(4, "big")
+            + b"\x03\x00"
+            + pixels
+        )
+    return b"\x00\x00\x00\x1cftypavif\x00\x00\x00\x00avifmif1miaf" + pixels  # avif
+
+
+@pytest.mark.parametrize("kind", ["avif", "qoi", "ppm"])
+def test_an_unrecognised_format_split_across_short_blocks_refuses(kind):
+    b64 = base64.b64encode(_other_format(kind)).decode()
+    blocks = [
+        {"type": "text", "text": b64[i : i + 200]} for i in range(0, len(b64), 200)
+    ]
+    assert all(len(block["text"]) < 512 for block in blocks)
+    body = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "x", "content": blocks}
+                ],
+            }
+        ]
+    }
+    with pytest.raises(ScrubRefused, match="split across strings"):
+        scrub_request(body, Stub())
+
+
+def test_ordinary_text_across_many_blocks_is_not_refused():
+    blocks = [
+        {"type": "text", "text": f"Step {i}: opened the referral and added a note."}
+        for i in range(60)
+    ]
+    body = {"messages": [{"role": "user", "content": blocks}]}
+    scrub_request(body, Stub())
