@@ -12,12 +12,17 @@ from __future__ import annotations
 import hashlib
 import threading
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Optional  # noqa: F401
+from typing import TYPE_CHECKING, Any, Mapping, Optional  # noqa: F401
 
 from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
-from openadapt_flow.ir import EffectVerificationEvidence, HaltObservation, StepResult
+from openadapt_flow.ir import (
+    EffectVerificationEvidence,
+    HaltObservation,
+    StepResult,
+    Workflow,
+)
 from openadapt_flow.qualification_faults import effect_verifier_input_sha256
-from openadapt_flow.runtime.authorization import runtime_param_text
+from openadapt_flow.runtime.authorization import RuntimeParamScalar, runtime_param_text
 from openadapt_flow.runtime.durable.first_local_runtime import (
     placeholder_effect_refusal,
 )
@@ -40,18 +45,15 @@ from openadapt_flow.verification import (
 )
 
 if TYPE_CHECKING:
-    from typing import Literal, Mapping
+    from typing import Literal
 
     from openadapt_flow.backend import Backend
-    from openadapt_flow.ir import Region, RunReport, Step, Workflow
+    from openadapt_flow.ir import Region, RunReport, Step
     from openadapt_flow.qualification_faults import (
         FaultMutationReceipt,
         QualificationFaultGate,
     )
-    from openadapt_flow.runtime.authorization import (
-        GovernedRunAuthorization,
-        RuntimeParamScalar,
-    )
+    from openadapt_flow.runtime.authorization import GovernedRunAuthorization
     from openadapt_flow.runtime.effects import Effect, EffectVerifier
     from openadapt_flow.runtime.readback_pipeline import (
         PipelinedReadback,
