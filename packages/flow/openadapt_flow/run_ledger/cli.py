@@ -110,7 +110,8 @@ def register(sub: argparse._SubParsersAction) -> None:
     export.add_argument(
         "--require-scrubber",
         action="store_true",
-        help="Refuse when openadapt-privacy's text scrubber isn't installed",
+        help="Kept for old scripts: export always requires openadapt-privacy's "
+        "text scrubber",
     )
     export.set_defaults(func=cmd_export)
 
@@ -369,6 +370,7 @@ def screen_rows(
         reason = _screen_one(
             entry,
             row,
+            opaque=store.opaque_task_id,
             summary=summary,
             scrubber=scrubber,
             values=values,
@@ -385,15 +387,23 @@ def _screen_one(
     entry: dict[str, Any],
     row: Any,
     *,
+    opaque: Callable[[str], str],
     summary: bool,
     scrubber: Optional[Any],
     values: list[str],
     models: tuple[Any, Any],
 ) -> str | tuple[str]:
-    """``(line,)`` for a row that may leave, else the reason it may not."""
+    """``(line,)`` for a row that may leave, else the reason it may not.
+
+    A task id the scrubber would rewrite is replaced by an opaque
+    ``tid-<16 hex>`` (:meth:`LedgerStore.opaque_task_id`): a caller can
+    choose a task id (a wrap-dispatch request id, say), so its text never
+    leaves, while the same task still groups together. Every other label
+    the scrubber would rewrite refuses the row, except a field name the
+    run's own config declared.
+    """
 
     declared = set(entry.get("declared_fields") or [])
-    declared_ids = set(entry.get("declared_task_ids") or [])
     doc = row.summary().to_json() if summary else row.to_json()
     model = models[0] if summary else models[1]
     allowed = {f.alias or name for name, f in model.model_fields.items()}
@@ -404,8 +414,6 @@ def _screen_one(
         for where, label in _label_values(doc):
             if where == "fields_written.name" and label in declared:
                 continue  # a declared field name (patient_id): not a value
-            if where == "task_id" and label in declared_ids:
-                continue  # the run's own files name this task id
             try:
                 scrubbed = scrubber.scrub_text(label)
             except Exception as exc:  # a scrubber that can't run refuses all
@@ -413,7 +421,9 @@ def _screen_one(
                     f"the text scrubber could not run ({type(exc).__name__}); "
                     "nothing was written"
                 ) from exc
-            if scrubbed != label:
+            if scrubbed != label and where == "task_id":
+                doc["task_id"] = opaque(label)
+            elif scrubbed != label:
                 return f"the scrubber would rewrite its {where}"
     line = json.dumps(doc, sort_keys=True)
     if any(value in line for value in values):
@@ -461,9 +471,27 @@ def _scrubber(require: bool) -> Optional[Any]:
     return scrubber
 
 
+def _write_0600(path: Path, data: bytes) -> None:
+    """Write ``path`` owner-only (0600), through a temporary file."""
+
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     try:
-        scrubber = _scrubber(args.require_scrubber)
+        # Rows leave the ledger: a working text scrubber is always required.
+        scrubber = _scrubber(True)
         screened = screen_rows(_store(args), summary=False, scrubber=scrubber)
     except LedgerRefused as exc:
         print(f"ledger export: refused: {exc}", file=sys.stderr)
@@ -471,7 +499,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     lines = screened.lines
-    out.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    _write_0600(out, "".join(line + "\n" for line in lines).encode("utf-8"))
     print(f"Wrote {len(lines)} rows to {out}")
     _print_refused("export", screened.refused)
     # A refused row stays local; the exit status says some didn't go.

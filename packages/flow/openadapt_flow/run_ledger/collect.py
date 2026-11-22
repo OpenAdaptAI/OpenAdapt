@@ -156,9 +156,6 @@ class Contribution:
     #: Field names the run's own task, verify or readiness reference config
     #: declares (``ledger export`` lets only these past the scrubber check).
     declared_fields: set[str] = field(default_factory=set)
-    #: Task ids the run's own task or readiness files declare (the same rule
-    #: as field names: ``ledger export`` may let these past the scrubber).
-    declared_task_ids: set[str] = field(default_factory=set)
     #: Wall-clock moments the source records (an approval asked, a hold, a
     #: read-back issued). They bound the run when it keeps no start time.
     moments: list[str] = field(default_factory=list)
@@ -384,6 +381,12 @@ def collect_agent_guard(path: Path) -> Contribution:
             out.signal("approval_held")
         elif sent:
             out.signal("write_unconfirmed")
+        elif not blocked and not (
+            events_path.is_file() or _int((doc.get("requests") or {}).get("save")) == 0
+        ):
+            # No events file and no count of zero saves: nothing shows that
+            # no save request went out.
+            out.signal("write_unconfirmed")
         elif not blocked:
             ended = doc.get("ended")
             out.signal(
@@ -607,11 +610,18 @@ def collect_agent_run_record(path: Path) -> Contribution:
         out.signal("lost_reply")
         return out
     path_kind = result.get("path")
+    fallback_unproved = False
     if path_kind == "agent_fallback":
-        # P7: an agent run after a program's drift. Its ``verified`` is P7's
-        # rule (a passed record check of the task's record, every gate
-        # approved by the person), so it reads like an agent's first run.
+        # P7: an agent run after a program's drift. Its ``verified`` counts
+        # only with the record check that proves it: readable and passed
+        # (P7's ``confirmed``). A record without one proves nothing.
         path_kind = "agent"
+        check = result.get("record_check")
+        fallback_unproved = not (
+            isinstance(check, dict)
+            and check.get("readable") is True
+            and check.get("passed") is True
+        )
     out.executor_kind = (
         "program" if path_kind == "skill" else "agent" if path_kind == "agent" else None
     )
@@ -625,6 +635,8 @@ def collect_agent_run_record(path: Path) -> Contribution:
     receipt_outcome = result.get("receipt_outcome")
     if isinstance(status, str) and status in WRAP_STATUS_REASON:
         out.signal(WRAP_STATUS_REASON[status])
+    elif result.get("verified") is True and fallback_unproved:
+        out.signal("reconciliation_required")
     elif result.get("verified") is True and (
         receipt_outcome == "VERIFIED" or path_kind == "agent"
     ):
@@ -1194,23 +1206,10 @@ class Collected:
     def declared_fields(self) -> set[str]:
         """Every field name the run's own config declares (finding a)."""
 
-        from openadapt_flow.run_ledger.readers import split_declared
-
-        names = split_declared(self.config_fields)[0]
+        names = set(self.config_fields)
         for contribution in self.contributions:
             names |= contribution.declared_fields
         return names
-
-    @property
-    def declared_task_ids(self) -> set[str]:
-        """Task ids the run's own guard task or readiness files declare."""
-
-        from openadapt_flow.run_ledger.readers import split_declared
-
-        ids = split_declared(self.config_fields)[1]
-        for contribution in self.contributions:
-            ids |= contribution.declared_task_ids
-        return ids
 
     @property
     def files(self) -> list[Path]:

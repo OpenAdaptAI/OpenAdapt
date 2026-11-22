@@ -242,6 +242,12 @@ def test_a_timed_out_guard_with_a_sent_save_is_unknown_not_failed(tmp_path):
     assert (row.outcome.value, row.outcome_reason) == ("UNKNOWN", "write_unconfirmed")
     summary["hold_ms"] = []
     summary["saves_held"] = 0
+    # No events file: only the guard's own count of zero saves shows that
+    # nothing was sent.
+    (tmp_path / "summary.json").write_text(json.dumps(summary))
+    row, _, _ = build_row(tmp_path)
+    assert (row.outcome.value, row.outcome_reason) == ("UNKNOWN", "write_unconfirmed")
+    summary["requests"] = {"save": 0}
     (tmp_path / "summary.json").write_text(json.dumps(summary))
     row, _, _ = build_row(tmp_path)
     assert (row.outcome.value, row.outcome_reason) == ("FAILED", "timed_out_no_write")

@@ -122,6 +122,7 @@ RunLedgerOutcomeReason = Literal[
     "save_blocked_double_save",
     "save_blocked_out_of_scope",
     "gate_refused",
+    "readback_field_differs",
     "shadow_wrong_record",
     "shadow_field_mismatch",
     # FAILED
@@ -180,6 +181,7 @@ RUN_LEDGER_REASON_OUTCOME: Mapping[str, RunLedgerOutcome] = {
     "save_blocked_double_save": _C,
     "save_blocked_out_of_scope": _C,
     "gate_refused": _C,
+    "readback_field_differs": _C,
     "shadow_wrong_record": _C,
     "shadow_field_mismatch": _C,
     "crashed_no_write": _F,
@@ -342,6 +344,8 @@ class _RowBody(_Strict):
             self.readback_tier != "independent_readback"
         ):
             raise ValueError("VERIFIED needs an independent read-back")
+        if self.outcome is RunLedgerOutcome.VERIFIED and self.fields_differing:
+            raise ValueError("VERIFIED can't have a field that differs")
         if self.started_at is not None and self.ended_at is not None:
             if _parse(self.ended_at) < _parse(self.started_at):
                 raise ValueError("ended_at is before started_at")

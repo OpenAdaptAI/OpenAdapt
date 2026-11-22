@@ -97,6 +97,11 @@ Two more rules:
   and a person's answer was part of the work either way. Approvals and
   exceptions carry a closed decision (`approve`, `continue`,
   `done_by_person`), which is why they can be cleared.
+- **A field that differs is a caught error.** A field any source marks
+  `differs` (a guard row's `fields_differing`, a read-back) makes the run
+  CAUGHT_ERROR (`readback_field_differs`, or `readback_refuted` when the guard
+  says so), whatever else says VERIFIED, and the schema refuses a VERIFIED row
+  with `fields_differing` above 0.
 - **"No write" needs evidence.** A crash, failure or timeout can come after a
   request went out. `crashed_no_write` and `timed_out_no_write` are used only
   where the source also shows nothing was sent (the agent guard's own save
@@ -147,7 +152,7 @@ know: the row is then UNKNOWN with `schema_unrecognised`.
 
 | File | Reads | Can't tell |
 | --- | --- | --- |
-| `summary.json` (`openadapt.agent-guard-run/v1`) and `guard_events.jsonl` | Verdict, blocked and would-block codes, holds, whether a save was sent, `ended`, `seconds` | Wall-clock times, field names, the guarded agent's model usage |
+| `summary.json` (`openadapt.agent-guard-run/v1`) and `guard_events.jsonl` | Verdict, blocked and would-block codes, holds, whether a save was sent, `ended`, `seconds`, `requests.save`. With no `guard_events.jsonl` and no `requests.save` of 0, nothing shows that no save went out: UNKNOWN (`write_unconfirmed`), never a no-write FAILED. | Wall-clock times, field names, the guarded agent's model usage |
 | `effect-receipt.json` (verify-run, `openadapt.effect-receipt/v1`) | `outcome`, `effect_verdict`, `verification_tier`, `executor_kind` | Field names (effects are contract hashes) |
 | `report.json` (compiled run; no schema field, recognised by shape) | `transaction_outcome` (else `execution_outcome`), `readback.checked_how`, `model_calls`, `est_model_cost_usd`, `started_at`, `total_ms`, `params` (committed only) | Tokens; field names |
 | `receipt.json` (`openadapt.run-receipt/v2`) | `effect_assurance` (else `effect_tier_reached`), `receipt_digest`, `model_calls`, `est_cost_usd`, `duration_ms` | Anything about a halted run (only VERIFIED runs get one) |
@@ -250,8 +255,9 @@ A fallback gate in `result.json` keeps one time, not an opened/decided pair,
 so a person's time on it is unknown (`null`), not zero. The envelope keeps
 no gate times at all, so its row's time is unknown too. A wrap run record
 (`openadapt-agent.run/v1`) whose result `path` is `agent_fallback` is read
-like an agent's first run: P7's `verified` is VERIFIED, anything else without
-the policy record is UNKNOWN (`write_unconfirmed`).
+like an agent's first run, but `verified: true` counts only with a
+`record_check` that is `readable: true` and passed; without one it is UNKNOWN
+(`reconciliation_required`).
 
 ### Merging sources
 
@@ -290,7 +296,7 @@ no POSIX mode to set.
 | `ledger list [--json]` | Every row. |
 | `ledger show ROW_ID [--show-values]` | One row; with `--show-values`, also the sidecar's values. |
 | `ledger summary [--since ISO] [--task-type T] [--json]` | Runs per outcome, a person's minutes, model cost, median duration. Rows whose time or cost is unknown are counted as unknown, not as zero. |
-| `ledger export --out FILE [--require-scrubber]` | Value-free JSONL. |
+| `ledger export --out FILE` | Value-free JSONL, written owner-only (0600). Always requires openadapt-privacy's text scrubber (`--require-scrubber` is kept for old scripts). |
 | `ledger push [--host URL] [--dry-run]` | POSTs each row without `sources`, as `openadapt.agent-run-summary/v1`, to `/api/runs/ingest-agent-run` with `OPENADAPT_API_KEY`. |
 
 `export` and `push` screen each row and refuse a row when:
@@ -299,8 +305,8 @@ no POSIX mode to set.
 - a row has a key outside its schema, or fails validation;
 - openadapt-privacy's text scrubber is installed and would rewrite a label
   (task id, task type, executor label or field name), or can't run (for
-  example, its spaCy model is missing). Without the scrubber, `export` says
-  so and relies on the sidecar check; `--require-scrubber` refuses instead.
+  example, its spaCy model is missing). Without a working scrubber, `export`
+  and `push` refuse everything; only `push --dry-run` warns and prints.
   One exemption: a field name the run's own config declared at `add` time.
   Presidio rewrites the name `patient_id` to `<ORGANIZATION>`; a declared
   name is a form's identifier, not a value. Declared means: a guard task's
@@ -312,13 +318,12 @@ no POSIX mode to set.
   ones; and for `FAILED_SCOPE` or a case with no proposal, whose field rows
   compare never built, nothing). Any other name the scrubber would rewrite still refuses, and an
   entry added before this rule exempts nothing.
-  The same rule covers the row's `task_id`: it is let through only when the
-  run's own files name it (a readiness `run.json` or `case.json`, or a guard
-  task whose `task_id` matches). Presidio reads `readiness-mockmed-0002` as
-  an organisation; P1's own run file names it, so it may leave. An id given
-  only with `--task-id` still refuses when the scrubber rewrites it. P7's own
-  `result.json` or dispatcher envelope declares its request id (or task key)
-  the same way. The entry keeps these as `declared_task_ids`.
+  A task id is never exempt: a caller can choose one (a wrap-dispatch
+  request id is the calling agent's). When the scrubber would rewrite it, the
+  row leaves with an opaque `tid-<16 hex>` instead: HMAC-SHA256 of the id
+  under a per-install key in `$OPENADAPT_HOME/ledger/task-id.key` (0600), so
+  the same task still groups together in Cloud and the text stays on this
+  computer. The local row keeps the real id.
 
 Cloud receives `null` for every value the sources don't give
 (`started_at`, `ended_at`, `duration_s`, the `model` counts and cost,

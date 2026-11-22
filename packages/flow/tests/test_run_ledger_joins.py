@@ -18,7 +18,9 @@ local paths were shortened):
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import stat
 from pathlib import Path
 
 import pytest
@@ -345,7 +347,7 @@ def test_the_dispatcher_envelopes_outcome_is_not_read(tmp_path):
         assert _outcome(row) == expected
 
 
-def test_a_wrap_record_of_a_verified_fallback_is_verified(tmp_path):
+def test_a_wrap_record_of_a_verified_fallback_needs_its_record_check(tmp_path):
     env = json.loads((FIXTURES / "dispatch_envelope_verified.json").read_text())
     result = {k: v for k, v in env.items() if k not in ("outcome", "fallback")}
     record = {
@@ -355,6 +357,11 @@ def test_a_wrap_record_of_a_verified_fallback_is_verified(tmp_path):
         "result": result,
     }
     path = tmp_path / "run-0001.json"
+    path.write_text(json.dumps(record))
+    row, _, _ = build_row(path)
+    # verified: true with no readable record check proves nothing.
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
+    result["record_check"] = {"readable": True, "passed": True, "created": 1}
     path.write_text(json.dumps(record))
     row, _, _ = build_row(path)
     assert _outcome(row) == ("VERIFIED", "readback_verified")
@@ -573,17 +580,28 @@ def test_collect_reads_a_shadow_run_as_one_source():
     assert collected.declared_fields == {"note", "patient_id", "type"}
 
 
-def test_a_guard_rows_field_diff_alone_does_not_pick_the_bucket(tmp_path):
-    # J3: the row gives names; the guard's summary.json (here
-    # RECONCILIATION_REQUIRED) and the read-back decide.
+def test_a_field_that_differs_from_any_source_is_a_caught_error(tmp_path):
+    # Review on b4e63aa2d: a row could be VERIFIED while a field differed.
+    # The guard row's differing field now makes the run CAUGHT_ERROR even
+    # when summary.json says VERIFIED.
     run = tmp_path / "run"
-    shutil.copytree(FIXTURES / "guard_no_persist", run)
+    shutil.copytree(FIXTURES / "guard_approved_ok", run)
     doc = json.loads((run / "guard_ledger_row.json").read_text())
-    doc.update(fields_checked=["note"], fields_differing=["note"])
+    doc.update(fields_differing=["note"])
     (run / "guard_ledger_row.json").write_text(json.dumps(doc))
     row, _, _ = build_row(run)
-    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
-    assert [(f.name, f.check) for f in row.fields_written] == [("note", "differs")]
+    assert _outcome(row) == ("CAUGHT_ERROR", "readback_field_differs")
+    assert ("note", "differs") in [(f.name, f.check) for f in row.fields_written]
+
+
+def test_the_schema_refuses_verified_with_a_differing_field():
+    from openadapt_types.run_ledger import RunLedgerRowV1
+
+    row, _, _ = build_row(FIXTURES / "guard_approved_ok")
+    doc = row.to_json()
+    doc["fields_differing"] = 1
+    with pytest.raises(ValueError, match="differs"):
+        RunLedgerRowV1.model_validate(doc)
 
 
 # -- a person's time: unknown unless a source shows nobody was asked ----------------
@@ -605,43 +623,49 @@ def test_no_intervals_is_unknown_unless_nobody_was_asked(fixture, expected):
     assert row.human.intervention_s == expected
 
 
-# -- task ids: exempt only when the run's own files declare them ----------------------
+# -- task ids: a rewritten one leaves as an opaque id, never as text --------------
 
 
 class _ReadsTaskIdAsOrg(_Presidio):
     """What Presidio does to P1's extra-target sample's task id."""
 
-    def __init__(self) -> None:
-        super().__init__("readiness-mockmed-0002")
+    def __init__(self, *more: str) -> None:
+        super().__init__("readiness-mockmed-0002", *more)
 
 
-def test_a_declared_task_id_passes_the_scrubber_check(tmp_path):
+def test_a_task_id_the_scrubber_rewrites_leaves_as_an_opaque_id(tmp_path):
     store = _store(tmp_path)
     store.add(FIXTURES / "shadow_extra_target")
-    (entry,) = store.entries()
-    assert entry["declared_task_ids"] == ["readiness-mockmed-0002"]
     (line,) = outbound_lines(store, summary=True, scrubber=_ReadsTaskIdAsOrg())
-    assert json.loads(line)["task_id"] == "readiness-mockmed-0002"
+    sent = json.loads(line)["task_id"]
+    assert re.fullmatch(r"tid-[0-9a-f]{16}", sent)
+    assert "readiness-mockmed-0002" not in line
+    # Stable per task, and the key stays here, owner-only.
+    assert store.opaque_task_id("readiness-mockmed-0002") == sent
+    key = store.root / "task-id.key"
+    assert stat.S_IMODE(key.stat().st_mode) == 0o600
+    # Kept locally as it was.
+    assert store.rows()[0].task_id == "readiness-mockmed-0002"
 
 
-def test_a_task_id_no_run_file_declares_still_refuses(tmp_path):
-    # The same id, given only with --task-id: nothing in the run names it.
+def test_a_caller_chosen_request_id_never_leaves_as_text(tmp_path):
+    # A wrap-dispatch request id is chosen by the agent that calls it.
     store = _store(tmp_path)
-    run = tmp_path / "run"
-    shutil.copytree(FIXTURES / "flight_held", run)
-    store.add(run, task_id="readiness-mockmed-0002")
-    with pytest.raises(LedgerRefused, match="task_id"):
-        outbound_lines(store, summary=True, scrubber=_ReadsTaskIdAsOrg())
+    store.add(FIXTURES / "run2_envelope_happy.json")
+    store.add(FIXTURES / "run2_envelope_declined.json")
+    lines = outbound_lines(
+        store,
+        summary=True,
+        scrubber=_ReadsTaskIdAsOrg("dispatch-happy", "dispatch-drift-declined"),
+    )
+    ids = {json.loads(line)["task_id"] for line in lines}
+    assert len(ids) == 2 and all(i.startswith("tid-") for i in ids)
+    assert not any("dispatch-" in line for line in lines)
 
 
-def test_a_guard_task_declares_its_own_task_id(tmp_path):
-    config = tuple(sorted((FIXTURES / "guard_approved_ok_config").iterdir()))
-    store = _store(tmp_path)
-    store.add(FIXTURES / "guard_approved_ok", config=config)
-    assert store.entries()[0]["declared_task_ids"] == ["prod-approval-approve-ok"]
-    plain = LedgerStore(tmp_path / "plain")
-    plain.add(FIXTURES / "guard_approved_ok")
-    assert plain.entries()[0]["declared_task_ids"] == []
+def test_another_install_gets_another_opaque_id(tmp_path):
+    a, b = LedgerStore(tmp_path / "a"), LedgerStore(tmp_path / "b")
+    assert a.opaque_task_id("x") != b.opaque_task_id("x")
 
 
 # -- P5's current row (guard_verdict, verdict_reason) ---------------------------------
@@ -752,21 +776,6 @@ def test_the_envelope_with_its_approvals_folder(tmp_path):
     assert _outcome(row) == ("ESCALATED", "person_declined")
     assert row.human.intervention_s == 0.02
     assert row.task_id == "dispatch-drift-declined"
-
-
-def test_a_p7_request_id_is_declared_by_p7s_own_file(tmp_path):
-    class ReadsDispatchAsOrg(_Presidio):
-        def __init__(self) -> None:
-            super().__init__("dispatch-happy", "dispatch-drift-declined")
-
-    store = _store(tmp_path)
-    store.add(FIXTURES / "run2_envelope_happy.json")
-    store.add(FIXTURES / "run2_envelope_declined.json", approvals=RUN2_APPROVALS)
-    lines = outbound_lines(store, summary=True, scrubber=ReadsDispatchAsOrg())
-    assert {json.loads(line)["task_id"] for line in lines} == {
-        "dispatch-happy",
-        "dispatch-drift-declined",
-    }
 
 
 def test_times_come_from_the_runs_own_files():

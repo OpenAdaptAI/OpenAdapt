@@ -204,3 +204,8 @@ def test_no_intervals_is_zero_or_unknown_never_another_number() -> None:
     assert RunLedgerHumanV1(intervention_s=0.0).intervention_s == 0.0
     with pytest.raises(ValidationError):
         RunLedgerHumanV1(intervention_s=5.0)
+
+
+def test_verified_with_a_differing_field_is_refused() -> None:
+    with pytest.raises(ValidationError, match="differs"):
+        _row(fields_differing=1)

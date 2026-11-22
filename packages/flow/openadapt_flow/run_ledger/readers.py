@@ -189,8 +189,6 @@ def collect_shadow_run(folder: Path) -> Contribution:
     out = Contribution(name, files=[run_path], executor_kind="agent")
     if (tid := _task_id(run.get("task_id"))) is not None:
         out.task_ids.append(tid)
-        # P1's own run file names the task: the operator's id, not a value.
-        out.declared_task_ids.add(tid)
     out.duration_s = _float(run.get("agent_wall_s"))
 
     usage_doc = _optional(folder, "usage.json", AGENT_USAGE_SCHEMA, out)
@@ -268,7 +266,6 @@ def collect_shadow_run(folder: Path) -> Contribution:
     if case is not None:
         if (tid := _task_id(case.get("task_id"))) is not None:
             out.task_ids.append(tid)
-            out.declared_task_ids.add(tid)
         for row in case.get("fields") or []:
             if (
                 not isinstance(row, dict)
@@ -409,9 +406,6 @@ def collect_fallback_result(path: Path) -> Contribution:
     tid = _task_id(doc.get("request_id")) or _task_id(compile_doc.get("task_key"))
     if tid is not None:
         out.task_ids.append(tid)
-        # P7's own result names the dispatcher's request id (or the task
-        # key): the operator's id, as a readiness run.json names its task.
-        out.declared_task_ids.add(tid)
     out.duration_s = _float(doc.get("seconds"))
     cost = _float(doc.get("cost_usd")) if doc.get("usage_known") is True else None
     out.usage = Usage(
@@ -689,7 +683,7 @@ def _guard_task_fields(path: Path, task_ids: set[str]) -> set[str]:
         return set()
     if doc.get("task_id") not in task_ids:
         return set()  # another task's config declares nothing for this run
-    names: set[str] = {"task_id:" + str(doc["task_id"])}
+    names: set[str] = set()
     for key in ("expected_record", "intended_fields"):
         value = doc.get(key)
         if isinstance(value, dict):
@@ -740,14 +734,6 @@ def declared_fields(files: Iterable[Path], task_ids: Iterable[str]) -> set[str]:
         elif path.suffix == ".json":
             names |= _guard_task_fields(path, ids)
     return names
-
-
-def split_declared(names: set[str]) -> tuple[set[str], set[str]]:
-    """``(field names, task ids)``: a guard task declares its own task id as
-    ``task_id:<id>`` beside its field names."""
-
-    ids = {n[len("task_id:") :] for n in names if n.startswith("task_id:")}
-    return {n for n in names if not n.startswith("task_id:")}, ids
 
 
 def config_files(files: Iterable[Path]) -> list[Path]:

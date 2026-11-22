@@ -13,8 +13,10 @@ Each ``rows.jsonl`` line is ``{"row": <openadapt.run-ledger/v1>, "run_digest":
 readiness reference config declares; ``ledger export`` and ``push`` let only
 those field names past the scrubber check (an entry without the key exempts
 nothing).
-``declared_task_ids`` lists the task ids the run's own guard task or
-readiness files name, under the same rule. ``run_digest`` hashes the source
+A task id the scrubber would rewrite (a caller may choose it) leaves as an
+opaque ``tid-<16 hex>``: an HMAC-SHA256 of the id under a per-install key in
+``task-id.key`` (mode 0600), so the same task still groups together and the
+text stays here. ``run_digest`` hashes the source
 files (paths and bytes); ``run_ref`` hashes the run's resolved path, so a run
 whose files change later (an approval answered after the first ``add``) gets
 a new row and :meth:`LedgerStore.latest` keeps the newest one per run. A
@@ -320,6 +322,11 @@ def build_row(
             }
         differing = max(differing, contribution.fields_differing)
     differing = max(differing, sum(1 for c in fields.values() if c == "differs"))
+    if differing:
+        # A field that differs, from any source (a guard row, a read-back),
+        # is a caught error: it outranks a VERIFIED from anywhere else.
+        signals = signals + [Signal("readback_field_differs", source="ledger")]
+        outcome, reason = decide(signals)
 
     tiers = [t for c in contributions for t in c.readback_tiers if t in _TIER_RANK]
     tier = max(tiers, key=lambda t: _TIER_RANK[t]) if tiers else None
@@ -445,6 +452,21 @@ class LedgerStore:
 
         return [RunLedgerRowV1.model_validate(e["row"]) for e in self.latest_entries()]
 
+    def opaque_task_id(self, task_id: str) -> str:
+        """``tid-`` and 16 hex of HMAC-SHA256(task id) under this install's
+        key (created once, mode 0600): stable per task, not reversible
+        without the key, which never leaves this computer."""
+
+        import hmac
+
+        key_path = self.root / "task-id.key"
+        with self._locked():
+            if not key_path.is_file():
+                _write_private(key_path, secrets.token_bytes(32))
+            key = key_path.read_bytes()
+        digest = hmac.new(key, task_id.encode("utf-8"), hashlib.sha256)
+        return "tid-" + digest.hexdigest()[:16]
+
     def exceptions_dir(self, run_ref: Optional[str]) -> Optional[Path]:
         """P6's folder for a run: ``exceptions/<run_ref>`` beside the ledger.
         P6's run reference is the operator's ``exceptions serve --run-ref``
@@ -524,7 +546,6 @@ class LedgerStore:
                     "run_ref": run_ref,
                     "added_at": _now(),
                     "declared_fields": sorted(collected.declared_fields),
-                    "declared_task_ids": sorted(collected.declared_task_ids),
                 }
             )
             body = "".join(json.dumps(e, sort_keys=True) + "\n" for e in entries)

@@ -222,15 +222,20 @@ def test_export_second_guard_uses_the_scrubber(capsys):
         outbound_lines(LedgerStore(), summary=False, scrubber=Scrubber())
 
 
-def test_export_require_scrubber_refuses_when_absent(tmp_path, monkeypatch, capsys):
+def test_export_always_requires_the_scrubber_and_writes_0600(
+    tmp_path, monkeypatch, capsys
+):
     import openadapt_flow.privacy as privacy
 
-    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: None)
     assert main(["ledger", "add", str(FIXTURES / "flight_held")]) == 0
     out = tmp_path / "e.jsonl"
-    assert main(["ledger", "export", "--out", str(out), "--require-scrubber"]) == 2
     assert main(["ledger", "export", "--out", str(out)]) == 0
-    assert "sidecars only" in capsys.readouterr().err
+    assert stat.S_IMODE(os.stat(out).st_mode) == 0o600
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: None)
+    for extra in ([], ["--require-scrubber"]):
+        assert main(["ledger", "export", "--out", str(tmp_path / "x"), *extra]) == 2
+    assert "scrubber" in capsys.readouterr().err
+    assert not (tmp_path / "x").exists()
 
 
 def test_push_is_refused_offline_with_no_key(monkeypatch, capsys):
