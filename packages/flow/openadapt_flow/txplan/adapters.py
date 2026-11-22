@@ -617,8 +617,25 @@ def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
                 "truncate" if re.match(r"^\s*truncate\b", sql, re.I) else "planned_ddl"
             )
         else:
+            # The planner can fold a call away (an IMMUTABLE wrapper) or hide
+            # one in a cast to a domain, so no plan proves a raw statement
+            # free of user code: any user function (other than a trigger or
+            # event-trigger function, covered above) or user domain, base or
+            # range type in the database caps it.
+            cur.execute(
+                "SELECT (SELECT count(*) FROM pg_proc "
+                f"WHERE oid >= {_PG_USER_OID} AND prorettype NOT IN "
+                "('trigger'::regtype, 'event_trigger'::regtype)), "
+                f"(SELECT count(*) FROM pg_type WHERE oid >= {_PG_USER_OID} "
+                "AND typtype IN ('d', 'b', 'r', 'm') AND typcategory <> 'A')"
+            )
+            funcs, types = cur.fetchone()
+            if int(funcs or 0):
+                gaps.add("user_function")
+            if int(types or 0):
+                gaps.add("user_type")
             # The statement as the server resolves it: views expanded, every
-            # function and relation by its catalog name.
+            # relation by its catalog name.
             cur.execute("EXPLAIN (VERBOSE, FORMAT JSON) " + sql)
             raw = cur.fetchone()[0]
             plan = json.loads(raw) if isinstance(raw, str) else raw

@@ -131,7 +131,7 @@ def _ctx(
                     "driver": "psycopg2",
                     "connect_args": cluster,
                     "tables": {"customers": "id"},
-                    "reviewed_triggers": list(reviewed),
+                    **({"reviewed_triggers": list(reviewed)} if reviewed else {}),
                 }
             ],
         }
@@ -379,7 +379,9 @@ def test_a_dollar_sign_identifier_cannot_hide_a_call(
     assert _notes(cur) == 0
 
 
-@pytest.mark.parametrize("how", ["domain", "cast", "view", "query_to_xml"])
+@pytest.mark.parametrize(
+    "how", ["domain", "cast", "view", "query_to_xml", "immutable", "domain_cast"]
+)
 def test_a_user_function_reached_through_the_catalog_is_never_verified(
     notes: Any, tmp_path: Path, how: str
 ) -> None:
@@ -418,6 +420,20 @@ def test_a_user_function_reached_through_the_catalog_is_never_verified(
             "UPDATE customers SET balance = 1 WHERE id = 1 AND (SELECT ok FROM gate)"
         )
         code, undo = "user_function", "DROP VIEW gate"
+    elif how == "immutable":
+        # The planner folds an IMMUTABLE call to a constant: no name is left
+        # in the plan.
+        cur.execute(
+            "CREATE FUNCTION im() RETURNS boolean IMMUTABLE LANGUAGE plpgsql AS $$ "
+            "BEGIN PERFORM wipe(); RETURN true; END $$"
+        )
+        write = _sql("UPDATE customers SET balance = 1 WHERE id = 1 AND im()")
+        code, undo = "user_function", "DROP FUNCTION im()"
+    elif how == "domain_cast":
+        # A cast to a domain runs its CHECK; the plan shows only the cast.
+        cur.execute("CREATE DOMAIN checked AS integer CHECK (VALUE IS NULL OR wipe())")
+        write = _sql("UPDATE customers SET balance = (1::checked)::int WHERE id = 1")
+        code, undo = "user_type", "DROP DOMAIN checked"
     else:
         write = _sql(
             "UPDATE customers SET balance = 1 WHERE id = 1 AND "
@@ -570,6 +586,7 @@ def _pg(**over: Any) -> dict[str, Any]:
         "d.refclassid::regclass::text": [],
         "pg_attribute a JOIN": [(0,)],
         "pg_get_expr(adbin": [],
+        "prorettype NOT IN": [(0, 0)],
         "EXPLAIN": _PLAN,
         "proname = ANY": [],
     }
@@ -667,6 +684,18 @@ def _explain(*outputs: str, schema: str = "public") -> list[tuple[Any, ...]]:
             ),
             "UPDATE customers SET v$a$ = 1 WHERE wipe()",
             "user_function",
+        ),
+        # A planner can fold a call away or hide it in a domain cast: user
+        # functions or types anywhere cap a raw statement.
+        (
+            _pg(**{"prorettype NOT IN": [(1, 0)]}),
+            "UPDATE customers SET b = 1",
+            "user_function",
+        ),
+        (
+            _pg(**{"prorettype NOT IN": [(0, 1)]}),
+            "UPDATE customers SET b = 1",
+            "user_type",
         ),
         (
             _pg(current_schemas=RuntimeError("permission denied")),
