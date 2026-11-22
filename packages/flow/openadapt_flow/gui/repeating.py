@@ -137,11 +137,14 @@ class Instance:
     #: The control for each slot, in slot order.
     controls: tuple[Control, ...]
 
-    def values(self) -> tuple[str, ...]:
+    def values(self) -> tuple[Optional[str], ...]:
         return tuple(_shown(c) for c in self.controls)
 
     def blank(self) -> bool:
-        return all(not v or v == "false" for v in self.values())
+        """Every slot reads empty or unticked. A box whose state was not read
+        is not blank."""
+
+        return all(v is not None and (not v or v == "false") for v in self.values())
 
 
 @dataclass(frozen=True)
@@ -154,8 +157,12 @@ class InstanceRead:
         return not self.problem
 
 
-def _shown(ctrl: Control) -> str:
+def _shown(ctrl: Control) -> Optional[str]:
+    """What a slot shows; None for a box whose state was not read."""
+
     if ctrl.role in ("checkbox", "switch", "radio"):
+        if ctrl.checked is None:
+            return None
         return "true" if ctrl.checked else "false"
     return ctrl.value.strip()
 
