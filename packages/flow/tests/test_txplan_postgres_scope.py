@@ -63,7 +63,18 @@ def cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]
         env=env,
     )
     try:
-        yield {"host": "127.0.0.1", "port": port, "user": "lab", "dbname": "postgres"}
+        info = {"host": "127.0.0.1", "port": port, "user": "lab", "dbname": "postgres"}
+        import psycopg2
+
+        con = psycopg2.connect(**info)
+        try:
+            cur = con.cursor()
+            cur.execute("SHOW server_version_num")
+            if int(cur.fetchone()[0]) < 130000:
+                pytest.skip("these tests need PostgreSQL 13 or later")
+        finally:
+            con.close()
+        yield info
     finally:
         subprocess.run(
             [pg_ctl, "-D", str(data), "-m", "immediate", "stop"],
@@ -266,6 +277,11 @@ def test_a_trigger_writing_a_foreign_table_is_never_verified(
     # transaction's row counts never see it, and pg_tables never frames the
     # foreign table.
     cluster, cur = db
+    cur.execute(
+        "SELECT count(*) FROM pg_available_extensions WHERE name = 'postgres_fdw'"
+    )
+    if not int(cur.fetchone()[0]):
+        pytest.skip("the postgres_fdw contrib module is not installed")
     cur.execute("CREATE DATABASE remote")
     import psycopg2
 
@@ -310,6 +326,58 @@ def test_a_trigger_writing_a_foreign_table_is_never_verified(
     assert out["outcome"] == "COMPLETED_UNVERIFIED", out
     assert {"foreign_data", "remote_link"} <= set(out["tx"]["not_covered"])
     assert left == 0 and _balance(cur, 2) == 8  # it ran, unverified
+
+
+@pytest.mark.parametrize("how", ["from", "when"])
+def test_a_trigger_reaching_a_user_function_another_way_is_never_verified(
+    db: Any, tmp_path: Path, how: str
+) -> None:
+    # The trigger function itself is local; the write outside the frame is a
+    # TRUNCATE (no row count shows it) in a helper called from a FROM clause,
+    # or from the trigger's WHEN condition.
+    cluster, cur = db
+    cur.execute(
+        "INSERT INTO side.notes (customer) SELECT g FROM generate_series(1, 4) g"
+    )
+    cur.execute(
+        "CREATE FUNCTION helper() RETURNS boolean LANGUAGE plpgsql AS $$ "
+        "BEGIN TRUNCATE side.notes; RETURN true; END $$"
+    )
+    if how == "from":
+        cur.execute(
+            "CREATE FUNCTION calls_helper() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN PERFORM 1 FROM helper(); RETURN NULL; END $$"
+        )
+        cur.execute(
+            "CREATE TRIGGER via AFTER UPDATE ON customers "
+            "FOR EACH ROW EXECUTE FUNCTION calls_helper()"
+        )
+    else:
+        cur.execute(
+            "CREATE FUNCTION calls_helper() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN RETURN NULL; END $$"
+        )
+        cur.execute(
+            "CREATE TRIGGER via AFTER UPDATE ON customers "
+            "FOR EACH ROW WHEN (helper()) EXECUTE FUNCTION calls_helper()"
+        )
+    try:
+        out = _attempt(
+            _ctx(cluster, tmp_path),
+            {
+                "system": "crm",
+                "collection": "customers",
+                "op": "update",
+                "id": 5,
+                "fields": {"balance": 3},
+            },
+        )
+    finally:
+        cur.execute("DROP FUNCTION calls_helper() CASCADE; DROP FUNCTION helper()")
+    assert isinstance(out, dict), out  # capped, not refused
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert "user_function" in out["tx"]["not_covered"]
+    assert _notes(cur) == 0
 
 
 def test_a_trigger_that_stays_in_the_schema_is_verified(
@@ -492,6 +560,24 @@ def _plpgsql(body: str) -> list[tuple[Any, ...]]:
             "system_function_with_effects",
         ),
         (_pg(pg_trigger=_plpgsql("BEGIN x := 'open; END")), "", "body_unparsed"),
+        (
+            _pg(
+                pg_trigger=_plpgsql("BEGIN PERFORM 1 FROM helper(); RETURN NULL; END"),
+                **{"proname = ANY": [("helper", "public")]},
+            ),
+            "",
+            "user_function",
+        ),
+        (
+            _pg(
+                pg_trigger=[
+                    ("plpgsql", False, False, "public", "BEGIN END", "helper()")
+                ],
+                **{"proname = ANY": [("helper", "public")]},
+            ),
+            "",
+            "user_function",
+        ),
         # The planned statement gets the same body test as a trigger.
         (_pg(), "TRUNCATE notes", "truncate"),
         (

@@ -371,8 +371,11 @@ _SQL_PAREN_WORDS = frozenset(
     update references foreign by with distinct do of to array
     """.split()
 )
-#: Words after which a name followed by ``(`` is a table or index, not a call.
-_NAME_WORDS = frozenset("into table update join from references on".split())
+#: Words after which a name followed by ``(`` is a table, not a call. On
+#: PostgreSQL there are none: every name is looked up in ``pg_proc``, which
+#: tells a table from a function. MySQL has no lookup, so only ``INTO t (``
+#: (a column list) is skipped.
+_NAME_WORDS = {"postgresql": frozenset(), "mysql": frozenset({"into"})}
 _IDENT = r'(?:"(?:[^"]|"")+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 _STRIP = {
     "postgresql": re.compile(
@@ -417,10 +420,13 @@ def sql_tokens(text: str, dialect: str) -> tuple[set[str], set[str], set[str]]:
         name = _unquote(tok)
         if last != ".":
             before = last
-        if (
-            m.group(2)
-            and name.lower() not in _SQL_PAREN_WORDS
-            and before.lower() not in _NAME_WORDS
+        quoted = tok[:1] in ('"', "`")
+        if m.group(2) and (
+            quoted
+            or (
+                name.lower() not in _SQL_PAREN_WORDS
+                and before.lower() not in _NAME_WORDS[dialect]
+            )
         ):
             calls.add(name)
         if tok[:1] not in ('"', "`"):
@@ -510,7 +516,8 @@ def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("rule")
-    # Defaults and checks on frame relations that call a user function.
+    # Defaults, checks, row-level security policies and index expressions on
+    # frame relations that call a user function.
     cur.execute(
         "SELECT count(*) FROM pg_depend d JOIN pg_proc p ON p.oid = d.refobjid "
         "JOIN pg_namespace n ON n.oid = p.pronamespace "
@@ -519,12 +526,17 @@ def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
         "(d.classid = 'pg_attrdef'::regclass AND d.objid IN "
         f"(SELECT oid FROM pg_attrdef WHERE adrelid IN ({_PG_FRAME_RELS}))) OR "
         "(d.classid = 'pg_constraint'::regclass AND d.objid IN "
-        f"(SELECT oid FROM pg_constraint WHERE conrelid IN ({_PG_FRAME_RELS}))))"
+        f"(SELECT oid FROM pg_constraint WHERE conrelid IN ({_PG_FRAME_RELS}))) OR "
+        "(d.classid = 'pg_policy'::regclass AND d.objid IN "
+        f"(SELECT oid FROM pg_policy WHERE polrelid IN ({_PG_FRAME_RELS}))) OR "
+        "(d.classid = 'pg_class'::regclass AND d.objid IN "
+        f"(SELECT indexrelid FROM pg_index WHERE indrelid IN ({_PG_FRAME_RELS}))))"
     )
     if int(cur.fetchone()[0]):
         gaps.add("user_function_default")
     cur.execute(
-        "SELECT l.lanname, p.prosecdef, p.proconfig IS NOT NULL, n.nspname, p.prosrc "
+        "SELECT l.lanname, p.prosecdef, p.proconfig IS NOT NULL, n.nspname, p.prosrc, "
+        "pg_get_expr(t.tgqual, t.tgrelid) "
         "FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid "
         "JOIN pg_namespace n ON n.oid = p.pronamespace "
         "JOIN pg_language l ON l.oid = p.prolang "
@@ -532,7 +544,9 @@ def _pg_scope_gaps(cur: Any, sql: str) -> list[str]:
         f"AND t.tgrelid IN ({_PG_FRAME_RELS})"
     )
     bodies: list[str] = []
-    for lang, secdef, config, nsp, src in cur.fetchall():
+    for lang, secdef, config, nsp, src, *when in cur.fetchall():
+        if when and when[0]:
+            bodies.append(str(when[0]))  # the trigger's WHEN condition
         if str(nsp) == "pg_catalog":
             continue  # a built-in trigger function writes only NEW
         if str(lang) not in _PG_SAFE_LANGS or secdef or config:
