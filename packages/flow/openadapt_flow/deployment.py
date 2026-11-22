@@ -2025,6 +2025,40 @@ def _resolve_config_exprs(
     return resolved
 
 
+def _resolve_sql_query_params(
+    exprs: Mapping[str, ValueExpr],
+    params: Optional[Mapping[str, object]],
+) -> dict[str, Optional[str]]:
+    """Resolve ``sql_query_params`` against the run's params, preserving explicit ``None``.
+
+    Missing parameters and unmapped ``map`` values still fail loud. Explicit
+    ``None`` (or ``ValueExpr(null=True)``) is passed through to
+    :class:`~openadapt_flow.runtime.effects.SqlRecordVerifier`, which rewrites
+    provably null-safe column equalities to ``IS NULL`` and refuses all other
+    uses.
+    """
+    values = dict(params or {})
+    resolved: dict[str, Optional[str]] = {}
+    for key, expr in exprs.items():
+        if expr.null or (
+            expr.param is not None
+            and expr.param in values
+            and values[expr.param] is None
+        ):
+            resolved[key] = None
+            continue
+        value = expr.resolve(values)
+        if value is None:
+            raise ValueError(
+                f"effects.sql_query_params[{key!r}] references run parameter "
+                f"{expr.param!r}, which was not supplied — pass it via "
+                "--param / --params-file (a verifier is never wired against "
+                "an unresolved selector)"
+            )
+        resolved[key] = value
+    return resolved
+
+
 def _require_env(name: str, what: str) -> str:
     """Read a secret env var named by the config; fail loud when absent."""
     import os
@@ -2599,8 +2633,7 @@ def _build_effect_verifier_unredacted(
             connect,
             cfg.sql_query,
             query_params=(
-                _resolve_config_exprs("sql_query_params", cfg.sql_query_params, params)
-                or None
+                _resolve_sql_query_params(cfg.sql_query_params, params) or None
             ),
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

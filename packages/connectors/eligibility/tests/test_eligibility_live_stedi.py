@@ -13,14 +13,13 @@ import os
 from datetime import datetime, timezone
 
 import pytest
-
-from openadapt_flow.eligibility.artifact import (
+from openadapt_eligibility.artifact import (
     ArtifactEncryption,
     PracticeArtifactPolicy,
     all_confirmed,
     write_and_verify,
 )
-from openadapt_flow.eligibility.client import (
+from openadapt_eligibility.client import (
     ApplicationMode,
     BenefitSelection,
     EligibilityRequest,

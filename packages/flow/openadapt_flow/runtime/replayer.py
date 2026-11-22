@@ -174,6 +174,7 @@ from openadapt_flow.qualification_faults import (  # noqa: F401
     sha256_bytes,
     verify_fault_mutation_receipt,
 )
+from openadapt_flow.receipt_record import save_settled_report
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.run_invocation import (
     InvocationContext,
@@ -3213,8 +3214,7 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
             # to a person, and it never stays held open for the next item.
             if decide_approval:
                 self._stamp_approval(report)
-        report.save(run_dir)
-        return report
+        return save_settled_report(run_dir, report)
 
     def recheck_deferred_readback(
         self,

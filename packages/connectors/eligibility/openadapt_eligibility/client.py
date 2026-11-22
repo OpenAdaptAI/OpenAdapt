@@ -2,7 +2,7 @@
 
 The public module is mechanism, not a production payer recipe.  A deployment
 supplies a practice-owned account boundary and an exact, reviewed payer binding
-through :mod:`openadapt_flow.eligibility.waterfall`.
+through :mod:`openadapt_eligibility.waterfall`.
 
 Primary contract references (reviewed 2026-07-21):
 
@@ -30,9 +30,8 @@ from enum import Enum
 from typing import Any, Callable, Literal, Mapping, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 from openadapt_flow.runtime.effects.auth import AuthRef
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 STEDI_ELIGIBILITY_URL = (
     "https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/eligibility/v3"

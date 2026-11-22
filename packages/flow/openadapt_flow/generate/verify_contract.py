@@ -4160,6 +4160,29 @@ def choose(
         if _exists(found, params):
             return found, params
         return _load_for(base / files[entry["mode"]], params), params
+    from openadapt_flow.generate.compositional import compose_and_admit
+
+    params = {**flatten(values), **dict(extra_params or {})}
+    try:
+        composed = compose_and_admit(
+            manifest_path, entry, given, lists, cleared, params
+        )
+    except ValueError as exc:
+        raise GenerateError(
+            f"composed {kind} contract for fields {sorted(given)} failed admission: {exc}"
+        ) from exc
+    if composed is not None:
+        write_doc, found_doc, _ = composed
+        base = manifest_path.parent
+        found = _load_doc_for(found_doc, params, base_dir=base, name=f"{kind}.found")
+        if _exists(found, params):
+            return found, params
+        return (
+            _load_doc_for(
+                write_doc, params, base_dir=base, name=f"{kind}.{entry['mode']}"
+            ),
+            params,
+        )
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
@@ -4226,6 +4249,24 @@ def _field_set(
         demos_sha256=str(inputs["demos_sha256"]),
     )
     return dict(result["files"])
+
+
+def _load_doc_for(
+    doc: Mapping[str, Any],
+    params: Mapping[str, Any],
+    *,
+    base_dir: Path,
+    name: str,
+) -> Any:
+    """Load an in-memory contract document with the same phone-shape rule as :func:`_load_for`."""
+
+    from openadapt_flow.generate.compositional import apply_phone_rule
+    from openadapt_flow.verifier import Contract
+
+    prepared = apply_phone_rule(doc, params)
+    contract = Contract.from_dict(prepared, name=name)
+    contract.config._base_dir = Path(base_dir).resolve()
+    return contract
 
 
 def _load_for(path: Path, params: Mapping[str, Any]) -> Any:
