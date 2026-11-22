@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.31.2 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: omit initial UI policy argument and forward inspected policy on certification
+- **desktop**: distinguish omitted policy from explicit selection in dispatcher and qualification
+- **types,desktop**: align certification policy readback, strict bool catalog slots, and canonical v1 outcome bytes
+- **types,desktop**: preserve v1 wire compat, tighten managed catalog schema, and support bundled Flow policy fallback
+
+
+
 ## v0.31.1 (2026-11-22)
 
 ### Bug Fixes
