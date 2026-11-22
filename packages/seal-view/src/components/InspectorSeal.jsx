@@ -1,5 +1,5 @@
-// The Seal card at the top of the program map's step inspector, shown exactly
-// while the inspector shows a step a Seal certifies (the save its read-backs
+// The receipt card at the top of the program map's step inspector, shown exactly
+// while the inspector shows a step a receipt covers (the save its read-backs
 // prove, or the stop), or a folded card holding that step. Nothing else gates
 // it: not playback, not the end of the runs. The package
 // (@openadapt/program-graph) owns the inspector's markup and has no slot for
@@ -7,9 +7,10 @@
 // it while it shows such a step, and the card renders into it with a portal
 // (as the landing map's run chips do).
 //
-// On openadapt.ai's landing page the card opens the Seal of the run that ended
-// there (a chooser when several did); on a Seal page it says this is the step
-// the Seal certifies and goes back up to the Seal. `Link` is the host's link
+// On openadapt.ai's landing page the card opens the receipt of the run that
+// ended there (a chooser when several did); on a receipt page it says this is
+// the step the receipt covers, with no button: the split view keeps the
+// receipt in view, and below 900 px the sticky tabs and verdict chip do. `Link` is the host's link
 // component (default: a plain <a>).
 import { useEffect, useState } from 'react'
 import { MiniIris } from './SealArt.jsx'
@@ -88,18 +89,19 @@ export function useInspectorHost(root, anchors, groups) {
 
 /**
  * seals: [{ n, href, irisSeed, tone, line, anchor }], the first one primary.
- * Landing: links to the Seals. Seal page: onBack scrolls up to the Seal.
+ * Landing (default): one link to the run's receipt. Receipt page (`here`): no
+ * button; the split view keeps the receipt and its verdict on screen.
  */
-export function InspectorSealCard({ seals, onBack = null, Link = 'a' }) {
+export function InspectorSealCard({ seals, here = false, Link = 'a' }) {
     const [primary, ...others] = seals
     const stop = primary.anchor?.kind === 'stop'
-    const landing = !onBack
+    const landing = !here
     return (
-        <section className={s.card} data-tone={primary.tone} data-seal-card={landing ? 'open' : 'here'} aria-label="This step's Seal">
+        <section className={s.card} data-tone={primary.tone} data-seal-card={landing ? 'open' : 'here'} aria-label="This step's receipt">
             <MiniIris seed={primary.irisSeed} tone={primary.tone} size={58} />
             <div className={s.body}>
                 <p className={s.kicker}>
-                    {landing ? `Sealed here${primary.n ? ` · referral ${primary.n}` : ''}` : 'This is the step the Seal certifies'}
+                    {landing ? `Signed here${primary.n ? ` · referral ${primary.n}` : ''}` : 'This is the step the receipt covers'}
                 </p>
                 <p className={s.line}>{primary.line}</p>
                 <p className={s.sub}>
@@ -115,16 +117,12 @@ export function InspectorSealCard({ seals, onBack = null, Link = 'a' }) {
                             primary.href /* nosemgrep: react-href-var -- sealPagePath() builds /seals/ plus 16 hex digits of the Seal's SHA-256. */
                         }
                     >
-                        Open the Seal →
+                        Open the receipt →
                     </Link>
-                ) : (
-                    <button type="button" className={s.action} onClick={onBack}>
-                        Back to the Seal ↑
-                    </button>
-                )}
+                ) : null}
                 {others.length ? (
                     <p className={s.others}>
-                        <span>Also sealed here:</span>
+                        <span>Also signed here:</span>
                         {others.map((o) => (
                             <Link
                                 key={o.n}

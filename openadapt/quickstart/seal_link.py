@@ -46,7 +46,7 @@ def read_card(run_dir: Path) -> Optional[SealCard]:
     """The Seal card for ``run_dir``, or None when its files are missing or odd."""
 
     try:
-        receipt = json.loads((run_dir / "receipt.json").read_text(encoding="utf-8"))
+        receipt = json.loads(_summary_path(run_dir).read_text(encoding="utf-8"))
         seal = json.loads((run_dir / "seal.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
@@ -79,3 +79,9 @@ __all__ = [
     "SealCard",
     "read_card",
 ]
+
+
+def _summary_path(run_dir: Path) -> Path:
+    """``run-summary.json``; runs from before Flow 3.5 kept it as ``receipt.json``."""
+    current = run_dir / "run-summary.json"
+    return current if current.is_file() else run_dir / "receipt.json"

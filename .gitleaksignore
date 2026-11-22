@@ -220,3 +220,15 @@ cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_arti
 # openadapt test proof runs' table dumps (no secret).
 98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-wrong-value-r1/table_after.json:generic-api-key:11
 98c1dd9385e2e2f9a9da7be8dd67773ded477632:packages/flow/benchmark/agent_test_proof/runs/esp-scripted/evidence/esp-collateral-edit-r1/table_after.json:generic-api-key:11
+# PR #2411: benchmark/hooks_live/runs/*/report.json from one live hooks run. Each match is
+# "hold_key", a SHA-256 digest of a declared write's name and values (or of a call), not a
+# credential. The reports must stay byte-identical because signed receipts cover them; the
+# field is named hold_sha256 from the next commit on.
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-15b7cdba4d534cdf/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-20bd0d5202aebae2/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-4bbe7d211bdab090/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-52984979eabaa0ad/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5d86278519ee576e/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5e9e2f18db8db211/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-93a7facdefde72e6/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-bdb55e83345cda8b/report.json:generic-api-key:8
