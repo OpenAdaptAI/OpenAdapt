@@ -1,0 +1,36 @@
+{
+  "execution_outcome": "HALTED",
+  "executor": {
+    "agent": "claude-code",
+    "kind": "agent"
+  },
+  "finished_at": "2026-11-21T06:36:20Z",
+  "hold_key": "835db7c017799cdd5d64d0b6f28c44863ba13bbbbca1d766fa730eaa2ceab9af",
+  "model_calls": 0,
+  "outcome": "BLOCKED",
+  "outcome_envelope": {
+    "passed_contracts": {
+      "authorization": 0,
+      "effect": 0
+    },
+    "required_contracts": {
+      "authorization": 1,
+      "effect": 0
+    }
+  },
+  "reasons": [
+    "blocked: a sqlite3 command whose SQL isn't one statement on the command line. clinic-db is a declared system of record and openadapt.systems.yaml declares no such write"
+  ],
+  "results": [
+    {
+      "actuation": "api",
+      "ok": false
+    }
+  ],
+  "run_id": "hk-93a7facdefde72e6",
+  "schema_version": "openadapt.hook-report/v1",
+  "started_at": "2026-11-21T06:36:20Z",
+  "system": "clinic-db",
+  "workflow_name": "clinic-db.undeclared",
+  "write": null
+}

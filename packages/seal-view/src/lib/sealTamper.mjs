@@ -32,7 +32,7 @@ export function tamperOptions(sealOutcome, reportOutcome) {
         {
             id: 'seal-outcome',
             target: 'seal',
-            label: 'Change the outcome in the Seal',
+            label: 'Change the outcome in the receipt',
             field: 'outcome',
             from: sealOutcome,
             to: sealTo,
@@ -48,7 +48,7 @@ export function applyTamper(files, option) {
     if (option.target === 'seal') {
         const seal = JSON.parse(files.sealText)
         if (seal[option.field] !== option.from)
-            throw new Error('The value to change is not in the Seal.')
+            throw new Error('The value to change is not in the receipt.')
         return {
             ...files,
             sealText: JSON.stringify({ ...seal, [option.field]: option.to }, null, 2),

@@ -65,6 +65,7 @@ FLOW_NAMES = {
     "fleet": "services fleet",
     "for-each": "run --for-each",
     "guard": "run --guard",
+    "hooks": "setup hooks",
     "induce": "compile --induce",
     "intake": "teach --intake",
     "item-approval": "approve --item",
@@ -177,6 +178,12 @@ def translate(
     return raw
 
 
+#: Short spellings that stay first-class and never print an alias notice:
+#: ``setup`` is its own command, and ``quickstart`` is the documented first
+#: command (``openadapt demo quickstart`` reaches the same thing).
+_UNANNOUNCED = frozenset({("setup",), ("quickstart",)})
+
+
 def alias_notice(argv: Sequence[str], prog: str) -> None:
     """Show old native spellings only when all three streams are terminals."""
     if not argv or any(
@@ -218,7 +225,7 @@ def legacy_names(argv: Sequence[str]) -> tuple[str, str] | None:
         if (
             native_old != native_canonical
             and tuple(argv[: len(native_old)]) == native_old
-            and native_old != ("setup",)
+            and native_old not in _UNANNOUNCED
         ):
             return " ".join(native_old), " ".join(native_canonical)
     return None
