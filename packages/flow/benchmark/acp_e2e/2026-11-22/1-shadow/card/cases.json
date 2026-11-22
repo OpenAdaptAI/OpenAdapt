@@ -1,0 +1,817 @@
+{
+  "agent_label": "vendor-agent-standin",
+  "cases": [
+    {
+      "agent_time_s": 2.135,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 00 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 00 for review"
+        }
+      ],
+      "human_time_s": 0.979,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0000",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.077,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "mismatched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 01 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 01 for review"
+        }
+      ],
+      "human_time_s": 0.945,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MISMATCHED",
+      "task_id": "readiness-mockmed-0001",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.051,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 02 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 02 for review"
+        }
+      ],
+      "human_time_s": 0.908,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0002",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.086,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 03 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 03 for review"
+        }
+      ],
+      "human_time_s": 0.927,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0003",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.059,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 04 for review",
+          "kind": "mismatched",
+          "name": "note",
+          "proposed": "Synthetic note O4 for review"
+        }
+      ],
+      "human_time_s": 0.932,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MISMATCHED",
+      "task_id": "readiness-mockmed-0004",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.044,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 05 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 05 for review"
+        }
+      ],
+      "human_time_s": 0.93,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0005",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.045,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 06 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 06 for review"
+        }
+      ],
+      "human_time_s": 0.931,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0006",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.055,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 07 for review",
+          "kind": "mismatched",
+          "name": "note",
+          "proposed": ""
+        }
+      ],
+      "human_time_s": 0.924,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MISMATCHED",
+      "task_id": "readiness-mockmed-0007",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.237,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 08 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 08 for review"
+        }
+      ],
+      "human_time_s": 0.922,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0008",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.1,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 09 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 09 for review"
+        }
+      ],
+      "human_time_s": 0.928,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0009",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.136,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "mismatched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 10 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 10 for review"
+        }
+      ],
+      "human_time_s": 0.902,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MISMATCHED",
+      "task_id": "readiness-mockmed-0010",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.087,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 11 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 11 for review"
+        }
+      ],
+      "human_time_s": 0.913,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0011",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.049,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 12 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 12 for review"
+        }
+      ],
+      "human_time_s": 0.914,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0012",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.029,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 13 for review",
+          "kind": "mismatched",
+          "name": "note",
+          "proposed": "Synthetic note 13 for reviews"
+        }
+      ],
+      "human_time_s": 0.913,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MISMATCHED",
+      "task_id": "readiness-mockmed-0013",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.049,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 14 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 14 for review"
+        }
+      ],
+      "human_time_s": 0.938,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0014",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.154,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 15 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 15 for review"
+        }
+      ],
+      "human_time_s": 0.93,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0015",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.052,
+      "contamination": null,
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "p2",
+          "kind": "wrong_record",
+          "name": "patient_id",
+          "proposed": "p3"
+        },
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 16 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 16 for review"
+        }
+      ],
+      "human_time_s": 0.907,
+      "identity": {
+        "code": "identity_mismatch",
+        "ok": false
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": "identity_mismatch",
+      "schema": "openadapt.readiness-case/v1",
+      "status": "WRONG_RECORD",
+      "task_id": "readiness-mockmed-0016",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.068,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 17 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 17 for review"
+        }
+      ],
+      "human_time_s": 0.929,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0017",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.077,
+      "contamination": {
+        "compared": 2,
+        "not_comparable": false,
+        "reason": null,
+        "shown": 0
+      },
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "Triage",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Triage"
+        },
+        {
+          "human": "Synthetic note 18 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 18 for review"
+        }
+      ],
+      "human_time_s": 0.945,
+      "identity": {
+        "code": "verified",
+        "ok": true
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": null,
+      "schema": "openadapt.readiness-case/v1",
+      "status": "MATCHED",
+      "task_id": "readiness-mockmed-0018",
+      "undeclared_fields": 0
+    },
+    {
+      "agent_time_s": 2.063,
+      "contamination": null,
+      "double_save": false,
+      "extra_held_writes": 0,
+      "fields": [
+        {
+          "human": "p2",
+          "kind": "wrong_record",
+          "name": "patient_id",
+          "proposed": "p3"
+        },
+        {
+          "human": "Consult",
+          "kind": "matched",
+          "name": "type",
+          "proposed": "Consult"
+        },
+        {
+          "human": "Synthetic note 19 for review",
+          "kind": "matched",
+          "name": "note",
+          "proposed": "Synthetic note 19 for review"
+        }
+      ],
+      "human_time_s": 0.924,
+      "identity": {
+        "code": "identity_mismatch",
+        "ok": false
+      },
+      "landed_writes": 0,
+      "model_calls_metered": 0,
+      "model_cost_source": "metered",
+      "model_cost_usd": 0.0,
+      "out_of_scope_requests": 0,
+      "reason": "identity_mismatch",
+      "schema": "openadapt.readiness-case/v1",
+      "status": "WRONG_RECORD",
+      "task_id": "readiness-mockmed-0019",
+      "undeclared_fields": 0
+    }
+  ],
+  "egress": {
+    "enforced": true,
+    "mode": "blocked",
+    "refused_tasks": 0,
+    "spend_cap_usd": null
+  },
+  "mode": "sandbox",
+  "runs_landed_writes": 0,
+  "schema": "openadapt.readiness-cases/v1",
+  "scope_statement": "No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach."
+}

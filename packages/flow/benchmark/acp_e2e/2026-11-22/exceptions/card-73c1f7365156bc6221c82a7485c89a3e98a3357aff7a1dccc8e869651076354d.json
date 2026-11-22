@@ -1,0 +1,28 @@
+{
+  "card_id": "sha256:73c1f7365156bc6221c82a7485c89a3e98a3357aff7a1dccc8e869651076354d",
+  "choices": [
+    {
+      "consequence": "You type the code in the live browser yourself. The run then goes on from the same screen. OpenAdapt never sees the code.",
+      "id": "done_by_person",
+      "label": "I entered the code in the browser"
+    },
+    {
+      "consequence": "Nothing is saved. The run moves to the next item.",
+      "id": "skip",
+      "label": "Skip this item"
+    },
+    {
+      "consequence": "Nothing more is saved. The whole run stops.",
+      "id": "abort",
+      "label": "Stop the run"
+    }
+  ],
+  "deadline_at": "2026-11-22T05:18:43.050035Z",
+  "kind": "second_factor",
+  "opened_at": "2026-11-22T05:03:43.050035Z",
+  "run_ref": "watch-2fa-run2",
+  "schema": "openadapt.exception-card/v1",
+  "screenshot_ref": null,
+  "summary": "The app is asking for a one-time code. Enter it in the browser.",
+  "task_id": "[number]"
+}

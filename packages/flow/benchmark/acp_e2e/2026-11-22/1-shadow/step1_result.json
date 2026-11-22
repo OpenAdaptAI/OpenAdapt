@@ -1,0 +1,16 @@
+{
+  "n": 20,
+  "person_writes": 20,
+  "import_exit": 0,
+  "run_exit": 0,
+  "run_s": 71.9,
+  "agent_writes_landed": 0,
+  "store_unchanged": true,
+  "compare_exit": 0,
+  "report_exit": 0,
+  "adv_run_exit": 0,
+  "adv_writes_landed": 0,
+  "adv_store_unchanged": true,
+  "adv_compare_exit": 0,
+  "adv_report_exit": 2
+}

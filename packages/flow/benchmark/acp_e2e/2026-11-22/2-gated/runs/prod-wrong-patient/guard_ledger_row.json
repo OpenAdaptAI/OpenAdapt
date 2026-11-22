@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": null,
+  "approval_opened_at": null,
+  "approver_kind": "none",
+  "diff_path": null,
+  "fields_checked": [],
+  "fields_differing": [],
+  "guard_verdict": null,
+  "hold_ms": 2.7,
+  "readback_tier": null,
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-wrong-patient",
+  "verdict": "CAUGHT_ERROR",
+  "verdict_reason": "save_blocked_out_of_scope"
+}

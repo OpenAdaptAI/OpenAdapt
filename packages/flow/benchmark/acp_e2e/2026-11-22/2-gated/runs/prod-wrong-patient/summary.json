@@ -1,0 +1,34 @@
+{
+  "approval": "each_item",
+  "blocked": [
+    {
+      "code": "write_wrong_record",
+      "hold_ms": 2.7
+    }
+  ],
+  "ended": "stopped",
+  "hold_ms": [],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": null,
+  "receipt_path": null,
+  "recording": "/Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-wrong-patient/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 0,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [
+    {
+      "code": "write_wrong_record",
+      "method": "POST",
+      "origin": "http://127.0.0.1:51141",
+      "resource_type": "XHR"
+    }
+  ],
+  "seconds": 11.142,
+  "task_id": "prod-wrong-patient",
+  "verdict": null,
+  "would_block": []
+}

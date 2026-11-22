@@ -1,0 +1,99 @@
+{
+  "compile_admit_s": 22.7,
+  "happy": {
+    "argv": [
+      "wrap-dispatch",
+      "..."
+    ],
+    "path": "program",
+    "outcome": "VERIFIED",
+    "status": "VERIFIED",
+    "verified": true,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "fallback_status": null,
+    "fallback_reason": null,
+    "approvals": null,
+    "gate_answers": null,
+    "repair_opened": null,
+    "fallback_run_dir": null,
+    "person": {
+      "request": null
+    },
+    "saved": "correct",
+    "saved_rows": 1,
+    "seconds": 5.87
+  },
+  "drift-approved": {
+    "argv": [
+      "wrap-dispatch",
+      "..."
+    ],
+    "path": "agent_fallback",
+    "outcome": "VERIFIED",
+    "status": "VERIFIED",
+    "verified": true,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "fallback_status": "VERIFIED",
+    "fallback_reason": null,
+    "approvals": 1,
+    "gate_answers": [
+      {
+        "decision": "approved",
+        "answer_sha256": "sha256:107c100bf3091a1d27e0ec38fe52299675dc1013ae8860be52decfdd8d2651bd",
+        "route": "desktop_run_it",
+        "signer": "front-desk",
+        "request_id": "c60a0ed817be4254b1ec377418c5d91d",
+        "request_sha256": "sha256:1459ab8c22cd004e09c6624be0dd8e6ec129d6ad71adbc4894ed69e7163349c7"
+      }
+    ],
+    "repair_opened": true,
+    "fallback_run_dir": null,
+    "person": {
+      "request": {
+        "request_id": "c60a0ed817be4254b1ec377418c5d91d",
+        "step_intent": "Press 'Submit to chart' on the record showing Jane Sample, MRN P1"
+      },
+      "answered": "approve"
+    },
+    "saved": "correct",
+    "saved_rows": 1,
+    "seconds": 23.49
+  },
+  "drift-declined": {
+    "argv": [
+      "wrap-dispatch",
+      "..."
+    ],
+    "path": "agent_fallback",
+    "outcome": "ESCALATED",
+    "status": "GATE_REFUSED",
+    "verified": false,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "fallback_status": "GATE_REFUSED",
+    "fallback_reason": null,
+    "approvals": 0,
+    "gate_answers": [
+      {
+        "decision": "refused",
+        "code": "declined",
+        "request_id": "4c7c5947e9484d4f9be73a395e124523",
+        "request_sha256": "sha256:2f66bd073f6ab8f9bd9313dc50fd54edb0d5f2bb61ec7f94c3adaf81411ce543"
+      }
+    ],
+    "repair_opened": null,
+    "fallback_run_dir": null,
+    "person": {
+      "request": {
+        "request_id": "4c7c5947e9484d4f9be73a395e124523",
+        "step_intent": "Press 'Submit to chart' on the record showing Jane Sample, MRN P1"
+      },
+      "answered": "decline"
+    },
+    "saved": "none",
+    "saved_rows": 0,
+    "seconds": 5.69
+  }
+}

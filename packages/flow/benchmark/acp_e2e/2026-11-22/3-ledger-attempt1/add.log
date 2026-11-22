@@ -1,0 +1,108 @@
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0000 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0000/guard_task.json
+bd2fc303-56d8-4133-8a16-40b65d846ef5  ESCALATED (shadow_matched)  task readiness-mockmed-0000  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0001 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0001/guard_task.json
+10eb43fe-829d-4457-9640-36915857508c  CAUGHT_ERROR (shadow_field_mismatch)  task readiness-mockmed-0001  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0002 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0002/guard_task.json
+7a897a8b-3167-4c6a-ab11-74134cfc6572  ESCALATED (shadow_matched)  task readiness-mockmed-0002  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0003 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0003/guard_task.json
+e3d7f1ea-4e7b-47fb-9040-1df5ade8a63f  ESCALATED (shadow_matched)  task readiness-mockmed-0003  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0004 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0004/guard_task.json
+3d7cb605-edbe-4680-bf76-59bcf419861a  CAUGHT_ERROR (shadow_field_mismatch)  task readiness-mockmed-0004  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0005 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0005/guard_task.json
+a925139c-a5b4-4b6f-ad66-0c82e2bd0388  ESCALATED (shadow_matched)  task readiness-mockmed-0005  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0006 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0006/guard_task.json
+5a8f2b71-7fc5-4d69-92de-36f8417a5d6b  ESCALATED (shadow_matched)  task readiness-mockmed-0006  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0007 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0007/guard_task.json
+cd63ec4c-71ef-476c-abeb-d6ab1f224079  CAUGHT_ERROR (shadow_field_mismatch)  task readiness-mockmed-0007  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0008 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0008/guard_task.json
+b7fa9b04-56c6-4b69-8053-ea2dc36fa83b  ESCALATED (shadow_matched)  task readiness-mockmed-0008  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0009 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0009/guard_task.json
+9960ca19-9cd8-4f30-a2a9-1d1dbee0b2d7  ESCALATED (shadow_matched)  task readiness-mockmed-0009  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0010 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0010/guard_task.json
+1c37d74e-ef42-4486-a147-812397bb242f  CAUGHT_ERROR (shadow_field_mismatch)  task readiness-mockmed-0010  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0011 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0011/guard_task.json
+767496db-51d2-4e99-b03f-9b3c3bb1fb49  ESCALATED (shadow_matched)  task readiness-mockmed-0011  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0012 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0012/guard_task.json
+79337947-8c45-4dc4-b614-c0f4a1f66831  ESCALATED (shadow_matched)  task readiness-mockmed-0012  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0013 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0013/guard_task.json
+b171f5ed-388c-4b46-b709-f3e92bd406e3  CAUGHT_ERROR (shadow_field_mismatch)  task readiness-mockmed-0013  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0014 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0014/guard_task.json
+d514cd5f-fca0-4675-9db2-14eeeb0c89af  ESCALATED (shadow_matched)  task readiness-mockmed-0014  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0015 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0015/guard_task.json
+6a7f0379-74ba-4c9e-a1d7-34d90a7f3cc3  ESCALATED (shadow_matched)  task readiness-mockmed-0015  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0016 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0016/guard_task.json
+a24bdcb3-947c-4546-a7f7-d46dab4670df  CAUGHT_ERROR (shadow_wrong_record)  task readiness-mockmed-0016  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0017 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0017/guard_task.json
+ac5d33f7-3292-46f4-bc30-d8264af214fd  ESCALATED (shadow_matched)  task readiness-mockmed-0017  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0018 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0018/guard_task.json
+1f59aa98-f0ef-4993-8635-309d8bbfad68  ESCALATED (shadow_matched)  task readiness-mockmed-0018  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs/readiness-mockmed-0019 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes/readiness-mockmed-0019/guard_task.json
+fb98e56d-25ba-4362-9c3e-f4c3bbca8c2d  CAUGHT_ERROR (shadow_wrong_record)  task readiness-mockmed-0019  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/runs/readiness-mockmed-0000 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/episodes/readiness-mockmed-0000/guard_task.json
+37d53121-ad22-4604-9dbb-55aa98ddd7c1  UNKNOWN (shadow_extra_target)  task readiness-mockmed-0000  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-approve-correct --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-approve-correct/task.json
+e884f539-0146-47a7-8409-108b6b380fa1  VERIFIED (readback_verified)  task prod-approve-correct  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-approve-wrong-value-no-adapter --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-approve-wrong-value-no-adapter/task.json
+340ad973-d407-425c-8a67-a2bc97a53c83  CAUGHT_ERROR (readback_refuted)  task prod-approve-wrong-value-no-adapter  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-clean-01 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-clean-01/task.json
+879f4f89-df73-42d4-95da-25c9ca7d1b1c  VERIFIED (readback_verified)  task prod-clean-01  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-clean-02 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-clean-02/task.json
+c11e6a30-60cf-4318-a64b-2957b92015e6  VERIFIED (readback_verified)  task prod-clean-02  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-decline --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-decline/task.json
+2c986ebf-d408-4b9d-ad8f-8985eb561d8c  ESCALATED (person_declined)  task prod-decline  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-not-saved --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-not-saved/task.json
+67e6f021-f0d5-4a8b-84a4-d651a1004a81  UNKNOWN (reconciliation_required)  task prod-not-saved  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-wrong-patient --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-wrong-patient/task.json
+939122d5-e1f4-4da2-a773-a97f24937006  CAUGHT_ERROR (save_blocked_out_of_scope)  task prod-wrong-patient  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-wrong-value-with-adapter --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/setup/prod-wrong-value-with-adapter/task.json
+d4b47c00-c811-4371-a9a5-35c094f0652f  CAUGHT_ERROR (save_blocked_out_of_scope)  task prod-wrong-value-with-adapter  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/2b-watch/run --task-type intake --run-ref watch-2fa-run2 --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/2b-watch/setup/task.json
+733e33c8-9e64-4861-9a95-9aa24a860220  ESCALATED (second_factor)  task triage-p1-0001  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/result-happy.json --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/verify.yaml
+de64a4fd-dc4d-4d21-a629-d4426bf24589  VERIFIED (readback_verified)  task run2-happy  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/result-drift-approved.json --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/verify.yaml
+a99a2b71-3461-4811-bf47-548122b5f7f7  VERIFIED (readback_verified)  task run2-drift-approved  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/result-drift-declined.json --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/4-fallback/verify.yaml
+177066d7-e2c3-43f5-b0dc-ffa0c39492f2  ESCALATED (person_declined)  task run2-drift-declined  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0000 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes/readiness-mockmed-0000/guard_task.json
+dffdcecf-1169-4407-ace4-f9d30ece64bd  FAILED (agent_gave_up)  task readiness-mockmed-0000  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0001 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes/readiness-mockmed-0001/guard_task.json
+7f8ee39d-8ccd-42cb-ad83-b15fb3b08545  FAILED (agent_gave_up)  task readiness-mockmed-0001  added
+[exit 0]
+$ ledger add /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0002 --task-type intake --config /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes/readiness-mockmed-0002/guard_task.json
+59bbcdcb-78b6-4671-af9a-525d2379dcb2  FAILED (agent_gave_up)  task readiness-mockmed-0002  added
+[exit 0]

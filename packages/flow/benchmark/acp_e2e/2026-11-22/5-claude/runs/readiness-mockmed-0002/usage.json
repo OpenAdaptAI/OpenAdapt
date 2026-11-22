@@ -1,0 +1,10 @@
+{
+  "calls": 2,
+  "cost_usd": 0.023758,
+  "final_line": "RESULT: NOT DONE The patient name and MRN were not provided, so I couldn't identify which referral to open.",
+  "input_tokens": 13685,
+  "model": "claude-sonnet-5-5",
+  "output_tokens": 356,
+  "schema": "openadapt.agent-usage/v1",
+  "stopped": null
+}

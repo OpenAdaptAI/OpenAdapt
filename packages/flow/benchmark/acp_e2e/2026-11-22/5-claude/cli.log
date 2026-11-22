@@ -1,0 +1,23 @@
+$ openadapt-flow readiness import --from /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/people --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes --app-url http://127.0.0.1:53248/?fault=ok#tasks
+[exit 0, 2.0s]
+readiness import: 3 episode(s) in /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes
+
+
+$ openadapt-flow readiness run --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs --app-url http://127.0.0.1:53248/?fault=ok#tasks --agent-cmd /Users/abrichr/oa/worktrees/wrap-publish/packages/flow/.venv/bin/python /Users/abrichr/oa/worktrees/acp-demo-merge/packages/flow/benchmark/readiness/claude_cu_agent.py --label claude-sonnet-5-5-computer-use --screen-selector #patient-banner --timeout 600 --linger 1.0 --reset-cmd curl -s -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:53248/api/reset --egress scrubbed --spend-cap 0.90
+[exit 0, 30.9s]
+{"ok": true}{"ok": true}{"ok": true}readiness run: 3 task(s), 0 write(s) reached the app, 0 refused for egress (egress: scrubbed)
+
+WARNING: writing the flight timeline and frames in plaintext at /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0000/egress: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing the flight timeline and frames in plaintext at /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0001/egress: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing the flight timeline and frames in plaintext at /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs/readiness-mockmed-0002/egress: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+
+$ openadapt-flow readiness compare --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/episodes --runs /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/runs --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/card
+[exit 0, 1.4s]
+readiness compare: {"NOT_CHECKED": 3} -> /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/card/cases.json
+
+
+$ openadapt-flow readiness report --cases /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/card/cases.json --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/card --hourly-cost 38 --label claude-sonnet-5-5-computer-use --task-type intake
+[exit 0, 1.4s]
+readiness report: matched 0 of 3; /Users/abrichr/oa/worktrees/acp-demo-out/run2/5-claude/card/scorecard.html
+
+

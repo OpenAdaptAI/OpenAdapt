@@ -1,0 +1,60 @@
+### flow unit
+........................................................................ [ 10%]
+........................................................................ [ 20%]
+........................................................................ [ 31%]
+........................................................................ [ 41%]
+........................................................................ [ 51%]
+........................................................................ [ 62%]
+........................................................................ [ 72%]
+........................................................................ [ 82%]
+........................................................................ [ 93%]
+................................................                         [100%]
+=============================== warnings summary ===============================
+openadapt_flow/integrations/agents/__init__.py:45
+  /Users/abrichr/oa/worktrees/acp-demo-merge/packages/flow/openadapt_flow/integrations/agents/__init__.py:45: DeprecationWarning: openadapt_flow.verify is deprecated; use openadapt_flow.verifier
+    from openadapt_flow.verify import (
+
+tests/test_flight_phi_payload.py::test_synthetic_phi_never_reaches_the_model_payload
+  /Users/abrichr/oa/worktrees/wrap-publish/packages/flow/.venv/lib/python3.12/site-packages/pydicom/pixel_data_handlers/util.py:106: DeprecationWarning: The 'pydicom.pixel_data_handlers' module will be removed in v4.0, please use 'from pydicom.pixels import apply_voi_lut' instead
+    warn_and_log(msg, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+696 passed, 2 warnings in 75.77s (0:01:15)
+### types
+......................................                                   [100%]
+38 passed in 0.47s
+### desktop
+/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_guard_request_pickup.py:27: in <module>
+    from openadapt_desktop.portal.service import PortalError, PortalService  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+openadapt_desktop/portal/service.py:72: in <module>
+    from loguru import logger
+E   ModuleNotFoundError: No module named 'loguru'
+subprocesses that forked pytest: 0
+=========================== short test summary info ============================
+ERROR tests/test_engine/test_stop_queue_exceptions.py
+ERROR tests/test_guard_request_pickup.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.59s
+### launcher
+.....                                                                    [100%]
+5 passed in 0.40s
+### desktop (desktop venv, PYTHONPATH=merged desktop+flow+types)
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+................................                                         [100%]
+=============================== warnings summary ===============================
+../../../desktop-chrome-profile/packages/desktop/.venv/lib/python3.14/site-packages/anyio/pytest_plugin.py:14
+  /Users/abrichr/oa/worktrees/desktop-chrome-profile/packages/desktop/.venv/lib/python3.14/site-packages/anyio/pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
+  The CallSpec2 alias will be removed in pytest 10.
+  Update imports to use CallSpec instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#callspec2-renamed
+    from _pytest.python import CallSpec2
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+subprocesses that forked pytest: 0
+32 passed, 1 warning in 3.24s

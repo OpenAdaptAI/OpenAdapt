@@ -1,0 +1,15 @@
+$ openadapt-flow readiness run --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/episodes --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/runs --app-url http://127.0.0.1:50226/?fault=ok#tasks --agent-cmd /Users/abrichr/oa/worktrees/wrap-publish/packages/flow/.venv/bin/python /Users/abrichr/oa/worktrees/acp-demo-merge/packages/flow/tests/e2e/test_readiness_adversarial_e2e.py --label adversarial-second-tab --screen-selector #patient-banner --timeout 60 --linger 0.5 --reset-cmd curl -s -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:50226/api/reset --egress blocked
+[exit 0, 3.1s]
+{"ok": true}readiness run: 1 task(s), 0 write(s) reached the app, 0 refused for egress (egress: blocked)
+
+
+$ openadapt-flow readiness compare --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/episodes --runs /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/runs --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/card
+[exit 0, 1.4s]
+readiness compare: {"NOT_CHECKED": 1} -> /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/card/cases.json
+
+
+$ openadapt-flow readiness report --cases /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/card/cases.json --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/card --hourly-cost 38 --label adversarial-second-tab --task-type intake
+[exit 2, 1.4s]
+readiness report: matched 0 of 1; /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/adversarial/card/scorecard.html
+
+

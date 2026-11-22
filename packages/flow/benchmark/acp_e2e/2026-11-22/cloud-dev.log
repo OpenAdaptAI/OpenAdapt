@@ -1,0 +1,66 @@
+▲ Next.js 16.4.6 (Turbopack)
+- Local:         http://127.0.0.1:3917
+- Network:       http://127.0.0.1:3917
+✓ Ready in 557ms
+⚠ `eslint` configuration in next.config.js is no longer supported. See more info here: https://nextjs.org/docs/app/api-reference/cli/next#next-lint-options
+⚠ Invalid next.config.js options detected: 
+⚠     Unrecognized key(s) in object: 'eslint'
+⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+✓ Running next.config.js took 17ms
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+✓ Generated AGENTS.md for AI agents. Set `agentRules: false` in next.config to disable.
+ GET /dashboard/ledger 200 in 3.0s (next.js: 2.6s, proxy.ts: 60ms, application-code: 380ms)
+ POST /api/runs/ingest-agent-run 201 in 358ms (next.js: 321ms, proxy.ts: 6ms, application-code: 31ms)
+ POST /api/runs/ingest-agent-run 201 in 12ms (next.js: 6ms, proxy.ts: 3ms, application-code: 4ms)
+ POST /api/runs/ingest-agent-run 201 in 7ms (next.js: 1.8ms, proxy.ts: 2ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 9ms (next.js: 3ms, proxy.ts: 3ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.4ms, proxy.ts: 1.8ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.5ms, proxy.ts: 1.7ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.9ms, proxy.ts: 1.7ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 7ms (next.js: 2ms, proxy.ts: 3ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 10ms (next.js: 1.6ms, proxy.ts: 2ms, application-code: 6ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.8ms, proxy.ts: 1.3ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.2ms, application-code: 1.7ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.2ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.6ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.3ms, proxy.ts: 1.5ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.3ms, proxy.ts: 1.5ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.2ms, proxy.ts: 1.4ms, application-code: 1.9ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.3ms, proxy.ts: 1.3ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.4ms, proxy.ts: 1.6ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.3ms, proxy.ts: 1.5ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.3ms, proxy.ts: 2ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.4ms, proxy.ts: 1.4ms, application-code: 1.8ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.3ms, proxy.ts: 1.4ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.3ms, application-code: 1.7ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.3ms, application-code: 1.9ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 2ms, proxy.ts: 1.2ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 2.0ms, proxy.ts: 1.5ms, application-code: 1.9ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.3ms, proxy.ts: 1.0ms, application-code: 1.8ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.3ms, application-code: 1.7ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.1ms, proxy.ts: 1.2ms, application-code: 1.6ms)
+ POST /api/runs/ingest-agent-run 201 in 6ms (next.js: 1.3ms, proxy.ts: 1.3ms, application-code: 3ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.3ms, proxy.ts: 1.2ms, application-code: 2ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.3ms, proxy.ts: 1.7ms, application-code: 1.5ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.1ms, proxy.ts: 1.1ms, application-code: 1.5ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.1ms, proxy.ts: 1.3ms, application-code: 1.4ms)
+ POST /api/runs/ingest-agent-run 201 in 5ms (next.js: 1.2ms, proxy.ts: 1.3ms, application-code: 2.0ms)
+ POST /api/runs/ingest-agent-run 201 in 4ms (next.js: 1.2ms, proxy.ts: 1.1ms, application-code: 1.6ms)
+ POST /api/readiness/upload 201 in 101ms (next.js: 94ms, proxy.ts: 2.0ms, application-code: 5ms)
+ POST /api/readiness/upload 201 in 9ms (next.js: 5ms, proxy.ts: 2ms, application-code: 1.8ms)
+ POST /api/readiness/upload 201 in 6ms (next.js: 3ms, proxy.ts: 1.5ms, application-code: 1.7ms)
+ GET /dashboard/ledger 200 in 122ms (next.js: 31ms, proxy.ts: 2ms, application-code: 88ms)
+ POST /api/product-signals/activity 200 in 230ms (next.js: 213ms, proxy.ts: 3ms, application-code: 14ms)
+ POST /api/product-signals/activity 200 in 225ms (next.js: 221ms, proxy.ts: 1.5ms, application-code: 2ms)
+ GET /dashboard/ledger 200 in 65ms (next.js: 3ms, proxy.ts: 2ms, application-code: 59ms)
+ POST /api/product-signals/activity 200 in 10ms (next.js: 4ms, proxy.ts: 2ms, application-code: 4ms)
+ POST /api/product-signals/activity 200 in 8ms (next.js: 4ms, proxy.ts: 1.1ms, application-code: 2ms)
+ GET /dashboard/readiness 200 in 323ms (next.js: 276ms, proxy.ts: 1.3ms, application-code: 45ms)
+ POST /api/product-signals/activity 200 in 9ms (next.js: 4ms, proxy.ts: 1.7ms, application-code: 4ms)
+ POST /api/product-signals/activity 200 in 8ms (next.js: 5ms, proxy.ts: 1.0ms, application-code: 1.8ms)

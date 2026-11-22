@@ -1,0 +1,10 @@
+{
+  "calls": 2,
+  "cost_usd": 0.024463,
+  "final_line": "RESULT: NOT DONE The patient name and MRN were not provided (only placeholders), so the correct referral can't be identified.",
+  "input_tokens": 13703,
+  "model": "claude-sonnet-5-5",
+  "output_tokens": 422,
+  "schema": "openadapt.agent-usage/v1",
+  "stopped": null
+}

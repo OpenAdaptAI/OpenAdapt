@@ -1,0 +1,36 @@
+{
+  "card_kind": "second_factor",
+  "save_while_open": {
+    "status": 409,
+    "header": "blocked; code=exception_open"
+  },
+  "writes_while_open": 0,
+  "guard_verdict": "VERIFIED",
+  "writes_after_answer": 1,
+  "watch": {
+    "exit": 0,
+    "run_ref": "watch-2fa-run2",
+    "stopped": null,
+    "outcomes": [
+      {
+        "card_id": "sha256:73c1f7365156bc6221c82a7485c89a3e98a3357aff7a1dccc8e869651076354d",
+        "kind": "second_factor",
+        "answer": "done_by_person",
+        "proceed": true,
+        "reason": null,
+        "opened_at": "2026-11-22T05:03:43.050035Z",
+        "decided_at": "2026-11-22T05:03:43.110334Z",
+        "instruction": "A person answered done_by_person. Go on from the current screen."
+      }
+    ]
+  },
+  "events": [
+    "watch_started",
+    "card_opened",
+    "request_blocked",
+    "answer"
+  ],
+  "note_in_log": false,
+  "run_ref": "watch-2fa-run2",
+  "task_json": "/Users/abrichr/oa/worktrees/acp-demo-out/run2/2b-watch/setup/task.json"
+}

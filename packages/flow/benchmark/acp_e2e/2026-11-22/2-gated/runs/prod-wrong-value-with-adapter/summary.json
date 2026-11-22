@@ -1,0 +1,34 @@
+{
+  "approval": "each_item",
+  "blocked": [
+    {
+      "code": "write_value_not_declared",
+      "hold_ms": 2.9
+    }
+  ],
+  "ended": "stopped",
+  "hold_ms": [],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": null,
+  "receipt_path": null,
+  "recording": "/Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-wrong-value-with-adapter/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 0,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [
+    {
+      "code": "write_value_not_declared",
+      "method": "POST",
+      "origin": "http://127.0.0.1:51141",
+      "resource_type": "XHR"
+    }
+  ],
+  "seconds": 11.153,
+  "task_id": "prod-wrong-value-with-adapter",
+  "verdict": null,
+  "would_block": []
+}

@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": "2026-11-22T05:02:45.250299+00:00",
+  "approval_opened_at": "2026-11-22T05:02:42.110868+00:00",
+  "approver_kind": "none",
+  "diff_path": null,
+  "fields_checked": [],
+  "fields_differing": [],
+  "guard_verdict": null,
+  "hold_ms": 3215.0,
+  "readback_tier": null,
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-decline",
+  "verdict": "ESCALATED",
+  "verdict_reason": "person_declined"
+}

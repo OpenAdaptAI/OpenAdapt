@@ -1,0 +1,18 @@
+{
+  "duration_unknown_rows": 0,
+  "fields_differing": 8,
+  "intervention_minutes": 0.32,
+  "intervention_unknown_rows": 5,
+  "median_duration_s": 2.135,
+  "model_cost_unknown_rows": 9,
+  "model_cost_usd": 0.071996,
+  "outcomes": {
+    "CAUGHT_ERROR": 10,
+    "ESCALATED": 16,
+    "FAILED": 3,
+    "UNKNOWN": 2,
+    "VERIFIED": 5
+  },
+  "rows": 36,
+  "undated_rows_skipped": 0
+}

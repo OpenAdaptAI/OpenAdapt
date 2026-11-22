@@ -1,0 +1,9 @@
+$ POST /api/readiness/upload < 1-shadow/card/scorecard.json (raw bytes, sha256 8c7d014b31d7cd04)
+{"id":"f12a126c-e83a-4995-8977-e66b90bd318b","duplicate":false}
+[HTTP 201]
+$ POST /api/readiness/upload < 1-shadow/adversarial/card/scorecard.json (raw bytes, sha256 141f7681a774b5f0)
+{"id":"dcec33f7-fc1e-4a00-884e-aff9aab7d474","duplicate":false}
+[HTTP 201]
+$ POST /api/readiness/upload < 5-claude/card/scorecard.json (raw bytes, sha256 292a1a8a58acaebd)
+{"id":"77e01698-05ae-4569-9452-198f8813c31c","duplicate":false}
+[HTTP 201]

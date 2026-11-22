@@ -1,0 +1,20 @@
+$ openadapt-flow readiness import --from /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/people --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes --app-url http://127.0.0.1:50226/?fault=ok#tasks
+[exit 0, 1.6s]
+readiness import: 20 episode(s) in /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes
+
+
+$ openadapt-flow readiness run --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs --app-url http://127.0.0.1:50226/?fault=ok#tasks --agent-cmd /Users/abrichr/oa/worktrees/wrap-publish/packages/flow/.venv/bin/python /Users/abrichr/oa/worktrees/acp-demo-merge/packages/flow/tests/e2e/test_readiness_e2e.py --label vendor-agent-standin --screen-selector #patient-banner --timeout 90 --linger 1.0 --reset-cmd curl -s -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:50226/api/reset --egress blocked
+[exit 0, 71.9s]
+{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}{"ok": true}readiness run: 20 task(s), 0 write(s) reached the app, 0 refused for egress (egress: blocked)
+
+
+$ openadapt-flow readiness compare --episodes /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/episodes --runs /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/runs --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/card
+[exit 0, 1.6s]
+readiness compare: {"MATCHED": 13, "MISMATCHED": 5, "WRONG_RECORD": 2} -> /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/card/cases.json
+
+
+$ openadapt-flow readiness report --cases /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/card/cases.json --out /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/card --hourly-cost 38 --label vendor-agent-standin --task-type intake
+[exit 0, 1.4s]
+readiness report: matched 13 of 20; /Users/abrichr/oa/worktrees/acp-demo-out/run2/1-shadow/card/scorecard.html
+
+

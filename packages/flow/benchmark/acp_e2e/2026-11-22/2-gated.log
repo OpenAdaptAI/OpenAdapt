@@ -1,0 +1,8 @@
+prod-approve-correct VERIFIED clean {'correct': True, 'fault_class': 'correct'} [] card approve 
+prod-approve-wrong-value-no-adapter REFUTED caught_by_readback {'correct': False, 'fault_class': 'partial'} [] card approve 
+prod-wrong-value-with-adapter None blocked {'correct': False, 'fault_class': 'absent'} ['write_value_not_declared'] no-card None 
+prod-decline None blocked {'correct': False, 'fault_class': 'absent'} ['declined'] card decline 
+prod-wrong-patient None blocked {'correct': False, 'fault_class': 'absent'} ['write_wrong_record'] no-card None 
+prod-not-saved RECONCILIATION_REQUIRED caught_by_readback {'correct': False, 'fault_class': 'absent'} [] card approve 
+prod-clean-01 VERIFIED clean {'correct': True, 'fault_class': 'correct'} [] card approve 
+prod-clean-02 VERIFIED clean {'correct': True, 'fault_class': 'correct'} [] card approve 

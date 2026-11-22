@@ -1,0 +1,24 @@
+{
+  "approval": "each_item",
+  "blocked": [],
+  "ended": "read_back",
+  "hold_ms": [
+    3228.6
+  ],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": 55.2,
+  "receipt_path": "/Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-clean-01/guard/guard-594c248f5707991c98f1c682464793f1/effect-receipt.json",
+  "recording": "/Users/abrichr/oa/worktrees/acp-demo-out/run2/2-gated/runs/prod-clean-01/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 7.435,
+  "task_id": "prod-clean-01",
+  "verdict": "VERIFIED",
+  "would_block": []
+}

@@ -1,0 +1,35 @@
+{
+  "fields": [
+    {
+      "name": "patient_id",
+      "parse": "json",
+      "value": "p2"
+    },
+    {
+      "name": "type",
+      "parse": "json",
+      "value": "Triage"
+    },
+    {
+      "name": "note",
+      "parse": "json",
+      "value": "Synthetic note 01 for review"
+    }
+  ],
+  "held_at": "2026-11-22T05:00:37.582+00:00",
+  "identity": {
+    "code": "verified",
+    "ok": true
+  },
+  "method": "POST",
+  "origin": "http://127.0.0.1:50226",
+  "refused": true,
+  "request_index": 0,
+  "resource_type": "XHR",
+  "schema": "openadapt.proposed-write/v1",
+  "screen_text": "held/0.screen.txt",
+  "screenshot": "held/0.png",
+  "task_id": "readiness-mockmed-0001",
+  "url_path": "/api/encounter",
+  "withheld_fields": 0
+}

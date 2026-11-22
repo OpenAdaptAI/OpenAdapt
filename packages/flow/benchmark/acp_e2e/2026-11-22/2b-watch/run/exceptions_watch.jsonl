@@ -1,0 +1,4 @@
+{"event": "watch_started", "run_ref": "watch-2fa-run2", "t": 494296.259}
+{"card_id": "sha256:73c1f7365156bc6221c82a7485c89a3e98a3357aff7a1dccc8e869651076354d", "event": "card_opened", "kind": "second_factor", "t": 494296.528}
+{"code": "exception_open", "event": "request_blocked", "kind": "save", "method": "POST", "resource_type": "XHR", "t": 494296.583}
+{"answer": "done_by_person", "card_id": "sha256:73c1f7365156bc6221c82a7485c89a3e98a3357aff7a1dccc8e869651076354d", "event": "answer", "proceed": true, "reason": null, "t": 494296.752}

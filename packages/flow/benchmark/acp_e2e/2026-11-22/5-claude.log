@@ -1,0 +1,11 @@
+{
+  "n": 3,
+  "person_writes": 3,
+  "import_exit": 0,
+  "run_exit": 0,
+  "run_s": 30.9,
+  "agent_writes_landed": 0,
+  "store_unchanged": true,
+  "compare_exit": 0,
+  "report_exit": 0
+}
