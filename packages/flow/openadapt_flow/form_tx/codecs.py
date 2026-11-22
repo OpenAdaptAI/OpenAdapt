@@ -12,6 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Sequence
 
+from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.types import (
     FieldCodecSpec,
     FormCodecKind,
@@ -295,18 +296,7 @@ def resolve_unique_option(
     intended_value: Any,
     options: Sequence[ObservedOption],
     spec: FieldCodecSpec,
-    placeholder_values: Sequence[str] = (
-        "",
-        "-- Select --",
-        "Select...",
-        "Choose...",
-        "Select one",
-        "-- Select one --",
-        "Choose one",
-        "Please choose",
-        "Choose",
-        "-- Choose one --",
-    ),
+    placeholder_values: Sequence[str] = load_words("placeholders"),
 ) -> ObservedOption:
     """Resolve exactly one ``ObservedOption`` matching ``intended_value`` or fail closed.
 

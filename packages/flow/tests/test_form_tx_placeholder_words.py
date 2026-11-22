@@ -113,3 +113,23 @@ def test_an_unset_placeholder_override_keeps_the_pack_digest() -> None:
     old_style.pop("placeholder_values")
     assert pack.digest() == canonical_sha256(old_style)
     assert _pack(placeholder_values=("",)).digest() != pack.digest()
+
+
+def test_the_option_resolver_default_is_unchanged() -> None:
+    import inspect
+
+    from openadapt_flow.form_tx.codecs import resolve_unique_option
+
+    tree = ast.parse(_old_source("openadapt_flow/form_tx/codecs.py"))
+    old = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "resolve_unique_option":
+            names = [a.arg for a in node.args.args]
+            defaults = node.args.defaults
+            offset = len(names) - len(defaults)
+            old = tuple(
+                ast.literal_eval(defaults[names.index("placeholder_values") - offset])
+            )
+    assert old is not None
+    now = inspect.signature(resolve_unique_option).parameters["placeholder_values"]
+    assert now.default == old == load_words("placeholders")
