@@ -9,6 +9,7 @@ Medplum and Gitea is ``benchmark/api_scoped``.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -901,32 +902,205 @@ def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
     assert audit.collateral and audit.own
 
 
-def test_a_marker_search_without_its_results_is_not_empty() -> None:
-    from openadapt_flow.txplan.adapters import AdapterError
-    from openadapt_flow.txplan.scoped import _search
+def _search_packs():
     from openadapt_flow.txplan.audit import ScopedCollection
 
-    scoped = ScopedCollection.model_validate(
+    base = {
+        "audit_ref": "item/{id}",
+        "identity": ["title"],
+        "marker": {"ext": "{marker}"},
+        "search": "/s?m={marker}",
+    }
+    items = ScopedCollection.model_validate({**base, "search_items": "items"})
+    root = ScopedCollection.model_validate({**base, "search_items": ""})
+    # Pack-shaped FHIR, as Medplum's pack declares it.
+    fhir = ScopedCollection.model_validate(
         {
-            "audit_ref": "item/{id}",
-            "identity": ["title"],
-            "marker": {"ext": "{marker}"},
-            "search": "/s?m={marker}",
-            "search_items": "items",
+            **base,
+            "search_items": "entry.*.resource",
+            "search_empty": {
+                "equals": {"resourceType": "Bundle", "type": "searchset"},
+                "absent": ["link[relation=next]"],
+            },
         }
     )
+    return base, items, root, fhir
+
+
+def _run_search(body, pack):
+    from openadapt_flow.txplan.scoped import _search
 
     class Adapter:
-        def __init__(self, body):
+        def __init__(self):
             self.http = httpx.Client(
                 transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)),
                 base_url="http://x",
             )
 
+    return _search(Adapter(), pack, "m1", "id")
+
+
+_BUNDLE = {"resourceType": "Bundle", "type": "searchset"}
+_P1 = {"resource": {"resourceType": "Patient", "id": "p1"}}
+_P2 = {"resource": {"resourceType": "Patient", "id": "p2"}}
+
+#: One probe per clause of the strict parser: refused with that clause's
+#: message, and accepted once only that clause is removed (no other check
+#: catches it). Each clause's source carries the same tag
+#: (``# search-clause: <tag>``).
+SEARCH_REFUSALS = {
+    "list-answer": ({"id": "x"}, "root", "did not return a list"),
+    "total-count": ({**_BUNDLE, "total": True, "entry": [_P1]}, "fhir", "not a count"),
+    "shape-equals": (
+        {"resourceType": "Bundle", "type": "history", "entry": []},
+        "fhir",
+        "answer has no type",
+    ),
+    "shape-absent": (
+        {**_BUNDLE, "link": [{"relation": "next", "url": "u"}], "entry": []},
+        "fhir",
+        "answer has link",
+    ),
+    "absent-shape": (
+        {**_BUNDLE, "link": {"relation": "next"}, "entry": []},
+        "fhir",
+        "link is malformed",
+    ),
+    "items-field": ({"error": "busy"}, "items", "has no items"),
+    "fan-out-list": ({**_BUNDLE, "entry": {}}, "fhir", "fan-out is not a list"),
+    "step-present": (
+        {**_BUNDLE, "entry": [{"fullUrl": "x"}]},
+        "fhir",
+        "has no resource",
+    ),
+    "no-flatten-after-fanout": (
+        {**_BUNDLE, "entry": [{"resource": []}]},
+        "fhir",
+        "usable id",
+    ),
+    "usable-id": (
+        {**_BUNDLE, "entry": [{"resource": {"id": False}}]},
+        "fhir",
+        "usable id",
+    ),
+    "total-equals": ({**_BUNDLE, "total": 2, "entry": [_P1]}, "fhir", "doesn't match"),
+}
+
+#: How a clause is removed: a raise becomes ``pass``; the flatten guard loses
+#: its condition.
+_MUTANT = {
+    "no-flatten-after-fanout": (
+        r'flatten = flatten and "\*" not in steps  # search-clause: no-flatten-after-fanout\n',
+        "flatten = flatten  # mutated\n",
+    ),
+}
+
+
+def _outcome(module, body, pack):
+    """("refused", message), ("accepted", ids), or ("crashed", error)."""
+    from openadapt_flow.txplan.adapters import AdapterError
+
+    class Adapter:
+        def __init__(self):
+            self.http = httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)),
+                base_url="http://x",
+            )
+
+    try:
+        return "accepted", module._search(Adapter(), pack, "m1", "id")
+    except AdapterError as exc:
+        return "refused", str(exc)
+    except Exception as exc:  # noqa: BLE001 - a crash is not acceptance
+        return "crashed", repr(exc)
+
+
+def test_each_search_clause_is_load_bearing() -> None:
+    """Mutation test: with one clause removed, its probe must be accepted."""
+    import types
+
+    from openadapt_flow.txplan import scoped as real
+
+    source = Path(real.__file__).read_text(encoding="utf-8")
+    _, items, root, fhir = _search_packs()
+    packs = {"items": items, "root": root, "fhir": fhir}
+    tags = set(re.findall(r"# search-clause: ([a-z-]+)\n", source))
+    assert tags == set(SEARCH_REFUSALS), tags ^ set(SEARCH_REFUSALS)
+    for tag, (body, pack, message) in SEARCH_REFUSALS.items():
+        kind, detail = _outcome(real, body, packs[pack])
+        assert kind == "refused" and message in detail, (tag, kind, detail)
+        pattern, replacement = _MUTANT.get(
+            tag,
+            (
+                rf"raise AdapterError\((?:(?!raise AdapterError).)*?\)"
+                rf"  # search-clause: {tag}\n",
+                "pass  # mutated\n",
+            ),
+        )
+        mutated = re.sub(pattern, replacement, source, flags=re.S)
+        assert mutated != source, tag
+        module = types.ModuleType(f"scoped_without_{tag.replace('-', '_')}")
+        module.__file__ = real.__file__
+        exec(compile(mutated, real.__file__, "exec"), module.__dict__)
+        kind, detail = _outcome(module, body, packs[pack])
+        assert kind == "accepted", (
+            f"with the {tag} clause removed its probe is {kind} ({detail}): "
+            "another check catches it, so this clause isn't the guard"
+        )
+
+
+def test_a_marker_search_parses_strictly_and_closed_by_default() -> None:
+    from openadapt_flow.txplan.adapters import AdapterError
+    from openadapt_flow.txplan.audit import ScopedCollection
+
+    base, items, root, fhir = _search_packs()
+    packs = {"items": items, "root": root, "fhir": fhir}
+    for name, (body, pack, message) in SEARCH_REFUSALS.items():
+        with pytest.raises(AdapterError, match=re.escape(message)):
+            _run_search(body, packs[pack])
+    # Shapes the earlier guards let through, each refused.
+    for body in (
+        {**_BUNDLE, "entry": [{"resource": None}]},
+        {**_BUNDLE, "entry": [None]},
+        {**_BUNDLE, "entry": {}},
+        {**_BUNDLE, "entry": [_P1, {"fullUrl": "x"}]},  # undercounted duplicate
+        {**_BUNDLE, "entry": None},
+        {**_BUNDLE, "entry": [{"resource": {"id": {}}}]},
+        {**_BUNDLE, "entry": [{"resource": {"resourceType": "Patient"}}]},
+        {**_BUNDLE, "total": 1},
+        {**_BUNDLE, "total": 1, "entry": []},
+        {**_BUNDLE, "total": 1.0, "entry": [_P1]},
+        {"resourceType": "OperationOutcome", "total": 0},
+        {"resourceType": "Bundle", "type": "batch-response"},
+        {**_BUNDLE, "entry": [{"resource": []}]},  # one entry never reads empty
+        {**_BUNDLE, "total": 0, "entry": [{"resource": []}]},
+        {**_BUNDLE, "entry": [{"resource": [{"id": "a"}, {"id": "b"}]}]},
+        {**_BUNDLE, "link": [{"relation": "Next", "url": "u"}]},  # any case
+        {**_BUNDLE, "link": [{"relation": 1}]},
+        {**_BUNDLE, "link": "next"},
+        {**_BUNDLE, "link": [None]},
+    ):
+        with pytest.raises(AdapterError):
+            _run_search(body, fhir)
+    undeclared = fhir.model_copy(update={"search_empty": None})
     with pytest.raises(AdapterError):
-        _search(Adapter({"error": "busy"}), scoped, "m1", "id")
-    assert _search(Adapter({"total": 0}), scoped, "m1", "id") == []
-    assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
+        _run_search(_BUNDLE, undeclared)
+    # Answers that do say what they hold.
+    assert _run_search(_BUNDLE, fhir) == []
+    assert _run_search({**_BUNDLE, "total": 0}, fhir) == []
+    assert _run_search({**_BUNDLE, "entry": [_P1]}, fhir) == ["p1"]
+    assert _run_search({**_BUNDLE, "total": 2, "entry": [_P1, _P2]}, fhir) == [
+        "p1",
+        "p2",
+    ]
+    assert _run_search({"total": 0}, items) == []
+    assert _run_search({"items": [{"id": 3}]}, items) == ["3"]
+    assert _run_search([{"id": "a"}], root) == ["a"]
+    # search_empty without search_items is refused when the pack loads.
+    with pytest.raises(ValueError):
+        ScopedCollection.model_validate(
+            {**base, "search_empty": {"equals": {"resourceType": "Bundle"}}}
+        )
 
 
 def test_activity_feed_resource_from_two_parts() -> None:

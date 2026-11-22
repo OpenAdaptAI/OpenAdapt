@@ -552,6 +552,7 @@
     "benchmark/api_generalization/results/preview-3cb70fa6/wordpress_comment.counterfactual.compile.json",
     "benchmark/api_generalization/setup_log.csv",
     "benchmark/api_scoped/gitea.compose.yml",
+    "benchmark/api_scoped/medplum.compose.override.yml",
     "benchmark/api_scoped/packs/gitea.tx.yaml",
     "benchmark/api_scoped/packs/medplum.tx.yaml",
     "benchmark/api_scoped/packs/stripe.tx.yaml",
