@@ -13157,15 +13157,13 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
+    from openadapt_flow.cli_deferred import register_deferred_parser
+    from openadapt_flow.run_ledger.cli import register as _register_ledger
 
     register_admit_parser(sub)
     register_check_parser(sub)
     register_api_parser(sub)
-
-    from openadapt_flow.cli_deferred import register_deferred_parser
-
     register_deferred_parser(sub)
-    from openadapt_flow.run_ledger.cli import register as _register_ledger
     _register_ledger(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
