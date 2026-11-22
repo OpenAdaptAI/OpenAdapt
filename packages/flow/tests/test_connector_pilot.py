@@ -522,6 +522,38 @@ def test_cancel_after_the_child_reported_keeps_its_real_outcome(tmp_path):
     assert result.status == "success" and result.error_code is None
 
 
+@pytest.mark.parametrize(
+    "report",
+    [
+        {"success": True, "execution_outcome": "VERIFIED", "results": [{"ok": True}]},
+        {"success": True, "results": [{"ok": True}]},
+    ],
+    ids=["verified", "legacy"],
+)
+def test_cancel_that_kills_a_child_after_it_reported_success_is_uncertain(
+    tmp_path, report
+):
+    """Killed after writing success (a seal still running): the write landed."""
+    lease = f"bjob_post_{len(report)}"
+    job = parse_job(_payload(), lease_job_id=lease)
+
+    def runner(argv, run_dir, env):
+        cancel_job(lease)
+        return RunOutcome(
+            returncode=-15, report={"execution_target_kind": "web", **report}
+        )
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "halt"
+    assert result.error_code == "child_outcome_unknown"
+    assert result.halt == {"present": True} and result.outcome is None
+
+
 def test_concurrency_runs_up_to_the_server_cap(tmp_path):
     plane = RecordingPlane(
         control={

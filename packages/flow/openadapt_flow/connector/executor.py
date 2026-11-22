@@ -883,7 +883,21 @@ def _execute_job(
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
         cancelled = job_cancelled(job.lease_job_id)
-        if cancelled and not _reported_terminal_outcome(report):
+        # A cancel can kill a child that already reported success but had not
+        # exited (a seal or callback still running): the nonzero exit then
+        # reads as a failure although the write landed. Treat that like a
+        # missing report (fail-open class: lost-outcome-as-failure).
+        killed_after_success = (
+            cancelled
+            and outcome.returncode != 0
+            and (
+                report.get("execution_outcome") == "VERIFIED"
+                or report.get("success") is True
+            )
+        )
+        if cancelled and (
+            not _reported_terminal_outcome(report) or killed_after_success
+        ):
             # The cancel terminated a child that had already started, and it
             # left no terminal report: a write may have landed. That is not a
             # failure (a re-run could repeat the write); it stops for
@@ -892,7 +906,8 @@ def _execute_job(
             error_code = "child_outcome_unknown"
             outcome_error = (
                 "cancelled by the control plane while running; the governed "
-                "child left no terminal report, so a write may have landed"
+                "child left no terminal report or was killed after reporting "
+                "success, so a write may have landed"
             )
         elif report_target_kind != job.target_kind:
             status = "failed"
