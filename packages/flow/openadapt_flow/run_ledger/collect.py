@@ -538,6 +538,11 @@ def collect_agent_run_record(path: Path) -> Contribution:
         out.signal("lost_reply")
         return out
     path_kind = result.get("path")
+    if path_kind == "agent_fallback":
+        # P7: an agent run after a program's drift. Its ``verified`` is P7's
+        # rule (a passed record check of the task's record, every gate
+        # approved by the person), so it reads like an agent's first run.
+        path_kind = "agent"
     out.executor_kind = (
         "program" if path_kind == "skill" else "agent" if path_kind == "agent" else None
     )
@@ -840,8 +845,9 @@ def collect_guard_ledger_row(path: Path) -> Contribution:
     Reads ``task_id``, ``fields_checked`` and ``fields_differing`` (lists of
     names), ``approval_opened_at``, ``approval_decided_at`` and
     ``readback_tier``. ``verdict`` is a bucket name P5 chose and is never a
-    bucket source here: the guard's ``summary.json`` and the read-back
-    decide. A differing field is the read-back's field diff, a catch.
+    bucket source here, and neither is anything else in the row: the guard's
+    ``summary.json`` and the read-back decide (J3). A differing field shows
+    as ``differs``.
     ``approver_kind``, ``hold_ms`` and ``diff_path`` have no place in the row
     and aren't read.
     """
@@ -881,8 +887,8 @@ def collect_guard_ledger_row(path: Path) -> Contribution:
         out.intervals.append(
             Interval("approval", opened, _stamp(doc.get("approval_decided_at")), key="")
         )
-    if differing:
-        out.signal("readback_refuted")
+    # No signal: J3 makes the row a source of names, times and the tier only.
+    # The guard's summary.json says REFUTED when its read-back differs.
     return out
 
 
@@ -1153,7 +1159,10 @@ def collect(
     return Collected(
         root=run,
         contributions=contributions,
-        config_fields=declared_fields([*config_files(files), *config]),
+        config_fields=declared_fields(
+            [*config_files(files), *config],
+            [tid for c in contributions for tid in c.task_ids],
+        ),
         config_paths=[p for p in config if p.is_file()],
     )
 

@@ -61,7 +61,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--run-ref",
         default=None,
         help="The run's exception-queue reference (exceptions serve --run-ref); "
-        "default: a folder named like RUN_DIR, if any",
+        "its cards and answers are read from $OPENADAPT_HOME/exceptions/REF",
     )
     add.add_argument(
         "--config",

@@ -142,16 +142,16 @@ copies of their real (synthetic) files from the 2026-11-21 end-to-end run;
 | Source | Keys read | Outcome |
 | --- | --- | --- |
 | Readiness run directory (P1): a folder with `run.json` (`openadapt.readiness-task-run/v1`) | `run.json` `task_id`, `status`, `agent_wall_s`, `landed_writes`, `usage`, `model_cost_usd`; `case.json` (`openadapt.readiness-case/v1`) `task_id`, `status`, `landed_writes`, `fields[].name`, `kind`, `human`, `proposed`; `proposed_write.json` `fields[].name`, `value`; `usage.json` `calls`, tokens, `model`, `cost_usd`; `egress.json` `model_calls`, `cost_usd`, `cost_source` | See the shadow table. Nothing else in the folder is read: a `guard_ledger_row.json` or `guard_events.jsonl` there belongs to the shadow hold. |
-| `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`, P5) | `task_id`, `fields_checked[]`, `fields_differing[]` (names), `approval_opened_at`, `approval_decided_at`, `readback_tier` | `verdict` is never read: the guard's `summary.json` and the read-back decide. A differing field is CAUGHT_ERROR (`readback_refuted`). |
-| P7 fallback `result.json` (`<cache>/fallback/<task>/<id>/`) or a `wrap-dispatch --result` envelope; no schema field, recognised by `path`, `status`, `verified`, `replay` | `status`, `verified`, `path`, `seconds`, `model_calls`, `cost_usd`, `usage_known`, `replay.fallback.task_record_check`, `replay.program.receipt_outcome`, `compile.run1.gates[].at` / `decision`, `compile.task_key`, `request_id` | See the fallback table. The envelope's `outcome` is not read. The agent attempt under `run/` is not read again. |
+| `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`, P5) | `task_id`, `fields_checked[]`, `fields_differing[]` (names), `approval_opened_at`, `approval_decided_at`, `readback_tier` | None: the row is never a bucket source (`verdict` isn't read). The guard's `summary.json` and the read-back decide. A differing field shows as `differs`. |
+| P7 fallback `result.json` (`<cache>/fallback/<task>/<id>/`, with `replay`) or a `wrap-dispatch --result` envelope (with `outcome` and `fallback`); no schema field, recognised by `path`, `status`, `verified` and those keys | `status`, `verified`, `path`, `seconds`, `model_calls`, `cost_usd`, `usage_known`, the policy record (`replay.fallback`, or the envelope's `fallback`) `task_record_check`, `replay.program.receipt_outcome`, `compile.run1.gates[].at` / `decision`, `compile.task_key`, `request_id` | See the fallback table. The envelope's `outcome` is not read. The agent attempt under `run/` is not read again. |
 | `$OPENADAPT_HOME/exceptions/<run_ref>/` (P6): `card-<id>.json` (`openadapt.exception-card/v1`), `answer-<id>.json` (`openadapt.exception-answer/v1`) | card `task_id`, `kind`, `opened_at`, `card_id`; answer `card_id`, `kind`, `opened_at`, `decided_at` | ESCALATED: `second_factor` for that kind, else `exception_card`. An expired card (`decided_at: null`) or one not answered yet makes the person's time unknown. A card for another task id makes the row `task_id_conflict`. |
 | `flight.json` (`openadapt.flight-run/v1`, P3) | `task_id`, `executor_label`, `started_at`, `ended_at`, `model`, `gate_events[].kind` | A `held` with no later `allowed` or `refused`: ESCALATED (`gate_held`). A `refused`: CAUGHT_ERROR (`gate_refused`). |
 | A lone `proposed_write.json` (outside a readiness folder) | `task_id`, `fields[].name`, `value` | UNKNOWN (`shadow_not_compared`): nothing compared it. |
 
 P6's run reference is the operator's `exceptions serve --run-ref` (or a
 random `mcp-...`); no run directory names it. `ledger add --run-ref REF`
-reads `exceptions/REF/`. Without it, a folder named exactly like the run
-directory is read when one exists.
+reads `exceptions/REF/`. Without it no exception folder is read: nothing
+in a run directory says which folder is its own.
 
 `answer` and signatures in exception files, card summaries, `approver_kind`,
 `hold_ms` and `diff_path` in a guard row, and `timeline_path` in a flight file
@@ -195,8 +195,13 @@ ignored one) is `not_checked`. Values go to the sidecar only. Duration is
 
 On `path: program` or `held` the envelope is read like a wrap result;
 `NO_ADMITTED_PROGRAM` is FAILED (`policy_rejected_no_write`, nothing ran).
-A fallback gate keeps one time, not an opened/decided pair, so a person's
-time on it is unknown (`null`), not zero.
+A fallback gate in `result.json` keeps one time, not an opened/decided pair,
+so a person's time on it is unknown (`null`), not zero. The envelope keeps
+no gate times at all; its row says `0` there, which is a known gap (the row
+schema has no way to say "unknown" without an interval). A wrap run record
+(`openadapt-agent.run/v1`) whose result `path` is `agent_fallback` is read
+like an agent's first run: P7's `verified` is VERIFIED, anything else without
+the policy record is UNKNOWN (`write_unconfirmed`).
 
 ### Merging sources
 
@@ -250,10 +255,12 @@ no POSIX mode to set.
   Presidio rewrites the name `patient_id` to `<ORGANIZATION>`; a declared
   name is a form's identifier, not a value. Declared means: a guard task's
   `expected_record` and `intended_fields` keys (`openadapt.guard-task/v1`,
-  `task.json` or `guard_task.json` in the run, or `--config`), a
+  `task.json` or `guard_task.json` in the run, or `--config`; only a task
+  whose `task_id` is the run's), a
   `verify.yaml`'s effect `match` keys (a `verify.proposed.yaml` doesn't
   count), and a readiness `case.json`'s reference fields (not its `extra`
-  ones). Any other name the scrubber would rewrite still refuses, and an
+  ones; and for `FAILED_SCOPE` or a case with no proposal, whose field rows
+  compare never built, nothing). Any other name the scrubber would rewrite still refuses, and an
   entry added before this rule exempts nothing.
 
 Cloud receives `null` for every value the sources don't give

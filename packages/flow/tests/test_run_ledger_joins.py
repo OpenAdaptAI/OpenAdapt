@@ -219,12 +219,14 @@ def test_an_expired_exception_is_unknown_time_not_zero(tmp_path):
     assert row.human.intervention_s is None
 
 
-def test_the_folder_named_like_the_run_is_used_without_a_run_ref(tmp_path):
+def test_without_a_run_ref_no_exception_folder_is_read(tmp_path):
+    # P6's run reference is the operator's --run-ref; nothing derives it
+    # from a run directory, so a folder named like the run isn't guessed.
     home = _home_with_exceptions(tmp_path)
     run = tmp_path / "e2e-answered"
     run.mkdir()
     row = LedgerStore(home).add(run).row
-    assert row.outcome_reason == "second_factor"
+    assert row.outcome_reason == "no_sources"
 
 
 def test_a_card_from_another_task_is_a_conflict(tmp_path):
@@ -266,6 +268,16 @@ def test_a_refused_gate_is_a_decline_not_schema_unrecognised():
     assert row.sources == ("result.json",)
 
 
+def test_the_dispatcher_envelope_is_wrapped_tasks_result_plus_dispatch_fields():
+    # Built with P7's own WrappedTask._result and dispatch_cli.finish over
+    # the real result.json: no replay or compile, a top-level fallback.
+    doc = json.loads((FIXTURES / "dispatch_envelope_refused.json").read_text())
+    assert "replay" not in doc and "compile" not in doc
+    assert doc["fallback"]["task_record_check"]["created"] == 0
+    row, _, _ = build_row(FIXTURES / "dispatch_envelope_refused.json")
+    assert row.task_id == "r-119"
+
+
 def test_the_dispatcher_envelopes_outcome_is_not_read(tmp_path):
     for name, expected in (
         ("dispatch_envelope_verified.json", ("VERIFIED", "readback_verified")),
@@ -277,6 +289,22 @@ def test_the_dispatcher_envelopes_outcome_is_not_read(tmp_path):
         path.write_text(json.dumps(doc))
         row, _, _ = build_row(path)
         assert _outcome(row) == expected
+
+
+def test_a_wrap_record_of_a_verified_fallback_is_verified(tmp_path):
+    env = json.loads((FIXTURES / "dispatch_envelope_verified.json").read_text())
+    result = {k: v for k, v in env.items() if k not in ("outcome", "fallback")}
+    record = {
+        "schema": "openadapt-agent.run/v1",
+        "request_id": "r-118",
+        "state": "finished",
+        "result": result,
+    }
+    path = tmp_path / "run-0001.json"
+    path.write_text(json.dumps(record))
+    row, _, _ = build_row(path)
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    assert row.executor_kind == "agent"
 
 
 def test_a_refused_gate_with_a_write_on_record_is_not_a_clean_decline(tmp_path):
@@ -345,6 +373,31 @@ def test_an_extra_field_the_reference_does_not_declare_refuses(tmp_path):
         outbound_lines(store, summary=False, scrubber=_Presidio("ssn"))
 
 
+def test_a_failed_scope_case_declares_none_of_the_proposed_names(tmp_path):
+    # compare.py returns before it builds the rows for FAILED_SCOPE, so the
+    # empty field list says nothing about the agent's own names.
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "shadow_matched", run)
+    case = json.loads((run / "case.json").read_text())
+    case.update(status="FAILED_SCOPE", reason="a write reached the app", fields=[])
+    (run / "case.json").write_text(json.dumps(case))
+    store = _store(tmp_path)
+    assert store.add(run).row.outcome_reason == "shadow_write_landed"
+    assert store.entries()[0]["declared_fields"] == []
+    with pytest.raises(LedgerRefused, match="fields_written.name"):
+        outbound_lines(store, summary=False, scrubber=_Presidio())
+
+
+def test_another_tasks_guard_task_declares_nothing(tmp_path):
+    task = json.loads((FIXTURES / "guard_approved_ok_config" / "task.json").read_text())
+    task["task_id"] = "another-task"
+    other = tmp_path / "task.json"
+    other.write_text(json.dumps(task))
+    store = _store(tmp_path)
+    store.add(FIXTURES / "guard_approved_ok", config=(other,))
+    assert store.entries()[0]["declared_fields"] == []
+
+
 def test_guard_task_fields_are_declared_through_config(tmp_path):
     config = sorted((FIXTURES / "guard_approved_ok_config").iterdir())
     plain = LedgerStore(tmp_path / "a")
@@ -377,10 +430,12 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
 
     try:
         scrubber = get_text_scrubber()
-    except PrivacyNotAvailable:
+        if scrubber is not None:
+            scrubber.scrub_text("probe")  # the spaCy model may be missing
+    except (PrivacyNotAvailable, Exception):  # noqa: BLE001
         scrubber = None
     if scrubber is None:
-        pytest.skip("openadapt-privacy's text scrubber isn't installed")
+        pytest.skip("openadapt-privacy's text scrubber can't run here")
     store = _store(tmp_path)
     for path in sorted(FIXTURES.iterdir()):
         if path.name == "shadow_no_case":
@@ -429,7 +484,7 @@ def test_push_payloads_validate_against_the_json_schema(tmp_path):
     assert halted["model"]["calls"] is None and halted["model"]["cost_usd"] is None
 
 
-def test_the_committed_j6_examples_are_what_push_sends():
+def test_the_committed_j6_examples_validate_against_the_json_schema():
     import jsonschema
 
     validator = jsonschema.Draft202012Validator(_schema())
@@ -449,3 +504,16 @@ def test_collect_reads_a_shadow_run_as_one_source():
     collected = collect(FIXTURES / "shadow_wrong_record")
     assert [c.collector for c in collected.contributions] == ["readiness_shadow"]
     assert collected.declared_fields == {"note", "patient_id", "type"}
+
+
+def test_a_guard_rows_field_diff_alone_does_not_pick_the_bucket(tmp_path):
+    # J3: the row gives names; the guard's summary.json (here
+    # RECONCILIATION_REQUIRED) and the read-back decide.
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "guard_no_persist", run)
+    doc = json.loads((run / "guard_ledger_row.json").read_text())
+    doc.update(fields_checked=["note"], fields_differing=["note"])
+    (run / "guard_ledger_row.json").write_text(json.dumps(doc))
+    row, _, _ = build_row(run)
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
+    assert [(f.name, f.check) for f in row.fields_written] == [("note", "differs")]

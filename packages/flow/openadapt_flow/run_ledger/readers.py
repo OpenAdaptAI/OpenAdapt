@@ -196,6 +196,17 @@ def collect_shadow_run(folder: Path) -> Contribution:
             proposed_names.append(fname)
             proposed_values[fname] = item.get("value")
     case_names: set[str] = set()
+    # compare.py returns before it builds the field rows for FAILED_SCOPE,
+    # a task that didn't run and a run with no proposal; then the case
+    # declares nothing about the proposed names.
+    rows_built = case is not None and (
+        case.get("status")
+        in ("MATCHED", "MISMATCHED", "WRONG_RECORD", "NOT_COMPARABLE")
+        or (
+            case.get("status") == "NOT_CHECKED"
+            and case.get("reason") in ("uncompared_fields", "no_reference_fields")
+        )
+    )
     if case is not None:
         if (tid := _task_id(case.get("task_id"))) is not None:
             out.task_ids.append(tid)
@@ -227,10 +238,10 @@ def collect_shadow_run(folder: Path) -> Contribution:
         out.private_fields.setdefault(
             fname, {"intended": proposed_values.get(fname), "saved": None}
         )
-        if case is not None:
-            # compare.py lists every proposed field the reference doesn't
-            # declare; one it leaves out is an expected-record or ignored
-            # field the task declared.
+        if rows_built:
+            # Once compare.py built the rows it lists every proposed field
+            # the reference doesn't declare; one it leaves out is an
+            # expected-record or ignored field the task declared.
             out.declared_fields.add(fname)
     out.fields_differing = sum(1 for c in out.fields.values() if c == "differs")
 
@@ -252,17 +263,18 @@ def collect_shadow_run(folder: Path) -> Contribution:
 
 
 def is_dispatch_result(doc: Any) -> bool:
-    """P7's fallback ``result.json`` (``SkillRun.to_dict()``) or the
-    ``wrap-dispatch`` envelope. Neither has a schema field, so both are
-    recognised by shape; compile-agent's ``compiled/result.json`` has no
-    ``path`` and isn't one."""
+    """P7's fallback ``result.json`` (``SkillRun.to_dict()``, with
+    ``replay``) or the ``wrap-dispatch`` envelope (``WrappedTask.call``'s
+    result plus ``outcome`` and ``fallback``). Neither has a schema field, so
+    both are recognised by shape; compile-agent's ``compiled/result.json``
+    has no ``path`` and isn't one."""
 
     return (
         isinstance(doc, dict)
         and doc.get("path") in _DISPATCH_PATHS
         and isinstance(doc.get("status"), str)
         and "verified" in doc
-        and "replay" in doc
+        and ("replay" in doc or ("outcome" in doc and "fallback" in doc))
     )
 
 
@@ -312,7 +324,9 @@ def collect_fallback_result(path: Path) -> Contribution:
 
     compile_doc = _dict(doc.get("compile"))
     replay = _dict(doc.get("replay"))
-    fallback = _dict(replay.get("fallback"))
+    # result.json keeps the policy's record in replay.fallback; the
+    # dispatcher envelope carries the same object as its top-level fallback.
+    fallback = _dict(replay.get("fallback")) or _dict(doc.get("fallback"))
     program = _dict(replay.get("program"))
     tid = _task_id(doc.get("request_id")) or _task_id(compile_doc.get("task_key"))
     if tid is not None:
@@ -351,6 +365,8 @@ def collect_fallback_result(path: Path) -> Contribution:
         at = _epoch(gate.get("at"))
         if at is not None and str(gate.get("decision", "")).endswith("_by_hold"):
             out.intervals.append(Interval("approval", at, None, key=f"gate:{at}"))
+    # The envelope keeps the gate decisions (fallback.gates) but no times, so
+    # a person's time on them can't be told; see docs/RUN_LEDGER.md.
     check = fallback.get("task_record_check")
     if check is None:
         check = doc.get("record_check")
@@ -429,13 +445,15 @@ def collect_exception_folder(folder: Path) -> Optional[Contribution]:
 # -- declared field names (finding a) -------------------------------------------------
 
 
-def _guard_task_fields(path: Path) -> set[str]:
+def _guard_task_fields(path: Path, task_ids: set[str]) -> set[str]:
     try:
         doc = _read_json(path)
     except _Unreadable:
         return set()
     if not isinstance(doc, dict) or doc.get("schema_version") != GUARD_TASK_SCHEMA:
         return set()
+    if doc.get("task_id") not in task_ids:
+        return set()  # another task's config declares nothing for this run
     names: set[str] = set()
     for key in ("expected_record", "intended_fields"):
         value = doc.get(key)
@@ -467,19 +485,21 @@ def _verify_fields(path: Path) -> set[str]:
 _CONFIG_NAMES = ("task.json", "guard_task.json", "verify.yaml")
 
 
-def declared_fields(files: Iterable[Path]) -> set[str]:
+def declared_fields(files: Iterable[Path], task_ids: Iterable[str]) -> set[str]:
     """Field names declared by a guard task (``openadapt.guard-task/v1``:
-    ``expected_record`` and ``intended_fields``) or a ``verify.yaml``
-    (``openadapt.verify/v1``: each effect's ``match``) among ``files``.
+    ``expected_record`` and ``intended_fields``) whose ``task_id`` is one of
+    the run's, or a ``verify.yaml`` (``openadapt.verify/v1``: each effect's
+    ``match``) among ``files``.
     Readiness reference fields come from ``case.json`` through
     :func:`collect_shadow_run`. Anything else declares nothing."""
 
+    ids = set(task_ids)
     names: set[str] = set()
     for path in files:
         if path.suffix in (".yaml", ".yml"):
             names |= _verify_fields(path)
         elif path.suffix == ".json":
-            names |= _guard_task_fields(path)
+            names |= _guard_task_fields(path, ids)
     return names
 
 

@@ -402,20 +402,17 @@ class LedgerStore:
 
         return [RunLedgerRowV1.model_validate(e["row"]) for e in self.latest_entries()]
 
-    def exceptions_dir(self, run: Path, run_ref: Optional[str]) -> Optional[Path]:
-        """P6's folder for this run: ``exceptions/<run_ref>`` beside the
-        ledger. P6's run reference is the operator's ``--run-ref`` (or a
-        random ``mcp-...``), not something a run directory names, so it is
-        given explicitly; without it, a folder named exactly like the run
-        directory is used when one exists."""
+    def exceptions_dir(self, run_ref: Optional[str]) -> Optional[Path]:
+        """P6's folder for a run: ``exceptions/<run_ref>`` beside the ledger.
+        P6's run reference is the operator's ``exceptions serve --run-ref``
+        (or a random ``mcp-...``); no run directory names it, so it is only
+        ever given explicitly."""
 
-        base = self.root.parent / "exceptions"
-        if run_ref is not None:
-            if not _RUN_REF.match(run_ref):
-                raise ValueError("a run reference is letters, digits, '.', '_' or '-'")
-            return base / run_ref
-        guess = base / Path(run).resolve().name
-        return guess if _RUN_REF.match(guess.name) and guess.is_dir() else None
+        if run_ref is None:
+            return None
+        if not _RUN_REF.match(run_ref):
+            raise ValueError("a run reference is letters, digits, '.', '_' or '-'")
+        return self.root.parent / "exceptions" / run_ref
 
     def find(self, row_id: str) -> Optional[RunLedgerRowV1]:
         for entry in self.entries():
@@ -456,7 +453,7 @@ class LedgerStore:
         run = Path(run)
         collected = collect(
             run,
-            exceptions=self.exceptions_dir(run, run_ref),
+            exceptions=self.exceptions_dir(run_ref),
             config=tuple(Path(c) for c in config),
         )
         row, sidecar, digest = build_row(
