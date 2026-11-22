@@ -314,8 +314,8 @@ def form_scripts(html: str, action_path: str, sent: Iterable[str]) -> list[str]:
     return found
 
 
-#: validate.js rule kinds the API step evaluates. Any other kind is script it
-#: can't run (for example OpenEMR's ``pastDate``).
+#: validate.js rule kinds the API step evaluates. Any other kind is custom
+#: client script it can't run (for example a custom date-range validator).
 CLIENT_RULE_KINDS = frozenset({"presence", "length", "format", "numericality", "email"})
 
 
@@ -485,7 +485,7 @@ def client_rules(html: str) -> Optional[dict[str, Any]]:
     """The page's client-side validation rules, when it declares them.
 
     Recognizes the ``var constraints = {...}`` object that validate.js-style
-    pages (OpenEMR among them) emit. The browser enforces these before it
+    pages emit. The browser enforces these before it
     submits; a direct request skips them, so the API step records them,
     refuses when they change, and enforces their ``presence`` rules.
     """
