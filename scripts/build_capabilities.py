@@ -23,17 +23,26 @@ pull request that refreshes both after changes land on main.
     python scripts/build_capabilities.py                   # rewrite CAPABILITIES.md
     python scripts/build_capabilities.py --check           # fail unless it is current
     python scripts/build_capabilities.py --check-pr BASE   # the pull-request check
+    python scripts/build_capabilities.py --guard           # fail if the page was edited by hand
     python scripts/build_capabilities.py --split           # rebuild capabilities/ from CAPABILITIES.md
 
 ``--check-pr BASE`` passes when each generated file (CAPABILITIES.md,
 llms-full.txt) is current or was not changed since BASE. It fails when a pull
 request edits a generated file by hand, because the next refresh would drop
-the edit. ``--split`` is the one-time migration; it is kept so the migration
-can be re-run on the newest main and checked.
+the edit. ``--guard`` runs before each refresh: it fails when
+CAPABILITIES.md no longer matches the hash this script last wrote
+(capabilities/CAPABILITIES.md.sha256), for example after a pull request whose
+CI passed before this check existed, and lists the lines no source produces.
+
+``--split`` is the one-time migration, kept so it can be re-run on the newest
+main before the split lands. After that, never run it: it rebuilds the row
+files from the committed page, so it deletes every row that so far exists
+only as a row file.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import re
@@ -46,6 +55,11 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "CAPABILITIES.md"
 SOURCES = ROOT / "capabilities"
 SECTION = "section.md"
+# The sha256 of CAPABILITIES.md as this script last wrote it. A page whose
+# hash differs was changed by something other than this script, such as a
+# pull request whose CI passed before --check-pr existed; --guard stops the
+# refresh there instead of dropping that change.
+STAMP = SOURCES / "CAPABILITIES.md.sha256"
 ROWS = "<!-- capability rows -->"
 COMMANDS = "<!-- generated: scripts/build_command_map.py -->"
 _ROW_FILE = re.compile(r"^(\d+)-[a-z0-9][a-z0-9-]*\.md$")
@@ -191,8 +205,9 @@ def split(text: str) -> dict[str, str]:
 
 
 def write_split(text: str, root: Path = SOURCES) -> None:
-    if root.exists():
-        shutil.rmtree(root)
+    # Replace the section directories; keep capabilities/README.md.
+    for directory in (p for p in root.iterdir() if p.is_dir()) if root.exists() else ():
+        shutil.rmtree(directory)
     for relative, content in split(text).items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -202,9 +217,38 @@ def write_split(text: str, root: Path = SOURCES) -> None:
 # --------------------------------------------------------------------------- #
 # Checks
 # --------------------------------------------------------------------------- #
+def _stamp(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() + "\n"
+
+
 def generated() -> dict[Path, str]:
     """Each generated, committed file and what it should hold now."""
-    return {OUT: assemble(), ROOT / "llms-full.txt": _load("build_llms_full").build()}
+    page = assemble()
+    return {
+        OUT: page,
+        STAMP: _stamp(page),
+        ROOT / "llms-full.txt": _load("build_llms_full").build(),
+    }
+
+
+def guard() -> int:
+    """Fail when CAPABILITIES.md changed since this script last wrote it."""
+    page = OUT.read_text("utf-8")
+    if STAMP.exists() and STAMP.read_text("utf-8") == _stamp(page):
+        return 0
+    sources = set(assemble().splitlines())
+    extra = [line for line in page.splitlines() if line not in sources]
+    print(
+        "CAPABILITIES.md was changed by something other than "
+        "scripts/build_capabilities.py, so regenerating it would drop that "
+        "change. Move each line below into its row file (or section.md), then "
+        "regenerate the page in the same pull request. Lines on the page "
+        "that no source produces:",
+        file=sys.stderr,
+    )
+    for line in extra or ["(none: the page only trails its sources; regenerate it)"]:
+        print(f"  {line[:200]}", file=sys.stderr)
+    return 1
 
 
 def _changed_since(base: str, path: Path) -> bool:
@@ -222,8 +266,11 @@ def main(argv: list[str]) -> int:
         write_split(OUT.read_text("utf-8"))
         if assemble() != OUT.read_text("utf-8"):
             raise SystemExit("the split does not assemble back to CAPABILITIES.md")
+        STAMP.write_text(_stamp(assemble()), "utf-8")
         print(f"wrote {SOURCES.relative_to(ROOT)}/ from CAPABILITIES.md")
         return 0
+    if "--guard" in argv:
+        return guard()
     if "--check-pr" in argv:
         base = argv[argv.index("--check-pr") + 1]
         bad = []
@@ -244,7 +291,8 @@ def main(argv: list[str]) -> int:
         return 1 if bad else 0
     text = assemble()
     if "--check" in argv:
-        if OUT.read_text("utf-8") != text:
+        current = STAMP.read_text("utf-8") if STAMP.exists() else ""
+        if OUT.read_text("utf-8") != text or current != _stamp(text):
             print(
                 "CAPABILITIES.md is out of date; run python scripts/build_capabilities.py",
                 file=sys.stderr,
@@ -252,6 +300,7 @@ def main(argv: list[str]) -> int:
             return 1
         return 0
     OUT.write_text(text, "utf-8")
+    STAMP.write_text(_stamp(text), "utf-8")
     print(f"wrote {OUT.relative_to(ROOT)}")
     return 0
 

@@ -378,7 +378,9 @@ def _row_files(directory: Path) -> list[tuple[int, Path, str]]:
 
 def _section_dirs(root: Path) -> dict[str, Path]:
     found = {}
-    for directory in sorted(p for p in (root / CAPABILITY_ROWS).iterdir() if p.is_dir()):
+    for directory in sorted(
+        p for p in (root / CAPABILITY_ROWS).iterdir() if p.is_dir()
+    ):
         section = directory / "section.md"
         if section.exists():
             first = section.read_text("utf-8").split("\n", 1)[0]
@@ -429,7 +431,9 @@ def migrate_capability_rows(
         directory = directories.get(heading)
         if mine[0] != original[0]:
             where = (
-                f"{directory.relative_to(root)}/section.md" if directory else "capabilities/"
+                f"{directory.relative_to(root)}/section.md"
+                if directory
+                else "capabilities/"
             )
             manual.append(
                 f"CAPABILITIES.md: your branch changed the text of '{name}'; "

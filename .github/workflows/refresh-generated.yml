@@ -61,6 +61,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Stop, rather than drop a row, when the page changed outside the
+          # generator (a pull request whose CI passed before --check-pr).
+          python3 scripts/build_capabilities.py --guard
           python3 scripts/build_capabilities.py
           python3 scripts/build_llms_full.py
           python3 scripts/build_capabilities.py --check
@@ -71,7 +74,7 @@ jobs:
             --json number,headRefName,body \
             --jq "map(select(.headRefName | startswith(\"$prefix\")))")"
 
-          if git diff --quiet -- CAPABILITIES.md llms-full.txt; then
+          if git diff --quiet -- CAPABILITIES.md capabilities/CAPABILITIES.md.sha256 llms-full.txt; then
             echo "CAPABILITIES.md and llms-full.txt are current."
             for number in $(jq -r '.[].number' <<<"$open_prs"); do
               gh pr close "$number" --repo "$GITHUB_REPOSITORY" --delete-branch \
@@ -93,7 +96,7 @@ jobs:
           sha="$(git rev-parse --short=12 HEAD)"
           branch="${prefix}${sha}"
           git switch -c "$branch"
-          git add CAPABILITIES.md llms-full.txt
+          git add CAPABILITIES.md capabilities/CAPABILITIES.md.sha256 llms-full.txt
           git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "docs: refresh CAPABILITIES.md and llms-full.txt"
@@ -121,3 +124,31 @@ jobs:
             gh pr close "$number" --repo "$GITHUB_REPOSITORY" --delete-branch \
               --comment "Superseded by $url."
           done
+
+  blocked:
+    name: refresh blocked issue
+    needs: refresh
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, or comment on, the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="CAPABILITIES.md refresh blocked"
+          body="The refresh of CAPABILITIES.md and llms-full.txt stopped: ${RUN_URL}
+
+          Usually the page on main was edited by hand, so regenerating it would drop that edit. The run log lists the lines no file under capabilities/ produces. Add a row file for each (or edit section.md) and run python scripts/build_capabilities.py in the same pull request."
+          number="$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
+            --search "\"$title\" in:title" --json number,title \
+            -q "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

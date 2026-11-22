@@ -54,7 +54,8 @@ def _section(tmp_path: Path, rows: dict[str, str]) -> Path:
     section = root / "01-a"
     section.mkdir(parents=True)
     (section / "section.md").write_text(
-        "## A\n\n| X | Y |\n| --- | --- |\n<!-- capability rows -->\n\nAfter.\n", "utf-8"
+        "## A\n\n| X | Y |\n| --- | --- |\n<!-- capability rows -->\n\nAfter.\n",
+        "utf-8",
     )
     for name, text in rows.items():
         (section / name).write_text(text, "utf-8")
@@ -125,3 +126,25 @@ def test_the_pr_check_passes_stale_pages_and_fails_hand_edits(
     page.write_text("old page\n", "utf-8")
     brief.write_text("old brief, edited\n", "utf-8")
     assert main(["--check-pr", base]) == 1
+
+
+def test_the_committed_stamp_matches_the_page_the_sources_build(mod):
+    # Seeded with the split; every regeneration rewrites it with the page.
+    assert mod.guard() == 0
+
+
+def test_the_guard_stops_a_refresh_that_would_drop_a_hand_edit(
+    mod, tmp_path, monkeypatch, capsys
+):
+    page, stamp = tmp_path / "CAPABILITIES.md", tmp_path / "stamp"
+    monkeypatch.setattr(mod, "OUT", page)
+    monkeypatch.setattr(mod, "STAMP", stamp)
+    monkeypatch.setattr(mod, "assemble", lambda: "| a |\n| b |\n")
+    page.write_text("| a |\n", "utf-8")
+    stamp.write_text(mod._stamp("| a |\n"), "utf-8")
+    # The page trails its sources (a new row file): the refresh may go on.
+    assert mod.guard() == 0
+    # A pull request whose CI predates --check-pr added a row to the page.
+    page.write_text("| a |\n| hand-added |\n", "utf-8")
+    assert mod.guard() == 1
+    assert "| hand-added |" in capsys.readouterr().err
