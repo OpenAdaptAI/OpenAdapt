@@ -409,24 +409,38 @@ class CommandSource:
         self, request: Request, *, heartbeat: Callable[[], None]
     ) -> Optional[str]:
         heartbeat()
+        deadline = time.monotonic() + request.timeout_s
         try:
-            done = subprocess.run(
+            proc = subprocess.Popen(
                 [*self._argv, request.kind, request.step_id],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                timeout=request.timeout_s,
-                check=False,
             )
-        except subprocess.TimeoutExpired:
-            raise SecondFactorRefused(
-                "second_factor_timeout",
-                f"no second factor within {request.timeout_s:g} s; nothing was typed",
-            ) from None
         except OSError:
             raise SecondFactorRefused(
                 "second_factor_unavailable", "the second-factor command could not start"
             ) from None
+        try:
+            # Wait in slices so the heartbeat keeps a supervisor from ending a
+            # run that is waiting for a person.
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(self._argv, request.timeout_s)
+                try:
+                    stdout, _ = proc.communicate(timeout=min(HEARTBEAT_S, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    heartbeat()
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise SecondFactorRefused(
+                "second_factor_timeout",
+                f"no second factor within {request.timeout_s:g} s; nothing was typed",
+            ) from None
+        done = subprocess.CompletedProcess(proc.args, proc.returncode, stdout)
         if done.returncode == DECLINED_EXIT_CODE:
             raise SecondFactorRefused(
                 "second_factor_declined", "the person declined; nothing was typed"

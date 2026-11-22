@@ -240,6 +240,20 @@ def test_a_local_command_that_fails_types_nothing(
     assert "not a code" not in str(refused.value)
 
 
+def test_a_waiting_command_keeps_the_heartbeat_going(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sf, "HEARTBEAT_S", 0.1)
+    source = sf.CommandSource(
+        _script(tmp_path, f"import time\ntime.sleep(0.6)\nprint('{CODE}')\n")
+    )
+    beats: list[int] = []
+    reply = source.obtain(
+        sf.Request("code", "s", 10.0), heartbeat=lambda: beats.append(1)
+    )
+    assert reply == CODE and len(beats) >= 3
+
+
 def test_no_source_and_bad_timeouts_are_refused() -> None:
     with pytest.raises(sf.SecondFactorRefused) as refused:
         sf.obtain("code", "s", env={})
