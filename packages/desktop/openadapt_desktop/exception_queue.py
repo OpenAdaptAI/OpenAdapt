@@ -308,3 +308,77 @@ __all__ = [
     "unsigned_answer",
     "valid_card",
 ]
+
+
+# -- the stop queue's side ------------------------------------------------------
+
+
+def stop_cards(root: Path | None = None) -> list[dict[str, Any]]:
+    """The stop queue's cards for every open exception card on this computer:
+    any run that asked a person (CLI guard, wrap, flight, hooks), not only
+    Desktop's own."""
+
+    from openadapt_desktop import stop_queue
+
+    cards = (stop_queue.card_for_exception(raw) for raw in open_cards(root))
+    return [card for card in cards if card is not None]
+
+
+def answer_stop_cards(
+    dispatcher: Any,
+    cards: list[dict],
+    choice_id: str,
+    sign: Callable[..., dict],
+    device: dict[str, str] | None,
+) -> dict:
+    """Answer one exception card from the stop queue: sign it, write the run's
+    answer file, and record the decision the way the queue records others."""
+
+    from openadapt_desktop import stop_queue
+    from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+    if len(cards) != 1:
+        return {
+            "ok": False,
+            "code": "answer_one_by_one",
+            "error": "Each of these stops is answered on its own. Nothing changed.",
+        }
+    card = cards[0]
+    try:
+        outcome = answer(
+            card["source"],
+            choice_id,
+            sign=sign,
+            route="desktop" if device is None else "portal",
+        )
+    except ApproverKeychainError as exc:
+        return {"ok": False, "code": exc.code, "error": str(exc)}
+    if not outcome.get("ok"):
+        return {
+            "ok": False,
+            "code": outcome.get("code"),
+            "error": f"{outcome.get('error')} Nothing changed.",
+        }
+    dispatcher._record_stop_decision(
+        {
+            "schema": stop_queue.DECISION_SCHEMA,
+            "card_ids": [card["card_id"]],
+            "kinds": [stop_queue.EXCEPTION_KIND],
+            "choice": choice_id,
+            "decided_at": outcome["decided_at"],
+            "opened_at": outcome["opened_at"],
+            "public_key": outcome["public_key"],
+            "signature": outcome["signature"],
+            "key": outcome.get("key"),
+            "results": [{"card_id": card["card_id"], "ok": True}],
+            **({"device": device} if device is not None else {}),
+        }
+    )
+    dispatcher.services.audit.log(
+        "exception_answered", kind=card.get("exception_kind"), choice=choice_id
+    )
+    return {
+        "ok": True,
+        "results": [{"card_id": card["card_id"], "ok": True, "error": None}],
+        "changed": 1,
+    }

@@ -4490,7 +4490,7 @@ class EngineDispatcher:
     def _stop_cards(self) -> list[dict]:
         """Every card the queue shows now, rebuilt from the stores."""
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.work_items import OPEN, TEACHING, public_item
 
         names = {
@@ -4519,15 +4519,7 @@ class EngineDispatcher:
             card = stop_queue.card_for_rearm(switch)
             if card is not None:
                 cards.append(card)
-        # Any run on this computer that asked a person (CLI guard, wrap,
-        # flight, hooks), not only Desktop's own runs.
-        from openadapt_desktop import exception_queue
-
-        for raw in exception_queue.open_cards():
-            card = stop_queue.card_for_exception(raw)
-            if card is not None:
-                cards.append(card)
-        return stop_queue.sort_cards(cards)
+        return stop_queue.sort_cards(cards + exception_queue.stop_cards())
 
     def _rearm_offer(self, workflow_id: str) -> dict | None:
         """Flow's re-arm offer for a task's switch, with the clean items named."""
@@ -4827,7 +4819,7 @@ class EngineDispatcher:
     ) -> dict:
         from datetime import datetime, timezone
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
         params = {"shown_ms": shown_ms}
@@ -4850,7 +4842,7 @@ class EngineDispatcher:
         if choice_id == "leave":
             return {"ok": True, "results": [], "changed": 0}
         if any(card["kind"] == stop_queue.EXCEPTION_KIND for card in cards):
-            return self._answer_exception(cards, choice_id, sign=sign, device=device)
+            return exception_queue.answer_stop_cards(self, cards, choice_id, sign, device)
         if any(card["kind"] == "rearm_problems_only" for card in cards):
             if len(cards) != 1 or device is not None:
                 return {
@@ -4919,65 +4911,6 @@ class EngineDispatcher:
                 if all(r["ok"] for r in results)
                 else {"error": "Some stops weren't changed. They stay in the queue."}
             ),
-        }
-
-    def _answer_exception(
-        self,
-        cards: list[dict],
-        choice_id: str,
-        *,
-        sign: Callable[..., dict],
-        device: dict[str, str] | None,
-    ) -> dict:
-        """Answer one exception card: sign it and write the run's answer file."""
-
-        from openadapt_desktop import exception_queue, stop_queue
-        from openadapt_desktop.approver_keychain import ApproverKeychainError
-
-        if len(cards) != 1:
-            return {
-                "ok": False,
-                "code": "answer_one_by_one",
-                "error": "Each of these stops is answered on its own. Nothing changed.",
-            }
-        card = cards[0]
-        try:
-            outcome = exception_queue.answer(
-                card["source"],
-                choice_id,
-                sign=sign,
-                route="desktop" if device is None else "portal",
-            )
-        except ApproverKeychainError as exc:
-            return {"ok": False, "code": exc.code, "error": str(exc)}
-        if not outcome.get("ok"):
-            return {
-                "ok": False,
-                "code": outcome.get("code"),
-                "error": f"{outcome.get('error')} Nothing changed.",
-            }
-        self._record_stop_decision(
-            {
-                "schema": stop_queue.DECISION_SCHEMA,
-                "card_ids": [card["card_id"]],
-                "kinds": [stop_queue.EXCEPTION_KIND],
-                "choice": choice_id,
-                "decided_at": outcome["decided_at"],
-                "opened_at": outcome["opened_at"],
-                "public_key": outcome["public_key"],
-                "signature": outcome["signature"],
-                "key": outcome.get("key"),
-                "results": [{"card_id": card["card_id"], "ok": True}],
-                **({"device": device} if device is not None else {}),
-            }
-        )
-        self.services.audit.log(
-            "exception_answered", kind=card.get("exception_kind"), choice=choice_id
-        )
-        return {
-            "ok": True,
-            "results": [{"card_id": card["card_id"], "ok": True, "error": None}],
-            "changed": 1,
         }
 
     def _answer_rearm(self, card: dict, *, shown_ms: Any) -> dict:
