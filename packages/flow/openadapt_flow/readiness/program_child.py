@@ -28,7 +28,8 @@ def write_args(path: Path, argv: list[str]) -> Path:
     """Write ``argv`` for the child to ``path`` (0600)."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    path.unlink(missing_ok=True)  # a new file, so its mode is 0600 whatever was there
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump({"schema": SCHEMA, "argv": list(argv)}, fh)
     return path

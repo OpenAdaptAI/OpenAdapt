@@ -177,3 +177,101 @@ def test_the_browser_reaches_the_app_and_nothing_else() -> None:
     assert other_hits == [], other_hits
     assert (got, public, ws, image) == ("failed", "failed", "failed", "failed")
     assert "/again" in app_hits
+
+
+def test_a_new_context_cannot_take_its_own_proxy() -> None:
+    """Reviewer probe: ``Target.createBrowserContext`` with ``proxyServer:
+    "direct://"`` through the relay escaped the browser's proxy limit."""
+
+    pytest.importorskip("playwright")
+    from playwright.sync_api import sync_playwright
+
+    app, _ = _server(b"<h1>app</h1>")
+    other, other_hits = _server(b"other")
+    app_origin = f"http://127.0.0.1:{app.server_address[1]}"
+    other_origin = f"http://127.0.0.1:{other.server_address[1]}"
+    with sync_playwright() as pw:
+        relay = DevToolsRelay(headless_shell(pw.chromium.executable_path),
+                              allowed_origins=(app_origin,)).start()
+        try:
+            wire = CdpWire(browser_ws_url(relay.http_url), lambda *a: None)
+            for params in ({"proxyServer": "direct://"},
+                           {"proxyBypassList": "*"},
+                           {"originsWithUniversalNetworkAccess": [other_origin]},
+                           {"someFutureKey": True}):
+                with pytest.raises(CdpError, match="refused"):
+                    wire.send("Target.createBrowserContext", params)
+            for method in ("Network.loadNetworkResource", "Target.exposeDevToolsProtocol",
+                           "Browser.executeBrowserCommand"):
+                with pytest.raises(CdpError, match="refused"):
+                    wire.send(method, {})
+            ctx = wire.send("Target.createBrowserContext", {"disposeOnDetach": True})
+            wire.send("Target.createTarget", {"url": other_origin + "/exfil?d=1",
+                                              "browserContextId": ctx["browserContextId"]})
+            import time
+
+            time.sleep(2)
+            wire.close()
+        finally:
+            relay.close()
+    app.shutdown()
+    other.shutdown()
+    assert other_hits == []
+
+
+def _lan_ip() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        try:
+            s.connect(("192.0.2.1", 9))  # no packet is sent for a UDP connect
+            return s.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
+
+
+def _stun_probe(block_webrtc: bool) -> bool:
+    """Whether a page's WebRTC ICE gathering sends a UDP packet to a local
+    STUN listener."""
+
+    from playwright.sync_api import sync_playwright
+
+    app, _ = _server(b"<h1>app</h1>")
+    app_origin = f"http://127.0.0.1:{app.server_address[1]}"
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp.bind(("0.0.0.0", 0))
+    udp.settimeout(6)
+    try:
+        with sync_playwright() as pw:
+            relay = DevToolsRelay(headless_shell(pw.chromium.executable_path),
+                                  allowed_origins=(app_origin,),
+                                  block_webrtc=block_webrtc).start()
+            try:
+                browser = pw.chromium.connect_over_cdp(relay.http_url)
+                page = browser.new_context().new_page()
+                page.goto(app_origin + "/")
+                page.evaluate(
+                    """(u) => { const pc = new RTCPeerConnection({iceServers: [{urls: u}]});
+                    pc.createDataChannel('x');
+                    pc.createOffer().then(o => pc.setLocalDescription(o)); window._pc = pc; }""",
+                    f"stun:{_lan_ip()}:{udp.getsockname()[1]}",
+                )
+                try:
+                    udp.recvfrom(2048)
+                    return True
+                except socket.timeout:
+                    return False
+                finally:
+                    browser.close()
+            finally:
+                relay.close()
+    finally:
+        udp.close()
+        app.shutdown()
+
+
+def test_webrtc_sends_no_udp_past_the_proxy() -> None:
+    """Reviewer probe: WebRTC's STUN packets went around the HTTP proxy."""
+
+    pytest.importorskip("playwright")
+    if not _stun_probe(block_webrtc=False):
+        pytest.skip("no STUN packet arrives here even without the block")
+    assert _stun_probe(block_webrtc=True) is False

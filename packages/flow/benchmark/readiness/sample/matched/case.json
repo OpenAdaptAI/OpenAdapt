@@ -1,5 +1,5 @@
 {
-  "agent_time_s": 2.076,
+  "agent_time_s": 2.021,
   "contamination": {
     "compared": 2,
     "not_comparable": false,
@@ -22,7 +22,7 @@
       "proposed": "Synthetic note 00 for review"
     }
   ],
-  "human_time_s": 0.943,
+  "human_time_s": 0.969,
   "identity": {
     "code": "verified",
     "ok": true

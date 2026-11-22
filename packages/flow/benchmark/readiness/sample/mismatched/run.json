@@ -1,9 +1,9 @@
 {
-  "agent_wall_s": 2.03,
+  "agent_wall_s": 2.046,
   "before_screen": true,
   "browser_network": {
     "allowed_origins": [
-      "http://127.0.0.1:54211"
+      "http://127.0.0.1:61403"
     ],
     "limited": true
   },

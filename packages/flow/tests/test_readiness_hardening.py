@@ -546,3 +546,18 @@ def test_the_program_child_reads_its_args_once_and_only_private(
     other = program_child.write_args(tmp_path / "c.json", ["guard", "x"])
     with pytest.raises(SystemExit, match="not a readiness program run"):
         program_child.main([str(other)])
+
+
+def test_the_hold_refuses_reads_to_origins_outside_the_allowlist(tmp_path: Path) -> None:
+    page = FakePage()
+    guard = _guard(tmp_path, page, allowed_origins=(APP, "https://login.example.test"))
+    guard.on_request(_req("r1", "GET", "/api/records"))
+    guard.on_request(HeldRequest(request_id="r2", method="GET",
+                                 url="http://127.0.0.1:1234/leak?d=Jane", resource_type="Image"))
+    guard.on_request(HeldRequest(request_id="r3", method="GET",
+                                 url="https://login.example.test/start", resource_type="Document"))
+    guard.on_request(HeldRequest(request_id="r4", method="GET",
+                                 url=f"blob:{APP}/0b1c", resource_type="Script"))
+    assert page.continued == ["r1", "r3", "r4"]
+    assert page.blocked == ["r2"]
+    assert guard.outcome()["other_origin_refused"] == 1

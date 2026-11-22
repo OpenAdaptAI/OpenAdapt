@@ -315,6 +315,7 @@ def run_one(
             lens=cfg.lens,
             save_target=(save["method"], save["url_path"]) if save else None,
             events_path=run_dir / "guard_events.jsonl",
+            allowed_origins=browser_origins(cfg),
         )
         job = LaunchJob(
             task_id=task_id,

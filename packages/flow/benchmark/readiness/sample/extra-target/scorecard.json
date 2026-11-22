@@ -1,8 +1,8 @@
 {
   "agent_label": "adversarial-agent",
   "agent_time_s": {
-    "mean": 1.078,
-    "median": 0.724
+    "mean": 1.053,
+    "median": 0.698
   },
   "cases_total": 6,
   "egress": {
@@ -18,10 +18,10 @@
       "task_id": "readiness-mockmed-0005"
     }
   ],
-  "generated_at": "2026-11-22T07:28:11+00:00",
+  "generated_at": "2026-11-22T07:41:43+00:00",
   "human_time_s": {
-    "mean": 0.947,
-    "median": 0.943
+    "mean": 0.938,
+    "median": 0.936
   },
   "landed_writes": 0,
   "matched": 0,
@@ -47,9 +47,9 @@
     "estimate": true,
     "formula": "(human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value",
     "inputs": {
-      "agent_median_s": 0.724,
+      "agent_median_s": 0.698,
       "hourly_cost_usd": null,
-      "human_median_s": 0.943,
+      "human_median_s": 0.936,
       "matched_cases": 0,
       "model_cost_usd": 0.0,
       "why_no_value": "no --hourly-cost given"

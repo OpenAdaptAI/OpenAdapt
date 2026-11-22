@@ -29,6 +29,15 @@ then reach the app and nothing else, by ``GET`` or WebSocket; only the
 candidate's process is under the OS egress block, so this is the browser's
 half (:attr:`DevToolsRelay.network_limited`).
 
+The limit can't be undone through the relay: a ``Target.createBrowserContext``
+may carry only :data:`CONTEXT_PARAMS` (no ``proxyServer``,
+``proxyBypassList`` or ``originsWithUniversalNetworkAccess``, and no key the
+relay doesn't know), and :data:`REFUSED_METHODS` (fetching from the browser
+process, exposing DevTools to a page, browser commands) are refused. WebRTC
+may not send UDP that bypasses the proxy
+(``--force-webrtc-ip-handling-policy=disable_non_proxied_udp``), and DNS
+prefetching is off.
+
 The hold is unchanged: the gate's ``Fetch.enable`` on its browser session
 pauses every other target's requests and the tab's own session pauses the
 tab's, exactly as over a TCP port. Close the browser (:meth:`close`) before
@@ -55,6 +64,14 @@ from typing import Any, Optional
 __all__ = ["DevToolsRelay", "headless_shell"]
 
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+#: The only parameters a client may give ``Target.createBrowserContext``.
+CONTEXT_PARAMS = frozenset({"disposeOnDetach"})
+#: Methods no client may send through the relay (fail closed).
+REFUSED_METHODS = frozenset({
+    "Network.loadNetworkResource",
+    "Target.exposeDevToolsProtocol",
+    "Browser.executeBrowserCommand",
+})
 
 
 def headless_shell(executable_path: str) -> str:
@@ -114,7 +131,11 @@ class DevToolsRelay:
         *,
         extra_args: tuple[str, ...] = (),
         allowed_origins: tuple[str, ...] = (),
+        block_webrtc: bool = True,
     ) -> None:
+        """``block_webrtc=False`` exists for the test that shows the block is
+        needed; nothing else turns it off."""
+        self.block_webrtc = block_webrtc
         self.executable = executable
         self.extra_args = tuple(extra_args)
         self.allowed_origins = tuple(allowed_origins)
@@ -157,10 +178,14 @@ class DevToolsRelay:
         dead.bind(("127.0.0.1", 0))  # bound and never listening: refuses all
         self._dead_port = dead
         proxy = f"http://127.0.0.1:{dead.getsockname()[1]}"
-        return [
+        args = [
             f"--proxy-server={proxy}",
             "--proxy-bypass-list=" + ";".join(["<-loopback>", *hosts]),
+            "--dns-prefetch-disable",
         ]
+        if self.block_webrtc:
+            args.append("--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
+        return args
 
     @property
     def http_url(self) -> str:
@@ -472,9 +497,31 @@ class DevToolsRelay:
             parts.clear()
             self._from_client(client, json.loads(text))
 
+    def _refusal(self, msg: dict[str, Any]) -> Optional[str]:
+        method = str(msg.get("method") or "")
+        if method in REFUSED_METHODS:
+            return f"{method} is refused by the readiness relay"
+        if method == "Target.createBrowserContext":
+            extra = set(msg.get("params") or {}) - CONTEXT_PARAMS
+            if extra:
+                return (
+                    "Target.createBrowserContext with "
+                    + ", ".join(sorted(extra))
+                    + " is refused by the readiness relay (the browser's network limit applies)"
+                )
+        return None
+
     def _from_client(self, client: _Client, msg: dict[str, Any]) -> None:
         original = msg.get("id")
         session = msg.get("sessionId")
+        refusal = self._refusal(msg)
+        if refusal is not None:
+            self.refused += 1
+            reply: dict[str, Any] = {"id": original, "error": {"code": -32000, "message": refusal}}
+            if session:
+                reply["sessionId"] = session
+            client.send_text(json.dumps(reply))
+            return
         if session:
             with self._lock:
                 owner = self._owners.get(str(session))

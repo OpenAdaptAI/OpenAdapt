@@ -385,7 +385,13 @@ class ProgramLauncher:
         return [*self.python_cmd, "-m", "openadapt_flow.readiness.program_child", str(path)]
 
     def start(self, job: LaunchJob) -> RunningAgent:
-        return _RunningProgram(job, self.argv(job), self.egress)
+        argv = self.argv(job)
+        try:
+            return _RunningProgram(job, argv, self.egress)
+        except BaseException:
+            # The child never started, so nothing will read and delete it.
+            (job.run_dir / "program-args.json").unlink(missing_ok=True)
+            raise
 
 
 def wait_exit(agent: RunningAgent, timeout_s: float) -> Optional[int]:

@@ -300,6 +300,17 @@ page can reach nothing else, by `GET`, image, navigation or WebSocket.
 scorecard's `egress.enforced` is true only when the candidate's process ran
 under the OS block and the browser was limited, for every task.
 
+The limit holds against the candidate too. The relay refuses a
+`Target.createBrowserContext` that carries anything but `disposeOnDetach`
+(so no `proxyServer: "direct://"`, `proxyBypassList` or
+`originsWithUniversalNetworkAccess`, nor a key it doesn't know), and
+refuses `Network.loadNetworkResource`, `Target.exposeDevToolsProtocol` and
+`Browser.executeBrowserCommand`. The shadow hold refuses every request,
+`GET` included, to an origin outside the same list, in every tab and
+context. WebRTC may not send UDP around the proxy
+(`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`); a test with a
+local STUN listener receives a packet without the flag and none with it.
+
 A compiled program (`--program`) gets its arguments (the relay URL with the
 run's token, the task's inputs) through a 0600 file the child reads once
 and deletes (`readiness/program_child.py`), never on its command line,
@@ -455,9 +466,11 @@ been run through `readiness` yet; that is the next evidence step.
   adversarial test (MockMed has none).
 - The browser runs outside the OS egress block (only the candidate's process
   is inside it); its own limit is the proxy settings below, which hold for
-  the page's HTTP and WebSocket traffic. They don't cover what Chromium
-  sends for itself outside the page's network stack (none is expected with
-  background networking off), and DNS for a proxied host is not looked up.
+  the page's HTTP and WebSocket traffic. Not tested: whether Chromium still
+  resolves a proxied host name locally (DNS prefetch is turned off, but a
+  name could still reach the local resolver), and traffic Chromium sends
+  for itself outside the page's network stack (none is expected with
+  background networking off).
 - Scrubbing is the flight recorder's. The scrubbed smoke test on MockMed
   (`test_a_real_claude_loop_under_scrubbed_egress_on_mockmed`) checks one
   planted patient name in the computer-use preamble plus task text: it does

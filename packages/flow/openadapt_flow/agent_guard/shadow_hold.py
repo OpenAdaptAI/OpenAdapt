@@ -320,6 +320,7 @@ class ShadowHoldGuard(CommitGuard):
         save_target: Optional[tuple[str, str]] = None,
         agent_id: str = "shadow-agent",
         events_path: Optional[Path] = None,
+        allowed_origins: Optional[Sequence[str]] = None,
         clock: Optional[Callable[[], float]] = None,
         wall_clock: Callable[[], _dt.datetime] = lambda: _dt.datetime.now(
             _dt.timezone.utc
@@ -362,6 +363,13 @@ class ShadowHoldGuard(CommitGuard):
         self.other_origin_refused = 0
         #: Writes from another tab, popup, context or worker (held, refused).
         self.extra_target_writes = 0
+        #: With a list, every request (``GET`` included) to an origin outside
+        #: it is refused, so a page can't carry data out in a URL.
+        self.allowed_origins = (
+            None
+            if allowed_origins is None
+            else frozenset(origin_of(o) or o for o in [app_origin, *allowed_origins])
+        )
         #: The first screen text on which the task's record showed, read
         #: before any write was held (the contamination check reads it).
         self.before_screen: Optional[str] = None
@@ -402,6 +410,8 @@ class ShadowHoldGuard(CommitGuard):
             self._on_save(request, self._clock())
             return
         kind = classify(request, app_origin=self.app_origin, not_saves=self.not_saves)
+        if kind == "read" and not self._origin_allowed(request.url):
+            kind = "other_origin"
         self.summary.requests[kind] = self.summary.requests.get(kind, 0) + 1
         if kind == "other_origin":
             self.other_origin_refused += 1
@@ -415,6 +425,15 @@ class ShadowHoldGuard(CommitGuard):
             )
             return
         self.page.continue_request(request.request_id)
+
+    def _origin_allowed(self, url: str) -> bool:
+        if self.allowed_origins is None:
+            return True
+        if url.startswith(("data:", "about:")):
+            return True  # no network
+        if url.startswith("blob:"):
+            url = url[len("blob:"):]  # a blob URL carries its creator's origin
+        return origin_of(url) in self.allowed_origins
 
     def _check_forwarded(self, request_id: str) -> None:
         request = self._seen.pop(request_id, None)
