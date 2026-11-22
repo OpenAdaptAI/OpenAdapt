@@ -11,7 +11,6 @@
     "core:window:allow-set-focus",
     "notification:default",
     "updater:default",
-    "shell:allow-open",
     {
       "identifier": "shell:allow-execute",
       "allow": [
