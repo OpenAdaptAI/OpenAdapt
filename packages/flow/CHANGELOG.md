@@ -149,12 +149,34 @@ upgrading openadapt-types to 0.24.1, which 3.4.0's range allows.
 - `openadapt_flow.eligibility` is gone. The Stedi 270/271 payer eligibility
   client moved into the `openadapt-eligibility` connector
   (`packages/connectors/eligibility`), which is not on PyPI yet (#2488).
-- `ExecuteService`, `create_app` and `serve` take `seed_admissions` in
-  place of `seed_mockmed` (#2486).
-- The `synthetic_mockmed` runner is now `synthetic_runner`. Its evidence
-  tags are `synthetic-verified` and `synthetic-banner-lie` (#2486).
-- The reward bundle builder's default task, environment and certificate ids
-  no longer name the demo app (#2486).
+- Execute (#2486):
+  - `ExecuteService`, `create_app` and `serve` take `seed_admissions` in
+    place of `seed_mockmed`.
+  - `seed_mockmed_admissions` and the `MOCKMED_*` constants moved from
+    `openadapt_flow.execute.registry` to
+    `openadapt_flow.mockmed.execute_seed`. The registry no longer exports
+    them.
+  - The `synthetic_mockmed` runner is now `synthetic_runner`. Its evidence
+    tags `mockmed-verified` and `mockmed-banner-lie` are now
+    `synthetic-verified` and `synthetic-banner-lie`.
+  - `default_runner` refuses a non-synthetic admission with no `bundle_dir`
+    (`DispatchError`, nothing executed). It used to run the synthetic demo
+    for it.
+- Reward bundles (#2486). The builder's defaults no longer describe the demo
+  app:
+  - The default required and forbidden effects match `record_id` with
+    `status` `committed` and `voided`. They were `patient_id` with `type`
+    `Triage` and `Discharge`.
+  - The default identity keys are `["record_id"]`, or the keys the given
+    effects name. They were `["patient_id"]`.
+  - Passing `required_effects` without `forbidden_effects` now means no
+    forbidden effects, not the defaults.
+  - The default task, environment and certificate ids are
+    `task_synthetic_record_write`, `environment_synthetic` and
+    `reward_certificate_synthetic`.
+
+  A bundle built with the defaults therefore has a different contract and
+  digest than under 3.x.
 
 ### Upgrading from 3.x
 
@@ -184,14 +206,18 @@ upgrading openadapt-types to 0.24.1, which 3.4.0's range allows.
 
   `seed_admissions` takes any iterable of `AdmittedBundle`, so your own
   admitted bundles work the same way. On the command line,
-  `--seed-mockmed` still works.
-- **Synthetic runner.** Code or stored evidence that matches
-  `synthetic_mockmed` should match `synthetic_runner`. The evidence tags
-  are now `synthetic-verified` and `synthetic-banner-lie`.
-- **Reward bundles.** If you relied on the default ids, pass `task_id`,
-  `environment_id` and `certificate_id` to the bundle builder explicitly.
-  Bundles built with the defaults now carry `task_synthetic_record_write`,
-  `environment_synthetic` and `reward_certificate_synthetic`.
+  `--seed-mockmed` still works. Import `seed_mockmed_admissions` and the
+  `MOCKMED_*` constants from `openadapt_flow.mockmed.execute_seed`.
+- **Synthetic runner.** Code that calls `synthetic_mockmed` should call
+  `synthetic_runner`. Stored evidence tagged `mockmed-verified` or
+  `mockmed-banner-lie` is now tagged `synthetic-verified` or
+  `synthetic-banner-lie`.
+- **Admissions without a bundle.** Give every non-synthetic admission a
+  `bundle_dir`, or mark it synthetic.
+- **Reward bundles.** If you relied on the defaults, pass `task_id`,
+  `environment_id`, `certificate_id`, `required_effects`,
+  `forbidden_effects` and `identity_keys` explicitly. Pass
+  `forbidden_effects` whenever you pass `required_effects`.
 
 ### Fixes
 
