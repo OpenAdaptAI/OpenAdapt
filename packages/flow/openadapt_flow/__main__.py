@@ -13190,8 +13190,14 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     for _name in (
-        "cli_rollback", "cli_shadow", "readiness.cli", "onboard.cli",
-        "cli_receipt", "learn", "cli_reconcile", "cli_cleanup",
+        "cli_rollback",
+        "cli_shadow",
+        "readiness.cli",
+        "onboard.cli",
+        "cli_receipt",
+        "learn",
+        "cli_reconcile",
+        "cli_cleanup",
     ):
         __import__(f"openadapt_flow.{_name}", fromlist=["register"]).register(sub)
     _add_jit_parser(sub)
