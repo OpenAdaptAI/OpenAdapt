@@ -9368,6 +9368,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command", required=True, parser_class=argparse.ArgumentParser
     )
+    __import__("openadapt_flow.exceptions.cli", fromlist=["register"]).register(sub)
 
     p = sub.add_parser(
         "demo",
