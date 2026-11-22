@@ -14,7 +14,10 @@ step, applied in memory on the device before anything is written:
   replaced by a keyed hash.
 * Anything that does not parse that way (HTML, plain text, binary, a cut
   body, a multipart body that carries a file) keeps only its length, its
-  content type and a keyed hash of the whole body.
+  content type and a keyed hash of the whole body. JSON is parsed only from
+  a body labelled JSON or unlabelled (``application/octet-stream``, the wire
+  tap's type for a missing header); JSON-looking text in any other type is
+  opaque.
 * URL query values are treated the same way, because a ``GET`` form puts the
   person's input there. Path segments are kept (see "Not covered").
 
@@ -56,19 +59,35 @@ HAR_FIELD = "_openadapt_minimized"
 
 _FIELD_NAME = re.compile(r"^[A-Za-z_$@][A-Za-z0-9_.$@:\-\[\]]{0,63}$")
 _JSON_START = ("{", "[")
+#: A value this module already replaced (left as is when minimized again).
+TAG = re.compile(r"hmac-sha256:[0-9a-f]{64}")
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 class BodyMinimizer:
     """Minimize the bodies and URLs of one capture.
 
     ``keep_fields`` are the declared field names. A JSON value is kept when
-    its leaf key or its dotted path (``data.id``, list indices dropped)
-    equals a declared name, compared case-insensitively. One instance per
-    capture: its hash key lives only as long as the instance.
+    its leaf key or a dotted suffix of its path (``id``, ``meta.versionId``,
+    ``data.id``; list indices dropped) equals a declared name, compared
+    case-insensitively. ``withhold`` names are never kept, whatever their
+    case (a declared secret). One instance per capture: its hash key lives
+    only as long as the instance.
     """
 
-    def __init__(self, keep_fields: Iterable[str] = (), *, key: Optional[bytes] = None):
-        self._keep = frozenset(str(f).lower() for f in keep_fields if str(f))
+    def __init__(
+        self,
+        keep_fields: Iterable[str] = (),
+        *,
+        key: Optional[bytes] = None,
+        withhold: Iterable[str] = (),
+    ):
+        withheld = {str(f).lower() for f in withhold}
+        self._keep = frozenset(
+            str(f).lower()
+            for f in keep_fields
+            if str(f) and str(f).lower() not in withheld
+        )
         self._key = key if key is not None else secrets.token_bytes(32)
 
     @property
@@ -80,7 +99,10 @@ class BodyMinimizer:
         if isinstance(value, (bytes, bytearray)):
             data = bytes(value)
         else:
-            data = json.dumps(value, ensure_ascii=False).encode("utf-8")
+            # surrogatepass: a lone escaped surrogate parses but isn't UTF-8.
+            data = json.dumps(value, ensure_ascii=False).encode(
+                "utf-8", "surrogatepass"
+            )
         digest = hmac.new(self._key, data, hashlib.sha256).hexdigest()
         return f"hmac-sha256:{digest}"
 
@@ -90,7 +112,12 @@ class BodyMinimizer:
         named = [p for p in path if not p.isdigit()]
         if not named:
             return False
-        return named[-1].lower() in self._keep or ".".join(named).lower() in self._keep
+        lowered = [p.lower() for p in named]
+        return any(".".join(lowered[i:]) in self._keep for i in range(len(lowered)))
+
+    def declared(self, name: str) -> bool:
+        """Whether a top-level field ``name`` is kept."""
+        return self._declared([self._segment(str(name))])
 
     def _segment(self, key: str) -> str:
         return key if _FIELD_NAME.match(key) else self.tag(key)
@@ -181,7 +208,12 @@ class BodyMinimizer:
                 return None
             fields, _files = parsed
             return "form", self.pairs(fields)
-        if text.lstrip().startswith(_JSON_START):
+        # JSON only when labelled JSON or unlabelled: octet-stream is the wire
+        # tap's type for a missing header. HTML and text stay opaque.
+        json_type = ctype in ("", "application/octet-stream") or ctype.endswith(
+            ("/json", "+json")
+        )
+        if json_type and text.lstrip().startswith(_JSON_START):
             try:
                 document = json.loads(text)
             except ValueError:
@@ -195,18 +227,60 @@ class BodyMinimizer:
     # -- URLs ------------------------------------------------------------
 
     def url(self, url: Any) -> Any:
-        """``url`` with every undeclared query value replaced by its hash."""
-        if not isinstance(url, str) or "?" not in url:
+        """``url`` with every undeclared query value replaced by its hash.
+
+        Also a query inside the fragment (``#/search?q=...``, ``#q=...``) and
+        a bare search term (``?term``, which has no name to declare).
+        """
+        if not isinstance(url, str) or ("?" not in url and "#" not in url):
             return url
         parts = up.urlsplit(url)
-        if not parts.query:
-            return url
+        fragment = parts.fragment
+        if "?" in fragment:
+            head, _, tail = fragment.partition("?")
+            fragment = head + "?" + self.query(tail)
+        elif "=" in fragment:
+            fragment = self.query(fragment)
+        return up.urlunsplit(
+            parts._replace(query=self.query(parts.query), fragment=fragment)
+        )
+
+    def query(self, query: str) -> str:
+        """A query string with undeclared values (and bare terms) hashed."""
         items = []
-        for name, value in up.parse_qsl(parts.query, keep_blank_values=True):
+        for component in query.split("&"):
+            if not component:
+                continue
+            name, sep, value = component.partition("=")
+            name = up.unquote_plus(name)
+            if not sep:
+                items.append(
+                    up.quote_plus(name if TAG.fullmatch(name) else self.tag(name))
+                )
+                continue
+            value = up.unquote_plus(value)
             segment = self._segment(name)
-            keep = self._declared([segment])
-            items.append((segment, value if keep or not value else self.tag(value)))
-        return up.urlunsplit(parts._replace(query=up.urlencode(items)))
+            keep = not value or TAG.fullmatch(value) or self._declared([segment])
+            items.append(up.urlencode([(segment, value if keep else self.tag(value))]))
+        return "&".join(items)
+
+    def refilter(self, minimized: Mapping[str, Any]) -> dict[str, Any]:
+        """An already minimized body under this policy: a kept value that
+        this policy doesn't declare is withheld (hashed)."""
+        out = dict(minimized)
+        if isinstance(out.get("kept"), list):
+            kept: list[Any] = []
+            withheld = list(out.get("withheld") or [])
+            for item in out["kept"]:
+                if not isinstance(item, list) or len(item) != 2:
+                    continue
+                path = [p for p in str(item[0]).split(".") if p]
+                if self._declared(path):
+                    kept.append(item)
+                else:
+                    withheld.append([str(item[0]), self.tag(item[1])])
+            out["kept"], out["withheld"] = kept, withheld
+        return out
 
 
 def restore_kept_json(minimized: Mapping[str, Any]) -> bytes:
@@ -218,23 +292,44 @@ def restore_kept_json(minimized: Mapping[str, Any]) -> bytes:
     """
     if minimized.get("format") != "json":
         return b""
-    root: dict[str, Any] = {}
+    holder: dict[str, Any] = {}
     for item in minimized.get("kept") or []:
         if not isinstance(item, list) or len(item) != 2:
             continue
-        path, value = str(item[0]), item[1]
-        names = [p for p in path.split(".") if p and not p.isdigit()]
-        if not names:
-            continue
-        node = root
-        for name in names[:-1]:
-            child = node.get(name)
-            if not isinstance(child, dict):
-                child = {}
-                node[name] = child
-            node = child
-        node.setdefault(names[-1], value)
+        segments = [p for p in str(item[0]).split(".") if p]
+        if segments and not _place(holder, [""] + segments, item[1]):
+            return b""  # paths that collide: restore nothing rather than guess
+    root = holder.get("")
     return json.dumps(root, sort_keys=True).encode("utf-8") if root else b""
+
+
+def _place(node: Any, segments: list[str], value: Any) -> bool:
+    """Set ``value`` at ``segments`` (digits index lists); False on a clash."""
+    for i, seg in enumerate(segments):
+        last = i == len(segments) - 1
+        if isinstance(node, list):
+            if not seg.isdigit() or int(seg) > 10_000:
+                return False
+            index: Any = int(seg)
+            while len(node) <= index:
+                node.append(None)
+        elif isinstance(node, dict):
+            index = seg
+        else:
+            return False
+        current = node[index] if isinstance(node, list) else node.get(index)
+        if last:
+            if current is not None:
+                return False
+            node[index] = value
+            return True
+        if current is None:
+            current = [] if segments[i + 1].isdigit() else {}
+            node[index] = current
+        if isinstance(current, list) != segments[i + 1].isdigit():
+            return False
+        node = current
+    return False
 
 
 def _har_text(container: Mapping[str, Any]) -> Optional[bytes]:
@@ -252,78 +347,148 @@ def _har_text(container: Mapping[str, Any]) -> Optional[bytes]:
 def minimize_har(har: Mapping[str, Any], minimizer: BodyMinimizer) -> dict[str, Any]:
     """A copy of a HAR 1.2 document with every body minimized.
 
-    Request ``postData.text`` and response ``content.text`` become empty and
-    the minimized description goes in ``_openadapt_minimized`` beside them.
-    Request URLs, ``queryString`` values, ``redirectURL`` and ``Location``
-    headers are minimized like any other URL.
+    Request ``postData.text`` (or ``params``) and response ``content.text``
+    become empty and the minimized description goes in
+    ``_openadapt_minimized`` beside them. Request URLs, ``queryString``
+    values, ``redirectURL``, ``Location`` headers and page titles are
+    minimized like any other URL. Every entry is minimized on its own, so a
+    raw entry added to an already minimized HAR is minimized too, and a body
+    minimized before is re-checked against this policy's fields. Wire-tap
+    ids and versions survive only when they are a kept value.
     """
     doc = json.loads(json.dumps(har))
     log = doc.get("log") if isinstance(doc, dict) else None
     if not isinstance(log, dict):
         return doc
     log[HAR_FIELD] = {"schema": MINIMIZED_SCHEMA, "bodies": MINIMIZED}
+    for page in log.get("pages") or []:
+        if isinstance(page, dict) and isinstance(page.get("title"), str):
+            page["title"] = minimizer.url(page["title"])
     for entry in log.get("entries") or []:
-        if not isinstance(entry, dict):
-            continue
-        request = entry.get("request")
-        if isinstance(request, dict):
-            if isinstance(request.get("url"), str):
-                request["url"] = minimizer.url(request["url"])
-            if isinstance(request.get("queryString"), list):
-                request["queryString"] = [
-                    {"name": n, "value": v}
-                    for n, v in up.parse_qsl(
-                        up.urlsplit(request.get("url") or "").query,
-                        keep_blank_values=True,
-                    )
-                ]
-            post = request.get("postData")
-            if isinstance(post, dict):
-                _minimize_har_body(post, minimizer, str(post.get("mimeType") or ""))
-                if isinstance(post.get("params"), list):
-                    post["params"] = []
-        response = entry.get("response")
-        if isinstance(response, dict):
-            if isinstance(response.get("redirectURL"), str):
-                response["redirectURL"] = minimizer.url(response["redirectURL"])
-            for header in response.get("headers") or []:
-                if (
-                    isinstance(header, dict)
-                    and str(header.get("name", "")).lower() == "location"
-                ):
-                    header["value"] = minimizer.url(header.get("value"))
-            content = response.get("content")
-            if isinstance(content, dict):
-                _minimize_har_body(
-                    content, minimizer, str(content.get("mimeType") or "")
-                )
-        meta = entry.get("_tx")
-        if isinstance(meta, dict):
-            # Wire-tap metadata keeps classifications, ids and versions only.
-            entry["_tx"] = {
-                k: v
-                for k, v in meta.items()
-                if k
-                in (
-                    "blocked",
-                    "block_reason",
-                    "is_mutation",
-                    "is_graphql_mutation",
-                    "extracted_entity_id",
-                    "etag",
-                    "version",
-                )
-            }
+        if isinstance(entry, dict):
+            _minimize_har_entry(entry, minimizer)
     return doc
+
+
+_TX_KEPT = ("blocked", "block_reason", "is_mutation", "is_graphql_mutation", "etag")
+_TX_VALUES = ("extracted_entity_id", "version")
+
+
+def _minimize_har_entry(entry: dict[str, Any], minimizer: BodyMinimizer) -> None:
+    kept_values: list[Any] = []
+    request = entry.get("request")
+    if isinstance(request, dict):
+        if isinstance(request.get("url"), str):
+            request["url"] = minimizer.url(request["url"])
+        if isinstance(request.get("queryString"), list):
+            request["queryString"] = [
+                {"name": n, "value": v}
+                for n, v in up.parse_qsl(
+                    up.urlsplit(request.get("url") or "").query,
+                    keep_blank_values=True,
+                )
+            ]
+        post = request.get("postData")
+        if isinstance(post, dict):
+            kept_values += _minimize_har_body(
+                post, minimizer, str(post.get("mimeType") or "")
+            )
+    response = entry.get("response")
+    if isinstance(response, dict):
+        if isinstance(response.get("redirectURL"), str):
+            response["redirectURL"] = minimizer.url(response["redirectURL"])
+        for header in response.get("headers") or []:
+            if (
+                isinstance(header, dict)
+                and str(header.get("name", "")).lower() == "location"
+            ):
+                header["value"] = minimizer.url(header.get("value"))
+        content = response.get("content")
+        if isinstance(content, dict):
+            kept_values += _minimize_har_body(
+                content, minimizer, str(content.get("mimeType") or "")
+            )
+    meta = entry.get("_tx")
+    if isinstance(meta, dict):
+        # Wire-tap metadata keeps classifications; an id or version only
+        # when the body kept it, else its hash.
+        out = {k: v for k, v in meta.items() if k in _TX_KEPT}
+        for k in _TX_VALUES:
+            if k in meta:
+                value = meta[k]
+                out[k] = (
+                    value
+                    if value is None or value in kept_values
+                    else minimizer.tag(value)
+                )
+        entry["_tx"] = out
 
 
 def _minimize_har_body(
     container: dict[str, Any], minimizer: BodyMinimizer, content_type: str
-) -> None:
+) -> list[Any]:
+    """Minimize one HAR body in place; returns the values it kept."""
     raw = _har_text(container)
+    previous = container.get(HAR_FIELD)
+    params = container.get("params")
     container.pop("encoding", None)
     container["text"] = ""
-    container[HAR_FIELD] = minimizer.body(raw, content_type)
+    if isinstance(params, list):
+        container["params"] = []
+    if raw is None and isinstance(previous, Mapping):
+        descriptor: Optional[dict[str, Any]] = minimizer.refilter(previous)
+    elif raw is None and isinstance(params, list) and params:
+        descriptor = _minimize_params(params, minimizer)
+    else:
+        descriptor = minimizer.body(raw, content_type)
+    container[HAR_FIELD] = descriptor
+    if not descriptor:
+        return []
+    return [item[1] for item in descriptor.get("kept") or [] if isinstance(item, list)]
+
+
+def _minimize_params(params: list[Any], minimizer: BodyMinimizer) -> dict[str, Any]:
+    pairs = [p for p in params if isinstance(p, Mapping)]
+    out: dict[str, Any] = {"schema": MINIMIZED_SCHEMA, "content_type": ""}
+    if any(p.get("fileName") or p.get("contentType") for p in pairs) or len(
+        pairs
+    ) != len(params):
+        out.update(
+            format="opaque", hmac=minimizer.tag(json.dumps(params, sort_keys=True))
+        )
+        return out
+    out["format"] = "form"
+    out.update(minimizer.pairs([p.get("name", ""), p.get("value", "")] for p in pairs))
+    return out
+
+
+def mutation_floor(entry: Mapping[str, Any]) -> bool:
+    """Whether a minimized HAR entry must replay as a write.
+
+    Replay classifies from what was kept, which can make a write look like a
+    read (a GraphQL document hashed in a ``GET`` query, an operation lost
+    from a batch). The wire tap's recorded ``is_mutation`` is the floor;
+    without one, a withheld or opaque write body or a hashed GraphQL
+    document is.
+    """
+    meta = entry.get("_tx")
+    if isinstance(meta, Mapping) and isinstance(meta.get("is_mutation"), bool):
+        return meta["is_mutation"]
+    request = entry.get("request")
+    if not isinstance(request, Mapping):
+        return False
+    method = str(request.get("method") or "GET").upper()
+    post = request.get("postData")
+    body = post.get(HAR_FIELD) if isinstance(post, Mapping) else None
+    if method not in _READ_METHODS and isinstance(body, Mapping):
+        if body.get("withheld") or body.get("format") not in ("json", "form"):
+            return True
+    parts = up.urlsplit(str(request.get("url") or ""))
+    graphql = parts.path.rstrip("/").lower().endswith("/graphql")
+    return any(
+        (graphql or name == "query") and TAG.fullmatch(value)
+        for name, value in up.parse_qsl(parts.query, keep_blank_values=True)
+    )
 
 
 def is_minimized_har(har: Mapping[str, Any]) -> bool:
@@ -344,7 +509,16 @@ def minimize_line(line: Mapping[str, Any], minimizer: BodyMinimizer) -> dict[str
             out[key] = minimizer.url(out[key])
     request_type = str(out.get("request_type") or "")
     if "form" in out:
-        out["form_minimized"] = minimizer.pairs(out.pop("form") or [])
+        form = out.pop("form") or []
+        if out.get("request_truncated"):
+            # A cut form may end mid-value: keep nothing of it.
+            out["form_minimized"] = {
+                "format": "opaque",
+                "truncated": True,
+                "hmac": minimizer.tag(json.dumps(form)),
+            }
+        else:
+            out["form_minimized"] = minimizer.pairs(form)
     if "body" in out:
         out["body_minimized"] = minimizer.body(
             out.pop("body"),

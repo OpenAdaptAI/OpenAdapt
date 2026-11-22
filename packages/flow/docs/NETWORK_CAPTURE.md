@@ -69,22 +69,28 @@ memory and writes only what the recording declared
   for this capture and never written. Equal values hash equally within one
   file; hashes from different files can't be compared, and a short value
   (a birth date) can't be recovered by trying candidates.
-- **Opaque:** HTML, plain text, binary, a cut body or a multipart body
-  with a file keeps only its length, content type and hash.
+- **Opaque:** HTML, plain text, binary, a cut body or form, or a
+  multipart body with a file keeps only its length, content type and hash.
+  JSON is parsed only from a body labelled JSON or unlabelled
+  (`application/octet-stream`); JSON-looking text of any other type is
+  opaque.
 
 So `form`, `body` and `response_text` are replaced by `form_minimized`,
 `body_minimized` and `response_minimized`, each `{"kept": [[path, value]],
 "withheld": [[path, hash]]}` (bodies also carry `format`, `bytes`,
 `content_type` and a whole-body `hmac`), and `url`, `frame_url` and
-`location` have undeclared query values hashed. Not minimized: URL path
+`location` have undeclared query values hashed (also a query in the
+fragment, `#/search?q=...`, and a bare search term, `?term`). Not minimized: URL path
 segments (`/patients/1234`) and JSON keys that look like field names.
 
 Readers find no body in a minimized file and propose nothing from it: no
 API step, no undo proposal, no record check from the app's reads. Record
 with `--capture-network-bodies raw` for those and for debugging. Raw is
-refused unless the recording is encrypted (the default for web recordings;
-not with `--no-encrypt`) or `OPENADAPT_FLOW_PLAINTEXT_AT_REST` allows
-plaintext. The redaction below applies to raw bodies.
+refused unless the recording is encrypted (set `OPENADAPT_RECORDING_KEY` or
+`OPENADAPT_BUNDLE_KEY`, or use `OPENADAPT_FLOW_AT_REST=strict`; never with
+`--no-encrypt`) or `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows
+plaintext, which is warned about and logged. Code that builds
+`NetworkCapture(bodies="raw")` itself calls `require_raw_ready()` first. The redaction below applies to raw bodies.
 
 ## Redaction, before anything is written
 

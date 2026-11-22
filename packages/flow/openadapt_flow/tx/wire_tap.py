@@ -1092,7 +1092,10 @@ class SessionWireTap:
         self, source: str | Path | bytes | Mapping[str, Any]
     ) -> WireSessionSummary:
         """Replay entries from a HAR 1.2 document into the current wire-tap session."""
+        from openadapt_flow.capture_privacy import is_minimized_har, mutation_floor
+
         har = load_har(source, secrets=self._policy.secrets)
+        minimized = is_minimized_har(har)
         entries = har.get("log", {}).get("entries", [])
         for entry in entries:
             if not isinstance(entry, Mapping):
@@ -1153,6 +1156,7 @@ class SessionWireTap:
                 request_headers=dict(req_headers),
                 response_headers=dict(resp_headers),
                 duration_ms=duration_ms,
+                assume_mutation=minimized and mutation_floor(entry),
             )
         return self.summary()
 
@@ -1287,6 +1291,7 @@ class SessionWireTap:
         raw_target: str,
         request_headers: list[tuple[str, str]],
         request_body: bytes,
+        assume_mutation: bool = False,
     ) -> dict[str, Any]:
         """Atomically classify and gate a request before any upstream network I/O."""
         upper_method = method.strip().upper()
@@ -1298,6 +1303,7 @@ class SessionWireTap:
             request_body,
             request_headers,
         )
+        is_mut = is_mut or assume_mutation
         started_utc = _utc_now_iso()
         req_sha = hashlib.sha256(request_body).hexdigest()
         masked_url = _mask_if_needed(full_url, self._policy.secrets)
@@ -1700,8 +1706,13 @@ class SessionWireTap:
             Mapping[str, str] | Iterable[tuple[str, str]]
         ] = None,
         duration_ms: float = 0.0,
+        assume_mutation: bool = False,
     ) -> Optional[WireMutationRecord]:
-        """Programmatically gate and record an HTTP exchange in-process."""
+        """Programmatically gate and record an HTTP exchange in-process.
+
+        ``assume_mutation`` counts it as a write whatever it looks like (a
+        minimized HAR's recorded write whose body was withheld).
+        """
         req_bytes = _to_bytes(request_body)
         req_hdrs = _header_pairs(request_headers)
         ticket = self._begin_request(
@@ -1709,6 +1720,7 @@ class SessionWireTap:
             raw_target=url,
             request_headers=req_hdrs,
             request_body=req_bytes,
+            assume_mutation=assume_mutation,
         )
         if ticket["blocked"]:
             status, _reason, err_hdrs, err_body = self._blocked_http_payload(
@@ -1893,14 +1905,10 @@ def dump_har(
     Bodies are minimized by default (:mod:`openadapt_flow.capture_privacy`):
     only ``keep_fields`` values survive (default: the policy's id and version
     fields), the rest become keyed hashes. ``raw_bodies=True`` keeps them for
-    debugging; a file is always sealed under the at-rest key
+    debugging and needs ``path``; a file is always sealed under the at-rest key
     (``write_private_record``). TODO(#2423): use the key hierarchy's data key.
     """
-    from openadapt_flow.capture_privacy import (
-        BodyMinimizer,
-        is_minimized_har,
-        minimize_har,
-    )
+    from openadapt_flow.capture_privacy import BodyMinimizer, minimize_har
 
     raw_har: Mapping[str, Any] = (
         har_or_tap.export_har()
@@ -1909,7 +1917,12 @@ def dump_har(
     )
     secret_tuple = tuple(s for s in secrets if s)
     scrubbed = _scrub_har_value(dict(raw_har), secret_tuple)
-    if not raw_bodies and not is_minimized_har(scrubbed):
+    if raw_bodies and path is None:
+        # Raw bodies go only to a sealed file, never back as plain text.
+        raise ValueError("dump_har(raw_bodies=True) needs a path to seal them to")
+    if not raw_bodies:
+        # Every entry, even in a HAR minimized before (a raw entry added to
+        # it is minimized, and earlier kept values are re-checked).
         policy = (
             har_or_tap.policy
             if isinstance(har_or_tap, SessionWireTap)

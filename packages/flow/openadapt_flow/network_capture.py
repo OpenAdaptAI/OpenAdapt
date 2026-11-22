@@ -352,33 +352,62 @@ class NetworkCapture:
 
         path = Path(recording_dir) / NETWORK_FILE
         lines = self.lines(t0_monotonic)
-        if self._bodies == cp.RAW:
-            _require_sealed_or_allowed(path)
-        else:
-            minimizer = cp.BodyMinimizer(self._keep_fields)
+        if self._bodies != cp.RAW:
+            minimizer = cp.BodyMinimizer(
+                {f for f in self._keep_fields if not SECRET_NAME.search(f)},
+                withhold=self._secret_names,
+            )
             lines = [cp.minimize_line(line, minimizer) for line in lines]
         header = {"schema": SCHEMA, "exchanges": len(lines), "bodies": self._bodies}
         text = json.dumps(header) + "\n"
         text += "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines)
+        data = text.encode("utf-8")
+        if self._bodies == cp.RAW and not raw_plaintext_allowed(path):
+            # Checked and written in one lookup: never plaintext if unsealed.
+            try:
+                sealed_set.write_bytes(path, data, sealed_only=True)
+            except PermissionError:
+                raise _raw_refusal() from None
+            return path
         # Sealed in memory when the recording is encrypted.
-        sealed_set.write_text(path, text)
+        sealed_set.write_bytes(path, data)
         return path
 
 
-def _require_sealed_or_allowed(path: Path) -> None:
-    """Refuse raw bodies on disk unless the recording is encrypted.
+def raw_plaintext_allowed(path: Path | str) -> bool:
+    """Whether raw bodies may go to ``path`` in plaintext: not sealed, and
+    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` allows it (recorded if so)."""
+    from openadapt_flow import at_rest, sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        return False
+    return at_rest.plaintext_allowed(_RAW_PURPOSE)
+
+
+def require_raw_ready(recording_dir: Path | str) -> None:
+    """Refuse raw bodies unless the recording is encrypted or plaintext is
+    explicitly allowed. Callers that build ``NetworkCapture(bodies="raw")``
+    themselves call it before driving the app, so nothing runs in vain.
 
     TODO(#2423): once the key hierarchy lands, seal raw captures under the
     recording's own data key rather than relying on the recording writer.
     """
-    from openadapt_flow import at_rest, sealed_set
+    from openadapt_flow import sealed_set
 
-    if sealed_set.is_sealed_path(path):
+    if sealed_set.is_sealed_path(recording_dir) or raw_plaintext_allowed(recording_dir):
         return
-    if at_rest.plaintext_allowed(_RAW_PURPOSE):
-        return
-    raise at_rest.AtRestRefused(
-        at_rest.refusal(_RAW_PURPOSE, "the recording is not encrypted")
+    raise _raw_refusal()
+
+
+def _raw_refusal() -> Exception:
+    from openadapt_flow import at_rest
+
+    return at_rest.AtRestRefused(
+        at_rest.refusal(
+            _RAW_PURPOSE,
+            "the recording is not encrypted (set OPENADAPT_RECORDING_KEY or "
+            "OPENADAPT_BUNDLE_KEY, or use OPENADAPT_FLOW_AT_REST=strict)",
+        )
     )
 
 
@@ -426,7 +455,9 @@ def cli_mode(args: Any, recording_key: Optional[str]) -> bool | str:
         if not at_rest.plaintext_allowed(_RAW_PURPOSE):
             raise SystemExit(
                 "record: --capture-network-bodies raw needs an encrypted "
-                "recording (drop --no-encrypt). Nothing was recorded."
+                "recording: set OPENADAPT_RECORDING_KEY or OPENADAPT_BUNDLE_KEY, "
+                "or use OPENADAPT_FLOW_AT_REST=strict, and drop --no-encrypt. "
+                "Nothing was recorded."
             )
     return str(mode)
 

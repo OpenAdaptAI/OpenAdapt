@@ -35,7 +35,9 @@ against 15.95 s and two approvals with API steps off (20 runs each,
 ## How to use it
 
 ```bash
-openadapt-flow record --backend web --url https://app.example/ --capture-network \
+# Raw bodies need an encrypted recording: a recording key, or strict mode.
+OPENADAPT_FLOW_AT_REST=strict openadapt-flow record --backend web \
+  --url https://app.example/ --capture-network \
   --capture-network-bodies raw --out rec/
 openadapt-flow compile rec/ --out bundle/ --name referral
 openadapt-flow api show bundle/

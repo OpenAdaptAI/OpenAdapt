@@ -26,7 +26,8 @@
   values are hashed too. `dump_har` and `save_har` do the same with the wire
   policy's id and version fields. `--capture-network-bodies raw` (and
   `raw_bodies=True`) keeps the redacted bodies, which API step and undo
-  proposals need, and is refused unless the recording is encrypted.
+  proposals need, and is refused unless the recording is encrypted or
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` explicitly allows plaintext.
 
 ### Fixes
 

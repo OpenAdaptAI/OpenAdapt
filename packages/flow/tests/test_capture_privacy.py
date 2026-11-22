@@ -39,7 +39,7 @@ def _forms(value: str) -> list[bytes]:
         raw,
         quote(value, safe="").encode(),
         quote_plus(value).encode(),
-        json.dumps(value)[1:-1].encode(),
+        json.dumps(value, ensure_ascii=False)[1:-1].encode(),
         json.dumps(value, ensure_ascii=True)[1:-1].encode(),
         base64.b64encode(raw),
         base64.urlsafe_b64encode(raw).rstrip(b"="),
@@ -47,30 +47,80 @@ def _forms(value: str) -> list[bytes]:
 
 
 def _plain(data: bytes) -> bytes:
-    """``data`` decrypted (Flow's at-rest format) and gunzipped when it is."""
+    """``data`` decrypted (Flow's at-rest format) and gunzipped when it is.
+
+    A file that is encrypted but doesn't decrypt fails the test: the scan
+    must never pass by looking at ciphertext.
+    """
     if crypto.is_encrypted(data):
-        for aad in (b"openadapt-flow/tx-private-state",):
-            try:
-                data = crypto.decrypt_bytes(
-                    data, crypto.resolve_read_key(None), aad=aad
-                )
-                break
-            except Exception:  # noqa: BLE001 - try the next context
-                continue
+        data = crypto.decrypt_bytes(
+            data, crypto.resolve_read_key(None), aad=b"openadapt-flow/tx-private-state"
+        )
     if data[:2] == b"\x1f\x8b":
         data = gzip.decompress(data)
     return data
 
 
-def _leaks(root: Path) -> list[tuple[str, str]]:
+def _decoded(data: bytes) -> list[bytes]:
+    """``data`` and every body inside it: JSON strings, base64 and gzip."""
+    out = [data]
+    try:
+        document = json.loads(data)
+    except ValueError:
+        return out
+    stack = [document]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, str):
+            out.append(node.encode("utf-8", "surrogatepass"))
+            try:
+                blob = base64.b64decode(node, validate=True)
+            except ValueError:
+                continue
+            out.append(blob)
+            if blob[:2] == b"\x1f\x8b":
+                out.append(gzip.decompress(blob))
+    return out
+
+
+def _leaks(root: Path, values: tuple[str, ...] = PHI) -> list[tuple[str, str]]:
     found = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        data = _plain(path.read_bytes())
-        for value in PHI:
-            for form in _forms(value):
-                if form in data:
-                    found.append((str(path.relative_to(root)), value))
+        blobs = _decoded(_plain(path.read_bytes()))
+        for value in values:
+            if any(form in blob for blob in blobs for form in _forms(value)):
+                found.append((str(path.relative_to(root)), value))
     return found
+
+
+# A canary whose raw, percent, JSON-escaped and base64 spellings all differ.
+CANARY = 'Zoë "Q" Ångström/1931'
+
+
+@pytest.mark.parametrize("index", range(7))
+def test_scanner_finds_each_encoding(tmp_path: Path, index: int) -> None:
+    form = _forms(CANARY)[index]
+    others = [f for i, f in enumerate(_forms(CANARY)) if i != index]
+    assert form not in others  # each control checks a distinct spelling
+    (tmp_path / "f.bin").write_bytes(b"x" + form + b"y")
+    assert _leaks(tmp_path, (CANARY,)) == [("f.bin", CANARY)]
+
+
+def test_scanner_finds_gzip_inside_a_har_body_and_refuses_ciphertext(
+    tmp_path: Path,
+) -> None:
+    body = base64.b64encode(gzip.compress(CANARY.encode())).decode()
+    har = {"log": {"entries": [{"response": {"content": {"text": body}}}]}}
+    (tmp_path / "s.har").write_text(json.dumps(har))
+    assert _leaks(tmp_path, (CANARY,)) == [("s.har", CANARY)]
+    sealed = crypto.encrypt_bytes(b"{}", "a-different-key", aad=b"other")
+    (tmp_path / "s.har").write_bytes(sealed)
+    with pytest.raises(Exception):
+        _leaks(tmp_path, (CANARY,))
 
 
 # -- network.jsonl ------------------------------------------------------------
@@ -330,12 +380,26 @@ def test_raw_har_opt_in_is_sealed_on_disk(tmp_path: Path) -> None:
 # -- minimizer -------------------------------------------------------------------
 
 
-def test_hash_key_is_per_capture_and_never_written() -> None:
+def test_hash_key_is_per_capture_and_never_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     a, b = cp.BodyMinimizer(), cp.BodyMinimizer()
     assert a.tag(DOB) == a.tag(DOB)
     assert a.tag(DOB) != b.tag(DOB)
     out = a.body(json.dumps({"dob": DOB}).encode(), "application/json")
     assert out is not None and DOB not in json.dumps(out)
+    # A known key, injected where captures make theirs, is in no output.
+    key = bytes(range(32))
+    monkeypatch.setattr(cp.secrets, "token_bytes", lambda n: key[:n])
+    (tmp_path / "rec").mkdir()
+    _record(tmp_path / "rec")
+    _tap().save_har(tmp_path / "rec" / "s.har")
+    spellings = [key, key.hex().encode(), base64.b64encode(key)]
+    spellings += [base64.urlsafe_b64encode(key).rstrip(b"=")]
+    for path in (tmp_path / "rec").rglob("*"):
+        if path.is_file():
+            for blob in _decoded(_plain(path.read_bytes())):
+                assert not any(k in blob for k in spellings), path
 
 
 def test_keys_that_are_not_field_names_are_hashed() -> None:
@@ -362,3 +426,157 @@ def test_url_query_values_are_hashed_unless_declared() -> None:
     url = m.url(f"http://app.test/s?q={quote_plus(PATIENT)}&page=2")
     assert quote_plus(PATIENT) not in url and PATIENT not in url
     assert "page=2" in url
+
+
+# -- review regressions ------------------------------------------------------------
+
+
+def _replayed(tap: SessionWireTap, tmp_path: Path, **kw: Any) -> Any:
+    path = tmp_path / "r.har"
+    dump_har(tap, path, **kw)
+    return SessionWireTap.from_har(path).summary()
+
+
+def test_replay_keeps_writes_whose_evidence_was_withheld(tmp_path: Path) -> None:
+    tap = SessionWireTap("http://app.test")
+    batch = [{"query": "query A { a }"}, {"query": "mutation B { b }"}]
+    tap.record_exchange(
+        method="POST",
+        url="http://app.test/graphql",
+        request_body=json.dumps(batch).encode(),
+        request_headers={"Content-Type": "application/json"},
+        response_body=b"{}",
+    )
+    tap.record_exchange(
+        method="GET", url="http://app.test/api?query=" + quote("mutation { x }")
+    )
+    live = tap.summary()
+    replay = _replayed(tap, tmp_path, keep_fields=("query",))
+    assert replay.mutations_allowed + replay.mutations_blocked == (
+        live.mutations_allowed + live.mutations_blocked
+    )
+    assert replay.read_requests == live.read_requests
+
+
+def test_floor_without_tap_metadata() -> None:
+    m = cp.BodyMinimizer()
+    entry = {"request": {"method": "GET", "url": m.url("http://a.test/x?query=m")}}
+    assert cp.mutation_floor(entry)
+    post = {"method": "POST", "url": "http://a.test/x", "postData": {}}
+    post["postData"][cp.HAR_FIELD] = m.body(b'{"a": 1}', "application/json")
+    assert cp.mutation_floor({"request": post})
+
+
+def test_raw_entry_added_to_a_minimized_har_is_minimized(tmp_path: Path) -> None:
+    har = load_har(dump_har(_tap()))
+    raw = json.loads(json.dumps(_tap().export_har()))["log"]["entries"][0]
+    har["log"]["entries"].append(raw)
+    har["log"]["pages"] = [{"title": f"http://app.test/?q={quote_plus(PATIENT)}"}]
+    (tmp_path / "s.har").write_text(dump_har(har))
+    assert _leaks(tmp_path) == []
+    narrowed = json.loads(dump_har(har, keep_fields=()))
+    for entry in narrowed["log"]["entries"]:
+        assert entry["_tx"].get("extracted_entity_id") != "51"
+        assert entry["_tx"].get("version") != "3"
+
+
+def test_truncated_forms_and_non_json_types_keep_nothing() -> None:
+    m = cp.BodyMinimizer(("id", "note"))
+    line = cp.minimize_line({"form": [["note", PATIENT]], "request_truncated": True}, m)
+    assert PATIENT not in json.dumps(line)
+    for ctype in ("text/plain", "text/html", "image/png"):
+        out = m.body(json.dumps({"id": PATIENT}).encode(), ctype)
+        assert out is not None and out["format"] == "opaque"
+        assert PATIENT not in json.dumps(out)
+
+
+def test_declared_secret_is_withheld_whatever_its_case(tmp_path: Path) -> None:
+    ctx = _Context()
+    cap = nc.NetworkCapture(ctx, secret_names={"code"}, keep_fields={"CODE"})
+    cap.start()
+    ctx.handlers["requestfinished"](
+        _Request(
+            "http://app.test/cb?code=xy",
+            "GET",
+            None,
+            None,
+            _Response(200, "text/html", b""),
+        )
+    )
+    cap.write(tmp_path, t0_monotonic=0.0)
+    assert "code=xy" not in (tmp_path / nc.NETWORK_FILE).read_text()
+
+
+def test_fragment_queries_and_bare_terms_are_hashed() -> None:
+    m = cp.BodyMinimizer(("page",))
+    for url in (
+        f"http://a.test/#/search?q={quote_plus(PATIENT)}&page=2",
+        f"http://a.test/#q={quote_plus(PATIENT)}",
+        f"http://a.test/s?{quote_plus(PATIENT)}",
+    ):
+        out = m.url(url)
+        assert quote_plus(PATIENT) not in out and PATIENT not in out
+    assert "page=2" in m.url("http://a.test/#/s?q=x&page=2")
+    once = m.url(f"http://a.test/s?q={quote_plus(PATIENT)}")
+    assert m.url(once) == once
+
+
+def test_restored_json_keeps_lists_and_dotted_versions() -> None:
+    m = cp.BodyMinimizer(("id", "meta.versionId"))
+    doc = {"data": {"id": ["one", "two"]}, "record": {"meta": {"versionId": "7"}}}
+    out = m.body(json.dumps(doc).encode(), "application/json")
+    assert out is not None
+    restored = json.loads(cp.restore_kept_json(out))
+    assert restored == doc
+
+
+def test_params_only_har_form_is_minimized() -> None:
+    har = {
+        "log": {
+            "entries": [
+                {
+                    "request": {
+                        "method": "POST",
+                        "url": "http://a.test/f",
+                        "postData": {
+                            "mimeType": "application/x-www-form-urlencoded",
+                            "params": [
+                                {"name": "id", "value": "9"},
+                                {"name": "dx", "value": DIAGNOSIS},
+                            ],
+                        },
+                    }
+                }
+            ]
+        }
+    }
+    out = cp.minimize_har(har, cp.BodyMinimizer(("id",)))
+    post = out["log"]["entries"][0]["request"]["postData"]
+    assert post["params"] == [] and DIAGNOSIS not in json.dumps(out)
+    assert ["id", "9"] in post[cp.HAR_FIELD]["kept"]
+    assert [n for n, _ in post[cp.HAR_FIELD]["withheld"]] == ["dx"]
+
+
+def test_lone_surrogate_is_hashed_not_fatal() -> None:
+    out = cp.BodyMinimizer().body(b'{"a": "\\ud800"}', "application/json")
+    assert out is not None and out["withheld"][0][1].startswith("hmac-sha256:")
+
+
+def test_raw_har_without_a_path_is_refused() -> None:
+    with pytest.raises(ValueError):
+        dump_har(_tap(), raw_bodies=True)
+
+
+def test_raw_network_write_never_falls_back_to_plaintext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import sealed_set
+
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV, raising=False)
+    with pytest.raises(PermissionError):
+        sealed_set.write_bytes(tmp_path / "x", b"raw", sealed_only=True)
+    assert not (tmp_path / "x").exists()
+    with pytest.raises(at_rest.AtRestRefused):
+        nc.require_raw_ready(tmp_path)
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "test: synthetic data")
+    nc.require_raw_ready(tmp_path)

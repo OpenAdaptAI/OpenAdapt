@@ -1116,10 +1116,22 @@ def open_text(path: Path | str, encoding: str = "utf-8") -> io.StringIO:
     return io.StringIO(read_text(path, encoding))
 
 
-def write_bytes(path: Path | str, data: bytes, *, key: Optional[str] = None) -> None:
-    """Write ``path``; sealed if it lies in an active writer or a sealed set."""
+def write_bytes(
+    path: Path | str,
+    data: bytes,
+    *,
+    key: Optional[str] = None,
+    sealed_only: bool = False,
+) -> None:
+    """Write ``path``; sealed if it lies in an active writer or a sealed set.
+
+    ``sealed_only`` refuses (``PermissionError``) instead of writing plaintext
+    when ``path`` turns out not to be sealed, in the same lookup as the write.
+    """
     root, rel = _locate(path)
     if root is None:
+        if sealed_only:
+            raise PermissionError(f"{path} is not in a sealed set; not written")
         target = Path(path)
         target.write_bytes(data)
         return
