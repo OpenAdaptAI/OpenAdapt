@@ -45,11 +45,19 @@ def main() -> int:
     body["gender"] = "female"
     out: dict[str, object] = {"server": c.get("/healthcheck").json().get("version")}
     out["read_etag_present"] = bool(etag)
-    out["put_wrong_version"] = c.put(path, json=body, headers={"If-Match": WRONG}).status_code
+    out["put_wrong_version"] = c.put(
+        path, json=body, headers={"If-Match": WRONG}
+    ).status_code
     out["unchanged_after_wrong_put"] = "gender" not in c.get(path).json()
-    out["put_read_version"] = c.put(path, json=body, headers={"If-Match": etag}).status_code
-    out["put_stale_version"] = c.put(path, json=body, headers={"If-Match": etag}).status_code
-    out["delete_wrong_version"] = c.delete(path, headers={"If-Match": WRONG}).status_code
+    out["put_read_version"] = c.put(
+        path, json=body, headers={"If-Match": etag}
+    ).status_code
+    out["put_stale_version"] = c.put(
+        path, json=body, headers={"If-Match": etag}
+    ).status_code
+    out["delete_wrong_version"] = c.delete(
+        path, headers={"If-Match": WRONG}
+    ).status_code
     out["present_after_wrong_delete"] = c.get(path).status_code == 200
     time.sleep(1.5)
     events = c.get(
