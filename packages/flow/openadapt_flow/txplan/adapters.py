@@ -503,12 +503,64 @@ def pg_trigger_digests(cur: Any) -> dict[str, str]:
     }
 
 
+def pg_function_digests(cur: Any) -> dict[str, Optional[str]]:
+    """``{signature: sha256}`` for every user function in the database (None
+    for an aggregate or window function, which has no definition to review).
+    A trigger's helpers leave no pg_depend edge, so a reviewed trigger counts
+    only while every user function is reviewed too."""
+    cur.execute(
+        "SELECT p.oid::regprocedure::text, p.prokind, CASE WHEN p.prokind IN "
+        "('f', 'p') THEN pg_get_functiondef(p.oid) END FROM pg_proc p "
+        f"WHERE p.oid >= {_PG_USER_OID}"
+    )
+    return {
+        f"function {sig}": (
+            hashlib.sha256(f"function\n{fdef}".encode()).hexdigest() if fdef else None
+        )
+        for sig, _kind, fdef in cur.fetchall()
+    }
+
+
+def _pg_fingerprint(cur: Any) -> str:
+    """Every user catalog row that could change what a write runs, by oid
+    and row version (xmin): any CREATE OR REPLACE, in this transaction or
+    committed by another one, gives a new version."""
+    cur.execute(
+        "SELECT 'p', oid::text, xmin::text FROM pg_proc "
+        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
+        "SELECT 't', oid::text, xmin::text FROM pg_trigger "
+        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
+        "SELECT 'r', oid::text, xmin::text FROM pg_rewrite "
+        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
+        "SELECT 'e', oid::text, xmin::text FROM pg_event_trigger UNION ALL "
+        "SELECT 'c', oid::text, xmin::text FROM pg_cast "
+        f"WHERE oid >= {_PG_USER_OID} UNION ALL "
+        "SELECT 'y', oid::text, xmin::text FROM pg_type "
+        f"WHERE oid >= {_PG_USER_OID}"
+    )
+    return hashlib.sha256(
+        json.dumps(sorted(map(list, cur.fetchall())), default=str).encode()
+    ).hexdigest()
+
+
 def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     gaps: set[str] = set()
     cur.execute("SELECT current_schema(), current_schemas(false)::text[]")
     schema, path = cur.fetchone()
-    if not schema or list(path or []) != [schema]:
-        # Unqualified names could resolve to another schema.
+    others = [p for p in (path or []) if p != schema]
+    if others:
+        # Unqualified names could resolve to another schema, unless it holds
+        # nothing a name could resolve to.
+        cur.execute(
+            "SELECT count(*) FROM pg_namespace n WHERE n.nspname = ANY(%s) AND ("
+            "EXISTS (SELECT 1 FROM pg_class c WHERE c.relnamespace = n.oid) OR "
+            "EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = n.oid) OR "
+            "EXISTS (SELECT 1 FROM pg_type t WHERE t.typnamespace = n.oid))",
+            (others,),
+        )
+        if int(cur.fetchone()[0]):
+            gaps.add("search_path_open")
+    if not schema:
         gaps.add("search_path_open")
     # Database-wide: anything here can write outside the frame however the
     # frame's own objects look.
@@ -533,10 +585,16 @@ def _pg_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
     )
     if int(cur.fetchone()[0]):
         gaps.add("user_cast_or_operator")
-    # Triggers on frame relations: covered only when reviewed, by digest.
+    # Triggers on frame relations: covered only when reviewed, by digest, and
+    # only while every user function in the database is reviewed too (a
+    # helper a trigger calls leaves no pg_depend edge).
     digests = pg_trigger_digests(cur)
     if set(digests.values()) - set(reviewed):
         gaps.add("trigger")
+    elif digests and any(
+        d is None or d not in reviewed for d in pg_function_digests(cur).values()
+    ):
+        gaps.add("trigger_helper_unreviewed")
     # Everything else attached to a frame relation, and what it depends on.
     cur.execute(
         "SELECT a.classid::regclass::text, a.objid::bigint, "
@@ -700,6 +758,19 @@ def mysql_trigger_digests(cur: Any) -> dict[str, str]:
         ).hexdigest()
         for row in cur.fetchall()
     }
+
+
+def _mysql_fingerprint(cur: Any) -> str:
+    """The database's triggers and routines, as they read now."""
+    triggers = mysql_trigger_digests(cur)
+    cur.execute(
+        "SELECT routine_name, routine_type, last_altered FROM "
+        "information_schema.routines WHERE routine_schema = DATABASE()"
+    )
+    routines = sorted(map(list, cur.fetchall()))
+    return hashlib.sha256(
+        json.dumps([sorted(triggers.items()), routines], default=str).encode()
+    ).hexdigest()
 
 
 def _mysql_scope_gaps(cur: Any, sql: str, reviewed: Sequence[str]) -> list[str]:
@@ -1227,19 +1298,13 @@ class SqlAdapter:
             if named & others:
                 raise Diverged("the statement names another database")
 
-    def scope_gaps(self, cur: Any, sql: str = "") -> list[str]:
-        """Closed write-scope check, inside the write's own transaction.
-
-        A database write may be VERIFIED only when everything that could
-        write outside the observed frame can be listed, and the list is
-        empty. Returns fixed reason codes, one per open item; an inventory
-        that can't be read is ``scope_unreadable``. A gap never refuses the
-        write: it caps the outcome at ``COMPLETED_UNVERIFIED``."""
+    def _scope_read(self, cur: Any, sql: str) -> tuple[list[str], Optional[str]]:
+        """The inventory's gaps and a fingerprint of the user catalog rows."""
         d = self.system.dialect
         if d == "sqlite":
             # One file: ATTACH is refused, so a trigger can only write tables
             # the frame reads, and the connection registers no functions.
-            return []
+            return [], ""
         if d == "postgresql":
             # A failed catalog read aborts a PostgreSQL transaction: read under
             # a savepoint, so an unreadable inventory caps the write instead of
@@ -1247,26 +1312,78 @@ class SqlAdapter:
             cur.execute("SAVEPOINT oa_scope")
             try:
                 gaps = _pg_scope_gaps(cur, sql, self.system.reviewed_triggers)
+                fp = _pg_fingerprint(cur)
             except Exception:  # noqa: BLE001 - unreadable: capped, not refused
                 cur.execute("ROLLBACK TO SAVEPOINT oa_scope")
-                return ["scope_unreadable"]
+                return ["scope_unreadable"], None
             cur.execute("RELEASE SAVEPOINT oa_scope")
-            return gaps
+            return gaps, fp
         try:
-            return _mysql_scope_gaps(cur, sql, self.system.reviewed_triggers)
+            return (
+                _mysql_scope_gaps(cur, sql, self.system.reviewed_triggers),
+                _mysql_fingerprint(cur),
+            )
         except Exception:  # noqa: BLE001 - unreadable: capped, not refused
-            return ["scope_unreadable"]
+            return ["scope_unreadable"], None
+
+    def scope_before(self, cur: Any, sql: str = "") -> tuple[list[str], Optional[str]]:
+        """The inventory before the write, in its transaction. On PostgreSQL it
+        also tries to hold the user functions still (``FOR SHARE`` on their
+        pg_proc rows, which needs a privileged account); the comparison after
+        the write is what counts either way."""
+        if self.system.dialect == "postgresql":
+            cur.execute("SAVEPOINT oa_lock")
+            try:
+                cur.execute(
+                    f"SELECT oid FROM pg_proc WHERE oid >= {_PG_USER_OID} FOR SHARE"
+                )
+                cur.execute("RELEASE SAVEPOINT oa_lock")
+            except Exception:  # noqa: BLE001 - not allowed: compare instead
+                cur.execute("ROLLBACK TO SAVEPOINT oa_lock")
+        return self._scope_read(cur, sql)
+
+    def scope_gaps(
+        self,
+        cur: Any,
+        sql: str = "",
+        before: Optional[tuple[list[str], Optional[str]]] = None,
+    ) -> list[str]:
+        """Closed write-scope check, inside the write's own transaction.
+
+        A database write may be VERIFIED only when the catalog shows nothing
+        that could write outside the observed frame. Returns fixed reason
+        codes, one per open item; an inventory that can't be read is
+        ``scope_unreadable``. With ``before`` (read before the write, in the
+        same transaction), the gaps of both reads count, and any change to the
+        user catalog between them (a function replaced while the write ran,
+        by it or by another session) is ``scope_changed``. A gap never refuses
+        the write: it caps the outcome at ``COMPLETED_UNVERIFIED``."""
+        gaps, fp = self._scope_read(cur, sql)
+        if before is None:
+            return gaps
+        bgaps, bfp = before
+        out = set(gaps) | set(bgaps)
+        if fp is not None and bfp is not None and fp != bfp:
+            out.add("scope_changed")
+        return sorted(out)
 
     def trigger_digests(self) -> dict[str, str]:
-        """The digest of each trigger the scope check would cap, by name, for
-        an operator to review and list in ``reviewed_triggers``."""
+        """The digests an operator reviews and lists in ``reviewed_triggers``:
+        each trigger, and on PostgreSQL every user function in the database
+        (a reviewed trigger counts only while all of them are listed)."""
         con = self.connect()
         try:
             cur = con.cursor()
             self._begin(cur)
             try:
                 if self.system.dialect == "postgresql":
-                    return pg_trigger_digests(cur)
+                    out = {
+                        f"trigger {k}": v for k, v in pg_trigger_digests(cur).items()
+                    }
+                    for sig, d in pg_function_digests(cur).items():
+                        if d is not None:
+                            out[sig] = d
+                    return out
                 if self.system.dialect == "mysql":
                     return mysql_trigger_digests(cur)
                 return {}
@@ -1419,21 +1536,25 @@ class SqlAdapter:
     def _exec(
         self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]
     ) -> dict[str, Any]:
+        sql = (
+            str((write.get("fields") or {}).get("sql", ""))
+            if write["op"] == "sql"
+            else ""
+        )
+        # The inventory before the write as well as after: a trigger that
+        # rewrites itself, or a function replaced by another session while the
+        # write runs, shows as a difference.
+        before = self.scope_before(cur, sql)
         result = self._exec_one(cur, write, baseline)
         if self.system.dialect == "postgresql":
             # Unobserved-scope class: a deferred constraint trigger fires at
             # COMMIT, after every check and frame read. Fire it now, inside
             # the transaction, where the scope check and the frame see it.
             cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
-        sql = (
-            str((write.get("fields") or {}).get("sql", ""))
-            if write["op"] == "sql"
-            else ""
-        )
         # Every op, not only raw SQL: a trigger on a planned insert, update or
         # delete can write outside the frame too.
         self._refuse_unobserved_writes(cur, sql)
-        result["not_covered"] = self.scope_gaps(cur, sql)
+        result["not_covered"] = self.scope_gaps(cur, sql, before)
         return result
 
     def _exec_one(
@@ -1631,6 +1752,7 @@ class SqlAdapter:
             cur = con.cursor()
             self._begin(cur)
             try:
+                before = self.scope_before(cur)
                 # Stale-baseline class: the check and the restore share one
                 # transaction, so an edit landing between them can't be
                 # overwritten.
@@ -1670,7 +1792,7 @@ class SqlAdapter:
                     cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
                 # The undo's own writes fire the same triggers.
                 self._refuse_unobserved_writes(cur, "")
-                gaps = self.scope_gaps(cur)
+                gaps = self.scope_gaps(cur, "", before)
             except Exception:
                 con.rollback()
                 raise

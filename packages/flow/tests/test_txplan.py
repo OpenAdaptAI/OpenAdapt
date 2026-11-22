@@ -1488,7 +1488,10 @@ def _open_scope(monkeypatch: pytest.MonkeyPatch, *gaps: str) -> None:
     from openadapt_flow.txplan.adapters import SqlAdapter
 
     monkeypatch.setattr(
-        SqlAdapter, "scope_gaps", lambda self, cur, sql="": list(gaps), raising=False
+        SqlAdapter,
+        "scope_gaps",
+        lambda self, cur, sql="", before=None: list(gaps),
+        raising=False,
     )
 
 
@@ -1647,3 +1650,17 @@ def test_a_stored_rest_result_without_its_evidence_is_not_verified(
     assert again["tx"]["replays"] == 1
     assert again["outcome"] == "COMPLETED_UNVERIFIED", again
     assert again["tx"]["not_covered"] == ["precondition_unproven"]
+
+
+def test_an_undo_that_only_cancels_held_writes_is_stopped(tmp_path: Path, rest) -> None:
+    # Nothing was ever sent, so the plan stopped with nothing written: a
+    # certain outcome, not an unverified one.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, holdback=60))
+    plan = _go(ctx, "T-cancel", [_delete(5)])
+    assert engine.apply_plan(ctx, plan["digest"])["tx"]["held"] == 1
+    undo = engine.undo_plan(ctx, plan["digest"])
+    assert undo["outcome"] == "STOPPED", undo
+    report = json.loads((Path(undo["run_dir"]) / "report.json").read_text())
+    assert report["success"] is True
+    assert 5 in store.records

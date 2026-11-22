@@ -488,7 +488,9 @@ def test_a_reviewed_trigger_counts_only_while_its_digest_matches(
         adapter = ctx.adapter("crm")
         assert isinstance(adapter, SqlAdapter)
         digests = tuple(adapter.trigger_digests().values())
-        assert len(digests) == 1
+        # The trigger, and every user function in the database (here its own
+        # and the fixture's).
+        assert len(digests) == 3
         out = _attempt(_ctx(cluster, tmp_path / "b", digests), _update(4, 2))
         assert isinstance(out, dict) and out["outcome"] == "VERIFIED", out
         cur.execute(
@@ -502,10 +504,107 @@ def test_a_reviewed_trigger_counts_only_while_its_digest_matches(
         cur.execute("DROP FUNCTION note_here() CASCADE; DROP TABLE audit")
 
 
+def _review(cluster: dict[str, Any], tmp_path: Path) -> tuple[str, ...]:
+    from openadapt_flow.txplan.adapters import SqlAdapter
+
+    adapter = _ctx(cluster, tmp_path / "review").adapter("crm")
+    assert isinstance(adapter, SqlAdapter)
+    return tuple(adapter.trigger_digests().values())
+
+
+_HELPER_OK = (
+    "CREATE OR REPLACE FUNCTION helper() RETURNS void LANGUAGE plpgsql AS $$ "
+    "BEGIN NULL; END $$"
+)
+
+
+def test_a_reviewed_triggers_helper_replaced_later_is_never_verified(
+    notes: Any, tmp_path: Path
+) -> None:
+    # The trigger's own definition is unchanged, so its digest still matches;
+    # the helper it calls now truncates another schema. A helper leaves no
+    # pg_depend edge, so every user function must be reviewed.
+    cluster, cur = notes
+    cur.execute(
+        _HELPER_OK + ";"
+        "CREATE FUNCTION calls_helper() RETURNS trigger LANGUAGE plpgsql AS $$ "
+        "BEGIN PERFORM helper(); RETURN NULL; END $$;"
+        "CREATE TRIGGER via AFTER UPDATE ON customers "
+        "FOR EACH STATEMENT EXECUTE FUNCTION calls_helper()"
+    )
+    try:
+        reviewed = _review(cluster, tmp_path)
+        ok = _attempt(_ctx(cluster, tmp_path / "a", reviewed), _update(1, 5))
+        assert isinstance(ok, dict) and ok["outcome"] == "VERIFIED", ok
+        cur.execute(
+            "CREATE OR REPLACE FUNCTION helper() RETURNS void LANGUAGE plpgsql AS $$ "
+            "BEGIN TRUNCATE side.notes; END $$"
+        )
+        out = _attempt(_ctx(cluster, tmp_path / "b", reviewed), _update(1, 6))
+    finally:
+        cur.execute("DROP FUNCTION calls_helper() CASCADE; DROP FUNCTION helper()")
+    _capped(out, "trigger_helper_unreviewed")
+    assert _notes(cur) == 0
+
+
+def test_a_trigger_that_rewrites_itself_to_the_reviewed_body_is_never_verified(
+    notes: Any, tmp_path: Path
+) -> None:
+    # The body that runs truncates another schema, then replaces itself with
+    # the reviewed body, so an inventory read only after the write would show
+    # nothing but reviewed code.
+    cluster, cur = notes
+    benign = (
+        "CREATE OR REPLACE FUNCTION shifty() RETURNS trigger LANGUAGE plpgsql AS "
+        "$b$ BEGIN RETURN NULL; END $b$"
+    )
+    cur.execute(
+        benign + ";"
+        "CREATE TRIGGER via AFTER UPDATE ON customers "
+        "FOR EACH STATEMENT EXECUTE FUNCTION shifty()"
+    )
+    try:
+        reviewed = _review(cluster, tmp_path)
+        cur.execute(
+            "CREATE OR REPLACE FUNCTION shifty() RETURNS trigger LANGUAGE plpgsql AS "
+            "$a$ BEGIN TRUNCATE side.notes; EXECUTE "
+            + "'"
+            + benign.replace("'", "''")
+            + "'; RETURN NULL; END $a$"
+        )
+        out = _attempt(_ctx(cluster, tmp_path / "b", reviewed), _update(2, 6))
+    finally:
+        cur.execute("DROP FUNCTION shifty() CASCADE")
+    _capped(out, "trigger")
+    assert "scope_changed" in out["tx"]["not_covered"]
+    assert _notes(cur) == 0
+
+
+def test_an_empty_schema_on_the_search_path_does_not_cap(
+    db: Any, tmp_path: Path
+) -> None:
+    cluster, cur = db
+    cur.execute("DROP SCHEMA IF EXISTS empty_one; CREATE SCHEMA empty_one")
+    try:
+        opened = {**cluster, "options": "-c search_path=public,empty_one"}
+        out = _attempt(_ctx(opened, tmp_path), _update(3, 4))
+        assert isinstance(out, dict) and out["outcome"] == "VERIFIED", out
+        sided = {**cluster, "options": "-c search_path=public,side"}
+        _capped(
+            _attempt(_ctx(sided, tmp_path / "b"), _update(3, 5)), "search_path_open"
+        )
+    finally:
+        cur.execute("DROP SCHEMA empty_one")
+
+
 # -- always on: the statement order, and MySQL's trigger inventory -------------
 # These run without a server. They pin what the real-cluster tests above
 # measure, so a CI job without PostgreSQL still catches a regression; the
 # MySQL branch has no server in this suite at all.
+
+
+class _Seq(list):  # type: ignore[type-arg]
+    """Answers given in turn, the last one repeated."""
 
 
 class _Cursor:
@@ -521,6 +620,9 @@ class _Cursor:
     def execute(self, sql: str, params: Any = None) -> None:
         self.sql.append(sql)
         self._last = next((v for k, v in self.answers.items() if k in sql), [(0,)])
+        if isinstance(self._last, _Seq):
+            # Successive answers: the catalog as read before, then after.
+            self._last = self._last.pop(0) if len(self._last) > 1 else self._last[0]
         if isinstance(self._last, Exception):
             raise self._last
 
@@ -575,6 +677,10 @@ _PLAN = [([{"Plan": {"Node Type": "ModifyTable", "Schema": "public", "Plans": []
 def _pg(**over: Any) -> dict[str, Any]:
     """Catalog answers for a closed PostgreSQL scope, with ``over`` applied."""
     base: dict[str, Any] = {
+        "xmin::text": [("p", "16500", "700")],
+        "oid::regprocedure": [],
+        "FOR SHARE": [],
+        "n.nspname = ANY(%s) AND": [(1,)],
         "pg_stat_xact_user_tables": [(0,)],
         "current_schemas": [("public", ["public"])],
         "pg_foreign_data_wrapper": [(0,)],
@@ -613,6 +719,34 @@ def _explain(*outputs: str, schema: str = "public") -> list[tuple[Any, ...]]:
     ("answers", "sql", "gap"),
     [
         (_pg(current_schemas=[("public", ["public", "side"])]), "", "search_path_open"),
+        # A reviewed trigger whose helper functions aren't all reviewed.
+        (
+            _pg(
+                pg_get_triggerdef=[
+                    ("t", "CREATE TRIGGER t ...", "CREATE FUNCTION f ...")
+                ],
+                **{
+                    "oid::regprocedure": [
+                        ("helper()", "f", "CREATE FUNCTION helper ...")
+                    ]
+                },
+            ),
+            "REVIEW_TRIGGER",
+            "trigger_helper_unreviewed",
+        ),
+        # The user catalog changed between the read before the write and the
+        # read after it (a function replaced while the write ran).
+        (
+            _pg(
+                **{
+                    "xmin::text": _Seq(
+                        [[("p", "16500", "700")], [("p", "16500", "701")]]
+                    )
+                }
+            ),
+            "",
+            "scope_changed",
+        ),
         (_pg(pg_foreign_data_wrapper=[(1,)]), "", "foreign_data"),
         (_pg(pg_extension=[(1,)]), "", "remote_link"),
         (_pg(pg_event_trigger=[(1,)]), "", "event_trigger"),
@@ -712,17 +846,37 @@ def _explain(*outputs: str, schema: str = "public") -> list[tuple[Any, ...]]:
 def test_postgres_scope_inventory_caps_each_open_item(
     answers: dict[str, Any], sql: str, gap: str
 ) -> None:
+    import hashlib
+
+    adapter = _adapter("postgresql")
+    if sql == "REVIEW_TRIGGER":
+        # The trigger itself is reviewed; its helper is not.
+        t = answers["pg_get_triggerdef"][0]
+        adapter.system.reviewed_triggers = [
+            hashlib.sha256(f"{t[1]}\n{t[2]}".encode()).hexdigest()
+        ]
+        sql = ""
     write = (
         {"collection": "statement", "op": "sql", "fields": {"sql": sql}}
         if sql
         else _UPDATE
     )
     cur = _Cursor(answers)
-    result = _adapter("postgresql")._exec(cur, write, None)
+    result = adapter._exec(cur, write, None)
     assert gap in (result.get("not_covered") or []), (gap, result, cur.sql)
     if gap == "scope_unreadable":
         # Read under a savepoint: the write's transaction is still usable.
         assert "ROLLBACK TO SAVEPOINT oa_scope" in cur.sql
+
+
+def test_an_empty_schema_on_the_search_path_is_closed() -> None:
+    cur = _Cursor(
+        _pg(
+            current_schemas=[("public", ["lab", "public"])],
+            **{"n.nspname = ANY(%s) AND": [(0,)]},
+        )
+    )
+    assert _adapter("postgresql")._exec(cur, _UPDATE, None)["not_covered"] == []
 
 
 def test_postgres_scope_inventory_is_empty_for_a_reviewed_trigger() -> None:

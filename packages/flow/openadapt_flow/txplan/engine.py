@@ -269,7 +269,8 @@ def _write_run(
         "finished_at": iso(now()),
         "plan_sha256": digest,
         "execution_outcome": outcome,
-        "success": outcome in ("VERIFIED", "ROLLED_BACK"),
+        "success": outcome in ("VERIFIED", "ROLLED_BACK")
+        or (phase == "undo" and outcome == "STOPPED"),
         "model_calls": 0,
         "change_ledger": [],
         "results": results,
@@ -1645,6 +1646,11 @@ def undo_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if ok
             else "RECONCILIATION_REQUIRED"
         )
+        values = set(per_write.values())
+        if "cancelled" in values and values <= {"cancelled", "not_this_plan"}:
+            # Only held writes, cancelled: nothing was ever sent, so the plan
+            # stopped with nothing written. That is certain, not unverified.
+            outcome = "STOPPED"
         approval = state.approval_record(digest)
         run = _write_run(
             state,

@@ -114,29 +114,41 @@ On PostgreSQL, an object is user-defined when its oid is at least 16384
 | Code | Open item |
 |---|---|
 | `trigger` | A trigger on a frame relation (PostgreSQL), or any trigger in the database (MySQL), that isn't listed in `reviewed_triggers` with its current digest |
+| `trigger_helper_unreviewed` | PostgreSQL: the triggers are reviewed, but not every user function in the database is. A function a trigger calls leaves no `pg_depend` edge, so a review covers the database's whole user code. An aggregate or window function can't be reviewed and always caps |
+| `scope_changed` | The user catalog (functions, triggers, rules, casts, types, event triggers on PostgreSQL; triggers and routines on MySQL) differs between the inventory read before the write and the one after, in the same transaction: a function replaced while the write ran, by the write itself or by another session |
 | `rule` | PostgreSQL: a rewrite rule on a frame relation (a view's own `_RETURN` rule runs only when the view is read) |
 | `user_function`, `user_type`, `other_relation`, `user_object` | PostgreSQL: a user-defined function, type, relation outside the schema, or other object reachable through `pg_depend` from a frame relation or from its defaults, checks, indexes or policies; or a column whose type is user-defined (a domain, an extension type; an enum is allowed). `user_function` also covers a user function the planned statement reaches, as `EXPLAIN (VERBOSE)` resolves it, views expanded |
 | `system_function_with_effects` | PostgreSQL: a built-in that runs SQL given as text (`query_to_xml` and the other `*_to_xml` functions, `ts_stat`) or acts outside the frame's rows (`lo_*`, `set_config`, `pg_*`, `dblink*`), in the planned statement or a default, check, index or policy expression |
 | `other_schema` | PostgreSQL: the planned statement reads or writes a relation in another schema |
 | `truncate`, `planned_ddl` | PostgreSQL: the planned statement is `TRUNCATE` or other DDL. `DROP ... CASCADE` and event triggers reach past the frame |
 | `event_trigger`, `user_cast_or_operator`, `foreign_data`, `remote_link` | PostgreSQL, anywhere in the database: an enabled event trigger; a user-defined cast or operator; a foreign data wrapper, server or table; the `dblink` or `postgres_fdw` extension. `foreign_data` on MySQL: a `FEDERATED`, `CONNECT` or `SPIDER` table |
-| `search_path_open` | PostgreSQL: the search path holds more than the current schema |
+| `search_path_open` | PostgreSQL: the search path holds another schema with a relation, function or type in it (an empty schema, or one that doesn't exist, is closed) |
 | `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove database-level (or global) `SELECT` and `TRIGGER`. Table-level grants don't count, because a table the account can't list can hold a trigger it can't see. A wildcard grant counts only for the name it spells; a role grant or a partial revoke proves nothing |
 | `routine` | MySQL: a stored routine in the database |
 | `user_function` (MySQL) | The planned statement calls a function that isn't a known built-in. MySQL has no catalog resolution for a statement, so this one is read from the text |
 | `user_function`, `user_type` (raw statement) | PostgreSQL: the database holds any user function other than a trigger or event-trigger function, or any user domain, base or range type. The planner can fold an `IMMUTABLE` call away or hide one in a domain cast, so no plan proves a raw statement free of user code. Structured creates, updates and deletes aren't affected |
 | `scope_unreadable` | A catalog read failed. On PostgreSQL it runs under a savepoint, so the write's transaction survives |
-| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send (PostgreSQL and MySQL; SQLite has nothing to list) |
+| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send (PostgreSQL and MySQL; SQLite has nothing to list). So a crash adoption on PostgreSQL or MySQL is never `VERIFIED` |
 
 **Reviewed triggers.** Many applications keep triggers, so a trigger can be
-reviewed instead. `SqlAdapter.trigger_digests()` gives each trigger's sha256:
-on PostgreSQL the trigger definition (its `WHEN` condition included) and its
-function's definition; on MySQL the trigger's table, timing, event and body.
-After reading them, an operator lists the digests in the system's
-`reviewed_triggers`. A listed trigger counts as covered only while its digest
-still matches, so an edited function caps writes again. The review covers the
-trigger and its own function, not the functions that one calls: reviewing a
-trigger means reviewing what it reaches.
+reviewed instead. `SqlAdapter.trigger_digests()` gives the sha256 of each
+trigger (on PostgreSQL its definition, `WHEN` condition included, and its
+function's; on MySQL its table, timing, event and body) and, on PostgreSQL,
+of every user function in the database. After reading them, an operator
+lists the digests in the system's `reviewed_triggers`. A trigger counts as
+covered only while its digest matches and, on PostgreSQL, every user
+function's digest is listed too, because a helper a trigger calls is not
+recorded in the catalog. On MySQL any routine caps, so a trigger there can
+call none. An edited trigger or function caps writes again.
+
+**Before and after.** The inventory is read twice inside the write's
+transaction: before the statement runs and after. Both reads' gaps count, and
+any change to the user catalog between them caps the write
+(`scope_changed`), so a trigger can't run one body and leave another, and a
+function replaced by another session during the write is seen. On
+PostgreSQL the adapter also tries to lock the user functions' `pg_proc` rows
+(`FOR SHARE`); that needs a privileged account, and without it the
+comparison still applies.
 
 A database with no triggers, rules, user functions or user types around the
 frame, and a plain search path, gives an empty list, so its writes can be
@@ -283,8 +295,8 @@ that the read-back didn't find. Either one makes the outcome
   closed write-scope check as an apply. The gaps are kept with the undone
   entry: a second `undo` on the plan reports them again (`undo_unrecorded`
   when the entry predates this rule), and an undo run that had nothing left
-  to undo, including one that only cancels held writes, ends
-  `COMPLETED_UNVERIFIED`, never `ROLLED_BACK`.
+  to undo ends `COMPLETED_UNVERIFIED`, never `ROLLED_BACK`. An undo that only
+  cancels held writes ends `STOPPED` (success: nothing was ever sent).
 - Held writes are cancelled.
 - After compensating, it reads each record back. A create must be gone. An
   update or delete must equal its baseline.
