@@ -81,6 +81,7 @@ ROLE_ORG: Final[str] = "org"
 ROLE_BREAK_GLASS: Final[str] = "break-glass"
 ROLE_RECOVERY: Final[str] = "recovery"
 
+
 def _platform_policy_sources(platform: str) -> list[str]:
     """The machine-scope policy sources this platform trusts. Each platform
     reads only its own administrator-controlled sources: a macOS managed
@@ -988,7 +989,9 @@ def _archive_root(location: Optional[str]) -> Path:
     return root
 
 
-def _intended_archive(record: dict[str, Any], policy: Optional[Policy]) -> Optional[str]:
+def _intended_archive(
+    record: dict[str, Any], policy: Optional[Policy]
+) -> Optional[str]:
     location = record.get("key_archive")
     if isinstance(location, str) and location:
         return location

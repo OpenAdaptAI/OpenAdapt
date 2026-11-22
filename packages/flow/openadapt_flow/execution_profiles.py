@@ -2031,10 +2031,13 @@ def classify_execution_outcome(
                 is not None
             ):
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
-        # WAIT and SWITCH_SURFACE deliver no input: no actuation path, no
-        # delivery boundary. A switch is verified by its own identity check
-        # and postconditions (docs/MULTI_SURFACE.md).
-        if step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE):
+        # WAIT, SWITCH_SURFACE and a device approval deliver no input: no
+        # actuation path, no delivery boundary. A switch is verified by its
+        # own identity check and postconditions (docs/MULTI_SURFACE.md).
+        no_input = step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE) or (
+            step.action is ActionKind.SECOND_FACTOR and step.one_time == "approval"
+        )
+        if no_input:
             if result.actuation is not None:
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
         elif result.actuation is None:
@@ -2057,8 +2060,7 @@ def classify_execution_outcome(
 
         effects = effects_for_actuation(step, result.actuation)
         automated_gui = result.actuation in AUTOMATED_GUI_ACTUATIONS or (
-            result.actuation is None
-            and step.action not in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
+            result.actuation is None and not no_input
         )
         if api_actuation:
             # The API tier bypasses the GUI resolve/settle/act/postcondition
@@ -2089,7 +2091,8 @@ def classify_execution_outcome(
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         if (
             automated_gui
-            and step.action in {ActionKind.TYPE, ActionKind.SELECT_OPTION}
+            and step.action
+            in {ActionKind.TYPE, ActionKind.SELECT_OPTION, ActionKind.SECOND_FACTOR}
             and result.input_verified is not True
         ):
             return ExecutionOutcome.COMPLETED_UNVERIFIED

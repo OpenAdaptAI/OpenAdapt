@@ -13666,6 +13666,7 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_push",
         "openadapt_flow.__main__:_cmd_seal",
     }
+    | _at_rest_cli.READ_ONLY
 )
 
 
@@ -13883,10 +13884,7 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
                 "patient data encrypted, and this one writes files outside an "
                 "encrypted set. Nothing was run."
             )
-        if (
-            command in _SEALED_READY_COMMANDS
-            and command not in _STRICT_SELF_SEALING | _at_rest_cli.READ_ONLY
-        ):
+        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
             # These keep sealed input sealed; given plaintext input they
             # re-save or write beside it in plaintext. So every directory
             # they are given must already be encrypted.
@@ -14186,9 +14184,7 @@ def main(
         return 2
     from openadapt_flow import at_rest
 
-    # --no-encrypt holds for this command only: an application that calls
-    # main() in-process gets the environment back however the command ends.
-    with _at_rest_cli.no_encrypt_scope(args, _cmd_record):
+    with _at_rest_cli.no_encrypt_scope(args, _cmd_record):  # this command only
         try:
             _unsealed_output_check(args)
         except (at_rest.AtRestRefused, ValueError) as exc:
@@ -14229,10 +14225,10 @@ def main(
                     print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
                     return 1
                 raise
-            # The configured known-ID list may not be used: halt before any step
-            # runs, with the named reason.
+            # The known-ID list may not be used: halt before any step runs.
             print(
-                f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+                f"replay halted before start: {exc.reason}: {exc.detail}",
+                file=sys.stderr,
             )
             return 3
 

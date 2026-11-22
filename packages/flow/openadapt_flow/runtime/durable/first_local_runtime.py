@@ -261,10 +261,9 @@ def run_with_output(
                 # is on (recorded).
                 from openadapt_flow import crypto as _crypto
 
-                replayer.checkpoint_key = (
-                    _sealed.store_passphrase(run_path)
-                    or _crypto.resolve_key(None)
-                )
+                replayer.checkpoint_key = _sealed.store_passphrase(
+                    run_path
+                ) or _crypto.resolve_key(None)
             return replayer._run_unsealed(workflow, **kwargs)
         writer = _sealed.SealedSetWriter(
             run_path, "run", passphrase, resume=_sealed.is_sealed(run_path)

@@ -832,10 +832,10 @@ def test_a_lost_keychain_entry_does_not_hide_the_recovery_code(
 
 
 def test_each_platform_reads_only_its_own_policy_sources() -> None:
-    assert kh._platform_policy_sources("win32") == ["HKLM\\SOFTWARE\\Policies\\OpenAdapt"]
-    assert all(
-        not s.startswith("HKLM") for s in kh._platform_policy_sources("darwin")
-    )
+    assert kh._platform_policy_sources("win32") == [
+        "HKLM\\SOFTWARE\\Policies\\OpenAdapt"
+    ]
+    assert all(not s.startswith("HKLM") for s in kh._platform_policy_sources("darwin"))
     assert kh._platform_policy_sources("linux") == ["/etc/openadapt/policy.json"]
 
 

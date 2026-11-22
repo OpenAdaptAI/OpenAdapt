@@ -609,8 +609,8 @@ The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 19229 |
-| `packages/flow/openadapt_flow/__main__.py` | 14236 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 18693 |
+| `packages/flow/openadapt_flow/__main__.py` | 14237 |
 | `packages/flow/openadapt_flow/qualification/__init__.py` | 4891 |
 | `packages/flow/openadapt_flow/ir.py` | 6830 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
@@ -618,7 +618,7 @@ The encryption-at-rest default lowered `__main__.py`: the `at-rest` command, `--
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4808 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3661 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6820 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6818 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight

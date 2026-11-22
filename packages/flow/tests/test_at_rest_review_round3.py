@@ -187,7 +187,9 @@ class _Backend:
         raise AssertionError
 
 
-def test_the_library_recorder_seals_by_default(default_mode: Path, tmp_path: Path) -> None:
+def test_the_library_recorder_seals_by_default(
+    default_mode: Path, tmp_path: Path
+) -> None:
     from openadapt_flow.recorder import Recorder
 
     out = tmp_path / "rec"
