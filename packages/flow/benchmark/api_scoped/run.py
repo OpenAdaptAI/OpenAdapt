@@ -32,6 +32,7 @@ sys.path.insert(0, str(HERE))
 
 from lab import LABS, http  # noqa: E402
 
+from openadapt_flow.txplan.adapters import StaleBaseline  # noqa: E402
 from openadapt_flow.txplan.engine import Ctx, TxRefused  # noqa: E402
 from openadapt_flow.txplan.scoped import default_send, scoped_write  # noqa: E402
 from openadapt_flow.txplan.spec import load_spec  # noqa: E402
@@ -79,8 +80,14 @@ def _twice(strip_guard: bool = True) -> Callable[..., Any]:
                 coll.scoped.condition_header = saved
         else:
             default_send(adapter, coll, **kw)
-        return default_send(adapter, coll, **kw)
+        try:
+            return default_send(adapter, coll, **kw)
+        except StaleBaseline:
+            # The server refused the second send (its version was stale).
+            send.refused.append(True)  # type: ignore[attr-defined]
+            raise
 
+    send.refused = []  # type: ignore[attr-defined]
     return send
 
 
@@ -282,9 +289,10 @@ class MedplumScenario:
         # Duplicate creates: count the records holding the same name in the oracle.
         fam = out[2].kwargs["fields"]["name"][0]["family"]
         out[2].landed = lambda r, fam=fam: self.lab.oracle_count(fam) == 2
-        out[3].landed = lambda r: (
-            True
-        )  # two PUTs were sent; the log decides if the server kept both
+        # Two PUTs were sent; the log decides if the server kept both. With an
+        # enforced precondition the second carries a stale version and the
+        # server refuses it (412), so the duplicate never lands.
+        out[3].landed = lambda r, s=out[3].send: not s.refused
         return out
 
 

@@ -39,8 +39,23 @@ systems:
         list: {path: /fhir/R4/Patient}
         read: {path: "/fhir/R4/Patient/{id}"}
         create: {method: POST, path: /fhir/R4/Patient}
-        update: {method: PUT, path: "/fhir/R4/Patient/{id}", replace: true}
-        delete: {method: DELETE, path: "/fhir/R4/Patient/{id}"}
+        # The read's ETag (W/"<versionId>") goes out as If-Match. Probed on
+        # Medplum 5.2.8 (probe_precondition.py, results/
+        # medplum_precondition_probe.json): a PUT or DELETE with a version
+        # that doesn't match is refused with 412 and changes nothing. The
+        # refused request is logged as an AuditEvent, so the adapter's own
+        # probe isn't used on this system; the record below is the evidence.
+        update:
+          method: PUT
+          path: "/fhir/R4/Patient/{id}"
+          replace: true
+          precondition:
+            enforcement: {status: 412, observed: "2026-11-22", server: "Medplum 5.2.8"}
+        delete:
+          method: DELETE
+          path: "/fhir/R4/Patient/{id}"
+          precondition:
+            enforcement: {status: 412, observed: "2026-11-22", server: "Medplum 5.2.8"}
         scoped:
           audit_ref: "Patient/{id}"
           identity: [name]

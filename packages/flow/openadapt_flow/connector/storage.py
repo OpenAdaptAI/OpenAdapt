@@ -44,6 +44,11 @@ class CustomerStorage(Protocol):
         ...
 
 
+def report_bytes(report: dict[str, Any]) -> bytes:
+    """The exact bytes a report is stored as (its digest may leave; it may not)."""
+    return json.dumps(report, indent=2).encode("utf-8")
+
+
 def _customer_path(root: Path, ref: str, *, kind: str) -> Path:
     """Resolve one relative customer-storage key without crossing its root."""
     if Path(ref).is_absolute() or "\\" in ref:
@@ -94,7 +99,7 @@ class LocalCustomerStorage:
             return None
         dest = _customer_path(self.root, ref, kind="report")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        dest.write_bytes(report_bytes(report))
         try:
             os.chmod(dest, 0o600)  # PHI-bearing — restrict at rest
         except OSError:  # pragma: no cover

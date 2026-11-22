@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.31.2 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: omit initial UI policy argument and forward inspected policy on certification
+- **desktop**: distinguish omitted policy from explicit selection in dispatcher and qualification
+- **types,desktop**: align certification policy readback, strict bool catalog slots, and canonical v1 outcome bytes
+- **types,desktop**: preserve v1 wire compat, tighten managed catalog schema, and support bundled Flow policy fallback
+
+
+
+## v0.31.1 (2026-11-22)
+
+### Bug Fixes
+
+- Exception cards are checked on Windows as on macOS and Linux: a link or junction is
+  refused, and a card must be private to this user by its access control list (only this
+  user, SYSTEM and Administrators). Answers are written only where they come out private,
+  and card and answer files are read and written as raw bytes.
+- Update the `url` crate to 2.5.9 (RUSTSEC-2026-0592).
+
 ## v0.31.0 (2026-11-21)
 
 ### Features

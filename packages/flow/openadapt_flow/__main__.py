@@ -13151,7 +13151,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
     ps.set_defaults(func=_cmd_business_decisions_serve)
 
-    from openadapt_flow.cli_connector import register_connector_parser
+    from openadapt_flow.connector.cli import register_connector_parser
 
     register_connector_parser(sub, _cmd_connector)
 
@@ -13483,93 +13483,17 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
 
 
 def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
-    """Collect the connector CLI flags into the settings-resolution dict."""
-    keys = (
-        "control_plane_url",
-        "token",
-        "org_id",
-        "name",
-        "profile",
-        "policy",
-        "storage_backend",
-        "storage_root",
-        "poll_wait",
-    )
-    return {
-        k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
-    }
+    """Keep the historical connector settings helper importable."""
+    from openadapt_flow.connector.cli import _connector_flags as collect
+
+    return collect(args)
 
 
 def _cmd_connector(args: argparse.Namespace) -> int:
-    """The BYOC connector: enroll this machine, or run governed jobs locally.
+    """Dispatch connector commands through the focused CLI helper."""
+    from openadapt_flow.connector.cli import _cmd_connector as command
 
-    Both sub-verbs are thin wrappers over :mod:`openadapt_flow.connector`. The
-    engine ships the connector so a dispatched run is the SAME fail-closed
-    ``openadapt-flow run`` admission gate + governed Replayer the local CLI uses,
-    executed inside the customer perimeter against the customer's own storage.
-    """
-    import os
-
-    from openadapt_flow.connector import (
-        ConnectorClient,
-        ConnectorClientError,
-        load_settings,
-        run_loop,
-        save_enrollment,
-    )
-    from openadapt_flow.connector.config import ConnectorConfigError
-    from openadapt_flow.connector.executor import _subprocess_runner
-
-    verb = getattr(args, "connector_cmd", None)
-    try:
-        settings = load_settings(_connector_flags(args))
-    except ConnectorConfigError as exc:
-        print(f"connector: {exc}")
-        return 2
-
-    if verb == "enroll":
-        enrollment_secret = getattr(args, "enrollment_secret", None) or os.environ.get(
-            "BYOC_ENROLLMENT_SECRET"
-        )
-        client = ConnectorClient(settings.control_plane_url)
-        try:
-            data = client.enroll(
-                enrollment_secret=enrollment_secret,
-                org_id=settings.org_id,
-                name=settings.name,
-            )
-        except ConnectorClientError as exc:
-            print(f"connector enroll failed: {exc}")
-            return 1
-        finally:
-            client.close()
-        settings.token = data.get("token") or settings.token
-        settings.org_id = data.get("org_id") or settings.org_id
-        path = save_enrollment(settings)
-        print(
-            f"enrolled connector {data.get('connector_id', '?')} for org "
-            f"{settings.org_id}; token persisted to {path} (0600)."
-        )
-        return 0
-
-    # verb == "run"
-    if not settings.token:
-        print(
-            "connector run: no token. Create an organization connector in "
-            "OpenAdapt Cloud → Settings, then pass --token or set "
-            "BYOC_CONNECTOR_TOKEN."
-        )
-        return 2
-    client = ConnectorClient(settings.control_plane_url, token=settings.token)
-    try:
-        return run_loop(
-            client,
-            settings,
-            runner=_subprocess_runner,
-            once=bool(getattr(args, "once", False)),
-        )
-    finally:
-        client.close()
+    return command(args)
 
 
 def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
