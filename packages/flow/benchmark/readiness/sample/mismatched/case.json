@@ -1,0 +1,40 @@
+{
+  "agent_time_s": 2.099,
+  "contamination": {
+    "compared": 2,
+    "not_comparable": false,
+    "reason": null,
+    "shown": 0
+  },
+  "double_save": false,
+  "extra_held_writes": 0,
+  "fields": [
+    {
+      "human": "Consult",
+      "kind": "mismatched",
+      "name": "type",
+      "proposed": "Triage"
+    },
+    {
+      "human": "Synthetic note 01 for review",
+      "kind": "matched",
+      "name": "note",
+      "proposed": "Synthetic note 01 for review"
+    }
+  ],
+  "human_time_s": 0.948,
+  "identity": {
+    "code": "verified",
+    "ok": true
+  },
+  "landed_writes": 0,
+  "model_calls_metered": 0,
+  "model_cost_source": "metered",
+  "model_cost_usd": 0.0,
+  "out_of_scope_requests": 0,
+  "reason": null,
+  "schema": "openadapt.readiness-case/v1",
+  "status": "MISMATCHED",
+  "task_id": "readiness-mockmed-0001",
+  "undeclared_fields": 0
+}

@@ -13196,6 +13196,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_rollback(sub)
     _register_shadow(sub)
+    __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
     _register_receipt(sub)
     _register_learn(sub)
     _register_reconcile(sub)
