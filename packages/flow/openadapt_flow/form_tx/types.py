@@ -255,10 +255,9 @@ class FieldCodecSpec(BaseModel):
     enum_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     # Overrides of the default yes/no texts (``presets/words/true_tokens.json``
     # and ``false_tokens.json``) for a ``boolean_yes_no`` codec. None keeps
-    # the default. Typed entry uses the first word of each list when both
-    # are set.
-    true_tokens: Optional[tuple[str, ...]] = None
-    false_tokens: Optional[tuple[str, ...]] = None
+    # the default. Typed entry uses the first word of a set list.
+    true_tokens: Optional[tuple[str, ...]] = Field(default=None, min_length=1)
+    false_tokens: Optional[tuple[str, ...]] = Field(default=None, min_length=1)
 
     @model_serializer(mode="wrap")
     def _omit_unset_overrides(self, handler: Any) -> Any:

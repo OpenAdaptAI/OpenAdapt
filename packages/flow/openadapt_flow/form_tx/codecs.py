@@ -361,10 +361,11 @@ def format_for_text_entry(intended_value: Any, spec: FieldCodecSpec) -> str:
         return f"{sign}{whole}.{minor:02d}"
     if spec.kind == FormCodecKind.BOOLEAN_YES_NO:
         yes = normalize_with_codec(intended_value, spec) == "yes"
-        if spec.true_tokens and spec.false_tokens:
-            # A codec with its own words types its own first word.
-            return spec.true_tokens[0] if yes else spec.false_tokens[0]
-        return "Yes" if yes else "No"
+        # A codec with its own words types its own first word, side by side,
+        # so what is typed is always a word the read-back accepts.
+        if yes:
+            return spec.true_tokens[0] if spec.true_tokens else "Yes"
+        return spec.false_tokens[0] if spec.false_tokens else "No"
     if spec.kind in (FormCodecKind.PHONE_DIGITS, FormCodecKind.INTEGER):
         return str(normalize_with_codec(intended_value, spec))
     if isinstance(intended_value, (int, float)):

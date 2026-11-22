@@ -295,6 +295,18 @@ def test_a_codec_can_override_the_yes_no_words() -> None:
     assert format_for_text_entry(True, german) == "Ja"
     assert format_for_text_entry(False, german) == "Nein"
 
+    french_yes = FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO, true_tokens=("oui",))
+    # Only one side overridden: what is typed for each side reads back.
+    assert format_for_text_entry(True, french_yes) == "oui"
+    assert (
+        normalize_with_codec(format_for_text_entry(True, french_yes), french_yes)
+        == "yes"
+    )
+    assert format_for_text_entry(False, french_yes) == "No"
+    assert normalize_with_codec("No", french_yes) == "no"
+    with pytest.raises(ValueError):
+        FieldCodecSpec(kind=FormCodecKind.BOOLEAN_YES_NO, true_tokens=())
+
     both = FieldCodecSpec(
         kind=FormCodecKind.BOOLEAN_YES_NO, true_tokens=("x",), false_tokens=("x",)
     )
