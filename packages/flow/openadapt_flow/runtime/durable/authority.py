@@ -203,10 +203,7 @@ def _default_db_path() -> Path:
     # OpenAdapt subpaths lexical so symlinks planted inside HOME are still
     # rejected by `_assert_configured_ancestors_are_not_links` and `_connect`.
     return (
-        Path.home().resolve()
-        / ".openadapt"
-        / "durable-authority"
-        / "authority.sqlite3"
+        Path.home().resolve() / ".openadapt" / "durable-authority" / "authority.sqlite3"
     )
 
 

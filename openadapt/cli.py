@@ -3493,11 +3493,7 @@ def _doctor_uv_tool_command(arguments: str) -> Optional[str]:
     ):
         return None
     major, minor = sys.version_info[:2]
-    py = (
-        f"{major}.{minor}"
-        if (major, minor) in ((3, 10), (3, 11), (3, 12))
-        else "3.12"
-    )
+    py = f"{major}.{minor}" if (major, minor) in ((3, 10), (3, 11), (3, 12)) else "3.12"
     flag = " --upgrade" if upgrade else ""
     return f"uv tool install --python {py}{flag} {spec}"
 
