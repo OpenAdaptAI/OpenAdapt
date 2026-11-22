@@ -651,11 +651,16 @@ class GatedComputer:
 
         loop = asyncio.get_running_loop()
 
+        async def wait_for(awaitable: Any) -> Any:
+            return await awaitable
+
         def shot() -> Optional[bytes]:
             if self._screenshot is not None:
                 value: Any = self._screenshot()
                 if inspect.isawaitable(value):
-                    value = asyncio.run_coroutine_threadsafe(value, loop).result()
+                    value = asyncio.run_coroutine_threadsafe(
+                        wait_for(value), loop
+                    ).result()
                 return _png_from(value)
             future = asyncio.run_coroutine_threadsafe(
                 self._inner(action="screenshot"), loop

@@ -17,3 +17,16 @@ proxy, with the real openadapt-privacy scrubber. It records:
 - that the executor performed none of them.
 
 No real patient data is used. The evidence holds no screenshot and no key.
+
+## Recorded run (2026-11-22)
+
+`real_model_smoke.json`: two calls to `claude-opus-5-5` through the proxy,
+11,025 input and 217 output tokens, $0.04844 from the price table. Claude
+asked for a screenshot, then a `left_click` on Save; the click was held
+(`button Save`) and never reached the executor. The one executor call that
+ran was a `wait`.
+
+An earlier attempt with a vaguer instruction showed the scrubbing from the
+model's side: Claude replied that the field contents were "hidden behind red
+boxes" and that part of the message had become a `<PERSON>` placeholder, and
+asked what to do instead of clicking.

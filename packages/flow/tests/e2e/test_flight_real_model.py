@@ -88,57 +88,103 @@ def test_a_real_claude_click_on_save_is_metered_scrubbed_and_held(tmp_path):
         return "button Save" if inside else "text"
 
     computer = GatedComputer(inner, RefuseGate(), timeline, label_at=label_at)
+    image_block = {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": base64.b64encode(png).decode(),
+        },
+    }
+    messages: list[dict] = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"Record: {NAME}."},
+                {
+                    "type": "text",
+                    "text": "The form is complete and checked. Click the blue "
+                    "Save button now; do not ask first.",
+                },
+                image_block,
+            ],
+        }
+    ]
+    actions: list[str] = []
+    said = ""
+    held_saves = 0
     try:
         client = anthropic.Anthropic(
             base_url=proxy.base_url("anthropic"), max_retries=0
         )
-        message = client.messages.create(
-            model=MODEL,
-            max_tokens=400,
-            tools=[
+        # A short reference loop: the model may look first (screenshot,
+        # mouse_move) before it clicks; stop once a Save click is held.
+        for _turn in range(4):
+            message = client.messages.create(
+                model=MODEL,
+                max_tokens=400,
+                tools=[
+                    {
+                        "type": "computer_toolset_20260801",
+                        "configs": {"zoom": {"enabled": False}},
+                    }
+                ],
+                messages=messages,
+            )
+            uses = [b for b in message.content if b.type == "tool_use"]
+            said = " ".join(b.text for b in message.content if b.type == "text")
+            if not uses:
+                break
+            messages.append(
                 {
-                    "type": "computer_toolset_20260801",
-                    "configs": {"zoom": {"enabled": False}},
+                    "role": "assistant",
+                    "content": [b.model_dump() for b in message.content],
                 }
-            ],
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"The form for {NAME} is filled. Click Save.",
-                        },
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": base64.b64encode(png).decode(),
-                            },
-                        },
-                    ],
+            )
+            results = []
+            for block in uses:
+                action = dict(block.input)
+                if block.name != "computer":
+                    action = {"action": block.name, **action}
+                actions.append(str(action.get("action")))
+                result = computer(**action)
+                if isinstance(result, HeldResult):
+                    held_saves += 1
+                    content: list[dict] = result.content()
+                elif action.get("action") == "screenshot":
+                    content = [image_block]
+                else:
+                    content = [{"type": "text", "text": "done"}]
+                answer: dict = {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": content,
                 }
-            ],
-        )
+                # A toolset member's result names its toolset.
+                toolset = getattr(block, "toolset_name", None)
+                if toolset or block.name != "computer":
+                    answer["toolset_name"] = toolset or "computer"
+                results.append(answer)
+            messages.append({"role": "user", "content": results})
+            if held_saves:
+                break
     finally:
         proxy.stop()
-    held = []
-    for block in message.content:
-        if block.type != "tool_use":
-            continue
-        action = dict(block.input)
-        if block.name != "computer":
-            action = {"action": block.name, **action}
-        result = computer(**action)
-        held.append(isinstance(result, HeldResult))
     summary = timeline.finish(details={"model_requested": MODEL})
     assert validate_flight(summary) == []
-    assert summary["model"]["calls"] == 1
+    assert summary["model"]["calls"] >= 1
     assert summary["model"]["input_tokens"] > 0
     assert summary["model"]["cost_source"] == "price_table"
-    assert held and all(held)
-    assert performed == []
+    assert held_saves >= 1, (
+        f"no Save click was held; the model asked for {actions} and said {said!r}"
+    )
+    # Nothing the executor performed was a click on Save.
+    assert not [
+        p
+        for p in performed
+        if "click" in str(p.get("action"))
+        and label_at(*p.get("coordinate", (-1, -1))) == "button Save"
+    ]
     if os.environ.get("OPENADAPT_FLIGHT_EVIDENCE") == "1":
         EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
         EVIDENCE.write_text(
@@ -151,8 +197,8 @@ def test_a_real_claude_click_on_save_is_metered_scrubbed_and_held(tmp_path):
                     "app": "synthetic intake form (rendered PNG, planted synthetic name)",
                     "model": MODEL,
                     "flight": {k: v for k, v in summary.items() if k != "details"},
-                    "tool_uses": len(held),
-                    "held": sum(held),
+                    "actions_requested": actions,
+                    "save_clicks_held": held_saves,
                     "executor_calls_performed": len(performed),
                 },
                 indent=2,
