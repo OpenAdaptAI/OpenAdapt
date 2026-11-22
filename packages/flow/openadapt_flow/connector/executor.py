@@ -178,13 +178,20 @@ def cancel_job(job_id: str) -> bool:
         _CHILDREN.cancelled.add(job_id)
         proc = _CHILDREN.procs.get(job_id)
     if proc is not None and proc.poll() is None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop(proc)
         return True
     return False
+
+
+def _stop(proc: "subprocess.Popen[Any]") -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 def job_cancelled(job_id: Optional[str]) -> bool:
@@ -275,6 +282,10 @@ def _subprocess_runner(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=dict(child_env),
+            # Its own session: an operator Ctrl-C or a service stop signals
+            # the daemon's process group, not the governed child. The daemon
+            # stops children itself (cancel_job), so each outcome is judged.
+            start_new_session=True,
         )
     except OSError as exc:
         raise _ChildNotStarted(type(exc).__name__) from exc
@@ -286,6 +297,12 @@ def _subprocess_runner(
             proc.terminate()
     try:
         proc.wait()
+    except BaseException:
+        # Interrupted while waiting (an inline run's Ctrl-C): never leave the
+        # child running in its own session. The interrupt still propagates,
+        # so the lease is not acked and the plane reaps it as uncertain.
+        _stop(proc)
+        raise
     finally:
         if job_id:
             with _CHILDREN.lock:
@@ -883,31 +900,29 @@ def _execute_job(
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
         cancelled = job_cancelled(job.lease_job_id)
-        # A cancel can kill a child that already reported success but had not
-        # exited (a seal or callback still running): the nonzero exit then
-        # reads as a failure although the write landed. Treat that like a
-        # missing report (fail-open class: lost-outcome-as-failure).
-        killed_after_success = (
-            cancelled
-            and outcome.returncode != 0
-            and (
-                report.get("execution_outcome") == "VERIFIED"
-                or report.get("success") is True
-            )
+        # After the child started, a nonzero exit with no report, or with a
+        # report that claims success, does not say whether the write landed:
+        # a cancel, a service stop, an OOM kill or a crash can end a child
+        # that already saved (or reported success and was still sealing).
+        # That is never a clean failure (a re-run could repeat the write); it
+        # stops for reconciliation (fail-open class: lost-outcome-as-failure).
+        # A report that records a refusal or a halt keeps its own outcome.
+        claims_success = (
+            report.get("execution_outcome") == "VERIFIED"
+            or report.get("success") is True
+            or report.get("terminal_outcome") == "success"
         )
-        if cancelled and (
-            not _reported_terminal_outcome(report) or killed_after_success
-        ):
-            # The cancel terminated a child that had already started, and it
-            # left no terminal report: a write may have landed. That is not a
-            # failure (a re-run could repeat the write); it stops for
-            # reconciliation, like a child whose outcome never came back.
+        outcome_unknown = (cancelled and not _reported_terminal_outcome(report)) or (
+            outcome.returncode != 0
+            and (not _reported_terminal_outcome(report) or claims_success)
+        )
+        if outcome_unknown:
             status = "halt"
             error_code = "child_outcome_unknown"
             outcome_error = (
-                "cancelled by the control plane while running; the governed "
-                "child left no terminal report or was killed after reporting "
-                "success, so a write may have landed"
+                "the governed child ended without a report it could stand by "
+                "(cancelled, stopped or killed while running, or killed after "
+                "reporting success), so a write may have landed"
             )
         elif report_target_kind != job.target_kind:
             status = "failed"

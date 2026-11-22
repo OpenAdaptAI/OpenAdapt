@@ -15,6 +15,7 @@ import hmac
 import io
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -552,6 +553,133 @@ def test_cancel_that_kills_a_child_after_it_reported_success_is_uncertain(
     assert result.status == "halt"
     assert result.error_code == "child_outcome_unknown"
     assert result.halt == {"present": True} and result.outcome is None
+
+
+@pytest.mark.parametrize(
+    "returncode,report,status,error_code",
+    [
+        # No cancel: a stop, an OOM kill or a crash after the child started.
+        (-2, {}, "halt", "child_outcome_unknown"),
+        (
+            -9,
+            {"execution_outcome": "VERIFIED", "success": True},
+            "halt",
+            "child_outcome_unknown",
+        ),
+        (1, {"success": True}, "halt", "child_outcome_unknown"),
+        (-15, {"terminal_outcome": "success"}, "halt", "child_outcome_unknown"),
+        # A report that records a refusal or a halt keeps its own outcome.
+        (
+            1,
+            {"execution_outcome": "FAILED", "success": False},
+            "failed",
+            "governed_run_failed",
+        ),
+        (1, {"execution_outcome": "HALTED", "success": False}, "halt", None),
+    ],
+    ids=["no-report", "verified", "legacy", "terminal-success", "refused", "halted"],
+)
+def test_a_nonzero_exit_after_start_is_judged_without_a_cancel(
+    tmp_path, returncode, report, status, error_code
+):
+    job = parse_job(_payload(), lease_job_id=f"bjob_exit_{returncode}_{len(report)}")
+
+    def runner(argv, run_dir, env):
+        body = {"execution_target_kind": "web", **report} if report else {}
+        return RunOutcome(returncode=returncode, report=body)
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == status
+    assert result.error_code == error_code
+    if error_code == "child_outcome_unknown":
+        assert result.halt == {"present": True} and result.outcome is None
+
+
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
+def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(tmp_path):
+    """Ctrl-C or a service stop while a real child runs: halt, never failed."""
+    plane = RecordingPlane()
+    plane.jobs.append({"id": "bjob_stop", "status": "queued", "payload": _payload()})
+    started = threading.Event()
+    child: dict = {}
+
+    client = _client(plane)
+
+    def interrupt() -> None:
+        # The operator's Ctrl-C (or the unit's SIGINT) reaches this process
+        # while the child runs. Only this process: the test runner's own
+        # process group is left alone.
+        if started.wait(10):
+            time.sleep(0.5)
+            os.kill(os.getpid(), signal.SIGINT)
+
+    threading.Thread(target=interrupt, daemon=True).start()
+
+    def runner(argv, run_dir, env):
+        real = [sys.executable, "-c", "import time; time.sleep(30)"]
+        original = executor_mod.subprocess.Popen
+
+        def spy(*args, **kwargs):
+            proc = original(*args, **kwargs)
+            child["proc"] = proc
+            started.set()
+            return proc
+
+        executor_mod.subprocess.Popen = spy
+        try:
+            return _subprocess_runner(real, run_dir, {"PATH": os.environ["PATH"]})
+        finally:
+            executor_mod.subprocess.Popen = original
+
+    settings = _configured_settings(
+        control_plane_url="https://cloud.test",
+        token=TOKEN,
+        poll_wait_s=0,
+        max_workers=2,
+    )
+    began = time.monotonic()
+    run_loop(
+        client,
+        settings,
+        runner=runner,
+        storage_factory=lambda job: InMemoryCustomerStorage(PLAIN_BUNDLE),
+        log=lambda _m: None,
+    )
+    assert time.monotonic() - began < 20  # stopped, not waited out
+    proc = child["proc"]
+    assert proc.poll() is not None  # the daemon stopped its child
+    acks = [
+        json.loads(r.content)
+        for r in plane.requests
+        if r.url.path == "/api/connector/ack"
+    ]
+    assert len(acks) == 1 and acks[0]["job_id"] == "bjob_stop"
+    assert acks[0]["status"] != "failed"
+    assert acks[0].get("error_code") == "child_outcome_unknown"
+
+
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
+def test_the_governed_child_runs_in_its_own_session(tmp_path):
+    """A signal to the daemon's process group does not reach the child."""
+    seen: dict = {}
+    original = executor_mod.subprocess.Popen
+
+    def spy(*args, **kwargs):
+        proc = original(*args, **kwargs)
+        seen["sid"] = os.getsid(proc.pid)
+        return proc
+
+    executor_mod.subprocess.Popen = spy
+    try:
+        _subprocess_runner([sys.executable, "-c", "pass"], tmp_path, dict(os.environ))
+    finally:
+        executor_mod.subprocess.Popen = original
+    assert seen["sid"] != os.getsid(0)
 
 
 def test_concurrency_runs_up_to_the_server_cap(tmp_path):

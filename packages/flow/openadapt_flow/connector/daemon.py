@@ -445,6 +445,12 @@ def run_loop(
         log("[connector] interrupted; exiting")
     finally:
         stop.set()
+        # Stop every governed child before draining. Each now runs in its own
+        # session, so a service stop or Ctrl-C reaches only this daemon; a
+        # stopped child is judged by the executor (a write may have landed:
+        # halt, child_outcome_unknown), never acked as a clean failure.
+        for job_id in active.ids():
+            cancel_job(job_id)
         pool.shutdown(wait=True)
         handled += active.reap(log)
     log(f"[connector] loop exiting; jobs handled this session: {handled}")
