@@ -23,6 +23,7 @@ or changes a command or option, regenerate it and say why in the pull request:
 
 from __future__ import annotations
 
+import difflib
 import importlib.metadata
 import json
 import os
@@ -167,4 +168,23 @@ def test_help_text_is_byte_identical() -> None:
     changed = [
         p for p in sorted(snapshot["help"]) if snapshot["help"][p] != current.get(p)
     ]
-    assert changed == [], f"--help text changed for {changed}"
+    if not changed:
+        return
+    diffs = []
+    for path in changed:
+        diffs.append(
+            "\n".join(
+                difflib.unified_diff(
+                    snapshot["help"][path].splitlines(),
+                    (current.get(path) or "").splitlines(),
+                    fromfile=f"snapshot {path}",
+                    tofile=f"current {path}",
+                    lineterm="",
+                )
+            )
+        )
+    raise AssertionError(
+        f"--help text changed for {changed}. Regenerate with "
+        "OPENADAPT_WRITE_CLI_SURFACE=1 pytest tests/test_cli_surface.py\n"
+        + "\n".join(diffs)
+    )
