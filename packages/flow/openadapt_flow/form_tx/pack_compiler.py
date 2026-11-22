@@ -88,7 +88,9 @@ _GENERIC_UI_CHROME_TOKENS = frozenset(
 #: Words that mark a field as another person's (data:
 #: ``presets/words/secondary_role_qualifiers.json``). A domain schema may
 #: replace them with ``secondary_role_qualifiers``.
-_SECONDARY_ROLE_QUALIFIERS = frozenset(load_words("secondary_role_qualifiers"))
+_SECONDARY_ROLE_QUALIFIERS = frozenset(
+    w.casefold() for w in load_words("secondary_role_qualifiers")
+)
 
 
 #: The default "next screen" button pattern for induction (data:
