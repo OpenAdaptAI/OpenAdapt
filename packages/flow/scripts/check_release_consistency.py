@@ -1767,13 +1767,31 @@ def _has_tag(repo: Path, ref: str) -> bool:
     return found.returncode == 0
 
 
+def _remote_has_tag(repo: Path, ref: str) -> bool:
+    """Whether origin has the tag. An unanswered query fails closed.
+
+    A tag that does not exist and a fetch that failed must not look alike:
+    the first falls back to the in-tree sources, the second must stop.
+    """
+    listed = _git(repo, "ls-remote", "--tags", "origin", ref)
+    if listed.returncode:
+        raise ValueError(
+            f"could not ask origin for {ref}; the openadapt-types floor check "
+            "needs the floor's tag"
+        )
+    return bool(listed.stdout.strip())
+
+
 def _types_sources_at_tag(repo: Path, tag: str) -> dict[str, str] | None:
     """Module name to source for openadapt_types at a tag, or None without it.
 
-    A shallow CI checkout has no tags, so a missing tag is fetched once.
+    A shallow CI checkout has no tags, so a tag origin has is fetched once.
+    None means origin has no such tag. A failed query or fetch raises.
     """
     ref = f"refs/tags/{tag}"
     if not _has_tag(repo, ref):
+        if not _remote_has_tag(repo, ref):
+            return None
         _git(
             repo,
             "fetch",
@@ -1784,7 +1802,7 @@ def _types_sources_at_tag(repo: Path, tag: str) -> dict[str, str] | None:
             f"+{ref}:{ref}",
         )
         if not _has_tag(repo, ref):
-            return None
+            raise ValueError(f"origin has {tag}, but fetching it failed")
     listing = _git(repo, "ls-tree", "-r", "--name-only", ref, "--", TYPES_SOURCE_DIR)
     if listing.returncode:
         raise ValueError(f"could not list {TYPES_SOURCE_DIR} at {tag}")

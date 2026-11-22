@@ -44,6 +44,12 @@ package repairs a Flow 3.4.0 install.
   pay as much as finishing. A contract that sets `verified_reward` to 0.5 or
   less must now also set `escalated_after_effect_reward` below it
   ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+- `RewardContractV1.digest` covers every scoring field with its default, so
+  the new `escalated_after_effect_reward` changes the digest of every reward
+  contract, including one that does not set it. A certificate issued under
+  0.24.0 names the old digest, and checking it against the same contract
+  under 0.24.1 reports a digest mismatch. Issue certificates again under
+  0.24.1 ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
 
 ## v0.24.0 (2026-10-20)
 

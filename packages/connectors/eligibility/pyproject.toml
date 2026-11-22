@@ -34,6 +34,8 @@ packages = ["openadapt_eligibility"]
 # from PyPI. Flow 3.5.0 needs openadapt-types 0.24.1, which PyPI does not
 # serve until it releases. The override makes openadapt-types a requirement
 # of this project, so the lock takes the in-tree copy, like Flow's.
+# Keep its range equal to Flow's openadapt-types range; when Flow moves to
+# 0.25, this must move with it or the lock won't resolve.
 override-dependencies = [
     "openadapt-types>=0.24.0,<0.25.0",
 ]

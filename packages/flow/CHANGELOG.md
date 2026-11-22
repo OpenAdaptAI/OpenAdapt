@@ -49,7 +49,7 @@ clean install of 3.4.0 failed on every receipt path. Flow now requires
   call goes through the MCP server's gate (`agent/contract_call.py`). Person
   confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
   (docs/A2A.md).
-- `openadapt handoff list` shows handoffs sent to other parties and what
+- `openadapt-flow handoff list` shows handoffs sent to other parties and what
   their systems confirmed. A counterparty confirmation is evidence, read from
   the other party's system, that it recorded what was sent. Two producers
   ship: payer acknowledgments, and referral intake read back from the
@@ -65,21 +65,21 @@ clean install of 3.4.0 failed on every receipt path. Flow now requires
   run folder becomes one line of the run's receipt, with its own verdict. A
   receipt can be anchored in a Rekor transparency log, and the viewer shows
   the receipt first (#2426; docs/RECEIPTS.md).
-- `openadapt hooks install --agent claude-code` (or `codex`) writes
+- `openadapt-flow hooks install --agent claude-code` (or `codex`) writes
   project-local hooks. Each tool call that writes to a system declared in
   `openadapt.systems.yaml` (a database URL, an HTTP API, a CLI that reaches
   one, or an MCP server's tools) is pre-checked against the declared writes,
   read back afterwards, and given a signed receipt. The hooks are advisory
   (#2411, #2496; docs/HOOKS.md).
-- `openadapt proxy --postgres URL -- CMD` (or `--sqlite PATH`, and `--api`
-  for HTTP APIs) holds the credentials and gives the agent scoped MCP tools.
-  Each SQL write is dry-run in a rolled-back transaction with its exact
+- `openadapt-flow proxy --postgres URL -- CMD` (or `--sqlite PATH`, and
+  `--api` for HTTP APIs) holds the credentials and gives the agent scoped MCP
+  tools. Each SQL write is dry-run in a rolled-back transaction with its exact
   row-level diff, approved by policy or by a person against the plan digest,
   committed only if the diff still matches, and undone with a read-back
-  proof. `openadapt plan` does the same for a batch of writes to REST APIs,
-  SQL databases and email: dry-run, apply under a single-use approval with an
-  idempotency key per write, and undo with a read-back proof. Email waits in
-  a cancelable queue (#2428; docs/TRANSACTIONS.md).
+  proof. `openadapt-flow plan` does the same for a batch of writes to REST
+  APIs, SQL databases and email: dry-run, apply under a single-use approval
+  with an idempotency key per write, and undo with a read-back proof. Email
+  waits in a cancelable queue (#2428; docs/TRANSACTIONS.md).
 - Writes to hosted APIs and SaaS systems, where there is no database to
   diff, are verified by reading the record back and by the system's own event
   or audit log. On an update every other field of the record must be
@@ -113,7 +113,7 @@ clean install of 3.4.0 failed on every receipt path. Flow now requires
   back on `RECONCILIATION_REQUIRED`, a lost reply, a failed record check or a
   model call during replay. Without the flag, a stopped program is held, as
   before (#2491; docs/WRAP_FALLBACK.md).
-- `openadapt flight -- CMD` records a run of a computer-use agent you already
+- `openadapt-flow flight -- CMD` records a run of a computer-use agent you already
   run. CMD's model calls go through a loopback proxy that scrubs text and
   screenshots before they leave the machine, meters cost against
   `--max-cost-usd`, and refuses any request it can't scrub. It logs the
@@ -142,12 +142,22 @@ clean install of 3.4.0 failed on every receipt path. Flow now requires
 ### Breaking changes
 
 - The Stedi 270/271 payer eligibility client moved out of `openadapt-flow`
-  into the separate `openadapt-eligibility` connector
+  into the `openadapt-eligibility` connector in this repository
   (`packages/connectors/eligibility`). `openadapt_flow.eligibility` no longer
-  exists; import `openadapt_eligibility` instead (#2488).
-- `ExecuteService`, `create_app` and `serve` take `seed_admissions` (the
-  admitted bundles to seed) in place of `seed_mockmed`. The
-  `--seed-mockmed` flag still works (#2486).
+  exists. `openadapt-eligibility` is not on PyPI yet; install it from the
+  repository and import `openadapt_eligibility` (#2488).
+- Execute (#2486):
+  - `ExecuteService`, `create_app` and `serve` take `seed_admissions` (the
+    admitted bundles to seed) in place of `seed_mockmed`. The
+    `--seed-mockmed` flag still works.
+  - The `synthetic_mockmed` runner is now `synthetic_runner`, and its
+    evidence tags are `synthetic-verified` and `synthetic-banner-lie`.
+- Reward bundles take explicit `task_id`, `environment_id` and
+  `certificate_id`; the defaults no longer name the demo app (#2486).
+- Identity checks no longer treat `patient`, `chart`, `charts`,
+  `discharged`, `admitted`, `appointment` and `demo` as row chrome. Words
+  repeated across sibling rows are derived from the rows instead
+  (`derive_sibling_chrome_words`) (#2486).
 
 ### Fixes
 

@@ -106,6 +106,12 @@ def test_types_floor_reads_the_base_dependency(tmp_path: Path) -> None:
     assert crc.types_floor(root) == "0.30.2"
 
 
+@pytest.fixture
+def no_remote_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These repositories have no origin: it has none of their tags."""
+    monkeypatch.setattr(crc, "_remote_has_tag", lambda repo, ref: False)
+
+
 def _monorepo(tmp_path: Path, *, floor: str, in_tree: str) -> Path:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     flow = tmp_path / "packages" / "flow"
@@ -128,13 +134,17 @@ def _monorepo(tmp_path: Path, *, floor: str, in_tree: str) -> Path:
     return flow
 
 
-def test_an_untagged_floor_must_be_the_in_tree_version(tmp_path: Path) -> None:
+def test_an_untagged_floor_must_be_the_in_tree_version(
+    tmp_path: Path, no_remote_tags: None
+) -> None:
     flow = _monorepo(tmp_path, floor="0.30.0", in_tree="0.29.0")
     with pytest.raises(ValueError, match="has no tag openadapt-types-v0.30.0"):
         crc.validate_types_floor_imports(flow)
 
 
-def test_an_untagged_floor_checks_the_in_tree_sources(tmp_path: Path) -> None:
+def test_an_untagged_floor_checks_the_in_tree_sources(
+    tmp_path: Path, no_remote_tags: None
+) -> None:
     flow = _monorepo(tmp_path, floor="0.30.0", in_tree="0.30.0")
     with pytest.raises(ValueError, match=r"uses\.py:1: openadapt_types\.ledger\.Row"):
         crc.validate_types_floor_imports(flow)
@@ -143,7 +153,9 @@ def test_an_untagged_floor_checks_the_in_tree_sources(tmp_path: Path) -> None:
     assert "unreleased 0.30.0" in crc.validate_types_floor_imports(flow)
 
 
-def test_a_tagged_floor_is_read_from_the_tag_not_the_tree(tmp_path: Path) -> None:
+def test_a_tagged_floor_is_read_from_the_tag_not_the_tree(
+    tmp_path: Path, no_remote_tags: None
+) -> None:
     flow = _monorepo(tmp_path, floor="0.30.0", in_tree="0.30.1")
     git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t"]
     subprocess.run([*git, "add", "-A"], check=True)
@@ -180,3 +192,20 @@ def test_flow_imports_exist_in_its_floor(monkeypatch: pytest.MonkeyPatch) -> Non
             )
         monkeypatch.setattr(crc, "_types_sources_at_tag", lambda repo, tag: None)
     crc.validate_types_floor_imports(ROOT)
+
+
+def test_an_unanswered_tag_query_fails_closed(tmp_path: Path) -> None:
+    # No origin: the check can't tell whether the floor is tagged, so it
+    # stops instead of falling back to the in-tree sources.
+    flow = _monorepo(tmp_path, floor="0.30.0", in_tree="0.30.0")
+    with pytest.raises(ValueError, match="could not ask origin"):
+        crc.validate_types_floor_imports(flow)
+
+
+def test_a_failed_fetch_of_an_existing_tag_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flow = _monorepo(tmp_path, floor="0.30.0", in_tree="0.30.0")
+    monkeypatch.setattr(crc, "_remote_has_tag", lambda repo, ref: True)
+    with pytest.raises(ValueError, match="fetching it failed"):
+        crc.validate_types_floor_imports(flow)
