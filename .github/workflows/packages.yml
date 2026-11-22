@@ -117,6 +117,7 @@ jobs:
       flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
+      eligibility: ${{ steps.classify.outputs.eligibility }}
       verify: ${{ steps.classify.outputs.verify }}
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
@@ -144,7 +145,7 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi
           echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
-            for pkg in flow types agent verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent eligibility verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -180,6 +181,8 @@ jobs:
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
+          # The optional eligibility connector is tested against the in-tree core.
+          eligibility="$(hit "^packages/(connectors/eligibility|flow|types)/|$wf")"
           verify="$(hit "^packages/(verify|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
@@ -197,6 +200,7 @@ jobs:
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
+            echo "eligibility=$eligibility"
             echo "verify=$verify"
             echo "capture=$capture"
             echo "privacy=$privacy"
@@ -334,6 +338,51 @@ jobs:
         run: |
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+      - name: Test
+        run: pytest -q
+
+  eligibility:
+    name: eligibility connector (py${{ matrix.python-version }})
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.eligibility == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+    defaults:
+      run:
+        working-directory: packages/connectors/eligibility
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/connectors/eligibility/uv.lock
+            packages/flow/uv.lock
+          cache-suffix: eligibility-py${{ matrix.python-version }}
+      - name: Install eligibility connector against the in-tree core
+        run: >-
+          python ../../../scripts/ci/locked_install.py
+          --lock 'packages/connectors/eligibility[dev]'
+          --editable packages/types --editable packages/flow
+          --editable packages/connectors/eligibility
+      - name: Confirm the in-tree packages are installed
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_eligibility, openadapt_flow
+          assert "packages/flow" in pathlib.Path(openadapt_flow.__file__).resolve().as_posix()
+          assert "packages/connectors/eligibility" in pathlib.Path(openadapt_eligibility.__file__).resolve().as_posix()
+          PY
+      - name: Ruff
+        run: ruff check openadapt_eligibility tests
       - name: Test
         run: pytest -q
 
@@ -1841,6 +1890,7 @@ jobs:
       - scope
       - types
       - agent
+      - eligibility
       - verify
       - verify-clean-install
       - flow-lint
@@ -1897,6 +1947,7 @@ jobs:
           selects = {
               "types": "types",
               "agent": "agent",
+              "eligibility": "eligibility",
               "verify": "verify",
               "verify-clean-install": "verify",
               "flow-lint": "flow",
