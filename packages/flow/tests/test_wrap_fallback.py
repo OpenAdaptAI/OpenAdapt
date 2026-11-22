@@ -802,3 +802,59 @@ def test_a_gate_that_fails_to_bind_leaves_an_ended_marker(
     runs = fb.fallback_runs(model.cache, PROMPT, PARAMS)
     assert runs["in_flight"] and runs["in_flight_owner"] == "ended"
     assert fb.clear_in_flight(model.cache, PROMPT, PARAMS)
+
+
+def test_a_write_to_another_record_during_the_halt_never_falls_back(
+    model, monkeypatch, run1
+) -> None:
+    """The task's record is unchanged, but the real record check counts a
+    new record of another record during the replay: it may be the
+    program's own write, so the halt is not proved clean."""
+    install_reply(model, monkeypatch, write={"id": "9", "kind": "other", "value": "x"})
+    agent = Agent()
+    chosen = policy(model)
+    result = chosen.run(PROMPT, PARAMS, agent)
+    assert result.record_check["created"] == 0
+    assert result.record_check["outside_run"]["created"] == 1
+    assert result.status == "HALTED" and agent.calls == 0
+    assert chosen.last == {"fallback": False, "reason": "record_changed_or_unproved"}
+
+
+def test_a_fallback_write_to_another_record_keeps_the_marker(
+    model, monkeypatch, run1
+) -> None:
+    """The gate refused the task's save, but the final read (the real
+    task_record_check) shows a new record elsewhere: reconcile, keep the
+    marker."""
+    install_reply(model, monkeypatch)
+
+    def elsewhere(made: FakeRun1) -> None:
+        made.rows.append({"id": "9", "kind": "other", "value": "x"})
+
+    run1.after = elsewhere
+    chosen = policy(model, gate=lambda request: False)
+    result = chosen.run(PROMPT, PARAMS, Agent())
+    written = chosen.last["task_record_check"]
+    assert written["created"] == 0 and written["outside_run"]["created"] == 1
+    assert result.status == "RECONCILIATION_REQUIRED" and not result.verified
+    assert chosen.last["run_status"] == "GATE_REFUSED"
+    assert (model.tmp / "cache" / "fallback" / "task" / fb._ACTIVE).exists()
+
+
+@pytest.mark.parametrize(
+    "check",
+    [
+        {"readable": True, "created": 0, "changed": 0, "removed": 0},
+        {
+            "readable": True,
+            "created": 0,
+            "changed": 0,
+            "removed": 0,
+            "outside_run": {"created": 0, "changed": 1, "removed": 0},
+        },
+    ],
+)
+def test_nothing_written_needs_no_change_outside_too(check) -> None:
+    assert fb._nothing_written(check) is False
+    clean = dict(check, outside_run={"created": 0, "changed": 0, "removed": 0})
+    assert fb._nothing_written(clean) is True

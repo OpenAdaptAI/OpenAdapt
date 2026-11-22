@@ -131,15 +131,24 @@ def _int_zero(value: Any) -> bool:
 
 
 def _nothing_written(check: Any) -> bool:
-    """Both reads of the record check succeeded and saw no change to the
-    task's record. An unreadable store also reports zero counts; without
-    ``readable`` (an older check) nothing is proved."""
-    return (
+    """Both reads of the record check succeeded and saw no change at all.
+
+    An unreadable store also reports zero counts; without ``readable`` (an
+    older check) nothing is proved. A change to another record during the
+    run (``outside_run``) may be the run's own write elsewhere, so it counts
+    as something written too, as does a check without ``outside_run``.
+    """
+    if not (
         isinstance(check, Mapping)
         and check.get("readable") is True
         and _int_zero(check.get("created"))
         and _int_zero(check.get("changed"))
         and _int_zero(check.get("removed"))
+    ):
+        return False
+    outside = check.get("outside_run")
+    return isinstance(outside, Mapping) and all(
+        _int_zero(outside.get(key)) for key in ("created", "changed", "removed")
     )
 
 

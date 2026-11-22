@@ -60,8 +60,11 @@ status text:
 - The halted reply recorded exactly zero model calls.
 - The cache's own record check of the halted run read the system of record
   both before and after (`readable: true`) and found no new, changed or
-  removed record of the task's record. An unreadable store also reports zero
-  changes, so it never counts as "nothing written". The policy keeps that
+  removed record of the task's record, and no change to any other record
+  during the run (`outside_run`; it may be the program's own write
+  elsewhere, so another user's write also stops the fallback). An
+  unreadable store also reports zero changes, so it never counts as
+  "nothing written". The policy keeps that
   check beside the halt, so a later call that finds the task held can fall
   back on the same halt.
 
@@ -104,7 +107,8 @@ was approved by the person, and a final task-scoped read (the baseline taken
 as the run started against a fresh read after it) confirms exactly one new
 record of the task's record with its values and nothing else changed on it.
 When the final read disagrees (a duplicate, a changed or removed record, an
-unreadable store), or a stopped run can't show it wrote nothing, the status is
+unreadable store), or a stopped run can't show it wrote nothing (including a
+change to another record), the status is
 `RECONCILIATION_REQUIRED`: no repair is opened, the in-flight marker stays,
 and `fallback.run_status` keeps what the run itself reported, beside both
 readings (`record_check` and `fallback.task_record_check`).
