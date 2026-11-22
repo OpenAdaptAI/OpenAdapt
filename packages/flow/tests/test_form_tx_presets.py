@@ -71,7 +71,8 @@ def test_each_moved_preset_ships_as_json(preset: str) -> None:
     path = Path(pack_compiler.__file__).with_name("presets") / f"{preset}.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["schema"] == PRESET_SCHEMA
-    assert load_domain_schema(preset).model_dump(mode="json") == data["preset"]
+    stored = pack_compiler.CanonicalDomainSchema.model_validate(data["preset"])
+    assert load_domain_schema(preset) == stored
 
 
 def test_an_unknown_preset_is_refused() -> None:
@@ -129,6 +130,10 @@ def _next_button_pattern() -> object:
     )
 
 
+def _secondary_role_qualifiers() -> object:
+    return pack_compiler._SECONDARY_ROLE_QUALIFIERS
+
+
 #: word list: (current value, the commit before the move, file, constant)
 MOVED_WORDS = {
     "primary_entity_kinds": (
@@ -136,6 +141,12 @@ MOVED_WORDS = {
         "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
         "packages/flow/openadapt_flow/form_tx/reconciler.py",
         "_PRIMARY_ENTITY_KINDS",
+    ),
+    "secondary_role_qualifiers": (
+        _secondary_role_qualifiers,
+        "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
+        "packages/flow/openadapt_flow/form_tx/pack_compiler.py",
+        "_SECONDARY_ROLE_QUALIFIERS",
     ),
 }
 
@@ -193,3 +204,40 @@ def test_a_malformed_word_list_is_refused(
             presets.load_words("bad")
     finally:
         presets.load_words.cache_clear()
+
+
+def test_a_domain_schema_can_override_the_role_qualifiers() -> None:
+    from openadapt_flow.form_tx.types import ObservedControl
+
+    spec = pack_compiler.CanonicalFieldSpec(
+        dossier_key="phone", synonyms=("phone", "phone number")
+    )
+    ctrl = ObservedControl.model_construct(
+        control_id="c1",
+        dom_selector="#g",
+        label_text="Guarantor phone",
+        name_attr="guarantor_phone",
+        id_attr="guarantor_phone",
+        section_text="",
+        input_type="text",
+        role="textbox",
+        tag="input",
+        visible=True,
+        disabled=False,
+        readonly=False,
+        options=(),
+        group_label="",
+        aria_label="",
+        placeholder="",
+    )
+    domain = pack_compiler.build_patient_registration_domain_schema()
+    assert domain.role_qualifiers() == pack_compiler._SECONDARY_ROLE_QUALIFIERS
+    blocked = pack_compiler._score_control_for_spec(
+        ctrl, spec, domain.role_qualifiers()
+    )
+    assert blocked == 0
+    open_domain = domain.model_copy(update={"secondary_role_qualifiers": ()})
+    allowed = pack_compiler._score_control_for_spec(
+        ctrl, spec, open_domain.role_qualifiers()
+    )
+    assert allowed > 0

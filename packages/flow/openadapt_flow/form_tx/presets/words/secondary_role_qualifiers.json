@@ -1,0 +1,21 @@
+{
+  "schema": "openadapt.form-word-list/v1",
+  "name": "secondary_role_qualifiers",
+  "about": "Words that mark a field as belonging to someone other than the form's main person (an emergency contact, a guarantor). During induction a control whose label or attributes carry one of these matches only a canonical field that names the same word. A domain schema may give its own list.",
+  "words": [
+    "emergency",
+    "guarantor",
+    "subscriber",
+    "employer",
+    "referring",
+    "physician",
+    "provider",
+    "coapplicant",
+    "secondary",
+    "mailing",
+    "previous",
+    "prior",
+    "guardian",
+    "witness"
+  ]
+}

@@ -85,24 +85,10 @@ _GENERIC_UI_CHROME_TOKENS = frozenset(
         "box",
     }
 )
-_SECONDARY_ROLE_QUALIFIERS = frozenset(
-    {
-        "emergency",
-        "guarantor",
-        "subscriber",
-        "employer",
-        "referring",
-        "physician",
-        "provider",
-        "coapplicant",
-        "secondary",
-        "mailing",
-        "previous",
-        "prior",
-        "guardian",
-        "witness",
-    }
-)
+#: Words that mark a field as another person's (data:
+#: ``presets/words/secondary_role_qualifiers.json``). A domain schema may
+#: replace them with ``secondary_role_qualifiers``.
+_SECONDARY_ROLE_QUALIFIERS = frozenset(load_words("secondary_role_qualifiers"))
 
 
 #: The default "next screen" button pattern for induction (data:
@@ -131,6 +117,15 @@ class CanonicalDomainSchema(BaseModel):
     schema_id: str = Field(min_length=1)
     fields: tuple[CanonicalFieldSpec, ...]
     expected_outputs: tuple[CanonicalFieldSpec, ...] = ()
+    # Override of the engine's default role qualifiers (see
+    # ``_SECONDARY_ROLE_QUALIFIERS``). None keeps the default.
+    secondary_role_qualifiers: Optional[tuple[str, ...]] = None
+
+    def role_qualifiers(self) -> frozenset[str]:
+        """The role qualifiers induction uses for this domain."""
+        if self.secondary_role_qualifiers is None:
+            return _SECONDARY_ROLE_QUALIFIERS
+        return frozenset(w.casefold() for w in self.secondary_role_qualifiers)
 
 
 class PackInductionReport(BaseModel):
@@ -311,13 +306,19 @@ def infer_control_kind(ctrl: ObservedControl) -> ControlKind:
     return ControlKind.TEXT
 
 
-def _spec_allowed_qualifiers(spec: CanonicalFieldSpec) -> set[str]:
+def _spec_allowed_qualifiers(
+    spec: CanonicalFieldSpec, qualifiers: frozenset[str] = _SECONDARY_ROLE_QUALIFIERS
+) -> set[str]:
     corpus = " ".join((spec.dossier_key, *spec.synonyms, *spec.section_hints))
     words = set(_normalize_phrase(corpus).split())
-    return words & _SECONDARY_ROLE_QUALIFIERS
+    return words & qualifiers
 
 
-def _score_control_for_spec(ctrl: ObservedControl, spec: CanonicalFieldSpec) -> int:
+def _score_control_for_spec(
+    ctrl: ObservedControl,
+    spec: CanonicalFieldSpec,
+    qualifiers: frozenset[str] = _SECONDARY_ROLE_QUALIFIERS,
+) -> int:
     """Return deterministic non-negative match score between ``ctrl`` and ``spec``."""
     label_full = _normalize_phrase(ctrl.label_text)
     label_core = _normalize_core_label(ctrl.label_text)
@@ -334,9 +335,9 @@ def _score_control_for_spec(ctrl: ObservedControl, spec: CanonicalFieldSpec) -> 
     ctrl_words = set(label_full.split()) | set(section_norm.split())
     for seq in attr_sequences:
         ctrl_words.update(seq)
-    disallowed_qualifiers = (
-        ctrl_words & _SECONDARY_ROLE_QUALIFIERS
-    ) - _spec_allowed_qualifiers(spec)
+    disallowed_qualifiers = (ctrl_words & qualifiers) - _spec_allowed_qualifiers(
+        spec, qualifiers
+    )
     if disallowed_qualifiers:
         return 0
 
@@ -518,7 +519,7 @@ def _induce_summary_check(
         for ctrl in eligible_controls:
             if ctrl.control_id in claimed_control_ids:
                 continue
-            sc = _score_control_for_spec(ctrl, out_spec)
+            sc = _score_control_for_spec(ctrl, out_spec, domain.role_qualifiers())
             if sc > 0:
                 scored.append((sc, ctrl))
         if not scored:
@@ -596,7 +597,7 @@ def _induce_summary_check(
         for ctrl in readonly_controls:
             if ctrl.control_id in claimed_control_ids:
                 continue
-            sc = _score_control_for_spec(ctrl, field_spec)
+            sc = _score_control_for_spec(ctrl, field_spec, domain.role_qualifiers())
             if sc > 0:
                 scored_rb.append((sc, ctrl))
         if not scored_rb:
@@ -699,7 +700,7 @@ def induce_form_pack(
         for s_idx, screen_ctrls in enumerate(editable_by_screen):
             scored_on_screen: list[tuple[int, int, ObservedControl]] = []
             for c_idx, ctrl in screen_ctrls:
-                sc = _score_control_for_spec(ctrl, spec)
+                sc = _score_control_for_spec(ctrl, spec, domain.role_qualifiers())
                 if sc > 0:
                     scored_on_screen.append((sc, c_idx, ctrl))
             if not scored_on_screen:
