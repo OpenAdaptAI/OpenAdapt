@@ -56,6 +56,15 @@
   application vocabulary: month names, yes and no words, currency signs and
   tables come from the pack. See docs/EFFECT_LOCATION.md.
 
+### Bug Fixes
+
+- A FHIR searchset Bundle's `OperationOutcome` entry (`search.mode:
+  outcome`) is no longer read as a marker match. Packs can declare
+  `search_match` on the entry parent (Medplum uses `path: search.mode`,
+  `equals: match`). A non-informational outcome is an error, not a
+  found id, so recovery cannot adopt a write that never landed and an
+  outcome id does not count toward `duplicate_write`.
+
 ## v3.4.0 (2026-11-21)
 
 ### Features
