@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow.form_tx import pack_compiler
+from openadapt_flow.form_tx import types as form_types
 from openadapt_flow.form_tx.presets import (
     PRESET_SCHEMA,
     load_domain_schema,
@@ -31,6 +32,11 @@ MOVED = {
         "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
         "build_patient_registration_domain_schema",
     ),
+    "property_quote": (
+        pack_compiler.build_property_quote_domain_schema,
+        "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
+        "build_property_quote_domain_schema",
+    ),
 }
 
 
@@ -45,7 +51,8 @@ def _old_builder(sha: str, name: str):  # type: ignore[no-untyped-def]
     text = got.stdout
     start = text.index(f"def {name}(")
     end = text.index("\ndef ", start + 1)
-    namespace = dict(vars(pack_compiler))
+    # The old builder named form_tx types that pack_compiler may no longer import.
+    namespace = {**vars(form_types), **vars(pack_compiler)}
     exec(compile(text[start:end], f"{sha}:{SOURCE}", "exec"), namespace)  # noqa: S102
     return namespace[name]
 
