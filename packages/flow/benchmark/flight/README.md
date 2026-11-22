@@ -30,3 +30,11 @@ An earlier attempt with a vaguer instruction showed the scrubbing from the
 model's side: Claude replied that the field contents were "hidden behind red
 boxes" and that part of the message had become a `<PERSON>` placeholder, and
 asked what to do instead of clicking.
+
+This run predates the 2026-11-21 changes (every string scrubbed, the
+fail-closed gate, the egress block). It has not been repeated since.
+
+## Scrub recall
+
+See [scrub_recall/README.md](scrub_recall/README.md): 98.4% of fields in
+text and in rendered screenshots on 50 synthetic records, every miss a name.

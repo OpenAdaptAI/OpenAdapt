@@ -12,10 +12,11 @@ never logged.
 
 CMD also gets OPENADAPT_FLIGHT_GATE_URL: an executor wrapped with
 GatedComputer or GatedComputerCall (one line, see FLIGHT_RECORDER.md) logs
-its actions here and holds each click on Save, Submit, Send... (or on a
-target it can't read) for a person: --gate terminal asks y/N on this
-terminal, --gate file writes an item-approval request Desktop or a paired
-phone answers, --gate refuse holds every one.
+its actions here and holds each click that is not known to be safe (only
+focus/view roles and a short list such as Cancel, Close, Back, Search, Open
+pass; --safe-label adds to it) for a person: --gate terminal asks y/N on
+this terminal, --gate file writes an item-approval request Desktop or a
+paired phone answers, --gate refuse holds every one.
 
 CMD runs under an OS egress block (openadapt_flow.flight.egress): on macOS,
 sandbox-exec denies every outbound connection except to loopback, so a model
@@ -66,8 +67,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "flight",
         help=(
             "Record any agent you already run: meter and price its model calls, "
-            "scrub its screenshots before they leave the machine, log its actions, "
-            "and hold each Save/Submit/Send for a person"
+            "scrub every string and screenshot before it leaves the machine, block "
+            "other egress (macOS), log its actions, and hold each click not known "
+            "to be safe for a person"
         ),
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,

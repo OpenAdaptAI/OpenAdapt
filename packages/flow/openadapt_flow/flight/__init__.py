@@ -1,12 +1,13 @@
 """Flight recorder for a computer-use agent you already run.
 
 ``openadapt-flow flight -- CMD`` starts a loopback proxy in front of the
-model API that ``CMD`` calls. The proxy meters and prices each call, scrubs
-every screenshot and text block before it leaves the machine, and logs each
-computer action the model asks for. A one-line executor swap
+model API that ``CMD`` calls, and on macOS runs ``CMD`` under an OS egress
+block (:mod:`openadapt_flow.flight.egress`). The proxy meters and prices each
+call, scrubs every string and screenshot before it leaves the machine, and
+logs each computer action the model asks for. A one-line executor swap
 (:class:`GatedComputer` for the Anthropic computer tool,
 :class:`GatedComputerCall` for an OpenAI ``computer_call`` loop) holds each
-commit-class action (a click on Save, Submit, Send...) for a person.
+click that is not known to be safe for a person.
 
 The run directory holds ``flight.json`` (``openadapt.flight-run/v1``),
 ``timeline.jsonl``, scrubbed frame thumbnails and ``timeline.html``.
@@ -20,6 +21,8 @@ from typing import Any
 __all__ = [
     "COMMIT_VERBS",
     "FLIGHT_SCHEMA",
+    "SAFE_LABELS",
+    "EgressRefused",
     "FileGate",
     "FlightProxy",
     "GateAction",
@@ -27,12 +30,16 @@ __all__ = [
     "GatedComputerCall",
     "PreCommitGate",
     "RefuseGate",
+    "ScrubbedEgress",
     "TerminalGate",
     "Timeline",
 ]
 
 _LAZY = {
     "COMMIT_VERBS": "openadapt_flow.flight.computer",
+    "SAFE_LABELS": "openadapt_flow.flight.computer",
+    "EgressRefused": "openadapt_flow.flight.egress",
+    "ScrubbedEgress": "openadapt_flow.flight.egress",
     "GateAction": "openadapt_flow.flight.gate",
     "GatedComputer": "openadapt_flow.flight.computer",
     "GatedComputerCall": "openadapt_flow.flight.computer",
