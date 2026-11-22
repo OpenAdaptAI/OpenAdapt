@@ -75,13 +75,16 @@ the run, by setting ``mode`` to ``"blocked"`` and raising
 * the agent's ``usage.json`` (``openadapt.agent-usage/v1`` in ``run_dir``,
   as the readiness runner reads it) reports more model calls than the proxy
   saw, or
+* there is no ``usage.json`` and the OS egress block was not enforced (no
+  count to compare and nothing to stop a bypass), or
 * a direct connection was trapped (a call the block refused).
 
 A connection the kernel block refuses without going through the trap can't
 be counted without privileges (macOS does not log these denials for an
 unprivileged caller), so it is refused but not counted. Without
-``usage.json`` the agent's own count can't be compared; under the block a
-bypass still can't reach the network. :attr:`ScrubbedEgress.refusal` holds
+``usage.json`` under the block, the agent's own count can't be compared:
+``checks["cross_check"]`` is ``"unavailable"`` (``"compared"`` with a
+usage.json), and a bypass still can't reach the network. :attr:`ScrubbedEgress.refusal` holds
 the reason, and :attr:`ScrubbedEgress.checks` the numbers behind it.
 
 The scrubber also hides personal data from the agent: the model can't read
@@ -354,8 +357,17 @@ class ScrubbedEgress:
             "kernel_blocked_calls": None,  # not observable unprivileged
             "enforced": self.enforced,
             "unenforced_reason": self.unenforced_reason or None,
+            "cross_check": "compared" if reported is not None else "unavailable",
         }
         reasons = []
+        if reported is None and not self.enforced:
+            # No count from the agent and no OS block: a call that went
+            # around the proxy could have left unscrubbed and nothing here
+            # would show it. Fail closed.
+            reasons.append(
+                "the agent wrote no usage.json, so its model calls can't be "
+                "compared with the proxy's, and no OS egress block was on"
+            )
         if reported is not None and reported > calls:
             reasons.append(
                 f"the agent reports {reported} model calls but {calls} passed the "

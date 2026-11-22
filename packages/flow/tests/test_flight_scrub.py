@@ -294,3 +294,15 @@ def test_a_name_in_a_long_prompt_is_scrubbed_piece_by_piece():
     assert NAME not in out
     assert out.count("<PERSON>") == 3
     assert "The task:" in out and '"type": "Triage"' in out
+
+
+def test_metadata_values_are_scrubbed_and_its_keys_kept():
+    body = {
+        "model": "claude-opus-5-5",
+        "metadata": {"user_id": f"{NAME} 4471923", "note": {"who": NAME}},
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    out = scrub_request(body, _scrub())
+    assert NAME not in json.dumps(out) and "4471923" not in json.dumps(out)
+    assert set(out["metadata"]) == {"user_id", "note"}
+    assert out["metadata"]["note"] == {"who": "<PERSON>"}

@@ -232,6 +232,7 @@ def test_no_egress_block_refuses_unless_allowed(tmp_path, unenforced, provider):
     ) as egress:
         assert egress.enforced is False
         assert egress.wrap(["agent", "--x"]) == ["agent", "--x"]
+        (tmp_path / "b" / "usage.json").write_text(json.dumps({"calls": 0}))
         env = egress.env
         assert env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
         assert env["HTTPS_PROXY"].startswith("http://127.0.0.1:")
@@ -328,5 +329,38 @@ def test_use_block_false_drops_the_trap_too(tmp_path, provider):
         scrubber=FakeScrubber(),
     ) as egress:
         assert egress.enforced is False
+        (tmp_path / "run" / "usage.json").write_text(json.dumps({"calls": 0}))
         assert "HTTPS_PROXY" not in egress.env and "NO_PROXY" not in egress.env
         assert egress.env["ANTHROPIC_BASE_URL"].startswith("http://127.0.0.1:")
+
+
+def test_no_usage_json_without_the_block_refuses_the_run(
+    tmp_path, unenforced, provider
+):
+    run_dir = tmp_path / "task"
+    with pytest.raises(EgressRefused, match="no usage.json"):
+        with ScrubbedEgress(
+            run_dir,
+            spend_cap_usd=None,
+            allow_unenforced=True,
+            upstreams={"anthropic": provider.url},
+            scrubber=FakeScrubber(),
+        ) as egress:
+            pass
+    assert json.loads((run_dir / "egress.json").read_text())["mode"] == "blocked"
+    assert egress.checks["cross_check"] == "unavailable"
+
+
+@darwin_only
+def test_no_usage_json_under_the_block_is_recorded_as_unavailable(tmp_path, provider):
+    with ScrubbedEgress(
+        tmp_path / "task",
+        spend_cap_usd=None,
+        upstreams={"anthropic": provider.url},
+        scrubber=FakeScrubber(),
+    ) as egress:
+        assert egress.enforced is True
+    assert egress.refusal is None
+    assert egress.checks["cross_check"] == "unavailable"
+    summary = json.loads((tmp_path / "task" / "egress.json").read_text())
+    assert summary["mode"] == "scrubbed" and set(summary) == SUMMARY_KEYS

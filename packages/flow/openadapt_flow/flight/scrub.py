@@ -6,8 +6,9 @@ exception that must reach the provider unchanged:
 * opaque signed blocks (``thinking``, ``redacted_thinking``, ``reasoning``)
   pass byte-identical, because the provider checks their signatures. They
   came from the provider, so resending them sends nothing new;
-* tool definitions, ``tool_choice``, ``model``, ``metadata`` and the other
-  request settings listed in :data:`_TOP_SETTINGS`;
+* tool definitions, ``tool_choice``, ``model`` and the other request
+  settings listed in :data:`_TOP_SETTINGS` (``metadata`` is not one: its
+  values are caller data and are scrubbed, its keys kept);
 * protocol fields: block and item ``type``, ``role``, ids
   (``id``, ``tool_use_id``, ``call_id``, ``previous_response_id``),
   ``signature``, ``encrypted_content``, ``media_type``, ``cache_control``,
@@ -706,7 +707,6 @@ _TOP_SETTINGS = {
     "model",
     "tools",
     "tool_choice",
-    "metadata",
     "response_format",
     "text",
     "reasoning",
@@ -941,5 +941,9 @@ def scrub_request(
         return structural(body, None)
     clean: dict[str, Any] = {}
     for k, v in body.items():
-        clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
+        if k == "metadata":
+            # Caller-defined values (a user id, a session label): data.
+            clean[k] = payload(v, k)
+        else:
+            clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
     return clean
