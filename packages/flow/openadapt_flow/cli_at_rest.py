@@ -124,9 +124,10 @@ def _cmd_shred(args: argparse.Namespace) -> int:
     if record.get("complete") is False:
         print(
             f"at-rest shred: NOT COMPLETE for {root}: destroyed {copies}, but the "
-            "organization archive's copy of its key could not be deleted (offline "
-            "or read-only?). Run this again, or `openadapt-flow at-rest archive`, "
-            "once the archive is reachable.",
+            "copy of its key in the organization archive it was written to could "
+            "not be deleted (offline, unmounted or read-only?). Run this again on "
+            "this computer, or `openadapt-flow at-rest archive`, once that "
+            "archive is reachable.",
             file=sys.stderr,
         )
         return 1

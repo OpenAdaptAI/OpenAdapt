@@ -44,8 +44,16 @@ A sealed bundle always runs into a sealed run directory, in every mode.
 `record`, `compile`, `run` and `replay`, writes plaintext. So does
 `OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'`, which records the reason. Each
 process prints a one-line warning and adds a ledger line. Strict mode ignores
-all of them. Files encrypted earlier still read under the opt-out, with the
-key that encrypted them.
+all of them. `--no-encrypt` lasts for its one command: an application that
+runs Flow in-process gets encryption back for the next one. Files encrypted
+earlier still read under the opt-out, with the key that encrypted them.
+
+From Python, `Recorder`, `InteractiveRecorder` and `record_desktop_capture`
+follow the same policy by default. Passing `encryption_key=None` writes a
+plaintext recording: strict mode refuses it before anything is written, and
+otherwise stderr names it and a ledger line records it. `report-run --receipt
+DIR` writes the field values a run read (`records.json`) only inside an
+encrypted run directory, or under the opt-out.
 
 **Healthcare and other regulated deployments:** set
 `OPENADAPT_FLOW_AT_REST=strict` and an organization policy
@@ -137,7 +145,7 @@ bucket key pair (P-256, one per set)
 
 | | Solo (default, no policy) | Organization mode (`mode: org`) |
 | --- | --- | --- |
-| Record | Inside the set's header (`records: inline`), so it travels with backups | `~/.openadapt/keys/buckets/<id>.json` plus a copy in the organization's `key_archive` (`records: archive`); never in the header |
+| Record | Inside the set's header (`records: inline`), so it travels with backups | `~/.openadapt/keys/buckets/<id>.json` plus a copy in the organization's `key_archive` (`records: archive`, the only choice in organization mode); never in the header |
 | Wrapped to | Device viewer key (and runtime key while open), recovery key if one exists | Device viewer key (runtime while open, local copy only), organization keys, recovery key if set |
 | Lost laptop | Backups open with the recovery key; without one they can't be opened | Every set whose record reached the archive opens with the organization key |
 | Crypto-shredding | This disk's copy only: a backup still opens with the recovery key | Every tracked copy: the local record (overwritten, then deleted) and the archive copy |
@@ -201,21 +209,43 @@ machine one:
 
 - In organization mode, a missing or unreadable policy, no active
   organization recipient, or no `key_archive` stops recording and running.
+  Organization mode keeps records in the archive only: `records: inline`
+  is refused there, so shredding always reaches every tracked copy.
+- The archive counts as reachable only when an empty file named
+  `.openadapt-key-archive` is at its root. The administrator creates it
+  once; Flow never creates the archive folder. An unmounted share (an empty
+  local folder at the mount point) is therefore never mistaken for the
+  archive: records are not written there, and a record missing from it is
+  not taken as deleted. Records are written atomically.
+- Each record notes the archive it was sent to, and so does the set's
+  header (under its MACs). Archiving and shredding use that archive, never
+  the policy in force later, so moving the archive or switching to solo mode
+  never leaves a key copy behind.
 - If the archive is unreachable, records stay local as "not yet archived"
-  (`at-rest status` counts them), and new sets stop after `max_unarchived`.
-  `openadapt-flow at-rest archive` sends them once it is back (and the next
-  new set tries that first), so recording resumes.
-- `records: inline` in organization mode is the choice of recovery over
-  shredding: every header carries the record, wrapped to the organization's
-  keys, so the organization can open any copy, but shredding reaches only
-  copies you can delete, as in solo mode.
+  (`at-rest status` counts them). A new set whose own record can't reach the
+  archive is refused (and its record destroyed) when more than
+  `max_unarchived` would then be waiting; `max_unarchived: 0` means every
+  record must reach the archive before its set is written. Concurrent
+  writers can't share the last slot. `openadapt-flow at-rest archive` sends
+  waiting records once the archive is back, and the next new set that
+  reaches it sends them too, so recording resumes.
+- Machine policy sources are platform-specific: macOS reads the managed
+  preferences profile and `/etc/openadapt/policy.json`, Windows reads only
+  HKLM, Linux reads only `/etc/openadapt/policy.json`. Every policy file
+  must be owned by root and writable by root only, checked on the file
+  actually read. A registry key the account can't read is an error, never
+  "no policy".
 - Only a local or mounted path (`file://`) is supported as `key_archive` so
   far; `s3://` and `smb://` refuse.
 - OpenAdapt Cloud never distributes the organization's key or holds any key.
 
 A reviewer opens a set with the archive copy of its record in
 `~/.openadapt/keys/buckets/` and `OPENADAPT_ORG_KEY_FILE` (a PEM private
-key). Unwrapping through the KMS itself (`Decrypt`, `DeriveSharedSecret`) is
+key). An organization key never opens a record that a set's own header
+carries: anyone who knows the organization's public key could make such a
+set. A record from a header opens only with this computer's device keys or a
+recovery key. If the device key's keychain entry is missing, Flow still
+tries the recovery code and organization key before it reports that. Unwrapping through the KMS itself (`Decrypt`, `DeriveSharedSecret`) is
 not built yet.
 
 ### Solo recovery
@@ -233,8 +263,11 @@ encrypted runs can't be opened.
   organization mode: Flow writes the version 1 header it always wrote,
   keyed by that passphrase (scrypt N=2^15, r=8, p=1). They are deprecated.
 - `~/.openadapt/keys/at-rest.key` (mode 0600), the key earlier versions
-  made, still opens what it encrypted, and is still the local passphrase of
-  durable checkpoints and attended state, which keep their own containers.
+  made, still opens what it encrypted. It is the local passphrase of
+  durable checkpoints and attended state in a plaintext or version 1 or 2
+  run directory. In a version 3 run, durable checkpoints and rollback state
+  use a key derived from the run's own data key instead, so shredding the
+  run reaches them, backups included.
 - Version 1 and 2 sets, and plaintext folders, still read.
 
 `openadapt-flow at-rest status` shows the mode, the policy source, the device
@@ -243,13 +276,18 @@ count. It prints no key material.
 
 ## Crypto-shredding
 
-`openadapt-flow at-rest shred DIR --yes` destroys the set's bucket key: the
-local record is overwritten and deleted, and the archive copy deleted. If the
-archive copy can't be deleted (an offline or read-only archive), the command
-says the shred is not complete and exits non-zero; running it again, or
-`at-rest archive`, finishes it once the archive is reachable. It
-also drops the record from the header, and deletes the durable checkpoints
-and other stores' ciphertext inside the set. It returns a shred record
+`openadapt-flow at-rest shred DIR --yes` first authenticates the set's
+header with a key this computer holds, so a changed header can't point the
+deletion at another set's key; a set no key here opens is refused, and
+nothing is destroyed. It then destroys the set's bucket key: the local
+record is overwritten and deleted, and the copy deleted from the archive the
+set was written to. If that copy can't be deleted (an offline, unmounted or
+read-only archive), the command says the shred is not complete and exits
+non-zero; running it again on the same computer, or `at-rest archive`,
+finishes it once the archive is reachable. It also drops the record from the
+header, and deletes the durable checkpoints and other stores' ciphertext
+inside the set. The header says complete only after the last of these, so an
+interrupted shred is finished by running it again. It returns a shred record
 (bucket id, time, copies destroyed). The library call is
 `openadapt_flow.sealed_set.shred`, for a retention job. In solo mode it
 reaches only this disk's copy, and says so.
@@ -282,7 +320,11 @@ The desktop recorders capture through openadapt-capture, which writes its
 raw session (input database and screen video) in plaintext while recording,
 in a private 0700 folder beside the output. When recording stops, Flow
 converts it, encrypts the converted recording into the output, and deletes
-the raw session and the converted plaintext. Until then, and if the process
+the raw session and the converted plaintext. If any of it can't be deleted,
+the recording fails and names the folder, rather than return as if it were
+encrypted. The organization policy (recipients, archive and backlog,
+hardware key) is checked before capture starts, and strict mode refuses
+desktop capture, whatever key a caller passes. Until then, and if the process
 is killed before it converts, they are plaintext on disk; deleting them is not
 a secure erase. So crypto-shredding can't be claimed for a desktop recording
 (NIST SP 800-88r2 3.2.2). Record on an encrypted volume. Encrypting inside the
