@@ -1449,6 +1449,7 @@
     "openadapt_flow/console/static/console.css",
     "openadapt_flow/console/static/console.js",
     "openadapt_flow/console/static/index.html",
+    "openadapt_flow/form_tx/presets/patient_registration.json",
     "openadapt_flow/form_tx/profiles/legacy_postback_portal.yaml",
     "openadapt_flow/form_tx/profiles/server_ppr_wizard.yaml",
     "openadapt_flow/integrations/agents/demo_packs/kanboard-cases.json",

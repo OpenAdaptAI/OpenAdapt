@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.24.1 (2026-11-22)
+
+### Features
+
+- **Run receipts (`openadapt_types.receipt`, `openadapt_types.receipt_callback`).** DSSE-wrapped in-toto `record/run/v1` run receipts with signer roles, public allow-list verification, counterparty confirmations, handoff payload and item-approval bindings, RFC 8785 `report.canonical` subject digests, follow-up receipt chains (`predicate.follows`), and shared verification vectors.
+- **Exception cards, run ledger, and managed jobs (`openadapt_types.exception_card`, `openadapt_types.run_ledger`, `openadapt_types.managed_job`).** Closed exception-queue card models, per-run accounting ledger schemas, and generalized managed-job contracts shared across executors and surfaces.
+- **Reward partial credit (`openadapt_types.reward`).** Configurable partial-credit scoring for a confirmed write followed by an escalation ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
+
+
 ## v0.24.0 (2026-10-20)
 
 The models live in this package again, and it depends only on `pydantic>=2.5`; the Python 3.13 cap is gone. `openadapt-flow` 2.3.0 and later depend on it, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)). Upgrade `openadapt-flow` to 2.3.0 together with this package: openadapt-flow 2.2.0 carries its own copy of the models, so with 0.24.0 alone, `isinstance` checks between the two copies fail.
