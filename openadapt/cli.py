@@ -1184,7 +1184,13 @@ def _hint(rest: str) -> str:
 
 def _under_uvx() -> bool:
     """True when this process runs from a ``uvx`` throwaway environment."""
-    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+    return any(
+        "/uv/archive-v" in path or ("uv" in path.lower() and "/archive-v" in path)
+        for path in (
+            sys.prefix.replace("\\", "/"),
+            sys.executable.replace("\\", "/"),
+        )
+    )
 
 
 def _keep_command() -> Optional[str]:
@@ -3470,8 +3476,38 @@ def version():
             click.echo(f"  {name}: {number}")
 
 
+def _doctor_uv_tool_command(arguments: str) -> Optional[str]:
+    """Translate a doctor ``pip install`` hint into ``uv tool install`` under ``uvx``."""
+    prefix = "-m pip install "
+    if not arguments.startswith(prefix):
+        return None
+    spec = arguments[len(prefix) :].strip()
+    upgrade = False
+    if spec.startswith("--upgrade "):
+        upgrade = True
+        spec = spec[len("--upgrade ") :].strip()
+    if not (
+        spec == "openadapt"
+        or spec.startswith('"openadapt[')
+        or spec.startswith("'openadapt[")
+    ):
+        return None
+    major, minor = sys.version_info[:2]
+    py = (
+        f"{major}.{minor}"
+        if (major, minor) in ((3, 10), (3, 11), (3, 12))
+        else "3.12"
+    )
+    flag = " --upgrade" if upgrade else ""
+    return f"uv tool install --python {py}{flag} {spec}"
+
+
 def _doctor_python_command(arguments: str) -> str:
     """Show a command for the interpreter running doctor, in the host shell."""
+    if _under_uvx():
+        uv_cmd = _doctor_uv_tool_command(arguments)
+        if uv_cmd is not None:
+            return uv_cmd
     if _host_platform() == "win32":
         powershell = "'" + sys.executable.replace("'", "''") + "'"
         return (
