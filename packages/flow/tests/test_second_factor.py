@@ -431,6 +431,24 @@ def test_a_code_only_submit_signs_in_only_right_after_a_sign_in(monkeypatch) -> 
         signed_in_first, {s.id: {} for s in signed_in_first}, kinds
     )
     assert [s.id for s in found] == ["s6"]
+    # The exemption is armed only by a username-and-password submit, used
+    # once, and lost to anything but the click that focuses the code field.
+    twice = [*signed_in_first[:5], _code_step(id="s5"), click("s6")]
+    found = _form_submit_steps(twice, {s.id: {} for s in twice}, kinds)
+    assert [s.id for s in found] == ["s6"]
+    browsed = [
+        *signed_in_first[:3],
+        click("b0"),
+        click("b1"),
+        _code_step(id="s3"),
+        click("s4"),
+    ]
+    observations = {"s2": {}, "s4": {}}
+    found = _form_submit_steps(browsed, observations, kinds)
+    assert [s.id for s in found] == ["s4"]
+    focused = [*signed_in_first[:3], click("f0"), _code_step(id="s3"), click("s4")]
+    found = _form_submit_steps(focused, {"s2": {}, "s4": {}}, kinds)
+    assert found == []
     # A code alone with a "Verify" button can confirm a payment: escalated.
     alone = [_code_step(id="s0"), click("s1")]
     found = _form_submit_steps(alone, {"s1": {}}, {})
@@ -511,6 +529,22 @@ def test_a_field_that_does_not_bind_is_refused_before_anyone_is_asked(
         )
     assert refused.value.code == "second_factor_unbound"
     assert calls == [] and field.typed == []
+
+
+def test_a_field_split_into_boxes_is_refused() -> None:
+    calls: list[str] = []
+    field = FakeField(max_length=1)
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        Handoff(field, DeliveryLedger(), obtain=_asker(calls=calls)).deliver_code(
+            "s", key="s"
+        )
+    assert refused.value.code == "second_factor_unbound"
+    assert calls == [] and field.typed == []
+    # A box too short for this code (but not for every code) refuses after.
+    field = FakeField(max_length=4)
+    with pytest.raises(sf.SecondFactorRefused):
+        Handoff(field, DeliveryLedger(), obtain=_asker()).deliver_code("s", key="s")
+    assert field.typed == []
 
 
 def test_a_field_that_cannot_be_masked_is_refused() -> None:

@@ -71,14 +71,18 @@ def _deliver(backend: Any, obtain: Any) -> bool:
     return Handoff(field, DeliveryLedger(), obtain=obtain).deliver_code("s", key="s")
 
 
-def test_the_code_is_typed_once_and_never_rendered(backend: Any) -> None:
+@pytest.mark.parametrize("kind", ["text", "tel", "password", "search"])
+def test_the_code_is_typed_once_and_never_rendered(backend: Any, kind: str) -> None:
     page = backend.page
+    form = PAGE.replace("<input id=code name=code", f"<input id=code type={kind}")
+    page.set_content(form)
+    page.focus("#code")
     assert _deliver(backend, _person("482913")) is True
     assert page.eval_on_selector("#code", "el => el.value") == "482913"
     first = page.locator("#code").screenshot()
     # Another code of the same length renders the same pixels: the screen
     # (and so every screenshot, gate frame or model image) shows dots only.
-    page.set_content(PAGE)
+    page.set_content(form)
     page.focus("#code")
     assert _deliver(backend, _person("917305")) is True
     assert page.locator("#code").screenshot() == first
@@ -118,6 +122,55 @@ def test_a_prefilled_field_is_refused_before_anyone_is_asked(backend: Any) -> No
         _deliver(backend, _person("482913", calls=calls))
     assert refused.value.code == "second_factor_unbound" and calls == []
     assert page.eval_on_selector("#code", "el => el.value") == "11"
+
+
+@pytest.mark.parametrize("kind", ["number", "date", "email"])
+def test_an_input_type_that_cannot_be_drawn_masked_is_refused(
+    backend: Any, kind: str
+) -> None:
+    page = backend.page
+    page.set_content(
+        PAGE.replace("<input id=code name=code", f"<input id=code type={kind}")
+    )
+    page.focus("#code")
+    calls: list[str] = []
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        _deliver(backend, _person("482913", calls=calls))
+    assert refused.value.code == "second_factor_unbound" and calls == []
+
+
+def test_a_code_split_into_boxes_is_refused_before_anyone_is_asked(
+    backend: Any,
+) -> None:
+    page = backend.page
+    boxes = "".join(
+        f'<input id=b{i} maxlength=1 autocomplete="one-time-code">' for i in range(6)
+    )
+    page.set_content(f"<form>{boxes}</form>")
+    page.evaluate(
+        """() => document.querySelectorAll('input').forEach((box, i, all) =>
+            box.addEventListener('input', () => all[i + 1] && all[i + 1].focus()))"""
+    )
+    page.focus("#b0")
+    calls: list[str] = []
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        _deliver(backend, _person("482913", calls=calls))
+    assert refused.value.code == "second_factor_unbound" and calls == []
+    values = page.eval_on_selector_all("input", "els => els.map((e) => e.value)")
+    assert values == [""] * 6
+
+
+def test_a_dialog_that_takes_focus_mid_delivery_gets_nothing(backend: Any) -> None:
+    """The code is filled into the bound element only, never the focused one."""
+
+    page = backend.page
+    page.evaluate(
+        """() => document.getElementById('code').addEventListener('focus', () =>
+            setTimeout(() => document.getElementById('other').focus(), 0))"""
+    )
+    page.focus("#code")
+    _deliver(backend, _person("482913"))
+    assert page.eval_on_selector("#other", "el => el.value") == ""
 
 
 def test_focus_on_an_ordinary_field_is_refused(backend: Any) -> None:

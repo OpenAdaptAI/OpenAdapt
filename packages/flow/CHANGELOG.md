@@ -27,7 +27,7 @@
   `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
   field must be an empty `autocomplete="one-time-code"` input, and the page
   is made to draw it as dots. After the answer the same field must still have
-  focus and be empty. The code is then typed once through that element, never
+  focus and be empty. The code is then filled once into that element, never
   retried, and kept nowhere: not in a model's page listing, a screenshot, a
   log, a receipt or the recording. No source, an answer after the deadline, a
   decline, a multi-line or malformed answer, a field that changed while the
@@ -38,8 +38,9 @@
   person's browser to a one-step P-256 key, and a cached run's child process
   gets the run token only with the control-plane URL. The wrap recorder turns
   a field marked `autocomplete="one-time-code"` into such a step. A code-only
-  form's submit counts as a sign-in only right after a username-and-password
-  sign-in. See docs/SECOND_FACTOR.md.
+  form's submit counts as a sign-in only once, right after a
+  username-and-password sign-in. A field split into one box per character
+  is refused. See docs/SECOND_FACTOR.md.
 - An interactive run (a terminal on stdin and stderr) asks for a sign-in's
   second factor at that terminal when no control plane or command is set. A
   code is read without echo, under the step's deadline, in the calling

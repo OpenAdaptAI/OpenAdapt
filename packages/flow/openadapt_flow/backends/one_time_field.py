@@ -12,9 +12,10 @@ value, only its length:
   document in the context gets. A screenshot taken afterwards, by the
   recorder, a model-facing harness, a gate or a transition check, shows dots,
   never the code.
-- :meth:`~PlaywrightOneTimeField.type_once` types through the bound element
-  handle, not the page keyboard, so the code goes to that element even if a
-  dialog took focus meanwhile.
+- :meth:`~PlaywrightOneTimeField.type_once` fills the bound element handle,
+  not the page keyboard, so the whole code goes to that one element: not to
+  a dialog that took focus, and not to the next box of a field split into
+  one box per character (which the handoff refuses before asking anyway).
 """
 
 from __future__ import annotations
@@ -53,11 +54,15 @@ const oaState = (el) => {
     const style = el.ownerDocument.defaultView.getComputedStyle(el);
     const security = style.getPropertyValue('-webkit-text-security') ||
         style.webkitTextSecurity || '';
+    // Only plain text-entry types draw -webkit-text-security; a number or
+    // date input would show the code whatever its computed style says.
+    const plain = ['text', 'tel', 'password', 'search'].includes(el.type);
     return {
-        kind: tokens.includes('one-time-code') ? 'one-time-code' : 'other',
+        kind: tokens.includes('one-time-code') && plain ? 'one-time-code' : 'other',
         empty: el.value === '',
         length: el.value.length,
-        masked: ['disc', 'circle', 'square'].includes(security),
+        max_length: el.maxLength,
+        masked: plain && ['disc', 'circle', 'square'].includes(security),
         connected: el.isConnected,
     };
 };
@@ -170,14 +175,14 @@ class PlaywrightOneTimeField:
         return None
 
     def type_once(self, code: str) -> None:
-        """Type ``code`` through the bound element handle, once."""
+        """Fill ``code`` into the bound element, once (input events fire)."""
 
         handle = self._frame.evaluate_handle(_HANDLE_JS, [self._nonce, _SLOT])
         element = handle.as_element()
         if element is None:
             raise RuntimeError("the bound one-time-code field is gone")
         self._backend._assert_qualification_environment_current()
-        element.type(code)
+        element.fill(code)
 
     def _find_frame(self) -> Any:
         """The one frame whose window holds this binding's nonce."""

@@ -15,8 +15,9 @@ same order and the same rules:
 4. **Re-check.** Immediately before typing, the same element must still be
    focused, empty and masked. A dialog that took focus, a field that was
    prefilled or replaced, or a lost binding refuses, and the code is dropped.
-5. **Type once.** The code is typed through the bound element. It is never
-   typed again, whatever happens next.
+5. **Type once.** The code is filled into the bound element, whole, only if
+   the element can hold all of it (a field split into one box per character
+   is refused). It is never typed again, whatever happens next.
 6. **Read back.** The element must hold exactly the code's length (or have
    left the page, which a code page that submits itself does). Anything else
    stops the run as ``second_factor_unverified``; it is not retried.
@@ -114,6 +115,9 @@ def field_checks(state: Optional[Mapping[str, Any]], *, bound: bool) -> list[Che
         held("one-time-code field", lambda s: s.get("kind") == "one-time-code"),
         held("empty", lambda s: s.get("empty") is True and s.get("length") == 0),
         held("masked", lambda s: s.get("masked") is True),
+        # A box that takes fewer than 4 characters (the shortest code) is one
+        # box of a split field; the code would spill into the others.
+        held("holds a whole code", lambda s: not _short(s.get("max_length"))),
     ]
     if bound:
         checks += [
@@ -121,6 +125,10 @@ def field_checks(state: Optional[Mapping[str, Any]], *, bound: bool) -> list[Che
             held("still focused", lambda s: s.get("focused") is True),
         ]
     return checks
+
+
+def _short(limit: object) -> bool:
+    return type(limit) is int and 0 <= limit < 4
 
 
 def _require(checks: list[Check], when: str) -> None:
@@ -193,6 +201,15 @@ class Handoff:
                 now = None
             _require(field_checks(now, bound=True), "after the person answered")
             length = code.length
+            limit = now.get("max_length") if isinstance(now, Mapping) else None
+            if type(limit) is int and 0 <= limit < length:
+                # One box per character: the rest of the code would land in
+                # other, unbound boxes.
+                raise SecondFactorRefused(
+                    "second_factor_unbound",
+                    "the code field takes fewer characters than the code (a "
+                    "field split into boxes); nothing was typed",
+                )
             try:
                 deliver(lambda: field.type_once(code.consume()))
             except Exception as exc:

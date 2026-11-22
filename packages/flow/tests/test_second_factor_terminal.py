@@ -1,8 +1,8 @@
 """Asking for a second factor at the run's own terminal, on a real pty.
 
 Each test opens a pseudo-terminal: the source reads the follower side, and
-the test plays the person by writing to the leader side. Nothing here needs
-a real terminal or a person.
+the test plays the person by writing to the leader side once the prompt has
+been written. Nothing here needs a real terminal or a person.
 """
 
 from __future__ import annotations
@@ -11,7 +11,8 @@ import io
 import os
 import sys
 import threading
-from typing import Iterator
+import time
+from typing import Any, Iterator, Optional
 
 import pytest
 
@@ -21,6 +22,9 @@ termios = pytest.importorskip("termios")
 pty = pytest.importorskip("pty")
 
 CODE = "482913"
+#: Generous: the person answers as soon as the prompt shows, so a slow
+#: machine only makes a test slower, never wrong.
+WAIT_S = 10.0
 
 
 @pytest.fixture(autouse=True)
@@ -37,21 +41,55 @@ def terminal() -> Iterator[tuple[int, int]]:
     os.close(follower)
 
 
-def _source(follower: int) -> tuple["TerminalSource", io.StringIO]:  # noqa: F821
+class _Screen(io.StringIO):
+    """The prompt side of the terminal; counts prompts as they are written."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prompts = threading.Semaphore(0)
+
+    def write(self, text: str) -> int:
+        written = super().write(text)
+        if text.endswith(": "):
+            self.prompts.release()
+        return written
+
+
+def _source(follower: int) -> tuple[Any, _Screen]:
     from openadapt_flow.second_factor_terminal import TerminalSource
 
-    out = io.StringIO()
-    return TerminalSource(follower, out), out
+    screen = _Screen()
+    return TerminalSource(follower, screen), screen
 
 
-def _answer_later(leader: int, text: str, delay: float = 0.2) -> threading.Timer:
-    timer = threading.Timer(delay, lambda: os.write(leader, text.encode()))
-    timer.start()
-    return timer
+def _person(
+    leader: int,
+    screen: _Screen,
+    text: str,
+    *,
+    sample: Optional[list[bool]] = None,
+    follower: int = -1,
+) -> threading.Thread:
+    """Answer the next prompt once it shows, sampling echo first if asked."""
+
+    def answer() -> None:
+        if not screen.prompts.acquire(timeout=WAIT_S):
+            return
+        if sample is not None:
+            sample.append(_echo_on(follower))
+        os.write(leader, text.encode())
+
+    thread = threading.Thread(target=answer, daemon=True)
+    thread.start()
+    return thread
 
 
 def _echo_on(follower: int) -> bool:
     return bool(termios.tcgetattr(follower)[3] & termios.ECHO)
+
+
+def _ask(source: Any, kind: str = "code", timeout_s: float = WAIT_S) -> Optional[str]:
+    return source.obtain(sf.Request(kind, "s", timeout_s), heartbeat=lambda: None)
 
 
 def test_a_code_is_read_without_echo_and_echo_comes_back(
@@ -59,32 +97,33 @@ def test_a_code_is_read_without_echo_and_echo_comes_back(
 ) -> None:
     leader, follower = terminal
     assert _echo_on(follower)
-    source, out = _source(follower)
+    source, screen = _source(follower)
     seen: list[bool] = []
-    threading.Timer(0.1, lambda: seen.append(_echo_on(follower))).start()
-    _answer_later(leader, "482 913\n")
+    _person(leader, screen, "482 913\n", sample=seen, follower=follower)
     code = sf.obtain("code", "step_004", source=source, heartbeat=lambda: None)
     assert code is not None and code.consume() == CODE
     assert seen == [False]  # echo was off while the person typed
     assert _echo_on(follower)  # and on again afterwards
-    assert "not shown" in out.getvalue() and CODE not in out.getvalue()
+    assert "not shown" in screen.getvalue() and CODE not in screen.getvalue()
 
 
 def test_a_timeout_restores_echo_and_the_next_prompt_gets_its_answer(
     terminal: tuple[int, int],
 ) -> None:
     leader, follower = terminal
-    source, _out = _source(follower)
+    source, screen = _source(follower)
     threads = threading.active_count()
+    started = time.monotonic()
     with pytest.raises(sf.SecondFactorRefused) as refused:
-        source.obtain(sf.Request("code", "s", 0.3), heartbeat=lambda: None)
+        _ask(source, timeout_s=0.3)
     assert refused.value.code == "second_factor_timeout"
+    assert time.monotonic() - started < WAIT_S
     # No reader is left behind holding the terminal with echo off.
     assert _echo_on(follower)
     assert threading.active_count() == threads
-    _answer_later(leader, f"{CODE}\n")
-    reply = source.obtain(sf.Request("code", "s", 5.0), heartbeat=lambda: None)
-    assert reply == CODE
+    screen.prompts.acquire(timeout=0)  # the prompt that timed out
+    _person(leader, screen, f"{CODE}\n")
+    assert _ask(source) == CODE
     assert _echo_on(follower)
 
 
@@ -93,27 +132,25 @@ def test_input_typed_before_the_prompt_does_not_answer_it(
 ) -> None:
     leader, follower = terminal
     os.write(leader, b"111111\n")  # typed earlier, at some other moment
-    source, _out = _source(follower)
-    _answer_later(leader, f"{CODE}\n", delay=0.3)
-    assert source.obtain(sf.Request("code", "s", 5.0), heartbeat=lambda: None) == CODE
+    source, screen = _source(follower)
+    _person(leader, screen, f"{CODE}\n")
+    assert _ask(source) == CODE
 
 
 def test_an_empty_code_declines_and_an_approval_can_be_confirmed_or_declined(
     terminal: tuple[int, int],
 ) -> None:
     leader, follower = terminal
-    source, _out = _source(follower)
-    _answer_later(leader, "\n")
+    source, screen = _source(follower)
+    _person(leader, screen, "\n")
     with pytest.raises(sf.SecondFactorRefused) as refused:
-        source.obtain(sf.Request("code", "s", 5.0), heartbeat=lambda: None)
+        _ask(source)
     assert refused.value.code == "second_factor_declined"
-    _answer_later(leader, "\n")
-    assert (
-        source.obtain(sf.Request("approval", "s", 5.0), heartbeat=lambda: None) is None
-    )
-    _answer_later(leader, "n\n")
+    _person(leader, screen, "\n")
+    assert _ask(source, "approval") is None
+    _person(leader, screen, "n\n")
     with pytest.raises(sf.SecondFactorRefused) as refused:
-        source.obtain(sf.Request("approval", "s", 5.0), heartbeat=lambda: None)
+        _ask(source, "approval")
     assert refused.value.code == "second_factor_declined"
     assert _echo_on(follower)
 
