@@ -112,6 +112,8 @@ def test_the_request_carries_before_after_and_source_for_each_field(
             "differs": False,
             "intended": NOTE,
             "held_differs": False,
+            "screen": None,
+            "screen_differs": False,
         }
     ]
     assert (guard.dir / SOURCES_FILENAME).stat().st_mode & 0o777 == 0o600
@@ -224,3 +226,45 @@ def test_the_differs_flag_uses_the_value_comparison(sor, tmp_path: Path) -> None
     cfg = parse_verify_config(verify_yaml(sor[0]))
     card = build_card(task, cfg, claim_fields={"note": MISREAD})
     assert card.sources[0].differs is True
+
+
+def test_screen_values_match_a_field_by_id_name_or_label() -> None:
+    from openadapt_flow.agent_guard.screen_values import match_fields, readable_png
+
+    controls = [
+        {
+            "key": "textarea:note:1",
+            "id": "note",
+            "name": "",
+            "label": "Note",
+            "value": "typed",
+        },
+        {
+            "key": "input:x:1",
+            "id": "x",
+            "name": "enc_type",
+            "label": "",
+            "value": "Triage",
+        },
+        {"key": "input:a:1", "id": "a", "name": "", "label": "Amount", "value": "1"},
+        {"key": "input:b:1", "id": "b", "name": "", "label": "Amount", "value": "2"},
+    ]
+    found = match_fields(controls, ["note", "type", "amount"], {"type": "enc_type"})
+    # Two controls labelled Amount disagree: not read rather than a guess.
+    assert found == {"note": "typed", "type": "Triage"}
+    assert match_fields(None, ["note"]) == {}
+    assert readable_png(tiny_png())
+    assert not readable_png(b"") and not readable_png(b"not a png at all, no header")
+
+
+def test_the_card_shows_the_screen_value_beside_the_task_value(sor) -> None:
+    cfg = parse_verify_config(verify_yaml(sor[0]))
+    card = build_card(_task(), cfg, claim_fields=None, screen_fields={"note": MISREAD})
+    [row] = card.sources
+    assert (row.screen, row.screen_differs, row.intended) == (MISREAD, True, NOTE)
+    assert card.screen_read is True and card.values_read is False
+    assert card.fields[0].after == NOT_READ
+    assert not card.nothing_visible(None)
+    blind = build_card(_task(), cfg, claim_fields=None)
+    assert blind.nothing_visible(None) and blind.nothing_visible(b"garbage")
+    assert not blind.nothing_visible(tiny_png())

@@ -395,6 +395,34 @@ describe("the card shows what will be saved", () => {
     expect(card).toContain("were not checked before saving");
   });
 
+  it("shows the value on screen at the save beside the task's, flagged", async () => {
+    onlySave(
+      saveDetail({
+        presentation: {
+          fields: [{ label: "note", before: null, after: "not read" }],
+          sources: [
+            {
+              label: "note",
+              source: null,
+              status: "no_source",
+              differs: false,
+              intended: "Triage note",
+              held_differs: false,
+              screen: "Another note",
+              screen_differs: true,
+            },
+          ],
+          values_checked: false,
+        },
+      }),
+    );
+    await boot();
+    const dd = q(".fields dd")!.textContent!;
+    expect(dd).toContain("On screen at the save: Another note");
+    expect(dd).toContain("Differs");
+    expect(dd).toContain("Task says: Triage note");
+  });
+
   it("flags a held value that differs from the task's", async () => {
     onlySave(
       saveDetail({

@@ -988,7 +988,9 @@ function saveSources(presentation) {
       typeof row.status === "string" &&
       typeof row.differs === "boolean" &&
       (row.intended === undefined || row.intended === null || typeof row.intended === "string") &&
-      (row.held_differs === undefined || typeof row.held_differs === "boolean"),
+      (row.held_differs === undefined || typeof row.held_differs === "boolean") &&
+      (row.screen === undefined || row.screen === null || typeof row.screen === "string") &&
+      (row.screen_differs === undefined || typeof row.screen_differs === "boolean"),
   );
   if (!ok) return null;
   return new Map(
@@ -999,6 +1001,8 @@ function saveSources(presentation) {
         differs: row.differs,
         intended: typeof row.intended === "string" ? row.intended : null,
         heldDiffers: row.held_differs === true,
+        screen: typeof row.screen === "string" ? row.screen : null,
+        screenDiffers: row.screen_differs === true,
       },
     ]),
   );
@@ -1236,7 +1240,12 @@ function sourceMarkup(card, field) {
     row.intended === null
       ? ""
       : `<span class="stops-record">${row.heldDiffers ? '<span class="stops-flag">Differs</span> ' : ""}Task says: <strong>${esc(row.intended === "" ? "empty" : row.intended)}</strong></span>`;
-  return `${intended}<span class="stops-record">${row.differs ? '<span class="stops-flag">Differs</span> ' : ""}Source: <strong>${esc(text)}</strong></span>`;
+  // With no write adapter: the value the form showed when the agent asked.
+  const onScreen =
+    row.screen === null
+      ? ""
+      : `<span class="stops-record">${row.screenDiffers ? '<span class="stops-flag">Differs</span> ' : ""}On screen at the save: <strong>${esc(row.screen === "" ? "empty" : row.screen)}</strong></span>`;
+  return `${onScreen}${intended}<span class="stops-record">${row.differs ? '<span class="stops-flag">Differs</span> ' : ""}Source: <strong>${esc(text)}</strong></span>`;
 }
 
 function fieldsMarkup(card) {

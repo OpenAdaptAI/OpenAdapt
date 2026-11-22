@@ -40,6 +40,7 @@ blocked: a second save          CAUGHT_ERROR      save_blocked_double_save
 blocked: outside teach scope    CAUGHT_ERROR      save_blocked_out_of_scope
 blocked: a person declined      ESCALATED         person_declined
 blocked: nobody answered        ESCALATED         approval_declined
+blocked: nothing to see         ESCALATED         values_unread
 blocked: guard couldn't check   FAILED            policy_rejected_no_write
 blocked: any other code         UNKNOWN           unmapped_outcome
 =============================  ================  ==========================
@@ -186,6 +187,9 @@ def refusal_outcome(code: str, *, scope: bool = False) -> tuple[str, str]:
         return "CAUGHT_ERROR", "save_blocked_double_save"
     if code == "declined":
         return "ESCALATED", "person_declined"
+    if code == "values_unread":
+        # No card was offered: nobody could see the values. A person acts.
+        return "ESCALATED", "values_unread"
     if code in _NOT_ANSWERED_CODES:
         return "ESCALATED", "approval_declined"
     if code in _FAILED_CODES or code.startswith(("approval_", "policy_")):

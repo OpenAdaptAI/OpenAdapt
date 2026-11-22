@@ -285,8 +285,15 @@ class CommitGuard:
     ) -> None:
         from openadapt_flow.agent_guard.approval_fields import card_for_request
 
-        guard.approval_card = card_for_request(guard, request, self.scope)
-        shot = self.page.screenshot() if self.guarded.approval == "each_item" else None
+        asked = self.guarded.approval == "each_item" or guard.source_check == "hold"
+        # What a person checks with no write adapter: the form as it is at
+        # the hold, its picture and its values, read at the same moment.
+        shot = self.page.screenshot() if asked else None
+        read_controls = getattr(self.page, "form_controls", None)
+        controls = read_controls() if asked and callable(read_controls) else None
+        guard.approval_card = card_for_request(
+            guard, request, self.scope, controls=controls
+        )
         commit = guard.commit(screenshot_png=shot, screen_text=screen, wait_s=0.0)
         if commit.status == "waiting_for_approval":
             self._waiting = (guard, request, held_at)

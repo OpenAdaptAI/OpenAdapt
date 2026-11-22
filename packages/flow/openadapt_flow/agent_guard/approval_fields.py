@@ -17,6 +17,11 @@ document says. :func:`build_card` makes those rows for one guarded save:
 * ``intended``: the value the task says to write, beside ``after``, with
   ``held_differs`` set when the two differ by the read-back's value
   comparison.
+* ``screen``: with no write adapter, the value the agent's form shows at the
+  moment the save is held (:mod:`.screen_values`), with ``screen_differs``
+  set when it differs from ``intended``. The card's screenshot is taken at
+  the same moment. With neither a value read nor a readable screenshot, no
+  card is offered: the guard refuses the save with ``values_unread``.
 * ``source``: the value the task's provenance cites, checked a second way
   against the source document (:func:`openadapt_flow.provenance.cross_check`).
 
@@ -81,6 +86,10 @@ class SourceRow:
     #: The value the held request sends differs from ``intended``. False when
     #: the sent value was not read (the card then says it wasn't checked).
     held_differs: bool = False
+    #: The value the form showed when the save was held; None: not read.
+    screen: Optional[str] = None
+    #: ``screen`` differs from ``intended``.
+    screen_differs: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -90,6 +99,8 @@ class SourceRow:
             "differs": self.differs,
             "intended": self.intended,
             "held_differs": self.held_differs,
+            "screen": self.screen,
+            "screen_differs": self.screen_differs,
         }
 
 
@@ -106,6 +117,21 @@ class ApprovalCard:
     #: How the sent values were read: ``write_adapter``, or why not
     #: (``no_held_request``, ``no_write_adapter``, ``unreadable``).
     values_how: str = "no_held_request"
+    #: At least one field's value was read from the screen at the hold.
+    screen_read: bool = False
+
+    def nothing_visible(self, screenshot: Optional[bytes]) -> bool:
+        """No value was read (not from the request, not from the screen) and
+        there is no screenshot a person could look at: nobody could see what
+        would be approved."""
+
+        from openadapt_flow.agent_guard.screen_values import readable_png
+
+        return (
+            not self.values_read
+            and not self.screen_read
+            and not readable_png(screenshot)
+        )
 
     def intent_note(self) -> str:
         """The sentence the card's intent carries when something is unread."""
@@ -116,6 +142,8 @@ class ApprovalCard:
                 ". The values this save sends could not be read, so they were "
                 "not checked before saving"
             )
+            if self.screen_read:
+                note += "; compare what was on screen at the save with the task"
         if self.not_covered:
             note += ". Not read, so this approval does not cover: " + ", ".join(
                 sorted(self.not_covered)
@@ -238,6 +266,7 @@ def build_card(
     records: Optional[Sequence[Mapping[str, Any]]] = None,
     read: bool = True,
     values_how: Optional[str] = None,
+    screen_fields: Optional[Mapping[str, str]] = None,
 ) -> ApprovalCard:
     """The approval card's rows for one guarded save. Never raises.
 
@@ -246,6 +275,8 @@ def build_card(
     (every ``after`` is then ``not read``). ``records`` is a read the caller
     already made; otherwise one is made now when ``read``. ``values_how``
     says why the values weren't read, for the card's sources file.
+    ``screen_fields`` are the values the form showed at the hold, keyed by
+    task field name (:func:`.screen_values.match_fields`).
     """
 
     from openadapt_flow.approval_mode.item_approval import MAX_SAVE_FIELDS, SaveField
@@ -284,11 +315,15 @@ def build_card(
                 not_covered.append(name)
         rows.append(SaveField(label=name[:128], before=before, after=after))
         row = sources.get(name) or SourceRow(name, None, "no_source")
+        on_screen = (screen_fields or {}).get(name)
+        on_screen = None if on_screen is None else _text(on_screen)
         row = replace(
             row,
             differs=_source_differs(row, intended if after == NOT_READ else after),
             intended=intended,
             held_differs=after != NOT_READ and _differs(intended, after),
+            screen=on_screen,
+            screen_differs=on_screen is not None and _differs(intended, on_screen),
         )
         source_rows.append(row)
         if row.source == NOT_READ and name not in not_covered:
@@ -313,6 +348,7 @@ def build_card(
         not_covered=not_covered,
         values_read=values_read,
         values_how=how,
+        screen_read=any(r.screen is not None for r in source_rows),
     )
 
 
@@ -336,7 +372,11 @@ def write_sources(run_dir: Path, request: Any, card: ApprovalCard) -> Path:
             "request_sha256": request.digest(),
             "rows": [row.to_dict() for row in card.sources],
             "not_covered": sorted(card.not_covered),
-            "values": {"read": card.values_read, "how": card.values_how},
+            "values": {
+                "read": card.values_read,
+                "how": card.values_how,
+                "screen_read": card.screen_read,
+            },
         },
     )
     return path
@@ -374,6 +414,9 @@ def read_sources_for(run_dir: Path, request: Any) -> Optional[list[dict[str, Any
         intended = row.get("intended")
         if intended is not None and not isinstance(intended, str):
             return None
+        screen = row.get("screen")
+        if screen is not None and not isinstance(screen, str):
+            return None
         rows.append(
             {
                 "label": row["label"][:128],
@@ -382,17 +425,27 @@ def read_sources_for(run_dir: Path, request: Any) -> Optional[list[dict[str, Any
                 "differs": row.get("differs") is True,
                 "intended": None if intended is None else intended[:_MAX_VALUE],
                 "held_differs": row.get("held_differs") is True,
+                "screen": None if screen is None else screen[:_MAX_VALUE],
+                "screen_differs": row.get("screen_differs") is True,
             }
         )
     return rows
 
 
-def card_for_request(guard: Any, request: Any, scope: Any) -> Any:
+def card_for_request(
+    guard: Any,
+    request: Any,
+    scope: Any,
+    *,
+    controls: Optional[Sequence[Mapping[str, str]]] = None,
+) -> Any:
     """The commit guard's card for a held save: the values the held request
     carries, read by the app's write adapter (the parser the guard checks
     writes with), beside the task's values. With no adapter, or a body it
     can't read, every sent value is ``not read`` and the card says they were
-    not checked. None when no card is asked for (or it is turned off)."""
+    not checked. Without an adapter, ``controls`` (the form at the hold,
+    :meth:`~.cdp.CdpGuardPage.form_controls`) give each field's value on
+    screen. None when no card is asked for (or it is turned off)."""
 
     owner = guard.owner
     asked = owner.approval == "each_item" or guard.source_check == "hold"
@@ -400,8 +453,16 @@ def card_for_request(guard: Any, request: Any, scope: Any) -> Any:
         return None
     adapter = getattr(scope, "write_adapter", None) if scope is not None else None
     if adapter is None:
+        from openadapt_flow.agent_guard.screen_values import match_fields
+
         return build_card(
-            guard.task, owner.verify, claim_fields=None, values_how="no_write_adapter"
+            guard.task,
+            owner.verify,
+            claim_fields=None,
+            values_how="no_write_adapter",
+            screen_fields=match_fields(
+                controls, sorted(guard.task.intended_fields), bound_fields(owner.verify)
+            ),
         )
     try:
         body = request.post_data.encode("utf-8") if request.post_data else None

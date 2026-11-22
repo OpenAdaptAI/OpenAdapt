@@ -19,6 +19,8 @@
   "exactly what will be saved" when OpenAdapt could not read the values the
   save sends. It shows the task's value beside each sent value, flags a
   difference, and says plainly when the sent values were not read or checked.
+  With no write adapter it shows the value on screen when the agent asked,
+  beside the task's, with a difference flagged.
 
 
 

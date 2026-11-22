@@ -273,6 +273,17 @@ def _guarded_wording(presentation: dict[str, Any], request: Any) -> None:
             "the held request before it goes out. After it saves, OpenAdapt "
             "reads the record back and reports any difference."
         )
+    elif any(
+        isinstance(row, dict) and row.get("screen") is not None
+        for row in presentation.get("sources") or []
+    ):
+        presentation["explanation"] = (
+            "OpenAdapt could not read the values this save will send, so they "
+            "were not checked before saving. The screenshot and the values on "
+            "screen were taken when the agent asked; compare them with the "
+            "task's values before you approve. After it saves, OpenAdapt "
+            "reads the record back and reports any difference."
+        )
     else:
         presentation["explanation"] = (
             "OpenAdapt could not read the values this save will send, so they "

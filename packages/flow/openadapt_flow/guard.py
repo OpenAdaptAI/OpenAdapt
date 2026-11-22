@@ -545,13 +545,22 @@ class Guard:
         )
         store = ItemApprovalStore(self.dir, key_dir=self.owner.key_dir, **pin)
         if self._request is None:
+            card = self._card()
+            if card is not None and card.nothing_visible(screenshot_png):
+                # No value read from the request or the screen, and no picture:
+                # nobody could see what they would approve, so nothing is asked.
+                self._save("refused_approval", reason="values_unread")
+                raise GuardRefused(
+                    "values_unread",
+                    "nobody can see what this save would write (no values read "
+                    "and no screenshot); a person checks the record",
+                )
             if not screenshot_png:
                 raise GuardRefused(
                     "screenshot_required",
                     "a person approves this save; commit needs the screenshot "
                     "they will be shown",
                 )
-            card = self._card()
             try:
                 # Person-only, pinned before anything is asked; the agent that
                 # started this guard is recorded so it can never answer it.

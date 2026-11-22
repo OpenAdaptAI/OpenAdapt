@@ -447,3 +447,24 @@ def test_an_observe_only_verified_save_is_verified_in_the_row(
         "VERIFIED",
         "readback_verified",
     )
+
+
+def test_no_values_and_no_screenshot_offers_no_card(
+    sor, tmp_path: Path, approver
+) -> None:
+    """Nobody could see what would be approved: the guard asks no one, blocks
+    the save, and the row is ESCALATED with values_unread. Nothing is written."""
+
+    class _Blind(_Page):
+        def screenshot(self) -> None:
+            return None
+
+    page = _Blind(FakeAgent(sor[0]), "p1")
+    guard = _guard(sor, tmp_path, page, approval="each_item")
+    page.save()
+    assert guard._waiting is None
+    assert [b["code"] for b in guard.summary.blocked] == ["values_unread"]
+    assert page.sent == [] and len(page.blocked) == 1
+    assert not list((tmp_path / "state").rglob("item-approval/request-*.json"))
+    row = json.loads((tmp_path / ROW_FILENAME).read_text())
+    assert (row["verdict"], row["verdict_reason"]) == ("ESCALATED", "values_unread")

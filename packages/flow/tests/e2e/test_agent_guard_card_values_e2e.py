@@ -101,6 +101,7 @@ class _Person(threading.Thread):
         self.signer = signer
         self.stop = threading.Event()
         self.shown: Optional[dict[str, Any]] = None
+        self.frame: Optional[bytes] = None
         self.error: Optional[str] = None
 
     def run(self) -> None:
@@ -109,7 +110,10 @@ class _Person(threading.Thread):
             make_answer,
         )
         from openadapt_flow.approval_mode.model import ITEM_APPROVAL_ROUTE
-        from openadapt_flow.console.save_approvals import save_approval_detail
+        from openadapt_flow.console.save_approvals import (
+            save_approval_detail,
+            save_approval_frame,
+        )
 
         requests: list[Path] = []
         while not self.stop.is_set():
@@ -125,6 +129,7 @@ class _Person(threading.Thread):
             self.shown = save_approval_detail(run_dir.parent, request_id)[
                 "presentation"
             ]
+            self.frame = save_approval_frame(run_dir.parent, request_id)
             store = ItemApprovalStore(run_dir)
             store.write_answer(
                 make_answer(
@@ -184,6 +189,17 @@ def test_the_card_never_says_exactly_when_it_could_not_read_the_values(
         sources = {r["label"]: r for r in shown["sources"]}
         assert sources["note"]["intended"] == bench.NOTE
         assert "values this save sends could not be read" in shown["step_intent"]
+        # What a careful person checks instead: the screen at the hold. The
+        # note the agent typed is read from the form and flagged; the
+        # encounter type is a button group, not a form value, so it is not
+        # read and the screenshot covers it.
+        assert sources["note"]["screen"] == bench.OTHER_NOTE
+        assert sources["note"]["screen_differs"] is True
+        assert sources["type"]["screen"] is None
+        assert "values on screen" in shown["explanation"]
+        from openadapt_flow.agent_guard.screen_values import readable_png
+
+        assert readable_png(person.frame)
         # Approved anyway: the read-back still catches the other note.
         assert result["verdict"] == "REFUTED", result
 
@@ -213,5 +229,46 @@ def test_the_card_never_says_exactly_when_it_could_not_read_the_values(
         assert not list(work.rglob("item-approval/request-*.json"))
         assert result["verdict"] is None, result
         assert result["blocked"] == ["write_value_not_declared"], result
+    finally:
+        app.stop()
+
+
+_BLIND = """
+from openadapt_flow.agent_guard import cdp
+
+cdp.CdpGuardPage.screenshot = lambda self: None
+cdp.CdpGuardPage.form_controls = lambda self: None
+"""
+
+
+def test_no_values_and_no_screenshot_offers_no_approval(
+    tmp_path: Path, signer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard's screenshot and form read both fail (patched in the guard's
+    own process), and there is no write adapter: nobody could see what would
+    be approved, so no approval is asked and nothing is written."""
+
+    import os
+
+    _chromium_or_skip()
+    patch = tmp_path / "blind"
+    patch.mkdir()
+    (patch / "sitecustomize.py").write_text(_BLIND)
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join([str(patch), os.environ.get("PYTHONPATH", "")])
+    )
+    app = serve(tmp_path / "app.sqlite")
+    try:
+        work = tmp_path / "blind-run"
+        files = _files(app, tmp_path / "setup", adapter=None)
+        person = _Person(work, "approve", signer)
+        result = _run(app, "agent_wrong_value", work, files, person)
+        assert person.shown is None, person.shown
+        assert not list(work.rglob("item-approval/request-*.json"))
+        assert result["verdict"] is None, result
+        assert result["blocked"] == ["values_unread"], result
+        assert result["writes"] == 0, result
+        row = json.loads((work / "guard_ledger_row.json").read_text())
+        assert (row["verdict"], row["verdict_reason"]) == ("ESCALATED", "values_unread")
     finally:
         app.stop()

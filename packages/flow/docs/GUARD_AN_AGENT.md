@@ -149,6 +149,7 @@ or the paired phone) lists every field the task writes:
 |---|---|
 | Now | The record's value before the save, read through `verify.yaml`. Empty for a save that adds a record. |
 | Saved | The value the held request carries, read by the app's `write_adapter`, the same reader the guard checks the write with. Without a `write_adapter`, or when the adapter can't read the body, it is `not read`. |
+| On screen at the save | Without a `write_adapter`: the value the agent's form shows when the save is held (its `input`, `select`, `textarea` and `contenteditable` controls, matched to a field by id, name or label). Marked `Differs` when it isn't the task's value. A field with no matching control, or two controls that disagree, is not read on screen. |
 | Task says | The task's `intended_fields` value, beside Saved. Marked `Differs` when the held request sends another value. |
 | Source | The value the task's `provenance` cites, checked a second time against the source document. A value the document doesn't confirm is marked `Differs` and shows what the document says. |
 
@@ -156,8 +157,12 @@ A value the guard can't read shows `not read`, never a blank, and the card
 says the approval doesn't cover it. The guard doesn't parse request bodies
 itself, so without a `write_adapter` it can't say what the save sends. The
 card then says that the values this save sends could not be read and were not
-checked before saving, and asks the person to compare the screen with the
-task's values. It says "exactly what will be saved" only when every value came
+checked before saving. It shows what a careful person would check instead: a
+screenshot of the filled form and the values on screen, both taken when the
+save is held, beside the task's values. If no value could be read and there
+is no readable screenshot, no card is offered at all, so nobody can approve
+what nobody could see: the guard blocks the save with `values_unread` and the
+run ends `ESCALATED` for a person to check the record. It says "exactly what will be saved" only when every value came
 from the held request. With a `write_adapter`, a save whose values differ
 from the task's is blocked before any card is shown. Either way, the read-back
 after the save still catches a value that differs.
@@ -199,6 +204,7 @@ ledger's words:
 | Blocked: wrong record, another origin, a second save, outside the teach scope | `CAUGHT_ERROR` | `save_blocked_*` |
 | Blocked: a person declined | `ESCALATED` | `person_declined` |
 | Blocked: nobody answered in time | `ESCALATED` | `approval_declined` |
+| Blocked: no value read and no screenshot, so no card was offered | `ESCALATED` | `values_unread` |
 | Blocked: the guard couldn't check (store unreadable, unusable answer) | `FAILED` | `policy_rejected_no_write` |
 | Blocked: any other code | `UNKNOWN` | `unmapped_outcome` |
 
