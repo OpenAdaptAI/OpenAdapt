@@ -254,6 +254,15 @@ class Proxy:
                 "receipt": out["run_dir"],
             }
 
+    def tools(self) -> list[dict[str, Any]]:
+        """The SQL tools when this proxy holds a database, then the extra tools."""
+        out = (
+            list(TOOLS)
+            if any(s.name == self.system for s in self.ctx.spec.systems)
+            else []
+        )
+        return out + (list(self.extra.tools()) if self.extra is not None else [])
+
     def call(self, name: str, args: Mapping[str, Any]) -> tuple[str, bool]:
         try:
             if name == "sql_query":
@@ -281,9 +290,6 @@ class Proxy:
                 {"error": type(exc).__name__, "detail": str(exc)[:300]}
             ), True
         return json.dumps(got, default=str), False
-
-    def tools(self) -> list[dict[str, Any]]:
-        return [*TOOLS, *(self.extra.tools() if self.extra is not None else [])]
 
     # the person's keys ---------------------------------------------------------
 
@@ -489,9 +495,15 @@ def run(
     task: str,
     secrets_: Sequence[str],
     port: int = 0,
+    api_spec: Optional[TxSpec] = None,
 ) -> int:
     ctx = Ctx(spec=spec, state=state)
-    proxy = Proxy(ctx, task=task, interactive=not argv_command)
+    extra = None
+    if api_spec is not None:
+        from openadapt_flow.txplan.scoped import ApiTools
+
+        extra = ApiTools(Ctx(spec=api_spec, state=state), task=task)
+    proxy = Proxy(ctx, task=task, interactive=not argv_command, extra=extra)
     server = McpServer(proxy, port=port)
     server.start()
     tmp = Path(tempfile.mkdtemp(prefix="openadapt-proxy-"))
