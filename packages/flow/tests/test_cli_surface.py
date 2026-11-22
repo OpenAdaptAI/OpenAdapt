@@ -59,6 +59,12 @@ def _type_name(kind: Any) -> str | None:
     return getattr(kind, "__qualname__", None) or type(kind).__name__
 
 
+def _scrub_home(text: str | None) -> str | None:
+    if text is None:
+        return None
+    return text.replace(str(Path.home()), "<HOME>")
+
+
 def _arguments(parser: argparse.ArgumentParser) -> list[dict[str, Any]]:
     rows = []
     for action in parser._actions:
@@ -78,7 +84,7 @@ def _arguments(parser: argparse.ArgumentParser) -> list[dict[str, Any]]:
                 else list(action.metavar),
                 "type": _type_name(action.type),
                 "default": _default(action.default),
-                "help": action.help,
+                "help": _scrub_home(action.help),
             }
         )
     return rows
@@ -112,7 +118,7 @@ def _walk(
         "commands": commands,
         "exclusive": exclusive,
     }
-    helps[path] = parser.format_help()
+    helps[path] = _scrub_home(parser.format_help()) or ""
     for name, sub in children:
         _walk(sub, f"{path} {name}", out, helps)
 
