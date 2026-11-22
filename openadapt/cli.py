@@ -2127,7 +2127,7 @@ def flight(command_ctx: click.Context) -> None:
     """Record any agent you already run, and hold its saves for a person.
 
     `openadapt flight [OPTIONS] -- CMD ...` meters and prices the agent's
-    model calls, scrubs every string and screenshot before it leaves the
+    model calls, scrubs text and PNG/JPEG/GIF/BMP/TIFF/WEBP screenshots before they leave the
     machine, blocks other egress on macOS, logs its actions and writes
     flight.json. Every argument passes to
     `openadapt flow flight`; its options are listed by

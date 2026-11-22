@@ -3,7 +3,9 @@
 ``openadapt-flow flight -- CMD`` starts a loopback proxy in front of the
 model API that ``CMD`` calls, and on macOS runs ``CMD`` under an OS egress
 block (:mod:`openadapt_flow.flight.egress`). The proxy meters and prices each
-call, scrubs every string and screenshot before it leaves the machine, and
+call, scrubs the text and the PNG/JPEG/GIF/BMP/TIFF/WEBP screenshots in each
+request before it leaves the machine (see FLIGHT_RECORDER.md for what is
+not covered), and
 logs each computer action the model asks for. A one-line executor swap
 (:class:`GatedComputer` for the Anthropic computer tool,
 :class:`GatedComputerCall` for an OpenAI ``computer_call`` loop) holds each

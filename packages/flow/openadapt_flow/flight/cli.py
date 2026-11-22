@@ -4,8 +4,11 @@
 
 Starts a loopback proxy in front of the model API and runs CMD with
 ANTHROPIC_BASE_URL and OPENAI_BASE_URL pointing at it, so every model call
-is metered and priced, and every screenshot and text block is scrubbed of
-personal data on this machine before it is sent. The provider the agent
+is metered and priced, and the request's text and its screenshots in PNG,
+JPEG, GIF, BMP, TIFF or WEBP are scrubbed of personal data on this machine
+before it is sent (other image formats, and data an agent re-encodes on
+purpose, are not covered; see "What the scrubber does not cover" in
+FLIGHT_RECORDER.md). The provider the agent
 already targets (its own *_BASE_URL, else the provider's API) is the only
 place anything is sent; the agent's key passes through untouched and is
 never logged.
@@ -67,7 +70,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "flight",
         help=(
             "Record any agent you already run: meter and price its model calls, "
-            "scrub every string and screenshot before it leaves the machine, block "
+            "scrub text and PNG/JPEG/GIF/BMP/TIFF/WEBP screenshots before they leave, block "
             "other egress (macOS), log its actions, and hold each click not known "
             "to be safe for a person"
         ),

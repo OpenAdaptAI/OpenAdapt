@@ -16,10 +16,12 @@ For that one run you get:
   table in `openadapt_flow.compile_agent.agents.PRICES_PER_MTOK`. A model with
   no price gets a cost of `null` with `cost_source: "unknown"`; the proxy
   never guesses a price.
-- **Scrubbing before anything leaves the machine.** The proxy scrubs every
-  string in the request body (message text, tool-call arguments, tool
-  results, URLs) and redacts every base64 screenshot before it forwards the
-  request. See [What the scrubber does](#what-the-scrubber-does).
+- **Scrubbing before anything leaves the machine.** The proxy scrubs the
+  strings in the request body (message text, tool-call arguments, tool
+  results, URLs) and redacts the screenshots it recognises (PNG, JPEG, GIF,
+  BMP, TIFF, WEBP) before it forwards the request. See
+  [What the scrubber does](#what-the-scrubber-does) and
+  [What the scrubber does not cover](#what-the-scrubber-does-not-cover).
 - **An egress block.** On macOS your command runs under `sandbox-exec` with
   every outbound connection denied except to loopback, so a direct
   connection from your command or anything it starts fails. Elsewhere
@@ -178,8 +180,13 @@ joined, so encoded data split into short pieces refuses too.
 
 Images are recognised and scrubbed in PNG, JPEG, GIF, BMP, TIFF and WEBP.
 An image in another format (AVIF, QOI, PPM...) is not recognised: it is
-refused only when one of the density backstops catches it, and a flat-colour
-uncompressed image in another format can get through.
+refused only when one of the density backstops catches it, and a page with
+text on a flat background, uncompressed in another format, can get through.
+
+The backstops can also refuse ordinary content that looks encoded: git
+SHAs, many camelCase identifiers in a row, random tokens. Because the agent
+resends its history on every call, a refused turn refuses the rest of the
+run.
 
 The scrubber covers images and text in ordinary agent traffic, in standard
 encodings: base64 in any wrapping, and JSON escapes. An agent that
