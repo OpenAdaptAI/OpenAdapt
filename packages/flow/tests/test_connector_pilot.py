@@ -501,20 +501,28 @@ def test_cancel_that_kills_a_started_child_is_uncertain_not_failed(tmp_path):
         runner=runner,
     )
     assert result.status == "halt"
-    assert result.error_code == "child_outcome_unknown"
+    assert result.error_code == "cancelled_after_child_start"
+    assert result.report_ref is None
     assert result.halt == {"present": True} and result.outcome is None
 
 
 def test_cancel_after_the_child_reported_keeps_its_real_outcome(tmp_path):
     job = parse_job(_payload(), lease_job_id="bjob_late")
 
+    envelope = json.loads(_VERIFIED_ENVELOPE.read_text())
+
     def runner(argv, run_dir, env):
         cancel_job("bjob_late")  # too late: the child already finished
         report = {
-            "execution_target_kind": "web",
+            "workflow_name": job.workflow_id,
+            "started_at": "2026-10-10T00:00:00Z",
+            "execution_target_kind": job.target_kind,
             "success": True,
-            "execution_outcome": "VERIFIED",
-            "results": [{"ok": True}],
+            "execution_profile": envelope["profile"],
+            "execution_outcome": envelope["outcome"],
+            "execution_completed": envelope["execution_completed"],
+            "production_eligible": envelope["production_eligible"],
+            "outcome_envelope": envelope,
         }
         return RunOutcome(returncode=0, report=report)
 
@@ -525,6 +533,11 @@ def test_cancel_after_the_child_reported_keeps_its_real_outcome(tmp_path):
         runner=runner,
     )
     assert result.status == "success" and result.error_code is None
+    assert result.outcome is not None
+    assert (
+        result.outcome["workflow_contract_sha256"]
+        == envelope["workflow_contract_sha256"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -555,7 +568,7 @@ def test_cancel_that_kills_a_child_after_it_reported_success_is_uncertain(
         runner=runner,
     )
     assert result.status == "halt"
-    assert result.error_code == "child_outcome_unknown"
+    assert result.error_code == "cancelled_after_child_start"
     assert result.halt == {"present": True} and result.outcome is None
 
 
@@ -720,7 +733,7 @@ def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(
     ]
     assert len(acks) == 1 and acks[0]["job_id"] == job_id
     assert acks[0]["status"] != "failed"
-    assert acks[0].get("error_code") == "child_outcome_unknown"
+    assert acks[0].get("error_code") == "cancelled_after_child_start"
 
 
 @pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
