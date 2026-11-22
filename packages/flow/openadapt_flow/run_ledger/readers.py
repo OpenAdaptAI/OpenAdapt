@@ -24,6 +24,7 @@ is decided only in :mod:`openadapt_flow.run_ledger.outcome`.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
@@ -106,6 +107,34 @@ def _optional(folder: Path, name: str, schema: str, out: Contribution) -> Any:
         out.signal("schema_unrecognised")
         return None
     return doc
+
+
+def _timeline_moments(path: Path, out: Contribution) -> list[str]:
+    """The first and last ``at`` in P3's egress ``timeline.jsonl``: when the
+    proxy saw the agent's first and last model traffic. Nothing else in the
+    timeline is read."""
+
+    if not path.is_file() or path.is_symlink():
+        return []
+    try:
+        if path.stat().st_size > 16 * 1024 * 1024:
+            return []
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    found: list[str] = []
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and (moment := _stamp(event.get("at"))):
+            found.append(moment)
+    if not found:
+        return []
+    out.files.append(path)
+    ordered = sorted(found)
+    return [ordered[0], ordered[-1]]
 
 
 def _usage_from(doc: Mapping[str, Any]) -> Usage:
@@ -203,6 +232,9 @@ def collect_shadow_run(folder: Path) -> Contribution:
     case = _optional(folder, "case.json", READINESS_CASE_SCHEMA, out)
     proposed_names: list[str] = []
     proposed_values: dict[str, Any] = {}
+    if (held := _stamp((proposed or {}).get("held_at"))) is not None:
+        out.moments.append(held)  # when the shadow hold stopped the save
+    out.moments += _timeline_moments(folder / "egress" / "timeline.jsonl", out)
     for item in (proposed or {}).get("fields") or []:
         if isinstance(item, dict) and (fname := _field_name(item.get("name"))):
             proposed_names.append(fname)
@@ -357,6 +389,9 @@ def collect_fallback_result(path: Path) -> Contribution:
     tid = _task_id(doc.get("request_id")) or _task_id(compile_doc.get("task_key"))
     if tid is not None:
         out.task_ids.append(tid)
+        # P7's own result names the dispatcher's request id (or the task
+        # key): the operator's id, as a readiness run.json names its task.
+        out.declared_task_ids.add(tid)
     out.duration_s = _float(doc.get("seconds"))
     cost = _float(doc.get("cost_usd")) if doc.get("usage_known") is True else None
     out.usage = Usage(
@@ -385,14 +420,27 @@ def collect_fallback_result(path: Path) -> Contribution:
 
     out.executor_kind = "agent"
     run1 = _dict(compile_doc.get("run1"))
+    # An item-approval gate (P7's ``gate_answers``) keeps each save's
+    # request in ``<approvals>/<fallback request id>/item-approval/``, with
+    # the times a person was asked and answered; ``ledger add --approvals``
+    # reads it there. A terminal gate keeps one time per save, not a pair.
+    answers = fallback.get("gate_answers")
+    if isinstance(answers, list) and answers:
+        key = fallback.get("request_id")
+        if isinstance(key, str) and _task_id(key) is not None:
+            out.approvals_key = key
     for gate in run1.get("gates") or []:
         if not isinstance(gate, dict):
             continue
         at = _epoch(gate.get("at"))
-        if at is not None and str(gate.get("decision", "")).endswith("_by_hold"):
+        if at is not None:
+            out.moments.append(at)
+        if (
+            at is not None
+            and out.approvals_key is None
+            and str(gate.get("decision", "")).endswith("_by_hold")
+        ):
             out.intervals.append(Interval("approval", at, None, key=f"gate:{at}"))
-    # The envelope keeps the gate decisions (fallback.gates) but no times, so
-    # a person's time on them can't be told; see docs/RUN_LEDGER.md.
     check = fallback.get("task_record_check")
     if check is None:
         check = doc.get("record_check")
@@ -414,6 +462,15 @@ def collect_fallback_result(path: Path) -> Contribution:
     if reason == "readback_verified":
         out.readback_tiers.append("independent_readback")
     out.signal(reason)
+    # The names the record check read back in the task's new record
+    # (``result.json`` only; the envelope doesn't carry them). ``collect``
+    # keeps only the ones the run's config declares when it declares any.
+    record = _dict(doc.get("record_check")) or _dict(run1.get("record_check"))
+    names = record.get("fields")
+    if isinstance(names, list) and record.get("created") == 1:
+        for fname in [n for n in map(_field_name, names) if n]:
+            out.fields[fname] = "matched" if confirmed else "not_checked"
+        out.readback_fields = True
     return out
 
 
@@ -499,7 +556,11 @@ def _verify_fields(path: Path) -> set[str]:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 - an unreadable config declares nothing
         return set()
-    if not isinstance(doc, dict) or doc.get("schema_version") != VERIFY_SCHEMA:
+    if not isinstance(doc, dict) or doc.get("schema_version", VERIFY_SCHEMA) != (
+        VERIFY_SCHEMA
+    ):
+        # A compile-agent verify.yaml has no schema_version; one that names
+        # another version declares nothing.
         return set()
     names: set[str] = set()
     for effect in doc.get("effects") or []:

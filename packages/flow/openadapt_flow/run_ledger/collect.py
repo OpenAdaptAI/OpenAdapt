@@ -159,6 +159,15 @@ class Contribution:
     #: Task ids the run's own task or readiness files declare (the same rule
     #: as field names: ``ledger export`` may let these past the scrubber).
     declared_task_ids: set[str] = field(default_factory=set)
+    #: Wall-clock moments the source records (an approval asked, a hold, a
+    #: read-back issued). They bound the run when it keeps no start time.
+    moments: list[str] = field(default_factory=list)
+    #: P7: the fallback request id whose item-approval folder holds the
+    #: gate's requests and answers (``ledger add --approvals``).
+    approvals_key: Optional[str] = None
+    #: ``fields`` are names a read-back saw in the new record, not names
+    #: the run declared it would write.
+    readback_fields: bool = False
     #: True when the source shows no person was asked during the run (a
     #: shadow hold, a guard run with approval ``not_gated``): the row's
     #: ``intervention_s`` is then 0 rather than unknown.
@@ -371,6 +380,16 @@ def collect_effect_receipt(path: Path) -> Contribution:
         return _refused(name, path, "schema_unrecognised")
     out = Contribution(name, files=[path])
     out.executor_kind = _EXECUTOR_KIND.get(str(receipt.get("executor_kind")), "unknown")
+    evidence = doc.get("evidence") if isinstance(doc.get("evidence"), dict) else {}
+    readback = evidence.get("readback") if isinstance(evidence, dict) else None
+    readback = readback if isinstance(readback, dict) else {}
+    for value in (
+        readback.get("baseline_read_at"),
+        readback.get("read_at"),
+        receipt.get("issued_at"),
+    ):
+        if (moment := _stamp(value)) is not None:
+            out.moments.append(moment)
     tier = receipt.get("verification_tier")
     if tier in _TIER_RANK:
         out.readback_tiers.append(str(tier))
@@ -634,6 +653,7 @@ def collect_item_approvals(folder: Path) -> Contribution:
                 continue
             decided = _stamp(answer.get("answered_at"))
             decision = answer.get("decision")
+        out.moments += [m for m in (opened, decided) if m is not None]
         out.intervals.append(
             Interval(
                 "question" if question else "approval",
@@ -895,9 +915,9 @@ def collect_guard_ledger_row(path: Path) -> Contribution:
         out.readback_tiers.append(str(tier))
     opened = _stamp(doc.get("approval_opened_at"))
     if opened is not None:
-        out.intervals.append(
-            Interval("approval", opened, _stamp(doc.get("approval_decided_at")), key="")
-        )
+        decided = _stamp(doc.get("approval_decided_at"))
+        out.moments += [m for m in (opened, decided) if m is not None]
+        out.intervals.append(Interval("approval", opened, decided, key=""))
     # No signal: J3 makes the row a source of names, times and the tier only.
     # The guard's summary.json says REFUTED when its read-back differs.
     return out
@@ -926,6 +946,8 @@ def collect_exception_answer(path: Path) -> Contribution:
     if opened is None:
         out.signal("source_unreadable")
         return out
+    decided_at = _stamp(doc.get("decided_at"))
+    out.moments += [m for m in (opened, decided_at) if m is not None]
     second = doc.get("kind") == "second_factor"
     card = doc.get("card_id")
     out.intervals.append(
@@ -1125,6 +1147,7 @@ def collect(
     *,
     exceptions: Optional[Path] = None,
     config: Iterable[Path] = (),
+    approvals: Optional[Path] = None,
 ) -> Collected:
     """Every source in ``run`` (a run directory or one file), plus P6's
     exception folder for the run when ``exceptions`` names one. ``config``
@@ -1142,14 +1165,14 @@ def collect(
     run = Path(run)
     config = [Path(c) for c in config]
     contributions: list[Contribution] = []
-    approvals: set[Path] = set()
+    approval_folders: set[Path] = set()
     found = _files(run)
     files, shadows = _skipped(found, run)
     for folder in shadows:
         contributions.append(collect_shadow_run(folder))
     for path in files:
         if path.parent.name == "item-approval" and path.name.startswith("request-"):
-            approvals.add(path.parent)
+            approval_folders.add(path.parent)
             continue
         contribution = _dispatch(path)
         if contribution is None and path == run:
@@ -1172,7 +1195,7 @@ def collect(
                 contribution = collect_fallback_result(path)
         if contribution is not None:
             contributions.append(contribution)
-    for folder in sorted(approvals):
+    for folder in sorted(approval_folders):
         contribution = collect_item_approvals(folder)
         if contribution.files:
             contributions.append(contribution)
@@ -1180,7 +1203,15 @@ def collect(
         contribution = collect_exception_folder(exceptions)
         if contribution is not None:
             contributions.append(contribution)
-    return Collected(
+    if approvals is not None:
+        # P7's item-approval gate: <approvals>/<fallback request id>/item-approval.
+        for key in sorted({c.approvals_key for c in contributions if c.approvals_key}):
+            folder = Path(approvals) / key / "item-approval"
+            if folder.is_dir() and not folder.is_symlink():
+                contribution = collect_item_approvals(folder)
+                if contribution.files:
+                    contributions.append(contribution)
+    collected = Collected(
         root=run,
         contributions=contributions,
         config_fields=declared_fields(
@@ -1189,6 +1220,15 @@ def collect(
         ),
         config_paths=[p for p in config if p.is_file()],
     )
+    declared = collected.declared_fields
+    for contribution in contributions:
+        if contribution.readback_fields and declared:
+            # A read-back lists every field of the new record (id, key ...);
+            # keep the ones the run's own config says it writes.
+            contribution.fields = {
+                n: c for n, c in contribution.fields.items() if n in declared
+            }
+    return collected
 
 
 __all__ = [

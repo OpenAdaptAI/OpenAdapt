@@ -163,10 +163,10 @@ def test_a_write_that_reached_the_app_in_shadow_mode_is_unknown(tmp_path):
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        ("TIMEOUT", ("FAILED", "timed_out_no_write")),
-        ("NO_WRITE_HELD", ("FAILED", "agent_gave_up")),
+        ("TIMEOUT", ("FAILED", "shadow_timed_out")),
+        ("NO_WRITE_HELD", ("FAILED", "shadow_no_proposal")),
         # P1 sets AGENT_ERROR before its guard counted anything: no evidence.
-        ("AGENT_ERROR", ("UNKNOWN", "write_unconfirmed")),
+        ("AGENT_ERROR", ("UNKNOWN", "shadow_agent_error")),
     ],
 )
 def test_a_shadow_run_that_proposed_nothing(tmp_path, status, expected):
@@ -499,8 +499,13 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
     for path in sorted(FIXTURES.iterdir()):
         if path.name == "shadow_no_case":
             continue  # no case.json declares its fields: see below
-        if path.name.startswith(("shadow_", "fallback_")):
+        if path.name.startswith("fallback_"):
+            continue  # no config declares their read-back field names
+        if path.name.startswith(("shadow_", "run2_claude")):
             store.add(path)
+        elif path.name == "run2_fallback_approved":
+            config = FIXTURES / "run2_fallback_approved_config" / "verify.yaml"
+            store.add(path, config=(config,), approvals=FIXTURES / "run2_approvals")
         elif path.name.startswith("guard_") and not path.name.endswith("_config"):
             config = FIXTURES / f"{path.name}_config"
             files = tuple(sorted(config.iterdir())) if config.is_dir() else ()
@@ -540,7 +545,8 @@ def test_push_payloads_validate_against_the_json_schema(tmp_path):
         validator.validate(payload)
     # Unknown values stay null, never 0.
     halted = next(p for p in payloads if p["outcome_reason"] == "halted_before_effect")
-    assert halted["started_at"] is None and halted["duration_s"] is None
+    # The receipt's own read-back times bound the run; no duration is kept.
+    assert halted["started_at"] is not None and halted["duration_s"] is None
     assert halted["model"]["calls"] is None and halted["model"]["cost_usd"] is None
 
 
@@ -655,3 +661,162 @@ def test_p5s_row_times_still_count():
     row, _, _ = build_row(FIXTURES / "guard_row_p5_declined")
     assert len(row.human.intervals) == 1
     assert row.human.intervention_s is not None
+
+
+# -- round 3: the integrated run2 (2026-11-22) ---------------------------------------
+#
+# run2_* are copies of /tmp/acp-demo-out/run2: 5-claude's real Claude readiness
+# run, 4-fallback's results, envelopes and item-approval folders (request and
+# answer JSON only), the compiled verify.yaml a person confirmed, and a
+# 2-gated approved save.
+
+RUN2_APPROVALS = FIXTURES / "run2_approvals"
+RUN2_VERIFY = FIXTURES / "run2_fallback_approved_config" / "verify.yaml"
+
+
+def test_a_real_claude_readiness_run_with_no_proposal_is_a_shadow_reason():
+    # NO_WRITE_HELD: the agent said it wasn't done and proposed nothing.
+    row, _, _ = build_row(FIXTURES / "run2_claude_no_write")
+    assert _outcome(row) == ("FAILED", "shadow_no_proposal")
+    assert row.outcome_reason.startswith("shadow_")
+    assert (row.model.calls, row.model.cost_source) == (2, "metered")
+    # The proxy's timeline names the run's first and last model traffic.
+    assert row.started_at == "2026-11-22T05:10:55.470000Z"
+    assert row.ended_at is not None and row.duration_s == 7.603
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "shadow_matched",
+        "shadow_mismatched",
+        "shadow_extra_target",
+        "shadow_egress",
+        "shadow_wrong_record",
+        "shadow_no_case",
+        "run2_claude_no_write",
+    ],
+)
+def test_every_shadow_row_has_a_shadow_reason(fixture):
+    row, _, _ = build_row(FIXTURES / fixture)
+    assert row.outcome_reason.startswith("shadow_") or (
+        row.outcome_reason == "egress_refused"
+    )
+
+
+def test_the_approved_fallback_has_the_persons_time_and_its_fields(tmp_path):
+    row = (
+        _store(tmp_path)
+        .add(
+            FIXTURES / "run2_fallback_approved",
+            config=(RUN2_VERIFY,),
+            approvals=RUN2_APPROVALS,
+        )
+        .row
+    )
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    # The signed approval: request created_at to answer answered_at.
+    assert [i.kind for i in row.human.intervals] == ["approval"]
+    assert row.human.intervention_s == 0.062
+    # The record check's names that the confirmed verify.yaml declares.
+    assert [(f.name, f.check) for f in row.fields_written] == [
+        ("note", "matched"),
+        ("patient_id", "matched"),
+        ("type", "matched"),
+    ]
+    assert row.started_at is not None and row.ended_at is not None
+
+
+def test_without_the_approvals_folder_the_persons_time_is_unknown():
+    row, _, _ = build_row(FIXTURES / "run2_envelope_approved.json")
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    assert row.human.intervention_s is None
+
+
+def test_the_envelope_with_its_approvals_folder(tmp_path):
+    row = (
+        _store(tmp_path)
+        .add(FIXTURES / "run2_envelope_declined.json", approvals=RUN2_APPROVALS)
+        .row
+    )
+    assert _outcome(row) == ("ESCALATED", "person_declined")
+    assert row.human.intervention_s == 0.02
+    assert row.task_id == "dispatch-drift-declined"
+
+
+def test_a_p7_request_id_is_declared_by_p7s_own_file(tmp_path):
+    class ReadsDispatchAsOrg(_Presidio):
+        def __init__(self) -> None:
+            super().__init__("dispatch-happy", "dispatch-drift-declined")
+
+    store = _store(tmp_path)
+    store.add(FIXTURES / "run2_envelope_happy.json")
+    store.add(FIXTURES / "run2_envelope_declined.json", approvals=RUN2_APPROVALS)
+    lines = outbound_lines(store, summary=True, scrubber=ReadsDispatchAsOrg())
+    assert {json.loads(line)["task_id"] for line in lines} == {
+        "dispatch-happy",
+        "dispatch-drift-declined",
+    }
+
+
+def test_times_come_from_the_runs_own_files():
+    row, _, _ = build_row(FIXTURES / "run2_guard_approved")
+    # Ended at the answer and read-back; started its own 7.715 s before.
+    assert row.ended_at == "2026-11-22T05:02:12.089101Z"
+    assert row.started_at == "2026-11-22T05:02:04.374101Z"
+    assert row.duration_s == 7.715
+    row, _, _ = build_row(FIXTURES / "run2_envelope_happy.json")
+    assert row.started_at is None and row.ended_at is None  # no source has one
+
+
+# -- round 3: one bad row refuses itself, not the ledger ----------------------------
+
+
+def _two_rows(tmp_path: Path) -> LedgerStore:
+    store = _store(tmp_path)
+    store.add(FIXTURES / "shadow_matched")
+    run = tmp_path / "run"
+    run.mkdir()
+    shutil.copy(FIXTURES / "shadow_matched" / "proposed_write.json", run)
+    store.add(run)  # a lone proposed write: patient_id undeclared
+    return store
+
+
+def test_screen_rows_refuses_only_the_bad_row(tmp_path):
+    from openadapt_flow.run_ledger.cli import screen_rows
+
+    store = _two_rows(tmp_path)
+    screened = screen_rows(store, summary=True, scrubber=_Presidio())
+    assert len(screened.lines) == 1
+    ((row_id, reason),) = screened.refused
+    assert reason == "the scrubber would rewrite its fields_written.name"
+    assert row_id not in screened.lines[0]
+
+
+def test_push_sends_the_good_rows_and_lists_the_refused_ones(tmp_path):
+    store = _two_rows(tmp_path)
+    sent: list[dict] = []
+    refused: list[tuple[str, str]] = []
+    results = push(
+        store,
+        host="https://app.openadapt.ai",
+        poster=lambda url, headers, payload: sent.append(payload) or 202,
+        environ={"OPENADAPT_API_KEY": "test-key-not-real"},
+        scrubber=_Presidio(),
+        refused=refused,
+    )
+    assert len(sent) == len(results) == 1 and len(refused) == 1
+
+
+def test_export_writes_the_good_rows_and_exits_non_zero(tmp_path, monkeypatch, capsys):
+    import openadapt_flow.privacy as privacy
+    from openadapt_flow.run_ledger.cli import main
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("OPENADAPT_HOME", str(home))
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: _Presidio())
+    _two_rows(tmp_path)
+    out = tmp_path / "export.jsonl"
+    assert main(["ledger", "export", "--out", str(out)]) == 2
+    assert len(out.read_text().splitlines()) == 1
+    assert "refused row" in capsys.readouterr().err

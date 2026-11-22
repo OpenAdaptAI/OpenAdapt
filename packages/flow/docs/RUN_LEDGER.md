@@ -28,7 +28,7 @@ Schema `openadapt.run-ledger/v1`, defined in
 | `task_type` | The operator's label from `--task-type` (default `unspecified`). Lower-case words only, so it can't carry a name. |
 | `executor_kind`, `executor_label` | `agent`, `program`, `human` or `unknown`, and a short label such as `browser-use`. |
 | `inputs_commitment` | `sha256:` of a random salt plus the run's inputs. The salt is only in the private sidecar. `null` when no source names the inputs. |
-| `started_at`, `ended_at`, `duration_s` | From sources that keep wall-clock times. Relative or monotonic clocks give a duration only. |
+| `started_at`, `ended_at`, `duration_s` | From a source that keeps the run's own start and end (wrap, compiled runs, flight, compile-agent). Otherwise from the wall-clock moments the run's files record (an approval asked and answered, a shadow hold, the egress timeline's first and last model call, a read-back issued, an exception card): `ended_at` is the latest, and `started_at` is `ended_at` minus the run's own duration, or the earliest moment if that is earlier. `null` only when no source records a moment. `duration_s` is always a source's own measure. |
 | `model` | `calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `cost_source` (`metered`, `reported` or `unknown`). A value a source doesn't give is `null`, never `0`. |
 | `human` | `intervals` (`approval`, `question`, `exception`, `second_factor`, each with `opened_at` and `decided_at`) and `intervention_s`, their sum. If any interval has no `decided_at`, `intervention_s` is `null`. With no intervals it is `0` only when a source shows no person was asked (a shadow hold, which never asks; an agent-guard run with approval `not_gated`; a flight with no gate events), and `null` (unknown) otherwise. A shadow run's person did the real save in a separate recorded run, so the shadow row itself is `0`. |
 | `outcome`, `outcome_reason` | See below. |
@@ -58,8 +58,8 @@ reason names another bucket is refused.
 | VERIFIED | An independent read-back verified the save and no hold is pending. | `readback_verified` |
 | ESCALATED | The run stopped for a person, a person declined it, or a person did the step. | `approval_held`, `person_declined`, `approval_declined`, `question_asked`, `exception_card`, `second_factor`, `halted_before_effect`, `gate_held`, `shadow_matched` |
 | CAUGHT_ERROR | A check caught a wrong save. A person declining is not a catch on its own. | `readback_refuted`, `save_blocked_wrong_record`, `save_blocked_other_origin`, `save_blocked_double_save`, `save_blocked_out_of_scope`, `gate_refused`, `shadow_wrong_record`, `shadow_field_mismatch` |
-| FAILED | Crashed, timed out, canceled or gave up, with no evidence of a write. | `crashed_no_write`, `timed_out_no_write`, `agent_gave_up`, `platform_failed`, `canceled_no_write`, `policy_rejected_no_write` |
-| UNKNOWN | Nothing settles it. Never folded into another bucket. | `shadow_write_landed`, `completed_unverified`, `shadow_not_compared`, `shadow_extra_target`, `egress_refused`, `reconciliation_required`, `screen_readback_only`, `lost_reply`, `write_unconfirmed`, `saved_awaiting_check`, `rolled_back`, `self_approved`, `observe_only_would_block`, `schema_unrecognised`, `source_unreadable`, `task_id_conflict`, `unmapped_outcome`, `no_sources` |
+| FAILED | Crashed, timed out, canceled or gave up, with no evidence of a write. | `crashed_no_write`, `timed_out_no_write`, `agent_gave_up`, `shadow_no_proposal`, `shadow_timed_out`, `platform_failed`, `canceled_no_write`, `policy_rejected_no_write` |
+| UNKNOWN | Nothing settles it. Never folded into another bucket. | `shadow_write_landed`, `completed_unverified`, `shadow_not_compared`, `shadow_extra_target`, `shadow_agent_error`, `egress_refused`, `reconciliation_required`, `screen_readback_only`, `lost_reply`, `write_unconfirmed`, `saved_awaiting_check`, `rolled_back`, `self_approved`, `observe_only_would_block`, `schema_unrecognised`, `source_unreadable`, `task_id_conflict`, `unmapped_outcome`, `no_sources` |
 
 When sources disagree, the stronger finding wins:
 CAUGHT_ERROR > UNKNOWN > ESCALATED > FAILED > VERIFIED. A run in which the
@@ -171,8 +171,11 @@ save is the real one.
 | `MISMATCHED` | CAUGHT_ERROR (`shadow_field_mismatch`) |
 | `MATCHED` | ESCALATED (`shadow_matched`): a person did the step; not a catch |
 | `NOT_COMPARABLE`, `NOT_CHECKED`, no `case.json` | UNKNOWN (`shadow_not_compared`) |
-| No proposal, run `TIMEOUT` / `NO_WRITE_HELD`, `landed_writes: 0` | FAILED (`timed_out_no_write` / `agent_gave_up`) |
-| No proposal, run `AGENT_ERROR` (set before the guard counted anything) | UNKNOWN (`write_unconfirmed`) |
+| No proposal, run `TIMEOUT` / `NO_WRITE_HELD`, `landed_writes: 0` | FAILED (`shadow_timed_out` / `shadow_no_proposal`) |
+| No proposal, run `AGENT_ERROR` (set before the guard counted anything) | UNKNOWN (`shadow_agent_error`) |
+
+Every shadow reason is a `shadow_*` one (or `egress_refused`), so a readiness
+trial never shows as a production failure.
 
 Fields come from `case.json`: `matched` is matched; `mismatched`, `missing`,
 `extra` and `wrong_record` differ; `uncompared` is not checked. A proposed
@@ -196,6 +199,16 @@ refused) replaces calls and cost with the proxy's count (`metered` when its
 | RECONCILIATION_REQUIRED | UNKNOWN (`reconciliation_required`) |
 | FALLBACK_GATE_UNATTENDED, FALLBACK_NO_AGENT, FALLBACK_COST_UNBOUNDED, FALLBACK_REQUEST_REUSED (agent not started) | ESCALATED (`halted_before_effect`) when the program halted before effect, else UNKNOWN (`write_unconfirmed`) |
 | Anything else | UNKNOWN (`unmapped_outcome`), or CAUGHT_ERROR (`readback_refuted`) when the record check shows an unverified write |
+
+An item-approval gate records `fallback.gate_answers` (request ids, decisions,
+signer) but no times; its request and answer files sit in
+`<approvals>/<fallback request id>/item-approval/` (`wrap-dispatch
+--fallback-approvals`). `ledger add --approvals DIR` reads them there: the
+person's time runs from the request's `created_at` to the answer's
+`answered_at`. Without `--approvals` the time is unknown. A `result.json`'s
+record check names the fields of the new record; the row keeps those the
+run's config (`--config verify.yaml`) declares, `matched` when the check is
+readable and passed. The envelope carries no field names.
 
 On `path: program` or `held` the envelope is read like a wrap result;
 `NO_ADMITTED_PROGRAM` is FAILED (`policy_rejected_no_write`, nothing ran).
@@ -246,7 +259,7 @@ no POSIX mode to set.
 | `ledger export --out FILE [--require-scrubber]` | Value-free JSONL. |
 | `ledger push [--host URL] [--dry-run]` | POSTs each row without `sources`, as `openadapt.agent-run-summary/v1`, to `/api/runs/ingest-agent-run` with `OPENADAPT_API_KEY`. |
 
-`export` and `push` refuse when:
+`export` and `push` screen each row and refuse a row when:
 
 - a value from any local sidecar appears in what they would send;
 - a row has a key outside its schema, or fails validation;
@@ -269,8 +282,9 @@ no POSIX mode to set.
   run's own files name it (a readiness `run.json` or `case.json`, or a guard
   task whose `task_id` matches). Presidio reads `readiness-mockmed-0002` as
   an organisation; P1's own run file names it, so it may leave. An id given
-  only with `--task-id` still refuses when the scrubber rewrites it. The
-  entry keeps these as `declared_task_ids`.
+  only with `--task-id` still refuses when the scrubber rewrites it. P7's own
+  `result.json` or dispatcher envelope declares its request id (or task key)
+  the same way. The entry keeps these as `declared_task_ids`.
 
 Cloud receives `null` for every value the sources don't give
 (`started_at`, `ended_at`, `duration_s`, the `model` counts and cost,
@@ -278,6 +292,10 @@ Cloud receives `null` for every value the sources don't give
 synthetic fixtures is committed at
 `packages/types/tests/fixtures/agent_run_summary_v1_examples.jsonl`; a test
 validates it against `AgentRunSummaryV1`'s JSON Schema.
+
+A refused row stays local and the rest still go: each refused row is listed
+on stderr with its reason, and the command exits 2. A scrubber that can't run
+refuses everything.
 
 `push` also refuses before anything else when `OPENADAPT_API_KEY` isn't set,
 and sends only to a destination the hosted destination policy accepts (the

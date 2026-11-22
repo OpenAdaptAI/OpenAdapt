@@ -1,6 +1,6 @@
 """``openadapt-flow ledger``: one accounting row per run, for any executor.
 
-    openadapt-flow ledger add RUN_DIR [--task-type T] [--task-id ID] [--run-ref REF]
+    openadapt-flow ledger add RUN_DIR [--task-type T] [--task-id ID] [--run-ref REF] [--approvals DIR]
                        [--config TASK_OR_VERIFY_FILE ...]
     openadapt-flow ledger list [--json]
     openadapt-flow ledger show ROW_ID [--show-values]
@@ -22,6 +22,7 @@ import json
 import os
 import statistics
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
@@ -62,6 +63,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         default=None,
         help="The run's exception-queue reference (exceptions serve --run-ref); "
         "its cards and answers are read from $OPENADAPT_HOME/exceptions/REF",
+    )
+    add.add_argument(
+        "--approvals",
+        default=None,
+        help="A P7 fallback's item-approval folder root "
+        "(wrap-dispatch --fallback-approvals); each gate's request and answer "
+        "times are read from DIR/<fallback request id>/item-approval",
     )
     add.add_argument(
         "--config",
@@ -149,6 +157,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             task_id=args.task_id,
             run_ref=args.run_ref,
             config=tuple(args.config),
+            approvals=args.approvals,
         )
     except ValidationError as exc:
         bad = sorted({str(e["loc"][0]) for e in exc.errors() if e.get("loc")})
@@ -320,69 +329,116 @@ def _label_values(doc: dict[str, Any]) -> list[tuple[str, str]]:
     return labels
 
 
+@dataclass
+class Screened:
+    """What may leave, and each row that may not (with why)."""
+
+    lines: list[str]
+    refused: list[tuple[str, str]]
+
+
+def screen_rows(
+    store: LedgerStore,
+    *,
+    summary: bool,
+    scrubber: Optional[Any] = None,
+) -> Screened:
+    """The newest row per run, serialised, each after both guards.
+
+    1. Every value in every local sidecar is looked for in the row; a hit
+       refuses that row.
+    2. When a text scrubber is given, each label (task id, task type,
+       executor label, field names) must come back from it unchanged; a label
+       the scrubber would rewrite looks like personal data and refuses that
+       row. The exemption is a field name or task id the run's own task,
+       verify, readiness or P7 files declared (kept beside the row at
+       ``add`` time): Presidio rewrites the name ``patient_id`` and the id
+       ``readiness-mockmed-0002``, but a declared name is an identifier the
+       operator chose, not a value.
+
+    A refused row is left out; the others still go. A scrubber that can't
+    run at all refuses everything (:class:`LedgerRefused`).
+    """
+
+    from openadapt_types.run_ledger import AgentRunSummaryV1, RunLedgerRowV1
+
+    values = store.sidecar_values()
+    out = Screened([], [])
+    for entry in store.latest_entries():
+        row = RunLedgerRowV1.model_validate(entry["row"])
+        reason = _screen_one(
+            entry,
+            row,
+            summary=summary,
+            scrubber=scrubber,
+            values=values,
+            models=(AgentRunSummaryV1, RunLedgerRowV1),
+        )
+        if isinstance(reason, str):
+            out.refused.append((row.row_id, reason))
+        else:
+            out.lines.append(reason[0])
+    return out
+
+
+def _screen_one(
+    entry: dict[str, Any],
+    row: Any,
+    *,
+    summary: bool,
+    scrubber: Optional[Any],
+    values: list[str],
+    models: tuple[Any, Any],
+) -> str | tuple[str]:
+    """``(line,)`` for a row that may leave, else the reason it may not."""
+
+    declared = set(entry.get("declared_fields") or [])
+    declared_ids = set(entry.get("declared_task_ids") or [])
+    doc = row.summary().to_json() if summary else row.to_json()
+    model = models[0] if summary else models[1]
+    allowed = {f.alias or name for name, f in model.model_fields.items()}
+    if set(doc) - allowed:
+        return "a key outside the contract"
+    model.model_validate(doc)
+    if scrubber is not None:
+        for where, label in _label_values(doc):
+            if where == "fields_written.name" and label in declared:
+                continue  # a declared field name (patient_id): not a value
+            if where == "task_id" and label in declared_ids:
+                continue  # the run's own files name this task id
+            try:
+                scrubbed = scrubber.scrub_text(label)
+            except Exception as exc:  # a scrubber that can't run refuses all
+                raise LedgerRefused(
+                    f"the text scrubber could not run ({type(exc).__name__}); "
+                    "nothing was written"
+                ) from exc
+            if scrubbed != label:
+                return f"the scrubber would rewrite its {where}"
+    line = json.dumps(doc, sort_keys=True)
+    if any(value in line for value in values):
+        return "it contains a value from a private sidecar"
+    return (line,)
+
+
 def outbound_lines(
     store: LedgerStore,
     *,
     summary: bool,
     scrubber: Optional[Any] = None,
 ) -> list[str]:
-    """The newest row per run, serialised, after both guards.
+    """:func:`screen_rows`, strict: the first refused row refuses all."""
 
-    1. Every value in every local sidecar is looked for in the output; one
-       hit refuses the whole export.
-    2. When a text scrubber is given, each label (task id, task type,
-       executor label, field names) must come back from it unchanged; a label
-       the scrubber would rewrite looks like personal data and is refused.
-       The one exemption is a field name the run's own task, verify or
-       readiness reference config declared (kept beside the row at ``add``
-       time): Presidio rewrites the name ``patient_id``, but a declared name
-       is a form's identifier, not a value.
-    """
+    screened = screen_rows(store, summary=summary, scrubber=scrubber)
+    if screened.refused:
+        row_id, reason = screened.refused[0]
+        raise LedgerRefused(f"row {row_id}: {reason}")
+    return screened.lines
 
-    from openadapt_types.run_ledger import AgentRunSummaryV1, RunLedgerRowV1
 
-    values = store.sidecar_values()
-    lines: list[str] = []
-    for entry in store.latest_entries():
-        row = RunLedgerRowV1.model_validate(entry["row"])
-        declared = set(entry.get("declared_fields") or [])
-        declared_ids = set(entry.get("declared_task_ids") or [])
-        doc = row.summary().to_json() if summary else row.to_json()
-        model = AgentRunSummaryV1 if summary else RunLedgerRowV1
-        allowed = {f.alias or name for name, f in model.model_fields.items()}
-        if set(doc) - allowed:
-            raise LedgerRefused(f"row {row.row_id} has a key outside the contract")
-        model.model_validate(doc)
-        if scrubber is not None:
-            for where, label in _label_values(doc):
-                if where == "fields_written.name" and label in declared:
-                    # A field name the run's own task, verify or readiness
-                    # config declares (``patient_id``): a name, not a value.
-                    continue
-                if where == "task_id" and label in declared_ids:
-                    # The task id the run's own guard task or readiness
-                    # files name (Presidio reads readiness-mockmed-0002 as
-                    # an organisation): the operator's id, not a value.
-                    continue
-                try:
-                    scrubbed = scrubber.scrub_text(label)
-                except Exception as exc:  # a scrubber that can't run refuses
-                    raise LedgerRefused(
-                        f"the text scrubber could not run ({type(exc).__name__}); "
-                        "nothing was written"
-                    ) from exc
-                if scrubbed != label:
-                    raise LedgerRefused(
-                        f"row {row.row_id}: the scrubber would rewrite its {where}"
-                    )
-        line = json.dumps(doc, sort_keys=True)
-        for value in values:
-            if value in line:
-                raise LedgerRefused(
-                    f"row {row.row_id} contains a value from a private sidecar"
-                )
-        lines.append(line)
-    return lines
+def _print_refused(verb: str, refused: list[tuple[str, str]]) -> None:
+    for row_id, reason in refused:
+        print(f"ledger {verb}: refused row {row_id}: {reason}", file=sys.stderr)
 
 
 def _scrubber(require: bool) -> Optional[Any]:
@@ -408,15 +464,18 @@ def _scrubber(require: bool) -> Optional[Any]:
 def cmd_export(args: argparse.Namespace) -> int:
     try:
         scrubber = _scrubber(args.require_scrubber)
-        lines = outbound_lines(_store(args), summary=False, scrubber=scrubber)
+        screened = screen_rows(_store(args), summary=False, scrubber=scrubber)
     except LedgerRefused as exc:
         print(f"ledger export: refused: {exc}", file=sys.stderr)
         return 2
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    lines = screened.lines
     out.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
     print(f"Wrote {len(lines)} rows to {out}")
-    return 0
+    _print_refused("export", screened.refused)
+    # A refused row stays local; the exit status says some didn't go.
+    return 2 if screened.refused else 0
 
 
 Poster = Callable[[str, dict[str, str], dict[str, Any]], int]
@@ -439,19 +498,24 @@ def push(
     poster: Poster = _post,
     environ: Optional[dict[str, str]] = None,
     scrubber: Optional[Any] = None,
+    refused: Optional[list[tuple[str, str]]] = None,
 ) -> list[dict[str, Any]]:
     """POST each newest row (minus ``sources``) to ``/api/runs/ingest-agent-run``.
 
     Refused, before anything else, when ``OPENADAPT_API_KEY`` isn't set.
-    The destination must pass the same policy ``ingest-report`` uses.
+    The destination must pass the same policy ``ingest-report`` uses. A row
+    :func:`screen_rows` refuses isn't sent; it is appended to ``refused``
+    (``(row_id, reason)``) when a list is given.
     """
 
     env = os.environ if environ is None else environ
     key = env.get(API_KEY_ENV, "").strip()
     if not key and not dry_run:
         raise LedgerRefused(f"{API_KEY_ENV} isn't set; nothing was sent")
-    lines = outbound_lines(store, summary=True, scrubber=scrubber)
-    payloads = [json.loads(line) for line in lines]
+    screened = screen_rows(store, summary=True, scrubber=scrubber)
+    if refused is not None:
+        refused.extend(screened.refused)
+    payloads = [json.loads(line) for line in screened.lines]
     if dry_run:
         return payloads
     from openadapt_flow.hosted import (
@@ -481,11 +545,13 @@ def cmd_push(args: argparse.Namespace) -> int:
     try:
         if not args.dry_run and not os.environ.get(API_KEY_ENV, "").strip():
             raise LedgerRefused(f"{API_KEY_ENV} isn't set; nothing was sent")
+        refused: list[tuple[str, str]] = []
         results = push(
             _store(args),
             host=args.host,
             dry_run=args.dry_run,
             scrubber=_scrubber(False),
+            refused=refused,
         )
     except LedgerRefused as exc:
         print(f"ledger push: refused: {exc}", file=sys.stderr)
@@ -493,12 +559,15 @@ def cmd_push(args: argparse.Namespace) -> int:
     if args.dry_run:
         for payload in results:
             print(json.dumps(payload, sort_keys=True))
-        return 0
+        _print_refused("push", refused)
+        return 2 if refused else 0
     failed = [r for r in results if r["status"] not in (200, 201, 202)]
-    print(f"Sent {len(results) - len(failed)} of {len(results)} rows")
+    total = len(results) + len(refused)
+    print(f"Sent {len(results) - len(failed)} of {total} rows")
     for item in failed:
         print(f"  {item['row_id']}: HTTP {item['status']}", file=sys.stderr)
-    return 1 if failed else 0
+    _print_refused("push", refused)
+    return 2 if refused else 1 if failed else 0
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -514,6 +583,7 @@ __all__ = [
     "LedgerRefused",
     "main",
     "outbound_lines",
+    "screen_rows",
     "push",
     "register",
     "summarize",
