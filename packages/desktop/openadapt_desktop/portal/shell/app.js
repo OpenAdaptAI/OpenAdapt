@@ -1011,11 +1011,30 @@ function saveSources(presentation) {
 const UNCHECKED_EXPLANATION =
   "OpenAdapt didn't confirm that these are the values this save will send, so they were not checked before saving. Compare the screen with what the task says before you approve.";
 
-// A Flow that doesn't say `values_checked: true` can't back an "exactly":
-// its wording is replaced whenever it claims one.
+// A save an agent asked for: it carries the agent's provenance, or a value
+// Flow couldn't read. An older Flow (Desktop pins 2.4.1) sends both for every
+// guarded save and neither for a compiled program's own save.
+function agentSave(presentation) {
+  if (presentation.provenance) return true;
+  const fields = Array.isArray(presentation.fields) ? presentation.fields : [];
+  return fields.some((f) => f && (f.after === NOT_READ || f.before === NOT_READ));
+}
+
+// Whether the card may say "exactly what will be saved". Flow says so with
+// `values_checked`. An older Flow sends no flag: a compiled program's save
+// keeps its wording, and an agent's save is not checked (fail closed). A
+// ledger question saves nothing, so the flag doesn't apply.
+function valuesChecked(presentation) {
+  if (presentation.kind === "question") return true;
+  if (presentation.values_checked === true) return true;
+  if (presentation.values_checked === false) return false;
+  return !agentSave(presentation);
+}
+
+// Without checked values, any "exactly" in Flow's wording is replaced.
 function saveExplanation(presentation) {
   const text = typeof presentation.explanation === "string" ? presentation.explanation : "";
-  if (presentation.values_checked !== true && (!text || /exactly/i.test(text))) return UNCHECKED_EXPLANATION;
+  if (!valuesChecked(presentation) && (!text || /exactly/i.test(text))) return UNCHECKED_EXPLANATION;
   return text || "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.";
 }
 
@@ -1079,10 +1098,9 @@ async function openSave(item) {
     then: saveExplanation(presentation),
     fields: saveFields(presentation),
     sources: saveSources(presentation),
-    // "Exactly what will be saved" only when Flow says the values were
-    // checked. An older Flow (Desktop pins 2.4.1) sends no values_checked:
-    // not checked, so the card never says "exactly" on its word alone.
-    exact: presentation.values_checked === true,
+    // "Exactly what will be saved" only when the values were checked
+    // (valuesChecked: an agent's save from an older Flow never is).
+    exact: valuesChecked(presentation),
     provenance: saveProvenance(presentation),
     frameUrl: null,
     frameOk: false,
