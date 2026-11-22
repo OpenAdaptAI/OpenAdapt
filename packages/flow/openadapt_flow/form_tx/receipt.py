@@ -37,7 +37,10 @@ from openadapt_flow.form_tx.types import (
     SummaryVerdict,
     canonical_json_bytes,
     canonical_sha256,
+    read_subjects,
     salted_sha256,
+    subjects_digest,
+    uncovered_subject_verdicts,
 )
 
 __all__ = [
@@ -272,20 +275,36 @@ def issue_form_tx_receipt(
             raise ValueError(
                 "Verified receipt requires the run's writes to check coverage"
             )
-        from openadapt_flow.form_tx.judge import (
-            read_subjects,
-            uncovered_subject_verdicts,
-        )
+        if not summary_verdict.ledger_digest:
+            raise ValueError(
+                "Verified receipt requires the summary judge's ledger_digest"
+            )
+        subjects = read_subjects(writes, human_resolutions)
+        if subjects_digest(subjects) != summary_verdict.ledger_digest:
+            raise ValueError(
+                "Verified receipt subject set does not match the run ledger "
+                "evaluated by the summary judge"
+            )
 
         uncovered = uncovered_subject_verdicts(
-            read_subjects(writes, human_resolutions),
+            subjects,
             summary_verdict.field_verdicts,
             lambda _k: FormCodecKind.WHITESPACE_COLLAPSE,
+            summary_verdict.observations_per_key,
         )
         if uncovered:
             raise ValueError(
                 "Verified receipt requires a verdict for every control the run "
                 f"wrote, kept or accepted; uncovered: {[v.dossier_key for v in uncovered]}"
+            )
+        auto_fill_subjects = read_subjects(
+            [w for w in writes if w.source == "auto_fill"], ()
+        )
+        if fields_filled_auto != len(auto_fill_subjects):
+            raise ValueError(
+                "Verified receipt auto-fill count does not match recorded "
+                f"auto_fill subjects: fields_filled_auto={fields_filled_auto} "
+                f"vs {len(auto_fill_subjects)} distinct auto_fill subject(s)"
             )
 
     hr_digests = tuple(salted_sha256(rec, actual_salt) for rec in human_resolutions)

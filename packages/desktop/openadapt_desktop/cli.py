@@ -1019,7 +1019,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--admit-local",
         action="store_true",
-        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+        help="Sign a local-dev admission that production trust maps refuse",
     )
 
     # replay

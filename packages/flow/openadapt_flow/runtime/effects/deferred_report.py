@@ -43,7 +43,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Literal, Mapping, Optional
+from typing import Any, Callable, Iterator, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -135,6 +135,11 @@ class PendingCheck(BaseModel):
 
 #: ``report_format`` of a waiting entry a UI read-back settles.
 UI_READBACK_FORMAT = "ui-readback"
+
+
+#: Hears each waiting entry a report mentions: ``(entry, row, n)``, or
+#: ``(entry, None, 0)`` when the entry expired.
+SettleObserver = Callable[["PendingCheck", Optional[ReportRow], int], None]
 
 
 @dataclass(frozen=True)
@@ -359,6 +364,7 @@ class PendingLedger:
         *,
         issued_at: Optional[datetime] = None,
         now: Optional[datetime] = None,
+        observer: Optional[SettleObserver] = None,
     ) -> list[Settlement]:
         """Expire overdue entries, then settle waiting ones against a report.
 
@@ -368,6 +374,13 @@ class PendingLedger:
         or the caller's report time for a CSV or text report), and only
         entries waiting on that exact report format. ``report_text`` None only
         expires entries.
+
+        ``observer``, when given, hears about every waiting entry the report
+        mentions, including a row that is still pending (a 999 ``A``, a
+        277CA ``A1``), which settles nothing: ``observer(entry, row, n)``
+        with ``n`` the number of waiting entries on that key, and
+        ``observer(entry, None, 0)`` for an entry that expired. It never
+        changes what settles (:mod:`openadapt_flow.handoffs.payer`).
         """
 
         moment = now or _now()
@@ -398,6 +411,7 @@ class PendingLedger:
                             entry.id, "reconciliation_required", "deadline", reason
                         )
                     )
+                    _notify(observer, entry, None, 0)
                 else:
                     still.append(entry)
             if report_text is None or fmt is None:
@@ -424,6 +438,9 @@ class PendingLedger:
                 by_digest.setdefault(entry.key_digest, []).append(entry)
             for digest, entries in by_digest.items():
                 row = rows.get(digest)
+                if row is not None:
+                    for entry in entries:
+                        _notify(observer, entry, row, len(entries))
                 if row is None or row.status == "pending":
                     continue
                 if len(entries) > 1:
@@ -457,6 +474,23 @@ class PendingLedger:
                     )
                     settled.append(Settlement(entry.id, state, code, reason))
         return settled
+
+
+def _notify(
+    observer: Optional[SettleObserver],
+    entry: PendingCheck,
+    row: Optional[ReportRow],
+    count: int,
+) -> None:
+    """Tell the observer, which never changes what settles: its failure is
+    swallowed (it can catch up later from the settled entries)."""
+
+    if observer is None:
+        return
+    try:
+        observer(entry, row, count)
+    except Exception:  # noqa: BLE001 - an observer must never stop a settlement
+        return
 
 
 def _issued_after(stamp: datetime, created: datetime) -> bool:
@@ -584,6 +618,7 @@ class DeferredReportVerifier(VerifierAdapterBase):
                 unavailable=True,
                 assurance=UNCHECKED,
             )
+        _record_handoff(self.ledger, entry)
         return EffectVerdict(
             verdict=Verdict.INDETERMINATE,
             kind=expected.kind,
@@ -595,6 +630,23 @@ class DeferredReportVerifier(VerifierAdapterBase):
             deferred_check=entry.id,
             assurance=UNCHECKED,
         )
+
+
+def _record_handoff(ledger: PendingLedger, entry: PendingCheck) -> None:
+    """The claim is now a handoff (``sent``), so the run's receipt can carry
+    its line. Never changes the check: a failure here is ignored, and
+    ``handoff list`` adds the handoff later from the pending entry."""
+
+    try:
+        from openadapt_flow.handoffs import payer
+        from openadapt_flow.handoffs.registry import note_ledger
+
+        if entry.report_format in payer.COUNTERPARTY_FORMATS:
+            handoffs = payer.handoff_ledger(ledger)
+            handoffs.adopt(payer.as_handoff(entry))
+            note_ledger(handoffs.directory)
+    except Exception:  # noqa: BLE001 - bookkeeping must never fail the save
+        return
 
 
 def build_deferred_report_verifier(
@@ -615,12 +667,13 @@ def settle_report_file(
     fmt: ReportFormat,
     *,
     issued_at: Optional[datetime] = None,
+    observer: Optional[SettleObserver] = None,
 ) -> list[Settlement]:
     """Settle against a report file. A CSV or text report needs its issue
     time (``issued_at``); an X12 report carries its own."""
 
     text = Path(report_path).read_text(encoding="utf-8", errors="strict")
-    return ledger.settle(text, fmt, issued_at=issued_at)
+    return ledger.settle(text, fmt, issued_at=issued_at, observer=observer)
 
 
 __all__ = [

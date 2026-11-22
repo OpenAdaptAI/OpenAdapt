@@ -49,6 +49,17 @@ class FormSurfaceBackend(Protocol):
         """Total state-changing requests (POST/PUT/PATCH/DELETE) sent so far."""
         ...
 
+    @property
+    def confirmed_mutation_count(self) -> int:
+        """State-changing requests started on this surface answered with 2xx/3xx."""
+        ...
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        """Return True iff a mutation started after ``since_mutation_count`` succeeded."""
+        ...
+
     def reset_mutation_counter(self) -> None: ...
 
     def snapshot(

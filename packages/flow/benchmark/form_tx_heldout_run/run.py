@@ -451,7 +451,7 @@ def maybe_learn(
 def main(argv: list[str]) -> int:
     from playwright.sync_api import sync_playwright
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--arm", choices=("B", "C"), required=True)
     ap.add_argument("--split", choices=("dev", "scored"), default="scored")
     ap.add_argument(
