@@ -45,7 +45,10 @@ def append_ledger_line(path: Path, entry: dict[str, Any]) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     data = (json.dumps(entry, sort_keys=True, separators=(",", ":")) + "\n").encode()
-    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    from openadapt_flow.private_file import open_binary
+
+    # Binary: on Windows a plain os.open would write CRLF into the ledger.
+    fd = open_binary(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     try:
         while data:
             written = os.write(fd, data)
