@@ -45,7 +45,9 @@
   second factor at that terminal when no control plane or command is set. A
   code is read without echo, under the step's deadline, in the calling
   thread; echo comes back on when the read ends, including on a timeout, and
-  input typed before the prompt is discarded. A run without a terminal never
+  input typed before the prompt is discarded. On Windows the console is read
+  one key at a time with `msvcrt.getwch`, which never echoes, under the same
+  deadline and discard rules. A run without a terminal never
   prompts and still stops before typing. `OPENADAPT_SECOND_FACTOR_PROMPT=off`
   turns the prompt off.
 

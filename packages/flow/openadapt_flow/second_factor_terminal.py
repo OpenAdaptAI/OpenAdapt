@@ -2,16 +2,25 @@
 
 :class:`TerminalSource` is the last source :func:`openadapt_flow.second_factor.source_from_env`
 tries: only when no control plane and no command is set, stdin and stderr are
-both a TTY, and ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``. A service,
-a hosted sandbox, an MCP server or CI has no terminal and never prompts.
+both a terminal, and ``OPENADAPT_SECOND_FACTOR_PROMPT`` is not ``off``. A
+service, a hosted sandbox, an MCP server or CI has no terminal and never
+prompts.
 
-The read runs in the calling thread under the step's deadline, with
-``select`` on the terminal's descriptor; nothing keeps reading after the
-step gives up. For a code, echo is turned off for that read only and turned
-back on in ``finally``, whether the person answered, the deadline passed or
-the read failed. Input typed before the prompt is discarded, so an earlier
-keystroke can't answer it, and so is input left over when the read ends, so
-the shell never reads part of a code.
+One line reader (:func:`read_line`) serves every platform, over a small
+:class:`Console` interface:
+
+- :class:`PosixConsole` (``termios``): echo is turned off for a code, and
+  ``select`` waits on the terminal's descriptor.
+- :class:`WindowsConsole` (``msvcrt``): ``getwch`` reads one key at a time
+  without echo, and ``kbhit`` is polled in short slices.
+
+Either way the read runs in the calling thread under the step's deadline, so
+nothing keeps reading after the step gives up. Anything typed before the
+prompt is discarded, so an earlier keystroke can't answer it. When the read
+ends, whatever ends it (an answer, the deadline, an over-long answer, Ctrl-C
+or a failed read), input it did not take is discarded and the terminal's
+normal input mode is restored in ``finally``, so the shell never reads part
+of a code.
 """
 
 from __future__ import annotations
@@ -20,45 +29,263 @@ import os
 import sys
 import time
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 from openadapt_flow.second_factor import Request, SecondFactorRefused
 
-__all__ = ["PROMPT_OFF", "TerminalSource"]
+__all__ = [
+    "PROMPT_OFF",
+    "Console",
+    "PosixConsole",
+    "TerminalSource",
+    "WindowsConsole",
+    "read_line",
+]
 
 #: Values of ``OPENADAPT_SECOND_FACTOR_PROMPT`` that turn the prompt off.
 PROMPT_OFF = ("off", "0", "false")
 #: The longest answer read from the terminal; a code is far shorter.
 _MAX_LINE = 256
+#: How often the Windows console is polled for a key.
+_POLL_S = 0.05
 
 
-class TerminalSource:
-    """Ask the person at the run's own terminal (no echo for a code)."""
+class Console(Protocol):
+    """The terminal primitives :func:`read_line` needs."""
+
+    #: Whether typed characters are shown by the terminal itself.
+    echoes: bool
+
+    def begin(self, *, hidden: bool) -> None:
+        """Enter reading mode (no echo when ``hidden``); drop pending input."""
+
+    def wait(self, timeout_s: float) -> bool:
+        """Whether a character is ready within ``timeout_s``."""
+
+    def read(self) -> str:
+        """Characters that are ready; ``""`` at end of input."""
+
+    def end(self) -> None:
+        """Drop input not taken and restore normal input. Never raises."""
+
+
+def read_line(
+    console: Console,
+    out: Any,
+    prompt: str,
+    *,
+    hidden: bool,
+    deadline: float,
+    timeout_s: float,
+    clock: Callable[[], float] = time.monotonic,
+) -> str:
+    """One line from ``console`` before ``deadline``, or a refusal."""
+
+    try:
+        try:
+            console.begin(hidden=hidden)
+        except Exception:  # noqa: BLE001 - an unusable terminal is unavailable
+            raise SecondFactorRefused(
+                "second_factor_unavailable", "the terminal can't be read"
+            ) from None
+        _write(out, prompt)
+        line: list[str] = []
+        skip = False
+        while True:
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise SecondFactorRefused(
+                    "second_factor_timeout",
+                    f"no second factor within {timeout_s:g} s; nothing was typed",
+                )
+            if not console.wait(remaining):
+                continue
+            chunk = console.read()
+            if not chunk:
+                raise SecondFactorRefused(
+                    "second_factor_unavailable",
+                    "the terminal closed; nothing was typed",
+                )
+            for char in chunk:
+                if skip:  # the second half of a Windows function or arrow key
+                    skip = False
+                    continue
+                if char in ("\x00", "\xe0"):
+                    skip = True
+                    continue
+                if char == "\x03":
+                    raise KeyboardInterrupt
+                if char in ("\r", "\n"):
+                    return "".join(line)
+                if char in ("\b", "\x7f"):
+                    if line:
+                        line.pop()
+                        if not hidden and not console.echoes:
+                            _write(out, "\b \b")
+                    continue
+                line.append(char)
+                if not hidden and not console.echoes:
+                    _write(out, char)  # an approval reply is shown, a code never
+                if len(line) > _MAX_LINE:
+                    raise SecondFactorRefused(
+                        "second_factor_invalid", "the answer is too long"
+                    )
+    except OSError:
+        raise SecondFactorRefused(
+            "second_factor_unavailable", "the terminal can't be read"
+        ) from None
+    finally:
+        console.end()
+        _write(out, "\n")
+
+
+def _write(out: Any, text: str) -> None:
+    try:
+        out.write(text)
+        out.flush()
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
+class PosixConsole:
+    """A POSIX terminal on file descriptor ``fd`` (``termios``)."""
+
+    echoes = True
+
+    def __init__(self, fd: int) -> None:
+        self._fd = fd
+        self._saved: Optional[list[Any]] = None
+
+    def begin(self, *, hidden: bool) -> None:
+        import termios
+
+        self._saved = termios.tcgetattr(self._fd)
+        quiet = list(self._saved)
+        if hidden:
+            quiet[3] = quiet[3] & ~termios.ECHO
+        termios.tcsetattr(self._fd, termios.TCSANOW, quiet)
+        # Input only: waiting for output to drain could block on a terminal
+        # nobody reads.
+        termios.tcflush(self._fd, termios.TCIFLUSH)
+
+    def wait(self, timeout_s: float) -> bool:
+        import select
+
+        ready, _, _ = select.select([self._fd], [], [], timeout_s)
+        return bool(ready)
+
+    def read(self) -> str:
+        return os.read(self._fd, _MAX_LINE).decode("utf-8", "replace")
+
+    def end(self) -> None:
+        try:
+            import termios
+        except ImportError:
+            return
+        try:
+            termios.tcflush(self._fd, termios.TCIFLUSH)
+        except (termios.error, OSError):
+            pass
+        if self._saved is not None:
+            try:
+                termios.tcsetattr(self._fd, termios.TCSANOW, self._saved)
+            except (termios.error, OSError):
+                pass
+            self._saved = None
+
+
+class WindowsConsole:
+    """The Windows console (``msvcrt``). ``getwch`` reads without echo.
+
+    ``msvcrt`` changes no console mode, so there is no mode to restore;
+    ending a read drops the keys it did not take. ``kbhit``, ``getwch`` and
+    ``sleep`` are injectable, so the logic is tested on every platform.
+    """
+
+    echoes = False
 
     def __init__(
         self,
-        fd_in: int,
+        *,
+        kbhit: Optional[Callable[[], bool]] = None,
+        getwch: Optional[Callable[[], str]] = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        if kbhit is None or getwch is None:
+            import msvcrt  # type: ignore[import-not-found,unused-ignore]
+
+            kbhit = kbhit or msvcrt.kbhit  # type: ignore[attr-defined,unused-ignore]
+            getwch = getwch or msvcrt.getwch  # type: ignore[attr-defined,unused-ignore]
+        self._kbhit = kbhit
+        self._getwch = getwch
+        self._sleep = sleep
+
+    def _drain(self) -> None:
+        for _ in range(4 * _MAX_LINE):  # bounded: a stuck kbhit can't hang
+            if not self._kbhit():
+                return
+            self._getwch()
+
+    def begin(self, *, hidden: bool) -> None:
+        self._drain()
+
+    def wait(self, timeout_s: float) -> bool:
+        waited = 0.0
+        while True:
+            if self._kbhit():
+                return True
+            if waited >= timeout_s:
+                return False
+            step = min(_POLL_S, timeout_s - waited)
+            self._sleep(step)
+            waited += step
+
+    def read(self) -> str:
+        return self._getwch()
+
+    def end(self) -> None:
+        try:
+            self._drain()
+        except Exception:  # noqa: BLE001 - ending never raises
+            pass
+
+
+class TerminalSource:
+    """Ask the person at the run's own terminal (no echo for a code).
+
+    ``fd_in`` is a POSIX terminal descriptor; pass ``console`` instead for
+    another :class:`Console` (the Windows console, or a test double).
+    """
+
+    def __init__(
+        self,
+        fd_in: Optional[int],
         out: Any,
         *,
+        console: Optional[Console] = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._fd = fd_in
+        if console is None:
+            if fd_in is None:
+                raise ValueError("a terminal source needs a descriptor or a console")
+            console = PosixConsole(fd_in)
+        self._console = console
         self._out = out
         self._clock = clock
 
     @classmethod
     def open(cls) -> Optional["TerminalSource"]:
-        """The run's terminal, or None when it has none (or no termios)."""
+        """The run's terminal, or None when it has none."""
 
-        try:
-            import termios  # noqa: F401 - POSIX terminals only
-        except ImportError:
-            return None
         try:
             if not (sys.stdin.isatty() and sys.stderr.isatty()):
                 return None
+            if sys.platform == "win32":
+                return cls(None, sys.stderr, console=WindowsConsole())
+            import termios  # noqa: F401 - POSIX terminals
+
             return cls(sys.stdin.fileno(), sys.stderr)
-        except (AttributeError, ValueError, OSError):
+        except (AttributeError, ValueError, OSError, ImportError):
             return None
 
     def obtain(
@@ -93,66 +320,12 @@ class TerminalSource:
     def _ask(
         self, prompt: str, *, hidden: bool, deadline: float, timeout_s: float
     ) -> str:
-        import select
-        import termios
-
-        try:
-            saved = termios.tcgetattr(self._fd)
-        except (termios.error, OSError):
-            raise SecondFactorRefused(
-                "second_factor_unavailable", "the terminal can't be read"
-            ) from None
-        try:
-            quiet = list(saved)
-            if hidden:
-                quiet[3] = quiet[3] & ~termios.ECHO
-            termios.tcsetattr(self._fd, termios.TCSANOW, quiet)
-            # Drop anything typed before the prompt (input only: waiting for
-            # output to drain could block on a terminal nobody reads).
-            termios.tcflush(self._fd, termios.TCIFLUSH)
-            self._out.write(prompt)
-            self._out.flush()
-            line = b""
-            while b"\n" not in line:
-                remaining = deadline - self._clock()
-                if remaining <= 0:
-                    raise SecondFactorRefused(
-                        "second_factor_timeout",
-                        f"no second factor within {timeout_s:g} s; nothing was typed",
-                    )
-                ready, _, _ = select.select([self._fd], [], [], remaining)
-                if not ready:
-                    continue
-                chunk = os.read(self._fd, _MAX_LINE)
-                if not chunk:
-                    raise SecondFactorRefused(
-                        "second_factor_unavailable",
-                        "the terminal closed; nothing was typed",
-                    )
-                line += chunk
-                if len(line) > _MAX_LINE:
-                    raise SecondFactorRefused(
-                        "second_factor_invalid", "the answer is too long"
-                    )
-            return line.split(b"\n", 1)[0].decode("utf-8", "replace")
-        except OSError:
-            raise SecondFactorRefused(
-                "second_factor_unavailable", "the terminal can't be read"
-            ) from None
-        finally:
-            try:
-                # Whatever the person typed and the read did not take (a
-                # timeout, an over-long answer, an interrupt) is discarded
-                # before echo comes back, so the shell never reads it.
-                termios.tcflush(self._fd, termios.TCIFLUSH)
-            except (termios.error, OSError):
-                pass
-            try:
-                termios.tcsetattr(self._fd, termios.TCSANOW, saved)
-            except (termios.error, OSError):
-                pass
-            try:
-                self._out.write("\n")
-                self._out.flush()
-            except (OSError, ValueError):
-                pass
+        return read_line(
+            self._console,
+            self._out,
+            prompt,
+            hidden=hidden,
+            deadline=deadline,
+            timeout_s=timeout_s,
+            clock=self._clock,
+        )
