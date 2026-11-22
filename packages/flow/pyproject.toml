@@ -7,6 +7,19 @@ name = "openadapt-flow"
 version = "3.4.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
+keywords = [
+    "computer-use-agents",
+    "gui-automation",
+    "workflow-compiler",
+    "agent-verification",
+    "read-back",
+    "receipts",
+    "mcp",
+    "rpa",
+    "desktop",
+    "citrix",
+    "rdp",
+]
 license = { text = "MIT" }
 # rapidocr-onnxruntime is part of the validated identity/OCR path and does not
 # publish Python 3.13-compatible releases. Keep the package boundary aligned
@@ -267,7 +280,7 @@ registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
 # deployment installs this and sets OPENADAPT_FLOW_SCRUB=on to fail closed.
 # After install: python -m spacy download en_core_web_sm
 privacy = [
-    "openadapt-privacy[presidio]>=1.0.0",
+    "openadapt-privacy[presidio]>=1.1.4",
     # spaCy imports Click directly from its CLI package but does not declare it;
     # Typer 0.27 stopped supplying Click transitively. Keep regulated-mode
     # compilation importable under fresh, unconstrained PyPI resolution.
