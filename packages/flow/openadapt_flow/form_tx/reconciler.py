@@ -1630,6 +1630,7 @@ class FormReconciler:
             _observed_control_matches,
             _text_pair_matches,
         )
+        from openadapt_flow.form_tx.review_location import review_text_matches
 
         for rb in check.review_readbacks:
             fact = session.effective_facts.get(rb.dossier_key)
@@ -1654,11 +1655,19 @@ class FormReconciler:
                 session._review_skipped[rb.dossier_key] = "not shown on the review"
                 continue
             session._review_skipped.pop(rb.dossier_key, None)
-            ok = (
-                _observed_control_matches(fact.value, ctrl, rb)
-                if ctrl is not None
-                else pair is not None and _text_pair_matches(fact.value, pair, rb)
-            )
+            if ctrl is not None:
+                ok = _observed_control_matches(fact.value, ctrl, rb)
+            elif pair is not None:
+                ported = review_text_matches(
+                    rb, fact.value, pair, run_id=session.run_id
+                )
+                ok = (
+                    _text_pair_matches(fact.value, pair, rb)
+                    if ported is None
+                    else ported
+                )
+            else:
+                ok = False
             if ok:
                 continue
             shown = (
