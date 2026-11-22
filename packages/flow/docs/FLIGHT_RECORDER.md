@@ -16,10 +16,12 @@ For that one run you get:
   table in `openadapt_flow.compile_agent.agents.PRICES_PER_MTOK`. A model with
   no price gets a cost of `null` with `cost_source: "unknown"`; the proxy
   never guesses a price.
-- **Scrubbing before anything leaves the machine.** The proxy scrubs every
-  string in the request body (message text, tool-call arguments, tool
-  results, URLs) and redacts every base64 screenshot before it forwards the
-  request. See [What the scrubber does](#what-the-scrubber-does).
+- **Scrubbing before anything leaves the machine.** The proxy scrubs the
+  strings in the request body (message text, tool-call arguments, tool
+  results, URLs) and redacts the screenshots it recognises (PNG, JPEG, GIF,
+  BMP, TIFF, WEBP) before it forwards the request. See
+  [What the scrubber does](#what-the-scrubber-does) and
+  [What the scrubber does not cover](#what-the-scrubber-does-not-cover).
 - **An egress block.** On macOS your command runs under `sandbox-exec` with
   every outbound connection denied except to loopback, so a direct
   connection from your command or anything it starts fails. Elsewhere
@@ -44,7 +46,9 @@ For that one run you get:
    1. scrubs the request body;
    2. checks the spend cap;
    3. forwards the body over HTTPS with your agent's own headers, including
-      its API key. The key is never logged or written.
+      its API key. The key is never logged or written. The request's URL
+      path, query and headers go to the provider as your agent set them;
+      only the body is scrubbed.
    4. passes the response back, streamed or not, and reads the usage from it.
 4. Your command also gets `OPENADAPT_FLIGHT_GATE_URL`. A `GatedComputer` or
    `GatedComputerCall` in your process uses it to log actions and to ask the
@@ -118,7 +122,9 @@ digits becomes `"<ID>"`.
 
 Each string goes through these steps:
 
-1. URLs are cut to their origin (`https://emr.example/<path removed>`).
+1. URLs are cut to their origin (`https://emr.example/<path removed>`),
+   with or without a scheme (`emr.example/<path removed>`), at the path:
+   the query goes too, whatever brackets it holds.
 2. Personal values are found: values already seen in this run, deterministic
    patterns (dates, phone numbers, e-mail addresses, street addresses,
    numbers of five or more digits, the value after a label such as `Name:`,
@@ -134,6 +140,60 @@ and are left alone; they mostly hit app names, headers and words like
 "DONE". When Presidio, asked about the same words alone, names a person or
 another identifier, they are redacted (it reads some names in a sentence as
 organisations). A date with no digit ("today") is left alone too.
+
+Images are found wherever they are: base64 `image` blocks, `data:image/...`
+URLs, an MCP image item's `data`, and any run of 256 or more base64
+characters inside any string, on one line or wrapped across lines (a raw
+dump in a tool result, JSON in a text block, `<img src="data:...">`, a
+76-column MIME part). A run that decodes to an image is scrubbed in place;
+one that decodes to anything else can't be read, and the request is
+refused. A run inside a URL is left to the URL cut. A request nested too
+deeply to walk is refused.
+
+Two more layers catch what those shapes miss:
+
+- JSON escapes are decoded first, a few levels deep (`\/`, `\n`, `\"`,
+  `\uXXXX`, a JSON string of JSON), and runs are looked for in the decoded
+  text. When one is found, the decoded, scrubbed text is what is sent.
+- An image split into groups of any size (spaces, `&#10;`, `<br>`, quoted
+  concatenation) is found by joining the groups and decoding: only bytes
+  that start like an image count.
+- A backstop refuses any string that still holds a 512-character stretch
+  (whitespace and backslashes removed) that is at least 75% base64 letters
+  with at least 20% upper and 20% lower case, which is what base64 looks
+  like and prose, numbers, hex and URLs don't. A JWT or any other opaque
+  token that long refuses the request too; nothing is sent.
+- The same backstop refuses a 512-character stretch that is mostly one or
+  two base64 letters ("////", "AAAA"): an uncompressed white page as BMP or
+  TIFF. Rules and table borders made of "-", "_" or "=" don't count.
+- Image signatures are searched for in every string's base64 letters, JSON
+  escapes decoded and every other character dropped, at all three
+  alignments (PNG, JPEG, GIF, BMP, TIFF, WEBP), and again in all of the
+  request's strings joined together (an image split across text blocks or
+  a JSON array of chunks). An image the layers above scrubbed in place is
+  taken out first; any other signature refuses the request.
+
+Both backstops run on each string and again on all of the request's strings
+joined, so encoded data split into short pieces refuses too.
+
+### What the scrubber does not cover
+
+Images are recognised and scrubbed in PNG, JPEG, GIF, BMP, TIFF and WEBP.
+An image in another format (AVIF, QOI, PPM...) is not recognised: it is
+refused only when one of the density backstops catches it, and a page with
+text on a flat background, uncompressed in another format, can get through.
+
+The backstops can also refuse ordinary content that looks encoded: git
+SHAs, many camelCase identifiers in a row, random tokens. Because the agent
+resends its history on every call, a refused turn refuses the rest of the
+run.
+
+The scrubber covers images and text in ordinary agent traffic, in standard
+encodings: base64 in any wrapping, and JSON escapes. An agent that
+deliberately re-encodes data (hex, percent-encoding, another base, a custom
+scheme, or anything else) can get it past the scrubber. A hostile agent is
+out of scope for the scrubber; the egress block and your choice of model
+provider are the controls there.
 
 Each image is OCR'd with tesseract. Each OCR line, split into table cells at
 wide gaps, goes through the same detection, and each value is painted over
@@ -212,35 +272,56 @@ faces or handwriting, and it can't cover text tesseract can't read.
 
 ## The pre-commit gate
 
-The gate checks clicks, double clicks, Enter and Space keys, Ctrl+S or Cmd+S,
-and typed text that ends a line. For each one, the wrapper reads the label of
-the target:
+The gate checks every action the agent asks your executor to perform. An
+action passes without a person only when everything it does is known to be
+safe; anything else goes to the gate.
 
-1. from your executor's accessibility hook (`label_at(x, y)`, or
-   `focused_label()` for keys) when it has one. The hook may name the role
-   first, as in `"button Save"`;
-2. otherwise, by OCR of a fresh screenshot. Only a text line whose box holds
+To read a target, the wrapper uses:
+
+1. your executor's accessibility hook (`label_at(x, y)`, or
+   `focused_label()` for the focused control) when it has one. The hook may
+   name the role first, as in `"button Save"`;
+2. otherwise, OCR of a fresh screenshot. Only a text line whose box holds
    the click point names the target, or every line inside the target's
    bounds when your executor has `target_bounds(x, y)`. A line next to the
    target, such as the field label beside an icon-only button, is not its
    label.
 
-The gate fails closed. An action passes without a person only when its
-target is known to be safe:
+A target is known to be safe when:
 
-- the role only focuses or reveals: `textbox`, `searchbox`, `textarea`,
-  `combobox` or `tab` (this needs the accessibility hook); or
-- the whole label, ignoring case and surrounding arrows, is one of: Back, Go
+- the accessibility hook gives it a role that only focuses or reveals:
+  `textbox`, `searchbox`, `textarea`, `combobox` or `tab`; or
+- its whole label, ignoring case and surrounding arrows, is one of: Back, Go
   back, Cancel, Close, Search, Find, Open, View, View details, Details, Show
   more, Show less, More, Expand, Collapse, Menu, Previous page, Next page,
   Home, Help.
 
-Everything else is commit-class: Save, OK, Done, Next, Apply, Delete,
+What passes, by action:
+
+| Action | Passes without a person when |
+| --- | --- |
+| Click, double click | the target is known to be safe |
+| Right click | always (it opens a menu; the item clicked next is gated) |
+| Drag | both ends are known-safe targets |
+| Scroll, wait, screenshot, pointer move | always |
+| Tab, Shift+Tab, Escape, arrows, Page Up/Down, Home, End, Ctrl/Cmd+C, Ctrl/Cmd+A, Ctrl/Cmd+F | always, unless the same action then types or presses anything else |
+| Backspace, Delete, Ctrl/Cmd+X, Ctrl/Cmd+V, a single character | focus is in a text field |
+| Typed text | focus is in a text field and the text has no control character (no tab, line break or other C0/C1 character); typed text with one is always held |
+| Enter | focus is in a multi-line text area or a search box, or on a known-safe control |
+| Space | focus is in a text field or on a known-safe control |
+| Ctrl/Cmd+S, Ctrl/Cmd+Enter, any other key or combination, any other action | never |
+
+"Focus is in a text field" means the accessibility hook says so. Without a
+focus hook, it means the last action the wrapper let through was a click on
+a target the accessibility hook called a text field, followed only by
+typing, editing keys, scrolls or waits. A Tab, any other key, or a click
+anywhere else ends it. With OCR alone the gate can't tell a field from a
+button, so it holds typing.
+
+Everything not listed is commit-class: Save, OK, Done, Next, Apply, Delete,
 "Cancel order", a label in another language, an icon with no text, a target
 that can't be read, and any action the JIT translators can't classify (a
-triple click, a separate mouse-down). Enter and Space on the focused control
-use the same rule; Enter also passes in a multi-line text area or a search
-box, and Space in a text field. Ctrl+S or Cmd+S is always commit-class.
+triple click, a separate mouse-down).
 
 `--safe-label LABEL` (repeatable) adds labels for one deployment, such as a
 navigation button your app calls "New Encounter". A label with Save, Submit,

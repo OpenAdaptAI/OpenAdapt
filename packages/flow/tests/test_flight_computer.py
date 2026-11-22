@@ -156,7 +156,6 @@ def test_actions_that_can_commit_or_cant_be_classified_are_held(action):
 @pytest.mark.parametrize(
     "action",
     [
-        {"action": "type", "text": "follow up"},
         {"action": "key", "text": "Tab"},
         {"action": "scroll", "coordinate": [1, 1], "scroll_direction": "down"},
         {"action": "mouse_move", "coordinate": [3, 4]},
@@ -274,12 +273,12 @@ def test_a_cua_save_click_is_held_inner_click_never_called_and_the_next_frame_sa
     computer.click(5, 5, "right")
     computer.scroll(1, 1, 0, 100)
     computer.keypress(["ENTER"])
+    # No focus hook and no click on a known text field: typing is held.
     computer.type("abc")
     assert inner.calls == [
         ("click", (9, 9, "left")),
         ("click", (5, 5, "right")),
         ("scroll", (1, 1, 0, 100)),
-        ("type", ("abc",)),
     ]
     assert computer.get_current_url() == "http://127.0.0.1/app"
 
@@ -666,3 +665,87 @@ def test_an_action_the_translators_refuse_is_held():
     tool = FakeTool()
     GatedComputer(tool, RefuseGate())(action="left_mouse_down")
     assert tool.calls == []
+
+
+# -- review round: focus moves and typing without a focus hook ---------------
+
+
+def test_typing_without_a_focus_hook_needs_a_click_on_a_text_field():
+    tool = LabelledTool({(1, 1): "textbox Note", (5, 5): "link Back"})
+    computer = GatedComputer(tool, RefuseGate())
+    computer(action="type", text="follow up")
+    assert tool.calls == []  # nothing known about focus yet
+    computer(**_click(1, 1))
+    computer(action="type", text="follow up")
+    assert tool.calls[-1] == {"action": "type", "text": "follow up"}
+    computer(action="key", text="Tab")  # focus moves somewhere unknown
+    computer(action="type", text=" ")
+    assert tool.calls[-1] == {"action": "key", "text": "Tab"}
+    computer(**_click(5, 5))  # a click on a link, not a text field
+    computer(action="type", text="x")
+    assert tool.calls[-1] == _click(5, 5)
+
+
+def test_a_focus_move_then_more_input_in_one_action_is_held():
+    class Focused(FakeTool):
+        def focused_label(self) -> str:
+            return "textbox Name"
+
+    for text in ("Jane\t ", "\tSubmit"):
+        tool = Focused()
+        GatedComputer(tool, RefuseGate())(action="type", text=text)
+        assert tool.calls == [], text
+    inner = FakeCuaComputer()
+    GatedComputerCall(inner, RefuseGate()).keypress(["TAB", "ENTER"])
+    assert inner.calls == []
+
+
+def _control_chars() -> list[str]:
+    return (
+        [chr(c) for c in range(0x20)]
+        + [chr(0x7F)]
+        + [chr(c) for c in range(0x80, 0xA0)]
+    )
+
+
+def test_no_typed_text_with_a_control_character_ever_passes():
+    import itertools
+    import random
+
+    rng = random.Random(2493)
+    printable = ["a", "Z", " ", "  ", "Save", "ok go", "é", "1"]
+    controls = _control_chars()
+    texts = set()
+    for c in controls:
+        for p in printable:
+            texts |= {c, p + c, c + p, p + c + p, c + " " + c}
+    for _ in range(300):
+        parts = [rng.choice(printable) for _ in range(rng.randint(0, 3))]
+        parts.insert(rng.randint(0, len(parts)), rng.choice(controls))
+        texts.add("".join(parts))
+
+    class Hooked(FakeTool):
+        def __init__(self, focus):
+            super().__init__()
+            self.focus = focus
+
+        def focused_label(self):
+            return self.focus
+
+    states = ["button Save", "textbox Name", "textarea Note", "searchbox Find", None]
+    for text, focus in itertools.product(sorted(texts), states):
+        if focus is None:
+            # No focus hook, but the last click was on a known text field.
+            tool = LabelledTool({(1, 1): "textbox Name"})
+            computer = GatedComputer(tool, RefuseGate())
+            computer(**_click(1, 1))
+            tool.calls.clear()
+        else:
+            tool = Hooked(focus)
+            computer = GatedComputer(tool, RefuseGate())
+        computer(action="type", text=text)
+        assert tool.calls == [], (repr(text), focus)
+    # Plain printable text still follows the text-field rule.
+    tool = Hooked("textbox Name")
+    GatedComputer(tool, RefuseGate())(action="type", text="Zed Quux 12")
+    assert len(tool.calls) == 1

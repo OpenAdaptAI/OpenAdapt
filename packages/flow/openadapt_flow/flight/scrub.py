@@ -177,6 +177,8 @@ def _split_url(url: str) -> tuple[str, int, int]:
         origin = f"{parts.scheme}://{parts.netloc}"
     except ValueError:
         return "", end, len(url)
+    if len(parts.netloc) > 253 or len(parts.hostname or "") > 253:
+        return "", end, len(url)  # longer than any host name: not a host
     if "@" in parts.netloc:  # credentials in the authority
         return f"{parts.scheme}://", end, len(url)
     return origin, end, len(url)
@@ -196,9 +198,38 @@ def _cut_url(match: re.Match[str]) -> str:
     return origin + "/<path removed>" + tail
 
 
+#: A URL without a scheme, as an address bar shows it: a host name (or
+#: IP) with a dot, then a path. Not inside a URL that has a scheme.
+_BARE_URL = re.compile(
+    r"(?i)(?<![\w@/.:-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}|"
+    r"\d{1,3}(?:\.\d{1,3}){3}|localhost)(:\d+)?(/[^\s\"'<>]*)"
+)
+
+
+def _bare_path(m: re.Match[str]) -> tuple[int, int]:
+    """(start, end) of a scheme-less URL's path and query in its text."""
+    start, end = m.start(3), m.end(3)
+    path = m.group(3)
+    if "?" not in path and "#" not in path:
+        while end > start and m.string[end - 1] in _URL_TAIL:
+            end -= 1
+    return start, end
+
+
 def scrub_urls(text: str) -> str:
-    """``text`` with every URL cut to its origin."""
-    return _URL.sub(_cut_url, text)
+    """``text`` with every URL cut to its origin, with or without a scheme."""
+    text = _URL.sub(_cut_url, text)
+    out = []
+    last = 0
+    for m in _BARE_URL.finditer(text):
+        start, end = _bare_path(m)
+        if text[start:end] in ("", "/") or text[start:end] == "/<path removed>":
+            continue
+        out.append(text[last:start])
+        out.append("/<path removed>")
+        last = end
+    out.append(text[last:])
+    return "".join(out)
 
 
 def scrub_pattern_text(text: str) -> str:
@@ -427,6 +458,13 @@ def detect(
     # Tokens, placeholders and cut URL paths are cut out of a span that
     # touches them; the rest of the span is still scrubbed.
     protected: list[Span] = [(*m.span(), "") for m in _PROTECTED.finditer(text)]
+    for m in _BARE_URL.finditer(text):
+        start, end = _bare_path(m)
+        if text[start:end] not in ("", "/") and not text[start:end].startswith(
+            "/<path removed>"
+        ):
+            found.append((start, end, "URL", 1))
+        protected.append((m.start(), m.start(3), ""))
     # A URL's origin is the app's address, kept on purpose (see _cut_url).
     for m in _URL.finditer(text):
         origin = _split_url(m.group(0))[0]
@@ -818,6 +856,199 @@ _BASE64 = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
 _IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x00*")
 
 
+#: A run of base64 characters long enough to be an encoded payload.
+#: Lines may break between groups (76-column MIME, PEM-style dumps): a run
+#: is base64 characters with line breaks (and indentation) between them.
+_B64_RUN = re.compile(
+    r"[A-Za-z0-9+/_-]{16,}"
+    # Between groups: a line break, real (LF, CRLF) or JSON-escaped (\n,
+    # \r\n written as two characters), with indentation around it, or
+    # spaces. A continuation group doesn't start with "--", so a MIME
+    # "--boundary" line ends the run (url-safe base64 can start with "-").
+    r"(?:(?:[ \t]*(?:\r?\n|\\r\\n|\\n)[ \t]*|[ \t]+)(?!--)[A-Za-z0-9+/_-]{4,})*"
+    # Padding comes only at the very end.
+    r"={0,2}"
+)
+_B64_GROUP = re.compile(r"[A-Za-z0-9+/_-]+={0,2}")
+_ESCAPED_BREAK = re.compile(r"\\r\\n|\\n")
+#: Middle groups of a wrapped run are at least this long; shorter ones are
+#: words that happen to use base64 letters. The first group can be short (a
+#: prefix on the same line), and so can the last.
+_B64_LINE_MIN = 16
+
+Run = tuple[int, int, list[tuple[int, int, str]]]
+
+
+def _runs(value: str) -> list[Run]:
+    """(start, end, groups) of each payload-sized base64 run in ``value``,
+    wrapped across real or escaped line breaks or spaces, or not. Each group
+    is (start, end, text) in ``value``."""
+    out: list[Run] = []
+    for m in _B64_RUN.finditer(value):
+        text = _ESCAPED_BREAK.sub(lambda e: " " * len(e.group(0)), m.group(0))
+        groups = [
+            (m.start() + g.start(), m.start() + g.end(), g.group(0))
+            for g in _B64_GROUP.finditer(text)
+        ]
+        if len(groups) > 1:
+            gap = text[groups[-2][1] - m.start() : groups[-1][0] - m.start()]
+            if "\n" not in gap and len(groups[-1][2]) < _B64_LINE_MIN:
+                # A short word after a space ("... done") is text, not the
+                # payload's last group.
+                groups = groups[:-1]
+        if sum(len(g[2]) for g in groups) < _BLOB_MIN:
+            continue
+        if len(set("".join(g[2] for g in groups))) < 8:
+            continue  # a rule ("-----") or padding, not encoded data
+        middle = groups[1:-1]
+        if any(len(g[2]) < _B64_LINE_MIN for g in middle):
+            continue
+        out.append((m.start(), groups[-1][1], groups))
+    return out
+
+
+def _decode_run(run: Run) -> tuple[Optional[bytes], int]:
+    """(bytes, end in the text) of a run. When stray characters before it
+    shift the alignment (a word glued onto the first group), or a word after
+    it was taken for its last group, the reading that decodes to an image
+    wins; otherwise the whole run's bytes (or None)."""
+    start, end, groups = run
+    first: Optional[bytes] = None
+    for drop in (0, 1):
+        used = groups[: len(groups) - drop] if drop else groups
+        if not used:
+            continue
+        compact = "".join(g[2] for g in used)
+        for skip in range(min(16, len(compact))):
+            blob = _base64_blob(compact[skip:])
+            if blob is None:
+                continue
+            if _is_image(blob):
+                return blob, used[-1][1]
+            if first is None and drop == 0:
+                first = blob
+    return first, end
+
+
+_JSON_ESCAPE = re.compile(r'\\(?:u([0-9a-fA-F]{4})|(["\\/bfnrt]))')
+_SIMPLE = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+
+
+def unescape_json(value: str, levels: int = 3) -> str:
+    r"""``value`` with JSON string escapes decoded, up to ``levels`` times
+    (a JSON string of JSON of JSON...). ``\/`` (PHP's default), ``\n``,
+    ``\uXXXX`` and the rest."""
+    for _ in range(levels):
+        if "\\" not in value:
+            break
+        decoded = _JSON_ESCAPE.sub(
+            lambda m: chr(int(m.group(1), 16)) if m.group(1) else _SIMPLE[m.group(2)],
+            value,
+        )
+        if decoded == value:
+            break
+        value = decoded
+    return value
+
+
+#: The density backstop: a window of this many characters (whitespace and
+#: backslashes removed)...
+_DENSE_WINDOW = 512
+#: ...at least this share of them base64 letters (separators such as
+#: "&#10;" or "<br>" every 16 characters still leave ~80%)...
+_DENSE_ALPHABET = 0.75
+#: ...with both cases mixed the way base64 mixes them (about 40% upper and
+#: 40% lower case). Prose has few capitals; numbers, hex and most ids have
+#: no lower or no upper case.
+_DENSE_CASE = 0.2
+_ALPHABET = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-"
+)
+
+
+def dense_payload(value: str) -> bool:
+    """Whether ``value`` holds encoded data the run detection did not take
+    apart: a 512-character window (whitespace and backslashes removed) that
+    is mostly base64 letters, with base64's mix of upper and lower case.
+
+    URL paths and queries are cut first and don't count."""
+    text = scrub_urls(unescape_json(value))
+    compact = "".join(ch for ch in text if not ch.isspace() and ch != "\\")
+    n = _DENSE_WINDOW
+    if len(compact) < n:
+        return False
+    alpha = [ch in _ALPHABET for ch in compact]
+    upper = [ch.isascii() and ch.isupper() for ch in compact]
+    lower = [ch.isascii() and ch.islower() for ch in compact]
+    a, u, lo = sum(alpha[:n]), sum(upper[:n]), sum(lower[:n])
+    for i in range(n, len(compact) + 1):
+        if a >= _DENSE_ALPHABET * n and u >= _DENSE_CASE * n and lo >= _DENSE_CASE * n:
+            return True
+        if i == len(compact):
+            break
+        a += alpha[i] - alpha[i - n]
+        u += upper[i] - upper[i - n]
+        lo += lower[i] - lower[i - n]
+    return False
+
+
+#: Separators taken out when looking for an image split into small groups.
+_SPLIT = re.compile(r'\s+|\\[nrt]|\\|&#\d+;|<br\s*/?>|"\s*\+\s*"')
+_LONG_ALPHA = re.compile(r"[A-Za-z0-9+/_-]{64,}={0,2}")
+
+
+def find_split_image(value: str) -> Optional[tuple[int, int, bytes]]:
+    """(start, end, image bytes) of an image whose base64 is split into
+    groups of any size (spaces, line breaks, ``&#10;``, ``<br>``, quoted
+    concatenation), as a span of ``value``; or None. Only a run that
+    decodes to an image's magic bytes counts, so prose glued together is
+    never taken for one."""
+    keep: list[int] = []
+    pieces: list[str] = []
+    last = 0
+    for m in _SPLIT.finditer(value):
+        pieces.append(value[last : m.start()])
+        keep.extend(range(last, m.start()))
+        last = m.end()
+    pieces.append(value[last:])
+    keep.extend(range(last, len(value)))
+    compact = "".join(pieces)
+    for m in _LONG_ALPHA.finditer(compact):
+        run = m.group(0)
+        for skip in range(min(16, len(run))):
+            blob = _base64_blob(run[skip:]) if len(run) - skip >= _BLOB_MIN else None
+            if blob is None:
+                blob = _small_image(run[skip:])
+            if blob is not None and _is_image(blob):
+                return keep[m.start() + skip], keep[m.end() - 1] + 1, blob
+    return None
+
+
+def _small_image(value: str) -> Optional[bytes]:
+    """The image a short base64 string (64 or more characters) decodes to,
+    or None: a tiny screenshot is still a screenshot."""
+    compact = "".join(value.split())
+    if len(compact) < 64 or not _BASE64.fullmatch(compact):
+        return None
+    try:
+        if "-" in compact or "_" in compact:
+            data = base64.urlsafe_b64decode(compact + "=" * (-len(compact) % 4))
+        else:
+            data = base64.b64decode(compact + "=" * (-len(compact) % 4), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return data if _is_image(data) else None
+
+
 def _base64_blob(value: str) -> Optional[bytes]:
     """The decoded bytes when ``value`` is a long base64 string, else None."""
     if len(value) < _BLOB_MIN:
@@ -837,6 +1068,101 @@ def _is_image(data: bytes) -> bool:
     if data.startswith(_IMAGE_MAGIC):
         return True
     return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+
+#: Image file signatures searched for in base64 text: (magic bytes, check
+#: on the first decoded bytes). Short magics get a stricter check.
+def _bmp_header(data: bytes) -> bool:
+    return (
+        data[:2] == b"BM"
+        and data[6:10] == b"\0\0\0\0"
+        and int.from_bytes(data[14:18], "little") in (12, 40, 52, 56, 64, 108, 124)
+    )
+
+
+_SIGNATURES: tuple[tuple[bytes, Callable[[bytes], bool]], ...] = (
+    (b"\x89PNG\r\n\x1a\n", lambda d: True),
+    (b"\xff\xd8\xff", lambda d: len(d) > 3 and d[3] in range(0xC0, 0x100)),
+    (b"GIF87a", lambda d: True),
+    (b"GIF89a", lambda d: True),
+    (b"II*\x00", lambda d: True),
+    (b"MM\x00*", lambda d: True),
+    (b"BM", _bmp_header),
+    (b"RIFF", lambda d: d[8:12] == b"WEBP"),
+)
+_NOT_ALPHABET = re.compile(r"[^A-Za-z0-9+/_-]")
+
+
+def _signature_patterns() -> list[tuple[str, int, int, bytes, Callable[[bytes], bool]]]:
+    """For each signature and each of the three byte alignments: the
+    base64 characters that encode it whatever its neighbours are, with how
+    many characters before them (``back``) start the 4-character group."""
+    out = []
+    for magic, check in _SIGNATURES:
+        for shift in range(3):
+            encoded = base64.b64encode(b"\0" * shift + magic + b"\0\0").decode()
+            # Characters fully determined by the magic bytes alone.
+            first = -(-shift * 8 // 6)  # ceil(shift * 8 / 6)
+            last = (shift + len(magic)) * 8 // 6
+            core = encoded[first:last]
+            if len(core) >= 2:
+                group = first - first % 4  # start of the 4-character group
+                out.append((core, first - group, shift, magic, check))
+    return out
+
+
+_PATTERNS = _signature_patterns()
+
+
+def image_signature(value: str) -> bool:
+    """Whether the base64 letters of ``value`` (JSON escapes decoded,
+    every other character removed) hold an image file's signature at any
+    of the three alignments, checked by decoding the header there."""
+    stream = _NOT_ALPHABET.sub("", unescape_json(value))
+    if len(stream) < 4:
+        return False
+    std = stream.replace("-", "+").replace("_", "/")
+    for core, back, shift, magic, check in _PATTERNS:
+        start = std.find(core)
+        while start != -1:
+            g = start - back
+            if g >= 0:
+                chunk = std[g : g + 64]
+                chunk = chunk[: len(chunk) - len(chunk) % 4]
+                try:
+                    data = base64.b64decode(chunk)[shift:]
+                except (binascii.Error, ValueError):
+                    data = b""
+                if data.startswith(magic) and check(data):
+                    return True
+            start = std.find(core, start + 1)
+    return False
+
+
+def low_diversity(value: str) -> bool:
+    """Whether a 512-character window of ``value`` (whitespace and
+    backslashes removed, URL paths cut) is mostly base64 letters and more
+    than 60% one or two of them: an uncompressed white BMP or TIFF ("////"
+    or "AAAA"), which the case-mix rule of :func:`dense_payload` misses.
+    "-", "_" and "=" don't count, so table borders and rules pass."""
+    text = scrub_urls(unescape_json(value))
+    compact = "".join(ch for ch in text if not ch.isspace() and ch != "\\")
+    n = _DENSE_WINDOW
+    if len(compact) < n:
+        return False
+    core = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+    for start in range(0, len(compact) - n + 1, n // 4):
+        window = compact[start : start + n]
+        letters = [ch for ch in window if ch in core]
+        if len(letters) < _DENSE_ALPHABET * n:
+            continue
+        counts: dict[str, int] = {}
+        for ch in letters:
+            counts[ch] = counts.get(ch, 0) + 1
+        top = sorted(counts.values(), reverse=True)[:2]
+        if sum(top) > 0.6 * n:
+            return True
+    return False
 
 
 def _b64(data: str) -> bytes:
@@ -860,6 +1186,25 @@ def _mime_png(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     return after
 
 
+def _leaf_strings(node: Any, key: Optional[str] = None) -> list[str]:
+    """The strings of a scrubbed body that carry data, in order: not
+    request settings, signed blocks or protocol fields."""
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, list):
+        return [s for item in node for s in _leaf_strings(item, key)]
+    if not isinstance(node, dict):
+        return []
+    if node.get("type") in _OPAQUE_TYPES:
+        return []
+    out: list[str] = []
+    for k, v in node.items():
+        if k in _PROTOCOL_KEYS or (key is None and k in _TOP_SETTINGS):
+            continue
+        out += _leaf_strings(v, k)
+    return out
+
+
 def scrub_request(
     body: Any, scrub: Any, on_frame: Optional[Callable[[bytes], None]] = None
 ) -> Any:
@@ -869,25 +1214,48 @@ def scrub_request(
     ``on_frame`` gets each scrubbed image seen for the first time.
     """
 
+    produced: set[str] = set()
+
     def image(raw: bytes) -> bytes:
         png, new = scrub.image(raw)
         if new and on_frame is not None:
             on_frame(png)
+        produced.add(base64.b64encode(png).decode("ascii"))
         return png
 
     def data_url(value: str) -> str:
         head, sep, data = value.partition(",")
         if not sep or ";base64" not in head:
             raise ScrubRefused("an image data URL is not base64")
-        png = image(_b64(data))
+        png = image(_b64("".join(data.split())))  # wrapped across lines too
         return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
     def string(value: str, *, image_slot: bool) -> str:
+        if "\\" in value and len(value) >= _BLOB_MIN:
+            # A payload behind JSON escapes (\/, \n, a JSON string of
+            # JSON): look in the decoded form; if it holds base64, that form
+            # is what is scrubbed and sent.
+            shadow = unescape_json(value)
+            if shadow != value and (
+                _runs(shadow) or dense_payload(shadow) or _small_image(shadow.strip())
+            ):
+                value = shadow
+        small = _small_image(value.strip()) if len(value) < 4096 else None
+        if small is not None:
+            return base64.b64encode(image(small)).decode("ascii")
         if value.startswith("data:"):
             if value[5:].lower().startswith("image/"):
                 return data_url(value)
             raise ScrubRefused("a non-image data URL can't be scrubbed")
-        blob = _base64_blob(value)
+        runs = _runs(value) if len(value) >= _BLOB_MIN else []
+        whole = (
+            len(runs) == 1
+            and not value[: runs[0][0]].strip()
+            and not value[runs[0][1] :].strip()
+        )
+        blob = _decode_run(runs[0])[0] if whole else None
+        if blob is None and runs:
+            return embedded(value)
         if blob is not None:
             # A screenshot in another shape (an MCP image item's data, a raw
             # base64 PNG in a tool result or in JSON text): scrubbed as an
@@ -899,10 +1267,87 @@ def scrub_request(
             return base64.b64encode(image(blob)).decode("ascii")
         if image_slot and value.lower().startswith(("http://", "https://")):
             raise ScrubRefused("an image by URL can't be scrubbed before it is sent")
-        out = scrub.text(value)
-        if not isinstance(out, str):
+        return split_images(value)
+
+    def split_images(value: str) -> str:
+        """Images split into small groups, scrubbed in place; the text
+        around them through the text scrubber and the backstop."""
+        out = []
+        for _ in range(64):
+            found = find_split_image(value) if len(value) >= 64 else None
+            if found is None:
+                break
+            start, end, blob = found
+            out.append(text_piece(value[:start]))
+            out.append(base64.b64encode(image(blob)).decode("ascii"))
+            value = value[end:]
+        else:
+            raise ScrubRefused("too many images in one string to scrub")
+        out.append(text_piece(value))
+        return "".join(out)
+
+    def embedded(value: str) -> str:
+        """``value`` with every base64 run of _BLOB_MIN or more characters
+        inside it, wrapped across lines or not (JSON in a text block,
+        ``<img src="data:...">``, a prefixed dump, a MIME part), scrubbed as
+        an image in place; the text around the runs is scrubbed as text.
+        A run that is not an image refuses. A run inside a URL is left to
+        the URL cut. No recursion: the text pieces go to the text scrubber
+        directly."""
+        # A run in a URL's path or query is left to the URL cut. A run in
+        # the place of a host (right after "https://") is no host: it is
+        # decoded like any other.
+        urls = []
+        for m in _URL.finditer(value):
+            origin = _split_url(m.group(0))[0]
+            if origin and not origin.endswith("://"):
+                urls.append(m.span())
+        urls += [m.span() for m in _BARE_URL.finditer(value)]
+        out = []
+        last = 0
+        for run in _runs(value):
+            start = run[0]
+            if any(us <= start and run[1] <= ue for us, ue in urls):
+                continue
+            blob, end = _decode_run(run)
+            if blob is None or not _is_image(blob):
+                raise ScrubRefused(
+                    "a base64 payload that is not an image can't be scrubbed"
+                )
+            head = value[last:start]
+            head = re.sub(
+                r"data:image/[\w.+-]+;base64,$", "data:image/png;base64,", head
+            )
+            out.append(text_piece(head))
+            out.append(base64.b64encode(image(blob)).decode("ascii"))
+            last = end
+        out.append(text_piece(value[last:]))
+        return "".join(out)
+
+    def text_piece(piece: str) -> str:
+        if not piece:
+            return piece
+        if len(piece) >= 4 and image_signature(piece):
+            # An image's signature in the base64 letters of text the
+            # decoders above could not take apart (any separator, any
+            # split): it can't be located and scrubbed, so nothing is sent.
+            raise ScrubRefused(
+                "the text holds a base64 image that can't be scrubbed in place"
+            )
+        if len(piece) >= _DENSE_WINDOW and (
+            dense_payload(piece) or low_diversity(piece)
+        ):
+            # The backstop: encoded data in a shape the run detection didn't
+            # take apart (groups of four, <br>-joined lines...). It can't be
+            # read, so nothing is sent.
+            raise ScrubRefused(
+                "the text holds encoded data that can't be scrubbed "
+                "(a dense base64-like run)"
+            )
+        cleaned = scrub.text(piece)
+        if not isinstance(cleaned, str):
             raise ScrubRefused("the text scrubber returned no text")
-        return out
+        return cleaned
 
     def number(value: Any) -> Any:
         """A number of five or more digits is an identifier until shown
@@ -1021,13 +1466,37 @@ def scrub_request(
                 out[k] = structural(v, k, kind)
         return _mime_png(node, out)
 
-    if not isinstance(body, dict):
-        return structural(body, None)
-    clean: dict[str, Any] = {}
-    for k, v in body.items():
-        if k == "metadata":
-            # Caller-defined values (a user id, a session label): data.
-            clean[k] = payload(v, k)
-        else:
-            clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
-    return clean
+    try:
+        if not isinstance(body, dict):
+            return structural(body, None)
+        clean: dict[str, Any] = {}
+        for k, v in body.items():
+            if k == "metadata":
+                # Caller-defined values (a user id, a session label): data.
+                clean[k] = payload(v, k)
+            else:
+                clean[k] = v if k in _TOP_SETTINGS else structural(v, k)
+        # Last check, over the whole scrubbed request: an image split across
+        # strings (text blocks, a JSON array of chunks) leaves its signature,
+        # or its density, in their letters joined together. The images
+        # scrubbed above are taken out first.
+        joined = "".join(_leaf_strings(clean))
+        for scrubbed_b64 in produced:
+            joined = joined.replace(scrubbed_b64, "")
+        if image_signature(joined):
+            raise ScrubRefused(
+                "the request holds a base64 image split across strings that "
+                "can't be scrubbed in place"
+            )
+        if len(joined) >= _DENSE_WINDOW and (
+            dense_payload(joined) or low_diversity(joined)
+        ):
+            # Encoded data split into strings too short for the backstop
+            # one by one (an image format with no signature checked here).
+            raise ScrubRefused(
+                "the request holds encoded data split across strings that "
+                "can't be scrubbed"
+            )
+        return clean
+    except RecursionError:
+        raise ScrubRefused("the request is nested too deeply to scrub") from None

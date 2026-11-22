@@ -183,3 +183,28 @@ def test_no_usage_json_under_the_block_runs_and_says_unavailable(tmp_path, provi
     egress = json.loads((run_dir / "flight.json").read_text())["details"]["egress"]
     assert egress["enforced"] is True and egress["refused"] is False
     assert egress["checks"]["cross_check"] == "unavailable"
+
+
+def test_the_flight_modules_import_without_posix_only_modules():
+    """Windows has no fcntl, termios, pwd, grp or resource; building the
+    flight parser and importing its modules must not need them."""
+    import subprocess
+
+    code = (
+        "import sys\n"
+        "class Block:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name in ('fcntl', 'termios', 'pwd', 'grp', 'resource'):\n"
+        "            raise ImportError('blocked ' + name)\n"
+        "sys.meta_path.insert(0, Block())\n"
+        "import argparse\n"
+        "from openadapt_flow.flight.cli import add_parser\n"
+        "from openadapt_flow.flight import egress, scrub, pseudonym, proxy\n"
+        "from openadapt_flow.flight import computer, gate, timeline\n"
+        "add_parser(argparse.ArgumentParser().add_subparsers())\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.stdout.strip() == "ok", result.stderr[-2000:]

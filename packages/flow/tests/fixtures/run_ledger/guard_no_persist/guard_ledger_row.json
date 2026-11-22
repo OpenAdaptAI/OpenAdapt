@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": null,
+  "approval_opened_at": null,
+  "approver_kind": "none",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [],
+  "fields_differing": [],
+  "guard_verdict": "RECONCILIATION_REQUIRED",
+  "hold_ms": 14.5,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-no-persist-00",
+  "verdict": "UNKNOWN",
+  "verdict_reason": "reconciliation_required"
+}

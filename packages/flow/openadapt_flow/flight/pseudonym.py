@@ -164,10 +164,17 @@ class Pseudonyms:
             sort_keys=True,
             ensure_ascii=False,
         ).encode("utf-8")
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        from openadapt_flow.private_file import open_binary
+
+        # A raw-byte descriptor (no CRT newline translation on Windows),
+        # owner-only from the start.
+        fd = open_binary(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
-            os.fchmod(fd, 0o600)
-            os.write(fd, data)
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, 0o600)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view) :]
         finally:
             os.close(fd)
 

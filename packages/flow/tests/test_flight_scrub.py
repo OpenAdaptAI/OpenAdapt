@@ -429,3 +429,217 @@ def test_a_chat_completions_image_by_url_is_refused():
     }
     with pytest.raises(ScrubRefused, match="by URL"):
         scrub_request(body, _scrub())
+
+
+def test_base64_images_inside_text_are_scrubbed_in_place():
+    _raw, b64 = _big_png()
+    texts = [
+        json.dumps({"screenshot": b64, "patient": "x"}),  # JSON in a text block
+        f"screenshot: {b64} done",  # a prefixed dump
+        f'<img src="data:image/jpeg;base64,{b64}"> after',  # HTML
+    ]
+    body = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": texts[0]}]},
+            {"role": "tool", "tool_call_id": "c1", "content": texts[1]},
+            {"role": "user", "content": texts[2]},
+        ]
+    }
+    scrub = CountingScrub()
+    out = scrub_request(body, scrub)
+    raw = json.dumps(out)
+    assert scrub.images == 3 and b64 not in raw
+    assert "data:image/png;base64," in out["messages"][2]["content"]
+    assert out["messages"][1]["content"].startswith("screenshot: ")
+    assert out["messages"][1]["content"].endswith(" done")
+
+
+def test_a_non_image_base64_run_inside_text_refuses():
+    blob = base64.b64encode(("Patient Zyxwv Qtest " * 40).encode()).decode()
+    with pytest.raises(ScrubRefused, match="not an image"):
+        scrub_request(
+            {
+                "messages": [
+                    {"role": "tool", "tool_call_id": "c", "content": f"x {blob}"}
+                ]
+            },
+            CountingScrub(),
+        )
+
+
+def test_a_url_without_a_scheme_is_cut_in_text_and_on_screen():
+    from openadapt_flow.flight.scrub import detect, scrub_urls
+
+    assert scrub_urls("at emr.example.test/patients/4471923?name=Zyxwv done") == (
+        "at emr.example.test/<path removed> done"
+    )
+    assert scrub_urls("10.0.0.5:8080/chart/77?x=1") == "10.0.0.5:8080/<path removed>"
+    assert scrub_urls("and/or e.g. this") == "and/or e.g. this"
+    text = "emr.example.test/patients/4471923?name=Zyxwv"
+    spans = detect(text, lambda t: t, lambda t: [])
+    covered = "".join(text[s:e] for s, e, _ in spans)
+    assert "4471923" in covered and "Zyxwv" in covered
+    assert "emr.example.test" not in covered
+
+
+def _wrapped(b64: str, width: int = 76, sep: str = "\n") -> str:
+    return sep.join(b64[i : i + width] for i in range(0, len(b64), width))
+
+
+def test_wrapped_base64_images_are_scrubbed_wherever_they_are():
+    _raw, b64 = _big_png()
+    texts = [
+        "screenshot:\n" + _wrapped(b64),  # a prefixed 76-column dump
+        "data:image/png;base64," + _wrapped(b64),  # a data URI, wrapped
+        (
+            "Content-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+            + _wrapped(b64, sep="\r\n")
+            + "\r\n--boundary--"
+        ),  # a MIME part
+        "  " + _wrapped(b64, 64, "\n  ") + "\nend",  # indented lines
+    ]
+    for text in texts:
+        scrub = CountingScrub()
+        out = scrub_request({"messages": [{"role": "user", "content": text}]}, scrub)[
+            "messages"
+        ][0]["content"]
+        assert scrub.images == 1, text[:40]
+        for line in _wrapped(b64).split("\n")[1:-1]:
+            assert line not in out
+
+
+def test_prose_and_urls_are_not_taken_for_base64():
+    scrub = CountingScrub()
+    prose = "\n".join(["see the patient chart and add a note"] * 20)
+    url = "open https://emr.example/" + "patients/abc-def/" * 20
+    bare = "open emr.example/" + "patients/abc-def/" * 20
+    for text in (prose, url, bare):
+        scrub_request({"messages": [{"role": "user", "content": text}]}, scrub)
+    assert scrub.images == 0
+
+
+def test_wrapped_base64_that_is_not_an_image_refuses():
+    blob = base64.b64encode(("Patient Zyxwv Qtest MRN 4471923 " * 40).encode())
+    text = "dump:\n" + _wrapped(blob.decode())
+    with pytest.raises(ScrubRefused, match="not an image"):
+        scrub_request(
+            {"messages": [{"role": "user", "content": text}]}, CountingScrub()
+        )
+
+
+def test_a_deeply_nested_request_refuses_instead_of_crashing():
+    node: Any = "x"
+    for _ in range(5000):
+        node = [node]
+    with pytest.raises(ScrubRefused, match="nested"):
+        scrub_request({"messages": node}, CountingScrub())
+
+
+# -- review round: the reviewer's wrapped-base64 probes, as tests ------------
+
+
+class BmpStub:
+    """Text unchanged; images counted (the probes' payloads are BMPs)."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def text(self, value: str) -> str:
+        return value
+
+    def image(self, raw: bytes) -> tuple[bytes, bool]:
+        assert raw.startswith(b"BM")
+        self.images += 1
+        return b"\x89PNG\r\n\x1a\nSCRUBBED", True
+
+
+def _bmp(extra: int = 0) -> bytes:
+    import struct
+
+    pixels = b"\x10\x20\x30" * 600 + b"\x01" * extra
+    return b"BM" + struct.pack("<I", 54 + len(pixels)) + b"\0" * 48 + pixels
+
+
+_BMP64 = base64.b64encode(_bmp()).decode()
+
+
+def _wrap(text: str, width: int = 76, sep: str = "\n") -> str:
+    return sep.join(text[i : i + width] for i in range(0, len(text), width))
+
+
+def _scrubbed(text: str) -> tuple[int, str]:
+    stub = BmpStub()
+    out = scrub_request({"messages": [{"role": "user", "content": text}]}, stub)
+    return stub.images, out["messages"][0]["content"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "screenshot:\n" + _wrap(_BMP64),
+        '<img alt="scan" src="data:image/bmp;base64,' + _wrap("x" * 43 + _BMP64)[43:],
+        "dump:\n" + _wrap(_BMP64, 32),
+        "-----BEGIN-----\n" + _wrap(_BMP64, 64) + "\n-----END-----",
+        "file: " + _BMP64[:30] + "\n" + _wrap(_BMP64[30:]),
+        "  " + _wrap(_BMP64).replace("\n", "\r\n    "),
+        "data " + " ".join(_BMP64[i : i + 76] for i in range(0, len(_BMP64), 76)),
+        _wrap("Attachment from the referral letter: " + _BMP64),
+        "tool output: " + json.dumps({"file": _wrap(_BMP64)}),
+        "tool output: " + json.dumps({"file": _wrap(_BMP64, sep="\r\n")}),
+        "Content-Type: image/bmp\nContent-Transfer-Encoding: base64\n\n"
+        + _wrap(_BMP64),
+        "attachment\n" + base64.encodebytes(_bmp()).decode(),
+        '<p>see</p><img src="data:image/bmp;base64,' + _BMP64 + '"> more',
+    ],
+    ids=[
+        "mime76",
+        "img-prefix-same-line",
+        "wrap32",
+        "pem64",
+        "first-line-short",
+        "crlf-indent",
+        "space-separated",
+        "folded-prefix",
+        "json-escaped-lf",
+        "json-escaped-crlf",
+        "mime-headers",
+        "encodebytes",
+        "html-unwrapped",
+    ],
+)
+def test_a_wrapped_image_in_any_shape_is_scrubbed(text):
+    images, out = _scrubbed(text)
+    assert images == 1
+    flat = "".join(out.replace("\\n", "").replace("\\r", "").split())
+    assert _BMP64[200:600] not in flat
+
+
+@pytest.mark.parametrize("extra", [0, 1, 2])
+def test_a_padded_mime_part_before_its_boundary_is_scrubbed(extra):
+    b64 = base64.b64encode(_bmp(extra)).decode()
+    part = (
+        "Content-Type: image/bmp\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        + _wrap(b64, sep="\r\n")
+        + "\r\n--boundary--"
+    )
+    images, out = _scrubbed(part)
+    assert images == 1 and out.endswith("\r\n--boundary--")
+
+
+def test_a_base64_run_in_the_place_of_a_host_is_not_kept_as_one():
+    b64 = base64.b64encode(b"BM" + b"\x41" * 400).decode().replace("/", "A")
+    images, out = _scrubbed("see https://" + b64)
+    assert images == 1 and b64[50:150] not in out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "\n".join(["see the patient chart and add a note"] * 20),
+        "short\n" + "\n".join(["abcdefghij" * 5] * 3) + "\nend",
+        "word\n" + "x" * 45 + "\n" + "y" * 45,
+    ],
+)
+def test_prose_with_long_words_is_not_refused(text):
+    images, _out = _scrubbed(text)
+    assert images == 0

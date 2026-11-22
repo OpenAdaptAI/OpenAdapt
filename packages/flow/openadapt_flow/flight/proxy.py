@@ -3,9 +3,11 @@
 The wrapped process gets ``ANTHROPIC_BASE_URL`` / ``OPENAI_BASE_URL``
 pointing here (``http://127.0.0.1:<port>/<token>/anthropic``). Each request:
 
-1. is scrubbed (:mod:`openadapt_flow.flight.scrub`): every string in the
-   body, tool-call arguments and tool results included, and every base64
-   image. A request that can't be scrubbed whole (an undecodable image, an
+1. is scrubbed (:mod:`openadapt_flow.flight.scrub`): the strings in the
+   body, tool-call arguments and tool results included, and the base64
+   images it recognises (PNG, JPEG, GIF, BMP, TIFF, WEBP). Other image
+   formats, and data an agent re-encodes on purpose, are not covered: see
+   "What the scrubber does not cover" in FLIGHT_RECORDER.md. A request that can't be scrubbed whole (an undecodable image, an
    image or document by URL, a compressed or non-JSON body, a scrubber
    error) is answered 502 and is never forwarded. Thinking and reasoning
    blocks pass byte-identical (their signatures must verify); tool
