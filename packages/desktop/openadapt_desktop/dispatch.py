@@ -81,7 +81,7 @@ _APPROVER_KEY_SETUP_CODES = frozenset(
 #: Stop cards a paired phone may answer through Desktop. A waiting save is
 #: answered through the portal's own save approval; turning "only ask about
 #: problems" back on is answered on the computer.
-PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted"})
+PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted", "exception"})
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
 
@@ -4490,7 +4490,7 @@ class EngineDispatcher:
     def _stop_cards(self) -> list[dict]:
         """Every card the queue shows now, rebuilt from the stores."""
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.work_items import OPEN, TEACHING, public_item
 
         names = {
@@ -4519,7 +4519,7 @@ class EngineDispatcher:
             card = stop_queue.card_for_rearm(switch)
             if card is not None:
                 cards.append(card)
-        return stop_queue.sort_cards(cards)
+        return stop_queue.sort_cards(cards + exception_queue.stop_cards())
 
     def _rearm_offer(self, workflow_id: str) -> dict | None:
         """Flow's re-arm offer for a task's switch, with the clean items named."""
@@ -4819,7 +4819,7 @@ class EngineDispatcher:
     ) -> dict:
         from datetime import datetime, timezone
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
         params = {"shown_ms": shown_ms}
@@ -4841,6 +4841,8 @@ class EngineDispatcher:
             }
         if choice_id == "leave":
             return {"ok": True, "results": [], "changed": 0}
+        if any(card["kind"] == stop_queue.EXCEPTION_KIND for card in cards):
+            return exception_queue.answer_stop_cards(self, cards, choice_id, sign, device)
         if any(card["kind"] == "rearm_problems_only" for card in cards):
             if len(cards) != 1 or device is not None:
                 return {

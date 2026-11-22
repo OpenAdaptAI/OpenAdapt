@@ -231,3 +231,7 @@ f92237889163b242800c6aecd7c334c174ce4428:packages/flow/tests/test_connector_pilo
 075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5e9e2f18db8db211/report.json:generic-api-key:14
 075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-93a7facdefde72e6/report.json:generic-api-key:8
 075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-bdb55e83345cda8b/report.json:generic-api-key:8
+# PR #2498: the RFC 6455 sample WebSocket nonce sent as Sec-WebSocket-Key by a
+# relay test in one commit; not a credential. The test now draws a nonce from
+# os.urandom at runtime.
+e09ebaec9b380b8217471cccb4031511ac7c966e:packages/flow/tests/test_readiness_devtools_relay.py:generic-api-key:44

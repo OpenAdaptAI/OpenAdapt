@@ -3,6 +3,7 @@
     openadapt proxy --postgres "$DATABASE_URL" -- claude
     openadapt proxy --sqlite app.db --auto-approve-max-rows 10 -- claude
     openadapt proxy --sqlite app.db            # serve here; y approve, u undo
+    openadapt proxy --api systems.tx.yaml -- claude   # API systems, same endpoint
 
 See ``openadapt_flow.txplan.proxy`` and ``docs/TRANSACTIONS.md``.
 """
@@ -27,11 +28,20 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _fill(p: argparse.ArgumentParser) -> None:
-    db = p.add_mutually_exclusive_group(required=True)
+    db = p.add_mutually_exclusive_group()
     db.add_argument(
         "--postgres", metavar="URL", help="a PostgreSQL URL (needs the psycopg package)"
     )
     db.add_argument("--sqlite", metavar="PATH", help="a SQLite file")
+    p.add_argument(
+        "--api",
+        metavar="TX_FILE",
+        help=(
+            "a tx file of API systems (openadapt.tx/v1 REST systems with scoped "
+            "verification): adds api_read and api_write, checked by read-back and "
+            "the system's own log"
+        ),
+    )
     p.add_argument(
         "--task", help="the task these writes belong to (default: one per proxy run)"
     )
@@ -82,28 +92,62 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def _run(args: argparse.Namespace, command: Sequence[str]) -> int:
+    import os
+
     from openadapt_flow.txplan.proxy import default_task, run, sql_spec
+    from openadapt_flow.txplan.spec import (
+        RestSystem,
+        SqlSystem,
+        TxSpecError,
+        load_spec,
+    )
     from openadapt_flow.txplan.state import State
 
+    if not (args.postgres or args.sqlite or args.api):
+        print("error: give --postgres, --sqlite or --api", file=sys.stderr)
+        return 2
+    api_spec = None
+    hidden: list[str] = [args.postgres] if args.postgres else []
     try:
-        spec = sql_spec(
-            postgres=args.postgres,
-            sqlite=args.sqlite,
-            max_rows=args.auto_approve_max_rows,
-            flags=args.flag,
-        )
-    except ValueError as exc:
+        if args.api:
+            api_spec = load_spec(Path(args.api))
+            for system in api_spec.systems:
+                if isinstance(system, RestSystem) and system.auth is not None:
+                    # The agent never gets the API credentials either.
+                    hidden.append(os.environ.get(system.auth.value_env, ""))
+        if args.postgres or args.sqlite:
+            spec = sql_spec(
+                postgres=args.postgres,
+                sqlite=args.sqlite,
+                max_rows=args.auto_approve_max_rows,
+                flags=args.flag,
+            )
+        else:
+            assert api_spec is not None
+            # Dropped-requirement class: API-only mode serves REST systems
+            # only and keeps every rule the file declares (anomaly flags,
+            # limits), never a rebuilt spec without them.
+            sql = [s.name for s in api_spec.systems if isinstance(s, SqlSystem)]
+            if sql:
+                raise TxSpecError(
+                    f"--api serves API systems only; {', '.join(sql)} is not one "
+                    "(use --postgres or --sqlite for a database)"
+                )
+            spec = api_spec
+    except (ValueError, TxSpecError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     state = State(Path(args.state) if args.state else None)
+    # One task per system and project folder, as default_task does for a database.
+    target = args.postgres or str(Path(args.sqlite or args.api).resolve())
     return run(
         command,
         spec=spec,
         state=state,
-        task=args.task
-        or default_task(args.postgres or str(Path(args.sqlite).resolve())),
-        secrets_=[args.postgres] if args.postgres else [],
+        task=args.task or default_task(target),
+        secrets_=[h for h in hidden if h],
         port=args.port,
+        api_spec=api_spec,
     )
 
 

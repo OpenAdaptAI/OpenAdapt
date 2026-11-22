@@ -9368,6 +9368,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command", required=True, parser_class=argparse.ArgumentParser
     )
+    __import__("openadapt_flow.exceptions.cli", fromlist=["register"]).register(sub)
 
     p = sub.add_parser(
         "demo",
@@ -10193,7 +10194,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
-
+    __import__("openadapt_flow.wrap.dispatch_cli", fromlist=["_"]).register(sub)
     p = sub.add_parser(
         "route",
         help=(
@@ -13157,14 +13158,14 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
+    from openadapt_flow.cli_deferred import register_deferred_parser
+    from openadapt_flow.run_ledger.cli import register as _register_ledger
 
     register_admit_parser(sub)
     register_check_parser(sub)
     register_api_parser(sub)
-
-    from openadapt_flow.cli_deferred import register_deferred_parser
-
     register_deferred_parser(sub)
+    _register_ledger(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
@@ -13187,6 +13188,7 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_rollback import register as _register_rollback
     from openadapt_flow.cli_shadow import register as _register_shadow
     from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.flight.cli import add_parser as _add_flight_parser
     from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
     from openadapt_flow.learn import register as _register_learn
@@ -13195,6 +13197,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_rollback(sub)
     _register_shadow(sub)
+    __import__("openadapt_flow.readiness.cli", fromlist=["cli"]).register(sub)
     _register_receipt(sub)
     _register_learn(sub)
     _register_reconcile(sub)
@@ -13202,10 +13205,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_jit_parser(sub)
     _add_compile_agent_parser(sub)
     _add_guard_parser(sub)
+    _add_flight_parser(sub)
     _add_hooks_parser(sub)
     _add_plan_parser(sub)
     _add_proxy_parser(sub)
     register_fleet_parser(sub)
+
+    # After any other ``handoff`` verbs: it adds ``list`` to the same group.
+    from openadapt_flow.cli_handoff_list import register_handoff_list
+
+    register_handoff_list(sub)
 
     parser.add_task_help()
     return parser

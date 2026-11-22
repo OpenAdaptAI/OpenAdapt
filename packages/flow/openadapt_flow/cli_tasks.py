@@ -60,8 +60,10 @@ FLOW_NAMES = {
     "disambiguate": "compile --disambiguate",
     "emit-mcp": "workflow emit-mcp",
     "emit-skill": "workflow emit-skill",
+    "exceptions": "approve exceptions",
     "explain": "inspect explain",
     "fleet": "services fleet",
+    "flight": "run --flight",
     "for-each": "run --for-each",
     "guard": "run --guard",
     "hooks": "setup hooks",
@@ -71,6 +73,7 @@ FLOW_NAMES = {
     "jit": "compile --jit",
     "known-ids": "verify known-ids",
     "learn": "teach --learn",
+    "ledger": "inspect ledger",
     "lint": "inspect lint",
     "local-seal": "verify local-seal",
     "login": "setup login",
@@ -84,7 +87,9 @@ FLOW_NAMES = {
     "pull": "workflow pull",
     "push": "workflow push",
     "qualify": "qualify",
+    "readiness": "qualify readiness",
     "receipt": "verify receipt",
+    "handoff": "verify handoff",
     "reconcile": "verify reconcile",
     "record": "record",
     "redact-report": "inspect redact-report",
@@ -117,6 +122,7 @@ FLOW_NAMES = {
     "variants": "compile --variants",
     "verify-run": "verify effect",
     "visualize": "inspect visualize",
+    "wrap-dispatch": "run --dispatch",
 }
 
 
