@@ -284,6 +284,16 @@ class ReconcilerSession:
         return tuple(self._writes.values())
 
 
+def _subject_selector(ctrl: ObservedControl, snapshot: FormSnapshot) -> str:
+    """One stable selector per field: a radio group is one subject, whichever
+    of its options the snapshot happens to show first."""
+    group = radio_group_key(ctrl)
+    if group is None:
+        return ctrl.dom_selector
+    peers = [c.dom_selector for c in snapshot.controls if radio_group_key(c) == group]
+    return peers[0] if peers else ctrl.dom_selector
+
+
 def _field_label(ctrl: Optional[ObservedControl]) -> str:
     """The name a person reads for ``ctrl``: a radio's group, else its label."""
     if ctrl is None:
@@ -1584,7 +1594,7 @@ class FormReconciler:
                         source="auto_fill",
                         dossier_key=binding.dossier_key,
                         label=_field_label(ctrl),
-                        selector=ctrl.dom_selector,
+                        selector=_subject_selector(ctrl, snapshot),
                         in_popup_subroutine=in_popup_subroutine,
                     )
                     edited_any = True
@@ -1602,7 +1612,7 @@ class FormReconciler:
                     source="kept_matching",
                     dossier_key=binding.dossier_key,
                     label=_field_label(ctrl),
-                    selector=ctrl.dom_selector,
+                    selector=_subject_selector(ctrl, snapshot),
                     in_popup_subroutine=in_popup_subroutine,
                     keep_existing=True,
                 )
