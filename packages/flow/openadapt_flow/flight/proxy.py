@@ -3,14 +3,13 @@
 The wrapped process gets ``ANTHROPIC_BASE_URL`` / ``OPENAI_BASE_URL``
 pointing here (``http://127.0.0.1:<port>/<token>/anthropic``). Each request:
 
-1. is scrubbed: every base64 image (Anthropic ``image`` blocks, OpenAI
-   ``data:`` image URLs) goes through openadapt-privacy image redaction and
-   every content text through the text scrubber. A request that can't be
-   scrubbed whole (an undecodable image, an image or document by URL, a
-   compressed or non-JSON body, a scrubber error) is answered 502 and is
-   never forwarded. Thinking and reasoning blocks pass byte-identical (their
-   signatures must verify); tool definitions, ids and model names are not
-   touched.
+1. is scrubbed (:mod:`openadapt_flow.flight.scrub`): every string in the
+   body, tool-call arguments and tool results included, and every base64
+   image. A request that can't be scrubbed whole (an undecodable image, an
+   image or document by URL, a compressed or non-JSON body, a scrubber
+   error) is answered 502 and is never forwarded. Thinking and reasoning
+   blocks pass byte-identical (their signatures must verify); tool
+   definitions, ids, tool names and model names are not touched.
 2. is checked against the spend cap (429 past it, or when the cap can't be
    enforced because a model has no price).
 3. is forwarded over HTTPS to the provider the agent already targets, with
@@ -30,7 +29,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import hashlib
 import hmac
 import http.client
 import json
@@ -38,12 +36,12 @@ import secrets
 import ssl
 import threading
 import time
-from collections import OrderedDict
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
 
+from openadapt_flow.flight.scrub import Scrub, ScrubRefused, scrub_request
 from openadapt_flow.flight.timeline import Timeline
 
 __all__ = [
@@ -72,12 +70,6 @@ _HOP = {
     "content-length",
     "accept-encoding",
 }
-#: Blocks passed through byte-identical: their signatures must verify.
-_OPAQUE_TYPES = {"thinking", "redacted_thinking", "reasoning"}
-#: String values scrubbed wherever they appear (content text).
-_TEXT_KEYS = {"text", "content", "system", "instructions", "output", "input"}
-#: Subtrees never scrubbed: tool definitions and request metadata.
-_SKIP_KEYS = {"tools", "tool_choice", "metadata", "model", "response_format"}
 _ANTHROPIC_ACTIONS = {
     "screenshot",
     "left_click",
@@ -97,10 +89,6 @@ _ANTHROPIC_ACTIONS = {
     "zoom",
     "cursor_position",
 }
-
-
-class ScrubRefused(Exception):
-    """The request can't be scrubbed whole, so it is not forwarded."""
 
 
 def _is_loopback(host: str) -> bool:
@@ -168,160 +156,6 @@ def _usage(raw: Any) -> dict[str, int]:
         out["cache_read_input_tokens"] = cached
         out["input_tokens"] -= cached
     return out
-
-
-# -- scrubbing ---------------------------------------------------------------
-
-
-class _Scrub:
-    """Memoised scrubbing of one run's request bodies (deterministic, so
-    the provider's prompt cache still matches across turns)."""
-
-    def __init__(self, scrubber: Any) -> None:
-        self.scrubber = scrubber
-        self._images: OrderedDict[str, bytes] = OrderedDict()
-        self._texts: OrderedDict[str, str] = OrderedDict()
-        self._lock = threading.Lock()
-
-    def text(self, value: str) -> str:
-        from openadapt_flow.privacy import scrub_outbound_text
-
-        if not value:
-            return value
-        key = hashlib.sha256(value.encode("utf-8")).hexdigest()
-        with self._lock:
-            hit = self._texts.get(key)
-        if hit is not None:
-            return hit
-        out = scrub_outbound_text(value, self.scrubber)
-        if not isinstance(out, str):
-            raise ScrubRefused("the text scrubber returned no text")
-        with self._lock:
-            self._texts[key] = out
-            while len(self._texts) > 8192:
-                self._texts.popitem(last=False)
-        return out
-
-    def image(self, raw: bytes) -> tuple[bytes, bool]:
-        """(scrubbed PNG, whether it is new this run)."""
-        import io
-
-        from PIL import Image
-
-        from openadapt_flow.privacy import scrub_outbound_image
-
-        key = hashlib.sha256(raw).hexdigest()
-        with self._lock:
-            hit = self._images.get(key)
-        if hit is not None:
-            return hit, False
-        try:
-            before = Image.open(io.BytesIO(raw))
-            before.load()
-        except Exception as exc:  # noqa: BLE001 - undecodable: refuse
-            raise ScrubRefused(f"an image could not be decoded ({type(exc).__name__})")
-        out = scrub_outbound_image(raw, self.scrubber)
-        after = Image.open(io.BytesIO(out))
-        if after.size != before.size:
-            raise ScrubRefused("the image scrubber changed the image size")
-        with self._lock:
-            self._images[key] = out
-            while len(self._images) > 512:
-                self._images.popitem(last=False)
-        return out, True
-
-
-def _b64(data: str) -> bytes:
-    try:
-        return base64.b64decode(data, validate=True)
-    except (binascii.Error, ValueError):
-        raise ScrubRefused("an image's base64 data could not be decoded") from None
-
-
-def scrub_request(
-    body: Any, scrub: Any, on_frame: Optional[Callable[[bytes], None]] = None
-) -> Any:
-    """Return a scrubbed copy of a JSON request body, or raise ScrubRefused.
-
-    ``scrub`` has ``text(str)`` and ``image(bytes) -> (png, new)``.
-    ``on_frame`` gets each scrubbed image seen for the first time.
-    """
-
-    def image(raw: bytes) -> bytes:
-        png, new = scrub.image(raw)
-        if new and on_frame is not None:
-            on_frame(png)
-        return png
-
-    def data_url(value: str) -> str:
-        head, sep, data = value.partition(",")
-        if not sep or ";base64" not in head:
-            raise ScrubRefused("an image data URL is not base64")
-        png = image(_b64(data))
-        return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-
-    def walk(node: Any, key: Optional[str]) -> Any:
-        if isinstance(node, str):
-            if node.startswith("data:"):
-                if node[5:].lower().startswith("image/"):
-                    return data_url(node)
-                raise ScrubRefused("a non-image data URL can't be scrubbed")
-            if key in ("image_url", "url") and node.startswith(("http://", "https://")):
-                raise ScrubRefused(
-                    "an image by URL can't be scrubbed before it is sent"
-                )
-            if key in _TEXT_KEYS:
-                return scrub.text(node)
-            return node
-        if isinstance(node, list):
-            return [walk(item, key) for item in node]
-        if not isinstance(node, dict):
-            return node
-        kind = node.get("type")
-        if kind in _OPAQUE_TYPES:
-            return node
-        source = node.get("source")
-        if kind in ("image", "document") and isinstance(source, dict):
-            if kind == "image" and source.get("type") == "base64":
-                png = image(_b64(str(source.get("data", ""))))
-                return {
-                    **{k: walk(v, k) for k, v in node.items() if k != "source"},
-                    "source": {
-                        **source,
-                        "media_type": "image/png",
-                        "data": base64.b64encode(png).decode("ascii"),
-                    },
-                }
-            if kind == "document" and source.get("type") == "text":
-                return {
-                    **node,
-                    "source": {
-                        **source,
-                        "data": scrub.text(str(source.get("data", ""))),
-                    },
-                }
-            raise ScrubRefused(
-                f"a {kind} sent as {source.get('type')!r} can't be scrubbed"
-            )
-        if kind in ("input_file", "file"):
-            raise ScrubRefused("a file input can't be scrubbed")
-        out: dict[str, Any] = {}
-        for k, v in node.items():
-            if k in _SKIP_KEYS or k in (
-                "id",
-                "tool_use_id",
-                "call_id",
-                "name",
-                "signature",
-            ):
-                out[k] = v
-            elif k == "encrypted_content":
-                out[k] = v
-            else:
-                out[k] = walk(v, k)
-        return out
-
-    return walk(body, None)
 
 
 # -- response parsing ---------------------------------------------------------
@@ -464,6 +298,7 @@ class FlightProxy:
         gate: Any = None,
         timeout_s: float = 600.0,
         ssl_context: Optional[ssl.SSLContext] = None,
+        ocr_words: Any = None,
     ) -> None:
         if scrub and scrubber is None:
             raise ValueError("scrubbing is on but no scrubber was given")
@@ -472,7 +307,9 @@ class FlightProxy:
             name: check_upstream(url)
             for name, url in {**DEFAULT_UPSTREAMS, **dict(upstreams or {})}.items()
         }
-        self._scrub = _Scrub(scrubber) if scrub else None
+        self._scrub = Scrub(scrubber, ocr_words=ocr_words) if scrub else None
+        #: CONNECTs to the egress trap (a direct call the agent tried).
+        self.trapped: list[str] = []
         self.max_cost_usd = max_cost_usd
         self.gate = gate
         self.timeout_s = timeout_s
@@ -523,15 +360,30 @@ class FlightProxy:
     def gate_url(self) -> str:
         return f"http://127.0.0.1:{self.port}/{self.token}/flight"
 
+    def model_env(self) -> dict[str, str]:
+        """The model-API variables, plus a forward-proxy trap: a client that
+        ignores the base URLs but honours HTTPS_PROXY lands here, is
+        refused and is counted (loopback stays direct through NO_PROXY)."""
+        trap = f"http://127.0.0.1:{self.port}"
+        loopback = "127.0.0.1,localhost,::1"
+        return {
+            "ANTHROPIC_BASE_URL": self.base_url("anthropic"),
+            "OPENAI_BASE_URL": self.base_url("openai"),
+            "HTTPS_PROXY": trap,
+            "HTTP_PROXY": trap,
+            "ALL_PROXY": trap,
+            "https_proxy": trap,
+            "http_proxy": trap,
+            "all_proxy": trap,
+            "NO_PROXY": loopback,
+            "no_proxy": loopback,
+        }
+
     def child_env(self) -> dict[str, str]:
         """The variables the wrapped process gets."""
         from openadapt_flow.flight.computer import GATE_URL_ENV
 
-        return {
-            "ANTHROPIC_BASE_URL": self.base_url("anthropic"),
-            "OPENAI_BASE_URL": self.base_url("openai"),
-            GATE_URL_ENV: self.gate_url,
-        }
+        return {**self.model_env(), GATE_URL_ENV: self.gate_url}
 
     def _ssl_context(self) -> ssl.SSLContext:
         if self._ssl is None:
@@ -740,6 +592,26 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return self.rfile.read(length) if length else b""
 
+    def do_CONNECT(self) -> None:  # noqa: N802
+        self._trap(self.path)
+
+    def _trap(self, target: str) -> None:
+        """A request sent here as a forward proxy: a direct call the agent
+        tried outside the model API. Counted, never forwarded."""
+        host = target
+        if "://" in target:
+            host = urlsplit(target).netloc
+        host = host.rsplit("@", 1)[-1][:255]
+        with self.owner._gate_lock:
+            self.owner.trapped.append(host)
+        self.owner.timeline.refused_request(
+            provider="direct",
+            status=403,
+            reason=f"a direct connection to {host} was refused (not a model API "
+            "call through this proxy)",
+        )
+        self._send(403, _error_body("direct egress is blocked during this run"))
+
     def do_GET(self) -> None:  # noqa: N802
         self._handle("GET")
 
@@ -756,6 +628,9 @@ class _Handler(BaseHTTPRequestHandler):
         self._handle("PATCH")
 
     def _handle(self, method: str) -> None:
+        if self.path.startswith(("http://", "https://")):
+            self._trap(self.path)
+            return
         route = self._route()
         if route is None:
             self._send(404, _error_body("not found"))

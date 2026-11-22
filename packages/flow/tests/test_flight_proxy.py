@@ -83,6 +83,7 @@ def _proxy(tmp_path: Path, provider: FakeProvider, **kw: Any) -> FlightProxy:
         timeline,
         upstreams={"anthropic": provider.url, "openai": provider.url + "/v1"},
         scrubber=scrubber if kw.get("scrub", True) else None,
+        ocr_words=kw.pop("ocr_words", lambda image: []),
         **kw,
     ).start()
 
