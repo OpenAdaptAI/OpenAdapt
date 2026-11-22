@@ -3,7 +3,7 @@
 Postconditions and identity evidence must SELECT FOR STABILITY: text that
 names a *moment* (clock times, freshly-dated rows), a *count* (counters,
 badges), or noise (short/low-entropy fragments) cannot survive replay
-against live data — a fresh OpenEMR recording once mined ``text_present
+against live data — a live web recording once mined ``text_present
 ':01'`` (a clock-minute fragment) and every later replay halted on it the
 moment the clock moved on (docs/validation/VALIDATION.md, Track D).
 
@@ -28,7 +28,7 @@ from typing import Optional
 # Clock times are volatile at replay latency (the minute hand moves between
 # record and replay). The second alternative catches bare OCR fragments like
 # ':01' — a colon-led minute with no hour digit, which slipped past the old
-# combined pattern and false-halted three live OpenEMR replays.
+# combined pattern and false-halted three live replays.
 CLOCK_RE = re.compile(
     r"(?<!\d)\d{1,2}:\d{2}(?::\d{2})?(?!\d)"  # 18:38, 6:05, 12:45:59
     r"|(?<![\w:]):\d{2}(?!\d)"  # bare ':01' OCR fragments
@@ -97,7 +97,7 @@ DATE_RE = re.compile(
 
 # Month-name dates ('Jul 8, 2026', '08 Jul 2026', 'July 2026', 'Updated
 # Jul 8', 'Wednesday July 8') — the numeric-only DATE_RE missed all of
-# these, and OpenEMR's post-login calendar renders exactly this class: a
+# these, and post-login calendar views render exactly this class: a
 # mined 'July 2026' header would false-halt every replay the next month.
 # A bare month WORD is not a date ('May I help you'): at least one of
 # day/year must be attached. Between tokens OCR may read a space, nothing,

@@ -5,7 +5,7 @@ The problem
 A consequential click must be tied to a record before Flow will deliver it.
 For a control inside a table row, the row is the record: its identity text is
 verified before the click and leased until delivery. An icon-only Save that
-floats next to a form (openIMIS's claim Save is a floppy-disk button with no
+floats next to a form (an icon-only Save button with no
 text, accessible name, or tooltip, outside any row) has no such identity, so
 Flow refuses the click. That refusal is correct: without more evidence, an
 unlabeled icon could be any control on the page.

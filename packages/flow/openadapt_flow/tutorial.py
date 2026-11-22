@@ -882,3 +882,31 @@ def run_demo_workflow_replay(
     finally:
         if stop is not None:
             stop()
+
+
+def serve_demo_app(*, port: int = 0) -> tuple[str, Callable[[], None]]:
+    """Serve the bundled MockMed demo app on a local port."""
+
+    from openadapt_flow.mockmed.server import serve
+
+    return serve(port=port)
+
+
+def demo_execute_admissions() -> tuple[Any, ...]:
+    """Return the bundled demo Execute admissions for ``--seed-mockmed``."""
+
+    from openadapt_flow.mockmed.execute_seed import demo_admissions
+
+    return demo_admissions()
+
+
+def seed_demo_reward(
+    data_dir: Path, key: Any, issuer_key_id: str
+) -> tuple[dict[str, Path], Path, Path]:
+    """Seed the bundled demo reward bundles and return (bundles, db, screen)."""
+
+    from openadapt_flow.mockmed.reward_seed import seed_mockmed
+
+    paths = seed_mockmed(data_dir, key, issuer_key_id)
+    store = Path(data_dir) / "mockmed"
+    return paths, store / "records.db", store / "screen.json"

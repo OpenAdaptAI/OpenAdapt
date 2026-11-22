@@ -675,7 +675,7 @@ DIFF_THRESHOLD = 25
 # Tolerance for REGION_STABLE postconditions. The structural (edge-based)
 # phash distance is ~0 for identical screens, <= 12 for cosmetic drift
 # (theme palettes, relocated buttons elsewhere in the region) and >= 30 for
-# semantic drift (e.g. a blocking modal), measured on MockMed; 16 splits
+# semantic drift (e.g. a blocking modal), measured on synthetic fixtures; 16 splits
 # those populations with margin.
 REGION_STABLE_TOLERANCE = 16
 
@@ -722,7 +722,7 @@ LABEL_MATCH_RATIO = 0.85
 # openadapt_flow.volatility): clock times, dates near the recording date,
 # digit/punctuation-dominated fragments, and low-entropy noise all name a
 # moment or a count, not an invariant screen state, and cannot survive
-# replay against live data. Observed on OpenEMR: a stray ':01' clock-minute
+# replay against live data. Observed on live apps: a stray ':01' clock-minute
 # fragment was mined and false-halted every later replay. Dates FAR from
 # the recording date (a DOB in an identity banner) are deliberately kept —
 # they are identity data, not chronology.
@@ -1246,7 +1246,7 @@ def _param_text_in_region(
     and no single fragment need carry it. The reverse containment
     ``_contains_excluded`` also accepts (excluded value CONTAINS the text) must
     NOT disqualify a region: an application's own literal word is frequently a
-    substring of a longer demonstrated value (MockMed's ``Triage`` inside the
+    substring of a longer demonstrated value (a short option label inside the
     note ``E2E triage booking three months``), and treating that as
     contamination would disarm perfectly stable regions.
 
@@ -2790,7 +2790,7 @@ def _compile_recording(
             (``compiler.effect_mining``). When True, each step gets candidate
             typed ``Effect``s auto-derived from what the demonstration observed:
             a real ``record_written`` / ``field_equals`` from a captured
-            ``/api/db``-style SoR delta, a flagged placeholder for a
+            REST SoR delta, a flagged placeholder for a
             consequential step whose binding is app-specific (not derivable),
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
