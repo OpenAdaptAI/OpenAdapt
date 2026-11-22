@@ -1046,16 +1046,28 @@ class VerifierReadback:
                         # assertion audience and sends the request to: no
                         # trimming, so ``/token`` and ``/token/`` (which can
                         # be different authorization endpoints) differ.
+                        # A discovering source (no configured token_url)
+                        # learns its endpoint only on first use; ask it, so
+                        # a recheck in a new process isn't declined.
+                        resolve = getattr(token_src, "token_endpoint", None)
+                        if callable(resolve):
+                            try:
+                                srv = resolve()
+                            except Exception:  # noqa: BLE001 - decline below
+                                srv = None
+                            if isinstance(srv, str) and srv.strip():
+                                auth_server = srv
                         for srv_attr in (
                             "token_url",
                             "_token_url",
                             "token_endpoint",
                             "issuer",
                         ):
+                            if auth_server is not None:
+                                break
                             srv = getattr(token_src, srv_attr, None)
                             if isinstance(srv, str) and srv.strip():
                                 auth_server = srv
-                                break
                         if auth_server is None:
                             return None
                         account = cid

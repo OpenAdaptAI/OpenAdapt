@@ -1070,6 +1070,75 @@ def test_smart_client_id_binds_authorization_server_and_allows_key_renewal() -> 
     assert out_slash.outcome == "NOT_CHECKED" and "record source" in out_slash.reason
 
 
+def test_discovered_smart_endpoint_binds_in_a_new_process() -> None:
+    """A delayed recheck runs in a new process, before any token request:
+    the discovered token endpoint must still bind (and still differ)."""
+    from openadapt_flow.runtime.effects.smart_auth import (
+        SmartBackendTokenSource,
+        SmartTokenError,
+    )
+
+    class _Discovering(SmartBackendTokenSource):
+        def __init__(self, discovered: Optional[str]) -> None:
+            super().__init__(
+                client_id="shared-client",
+                scope="system/Patient.read",
+                key=None,
+                kid="k1",
+                alg="RS384",
+                fhir_base_url="https://shared-fhir.invalid/R4",
+            )
+            self.discovered = discovered
+            self.discoveries = 0
+
+        def _discover(self) -> str:
+            self.discoveries += 1
+            if self.discovered is None:
+                raise SmartTokenError("smart-configuration request failed")
+            return self.discovered
+
+    class _SmartVerifier(_Verifier):
+        substrate = "fhir"
+        base_url = "https://shared-fhir.invalid/R4"
+
+        def __init__(self, token_source: Any) -> None:
+            super().__init__()
+            self.token_source = token_source
+            self.record = {"id": "7", "meta": {"versionId": "1"}, "note": "A"}
+
+    def readback(discovered: Optional[str]) -> VerifierReadback:
+        return VerifierReadback(
+            _SmartVerifier(_Discovering(discovered)),
+            _Effect(),
+            None,
+            fields=["note"],
+            version_path="meta.versionId",
+        )
+
+    url = "https://auth-a.invalid/oauth2/token"
+    first = readback(url)
+    state = begin(
+        first,
+        target=TARGET,
+        first_outcome="VERIFIED",
+        first_identity="7",
+        window_s=5,
+        now=T0,
+    )
+    sha = schedule(state)["state_sha256"]
+    later = T0 + timedelta(seconds=10)
+    fresh = readback(url)  # new process: nothing discovered yet
+    assert fresh.verifier.token_source._token_url is None
+    out = recheck(state, fresh, target=TARGET, expected_state_sha256=sha, now=later)
+    assert out.outcome == "VERIFIED"
+    assert fresh.verifier.token_source.discoveries == 1
+    for other in (url + "/", "https://auth-b.invalid/oauth2/token", None):
+        out = recheck(
+            state, readback(other), target=TARGET, expected_state_sha256=sha, now=later
+        )
+        assert out.outcome == "NOT_CHECKED" and "source" in out.reason
+
+
 def test_incomplete_log_returns_not_checked_even_when_fields_changed_or_missing() -> (
     None
 ):
