@@ -124,6 +124,7 @@ On PostgreSQL, an object is user-defined when its oid is at least 16384
 | `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove database-level (or global) `SELECT` and `TRIGGER`. Table-level grants don't count, because a table the account can't list can hold a trigger it can't see. A wildcard grant counts only for the name it spells; a role grant or a partial revoke proves nothing |
 | `routine` | MySQL: a stored routine in the database |
 | `user_function` (MySQL) | The planned statement calls a function that isn't a known built-in. MySQL has no catalog resolution for a statement, so this one is read from the text |
+| `user_function`, `user_type` (raw statement) | PostgreSQL: the database holds any user function other than a trigger or event-trigger function, or any user domain, base or range type. The planner can fold an `IMMUTABLE` call away or hide one in a domain cast, so no plan proves a raw statement free of user code. Structured creates, updates and deletes aren't affected |
 | `scope_unreadable` | A catalog read failed. On PostgreSQL it runs under a savepoint, so the write's transaction survives |
 | `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send (PostgreSQL and MySQL; SQLite has nothing to list) |
 
@@ -280,8 +281,10 @@ that the read-back didn't find. Either one makes the outcome
   correctly, the plan ends `COMPLETED_UNVERIFIED` (`undone_not_covered`,
   `unconditional_undo`), never `ROLLED_BACK`. A SQL undo gets the same
   closed write-scope check as an apply. The gaps are kept with the undone
-  entry: a second `undo` on the plan reports them again, and an undo run that
-  had nothing left to undo is never `ROLLED_BACK`.
+  entry: a second `undo` on the plan reports them again (`undo_unrecorded`
+  when the entry predates this rule), and an undo run that had nothing left
+  to undo, including one that only cancels held writes, ends
+  `COMPLETED_UNVERIFIED`, never `ROLLED_BACK`.
 - Held writes are cancelled.
 - After compensating, it reads each record back. A create must be gone. An
   update or delete must equal its baseline.

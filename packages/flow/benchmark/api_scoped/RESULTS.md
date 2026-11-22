@@ -25,7 +25,7 @@ clean writes.
 |---|---|---|
 | Clean writes stopped | 0 of 400 | 0 of 400 |
 | Clean writes with a receipt | 400 | 400 |
-| Seconds per write, median (p95) | 0.06 (0.07) | 0.07 (0.59) |
+| Seconds per write, median (p95) | 0.06 (0.08) | 0.07 (0.59) |
 | Wrong value, create | 50 of 50 stopped (`wrong_value`) | 50 of 50 |
 | Wrong value, update or edit | 50 of 50 | 50 of 50 |
 | Duplicate create (the executor sends it twice, without the guard) | 50 of 50 (`duplicate_write`) | 50 of 50 |
@@ -70,7 +70,7 @@ changes nothing ([probe_precondition.py](probe_precondition.py), output in
 [results/medplum_precondition_probe.json](results/medplum_precondition_probe.json)).
 The pack now sends the read's `ETag` as `If-Match` on update and delete and
 records that probe as its evidence. The Medplum column above is from the
-rerun at commit RERUN_SHA: 400 of 400 clean writes `VERIFIED`, and every
+rerun at commit `7fe8cd92`: 400 of 400 clean writes `VERIFIED`, and every
 exposed fault class that landed stopped, 50 of 50. In the duplicate update
 plant, the executor sends the PUT twice; the second now carries a
 stale version and the server refuses it, so the duplicate never lands and
@@ -98,7 +98,7 @@ the same pull request as those results:
   defaults.
 
 Which code produced each file: the Medplum rows were rerun live at commit
-RERUN_SHA (#2529, enforced preconditions and the catalog write-scope check).
+`7fe8cd92` (#2529, enforced preconditions and the catalog write-scope check).
 Before that they were from commit `6ad9f6fb`. The Gitea rows
 are from commit `5680f814`; the later changes touch only the marker search and
 the Medplum lab, and Gitea's pack declares no marker search, so its path is
