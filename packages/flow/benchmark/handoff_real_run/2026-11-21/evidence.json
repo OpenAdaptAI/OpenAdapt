@@ -1,0 +1,77 @@
+{
+  "handoffs": {
+    "differing": {
+      "decide_ms": 3.7,
+      "decision": "reject",
+      "integrity": "intact",
+      "outcome": "VERIFIED",
+      "payload_bound": true,
+      "receiver_check": {
+        "differing_fields": [
+          "key"
+        ],
+        "read_method": "api",
+        "state": "recorded_differently"
+      },
+      "send_exit": 0,
+      "signer_lines": [
+        "Signed by Sender Clinic's key"
+      ],
+      "verify_exit": 0
+    },
+    "fabricated": {
+      "decide_ms": 2.3,
+      "decision": "reject",
+      "integrity": "intact",
+      "outcome": "VERIFIED",
+      "payload_bound": true,
+      "receiver_check": {
+        "differing_fields": [],
+        "read_method": "api",
+        "state": "not_found"
+      },
+      "send_exit": 0,
+      "signer_lines": [
+        "Signed by Sender Clinic's key"
+      ],
+      "verify_exit": 0
+    },
+    "true": {
+      "decide_ms": 3.34,
+      "decision": "accept",
+      "integrity": "intact",
+      "outcome": "VERIFIED",
+      "payload_bound": true,
+      "receiver_check": {
+        "differing_fields": [],
+        "read_method": "api",
+        "state": "recorded_as_intended"
+      },
+      "send_exit": 0,
+      "signer_lines": [
+        "Signed by Sender Clinic's key"
+      ],
+      "verify_exit": 0
+    }
+  },
+  "record_fields": [
+    "id",
+    "key",
+    "note",
+    "patient_id",
+    "source",
+    "type"
+  ],
+  "run": {
+    "execution_outcome": "VERIFIED",
+    "model_calls": 0,
+    "receipt_written": true,
+    "transaction_outcome": "VERIFIED"
+  },
+  "run_seconds": 26.2,
+  "started": "2026-11-21T06:47:19Z",
+  "swapped_payload": {
+    "integrity": "refused",
+    "reason": "payload_mismatch"
+  }
+}

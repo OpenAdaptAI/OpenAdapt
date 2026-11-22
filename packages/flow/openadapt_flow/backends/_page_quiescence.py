@@ -26,6 +26,11 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
+#: How long the top document may go without rendering a frame, in ms, before
+#: the probe treats paint as unobservable (a hidden or covered window) and
+#: the caller falls back to the screenshot settle.
+PAINT_STALL_MS = 1000
+
 # Installed in every document (init script for new documents, lazily for
 # documents that already existed). Records the last time anything that can
 # change pixels happened, as an absolute epoch-ms time comparable across
@@ -101,7 +106,19 @@ QUIESCENCE_INSTALL_JS = r"""
 """
 
 # Judge one window's own document; '' when quiet, else a reason.
-_JUDGE_DOC_JS = r"""
+_JUDGE_DOC_JS = (
+    r"""
+// True when the top document renders no frames: it is hidden, or its last
+// animation frame (or, before the first one, the probe's install) is older
+// than PAINT_STALL_MS. A visible page renders a frame every 16 ms or so.
+const paintStalled = (state, nowAbs) => {
+    if (document.visibilityState === 'hidden') return true;
+    const ticks = state.ticks || [0, 0];
+    const since = ticks[1] > 0 ? ticks[1] : state.installed;
+    return nowAbs - since > """
+    + str(PAINT_STALL_MS)
+    + r""";
+};
 
 const COSMETIC = new Set([
     'outline', 'outline-color', 'outline-width', 'outline-offset',
@@ -160,6 +177,7 @@ const judgeDoc = (win, windowMs, nowAbs) => {
     return '';
 };
 """
+)
 
 # Whole-page probe from the top document: walks same-origin child frames
 # directly. Returns {verdict, windows, last}; verdict 'perframe' asks the
@@ -205,6 +223,13 @@ TREE_PROBE_JS = (
     const ticks = window.__oaflowQuiet.ticks || [0, 0];
     // Two rendered top-level frames after the last change in any frame.
     if (window === window.top && !(ticks[0] > last)) {
+        // A page that renders no frames at all can never pass this check:
+        // a hidden document, or a headed window the OS reports as covered
+        // (macOS stops frames for a window behind another app's window).
+        // Everything else is quiet, so let the screenshot settle decide.
+        if (paintStalled(window.__oaflowQuiet, nowAbs)) {
+            return { verdict: 'unavailable', windows, last };
+        }
         return { verdict: 'busy:paint', windows, last };
     }
     return { verdict: 'quiet', windows, last };
@@ -229,7 +254,20 @@ FRAME_PROBE_JS = (
 }"""
 )
 
-TOP_TICKS_JS = r"""() => (window.__oaflowQuiet && window.__oaflowQuiet.ticks) || null"""
+TOP_TICKS_JS = (
+    r"""() => {
+    const state = window.__oaflowQuiet;
+    if (!state || !state.ticks) return null;
+    const nowAbs = performance.timeOrigin + performance.now();
+    const ticks = state.ticks;
+    const since = ticks[1] > 0 ? ticks[1] : state.installed;
+    const stalled = document.visibilityState === 'hidden' ||
+        nowAbs - since > """
+    + str(PAINT_STALL_MS)
+    + r""";
+    return { ticks, stalled };
+}"""
+)
 
 
 class PageQuiescence:
@@ -342,10 +380,15 @@ class PageQuiescence:
         if busy:
             return busy
         try:
-            ticks = self._page.evaluate(TOP_TICKS_JS)
+            top = self._page.evaluate(TOP_TICKS_JS)
         except Exception:
             return None
+        ticks = top.get("ticks") if isinstance(top, dict) else None
         if not ticks or not float(ticks[0]) > last:
+            # No frames rendered at all (hidden or covered window): paint
+            # can't be observed, so the screenshot settle decides.
+            if isinstance(top, dict) and top.get("stalled"):
+                return None
             return "busy:paint"
         self._frame_last = last
         return "quiet"

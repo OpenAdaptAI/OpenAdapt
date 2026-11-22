@@ -273,6 +273,17 @@ jobs:
                 exit 1
               fi
             done
+            # desktop-test.yml leaves macOS and Windows on Python 3.11 to the
+            # nightly run once a version is released; an unreleased version's
+            # push run keeps them. Require them by name, so a release never
+            # ships on the trimmed matrix.
+            for os in macos-latest windows-latest; do
+              job="desktop test / Python engine tests (${os}, py3.11)"
+              if ! grep -qxF "$(printf 'success\t%s' "${job}")" "${RUNNER_TEMP}/jobs.tsv"; then
+                echo "Refusing to release: no successful '${job}' job in run $1." >&2
+                exit 1
+              fi
+            done
             if grep -E $'^(failure|cancelled|timed_out)\tdesktop (test|build) / ' "${RUNNER_TEMP}/jobs.tsv"; then
               echo "Refusing to release: a desktop job did not pass." >&2
               exit 1
@@ -410,7 +421,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           # Release builds restore no cache; see the note at the top.
           enable-cache: false

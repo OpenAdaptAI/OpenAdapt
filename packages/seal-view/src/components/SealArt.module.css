@@ -3,13 +3,13 @@
    HTML and stays smooth. Reduced motion shows the finished Seal, still. */
 
 .wrap {
-    --t0: #4cf0b8;
-    --t1: #5ccfff;
-    --soft: #b9fbe5;
-    --glow: rgba(76, 240, 184, 0.3);
-    --amber: #ffb547;
-    --fail: #ff4d6a;
-    --ghost: rgba(255, 255, 255, 0.075);
+    --t0: var(--seal-ok, #4cf0b8);
+    --t1: var(--seal-ok-2, #5ccfff);
+    --soft: var(--seal-ok-soft, #b9fbe5);
+    --glow: color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 30%, transparent);
+    --amber: var(--seal-halt, #ffb547);
+    --fail: var(--seal-fail, #ff4d6a);
+    --ghost: color-mix(in srgb, var(--seal-ink, #fff) 7.5%, transparent);
     --sweep: 1700ms;
     --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
     position: relative;
@@ -18,13 +18,13 @@
     isolation: isolate;
 }
 .wrap[data-tone='halt'] {
-    --t0: #ffbf55;
-    --t1: #ff9440;
-    --soft: #ffe2ad;
-    --glow: rgba(255, 170, 64, 0.26);
+    --t0: var(--seal-halt, #ffbf55);
+    --t1: var(--seal-halt-2, #ff9440);
+    --soft: var(--seal-halt-soft, #ffe2ad);
+    --glow: color-mix(in srgb, var(--seal-halt, #ffaa40) 26%, transparent);
 }
 .wrap[data-phase='broken'] {
-    --glow: rgba(255, 77, 106, 0.24);
+    --glow: color-mix(in srgb, var(--seal-fail, var(--seal-fail, #ff4d6a)) 24%, transparent);
 }
 
 .svg {
@@ -69,7 +69,7 @@
     stop-color: var(--glow);
 }
 .c1 {
-    stop-color: rgba(4, 7, 10, 0.55);
+    stop-color: color-mix(in srgb, var(--seal-core, var(--seal-core, #04070a)) 55%, transparent);
 }
 
 /* Parallax depth: the page sets --px and --py (-1 to 1) on an ancestor. */
@@ -83,7 +83,7 @@
 
 .hair {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.055);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 5.5%, transparent);
     stroke-width: 1;
 }
 
@@ -113,11 +113,11 @@
 
 .bandArc {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.2);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 20%, transparent);
     stroke-width: 1;
 }
 .bandMark {
-    stroke: rgba(255, 255, 255, 0.42);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 42%, transparent);
     stroke-width: 1.2;
 }
 .bandText {
@@ -125,7 +125,7 @@
     font-size: 9.5px;
     font-weight: 500;
     letter-spacing: 0.26em;
-    fill: rgba(220, 232, 244, 0.5);
+    fill: color-mix(in srgb, var(--seal-ink-muted, #dce8f4) 50%, transparent);
 }
 
 /* Steps. */
@@ -201,7 +201,7 @@
 }
 .dot[data-result='not_reached'] {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.16);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 16%, transparent);
     stroke-width: 1.3;
 }
 .dot[data-result='failed'] {
@@ -221,7 +221,7 @@
 }
 
 .core {
-    stroke: rgba(255, 255, 255, 0.1);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 10%, transparent);
     stroke-width: 1;
 }
 .rosette path {
@@ -272,7 +272,7 @@
     opacity: 0.36;
 }
 .tick[data-on] {
-    stroke: #fff;
+    stroke: var(--seal-ink, #fff);
 }
 .wrap[data-ring='steps'] :is(.tick, .dot, .petal),
 .wrap[data-ring='checks'] :is(.step, .bloom, .dot, .petal),
@@ -291,17 +291,17 @@
     transition: stroke 200ms ease;
 }
 .hit:focus-visible {
-    stroke: rgba(255, 255, 255, 0.13);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 13%, transparent);
 }
 
 /* The outside witnesses (Sigstore Rekor, Sigstore TSA). */
 .witnessLink {
-    stroke: rgba(255, 255, 255, 0.22);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 22%, transparent);
     stroke-width: 1;
 }
 .witnessDot {
-    fill: #070b10;
-    stroke: rgba(255, 255, 255, 0.28);
+    fill: var(--seal-core, #070b10);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 28%, transparent);
     stroke-width: 1.4;
     transition:
         fill 600ms ease,
@@ -309,7 +309,7 @@
 }
 .witnessGlyph {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.45);
+    stroke: color-mix(in srgb, var(--seal-ink, #fff) 45%, transparent);
     stroke-width: 1.5;
     stroke-linecap: round;
     transition: stroke 600ms ease;
@@ -326,7 +326,7 @@
     font-family: var(--mono);
     font-size: 9px;
     letter-spacing: 0.2em;
-    fill: rgba(220, 232, 244, 0.45);
+    fill: color-mix(in srgb, var(--seal-ink-muted, #dce8f4) 45%, transparent);
     transition: fill 600ms ease;
 }
 .witness[data-state='pass'] .witnessText {
@@ -343,11 +343,11 @@
 }
 @keyframes witnessWait {
     to {
-        stroke: rgba(255, 255, 255, 0.6);
+        stroke: color-mix(in srgb, var(--seal-ink, #fff) 60%, transparent);
     }
 }
 .witness[data-state='pass'] .witnessDot {
-    fill: color-mix(in srgb, var(--t0) 22%, #070b10);
+    fill: color-mix(in srgb, var(--t0) 22%, var(--seal-core, #070b10));
     stroke: var(--t0);
 }
 .witness[data-state='pass'] .witnessGlyph {
@@ -370,7 +370,7 @@
     }
 }
 .witness[data-state='fail'] .witnessDot {
-    fill: color-mix(in srgb, var(--fail) 18%, #070b10);
+    fill: color-mix(in srgb, var(--fail) 18%, var(--seal-core, #070b10));
     stroke: var(--fail);
 }
 .witness[data-state='fail'] .witnessGlyph {
@@ -532,7 +532,7 @@
 }
 @keyframes tickFlare {
     30% {
-        stroke: #ffffff;
+        stroke: var(--seal-ink, #ffffff);
     }
 }
 @keyframes dotFlare {
@@ -551,23 +551,23 @@
         fill 380ms ease;
 }
 .wrap[data-phase='broken'] .step:not([data-status='not_reached']) {
-    stroke: #6b3a46;
+    stroke: var(--seal-broken, #6b3a46);
 }
 .wrap[data-phase='broken'] .bloom {
     stroke: var(--fail);
     opacity: 0.08;
 }
 .wrap[data-phase='broken'] .tick {
-    stroke: #8a6d74;
+    stroke: var(--seal-broken-2, #8a6d74);
 }
 .wrap[data-phase='broken'] .dot:not([data-result='not_reached']) {
-    fill: #7a4a55;
+    fill: var(--seal-broken, #7a4a55);
 }
 .wrap[data-phase='broken'] .petal:not([data-result='not_reached']) {
-    stroke: #6b3a46;
+    stroke: var(--seal-broken, #6b3a46);
 }
 .wrap[data-phase='broken'] .stop line {
-    stroke: #8a6d74;
+    stroke: var(--seal-broken-2, #8a6d74);
 }
 .wrap[data-phase='broken'] .rosette path {
     stroke: var(--fail);
@@ -723,7 +723,7 @@
     stroke-width: 1.4;
 }
 .anchorMark circle {
-    fill: #070b10;
+    fill: var(--seal-core, #070b10);
     stroke: var(--t0);
     stroke-width: 2;
 }
@@ -789,7 +789,7 @@
 }
 .wrap[data-spot='identity'] .petal[data-lit='1'],
 .wrap[data-spot='checks'] .tick[data-lit='1'] {
-    stroke: #fff;
+    stroke: var(--seal-ink, #fff);
 }
 .wrap[data-spot='save'] .dot[data-lit='1'] {
     fill: var(--soft);
@@ -827,21 +827,21 @@
 
 /* The small iris on the map inspector's Seal card (MiniIris). */
 .mini {
-    --t0: #4cf0b8;
-    --soft: #b9fbe5;
-    --fail: #ff4d6a;
+    --t0: var(--seal-ok, #4cf0b8);
+    --soft: var(--seal-ok-soft, #b9fbe5);
+    --fail: var(--seal-fail, #ff4d6a);
     position: relative;
     display: inline-block;
     flex: none;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(76, 240, 184, 0.14), rgba(4, 12, 10, 0.9) 70%);
-    box-shadow: 0 0 0 1px rgba(76, 240, 184, 0.35), 0 0 24px -6px rgba(76, 240, 184, 0.55);
+    background: radial-gradient(circle, color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 14%, transparent), color-mix(in srgb, var(--seal-core, #040c0a) 90%, transparent) 70%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 35%, transparent), 0 0 24px -6px color-mix(in srgb, var(--seal-ok, var(--seal-ok, #4cf0b8)) 55%, transparent);
 }
 .mini[data-tone='halt'] {
-    --t0: #ffbf55;
-    --soft: #ffe2ad;
-    background: radial-gradient(circle, rgba(255, 191, 85, 0.14), rgba(16, 10, 2, 0.9) 70%);
-    box-shadow: 0 0 0 1px rgba(255, 191, 85, 0.4), 0 0 24px -6px rgba(255, 191, 85, 0.5);
+    --t0: var(--seal-halt, #ffbf55);
+    --soft: var(--seal-halt-soft, #ffe2ad);
+    background: radial-gradient(circle, color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 14%, transparent), color-mix(in srgb, var(--seal-core, #100a02) 90%, transparent) 70%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 40%, transparent), 0 0 24px -6px color-mix(in srgb, var(--seal-halt, var(--seal-halt, #ffbf55)) 50%, transparent);
 }
 .mini .iris {
     inset: 8%;

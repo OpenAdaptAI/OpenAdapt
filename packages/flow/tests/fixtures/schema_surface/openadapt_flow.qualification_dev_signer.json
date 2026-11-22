@@ -1,0 +1,199 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "LocalDevAdmission": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "Signed local pin-confirmation. Not a production workflow admission.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.local-dev-admission/v1",
+      "default": "openadapt.local-dev-admission/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "purpose": {
+      "const": "local-dev",
+      "default": "local-dev",
+      "title": "Purpose",
+      "type": "string"
+     },
+     "admission_id": {
+      "title": "Admission Id",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "proposal_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Proposal Sha256",
+      "type": "string"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "policy_pack": {
+      "title": "Policy Pack",
+      "type": "string"
+     },
+     "issued_at": {
+      "title": "Issued At",
+      "type": "string"
+     },
+     "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+     },
+     "issuer_workflow": {
+      "const": "openadapt-flow/local-dev-admission",
+      "default": "openadapt-flow/local-dev-admission",
+      "title": "Issuer Workflow",
+      "type": "string"
+     },
+     "issuer_key_id": {
+      "title": "Issuer Key Id",
+      "type": "string"
+     },
+     "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+     },
+     "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_id",
+     "bundle_content_digest",
+     "proposal_sha256",
+     "environment_digest",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "policy_pack",
+     "issued_at",
+     "expires_at",
+     "issuer_key_id",
+     "signature"
+    ],
+    "title": "LocalDevAdmission",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "Signed local pin-confirmation. Not a production workflow admission.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.local-dev-admission/v1",
+      "default": "openadapt.local-dev-admission/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "purpose": {
+      "const": "local-dev",
+      "default": "local-dev",
+      "title": "Purpose",
+      "type": "string"
+     },
+     "admission_id": {
+      "title": "Admission Id",
+      "type": "string"
+     },
+     "bundle_content_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Bundle Content Digest",
+      "type": "string"
+     },
+     "proposal_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Proposal Sha256",
+      "type": "string"
+     },
+     "environment_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+     },
+     "identity_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Identity Contract Sha256",
+      "type": "string"
+     },
+     "effect_contract_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Effect Contract Sha256",
+      "type": "string"
+     },
+     "policy_pack": {
+      "title": "Policy Pack",
+      "type": "string"
+     },
+     "issued_at": {
+      "title": "Issued At",
+      "type": "string"
+     },
+     "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+     },
+     "issuer_workflow": {
+      "const": "openadapt-flow/local-dev-admission",
+      "default": "openadapt-flow/local-dev-admission",
+      "title": "Issuer Workflow",
+      "type": "string"
+     },
+     "issuer_key_id": {
+      "title": "Issuer Key Id",
+      "type": "string"
+     },
+     "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+     },
+     "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_id",
+     "bundle_content_digest",
+     "proposal_sha256",
+     "environment_digest",
+     "identity_contract_sha256",
+     "effect_contract_sha256",
+     "policy_pack",
+     "issued_at",
+     "expires_at",
+     "issuer_key_id",
+     "signature"
+    ],
+    "title": "LocalDevAdmission",
+    "type": "object"
+   }
+  }
+ }
+}

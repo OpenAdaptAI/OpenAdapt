@@ -28,7 +28,7 @@ function project({
   return {
     ok: true,
     workflow_id: "wf-1",
-    policy: "clinical-write",
+    policy: "record-write",
     qualification_schema: "openadapt.qualification-project/v1",
     migration_required: false,
     draft_environment: draft,
@@ -714,4 +714,42 @@ it("does not show an earlier no-input result for another workflow", async () => 
   rerender(<CheckIt workflowId="wf-2" onExactChecks={() => {}} onRun={() => {}} />);
   expect(screen.queryByText("Right-record identity passed.")).toBeNull();
   expect(screen.queryByText(/Stopped at the declared save boundary before any input/)).toBeNull();
+});
+
+it("omits policy on initial load and carries the inspected policy on approval", async () => {
+  const legacyReady = {
+    ...project({
+      cases: [
+        { id: "practice-1", kind: "representative", status: "passed" },
+        { id: "fault-identity-swap", kind: "wrong_identity", status: "passed" },
+      ],
+    }),
+    policy: "clinical-write",
+  };
+  engine(legacyReady);
+  vi.mocked(engineInvoke).mockImplementation(async (command) => {
+    if (command === CMD.GET_QUALIFICATION) return legacyReady;
+    if (command === CMD.CERTIFY_QUALIFICATION) {
+      return { ...legacyReady, certification_current: true };
+    }
+    if (command === CMD.SEAL_QUALIFICATION_WORKFLOW) {
+      return { ok: true, workflow_id: "wf-1-v2" };
+    }
+    throw new Error(`unexpected ${command}`);
+  });
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Approve this workflow" }));
+  expect(await screen.findByText("Approved and locked")).toBeTruthy();
+
+  const inspectCall = vi
+    .mocked(engineInvoke)
+    .mock.calls.find(([command]) => command === CMD.GET_QUALIFICATION);
+  expect(inspectCall?.[1]).toEqual({ workflow_id: "wf-1" });
+  expect(inspectCall?.[1]).not.toHaveProperty("policy");
+
+  const certifyCall = vi
+    .mocked(engineInvoke)
+    .mock.calls.find(([command]) => command === CMD.CERTIFY_QUALIFICATION);
+  expect(certifyCall?.[1]).toEqual({ workflow_id: "wf-1", policy: "clinical-write" });
 });

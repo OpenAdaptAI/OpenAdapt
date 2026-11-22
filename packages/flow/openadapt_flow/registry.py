@@ -1,6 +1,6 @@
 """Workflow registry: fetch a packaged, parameterized bundle by name.
 
-``openadapt-flow pull openemr/new-referral`` reads ``registry/index.json`` from
+``openadapt-flow pull app/workflow-name`` reads ``registry/index.json`` from
 this repository on GitHub, downloads each file of the named bundle, checks
 every file against the sha256 recorded in the index, and then loads the bundle
 so its own manifest digest is checked too. Nothing is installed or run.
@@ -889,7 +889,7 @@ def add_parser(sub: Any) -> None:
         "pull", help="Download a packaged workflow bundle by name", allow_abbrev=False
     )
     p.add_argument(
-        "workflow", nargs="?", help="Workflow id, for example openemr/new-referral"
+        "workflow", nargs="?", help="Workflow id, for example app/workflow-name"
     )
     p.add_argument(
         "--out", default=None, help="Destination directory (default: ./<name>)"
