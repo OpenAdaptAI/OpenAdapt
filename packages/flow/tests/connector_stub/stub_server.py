@@ -1,6 +1,6 @@
 """A stub BYOC control plane for the connector service tests.
 
-It listens on 127.0.0.1 only and answers the three outbound endpoints the
+It listens on 127.0.0.1 only and answers the outbound endpoints the
 connector calls:
 
 * ``POST /api/connector/poll``: 204 for the first ``--empty-polls`` polls
@@ -10,6 +10,8 @@ connector calls:
   fetches a bundle or touches any GUI.
 * ``POST /api/internal/run-callback``: 200.
 * ``POST /api/connector/ack``: 200.
+* ``POST /api/connector/rotate``: following a test rotation request, accept
+  the new token digest and require its matching bearer on subsequent polls.
 
 Every request is appended to a JSON file (method, path, sorted header names,
 parsed body). Header values are never recorded, so the bearer token never
@@ -21,7 +23,9 @@ reaches the log.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -67,6 +71,9 @@ class StubState:
         self.active_empty_polls = 0
         self.auth_denials = 0
         self.deny_auth = False
+        self.rotate_requested = False
+        self.rotated_digest: Optional[str] = None
+        self.rotated_polls = 0
         self.lock = threading.Lock()
 
     def record(self, entry: dict[str, Any]) -> None:
@@ -92,9 +99,19 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
             return
 
-        def _reply(self, status: int, body: Optional[dict[str, Any]]) -> None:
+        def _reply(
+            self,
+            status: int,
+            body: Optional[dict[str, Any]],
+            *,
+            recommend_rotation: bool = False,
+        ) -> None:
             data = json.dumps(body).encode("utf-8") if body is not None else b""
             self.send_response(status)
+            if recommend_rotation:
+                self.send_header(
+                    "x-oa-connector-control", '{"rotate_recommended":true}'
+                )
             if data:
                 self.send_header("content-type", "application/json")
             self.send_header("content-length", str(len(data)))
@@ -110,6 +127,9 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
             elif self.path == "/test/allow-auth":
                 with state.lock:
                     state.deny_auth = False
+            elif self.path == "/test/request-rotation":
+                with state.lock:
+                    state.rotate_requested = True
             elif self.path != "/test/state":
                 return self._reply(404, {"error": "not_found"})
             with state.lock:
@@ -117,6 +137,7 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                     "polls": state.polls,
                     "active_empty_polls": state.active_empty_polls,
                     "auth_denials": state.auth_denials,
+                    "rotated_polls": state.rotated_polls,
                 }
             self._reply(200, snapshot)
 
@@ -137,11 +158,41 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                     "t": time.time(),
                 }
             )
+            auth = self.headers.get("authorization", "")
+            token_digest = (
+                hashlib.sha256(auth[7:].encode()).hexdigest()
+                if auth.startswith("Bearer ")
+                else None
+            )
+            if path == "/api/connector/rotate":
+                candidate = (
+                    body.get("new_token_sha256") if isinstance(body, dict) else None
+                )
+                if not isinstance(candidate, str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", candidate
+                ):
+                    return self._reply(400, {"error": "invalid_candidate"})
+                with state.lock:
+                    accepted = (
+                        state.rotate_requested
+                        and token_digest is not None
+                        and candidate != token_digest
+                    )
+                    if accepted:
+                        state.rotated_digest = candidate
+                        state.rotate_requested = False
+                return self._reply(200 if accepted else 409, {"ok": accepted})
             if path == "/api/connector/poll":
                 with state.lock:
-                    deny_auth = state.deny_auth
+                    deny_auth = state.deny_auth or (
+                        state.rotated_digest is not None
+                        and token_digest != state.rotated_digest
+                    )
+                    recommend_rotation = state.rotate_requested
                     if deny_auth:
                         state.auth_denials += 1
+                    elif state.rotated_digest is not None:
+                        state.rotated_polls += 1
                 if deny_auth:
                     # Deliberately hostile response: the service log must
                     # remove its token even when a server echoes it back.
@@ -154,7 +205,7 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                         state.active_empty_polls += 1
                     try:
                         time.sleep(state.empty_sleep)
-                        self._reply(204, None)
+                        self._reply(204, None, recommend_rotation=recommend_rotation)
                     finally:
                         with state.lock:
                             state.active_empty_polls -= 1

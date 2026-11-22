@@ -422,10 +422,12 @@ def _save_frame(run_dir: Path) -> bytes:
 
 
 def _rows(rows: Any) -> list[dict[str, Any]]:
-    """The id and note of each record row, for the gating safety check."""
+    """Every column of each record row, for the gating safety check."""
 
     values = rows.values() if isinstance(rows, dict) else rows
-    return [{"id": r["id"], "note": r["note"]} for r in values]
+    return [
+        {key: r[key] for key in ("id", "first", "last", "dob", "note")} for r in values
+    ]
 
 
 def _outcome(run_dir: Path) -> dict[str, Any]:
@@ -586,6 +588,8 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
 
     # 1. A person answers while the run waits; the save lands and verifies.
     host.launch_app()
+    # Every launch reseeds the same rows; the check diffs each phase against them.
+    evidence["seed_rows"] = _rows(host.rows())
     _focus_app(backend, _points(backend))
     evidence["environment_before_run"] = list(
         backend.qualification_environment_identity() or ()
@@ -646,6 +650,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "exit": held.returncode,
         "tail": (held.stdout + held.stderr)[-3000:],
         "rows": _rows(rows),
+        "halts": _halts(run_dir),
         **_outcome(run_dir),
     }
     assert held.returncode != 0, evidence["held"]

@@ -1,0 +1,24 @@
+{
+  "approval": "each_item",
+  "blocked": [],
+  "ended": "read_back",
+  "hold_ms": [
+    3315.1
+  ],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": 45.3,
+  "receipt_path": "/tmp/acp-demo-out/2-gated/runs/prod-approval-approve-ok/guard/guard-41eb7c4087463e7ca88e09419bd35ea9/effect-receipt.json",
+  "recording": "/tmp/acp-demo-out/2-gated/runs/prod-approval-approve-ok/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 7.933,
+  "task_id": "prod-approval-approve-ok",
+  "verdict": "VERIFIED",
+  "would_block": []
+}

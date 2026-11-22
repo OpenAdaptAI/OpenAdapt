@@ -23,7 +23,7 @@ from benchmark.form_tx_heldout.case_defs import CASES, PORTAL_META
 from benchmark.form_tx_heldout.portals import PORTALS
 
 HERE = Path(scoring.__file__).resolve().parent
-AK = json.loads((HERE / "answer_key.json").read_text())
+AK = json.loads((HERE / "answers.json").read_text())
 ALL = [(cid, c) for cid, c in AK["cases"].items()]
 
 
@@ -144,7 +144,7 @@ def test_manifest_hashes_match_files() -> None:
     manifest = json.loads((HERE / "MANIFEST.json").read_text())
     for rel, digest in manifest["files"].items():
         assert hashlib.sha256((HERE / rel).read_bytes()).hexdigest() == digest, rel
-    assert manifest["answer_key_sha256"] == manifest["files"]["answer_key.json"]
+    assert manifest["answers_sha256"] == manifest["files"]["answers.json"]
 
 
 def test_reference_human_solves_every_scored_case() -> None:

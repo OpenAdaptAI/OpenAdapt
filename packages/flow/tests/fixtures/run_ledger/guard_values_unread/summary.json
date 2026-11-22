@@ -1,0 +1,27 @@
+{
+  "approval": "each_item",
+  "blocked": [
+    {
+      "code": "values_unread",
+      "hold_ms": 60.4
+    }
+  ],
+  "ended": "stopped",
+  "hold_ms": [],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": null,
+  "receipt_path": null,
+  "recording": null,
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": null,
+  "task_id": "task-ledger-0001",
+  "verdict": null,
+  "would_block": []
+}

@@ -158,7 +158,7 @@ def test_default_policy_is_person_only() -> None:
             assert not policy.permits(step_class, other)
 
 
-def test_policy_can_allow_an_agent_and_still_forbid_it_for_clinical_writes() -> None:
+def test_policy_can_allow_an_agent_and_still_forbid_it_for_high_risk_writes() -> None:
     allowed = {c: (ApproverKind.PERSON,) for c in StepClass}
     allowed[StepClass.CONSEQUENTIAL] = (ApproverKind.PERSON, ApproverKind.AGENT)
     policy = ApproverPolicyV1(allowed=allowed)
@@ -166,18 +166,91 @@ def test_policy_can_allow_an_agent_and_still_forbid_it_for_clinical_writes() -> 
     assert policy.refusal(StepClass.IRREVERSIBLE, AGENT) is (
         ApproverPolicyRefusal.KIND_NOT_ALLOWED
     )
-    assert policy.refusal(StepClass.CLINICAL_WRITE, AGENT) is (
-        ApproverPolicyRefusal.CLINICAL_WRITE_NEEDS_OPT_IN
+    assert policy.refusal(StepClass.HIGH_RISK_WRITE, AGENT) is (
+        ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN
     )
 
 
-def test_clinical_write_non_person_needs_an_opt_in() -> None:
+def test_high_risk_write_non_person_needs_an_opt_in() -> None:
     allowed = {c: (ApproverKind.PERSON,) for c in StepClass}
-    allowed[StepClass.CLINICAL_WRITE] = (ApproverKind.PERSON, ApproverKind.AGENT)
+    allowed[StepClass.HIGH_RISK_WRITE] = (ApproverKind.PERSON, ApproverKind.AGENT)
     with pytest.raises(ValidationError):
         ApproverPolicyV1(allowed=allowed)
-    policy = ApproverPolicyV1(allowed=allowed, clinical_write_opt_in_sha256=DIGEST)
-    assert policy.permits(StepClass.CLINICAL_WRITE, AGENT)
+    policy = ApproverPolicyV1(allowed=allowed, high_risk_write_opt_in_sha256=DIGEST)
+    assert policy.permits(StepClass.HIGH_RISK_WRITE, AGENT)
+
+
+def test_legacy_clinical_write_wire_aliases_remain_compatible() -> None:
+    # Legacy serialized v1 policy using clinical_write / clinical_write_opt_in_sha256
+    legacy_payload = {
+        "schema_version": "openadapt.approver-policy/v1",
+        "allowed": {
+            "read_only": ["person"],
+            "reversible": ["person"],
+            "consequential": ["person"],
+            "irreversible": ["person"],
+            "clinical_write": ["person", "agent"],
+        },
+        "clinical_write_opt_in_sha256": DIGEST,
+    }
+    policy = ApproverPolicyV1.model_validate(legacy_payload)
+    assert policy.high_risk_write_opt_in_sha256 == DIGEST
+    assert policy.clinical_write_opt_in_sha256 == DIGEST
+    assert policy.model_dump(mode="json") == legacy_payload
+    assert StepClass.CLINICAL_WRITE is StepClass.HIGH_RISK_WRITE
+    assert StepClass("clinical_write") is StepClass.HIGH_RISK_WRITE
+    assert StepClass("high_risk_write") is StepClass.HIGH_RISK_WRITE
+    assert (
+        ApproverPolicyRefusal("clinical_write_needs_opt_in")
+        is ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN
+    )
+    assert (
+        ApproverPolicyRefusal("high_risk_write_needs_opt_in")
+        is ApproverPolicyRefusal.HIGH_RISK_WRITE_NEEDS_OPT_IN
+    )
+    assert policy.permits(StepClass.HIGH_RISK_WRITE, AGENT)
+
+    # Domain-neutral input normalizes to identical canonical v1 wire bytes
+    neutral_payload = {
+        "schema_version": "openadapt.approver-policy/v1",
+        "allowed": {
+            "read_only": ["person"],
+            "reversible": ["person"],
+            "consequential": ["person"],
+            "irreversible": ["person"],
+            "high_risk_write": ["person", "agent"],
+        },
+        "high_risk_write_opt_in_sha256": DIGEST,
+    }
+    neutral_policy = ApproverPolicyV1.model_validate(neutral_payload)
+    assert neutral_policy.model_dump(mode="json") == legacy_payload
+
+    # Both v1 and domain-neutral approval records round-trip to canonical v1 wire bytes
+    for step_class_value in ("clinical_write", "high_risk_write"):
+        record = ApprovalRecordV1.model_validate(
+            {
+                "workflow_id": "wf-1",
+                "step_id": "step_1",
+                "step_class": step_class_value,
+                "mode": "each_item",
+                "decision": "approved",
+                "approver": PERSON.model_dump(mode="json"),
+                "route": "desktop_run_it",
+                "request_sha256": DIGEST,
+                "decided_at": "2026-10-01T12:00:00Z",
+            }
+        )
+        assert record.step_class is StepClass.HIGH_RISK_WRITE
+        assert record.model_dump(mode="json")["step_class"] == "clinical_write"
+
+    # Conflicting canonical and legacy fields are refused
+    with pytest.raises(ValidationError):
+        ApproverPolicyV1.model_validate(
+            {
+                **legacy_payload,
+                "high_risk_write_opt_in_sha256": "sha256:" + "1" * 64,
+            }
+        )
 
 
 def test_policy_must_name_every_step_class() -> None:
