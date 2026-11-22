@@ -522,6 +522,9 @@ def _fill_with_bindings(
         blank = _blank_choice_halt(rec, session, snapshot)
         if blank is not None:
             raise _FillHalt(blank)
+        unbound = _unbound_halt(rec, session, snapshot)
+        if unbound is not None:
+            raise _FillHalt(unbound)
 
     return fill
 
@@ -600,6 +603,9 @@ def _hub(
     )
     if verdict.status is not Status.HELD:
         return failed("*", "not every section reads done on the hub", wrote=True)
+    unbound = _unbound_halt(rec, session, act.snapshot())
+    if unbound is not None:
+        return unbound
     step = take_step(
         act,
         StepSpec(
@@ -641,6 +647,9 @@ def before_leaving_screen(
         if step_spec.screen_id != sid:
             continue
         role = StepRole.NAVIGATE if step_spec.role == "navigate" else StepRole.IN_PLACE
+        unbound = _unbound_halt(rec, session, snapshot)
+        if unbound is not None:
+            return unbound
         taken = take_step(
             SurfaceActuator(surface, session.pack),
             StepSpec(f"{sid}:step", step_spec.control.spec(dialog=False), role),
@@ -785,6 +794,24 @@ def _review_echo(
             )
         session._review_skipped.pop(rb.dossier_key, None)
     return None
+
+
+def _unbound_halt(
+    rec: Any, session: Any, snapshot: FormSnapshot
+) -> Optional[FormTxResult]:
+    """The reconciler's unbound-control scan, for a screen this module is
+    about to leave (the main loop's own scan is skipped when it continues)."""
+
+    halt = rec._scan_unbound_controls(session, snapshot)
+    if halt is None:
+        return None
+    return rec._build_result(
+        session,
+        outcome=FormTxOutcome.HALTED_NEEDS_HUMAN,
+        safe_to_retry=True,
+        halts=(halt,),
+        what_happened=halt.message,
+    )
 
 
 def _match(

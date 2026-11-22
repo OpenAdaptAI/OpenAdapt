@@ -50,7 +50,10 @@ CONFIRM = "I confirm this medication list is complete"
 
 
 class _Site:
-    def __init__(self, *, pharmacy: bool = False, ignore_saves: bool = False) -> None:
+    def __init__(
+        self, *, pharmacy: bool = False, ignore_saves: bool = False, notes: str = ""
+    ) -> None:
+        self.notes = notes
         self.state: dict[str, Any] = {"meds": [], "sections": {}}
         self.records: list[dict[str, Any]] = []
         self.pharmacy = pharmacy
@@ -58,7 +61,12 @@ class _Site:
 
     def page(self, path: str) -> str | None:
         if path == "/meds":
-            return MEDS_PAGE
+            extra = (
+                f'<label for="nt">Notes</label><input id="nt" value="{self.notes}">'
+                if self.notes
+                else ""
+            )
+            return MEDS_PAGE.replace("<!--NOTES-->", extra)
         if path == "/review":
             rows = "".join(
                 f"<div><span>Medication {i + 1}</span><span>{m['drug']} {m['dose']}</span></div>"
@@ -90,7 +98,7 @@ class _Site:
         return None
 
 
-MEDS_PAGE = """<h1>Medications</h1><div id="list"></div>
+MEDS_PAGE = """<h1>Medications</h1><!--NOTES--><div id="list"></div>
 <button type="button" id="add-med" onclick="add()">Add another medication</button>
 <p><a id="next" href="/review" onclick="return keep()">Continue</a></p>
 <script>
@@ -410,3 +418,20 @@ def test_saas_hub_save_the_app_ignores_stops_before_the_review(browser: Any) -> 
     assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
     assert "hub section 'profile'" in result.halts[0].message
     assert site.records == []
+
+
+def test_a_prefilled_field_no_binding_covers_stops_before_the_link_is_taken(
+    browser: Any,
+) -> None:
+    site = _Site(notes="Seen by another clinician")
+    result, _ = _run(
+        browser,
+        site,
+        "/meds",
+        MEDS_PACK,
+        _dossier(medications=MEDS),
+        attester="clinician 7",
+    )
+    assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert "Notes" in result.halts[0].message
+    assert site.state["meds"] == [] and site.records == []
