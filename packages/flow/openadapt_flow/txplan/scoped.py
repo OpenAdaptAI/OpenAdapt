@@ -297,11 +297,17 @@ def _search(
     items = pick(got, scoped.search_items) if scoped.search_items else got
     if scoped.search_items and len(items) == 1 and isinstance(items[0], list):
         items = items[0]
-    return [
+    found = [
         str(x.get(id_field))
         for x in items
         if isinstance(x, Mapping) and x.get(id_field) is not None
     ]
+    total = got.get("total") if isinstance(got, Mapping) else None
+    if not found and isinstance(total, int) and total > 0:
+        # Missing-evidence class: an answer that says it matched something
+        # but returns no usable record is partial, never "not found".
+        raise AdapterError("the marker search reports matches it did not return")
+    return found
 
 
 def _read(

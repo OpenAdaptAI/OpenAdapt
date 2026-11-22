@@ -940,6 +940,11 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
     # A Bundle that says it matched something but carries no entries is partial.
     with pytest.raises(AdapterError):
         _search(Adapter({**bundle, "total": 1}), fhir, "m1", "id")
+    # The same with an empty entry list, and for an undeclared shape.
+    with pytest.raises(AdapterError):
+        _search(Adapter({**bundle, "total": 1, "entry": []}), fhir, "m1", "id")
+    with pytest.raises(AdapterError):
+        _search(Adapter({"items": [], "total": 2}), scoped, "m1", "id")
     assert _search(Adapter({"items": [{"id": 3}]}), scoped, "m1", "id") == ["3"]
 
 
