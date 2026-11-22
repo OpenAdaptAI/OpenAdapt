@@ -51,7 +51,9 @@ class Keyboard:
         self.keys = sorted([*self.keys, *((at, c) for c in text)], key=lambda k: k[0])
 
     def console(self) -> WindowsConsole:
-        return WindowsConsole(kbhit=self.kbhit, getwch=self.getwch, sleep=self.sleep)
+        return WindowsConsole(
+            kbhit=self.kbhit, getwch=self.getwch, sleep=self.sleep, clock=self.clock
+        )
 
 
 def _ask(kb: Keyboard, kind: str = "code", timeout_s: float = 30.0) -> Optional[str]:
@@ -88,6 +90,24 @@ def test_the_deadline_holds_and_left_over_keys_are_discarded() -> None:
     # before its prompt, so it can't answer or reach the shell.
     kb.type(42.0, f"{CODE}\r")
     assert _ask(kb) == CODE
+
+
+def test_a_sleep_that_oversleeps_does_not_stretch_the_deadline() -> None:
+    kb = Keyboard()
+    kb.sleep = lambda seconds: setattr(kb, "now", kb.now + 3 * seconds + 0.015)  # type: ignore[method-assign]
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        _ask(kb, timeout_s=30.0)
+    assert refused.value.code == "second_factor_timeout"
+    assert kb.now < 30.5
+
+
+def test_a_long_paste_is_dropped_whole() -> None:
+    kb = Keyboard()
+    kb.type(1.0, "9" * 5000)
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        _ask(kb)
+    assert refused.value.code == "second_factor_invalid"
+    assert not kb.kbhit()  # nothing of the paste is left for the shell
 
 
 def test_ctrl_c_interrupts_and_still_discards_what_was_typed() -> None:

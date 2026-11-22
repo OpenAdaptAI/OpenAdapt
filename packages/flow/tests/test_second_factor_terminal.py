@@ -152,6 +152,19 @@ def test_input_left_after_a_timeout_never_reaches_the_shell(
     assert select.select([follower], [], [], 0.2)[0] == []
 
 
+def test_non_ascii_input_is_kept_on_a_posix_terminal(
+    terminal: tuple[int, int],
+) -> None:
+    """A character such as U+00E0 is ordinary input here, not a key prefix."""
+
+    leader, follower = terminal
+    source, screen = _source(follower)
+    _person(leader, screen, "\u00e0n\n")
+    # Read whole: the code check (in obtain) refuses it later, but the
+    # terminal neither swallows it nor skips the next character.
+    assert _ask(source) == "\u00e0n"
+
+
 def test_an_empty_code_declines_and_an_approval_can_be_confirmed_or_declined(
     terminal: tuple[int, int],
 ) -> None:

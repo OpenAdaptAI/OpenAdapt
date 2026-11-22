@@ -55,6 +55,9 @@ class Console(Protocol):
 
     #: Whether typed characters are shown by the terminal itself.
     echoes: bool
+    #: Whether ``\x00`` or ``\xe0`` starts a two-character function or
+    #: arrow key (the Windows console); elsewhere they are ordinary input.
+    prefixed_keys: bool
 
     def begin(self, *, hidden: bool) -> None:
         """Enter reading mode (no echo when ``hidden``); drop pending input."""
@@ -110,7 +113,7 @@ def read_line(
                 if skip:  # the second half of a Windows function or arrow key
                     skip = False
                     continue
-                if char in ("\x00", "\xe0"):
+                if console.prefixed_keys and char in ("\x00", "\xe0"):
                     skip = True
                     continue
                 if char == "\x03":
@@ -151,10 +154,15 @@ class PosixConsole:
     """A POSIX terminal on file descriptor ``fd`` (``termios``)."""
 
     echoes = True
+    prefixed_keys = False
 
     def __init__(self, fd: int) -> None:
+        import codecs
+
         self._fd = fd
         self._saved: Optional[list[Any]] = None
+        # A multi-byte character split across two reads still decodes.
+        self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
     def begin(self, *, hidden: bool) -> None:
         import termios
@@ -175,7 +183,13 @@ class PosixConsole:
         return bool(ready)
 
     def read(self) -> str:
-        return os.read(self._fd, _MAX_LINE).decode("utf-8", "replace")
+        while True:
+            raw = os.read(self._fd, _MAX_LINE)
+            if not raw:
+                return ""
+            text = self._decoder.decode(raw)
+            if text:  # empty: half a character; its rest is in the same line
+                return text
 
     def end(self) -> None:
         try:
@@ -203,6 +217,9 @@ class WindowsConsole:
     """
 
     echoes = False
+    prefixed_keys = True
+    #: How long ending a read keeps dropping keys (a long paste included).
+    drain_s = 0.5
 
     def __init__(
         self,
@@ -210,6 +227,7 @@ class WindowsConsole:
         kbhit: Optional[Callable[[], bool]] = None,
         getwch: Optional[Callable[[], str]] = None,
         sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if kbhit is None or getwch is None:
             import msvcrt  # type: ignore[import-not-found,unused-ignore]
@@ -219,26 +237,29 @@ class WindowsConsole:
         self._kbhit = kbhit
         self._getwch = getwch
         self._sleep = sleep
+        self._clock = clock
 
     def _drain(self) -> None:
-        for _ in range(4 * _MAX_LINE):  # bounded: a stuck kbhit can't hang
-            if not self._kbhit():
-                return
+        # Bounded by time, not by a count, so a long paste is dropped whole
+        # and a key held down can't hang the run.
+        until = self._clock() + self.drain_s
+        while self._kbhit() and self._clock() < until:
             self._getwch()
 
     def begin(self, *, hidden: bool) -> None:
         self._drain()
 
     def wait(self, timeout_s: float) -> bool:
-        waited = 0.0
+        # Measured on the clock: a sleep that oversleeps can't stretch the
+        # deadline.
+        until = self._clock() + timeout_s
         while True:
             if self._kbhit():
                 return True
-            if waited >= timeout_s:
+            left = until - self._clock()
+            if left <= 0:
                 return False
-            step = min(_POLL_S, timeout_s - waited)
-            self._sleep(step)
-            waited += step
+            self._sleep(min(_POLL_S, left))
 
     def read(self) -> str:
         return self._getwch()
