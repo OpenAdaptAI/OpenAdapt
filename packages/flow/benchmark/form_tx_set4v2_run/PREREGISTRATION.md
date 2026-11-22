@@ -162,5 +162,34 @@ operators.
 
 ## Deviations
 
-None yet. The secondary read-route metric was declared before any v2 case
-ran.
+**D1, 2026-11-22, packs written; no scored case had run.**
+- **Engines.** B0 packs were written and smoked in a worktree whose
+  `openadapt_flow` equals `866aac8c1` (the compiler module removed). B packs
+  were written at `1ddd69712`.
+- **Read-limit departures, as the six authors reported them:**
+  - Several used the runner's `--control-log` on their own dev runs, which
+    shows the dev page text and the last-seen controls.
+  - One B author read parts of `reconciler.py` and grepped
+    `playwright_surface.py`. Others grepped engine files for a few lines, or
+    listed the run folder's file names.
+  - One B0 author read part of a set-4 (first-version) dev pack for another
+    portal.
+  - No author opened the sealed folder, the key, scored intakes or the
+    answer key.
+- **Pack choices to review, recorded here and not changed:**
+  - Packs tick review-page confirmation boxes from a derived fact (an
+    attestation, not intake data).
+  - Two brackwater packs narrow the modal selectors to exclude the portal's
+    section dialogs; any other open dialog still stops.
+  - Some packs sum intake items in `derived_facts` where the vocabulary
+    defines the total that way.
+  - One hollowfen pack declares its post-submit read-back once per step, to
+    meet the per-screen write ledger.
+- **Dev smoke.** No v2 dev case reached `verified_done` in either arm:
+  - larkspan and hollowfen submit correct records but end
+    `readback_incomplete`: a combined summary row, an unreadable
+    lookup-window result, and attestation boxes;
+  - brackwater stops before submit on a type-ahead whose directory entry
+    cannot be built from the intake.
+
+  The registered criteria are unchanged.
