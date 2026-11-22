@@ -10,7 +10,8 @@ The read runs in the calling thread under the step's deadline, with
 step gives up. For a code, echo is turned off for that read only and turned
 back on in ``finally``, whether the person answered, the deadline passed or
 the read failed. Input typed before the prompt is discarded, so an earlier
-keystroke can't answer it.
+keystroke can't answer it, and so is input left over when the read ends, so
+the shell never reads part of a code.
 """
 
 from __future__ import annotations
@@ -139,6 +140,13 @@ class TerminalSource:
                 "second_factor_unavailable", "the terminal can't be read"
             ) from None
         finally:
+            try:
+                # Whatever the person typed and the read did not take (a
+                # timeout, an over-long answer, an interrupt) is discarded
+                # before echo comes back, so the shell never reads it.
+                termios.tcflush(self._fd, termios.TCIFLUSH)
+            except (termios.error, OSError):
+                pass
             try:
                 termios.tcsetattr(self._fd, termios.TCSANOW, saved)
             except (termios.error, OSError):

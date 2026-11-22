@@ -137,6 +137,21 @@ def test_input_typed_before_the_prompt_does_not_answer_it(
     assert _ask(source) == CODE
 
 
+def test_input_left_after_a_timeout_never_reaches_the_shell(
+    terminal: tuple[int, int],
+) -> None:
+    leader, follower = terminal
+    source, screen = _source(follower)
+    _person(leader, screen, "4829")  # part of a code, no Enter
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        _ask(source, timeout_s=1.0)
+    assert refused.value.code == "second_factor_timeout"
+    import select
+
+    # Nothing is left for the next reader (the shell, after the run exits).
+    assert select.select([follower], [], [], 0.2)[0] == []
+
+
 def test_an_empty_code_declines_and_an_approval_can_be_confirmed_or_declined(
     terminal: tuple[int, int],
 ) -> None:
