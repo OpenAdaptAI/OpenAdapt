@@ -13179,48 +13179,32 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+    from openadapt_flow.cli_fleet import register_fleet_parser
+    from openadapt_flow.cli_receipt import register as _register_receipt
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
     from openadapt_flow.cli_rollback import register as _register_rollback
+    from openadapt_flow.cli_shadow import register as _register_shadow
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+    from openadapt_flow.learn import register as _register_learn
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     _register_rollback(sub)
-
-    from openadapt_flow.cli_shadow import register as _register_shadow
-
     _register_shadow(sub)
-
-    from openadapt_flow.cli_receipt import register as _register_receipt
-
     _register_receipt(sub)
-
-    from openadapt_flow.learn import register as _register_learn
-
     _register_learn(sub)
-
-    from openadapt_flow.cli_reconcile import register as _register_reconcile
-
     _register_reconcile(sub)
-
-    from openadapt_flow.cli_cleanup import register as _register_cleanup
-
     _register_cleanup(sub)
-
-    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
-
     _add_jit_parser(sub)
-
-    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-
     _add_compile_agent_parser(sub)
-
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
-
     _add_guard_parser(sub)
-
-    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
-
     _add_hooks_parser(sub)
-
-    from openadapt_flow.cli_fleet import register_fleet_parser
-
+    _add_plan_parser(sub)
+    _add_proxy_parser(sub)
     register_fleet_parser(sub)
 
     parser.add_task_help()
