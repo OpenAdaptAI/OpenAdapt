@@ -1,7 +1,7 @@
 {
  "case_id": "lta-s06",
  "screen_id": "lta_review",
- "url": "http://127.0.0.1:55652/trip",
+ "url": "http://127.0.0.1:58280/trip",
  "bound": [
   {
    "binding_id": "lta_purchaser_name",
