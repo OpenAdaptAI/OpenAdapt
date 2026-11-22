@@ -488,6 +488,12 @@ What the wire check doesn't see:
   still held until the page closes, but the run, already over, doesn't
   report it.
 
+The wire check is evidence about what left the browser. It is not a check
+level: a request that matched the declaration says nothing about what the
+server stored, so a run is never `VERIFIED` on the wire check alone. Its
+scope is the channel it observed (the browser context's routes) and the
+request shapes it parsed (form fields and flat JSON).
+
 A page whose own listener changes a field as the form is sent changes what is
 sent after the check, so its save halts even when the demonstration did the
 same: a false halt, in the safe direction. The compiler treats a click on the
@@ -655,6 +661,46 @@ effect path refused. See
 [`FAULT_MODEL.md`](../benchmark/fault_model/FAULT_MODEL.md) and
 [`EFFECT_VERIFIER.md`](design/EFFECT_VERIFIER.md). This is evidence for the
 mechanism, not proof that a customer-specific effect binding is correct.
+
+The 72-fault table in the README
+([`EFFECT_E2E.md`](../benchmark/effect_e2e/EFFECT_E2E.md)) has two limits
+of its own. Its database is SQLite with two record tables (encounters and
+billing), so "a read of every table" there means two tables; a production
+system has hundreds, and a read path rarely covers them all. And 9 of the 18
+correct saves stopped in every arm: the `timeout` case commits the save but
+the client never learns it, so the write step halts before any read-back
+runs. That is a safe false stop, but it is a false stop, and it counts end-to-end
+run outcomes rather than any one check.
+
+The openIMIS claims result (148 of 149 read back correct) was checked by SQL,
+through a read-only database role on a test copy. It shows the program and
+the check on a real application with database access; it is not evidence for
+a deployment without it.
+
+#### What the guarantee covers without database access
+
+Most deployments give no database or API access. Where the application's own
+screens are then the only independent read (no readable log or export of
+committed data, which can still give level 4; see
+[`RECORDS.md`](RECORDS.md)), the strongest read is a separate session
+(`separate_session`, level 3 in
+[`check_level.py`](../../types/openadapt_types/check_level.py)), and the
+guarantee is narrower:
+
+- it covers the target record, read back in that session;
+- where the application shows an activity or audit log and the program is
+  set up to read it, it also covers the same actor's logged changes within a
+  stated window (with no audit view declared, a collateral edit to another
+  record is not seen);
+- it does not cover other records the log doesn't show, server-side jobs that
+  run after the read, or outbound effects (HL7, message queues, email, a
+  downstream service).
+
+`VERIFIED` there means "as of the read-back time, the separate session showed
+this value". It is not a claim that the value persisted, or that the run
+caused nothing else. The run report names the check level for every save
+with a declared read-back. A legacy step with no declared effect is checked
+only by its screen postcondition and is not graded on the ladder.
 
 #### On-screen read-back (the no-API default oracle) is a consistency signal, not transactional proof
 
