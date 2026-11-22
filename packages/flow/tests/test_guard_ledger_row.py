@@ -424,3 +424,23 @@ def test_a_decline_from_the_phone_card_carries_a_reason(
     assert [b["code"] for b in guard.summary.blocked] == ["declined"]
     row = json.loads((tmp_path / ROW_FILENAME).read_text())
     assert (row["verdict"], row["verdict_reason"]) == ("ESCALATED", "person_declined")
+
+
+def test_an_observe_only_verified_save_is_verified_in_the_row(
+    sor, tmp_path: Path
+) -> None:
+    """Observe-only takes the tier from the verify-run receipt; its words are
+    the same, so a verified observed save is VERIFIED in the row too."""
+
+    page = _Page(FakeAgent(sor[0]), "p1")
+    guard = _guard(sor, tmp_path, page, observe_only=True)
+    page.save()
+    guard.poll()
+    assert guard.summary.verdict == "VERIFIED"
+    row = json.loads((tmp_path / ROW_FILENAME).read_text())
+    assert row["readback_tier"] == "independent_readback"
+    assert (row["verdict"], row["guard_verdict"], row["verdict_reason"]) == (
+        "VERIFIED",
+        "VERIFIED",
+        "readback_verified",
+    )
