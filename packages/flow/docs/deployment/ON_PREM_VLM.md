@@ -247,15 +247,17 @@ through. Scrubbing here would **defeat the safety check**, not add safety.
    boundary. Run the appliance HTTPS-only on the LAN, gate it with the bearer
    token (`VLM_SERVICE_TOKEN`), and keep it inside the same network zone as the
    runners. Under the `regulated` execution profile the runner enforces the
-   transport: it wires an appliance or `grounding_model.base_url` only over
-   `https`, or over `http` to loopback, and prints why it refused any other URL.
+   transport: it wires an appliance or a grounding model only over `https`, or
+   over `http` to loopback, and prints why it refused any other URL. It checks
+   the URL the built client sends to, including one the client library reads
+   from its own environment.
 4. **Every frame sent off the box is on a local ledger.** Before each off-box
    call the runner appends one line to `egress-ledger.jsonl` beside the run
    directory (or the file `OPENADAPT_FLOW_EGRESS_LEDGER` names). The line holds
    the frame's SHA-256 and size, the component, the destination host, the run,
    the step and the time, and never pixels or text. The file is append-only,
-   mode `0600` and fsynced per line. If the line can't be written, the frame is
-   not sent and the component gives its fail-safe answer, so the step halts.
+   mode `0600` and fsynced per line. If the line can't be written, or no
+   ledger is set (a replayer driven outside a run), the frame is not sent and the component gives its fail-safe answer, so the step halts.
    Halted runs are on the ledger too, because each line is written when its
    frame is sent.
 5. **No fallback to another model.** When `grounding_model` is pinned and
