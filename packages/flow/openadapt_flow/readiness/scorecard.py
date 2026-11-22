@@ -20,8 +20,9 @@ task's model cost is known; it is marked as an estimate.
 when every known cost was measured by the flight proxy, ``reported`` when
 any came from the agent's own ``usage.json``, and ``unknown`` when no cost
 is known. ``egress`` says how the agent's model traffic left the machine
-(``scrubbed``, ``blocked`` or ``unscrubbed``), whether that was enforced by
-the OS block, and how many model calls the proxy saw.
+(``scrubbed``, ``blocked`` or ``unscrubbed``), whether that was enforced
+(``enforced`` is true only when the candidate's process ran under the OS
+egress block and the shadow browser could reach the app's origins only), and how many model calls the proxy saw.
 
 ``scope_ok`` is false and ``failed_scope`` counts the case when a write
 reached the app (``FAILED_SCOPE``), the run couldn't vouch for the other
@@ -348,7 +349,7 @@ def render_html(card: Mapping[str, Any], cases_doc: Mapping[str, Any]) -> str:
         f"<p class={'mute' if card['scope_ok'] else 'bad'}>Scope: {html.escape(card['scope_statement'])}</p>"
         f"<p class=mute>Task type: {html.escape(card['task_type'])}. Model traffic: "
         f"{html.escape(card['egress']['mode'])}"
-        f"{'' if card['egress']['enforced'] else ' (not enforced by the OS block)'}.</p>"
+        f"{' (enforced for the agent and the browser)' if card['egress']['enforced'] else ' (not enforced for both the agent and the browser)'}.</p>"
         f"{flag}<div class=tiles>{tile_html}</div>"
         "<h2>Risks caught</h2><table>"
         f"<tr><td>Wrong record (the agent was on another record at save)</td><td>{risks['wrong_record']}</td></tr>"

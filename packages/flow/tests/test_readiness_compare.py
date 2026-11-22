@@ -220,8 +220,8 @@ def test_usage_pricing_and_program_launcher(tmp_path) -> None:
     job = LaunchJob(task_id="t-00000001", instruction="do it", inputs={"note": "n"},
                     cdp_url="http://127.0.0.1:9", page_url="http://127.0.0.1:1/",
                     run_dir=Path(tmp_path))
-    argv = ProgramLauncher(Path(tmp_path) / "bundle", flow_cmd=["flow"]).argv(job)
-    assert argv[:3] == ["flow", "run", str(Path(tmp_path) / "bundle")]
+    argv = ProgramLauncher(Path(tmp_path) / "bundle").flow_args(job)
+    assert argv[:2] == ["run", str(Path(tmp_path) / "bundle")]
     assert argv[argv.index("--approval-mode") + 1] == "each_item"
     assert "note=n" in argv
     folder = Path(tmp_path) / "program-run" / "item-approval"

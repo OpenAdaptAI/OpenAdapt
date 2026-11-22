@@ -342,18 +342,20 @@ class ProgramLauncher:
         self,
         bundle: Path | str,
         *,
-        flow_cmd: Sequence[str] = (sys.executable, "-m", "openadapt_flow"),
+        python_cmd: Sequence[str] = (sys.executable,),
         label: Optional[str] = None,
         egress: Optional[EgressOptions] = EgressOptions(),
     ) -> None:
         self.bundle = Path(bundle)
-        self.flow_cmd = list(flow_cmd)
+        self.python_cmd = list(python_cmd)
         self.label = label or f"program:{self.bundle.name}"
         self.egress = egress
 
-    def argv(self, job: LaunchJob) -> list[str]:
+    def flow_args(self, job: LaunchJob) -> list[str]:
+        """The ``openadapt-flow`` arguments. They hold the relay URL with its
+        token and the task's inputs, so they never go on a command line."""
+
         argv = [
-            *self.flow_cmd,
             "run",
             str(self.bundle),
             "--browser-cdp-endpoint",
@@ -372,6 +374,15 @@ class ProgramLauncher:
                 continue
             argv += ["--param", f"{key}={value}"]
         return argv
+
+    def argv(self, job: LaunchJob) -> list[str]:
+        """The child's command line: the program-args file only (see
+        :mod:`openadapt_flow.readiness.program_child`)."""
+
+        from openadapt_flow.readiness.program_child import write_args
+
+        path = write_args(job.run_dir / "program-args.json", self.flow_args(job))
+        return [*self.python_cmd, "-m", "openadapt_flow.readiness.program_child", str(path)]
 
     def start(self, job: LaunchJob) -> RunningAgent:
         return _RunningProgram(job, self.argv(job), self.egress)

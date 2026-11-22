@@ -92,6 +92,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="where the proxy forwards a provider's calls (anthropic, openai; repeatable)",
     )
     run.add_argument(
+        "--browser-allow",
+        action="append",
+        default=[],
+        metavar="ORIGIN",
+        help="an origin the browser may reach besides the app's (a sign-in "
+        "host, a CDN); every other origin is unreachable (repeatable)",
+    )
+    run.add_argument(
         "--keep-session",
         action="store_true",
         help="carry the signed-in session from each task to the next",
@@ -220,6 +228,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         lens=_load_lens(args.lens),
         storage_state=Path(args.storage_state) if args.storage_state else None,
         keep_session=args.keep_session,
+        allow_origins=tuple(args.browser_allow),
     )
     try:
         manifest = run_episodes(args.episodes, args.out, launcher, cfg)

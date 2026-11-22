@@ -1,6 +1,12 @@
 {
-  "agent_wall_s": 2.037,
+  "agent_wall_s": 2.032,
   "before_screen": false,
+  "browser_network": {
+    "allowed_origins": [
+      "http://127.0.0.1:54211"
+    ],
+    "limited": true
+  },
   "double_save": false,
   "egress": {
     "cost_source": "metered",

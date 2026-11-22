@@ -407,7 +407,7 @@ def test_a_program_gets_no_parameter_for_the_record_inputs(tmp_path: Path) -> No
                     inputs={"note": "n", "record_name": "Jane Sample"},
                     cdp_url="http://127.0.0.1:9", page_url="http://127.0.0.1/",
                     run_dir=tmp_path, record_keys=("record_name",))
-    argv = ProgramLauncher(tmp_path / "bundle", egress=None).argv(job)
+    argv = ProgramLauncher(tmp_path / "bundle", egress=None).flow_args(job)
     assert "note=n" in argv and not any("Jane" in a for a in argv)
 
 
@@ -501,3 +501,48 @@ def test_a_field_named_body_is_not_exempt() -> None:
     case = compare_case(_ref(type="Triage"), _run(), unparsed, before_screen=SCREEN,
                         held=[_held(0)])
     assert case["status"] != "MATCHED", case
+
+
+# -- review: no secret or input on a command line -------------------------------------------
+
+
+def test_a_programs_command_line_holds_no_token_or_input(tmp_path: Path) -> None:
+    from openadapt_flow.readiness.launcher import LaunchJob, ProgramLauncher
+
+    token = "tok_" + "s3cr3t" * 4
+    job = LaunchJob(task_id="t-00000001", instruction="x",
+                    inputs={"note": "Synthetic note 07", "record_name": "Jane Sample"},
+                    cdp_url=f"http://127.0.0.1:9/{token}", page_url="http://127.0.0.1:1/",
+                    run_dir=tmp_path, record_keys=("record_name",))
+    agent = ProgramLauncher(tmp_path / "no-bundle", egress=None).start(job)
+    try:
+        args = " ".join(agent._process.proc.args)  # what ps shows
+    finally:
+        agent.stop()
+    assert token not in args and "Synthetic note 07" not in args and "Jane" not in args
+    assert "openadapt_flow.readiness.program_child" in args
+
+
+def test_the_program_child_reads_its_args_once_and_only_private(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    import openadapt_flow.__main__ as flow
+    from openadapt_flow.readiness import program_child
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(flow, "main", lambda argv: seen.append(list(argv)) or 0)
+    path = program_child.write_args(tmp_path / "a.json",
+                                    ["run", "b", "--browser-cdp-endpoint", "http://x/tok"])
+    assert oct(os.stat(path).st_mode & 0o777) == "0o600"
+    assert program_child.main([str(path)]) == 0
+    assert seen == [["run", "b", "--browser-cdp-endpoint", "http://x/tok"]]
+    assert not path.exists()  # read once
+    loose = program_child.write_args(tmp_path / "b.json", ["run", "b"])
+    os.chmod(loose, 0o644)
+    with pytest.raises(SystemExit, match="readable by others"):
+        program_child.main([str(loose)])
+    other = program_child.write_args(tmp_path / "c.json", ["guard", "x"])
+    with pytest.raises(SystemExit, match="not a readiness program run"):
+        program_child.main([str(other)])

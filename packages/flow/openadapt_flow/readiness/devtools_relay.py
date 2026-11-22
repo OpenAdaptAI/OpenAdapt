@@ -21,6 +21,14 @@ the relay looks like a DevTools connection of its own. Message ids are
 remapped per client. When a client disconnects, every session it owned is
 detached, as Chromium does for a closed connection.
 
+Network: with ``allowed_origins`` the browser gets ``--proxy-server`` at a
+loopback port that refuses every connection (bound, never listening) and
+``--proxy-bypass-list`` naming only those origins' hosts and ports, with
+``<-loopback>`` so other loopback ports are not exempt either. A page can
+then reach the app and nothing else, by ``GET`` or WebSocket; only the
+candidate's process is under the OS egress block, so this is the browser's
+half (:attr:`DevToolsRelay.network_limited`).
+
 The hold is unchanged: the gate's ``Fetch.enable`` on its browser session
 pauses every other target's requests and the tab's own session pauses the
 tab's, exactly as over a TCP port. Close the browser (:meth:`close`) before
@@ -100,9 +108,17 @@ class _Client:
 class DevToolsRelay:
     """Start a pipe-only headless browser and serve it under a token."""
 
-    def __init__(self, executable: str, *, extra_args: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        executable: str,
+        *,
+        extra_args: tuple[str, ...] = (),
+        allowed_origins: tuple[str, ...] = (),
+    ) -> None:
         self.executable = executable
         self.extra_args = tuple(extra_args)
+        self.allowed_origins = tuple(allowed_origins)
+        self._dead_port: Optional[socket.socket] = None
         self.token = secrets.token_urlsafe(24)
         self._ids = itertools.count(1)
         self._lock = threading.Lock()
@@ -117,6 +133,34 @@ class DevToolsRelay:
         self.port = 0
 
     # -- lifecycle -----------------------------------------------------------------
+
+    @property
+    def network_limited(self) -> bool:
+        """The browser can reach only :attr:`allowed_origins`."""
+
+        return self._dead_port is not None
+
+    def _network_args(self) -> list[str]:
+        if not self.allowed_origins:
+            return []
+        from urllib.parse import urlsplit
+
+        hosts = []
+        for origin in self.allowed_origins:
+            parts = urlsplit(origin)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError(f"not an http(s) origin: {origin!r}")
+            port = parts.port or (443 if parts.scheme == "https" else 80)
+            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+            hosts.append(f"{host}:{port}")
+        dead = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        dead.bind(("127.0.0.1", 0))  # bound and never listening: refuses all
+        self._dead_port = dead
+        proxy = f"http://127.0.0.1:{dead.getsockname()[1]}"
+        return [
+            f"--proxy-server={proxy}",
+            "--proxy-bypass-list=" + ";".join(["<-loopback>", *hosts]),
+        ]
 
     @property
     def http_url(self) -> str:
@@ -140,6 +184,7 @@ class DevToolsRelay:
             "--disable-background-networking",
             "--password-store=basic",
             "--use-mock-keychain",
+            *self._network_args(),
             *self.extra_args,
             "about:blank",
         ]
@@ -198,6 +243,8 @@ class DevToolsRelay:
                     pass
         if self._profile:
             shutil.rmtree(self._profile, ignore_errors=True)
+        if self._dead_port is not None:
+            self._dead_port.close()
 
     # -- the pipe ------------------------------------------------------------------
 

@@ -31,6 +31,7 @@ ALLOWED: Mapping[str, frozenset[str]] = {
         "model_cost_usd", "model_cost_source", "egress", "landed_writes", "held",
         "double_save", "other_origin_refused", "proposed", "before_screen",
         "extra_target_writes", "target_gate", "session", "notes", "requests",
+        "browser_network",
     }),
     "egress.json": frozenset({
         "mode", "enforced", "model_calls", "cost_usd", "cost_source", "refused_requests",

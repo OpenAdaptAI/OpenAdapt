@@ -126,6 +126,9 @@ class RunnerConfig:
     storage_state: Optional[Path] = None
     #: Carry the session from each task to the next (see the module docstring).
     keep_session: bool = False
+    #: Origins the browser may reach besides the app's and the ``not_saves``
+    #: rules' (a sign-in host, a CDN); every other origin is unreachable.
+    allow_origins: Sequence[str] = ()
     notes: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -251,6 +254,8 @@ def run_one(
         "proposed": False,
         "before_screen": False,
         "extra_target_writes": 0,
+        #: What the browser could reach (the app and the listed origins only).
+        "browser_network": None,
         #: The target gate's inventory; None means no gate ran (the case
         #: fails closed as ``extra_target``).
         "target_gate": None,
@@ -272,7 +277,14 @@ def run_one(
         # No TCP debugging port: the browser speaks DevTools over a pipe the
         # relay owns, and every client needs the run's token (see
         # readiness/devtools_relay.py).
-        relay = DevToolsRelay(headless_shell(pw.chromium.executable_path)).start()
+        relay = DevToolsRelay(
+            headless_shell(pw.chromium.executable_path),
+            allowed_origins=browser_origins(cfg),
+        ).start()
+        record["browser_network"] = {
+            "limited": relay.network_limited,
+            "allowed_origins": list(relay.allowed_origins),
+        }
         browser = pw.chromium.connect_over_cdp(relay.http_url)
         width, height = cfg.viewport
         state_in = _session_in(out, cfg)
@@ -385,9 +397,10 @@ def run_one(
                 if record.get("egress") is None:
                     record["egress"] = summary
         if gate is not None:
+            # Read before closing, so a connection lost during the run shows.
+            record["target_gate"] = gate.status()
             # From here every request the gate sees is blocked.
             gate.close_hold()
-            record["target_gate"] = gate.status()
         if cfg.keep_session and context is not None and guard is not None:
             try:
                 _write_private(_session_carry(out), context.storage_state())
@@ -437,6 +450,16 @@ def run_one(
             record["status"] = "NO_WRITE_HELD"
     _write_private(run_dir / "run.json", record)
     return record
+
+
+def browser_origins(cfg: RunnerConfig) -> tuple[str, ...]:
+    """The origins the shadow browser may reach: the app's, the ``not_saves``
+    rules' own origins, and ``allow_origins``."""
+
+    found = [origin_of(cfg.app_url)]
+    found += [rule.origin for rule in cfg.not_saves if getattr(rule, "origin", None)]
+    found += [origin_of(o) or o for o in cfg.allow_origins]
+    return tuple(dict.fromkeys(o for o in found if o))
 
 
 def extra_target(run: Any) -> bool:
@@ -515,9 +538,20 @@ def run_episodes(
             json.loads((out / t["task_id"] / "run.json").read_text("utf-8")).get("egress") or {}
             for t in manifest["tasks"]
         ]
+        browsers = [
+            (json.loads((out / t["task_id"] / "run.json").read_text("utf-8"))
+             .get("browser_network") or {}).get("limited")
+            for t in manifest["tasks"]
+        ]
         manifest["egress"] = {
             "mode": options.mode,
-            "enforced": bool(runs) and all(r.get("enforced") for r in runs),
+            # Enforced only when the candidate's process was under the OS
+            # block AND the browser could reach the app's origins only.
+            "enforced": bool(runs)
+            and all(r.get("enforced") for r in runs)
+            and all(browsers),
+            "agent_enforced": bool(runs) and all(r.get("enforced") for r in runs),
+            "browser_limited": bool(browsers) and all(browsers),
             "spend_cap_usd": options.spend_cap_usd,
             "refused_tasks": sum(1 for r in runs if r.get("refused")),
         }

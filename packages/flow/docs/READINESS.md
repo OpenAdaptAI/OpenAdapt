@@ -290,6 +290,21 @@ refused_requests`, the flight recorder's summary) and the proxy's scrubbed
 record in `egress/`; `run.json` gets `egress` (that summary with the
 session's mode, `refused` and `reason`).
 
+The shadow browser's network is limited too: it starts with
+`--proxy-server` at a loopback port that refuses every connection and
+`--proxy-bypass-list` naming only the app's origin, the origins of
+`--not-save` rules that name one, and `--browser-allow ORIGIN` (a sign-in
+host, a CDN), with `<-loopback>` so other loopback ports aren't exempt. A
+page can reach nothing else, by `GET`, image, navigation or WebSocket.
+`run.json` records `browser_network: {limited, allowed_origins}`. The
+scorecard's `egress.enforced` is true only when the candidate's process ran
+under the OS block and the browser was limited, for every task.
+
+A compiled program (`--program`) gets its arguments (the relay URL with the
+run's token, the task's inputs) through a 0600 file the child reads once
+and deletes (`readiness/program_child.py`), never on its command line,
+which every local user can read with `ps`.
+
 The proxy replaces each personal value with a run token (`[PERSON_1]`, the
 same token in text and on screenshots) and turns the token back into the
 real value in the candidate's tool inputs, so the candidate types the real
@@ -439,9 +454,10 @@ been run through `readiness` yet; that is the next evidence step.
 - Out-of-process iframes of the guarded tab were not exercised by the
   adversarial test (MockMed has none).
 - The browser runs outside the OS egress block (only the candidate's process
-  is inside it). The hold refuses non-GET requests to other origins, but a
-  `GET` to another origin from the page goes on, so a candidate could carry
-  what is on screen out through the browser (an image URL, a navigation).
+  is inside it); its own limit is the proxy settings below, which hold for
+  the page's HTTP and WebSocket traffic. They don't cover what Chromium
+  sends for itself outside the page's network stack (none is expected with
+  background networking off), and DNS for a proxied host is not looked up.
 - Scrubbing is the flight recorder's. The scrubbed smoke test on MockMed
   (`test_a_real_claude_loop_under_scrubbed_egress_on_mockmed`) checks one
   planted patient name in the computer-use preamble plus task text: it does

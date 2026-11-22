@@ -102,3 +102,78 @@ def test_playwright_connects_with_the_token(relay: DevToolsRelay) -> None:
             pw.chromium.connect_over_cdp(f"http://127.0.0.1:{relay.port}", timeout=5000)
     assert json.loads(urllib.request.urlopen(  # noqa: S310
         relay.http_url + "/json/version", timeout=5).read())["webSocketDebuggerUrl"] == relay.ws_url
+
+
+def _server(body: bytes):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    hits: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a) -> None:
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802
+            hits.append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, hits
+
+
+def test_the_browser_reaches_the_app_and_nothing_else() -> None:
+    pytest.importorskip("playwright")
+    from playwright.sync_api import sync_playwright
+
+    app, app_hits = _server(b"<h1 id=app>app</h1>")
+    other, other_hits = _server(b"other")
+    app_origin = f"http://127.0.0.1:{app.server_address[1]}"
+    other_origin = f"http://127.0.0.1:{other.server_address[1]}"
+    with sync_playwright() as pw:
+        exe = headless_shell(pw.chromium.executable_path)
+        relay = DevToolsRelay(exe, allowed_origins=(app_origin,)).start()
+        try:
+            assert relay.network_limited
+            browser = pw.chromium.connect_over_cdp(relay.http_url)
+            page = browser.new_context().new_page()
+            page.goto(app_origin + "/")
+            assert page.text_content("#app") == "app"
+            assert page.evaluate(
+                f"fetch({json.dumps(app_origin + '/again')}).then(r => r.status, e => 'failed')"
+            ) == 200
+            got = page.evaluate(
+                f"fetch({json.dumps(other_origin + '/leak?d=1')}, {{mode: 'no-cors'}})"
+                ".then(() => 'answered', () => 'failed')"
+            )
+            public = page.evaluate(
+                "fetch('http://192.0.2.1/leak', {mode: 'no-cors'})"
+                ".then(() => 'answered', () => 'failed')"
+            )
+            ws = page.evaluate(
+                f"""new Promise(done => {{
+                    const s = new WebSocket({json.dumps('ws://127.0.0.1:' + str(other.server_address[1]) + '/ws')});
+                    s.onopen = () => done('open'); s.onerror = () => done('failed');
+                    setTimeout(() => done('timeout'), 20000);
+                }})"""
+            )
+            image = page.evaluate(
+                f"""new Promise(done => {{
+                    const i = new Image(); i.onload = () => done('loaded');
+                    i.onerror = () => done('failed');
+                    i.src = {json.dumps(other_origin + '/pixel?d=1')};
+                }})"""
+            )
+            browser.close()
+        finally:
+            relay.close()
+    app.shutdown()
+    other.shutdown()
+    assert other_hits == [], other_hits
+    assert (got, public, ws, image) == ("failed", "failed", "failed", "failed")
+    assert "/again" in app_hits
