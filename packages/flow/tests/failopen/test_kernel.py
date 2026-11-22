@@ -267,6 +267,41 @@ def test_one_result_cannot_satisfy_two_obligations() -> None:
     assert not settled.passes and set(settled.conflicting) == {unbound, bound}
 
 
+def test_a_repeated_result_is_judged_like_an_equal_copy() -> None:
+    """The same object twice, or two equal objects, give one verdict."""
+
+    (subject,) = _subjects(1)
+    ob = Obligations.fix([subject], source="p")
+    once = _result(subject, "held")
+    same_object = settle(ob, [once, once])
+    equal_copy = settle(ob, [once, _result(subject, "held")])
+    assert same_object.passes and equal_copy.passes
+    assert same_object.label(precedence=()) is equal_copy.label(precedence=())
+    disagree = settle(ob, [once, _result(subject, "refuted")])
+    assert not disagree.passes and disagree.conflicting == (subject,)
+
+
+@pytest.mark.parametrize(
+    "obs, status",
+    [
+        (Observed(0), Status.HELD),
+        (Observed(0, complete=False), Status.NOT_CHECKED),
+        (Observed(3, complete=False), Status.REFUTED),
+        (Observed(3), Status.REFUTED),
+        (Observed(None), Status.NOT_CHECKED),
+        (Observed(True), Status.NOT_CHECKED),
+        (Observed(-1), Status.NOT_CHECKED),
+        (Missing("no read"), Status.NOT_CHECKED),
+        (Errored("TimeoutError", ""), Status.NOT_CHECKED),
+    ],
+)
+def test_nothing_else_holds_only_on_a_complete_read(
+    obs: object, status: Status
+) -> None:
+    (subject,) = _subjects(1)
+    assert Result.nothing_else(subject, obs).status is status  # type: ignore[arg-type]
+
+
 def test_benign_cannot_map_a_raise_to_a_value() -> None:
     def probe() -> object:
         raise TimeoutError

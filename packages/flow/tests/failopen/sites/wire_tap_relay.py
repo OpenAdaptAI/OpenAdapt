@@ -3,9 +3,9 @@ browser on an allowed origin.
 
 The corpus (corpus/urls.json) is read the way a browser reads it
 (:func:`browser_origin`), not the way ``urlsplit`` does: on main
-``///evil.example/x`` is relayed as written, and a browser goes to
-``evil.example``. Fixed on #2470; the post-fix copy is in
-``selftest/s10_wire_tap_relay.py``.
+``///evil.example/x`` was relayed as written, and a browser went to
+``evil.example``. #2470 fixed it; the pre- and post-fix copies stay in the
+self-test (``selftest/_v_wire_tap_*.py``).
 """
 
 from __future__ import annotations
@@ -51,18 +51,7 @@ def _main() -> None:
     from openadapt_flow.tx.wire_tap import relay_redirect_location
 
     register(
-        relay_spec(
-            relay_redirect_location, "wire_tap.relay_redirect_location", "owned"
-        ),
-        xfail="#2470: '///host' is relayed raw and a browser reads it as a host",
-        known=[
-            "M11 P3: seed 0: accepted '///evil.example/x' as '///evil.example/x'",
-            "M11 P3: seed 0: accepted '////evil.example/x' as '////evil.example/x'",
-            "M11 P3: seed 0: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
-            "M11 P3: seed 1: accepted '///evil.example/x' as '///evil.example/x'",
-            "M11 P3: seed 1: accepted '////evil.example/x' as '////evil.example/x'",
-            "M11 P3: seed 1: accepted 'http:////evil.example/x' as 'http:////evil.example/x'",
-        ],
+        relay_spec(relay_redirect_location, "wire_tap.relay_redirect_location", "site")
     )
 
 

@@ -8,14 +8,34 @@ and fixed reason codes, never record ids, business keys or stored values.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional, TypeGuard
 
+from openadapt_flow.verdict import (
+    Obligations,
+    Observed,
+    Result,
+    Status,
+    Subject,
+    settle,
+)
 from openadapt_flow.verdict_sites import verdict_site
 
 InvariantName = Literal["declared_scope", "at_most_one", "no_undeclared_deletes"]
 InvariantStatus = Literal["held", "refuted", "not_checked"]
 LAYER_SCHEMA = "openadapt.hard-invariants/v1"
+
+
+NAMES: tuple[InvariantName, ...] = (
+    "declared_scope",
+    "at_most_one",
+    "no_undeclared_deletes",
+)
+#: The three obligations, fixed before any reader runs.
+_OBLIGATIONS = Obligations.fix(
+    (Subject(surface="hard_invariants", key=name) for name in NAMES),
+    source="hard_invariants",
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +44,19 @@ class InvariantResult:
     status: InvariantStatus
     reason: str
     observed_count: Optional[int] = None
+    #: The kernel result this check was judged as. Only a check built by
+    #: :func:`judge_hard_invariants` carries one, so a hand-written "held"
+    #: can't make the layer hold.
+    result: Optional[Result] = field(default=None, compare=False, repr=False)
+
+    def _kernel(self) -> Result:
+        subject = Subject(surface="hard_invariants", key=self.name)
+        if self.result is not None and self.result.subject == subject:
+            return self.result
+        if self.status == "refuted":
+            # A refutation needs no complete read: one violation is enough.
+            return Result.refuted(subject, Observed(None, complete=False), self.reason)
+        return Result.not_checked(subject, "not judged by the kernel")
 
     def evidence(self) -> dict[str, object]:
         return {
@@ -40,16 +73,17 @@ class HardInvariantVerdict:
 
     @property
     def status(self) -> InvariantStatus:
-        if any(c.status == "refuted" for c in self.checks):
-            return "refuted"
-        if (
-            {c.name for c in self.checks}
-            != {"declared_scope", "at_most_one", "no_undeclared_deletes"}
-            or len(self.checks) != 3
-            or any(c.status != "held" for c in self.checks)
-        ):
-            return "not_checked"
-        return "held"
+        """Held only when each of the three invariants held, once. One
+        refutation refutes; anything missing, repeated or extra is not
+        checked."""
+
+        settled = settle(_OBLIGATIONS, (c._kernel() for c in self.checks))
+        labels: dict[Status, InvariantStatus] = {
+            Status.HELD: "held",
+            Status.REFUTED: "refuted",
+            Status.NOT_CHECKED: "not_checked",
+        }
+        return labels[settled.label(precedence=(Status.REFUTED, Status.NOT_CHECKED))]
 
     def evidence(self) -> dict[str, object]:
         return {
@@ -64,6 +98,17 @@ def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def _invariant(
+    name: InvariantName, result: Result, reason: str, count: Optional[int]
+) -> InvariantResult:
+    labels: dict[Status, InvariantStatus] = {
+        Status.HELD: "held",
+        Status.REFUTED: "refuted",
+        Status.NOT_CHECKED: "not_checked",
+    }
+    return InvariantResult(name, labels[result.status], reason, count, result)
+
+
 def _zero(
     name: InvariantName,
     count: Optional[int],
@@ -73,17 +118,22 @@ def _zero(
     refuted: str,
     unknown: str,
 ) -> InvariantResult:
+    """No change of this kind: any one refutes; none holds only on a complete
+    read (:meth:`Result.nothing_else`)."""
+
+    subject = Subject(surface="hard_invariants", key=name)
     if not _count(count):
-        return InvariantResult(name, "not_checked", "invalid_or_missing_observation")
-    assert count is not None
-    if count > 0:
-        return InvariantResult(name, "refuted", refuted, count)
-    return InvariantResult(
-        name,
-        "held" if complete is True else "not_checked",
-        held if complete is True else unknown,
-        count,
+        result = Result.not_checked(subject, "invalid_or_missing_observation")
+        return _invariant(name, result, "invalid_or_missing_observation", None)
+    result = Result.nothing_else(
+        subject,
+        Observed(count, complete=complete is True),
+        held=held,
+        refuted=refuted,
+        partial=unknown,
     )
+    reason = {Status.HELD: held, Status.REFUTED: refuted}.get(result.status, unknown)
+    return _invariant(name, result, reason, count)
 
 
 @verdict_site("hard_invariants.judge", classes="C2 C5")
@@ -126,30 +176,27 @@ def judge_hard_invariants(
     counts = (before_matches, after_matches, history_matches)
     known = [n for n in counts if _count(n)]
     maximum = max(known) if known else None
+    subject = Subject(surface="hard_invariants", key="at_most_one")
+    # One duplicate refutes, even beside an incomplete read.
     if maximum is not None and maximum > 1:
-        cardinality = InvariantResult(
-            "at_most_one", "refuted", "duplicate_business_key", maximum
+        result = Result.refuted(
+            subject, Observed(maximum, complete=False), "duplicate_business_key"
         )
+        reason = "duplicate_business_key"
     elif (
-        not all(_count(n) for n in counts)
+        len(known) != len(counts)
         or history_complete is not True
         or search_complete is not True
     ):
-        cardinality = InvariantResult(
-            "at_most_one",
-            "not_checked",
-            "business_key_history_or_search_incomplete",
-            maximum,
-        )
+        reason = "business_key_history_or_search_incomplete"
+        result = Result.not_checked(subject, reason)
     elif _count(history_matches) and maximum is not None and history_matches < maximum:
-        cardinality = InvariantResult(
-            "at_most_one",
-            "not_checked",
-            "business_key_observations_inconsistent",
-            maximum,
-        )
+        reason = "business_key_observations_inconsistent"
+        result = Result.not_checked(subject, reason)
     else:
-        cardinality = InvariantResult(
-            "at_most_one", "held", "at_most_one_business_record", maximum
-        )
+        reason = "at_most_one_business_record"
+        # Every count is known and both reads were complete (checked above).
+        complete = history_complete is True and search_complete is True
+        result = Result.held(subject, Observed(maximum, complete=complete), reason)
+    cardinality = _invariant("at_most_one", result, reason, maximum)
     return HardInvariantVerdict((scope, cardinality, deletes))

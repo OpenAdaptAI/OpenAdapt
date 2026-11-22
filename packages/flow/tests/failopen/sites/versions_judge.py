@@ -9,6 +9,7 @@ from openadapt_flow.runtime.effects.versions import (
     judge_versions,
     seal_versions,
 )
+from openadapt_flow.verdict import Status
 from tests.failopen.harness import Seed, SiteSpec, key, register
 
 KEY = b"k" * 32
@@ -41,6 +42,7 @@ register(
         target="openadapt_flow.runtime.effects.versions:judge_versions",
         run=_run,
         is_pass=lambda out: out.status == "held",
+        level=lambda out: Status(out.status),
         seeds=lambda: [
             Seed(_good(), True),
             Seed(

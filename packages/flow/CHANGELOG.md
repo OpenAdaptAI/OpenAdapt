@@ -23,12 +23,19 @@
   evidence into held, refuted or not checked. It fixes the obligations from
   the plan first, settles results against them, and never passes an empty
   set, a truncated or short read, a probe that raised, a result bound to
-  another run, two results that disagree, or a code nobody listed. Functions
-  marked `@verdict_site` are run by a fail-open harness
-  (`tests/failopen`) with 13 generic mutations; it flags 15 fail-open bugs
-  rebuilt from this repository's code and passes their fixes.
-  `scripts/check_verdict_folds.py` fails CI when a file gains a hand-written
-  fold. See `docs/FAIL_CLOSED.md`.
+  another run, two results that disagree, or a code nobody listed.
+  `Result.nothing_else` holds a "nothing else changed" claim only on a
+  complete read. Functions marked `@verdict_site` are run by a fail-open
+  harness (`tests/failopen`) with 15 generic mutations, which checks the
+  verdict at three levels (refuted, not checked, held), not as one bit. It
+  flags 14 fail-open bugs rebuilt from this repository's history (pinned
+  pre-fix copies) and one live connector site, and passes their fixes.
+  `scripts/check_verdict_folds.py` fails CI when the repository-wide count of
+  a hand-written fold kind rises, including a broad `except` that logs and
+  falls through and a "nothing else changed" test over a set that may be a
+  partial read. See `docs/FAIL_CLOSED.md`.
+- The hard-invariant layer, the frame's version check, `verify-run`'s effect
+  folds and the receipt's line judge and tally are built on the kernel.
 
 ### Fixes
 
@@ -36,6 +43,14 @@
   one with the effects, is `INDETERMINATE`, `unknown` and `unchecked`, not
   `CONFIRMED`, `present` and `independent_readback`. The receipt model already
   refuses an empty list, so no run changes outcome today.
+- `verify-run`: the effect folds settle against the planned effects, so a
+  planned effect with no verdict is `INDETERMINATE`, and an observed-effect
+  code nobody listed is `unknown` rather than `present`.
+- The frame's version check: a duplicate version row, a version history
+  that lost a row, or a changed target with no new version no longer hides a
+  version saved by another user. The frame is refuted instead of not checked.
+- Receipts: a line check nobody listed keeps the run from `VERIFIED` and is
+  counted as not checked, so the three line counts add up to the lines.
 
 ## v3.4.0 (2026-11-21)
 

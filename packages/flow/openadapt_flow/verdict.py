@@ -13,6 +13,9 @@ listed. Each was fixed where it was found. This module fixes the classes once
   made from a complete :class:`Observed` value (:meth:`Result.held`) or from
   an allow-listed upstream code (:meth:`Result.from_code`). A read that raised
   or found nothing gives ``NOT_CHECKED``; it never defaults to a pass.
+- :meth:`Result.nothing_else` judges a "nothing else changed" claim from a
+  count of changes: any change refutes, and zero holds only on a complete
+  read (C1, C2).
 - :func:`settle` matches results to obligations. An obligation with no result,
   a result nobody asked for, a result bound to a different run, two results
   that disagree, or more obligations than the limit all keep the settlement
@@ -277,6 +280,38 @@ class Result:
         return cls.not_checked(subject, reason)
 
     @classmethod
+    def nothing_else(
+        cls,
+        subject: Subject,
+        obs: Observation,
+        *,
+        held: str = "nothing else changed",
+        refuted: str = "something else changed",
+        partial: str = "the read was partial",
+    ) -> "Result":
+        """A "nothing else changed" claim from a count of changes found.
+
+        The observed value is the number of changes the read found outside
+        what was allowed. One or more refutes, even on a partial read. Zero
+        holds only when the read was complete: a partial read that found
+        nothing is ``NOT_CHECKED``, never a pass. A count that isn't a whole
+        number (``None``, a bool, a negative) is ``NOT_CHECKED``.
+        """
+
+        if isinstance(obs, Missing):
+            return cls.not_checked(subject, f"missing: {obs.reason}")
+        if isinstance(obs, Errored):
+            return cls.not_checked(subject, f"errored: {obs.exc_type}")
+        count = obs.value
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            return cls.not_checked(subject, "invalid_or_missing_observation")
+        if count > 0:
+            return cls.refuted(subject, obs, refuted)
+        if obs.complete is not True:
+            return cls.not_checked(subject, partial)
+        return cls.held(subject, obs, held)
+
+    @classmethod
     def from_code(
         cls,
         subject: Subject,
@@ -433,20 +468,24 @@ def settle(
     conflicting: list[Subject] = []
     used: set[int] = set()
     matches: dict[int, list[Result]] = {}
-    takers: dict[int, int] = {}
+    # The obligations that claim each result, by index: the same object passed
+    # twice to one obligation is one claim, so the verdict depends on the
+    # evidence, not on how the caller stored it.
+    takers: dict[int, set[int]] = {}
     for n, item in enumerate(obligations.items):
         same_key = by_key.get(item.key_tuple(), [])
         matches[n] = [r for r in same_key if not binding_mismatches(item, r.subject)]
         for r in matches[n]:
-            takers[id(r)] = takers.get(id(r), 0) + 1
+            takers.setdefault(id(r), set()).add(n)
     for n, item in enumerate(obligations.items):
         got = matches[n]
         used.update(id(r) for r in got)
+        shared = any(len(takers[id(r)]) > 1 for r in got)
         if not by_key.get(item.key_tuple()):
             buckets["missing"].append(item)
         elif not got:
             buckets["mismatched"].append(item)
-        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):
+        elif len({r.status for r in got}) > 1 or shared:
             # Two results that disagree, or one result two obligations claim.
             conflicting.append(item)
         else:

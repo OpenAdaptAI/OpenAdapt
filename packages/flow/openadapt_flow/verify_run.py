@@ -56,7 +56,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
 from openadapt_types.approval import (
@@ -2964,40 +2964,76 @@ _AGGREGATE_LABELS: dict[Status, EffectVerdictLabel] = {
 }
 
 
-@verdict_site("verify_run.aggregate", classes="C2")
-def _aggregate(verdicts: Sequence[EffectVerdict]) -> EffectVerdictLabel:
-    """CONFIRMED only when every effect is; any INDETERMINATE outranks a
-    REFUTED; no effects at all is INDETERMINATE (docs/FAIL_CLOSED.md)."""
+def _effect_results(
+    planned: Sequence[str],
+    verdicts: Sequence[EffectVerdict],
+    code: Callable[[EffectVerdict], object],
+    *,
+    held: frozenset[str],
+    refuted: frozenset[str],
+) -> tuple[Obligations, list[Result]]:
+    """One obligation per planned effect, fixed from the contract before any
+    read; the ``i``-th verdict answers the ``i``-th. A verdict past the plan
+    answers nothing (it is unexpected), and a planned effect with no verdict
+    is missing, so neither can pass."""
 
-    subjects = [Subject(key=str(i)) for i in range(len(verdicts))]
-    settled = settle(
-        Obligations.fix(subjects, source="effects"),
-        [
-            Result.from_code(
-                s,
-                v.verdict,
-                held=frozenset({Verdict.CONFIRMED.value}),
-                refuted=frozenset({Verdict.REFUTED.value}),
-            )
-            for s, v in zip(subjects, verdicts)
-        ],
+    subjects = [Subject(key=key) for key in planned]
+    results = [
+        Result.from_code(
+            subjects[i] if i < len(subjects) else Subject(key=f"unplanned:{i}"),
+            code(v),
+            held=held,
+            refuted=refuted,
+        )
+        for i, v in enumerate(verdicts)
+    ]
+    return Obligations.fix(subjects, source="cfg.effects"), results
+
+
+@verdict_site("verify_run.aggregate", classes="C1 C2")
+def _aggregate(
+    planned: Sequence[str], verdicts: Sequence[EffectVerdict]
+) -> EffectVerdictLabel:
+    """CONFIRMED only when every planned effect is; any INDETERMINATE outranks
+    a REFUTED; no effects at all, a planned effect with no verdict or a
+    verdict nobody planned is INDETERMINATE (docs/FAIL_CLOSED.md)."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.verdict,
+        held=frozenset({Verdict.CONFIRMED.value}),
+        refuted=frozenset({Verdict.REFUTED.value}),
     )
+    settled = settle(obligations, results)
     return _AGGREGATE_LABELS[
         settled.label(precedence=(Status.NOT_CHECKED, Status.REFUTED))
     ]
 
 
-@verdict_site("verify_run.observed", classes="C2")
-def _observed(verdicts: Sequence[EffectVerdict]) -> str:
-    if not verdicts:
-        return "unknown"  # nothing was read, so nothing is present
+@verdict_site("verify_run.observed", classes="C1 C2")
+def _observed(planned: Sequence[str], verdicts: Sequence[EffectVerdict]) -> str:
+    """``present`` only when every planned effect was read as present.
+    ``unknown`` when one was not read, has no verdict, or was not planned;
+    ``conflicting`` for a wrong record or a mix of landed and not landed."""
+
+    obligations, results = _effect_results(
+        planned,
+        verdicts,
+        lambda v: v.observed_effect,
+        held=frozenset({"present"}),
+        refuted=frozenset({"absent", "conflicting"}),
+    )
+    settled = settle(obligations, results)
+    if settled.passes:
+        return "present"
+    if not settled.refuted or settled.total != len(settled.held) + len(settled.refuted):
+        return "unknown"  # something planned was not read, or not planned
     seen = {v.observed_effect for v in verdicts}
-    if "unknown" in seen:
-        return "unknown"
     if "conflicting" in seen or seen == {"absent", "present"}:
         # A wrong record, or some effects landed and others did not.
         return "conflicting"
-    return "absent" if "absent" in seen else "present"
+    return "absent"
 
 
 @verdict_site("verify_run.readback_class", classes="C1 C2")
@@ -3229,6 +3265,10 @@ def verify_run(
     judged_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
+    # The effects the contract plans, fixed before any read: each fold below
+    # settles the verdicts against these, so a verdict that goes missing
+    # can't leave a pass.
+    planned = [f"{i}:{e.kind.value}" for i, e in enumerate(cfg.effects)]
     for effect in cfg.effects:
         try:
             bound = effect.resolve(params)
@@ -3287,8 +3327,8 @@ def verify_run(
             }
         )
 
-    delta_verdict = _aggregate(verdicts)
-    observed_effect = _observed(verdicts)
+    delta_verdict = _aggregate(planned, verdicts)
+    observed_effect = _observed(planned, verdicts)
     # The frame: nothing outside the declared delta moved. Without a baseline
     # it can't be known, so it is not checked and the run is not verified.
     frame_spec = cfg.frame or FrameSpec()
@@ -3316,8 +3356,8 @@ def verify_run(
         _excuse_attributed_additions(
             cfg, verifier, before, judged_effects, verdicts, rows, frame
         )
-        delta_verdict = _aggregate(verdicts)
-        observed_effect = _observed(verdicts)
+        delta_verdict = _aggregate(planned, verdicts)
+        observed_effect = _observed(planned, verdicts)
     if history_spec is not None:
         if history_problem is not None and frame.status != "refuted":
             frame.status = "not_checked"

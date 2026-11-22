@@ -19,6 +19,9 @@ SNIPPETS = {
     "swallow": "def f(g):\n    try:\n        return g()\n    except Exception:\n        return 0\n",
     "slice_count": "def f(lines):\n    n = sum(1 for x in lines[:256] if x)\n    return n\n",
     "else_success": 'def f(x):\n    if x:\n        y = "REFUTED"\n    else:\n        y = "CONFIRMED"\n    return y\n',
+    "swallow_wide": "def f(g, log):\n    try:\n        g()\n    except Exception:\n        log.error('failed')\n    return True\n",
+    "says_unchanged": 'def f():\n    return "no_change"\n',
+    "empty_change_set": "def f(changes):\n    return not changes\n",
 }
 
 
@@ -49,6 +52,71 @@ def test_each_exit_of_a_handler_is_judged(tmp_path: Path) -> None:
     assert "swallow" not in _count(tmp_path, attr)
     reraise = "def f(g):\n    try:\n        return g()\n    except Exception:\n        raise\n"
     assert "swallow" not in _count(tmp_path, reraise)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        "except Exception:\n        log.error('failed')",
+        "except Exception as exc:\n        log.exception(exc)\n        x = 1",
+        "except (ValueError, Exception):\n        return 0",
+        "except builtins.Exception:\n        return 0",
+        "except BaseException:\n        if x:\n            raise\n        log.error('x')",
+        "except Exception:\n        for _ in x:\n            break",
+    ],
+)
+def test_every_open_way_out_of_a_broad_handler_is_counted(
+    tmp_path: Path, handler: str
+) -> None:
+    src = f"def f(g, log, x):\n    try:\n        g()\n    {handler}\n    return True\n"
+    got = _count(tmp_path, src)
+    assert got.get("swallow", 0) + got.get("swallow_wide", 0) == 1, got
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        "except Exception:\n        log.error('failed')\n        raise",
+        "except Exception:\n        status = 'not_checked'",
+        "except Exception as exc:\n        out.append(Errored(type(exc).__name__, ''))",
+        "except Exception:\n        if x:\n            raise\n        else:\n            return NOT_CHECKED",
+        "except ValueError:\n        log.error('narrow')",
+    ],
+)
+def test_a_closed_handler_is_not_counted(tmp_path: Path, handler: str) -> None:
+    src = f"def f(g, log, x, out):\n    try:\n        g()\n    {handler}\n    return True\n"
+    got = _count(tmp_path, src)
+    assert "swallow" not in got and "swallow_wide" not in got, got
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "not changes",
+        "len(collateral) == 0",
+        "deleted == []",
+        "not any(c for c in diffs)",
+        "frame.changes == set()",
+    ],
+)
+def test_a_nothing_changed_test_is_counted(tmp_path: Path, expr: str) -> None:
+    src = f"def f(changes, collateral, deleted, diffs, frame):\n    return {expr}\n"
+    assert _count(tmp_path, src).get("empty_change_set") == 1
+
+
+def test_a_file_that_does_not_parse_fails_the_check(tmp_path: Path) -> None:
+    path = tmp_path / "m.py"
+    path.write_text("def f(:\n")
+    with pytest.raises(SyntaxError):
+        folds.count_file(path, CONFIG)
+
+
+def test_a_spec_id_is_an_id_argument_not_any_quoted_word() -> None:
+    src = (
+        "register(SiteSpec(id='a.judge', classes='C1', is_pass=lambda o: o == 'held'))\n"
+        "register(make_spec(fn, 'b.judge', 'owned'), xfail='#1', known=['M1 P2: x'])\n"
+    )
+    assert folds.spec_ids(src) == {"a.judge", "b.judge"}
 
 
 def test_a_site_id_on_two_functions_is_refused(tmp_path: Path) -> None:

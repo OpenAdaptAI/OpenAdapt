@@ -2,13 +2,15 @@
 
 M1 drop, M2 inflate past the limit, M3 empty, M4 probe raises, M5 missing or
 null field, M6 reorder, M7 duplicate, M8 subject swap, M9 knob sweep, M10 value
-perturb, M11 corpus, M12 outcome after delivery, M14 unknown code. M13 (a
+perturb, M11 corpus, M12 outcome after delivery, M14 unknown code, M15 a
+"nothing else changed" read made partial, M16 one result turned bad. M13 (a
 trust-source swap) waits for the signer-registry vectors (FAIL_CLOSED.md,
 follow-ups).
 """
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -48,6 +50,9 @@ class Mutation:
     #: problem description, or "" when it holds.
     check: Optional[Callable[[], str]] = None
     prop: str = ""
+    #: Keeps every result and adds or turns one adverse: the level may not
+    #: rise at all (P6).
+    adverse: bool = False
 
 
 def perturbations(value: Any) -> list[tuple[str, Any]]:
@@ -95,9 +100,13 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
         )
     if spec.items is not None and not (spec.vacuous and spec.plan is None):
         empty = spec.items.set(ev, [])
+        label = "no results"
         if spec.plan is not None and spec.vacuous is None:
             empty = spec.plan.set(empty, [])
-        yield Mutation("M3", "no results and no plan", empty, "not_pass")
+            label = "no results and no plan"
+        elif spec.plan is not None:
+            label = "no results, the plan kept"
+        yield Mutation("M3", label, empty, "not_pass")
     if spec.probe_raise is not None:
         for exc in PROBE_ERRORS:
             yield Mutation(
@@ -127,16 +136,33 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
             rev = spec.plan.set(rev, list(reversed(spec.plan.get(ev))))
         yield Mutation("M6", "results reordered", rev, "same")
     if items:
+        # A separate, equal copy: the site must judge it like the original,
+        # not lean on the kernel noticing the same object twice.
         yield Mutation(
-            "M7", "a result repeated", spec.items.set(ev, items + [items[0]])
-        )  # type: ignore[union-attr]
+            "M7",
+            "a result repeated",
+            spec.items.set(ev, items + [copy.deepcopy(items[0])]),  # type: ignore[union-attr]
+            adverse=True,
+        )
         if spec.bad_item is not None:
             yield Mutation(
                 "M7",
                 "a result repeated with a bad copy",
-                spec.items.set(ev, items + [spec.bad_item(items[0])]),
+                spec.items.set(ev, items + [spec.bad_item(items[0])]),  # type: ignore[union-attr]
                 "not_pass",
-            )  # type: ignore[union-attr]
+                adverse=True,
+            )
+        if spec.bad_item is not None and seed.correct_pass and spec.bad_replaces:
+            # Every result of a pass seed held, so turning the first one bad
+            # (``bad_item`` is a bad copy of it) must leave no pass.
+            turned = [spec.bad_item(items[0]), *items[1:]]
+            yield Mutation(
+                "M16",
+                "the first result turned bad",
+                spec.items.set(ev, turned),  # type: ignore[union-attr]
+                "not_pass",
+                adverse=True,
+            )
     if spec.subject is not None:
         yield Mutation(
             "M8",
@@ -169,6 +195,9 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
                     check=_corpus_check(spec, mutated, entry),
                     prop="P3",
                 )
+    if spec.partial is not None:
+        for label, partial in spec.partial(ev):
+            yield Mutation("M15", f"{label} partial", partial, "not_pass")
     if spec.knob is not None and seed.correct_pass:
         yield Mutation(
             "M9", f"knob {spec.knob.name}", check=_knob_check(spec, ev), prop="P5"

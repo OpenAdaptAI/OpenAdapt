@@ -119,6 +119,9 @@ def audit_spec(reader: Any, id: str) -> SiteSpec:
         ],
         items=key("events"),
         bad_item=lambda e: {**e, "id": e["id"] + "-dup"},
+        # The bad item is a second own event beside the first, not a bad
+        # version of it.
+        bad_replaces=False,
         inflate=lambda ev, n: {
             **ev,
             "events": [own, stale]
@@ -456,13 +459,13 @@ for _name, _factory, _pre, _post in (
         "S9_aggregate_empty",
         verify_run_folds.aggregate_spec,
         _v_s9_verify_run_pre._aggregate,
-        verify_run._aggregate,
+        verify_run_folds._unplanned(verify_run._aggregate),
     ),
     (
         "S9_observed_empty",
         verify_run_folds.observed_spec,
         _v_s9_verify_run_pre._observed,
-        verify_run._observed,
+        verify_run_folds._unplanned(verify_run._observed),
     ),
     (
         "S9_readback_class_empty",

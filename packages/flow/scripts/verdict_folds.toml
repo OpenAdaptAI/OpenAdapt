@@ -27,7 +27,27 @@ success = [
 ]
 # Compared against, beside every outcome in the vocabulary.
 outcome_extra = ["held", "confirmed", "pass", "verified_done", "refuted", "not_checked"]
+# A check that says one of these is saying nothing else changed (a frame, a
+# rollback, no collateral). Only a complete read can say it.
+unchanged = [
+  "unchanged",
+  "no_change",
+  "nothing_changed",
+  "untouched",
+  "no_collateral",
+  "no_outside_scope_changes",
+  "no_undeclared_deletes",
+  "rolled_back",
+  "ROLLED_BACK",
+  "NO_CHANGE",
+  "NOTHING_CHANGED",
+]
 
 [bool_fold]
 # all(...)/any(...) over one of these names folds verdicts by hand.
 names = '(verdict|result|check|effect|line|tier)'
+
+[change_set]
+# ``not x``, ``len(x) == 0``, ``x == []`` or ``not any(x)`` over one of these
+# names says nothing else changed. Matched anywhere in the name.
+names = '.*(changes|changed|collateral|diffs?|deletes|deleted|concurrent|moved|unexpected).*'

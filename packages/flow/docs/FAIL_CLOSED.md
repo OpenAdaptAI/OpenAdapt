@@ -55,7 +55,15 @@ found didn't stop the next one, so the shapes are now fixed in one place:
 8. **Each site states its own failure order.** `Settlement.label(precedence=...)`
    returns `HELD` only when the settlement passes; otherwise it returns the
    first status in the site's order that applies. The kernel doesn't impose one
-   total order, because that would silently relabel existing results.
+   total order, because that would silently relabel existing results. The
+   harness ranks REFUTED < NOT_CHECKED < HELD unless the spec says, with a
+   reason, that an unread result outranks a refuted one (P6).
+9. **"Nothing else changed" holds only on a complete read.**
+   `Result.nothing_else(subject, Observed(count, complete=...))` takes the
+   number of changes a read found outside what was allowed: one or more
+   refutes, even on a partial read; zero holds only when the read was
+   complete. A frame, a "no undeclared delete" or a rollback check is one of
+   these, never `not changes` over whatever the read returned.
 
 ## Register a site
 
@@ -90,22 +98,37 @@ a decorated function.
 |---|---|---|
 | M1 | drop a result, keep the plan | not pass |
 | M2 | grow to the limit plus one, the last result bad | not pass |
-| M3 | no results, no plan | not pass (unless the spec says an empty set is vacuous, with the reason) |
+| M3 | no results and no plan (a vacuous spec keeps the plan) | not pass (unless the spec says an empty set is vacuous, with the reason) |
 | M4 | the probe raises `Exception`, `TimeoutError`, an HTTP 503 | not pass |
 | M5 | a required field missing or null | not pass |
 | M6 | reorder the results | change nothing |
-| M7 | repeat a result; repeat it with a bad copy | not improve; not pass |
+| M7 | repeat a result as a separate equal copy; repeat it with a bad copy | not raise the level; not pass |
 | M8 | a result bound to another run | not pass |
 | M9 | sweep a knob; relabel a scored run as not scored | the default is the strictest value; not pass |
 | M10 | perturb a value: prefix, superstring, `''`, null, absent, number for string | not pass |
 | M11 | a corpus entry (`corpus/urls.json`, `corpus/values.json`) | not accepted |
 | M12 | an outcome after delivery that may have changed something | not reported as a plain failure or as nothing changed |
 | M14 | a code no list names | not pass |
+| M15 | a "nothing else changed" read marked partial | not pass |
+| M16 | on a pass seed, the first result turned bad | not pass, not raise the level |
 
 On every seed the site must give the correct answer (P0), and a mutation that
 only removes or corrupts evidence must never turn a not-pass into a pass (P1).
-A crash counts as a not-pass. M13, a trust-source swap, waits for the signer
-vectors (follow-up 5).
+A crash counts as a not-pass.
+
+The verdict has three levels, not one bit (P6). A spec gives `level`, and the
+harness ranks REFUTED < NOT_CHECKED < HELD. A mutation that keeps every
+result and adds a copy or turns one bad (M7, M16) must not raise the level
+at all. A reordering (M6) leaves the level
+exactly where it was. A mutation that removes evidence (M1, M3, M4, M5, M8,
+M10) may move REFUTED to NOT_CHECKED, because the refutation it removed is no
+longer known, but never to HELD. A site whose order puts an unread result
+below a refuted one says so in `precedence` with the reason in
+`notes["precedence"]` (a test enforces the note). `verify_run`'s folds and
+`receipt_record._line` do: an effect that wasn't read may have landed, so the
+run says "check the record" rather than "refuted" (C7).
+
+M13, a trust-source swap, waits for the signer vectors (follow-up 5).
 
 ## The self-test
 
@@ -127,20 +150,19 @@ applies to, fails too:
 | S7 a cancel after the child started is reported as failed (#2300) | `fd7133866` | #2300 head | M12 |
 | S3b the S3 fix still keeps a deny-list: a per-write code nobody listed is `ROLLED_BACK` | `fda539c78` | open | M14 |
 | S8 `''` and NULL in the governed check (#2258) | main at `576f87b41` | `00a55cc16` | P0, M10 |
-| Wire tap relays `///host` raw (#2470) | main at `576f87b41` | #2470 head | M11 |
+| Wire tap relays `///host` raw (#2470, merged; the live site is now registered) | main at `576f87b41` | #2470 head | M11 |
 | S9 `verify_run` folds pass an empty effect list | main before this change | main | M1, M3 |
 
 The pre-fix controls are pinned copies, never live code, so landing a fix on
 main can't turn a control green.
 
-Three sites on main are still fail-open and are owned by open pull requests.
+Two sites on main are still fail-open and are owned by open pull requests.
 Their specs are `owned`: they name the owner and list exactly the failures the
 site has today. This is a strict xfail per case. A new failure fails the test,
 so a known bug can't hide another one. A known failure that goes away also
 fails it, so the list, and then the `owned` marker, comes out in the change
 that fixes the site.
 
-- `wire_tap.relay_redirect_location`: `///evil.example/x` is relayed raw (#2470).
 - `governed_safety.check`: a held target note changed between `''` and NULL
   reads as no write (#2258).
 - `connector.status_from_report`: a report whose `transaction_outcome` is
@@ -150,17 +172,46 @@ that fixes the site.
 ## The ratchet
 
 `scripts/check_verdict_folds.py` runs in the required `ci` check, in the smoke
-job that runs on every change, next to the file-size ratchet. It counts, in `openadapt_flow/`, the
-launcher and `scripts/ci/`, six kinds of hand-written fold: a success literal
-produced in code (`VERIFIED`, `CONFIRMED`, `held`, ...), a compare against an
-outcome literal, `all()`/`any()` over verdicts or results, a broad `except`
-that returns without a raise or a not-checked value, a slice in a statement
-that counts, and a final `else` that assigns success. It fails only when the
-total for a kind rises above `verdict_folds_baseline.json`, and then lists the
-files whose count rose. Totals decide, so moving code into a new module (as
-the decomposition plan asks) is not a new fold. It never fails on a drop; run
-it with `--update-baseline` to lower the baseline. To add verdict code, put it
-in a `@verdict_site` with a spec; the ratchet doesn't count inside one.
+job that runs on every change, next to the file-size ratchet. It counts, in
+`openadapt_flow/`, the launcher and `scripts/ci/`, these kinds of hand-written
+fold:
+
+| Kind | What it counts |
+|---|---|
+| `says_success` | a success literal produced in code (`VERIFIED`, `CONFIRMED`, `held`, ...) |
+| `cmp_literal` | a compare against an outcome literal |
+| `bool_fold` | `all()`/`any()` over verdicts, results, checks, effects, lines or tiers |
+| `swallow` | `except Exception` (or bare) with a `return`, `continue` or `pass` that hands back no not-checked value |
+| `swallow_wide` | what `swallow` misses: a broad handler that falls through (`except Exception: logger.error(...)` and carry on), leaves by `break`, or names `Exception` in a tuple or by attribute |
+| `slice_count` | a slice in a statement that counts |
+| `else_success` | a final `else` that assigns success |
+| `says_unchanged` | a "nothing changed" literal produced in code (`unchanged`, `no_change`, `ROLLED_BACK`, ...) |
+| `empty_change_set` | `not changes`, `len(collateral) == 0`, `deleted == []`, `not any(diffs)`: a "nothing else changed" verdict computed from a set that may be a partial read |
+
+A handler that re-raises, returns a not-checked value, or records one
+(`status = "not_checked"`, `out.append(Errored(...))`) before falling through
+is not a swallow. A file the check can't parse fails it, rather than counting
+as a file with no folds.
+
+The check fails only when the repository-wide total for a kind rises above
+`verdict_folds_baseline.json`, and then lists the files whose count rose.
+Totals decide, so moving code into a new module (as the decomposition plan
+asks) is not a new fold. It never fails on a drop; run it with
+`--update-baseline` to lower the baseline. The static count can't tell a
+complete read from a partial one, so a site that says nothing else changed
+also gets M15 in the harness.
+
+It also fails when a `@verdict_site` has no spec. A spec's id is an `id=`
+argument, or a string passed to the spec factory given to `register(...)`;
+any other quoted word in a spec file doesn't count.
+
+The baseline was measured again on this branch after merging main at
+`9b6956be3`, because main had gained folds after the first measurement. For
+every kind the branch's count is at or below a clean `origin/main` measured
+with the same detector, so no kind's allowance rose above main's.
+
+To add verdict code, put it in a `@verdict_site` with a spec; the ratchet
+doesn't count inside one.
 
 ## Review rule
 
@@ -169,12 +220,12 @@ spec, not by a local patch. A reviewer who finds one asks for the spec.
 
 ## Follow-ups
 
-1. Owners adopt: #2429, #2258, #2470 and #2300 replace their local patch with
-   `settle` plus a spec and remove the strict xfail. The stacked pull requests
-   (#2437, #2394, #2428, #2457, #2413, #2419, #2414, #2448) register their
-   sites when they rebase.
-2. One owner for `receipt_record`; the #2394 and #2437 stacks carry copies
-   that have diverged.
+1. Owners adopt: #2429, #2258 and #2300 replace their local patch with
+   `settle` plus a spec and remove the strict xfail (#2470 has merged and its
+   site is registered). The stacked pull requests (#2437, #2428, #2457,
+   #2413, #2419, #2414, #2448) register their sites when they rebase.
+2. `receipt_record`'s line judge and tally are on the kernel now (#2394 has
+   merged); the #2437 stack rebases onto them.
 3. A connector `unknown` status derived from `outcomes.json`
    `may_have_changed`, with a control-plane contract bump.
 4. `confirms()` and `changed()` over `readback_values.compare_value`, keeping
@@ -189,3 +240,53 @@ spec, not by a local patch. A reviewer who finds one asks for the spec.
 11. A nightly real-app lane for the negative controls: a database killed
     mid-read, a short audit page, a decoy table, a cancel after delivery, a
     cross-origin redirect.
+
+## Migration checklist
+
+The sites below fold evidence by hand and belong to one of the classes
+above. Each moves onto `settle` (or `Result.nothing_else` for a "nothing else
+changed" claim), gets `@verdict_site` and a spec, and keeps its behaviour
+except where a fail-open is fixed, with a differential test against the old
+copy. Tick a row in the pull request that moves it.
+
+Done:
+
+- [x] `hard_invariants.judge_hard_invariants` (C2 C5): three obligations;
+  "no outside-scope change" and "no undeclared delete" on
+  `Result.nothing_else`; a hand-written "held" no longer holds. Unchanged on
+  every small input.
+- [x] `runtime/effects/versions.judge_versions` (C1 C5): one obligation for
+  the reads and one per target. Fix: a duplicate, missing-history or
+  no-new-version row no longer hides a version by someone else (refuted, not
+  "not checked").
+- [x] `verify_run._aggregate` and `_observed` (C1 C2): settled against the
+  planned effects (`cfg.effects`), so a missing or unplanned verdict never
+  passes. Fix: an observed code nobody listed is `unknown`, not `present`.
+- [x] `receipt_record._line` (C1 C3): declared contract hashes are the
+  obligations. Unchanged on every generated input.
+- [x] `receipt_record._tally_lines` (C2 C3): fix: a line check nobody listed
+  keeps the run from VERIFIED and counts as not checked.
+- [x] `tx/wire_tap.relay_redirect_location` (C6): registered after #2470.
+
+Next, most bug-prone first:
+
+- [ ] `verify_run.judge_run_frame` and the frame merge in `verify_run` (C1 C2):
+  the main "nothing else changed" verdict; status literals merged by hand.
+- [ ] `runtime/effects/history.judge_initial_history` (C1 C2): a history
+  frame over a read window.
+- [ ] `verify_run.readback_class` (C1 C2): registered, still `all()`/`any()`.
+- [ ] `scripts/ci/check_windows_governed_safety.check` (C5, owned by #2258).
+- [ ] `connector.executor.status_from_report` (C7, owned; follow-up 3).
+- [ ] `txplan.engine.undo_plan` (C3): the per-write deny-list (S3b).
+- [ ] `tx/lens.py` final `else: outcome = "CONFIRMED"` (C3, follow-up 8).
+- [ ] `txplan.audit.AuditReader.after` (C1, S2; #2437 stack).
+- [ ] `form_tx.judge.SummaryJudge.evaluate` and
+  `form_tx.reconciler._control_matches_fact` (C1 C5; #2429, #2448).
+- [ ] `agent_test.gate.compare` (C4: `min_scored`; S5, follow-up 6).
+- [ ] `receipt_record._approval` (C4): the weakest approver by `all()`.
+- [ ] `public_seal._checks` (C1): `min(confirmed, required)` clamps instead of
+  settling.
+- [ ] `readback_values.compare_value` users `confirms()`/`changed()` (C5,
+  follow-up 4).
+- [ ] provenance and signer labels (C4, follow-up 5, then M13).
+- [ ] `safe_url` in Python and JS (C6, follow-up 7).

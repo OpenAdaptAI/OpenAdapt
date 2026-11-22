@@ -34,3 +34,11 @@ def test_owned_sites_name_their_owner_and_failures() -> None:
             assert spec.xfail and "#" in spec.xfail and spec.known, spec.id
         else:
             assert not spec.known, spec.id
+
+
+def test_a_site_that_ranks_unread_first_says_why() -> None:
+    from openadapt_flow.verdict import Status
+
+    for spec in load_all().values():
+        if spec.precedence != (Status.REFUTED, Status.NOT_CHECKED):
+            assert spec.notes.get("precedence"), spec.id

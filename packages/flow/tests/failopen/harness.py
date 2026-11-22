@@ -18,8 +18,17 @@ properties:
   must not pass.
 - P4: reordering the results (M6) changes nothing.
 - P5: the default of a knob is the strictest value of its sweep (M9).
+- P6: the verdict has three levels, REFUTED < NOT_CHECKED < HELD (a site
+  where an unread result outranks a refuted one, because it may have
+  changed something, states that in ``precedence``). A mutation that keeps every result and adds a copy or
+  turns one bad never raises it at any level; a reordering leaves it
+  exactly where it was (P4). A
+  mutation that removes evidence may move REFUTED to NOT_CHECKED, since a
+  refutation it removed is no longer known, but never to HELD (P1).
 - P7: an outcome that may have changed something never maps to one that says
   nothing changed, or to a plain "failed" (M12).
+- P8: "nothing else changed" holds only on a complete read: marking the scope
+  read partial (M15) must not pass.
 
 An uncaught exception from the site counts as not-pass: a check that crashes
 fails closed. ``docs/FAIL_CLOSED.md`` explains the classes behind each
@@ -33,8 +42,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from openadapt_flow.verdict import Status
+
 #: Mutator ids whose mutated evidence must not pass, by property.
-P2 = frozenset({"M1", "M2", "M3", "M4", "M5", "M7", "M10", "M14"})
+P2 = frozenset({"M1", "M2", "M3", "M4", "M5", "M7", "M10", "M14", "M15", "M16"})
 P3 = frozenset({"M8", "M11"})
 #: Mutators P1 applies to: each one only removes or corrupts evidence. A
 #: value perturbation (M10), a rebuilt set (M2), a dropped result (M1, which
@@ -141,6 +152,9 @@ class SiteSpec:
     plan: Optional[Lens] = None
     #: A refuted (or not-checked) copy of one result item.
     bad_item: Optional[Callable[[Any], Any]] = None
+    #: False when ``bad_item`` makes an extra bad result rather than a bad
+    #: version of the one it is given: M16 (turn a result bad) is skipped.
+    bad_replaces: bool = True
     #: M2: build evidence with ``n`` results, the last one bad.
     inflate: Optional[Callable[[Any, int], Any]] = None
     limit: Optional[int] = None
@@ -174,6 +188,16 @@ class SiteSpec:
     #: Any other failure, or one of these going away, fails the test.
     known: frozenset[str] = frozenset()
     notes: dict[str, str] = field(default_factory=dict)
+    #: The verdict's level (P6). Without it a pass is HELD and anything else
+    #: NOT_CHECKED, so only the top level is tested.
+    level: Optional[Callable[[Any], Status]] = None
+    #: P6's order below HELD, worst first. REFUTED is worst unless the site
+    #: states (in ``notes["precedence"]``) that an unread result outranks a
+    #: refuted one, as ``Settlement.label(precedence=...)`` lets it.
+    precedence: tuple[Status, Status] = (Status.REFUTED, Status.NOT_CHECKED)
+    #: M15: evidence whose "nothing else changed" read is partial, one per
+    #: completeness flag. Each must not pass.
+    partial: Optional[Callable[[Any], list[tuple[str, Any]]]] = None
 
 
 @dataclass(frozen=True)
@@ -214,6 +238,30 @@ def safe_pass(spec: SiteSpec, evidence: Any) -> bool:
     return bool(spec.is_pass(out))
 
 
+def safe_level(spec: SiteSpec, evidence: Any) -> Status:
+    """The verdict's level; a crash is NOT_CHECKED. HELD needs ``is_pass``
+    too, so a ``level`` that says HELD for a not-pass can't lift it."""
+
+    try:
+        out = spec.run(evidence)
+        passed = bool(spec.is_pass(out))
+        got = spec.level(out) if spec.level is not None else None
+    except Exception:  # noqa: BLE001 - a crash is a not-pass
+        return Status.NOT_CHECKED
+    if passed:
+        return Status.HELD
+    if got is None or got is Status.HELD:
+        return Status.NOT_CHECKED
+    return got
+
+
+def rank(spec: SiteSpec, status: Status) -> int:
+    """P6's order: 0 for the worst level, 2 for HELD. By default
+    REFUTED < NOT_CHECKED < HELD."""
+
+    return 2 if status is Status.HELD else spec.precedence.index(status)
+
+
 def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
     """Every property failure for ``spec``; empty means the site holds."""
 
@@ -237,6 +285,7 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
                 )
             )
             continue
+        level = safe_level(spec, seed.evidence)
         for m in mutators.mutations(spec, seed):
             if only is not None and m.id not in only:
                 continue
@@ -247,6 +296,16 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
                     failures.append(Failure(spec.id, m.id, m.prop, f"{at}: {problem}"))
                 continue
             after = safe_pass(spec, m.evidence)
+            moved = safe_level(spec, m.evidence)
+            if m.adverse and rank(spec, moved) > rank(spec, level):
+                failures.append(
+                    Failure(
+                        spec.id,
+                        m.id,
+                        "P6",
+                        f"{at}: {m.label}: raised {level.value} to {moved.value}",
+                    )
+                )
             if not got and after and m.id in P1_IDS:
                 failures.append(
                     Failure(
@@ -261,7 +320,7 @@ def run_site(spec: SiteSpec, only: Optional[set[str]] = None) -> list[Failure]:
                 failures.append(
                     Failure(spec.id, m.id, prop, f"{at}: {m.label}: still passes")
                 )
-            elif m.expect == "same" and after != got:
+            elif m.expect == "same" and (after != got or moved is not level):
                 failures.append(
                     Failure(spec.id, m.id, "P4", f"{at}: {m.label}: changed")
                 )

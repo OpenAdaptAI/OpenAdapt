@@ -11,9 +11,30 @@ from typing import Any, Callable
 
 from openadapt_flow import verify_run
 from openadapt_flow.runtime.effects.effect import Verdict
+from openadapt_flow.verdict import Status
 from tests.failopen.harness import Seed, SiteSpec, key, register, root_list
 
 C, R, I = "confirmed", "refuted", "indeterminate"
+
+#: verify_run's labels by level (P6).
+#: Both folds rank an unread effect above a refuted one (C7): an effect that
+#: wasn't read may have landed, so the run says "check the record", never a
+#: plain "refuted".
+_UNREAD_FIRST = (Status.NOT_CHECKED, Status.REFUTED)
+_PRECEDENCE_NOTE = (
+    "an unread effect outranks a refuted one: it may have changed something, "
+    "so the run is INDETERMINATE (check the record), not REFUTED"
+)
+
+_LEVEL = {
+    "CONFIRMED": Status.HELD,
+    "REFUTED": Status.REFUTED,
+    "INDETERMINATE": Status.NOT_CHECKED,
+    "present": Status.HELD,
+    "absent": Status.REFUTED,
+    "conflicting": Status.REFUTED,
+    "unknown": Status.NOT_CHECKED,
+}
 
 
 def _verdicts(codes: list[str]) -> list[Any]:
@@ -28,6 +49,9 @@ def aggregate_spec(fn: Callable[..., Any], id: str, kind: str = "site") -> SiteS
         kind=kind,
         run=lambda ev: fn(_verdicts(ev)),
         is_pass=lambda out: out == "CONFIRMED",
+        level=lambda out: _LEVEL.get(out, Status.NOT_CHECKED),
+        precedence=_UNREAD_FIRST,
+        notes={"precedence": _PRECEDENCE_NOTE},
         seeds=lambda: [
             Seed([C], True),
             Seed([C, C, C], True),
@@ -53,6 +77,9 @@ def observed_spec(fn: Callable[..., Any], id: str, kind: str = "site") -> SiteSp
         kind=kind,
         run=lambda ev: fn(_observed(ev)),
         is_pass=lambda out: out == "present",
+        level=lambda out: _LEVEL.get(out, Status.NOT_CHECKED),
+        precedence=_UNREAD_FIRST,
+        notes={"precedence": _PRECEDENCE_NOTE},
         seeds=lambda: [
             Seed(["present"], True),
             Seed(["present", "present"], True),
@@ -104,6 +131,61 @@ def readback_spec(fn: Callable[..., Any], id: str, kind: str = "site") -> SiteSp
     )
 
 
-register(aggregate_spec(verify_run._aggregate, "verify_run.aggregate"))
-register(observed_spec(verify_run._observed, "verify_run.observed"))
+def _unplanned(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """A fold that takes the plan, called the way the S9 copies are: one
+    planned effect per verdict, so only the empty case is in question."""
+
+    return lambda verdicts: fn([str(i) for i in range(len(verdicts))], verdicts)
+
+
+def planned_spec(
+    fn: Callable[..., Any],
+    id: str,
+    make: Callable[[list[Any]], list[Any]],
+    base: Callable[[Callable[..., Any], str], SiteSpec],
+    last_bad: tuple[Any, Any],
+) -> SiteSpec:
+    """The live fold, with the plan (``cfg.effects``) apart from the
+    verdicts: dropping a verdict keeps the plan (M1), and a verdict past the
+    plan answers nothing."""
+
+    spec = base(_unplanned(fn), id)
+    seeds = spec.seeds
+    good, bad = last_bad
+
+    def plan_seeds() -> list[Seed]:
+        return [
+            Seed(
+                {"plan": [f"{i}:e" for i in range(len(s.evidence))], "got": s.evidence},
+                s.correct_pass,
+                s.note,
+            )
+            for s in seeds()
+        ]
+
+    spec.run = lambda ev: fn(ev["plan"], make(ev["got"]))
+    spec.seeds = plan_seeds
+    spec.items = key("got")
+    spec.plan = key("plan")
+    spec.inflate = lambda _ev, n: {
+        "plan": [f"{i}:e" for i in range(n)],
+        "got": [good] * (n - 1) + [bad],
+    }
+    return spec
+
+
+register(
+    planned_spec(
+        verify_run._aggregate, "verify_run.aggregate", _verdicts, aggregate_spec, (C, R)
+    )
+)
+register(
+    planned_spec(
+        verify_run._observed,
+        "verify_run.observed",
+        _observed,
+        observed_spec,
+        ("present", "unknown"),
+    )
+)
 register(readback_spec(verify_run.readback_class, "verify_run.readback_class"))

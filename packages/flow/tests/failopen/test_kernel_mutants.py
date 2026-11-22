@@ -33,11 +33,11 @@ MUTANTS: dict[str, tuple[str, str]] = {
         "        matches[n] = list(same_key)\n",
     ),
     "one writer wins": (
-        "        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):\n",
-        "        elif any(takers[id(r)] > 1 for r in got):\n",
+        "        elif len({r.status for r in got}) > 1 or shared:\n",
+        "        elif shared:\n",
     ),
     "a shared result counts twice": (
-        "        elif len({r.status for r in got}) > 1 or any(takers[id(r)] > 1 for r in got):\n",
+        "        elif len({r.status for r in got}) > 1 or shared:\n",
         "        elif len({r.status for r in got}) > 1:\n",
     ),
     "truncate at limit": (
@@ -48,6 +48,20 @@ MUTANTS: dict[str, tuple[str, str]] = {
     "observe returns a default": (
         "        return Errored(type(exc).__name__, str(exc)[:200])\n",
         "        return Observed(None)\n",
+    ),
+    "a repeat counts as a second claim": (
+        "            takers.setdefault(id(r), set()).add(n)\n",
+        "            takers.setdefault(id(r), set()).add(len(takers.get(id(r), ())))\n",
+    ),
+    "a partial read holds nothing else": (
+        "        if obs.complete is not True:\n"
+        "            return cls.not_checked(subject, partial)\n"
+        "        return cls.held(subject, obs, held)\n",
+        "        return _mint_held(subject, held)\n",
+    ),
+    "a partial read hides a change": (
+        "        if count > 0:\n            return cls.refuted(subject, obs, refuted)\n",
+        "        if count > 0 and obs.complete:\n            return cls.refuted(subject, obs, refuted)\n",
     ),
     "from_code deny-list": (
         "    if code in refuted:\n        return Status.REFUTED\n    return Status.NOT_CHECKED\n",
@@ -96,6 +110,13 @@ def battery(v: ModuleType) -> None:
     results = [held(s) for s in many[:-1]] + [R.refuted(many[-1], v.Observed(0), "x")]
     settled = v.settle(fix(*many), results, limit=3)
     assert len(settled.refuted) == 1 and settled.total == 5, "truncated"
+
+    once = held(a)
+    assert v.settle(fix(a), [once, once]).passes, "a repeat is a second claim"
+    partial = v.Observed(0, complete=False)
+    assert R.nothing_else(a, partial).status is v.Status.NOT_CHECKED, "partial holds"
+    changed = R.nothing_else(a, v.Observed(2, complete=False)).status
+    assert changed is v.Status.REFUTED, "a partial read hides a change"
 
     def boom() -> object:
         raise TimeoutError

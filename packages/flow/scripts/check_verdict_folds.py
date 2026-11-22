@@ -61,8 +61,11 @@ KINDS = (
     "cmp_literal",
     "bool_fold",
     "swallow",
+    "swallow_wide",
     "slice_count",
     "else_success",
+    "says_unchanged",
+    "empty_change_set",
 )
 
 
@@ -76,6 +79,8 @@ def load_config(path: Path = CONFIG) -> dict[str, Any]:
     config["_outcomes"] = frozenset(literals)
     config["_success"] = frozenset(config["literals"]["success"])
     config["_fold_names"] = re.compile(config["bool_fold"]["names"], re.IGNORECASE)
+    config["_unchanged"] = frozenset(config["literals"]["unchanged"])
+    config["_change_names"] = re.compile(config["change_set"]["names"], re.IGNORECASE)
     return config
 
 
@@ -185,19 +190,78 @@ def _closed_exit(node: ast.AST) -> bool:
     return _not_checked_value(value)
 
 
+_BROAD = frozenset({"Exception", "BaseException"})
+
+
+def _broad(handler: ast.ExceptHandler) -> bool:
+    """A bare ``except``, or one naming ``Exception``/``BaseException`` by
+    name, by attribute (``builtins.Exception``) or inside a tuple."""
+
+    kind = handler.type
+    if kind is None:
+        return True
+    kinds = kind.elts if isinstance(kind, ast.Tuple) else [kind]
+    return any(
+        (isinstance(k, ast.Name) and k.id in _BROAD)
+        or (isinstance(k, ast.Attribute) and k.attr in _BROAD)
+        for k in kinds
+    )
+
+
+def _falls_through(body: list[ast.stmt]) -> bool:
+    """True when running ``body`` can reach its end (no raise, return,
+    continue or break on every path). Loops, ``with``, ``try`` and ``match``
+    are taken to fall through unless every branch they hold ends."""
+
+    for stmt in body:
+        if isinstance(stmt, (ast.Raise, ast.Return, ast.Continue, ast.Break)):
+            return False
+        if isinstance(stmt, ast.If):
+            if not _falls_through(stmt.body) and not _falls_through(stmt.orelse):
+                return False
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            if not _falls_through(stmt.body):
+                return False
+        elif isinstance(stmt, ast.Try):
+            ends = not _falls_through(stmt.body + stmt.orelse) and all(
+                not _falls_through(h.body) for h in stmt.handlers
+            )
+            if ends or (stmt.finalbody and not _falls_through(stmt.finalbody)):
+                return False
+    return True
+
+
+def _records_not_checked(body: list[ast.stmt]) -> bool:
+    """True when the handler assigns or appends a not-checked value, so a
+    fall-through hands on "not checked" rather than nothing."""
+
+    wrapper = ast.Module(body=body, type_ignores=[])
+    for node in ast.walk(wrapper):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and (
+            node.value is not None and _not_checked_value(node.value)
+        ):
+            return True
+        if (
+            isinstance(node, ast.Call)
+            and node.args
+            and any(_not_checked_value(a) for a in node.args)
+        ):
+            return True
+    return False
+
+
 _COUNTING = frozenset({"sum", "len", "Counter", "tally", "count"})
 
 
 def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
     """Per-kind counts of hand-written folds in one Python file."""
 
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (SyntaxError, UnicodeDecodeError):
-        return Counter()
+    # A file the check can't read is an error, never a file with no folds.
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     skip = _exempt_nodes(tree)
     outcomes, success = config["_outcomes"], config["_success"]
-    fold_names = config["_fold_names"]
+    fold_names, unchanged = config["_fold_names"], config["_unchanged"]
+    change_names = config["_change_names"]
     counts: Counter[str] = Counter()
 
     compared: set[int] = set()
@@ -215,6 +279,8 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
     for node in ast.walk(tree):
         if id(node) in skip:
             continue
+        if _empty_change_set(node, change_names):
+            counts["empty_change_set"] += 1
         if isinstance(node, ast.Compare):
             values = [node.left, *node.comparators]
             if any(s in outcomes or s in success for v in values for s in _strings(v)):
@@ -228,6 +294,14 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
         ):
             counts["says_success"] += 1
         elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value in unchanged
+            and id(node) not in compared
+            and id(node) not in typed
+        ):
+            counts["says_unchanged"] += 1
+        elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id in ("all", "any")
@@ -235,20 +309,30 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
             and any(fold_names.search(n) for n in _names(node.args[0]))
         ):
             counts["bool_fold"] += 1
-        elif isinstance(node, ast.ExceptHandler):
-            broad = node.type is None or (
-                isinstance(node.type, ast.Name)
-                and node.type.id in ("Exception", "BaseException")
-            )
+        elif isinstance(node, ast.ExceptHandler) and _broad(node):
             # Each way out of the handler is judged on its own: a raise on one
             # branch doesn't excuse a ``return True`` on another.
             body = ast.Module(body=node.body, type_ignores=[])
-            if broad and any(
-                not _closed_exit(n)
+            exits = [
+                n
                 for n in ast.walk(body)
-                if isinstance(n, (ast.Return, ast.Continue, ast.Pass))
+                if isinstance(n, (ast.Return, ast.Continue, ast.Break, ast.Pass))
+            ]
+            named = node.type is None or (
+                isinstance(node.type, ast.Name) and node.type.id in _BROAD
+            )
+            if named and any(
+                not _closed_exit(n) for n in exits if not isinstance(n, ast.Break)
             ):
                 counts["swallow"] += 1
+            elif any(not _closed_exit(n) for n in exits) or (
+                _falls_through(node.body) and not _records_not_checked(node.body)
+            ):
+                # What ``swallow`` misses: ``except Exception: logger.error(...)``
+                # and carry on, so the code after the handler runs as if the
+                # call had worked; a ``break``; and ``Exception`` named in a
+                # tuple or by attribute.
+                counts["swallow_wide"] += 1
         elif isinstance(node, ast.If) and node.orelse:
             tail = node.orelse
             if not (len(tail) == 1 and isinstance(tail[0], ast.If)):
@@ -286,6 +370,49 @@ def count_file(path: Path, config: dict[str, Any]) -> Counter[str]:
         ):
             counts["slice_count"] += 1
     return counts
+
+
+def _empty_change_set(node: ast.AST, names: "re.Pattern[str]") -> bool:
+    """A "nothing else changed" test written by hand: ``not changes``,
+    ``len(changes) == 0``, ``changes == []`` or ``not any(changes)`` over a
+    set of changes, collateral, diffs or deletes. The set may be a partial
+    read, so emptiness is not evidence that nothing changed; the kernel's
+    ``Result.nothing_else`` holds only on a complete read."""
+
+    def about_changes(expr: ast.AST) -> bool:
+        if isinstance(expr, ast.Call) and getattr(expr.func, "id", "") in (
+            "any",
+            "len",
+            "bool",
+        ):
+            return bool(expr.args) and about_changes(expr.args[0])
+        if isinstance(expr, (ast.GeneratorExp, ast.ListComp, ast.SetComp)):
+            return any(about_changes(g.iter) for g in expr.generators)
+        if isinstance(expr, ast.Name):
+            return bool(names.fullmatch(expr.id))
+        if isinstance(expr, ast.Attribute):
+            return bool(names.fullmatch(expr.attr))
+        return False
+
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return about_changes(node.operand)
+    if (
+        isinstance(node, ast.Compare)
+        and len(node.ops) == 1
+        and isinstance(node.ops[0], (ast.Eq, ast.Is))
+    ):
+        left, right = node.left, node.comparators[0]
+        empty = (
+            (isinstance(right, ast.Constant) and right.value == 0)
+            or (isinstance(right, (ast.List, ast.Tuple, ast.Set)) and not right.elts)
+            or (
+                isinstance(right, ast.Call)
+                and getattr(right.func, "id", "") in ("set", "list", "tuple", "dict")
+                and not right.args
+            )
+        )
+        return empty and about_changes(left)
+    return False
 
 
 def scope_files(config: dict[str, Any], root: Path = ROOT) -> Iterator[Path]:
@@ -359,7 +486,36 @@ def lowered(
     return {rel: dict(sorted(k.items())) for rel, k in sorted(out.items())}
 
 
-SPEC_ID = re.compile(r"""["']([\w.\-]+)["']""")  # any quoted id in a spec file
+_SPEC_KINDS = frozenset({"site", "owned", "selftest"})
+
+
+def spec_ids(source: str) -> set[str]:
+    """The site ids a spec file registers: an ``id=`` keyword, or a string
+    passed to the call given to ``register(...)`` (a spec factory). Any other
+    quoted word in the file (``"held"``, ``"C1"``) is not an id."""
+
+    ids: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if (
+                kw.arg == "id"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, str)
+            ):
+                ids.add(kw.value.value)
+        if getattr(node.func, "id", "") == "register" and node.args:
+            inner = node.args[0]
+            if isinstance(inner, ast.Call):
+                ids.update(
+                    a.value
+                    for a in inner.args
+                    if isinstance(a, ast.Constant)
+                    and isinstance(a.value, str)
+                    and a.value not in _SPEC_KINDS
+                )
+    return ids
 
 
 def unregistered_sites(root: Path = ROOT) -> list[str]:
@@ -372,7 +528,7 @@ def unregistered_sites(root: Path = ROOT) -> list[str]:
 
     config = load_config()
     specs = root / "packages/flow/tests/failopen/sites"
-    ids = {m for f in specs.glob("*.py") for m in SPEC_ID.findall(f.read_text("utf-8"))}
+    ids = {i for f in specs.glob("*.py") for i in spec_ids(f.read_text("utf-8"))}
     missing = []
     for path in scope_files(config, root):
         for site, name in decorated_sites(path).items():
