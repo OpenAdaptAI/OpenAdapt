@@ -216,7 +216,9 @@ def main():
     training/evaluation commands are research.
 
     \b
-    Quick Start (Python 3.10-3.12):
+    Quick Start (uv fetches Python 3.12 if needed):
+        uvx --python 3.12 openadapt@latest quickstart
+    Or, on Python 3.10-3.12:
         python -m pip install --upgrade openadapt
         openadapt quickstart
 
@@ -393,6 +395,7 @@ def _option_value(argv: list[str], name: str) -> Optional[str]:
 def _invoke_flow(argv: list[str]) -> int:
     """Invoke the canonical engine once and return its exit code."""
     if not _python_supported():
+        _rerun_with_supported_python()
         _echo_python_remedy()
         return 1
     try:
@@ -458,6 +461,15 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # classifiers, and the CI guard matrix in step.
 _SUPPORTED_PYTHON = ((3, 10), (3, 12))
 
+#: The documented first command: the newest launcher, on a Python the engine
+#: supports, with nothing installed first. tests/test_quickstart_command.py
+#: keeps README.md, llms.txt and the docs on exactly this spelling.
+QUICKSTART_COMMAND = "uvx --python 3.12 openadapt@latest quickstart"
+
+#: Set on the rerun under Python 3.12, so a rerun that still lands on an
+#: unsupported Python prints the fix instead of running again.
+_PYTHON_RERUN_ENV = "OPENADAPT_PYTHON_RERUN"
+
 
 def _host_platform() -> str:
     return sys.platform
@@ -479,11 +491,12 @@ def _python_fix() -> str:
             "OpenAdaptAI/OpenAdapt/main/packages/flow/scripts/install.sh"
         )
     return (
-        "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
-        "have it:\n"
+        "Run it with uv, which downloads Python 3.12 if you don't have it:\n"
+        f"  {QUICKSTART_COMMAND}\n"
+        "No uv yet? Install it first:\n"
         f"{installer}"
-        "  uv tool install --python 3.12 openadapt\n"
-        f"Then run: openadapt quickstart{script}"
+        "To keep OpenAdapt installed: uv tool install --python 3.12 openadapt"
+        f"{script}"
     )
 
 
@@ -548,8 +561,59 @@ def _require_supported_python() -> None:
     with the remedy instead of an ImportError or a misleading reinstall hint.
     """
     if not _python_supported():
+        _rerun_with_supported_python()
         _echo_python_remedy()
         raise click.exceptions.Exit(1)
+
+
+def _rerun_command() -> Optional[tuple[list[str], str]]:
+    """Under ``uvx`` on an unsupported Python: the same command on 3.12.
+
+    Returns the argv to run and its shell spelling, or None when this isn't a
+    ``uvx`` run, uv can't be found, or this already is the rerun. The rerun
+    pins this launcher's own release (``openadapt@X.Y.Z``) so it runs the
+    same version; a development build reruns ``openadapt@latest``.
+    """
+    import shutil
+
+    if os.environ.get(_PYTHON_RERUN_ENV) or not _under_uvx():
+        return None
+    uv = os.environ.get("UV") or shutil.which("uv")
+    if not uv:
+        return None
+    pin = __version__ if re.fullmatch(r"\d+\.\d+\.\d+", __version__) else "latest"
+    spec = ["--python", "3.12", f"openadapt@{pin}", *sys.argv[1:]]
+    shown = " ".join(["uvx", *(_shell_quote(part) for part in spec)])
+    return [uv, "tool", "run", *spec], shown
+
+
+def _rerun_with_supported_python() -> None:
+    """Rerun this command with Python 3.12 under ``uvx``; return if it can't.
+
+    ``uvx openadapt@latest quickstart`` on Python 3.13 or newer installs only
+    the launcher (the engine needs 3.10 to 3.12). uv can fetch 3.12 itself,
+    so the same command runs again with ``--python 3.12`` and its exit code
+    becomes this one's. Elsewhere this returns and the caller prints the fix.
+    """
+    import subprocess
+
+    rerun = _rerun_command()
+    if rerun is None:
+        return
+    argv, shown = rerun
+    current = "{}.{}".format(*_python_minor())
+    click.echo(
+        f"Python {current} can't run the OpenAdapt engine (it needs 3.10 to "
+        f"3.12), so this runs it with Python 3.12:\n  {shown}",
+        err=True,
+    )
+    try:
+        code = subprocess.call(argv, env={**os.environ, _PYTHON_RERUN_ENV: "1"})
+    except OSError:
+        return
+    except KeyboardInterrupt:
+        code = 130
+    raise click.exceptions.Exit(code)
 
 
 # openadapt-agent 2.0.1 requires `serve --bundles`. The bundle-free
@@ -626,6 +690,8 @@ _QUICKSTART_OPTIONS = frozenset(
     {
         "--out",
         "--app",
+        "--watch",
+        "--open",
         "--headless",
         "--no-break",
         "--verbose",
@@ -730,9 +796,21 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     ),
 )
 @click.option(
-    "--headless",
+    "--watch",
     is_flag=True,
-    help="Hide the browser. It is shown by default when a display is available.",
+    help=(
+        "Show the browser window while it runs. By default the browser is "
+        "hidden and progress shows in the terminal."
+    ),
+)
+@click.option(
+    "--open",
+    "open_seal",
+    is_flag=True,
+    help=(
+        "Open your Seal page in the browser at the end. By default the "
+        "finale prints a link to it."
+    ),
 )
 @click.option(
     "--no-break",
@@ -753,18 +831,24 @@ def _quickstart_root(out: Optional[Path]) -> Path:
         "--out) and exit. Runs nothing."
     ),
 )
+# --headed is the older spelling of --watch. --headless was the opt-out when
+# the window showed by default; hidden is the default now, so it changes
+# nothing and is kept so older commands still run.
 @click.option("--headed", is_flag=True, hidden=True)
+@click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
 @click.pass_context
 def quickstart(
     command_ctx: click.Context,
     out: Optional[Path],
     app: str,
-    headless: bool,
+    watch: bool,
+    open_seal: bool,
     no_break: bool,
     verbose: bool,
     more: bool,
     headed: bool,
+    headless: bool,
     break_it: bool,
 ) -> None:
     """Show a task once, run it, then watch it catch a save that didn't happen.
@@ -781,7 +865,8 @@ def quickstart(
     chart, where the program stops before saving. It runs from a clone of the
     repository and needs Docker; without either it says so and exits 2.
 
-    Other flags of the engine tutorial (for example --guided or
+    The browser runs hidden, so nothing takes over the screen; --watch shows
+    its window. Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
     if more:
@@ -796,13 +881,12 @@ def quickstart(
         # Engine-owned flags (--guided, --interactive-record, and future
         # engine additions) run the engine's own tutorial, as before. So does
         # a Flow older than the pieces the three-act quickstart uses.
-        _engine_tutorial(root, out is None, headed, break_it, command_ctx.args)
+        _engine_tutorial(root, out is None, watch or headed, break_it, command_ctx.args)
         return
 
     from openadapt.quickstart import next_steps, run_quickstart
-    from openadapt.quickstart.engine import display_available
 
-    visible = not headless and (headed or display_available())
+    visible = _watch_window(watch or headed)
     steps = next_steps(
         _hint,
         _shell_quote,
@@ -820,6 +904,7 @@ def quickstart(
                 verbose=verbose,
                 steps=steps,
                 openemr=openemr,
+                open_seal=open_seal,
             )
     except KeyboardInterrupt:
         click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
@@ -841,6 +926,26 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _watch_window(watch: bool) -> bool:
+    """Whether the quickstart shows its browser window (``--watch`` only).
+
+    Linux without X11 or Wayland has nowhere to show a window, so the run
+    stays hidden there and says so instead of failing to start the browser.
+    """
+    if not watch:
+        return False
+    if _host_platform().startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        click.echo(
+            "No display here (DISPLAY and WAYLAND_DISPLAY are unset), so the "
+            "browser stays hidden.",
+            err=True,
+        )
+        return False
+    return True
 
 
 def _public_seals_available() -> bool:
@@ -1009,16 +1114,18 @@ def _engine_tutorial(
 
 
 def _hint(rest: str) -> str:
-    """Spell an ``openadapt`` command the way it reaches this same version.
+    """Spell an ``openadapt`` command so it works as printed.
 
     Under ``uvx`` this process runs from a throwaway environment in uv's cache,
     so the shell may have no ``openadapt`` or an older one that lacks the verb.
-    Repeat the ``uvx`` form there; otherwise keep the plain command.
+    Repeat the ``uvx`` form there, with ``openadapt@latest`` so it reaches the
+    newest release (this one or later) and this Python's version; otherwise
+    keep the plain command.
     """
 
     if _under_uvx():
         major, minor = sys.version_info[:2]
-        return f"uvx --python {major}.{minor} openadapt {rest}"
+        return f"uvx --python {major}.{minor} openadapt@latest {rest}"
     return f"openadapt {rest}"
 
 
@@ -1926,6 +2033,27 @@ def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, 
             command_ctx.exit(0)
         return None
     return loaded[-1].main
+
+
+@main.command(
+    "hooks",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def hooks(command_ctx: click.Context) -> None:
+    """Check a coding agent's writes to declared systems of record."""
+    _require_supported_python()
+    hooks_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.hooks.cli",))
+    if hooks_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no hooks command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(hooks_main(list(command_ctx.args)) or 0))
 
 
 @main.command(

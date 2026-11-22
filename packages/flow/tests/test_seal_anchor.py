@@ -176,7 +176,13 @@ def _run(tmp_path: Path, name: str = "run", outcome: str = "VERIFIED") -> Path:
     run.mkdir(parents=True)
     (run / "report.json").write_text(
         json.dumps(
-            {"run_id": name, "execution_outcome": outcome, "patient": "SYNTH-0001"}
+            {
+                "run_id": name,
+                "execution_outcome": outcome,
+                "patient": "SYNTH-0001",
+                "results": [],
+                "change_ledger": [],
+            }
         ),
         encoding="utf-8",
     )
