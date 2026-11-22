@@ -396,3 +396,26 @@ def test_judge_instances_refuses_missing_extra_and_rebound_rows() -> None:
     assert (
         judge_instances(planned, {"0": "#a"}, near, run_id="r").status is Status.REFUTED
     )
+
+
+def test_a_box_whose_state_was_not_read_is_neither_blank_nor_a_pass() -> None:
+    from openadapt_flow.gui.model import Container, Control, Screen
+    from openadapt_flow.gui.repeating import seen_rows
+
+    spec = RepeatSpec(
+        "opts",
+        ControlSpec("button", "Add"),
+        "row",
+        (Slot("checkbox", "Insured", "ins"),),
+    )
+    row = Container("r1", "row")
+    screen = Screen(
+        controls=(
+            Control("c1", "checkbox", "Insured", checked=None, containers=(row,)),
+        )
+    )
+    read = find_instances(screen, spec)
+    assert read.usable and not read.instances[0].blank()
+    planned = [{"item": "0", "slot": "Insured", "expected": "false"}]
+    got = judge_instances(planned, {"0": "r1"}, seen_rows(read, spec, "r"), run_id="r")
+    assert got.status is Status.NOT_CHECKED
