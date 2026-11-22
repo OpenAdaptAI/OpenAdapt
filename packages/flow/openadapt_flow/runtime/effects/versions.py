@@ -264,9 +264,10 @@ def judge_versions(
         mine = resolved
     before: Mapping[str, Any] = stored.get("records") or {}
     out = VersionVerdict("held")
-    # The obligations come from the plan: the reads themselves, then one per
-    # target. With no target (all creates) the reads still have to hold, so
-    # the set is never empty.
+    # The obligations come from the plan: that the reads succeeded (the
+    # early return above refused an unreadable one), then one per target.
+    # With no target (all creates) that one still has to hold, so the set is
+    # never empty.
     read = Subject(surface="versions", key="reads")
     subjects = [read]
     results = [

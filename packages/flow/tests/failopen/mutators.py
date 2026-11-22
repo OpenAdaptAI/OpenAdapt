@@ -197,7 +197,8 @@ def mutations(spec: SiteSpec, seed: Seed) -> Iterator[Mutation]:
                 )
     if spec.partial is not None:
         for label, partial in spec.partial(ev):
-            yield Mutation("M15", f"{label} partial", partial, "not_pass")
+            # A partial read can still refute, so a refuted seed stays refuted.
+            yield Mutation("M15", f"{label} partial", partial, "not_pass", adverse=True)
     if spec.knob is not None and seed.correct_pass:
         yield Mutation(
             "M9", f"knob {spec.knob.name}", check=_knob_check(spec, ev), prop="P5"

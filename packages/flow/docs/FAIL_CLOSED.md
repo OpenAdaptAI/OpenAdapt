@@ -46,7 +46,11 @@ found didn't stop the next one, so the shapes are now fixed in one place:
    nonce, digest). A result whose binding disagrees with the obligation is
    mismatched, so a result from another run or from a decoy table doesn't
    count. One result can't settle two obligations: if two claim it, both
-   are conflicting.
+   are conflicting. The kernel checks the binding a result carries, not
+   where its value came from: the adapter that reads the store must
+   establish that the observation belongs to this run before it builds the
+   result. An earlier run's read tagged with this run's subject looks like a
+   fresh one.
 6. **Say who signed only from a verified source.** `trust_label(source,
    verified=...)` names the signer only for a verified `TrustSource`; anything
    else is "not verified".
@@ -256,7 +260,7 @@ Done:
   `Result.nothing_else`; a hand-written "held" no longer holds. Unchanged on
   every small input.
 - [x] `runtime/effects/versions.judge_versions` (C1 C5): one obligation for
-  the reads and one per target. Fix: a duplicate, missing-history or
+  reads succeeding and one per target. Fix: a duplicate, missing-history or
   no-new-version row no longer hides a version by someone else (refuted, not
   "not checked").
 - [x] `verify_run._aggregate` and `_observed` (C1 C2): settled against the

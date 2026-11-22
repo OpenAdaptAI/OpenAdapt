@@ -63,6 +63,8 @@ def test_each_exit_of_a_handler_is_judged(tmp_path: Path) -> None:
         "except builtins.Exception:\n        return 0",
         "except BaseException:\n        if x:\n            raise\n        log.error('x')",
         "except Exception:\n        for _ in x:\n            break",
+        "except Exception:\n        log.error('unknown')",
+        "except Exception:\n        log.warning(NOT_CHECKED)",
     ],
 )
 def test_every_open_way_out_of_a_broad_handler_is_counted(

@@ -241,13 +241,20 @@ def _records_not_checked(body: list[ast.stmt]) -> bool:
             node.value is not None and _not_checked_value(node.value)
         ):
             return True
+        # Only a call that stores the value counts: ``out.append(Errored(...))``.
+        # A log line that mentions "unknown" hands nothing on.
         if (
             isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _RECORDING
             and node.args
             and any(_not_checked_value(a) for a in node.args)
         ):
             return True
     return False
+
+
+_RECORDING = frozenset({"append", "add", "extend", "put", "setdefault", "insert"})
 
 
 _COUNTING = frozenset({"sum", "len", "Counter", "tally", "count"})

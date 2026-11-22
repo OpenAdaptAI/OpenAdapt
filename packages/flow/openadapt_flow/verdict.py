@@ -72,7 +72,11 @@ class Status(str, Enum):
 @dataclass(frozen=True)
 class Observed:
     """A value that was read. ``complete=False`` when the read was partial
-    (a short page, a capped query): it can refute, never hold."""
+    (a short page, a capped query): it can refute, never hold.
+
+    It carries no provenance. The adapter that makes it must establish that
+    the read belongs to this run (bound to its run id, nonce or digest);
+    the kernel checks a result's binding, not where its value came from."""
 
     value: object
     complete: bool = True
@@ -238,7 +242,9 @@ class Result:
 
     @classmethod
     def held(cls, subject: Subject, obs: Observation, reason: str = "") -> "Result":
-        """HELD, from a complete observed value only."""
+        """HELD, from a complete observed value only. The caller vouches that
+        ``obs`` was read for ``subject``'s run: the kernel can't tell a stale
+        observation tagged with the current subject from a fresh one."""
 
         if not isinstance(obs, Observed) or obs.complete is not True:
             raise TypeError("HELD needs a complete Observed value")
