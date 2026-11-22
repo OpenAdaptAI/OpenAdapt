@@ -86,7 +86,7 @@ The P6 watch ran against a synthetic one-time-code dialog:
 - **Model cost:** $0.0720, unknown for 9 runs.
 - **Push:** sent 36 of 36 rows. The three scorecards were posted as raw file bytes and returned 201 each.
 
-Nothing was adapted, no placeholder values were used and no keys were dropped. The first attempt is in `3-ledger-attempt1/`: export and push refused every row with `row ...: the scrubber would rewrite its task_id`. The cause was step 4's request id `run2-happy`, which Presidio reads as `<ORGANIZATION>-happy`. Step 4 was rerun with request ids `dispatch-*`.
+The output went up unmodified: no adapter, no placeholder values, no dropped keys. The input was changed once, though. The first attempt is in `3-ledger-attempt1/`: export and push refused every row with `row ...: the scrubber would rewrite its task_id`. The cause was step 4's request id `run2-happy`, which Presidio reads as `<ORGANIZATION>-happy`. The push went through only after step 4 was rerun with request ids `dispatch-*`.
 
 What the dashboard showed (`3-dashboard/*.txt`, `*.png`):
 
@@ -124,6 +124,7 @@ The driver made one change: the imported instruction names no record, and MockMe
 
 The total spend was $0.071996, with 0 writes. Scrubbing stopped the agent.
 
+- `instruction_scrub_check.json` runs the flight scrubber locally on the same task text. It turns the instruction into "Open the referral for <PERSON> (MRN <US_DRIVER_LICENSE>), ...".
 - Each final line says the name and MRN arrived only as placeholders. For example: "RESULT: NOT DONE The patient name and MRN were not provided, so I couldn't identify which referral to open."
 - The scrubbed screenshot it was sent, `runs/readiness-mockmed-0000/egress/frames/*.png`, also blacks out the app name, the page title, the column headers and the referral reasons.
 
@@ -132,7 +133,7 @@ The ledger records the 3 runs as FAILED `agent_gave_up`.
 ## Breaks and open questions
 
 1. The readiness instruction from `readiness import` names no record (step 5). A real agent can't tell which patient to open.
-2. The scrubber removes the record's name and MRN from the instruction and redacts most of the screen. Under `--egress scrubbed`, a real agent could not do a single task.
+2. The scrubber replaces the record's name and MRN in the instruction (`<PERSON>`, `<US_DRIVER_LICENSE>`) and redacts most of the screen. Under `--egress scrubbed`, a real agent could not do a single task.
 3. One task id that the ledger scrubber flags makes `ledger export/push` refuse all rows, not just that one. A P7 request id is never a declared task id.
 4. Without a write adapter, a person can approve a save whose values were never read, and a wrong value then lands. The card now says so, and the read-back catches it after the save.
 5. The decline row from P5 has `approver_kind: none` although a person signed the decline.
@@ -140,3 +141,7 @@ The ledger records the 3 runs as FAILED `agent_gave_up`.
 7. The readiness card for a failed scope still prints the scope statement ("No non-GET request ... left any tab"), with the failure banner above it.
 8. On the dashboard, every human baseline shows "0 min per case" because the person's median time is under a second, and the minutes saved show "0 min".
 9. `readiness report` exits 2 when the scope check fails.
+10. The dashboard headline counts 16 cases as "Escalated to a person". 13 of them are matched shadow holds that no person touched.
+11. All 36 rows show their start time as "unknown", because `started_at` is null in every payload.
+12. The approved fallback row (`dispatch-drift-approved`) shows intervention "unknown" and fields written "none", despite a signed approval and a verified write. `dispatch-happy` also shows fields written "none".
+13. The merged tree has no working `wrap-dispatch` run with a scripted agent. The CLI always builds a provider agent, and `--task` needs an admitted operator task file.

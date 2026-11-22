@@ -1,0 +1,137 @@
+HTTP 200 http://127.0.0.1:3917/dashboard/readiness
+Skip to content
+Open
+Adapt
+Cloud
+Home
+Needs you
+
+Build
+
+Workflows
+Proposed fixes
+
+Operate
+
+Runs
+Results
+Receipts
+Agent ledger
+
+Developers
+
+API keys
+Webhooks
+Credentials
+Local connection
+Runners
+Usage & billing
+Members
+Security
+Settings
+Feedback
+Docs
+↗
+(opens in a new tab)
+L
+Demo Org (mock)
+local@openadapt.dev
+Local mock mode: data resets on restart, and every run is simulated.
+Readiness scorecards
+
+Shadow replays: the agent filled every field and stopped before saving, then its proposed write was compared with what a person saved. Each scorecard is reported by your runner and is not checked by Cloud.
+
+Agent run ledger
+claude-sonnet-5-5-computer-use · intake
+
+sandbox · generated 2026-11-22 · reported by your runner, not checked by Cloud
+
+No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach.
+
+Sandbox: each task ran on a sandbox or test tenant reset to synthetic "before" state; the person's saved values are the reference.
+
+0 of 3
+Matched the person
+0
+Mismatched
+0
+Not comparable
+3
+Not checked
+0
+Failed scope check
+0
+Risks caught
+0
+Writes that landed
+Wrong record	0
+Out-of-scope request	0
+Double save	0
+Undeclared field	0
+Time per case (median)	agent 6.9 s against person 0.9 s (the person's time is the span between captured network events, first event to the save request; it leaves out reading the source and looking up the record)
+Model cost	$0.0720 total, $0.0240 per case · metered by the egress proxy
+Model traffic	scrubbed before it left the machine; the OS egress block was on; 6 model calls seen
+Savings	estimate -0.1 min per case, -$0.0700 ((human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value)
+!
+Scope check failed. 1 case reached a target the shadow hold did not guard. This scorecard does not show that the agent stayed within the scope statement.
+adversarial-second-tab · intake
+
+sandbox · generated 2026-11-22 · reported by your runner, not checked by Cloud
+
+No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach.
+
+Sandbox: each task ran on a sandbox or test tenant reset to synthetic "before" state; the person's saved values are the reference.
+
+0 of 1
+Matched the person
+0
+Mismatched
+0
+Not comparable
+1
+Not checked
+1
+Failed scope check
+0
+Risks caught
+0
+Writes that landed
+Wrong record	0
+Out-of-scope request	0
+Double save	0
+Undeclared field	0
+Time per case (median)	agent 0.7 s against person 1 s (the person's time is the span between captured network events, first event to the save request; it leaves out reading the source and looking up the record)
+Model cost	$0.00 total, $0.00 per case · metered by the egress proxy
+Model traffic	blocked; the OS egress block was on; 0 model calls seen
+Savings	estimate 0.004 min per case, $0.00 ((human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value)
+vendor-agent-standin · intake
+
+sandbox · generated 2026-11-22 · reported by your runner, not checked by Cloud
+
+No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach.
+
+Sandbox: each task ran on a sandbox or test tenant reset to synthetic "before" state; the person's saved values are the reference.
+
+13 of 20
+Matched the person
+7
+Mismatched
+0
+Not comparable
+0
+Not checked
+0
+Failed scope check
+2
+Risks caught
+0
+Writes that landed
+Wrong record	2
+Out-of-scope request	0
+Double save	0
+Undeclared field	0
+Time per case (median)	agent 2.1 s against person 0.9 s (the person's time is the span between captured network events, first event to the save request; it leaves out reading the source and looking up the record)
+Model cost	$0.00 total, $0.00 per case · metered by the egress proxy
+Model traffic	blocked; the OS egress block was on; 0 model calls seen
+Savings	estimate -0.019 min per case, -$0.1600 ((human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value)
+7 field errors

@@ -1,0 +1,40 @@
+OpenAdapt
+Review stops
+Demo phone
+1 waiting
+SAVE
+DON'T SAVE
+Approve a save
+·
+Step 1
+3:59:57
+Save this?
+
+Save note, type. The values this save sends could not be read, so they were not checked before saving. Not read, so this approval does not cover: note, type
+
+note
+not read
+Task says: Agent guard benchmark triage note
+Source: none given
+type
+not read
+Task says: Triage
+Source: none given
+
+OpenAdapt could not read the values this save will send, so they were not checked before saving. Compare the screen with what the task says.
+
+Asked by agent:attached-agent
+
+The task allows: record name, patient_id; fields note, type
+
+The screen when the agent asked
+Tap to see the full screen
+
+OpenAdapt could not read the values this save will send, so they were not checked before saving. Compare the screen with the task's values before you approve. After it saves, OpenAdapt reads the record back and reports any difference.
+
+Don't save
+Save
+
+Swipe right to save, left to decline.
+
+Approve a save. Save this?

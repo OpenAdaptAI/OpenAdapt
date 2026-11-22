@@ -1,0 +1,113 @@
+HTTP 200 http://127.0.0.1:3917/dashboard/ledger
+Skip to content
+Open
+Adapt
+Cloud
+Home
+Needs you
+
+Build
+
+Workflows
+Proposed fixes
+
+Operate
+
+Runs
+Results
+Receipts
+Agent ledger
+
+Developers
+
+API keys
+Webhooks
+Credentials
+Local connection
+Runners
+Usage & billing
+Members
+Security
+Settings
+Feedback
+Docs
+↗
+(opens in a new tab)
+L
+Demo Org (mock)
+local@openadapt.dev
+Local mock mode: data resets on restart, and every run is simulated.
+Agent run ledger
+
+Every case an agent, a compiled program or a person ran, with the outcome its runner's read-back reported.
+
+Readiness scorecards
+
+Reported by your runner. These rows arrive on your ingest token and are not signed. Cloud has not checked them, so every count, time and cost below is as your runner reported it.
+
+No row names a receipt digest.
+
+36
+Cases
+5
+Verified by the runner’s read-back
+16
+Escalated to a person
+10
+Error caught
+3
+Failed
+2
+Unknown
+By task type and executor
+Task type	Executor	Cases	Verified	Escalated	Error caught	Failed	Unknown	Intervention	Model cost	Median time
+intake	agent-guard (agent)	9	3	2	3	0	1	0.3 min for 7 runs, 2 unknown	unknown (all 9)	8.4 s
+intake	claude-sonnet-5-5 (agent)	3	0	0	0	3	0	0 min	$0.0720	6.9 s
+intake	openadapt-wrap (agent)	2	1	1	0	0	0	unknown (all 2)	$0.00	9.1 s
+intake	readiness-shadow (agent)	21	0	13	7	0	1	0 min	$0.00	2.1 s
+intake	openadapt-wrap (program)	1	1	0	0	0	0	unknown (all 1)	$0.00	5.8 s
+Time and money saved
+
+Saved minutes = human minutes per case × verified cases − intervention minutes. Saved dollars = saved minutes at the hourly cost − model cost. Only verified cases count. Every input is reported by your runner; Cloud has not checked it.
+
+A network-event span is the time from the first captured network event to the save request while a person did the task in a readiness run. It leaves out reading the source and looking up the record, so it is not the person's full time on the case.
+
+0 min
+Minutes saved
+unknown
+Dollars saved
+unknown
+Model cost · $0.0720 for 27 runs, 9 unknown
+
+3 task and executor pairs have no savings figure and are left out of the totals.
+
+Model cost is unknown for 9 of 36 runs, so the total cost is unknown.
+
+Task type	Executor	Human baseline	Minutes saved	Dollars saved
+intake	agent-guard	0 min per case network-event span	—	— Intervention time is unknown for some runs.
+intake	claude-sonnet-5-5	0 min per case network-event span	0 min	— No hourly cost entered.
+intake	openadapt-wrap	0 min per case network-event span	—	— Intervention time is unknown for some runs.
+intake	readiness-shadow	0 min per case network-event span	0 min	— No hourly cost entered.
+intake	openadapt-wrap	0 min per case network-event span	—	— Intervention time is unknown for some runs.
+Recent cases
+Started	Task	Executor	Outcome	Fields written	Read-back	Duration	Model cost
+unknown	intake readiness-mockmed-0002	claude-sonnet-5-5	FAILED agent_gave_up	none	unknown	6.6 s	$0.0238 metered
+unknown	intake readiness-mockmed-0001	claude-sonnet-5-5	FAILED agent_gave_up	none	unknown	6.9 s	$0.0245 metered
+unknown	intake readiness-mockmed-0000	claude-sonnet-5-5	FAILED agent_gave_up	none	unknown	7.6 s	$0.0238 metered
+unknown	intake dispatch-drift-declined	openadapt-wrap	ESCALATED person_declined	none	unknown	5.7 s	$0.00 reported
+unknown	intake dispatch-drift-approved	openadapt-wrap	VERIFIED readback_verified	none	independent_readback	12.5 s	$0.00 reported
+unknown	intake dispatch-happy	openadapt-wrap	VERIFIED readback_verified	none	independent_readback	5.8 s	$0.00 reported
+unknown	intake triage-p1-0001	agent-guard	ESCALATED second_factor	note (matched), type (matched)	independent_readback	5.4 s	unknown
+unknown	intake prod-wrong-value-with-adapter	agent-guard	CAUGHT_ERROR save_blocked_out_of_scope	none	unknown	11.2 s	unknown
+unknown	intake prod-wrong-patient	agent-guard	CAUGHT_ERROR save_blocked_out_of_scope	none	unknown	11.1 s	unknown
+unknown	intake prod-not-saved	agent-guard	UNKNOWN reconciliation_required	none	independent_readback	8.5 s	unknown
+unknown	intake prod-decline	agent-guard	ESCALATED person_declined	none	unknown	14.3 s	unknown
+unknown	intake prod-clean-02	agent-guard	VERIFIED readback_verified	note (matched), type (matched)	independent_readback	7.4 s	unknown
+unknown	intake prod-clean-01	agent-guard	VERIFIED readback_verified	note (matched), type (matched)	independent_readback	7.4 s	unknown
+unknown	intake prod-approve-wrong-value-no-adapter	agent-guard	CAUGHT_ERROR readback_refuted	note (differs), type (matched) · 1 differ	independent_readback	8.4 s	unknown
+unknown	intake prod-approve-correct	agent-guard	VERIFIED readback_verified	note (matched), type (matched)	independent_readback	7.7 s	unknown
+unknown	intake readiness-mockmed-0000	readiness-shadow	UNKNOWN shadow_extra_target	none	unknown	0.7 s	$0.00 metered
+unknown	intake readiness-mockmed-0019	readiness-shadow	CAUGHT_ERROR shadow_wrong_record	note (matched), patient_id (differs), type (matched) · 1 differ	unknown	2.1 s	$0.00 metered
+unknown	intake readiness-mockmed-0018	readiness-shadow	ESCALATED shadow_matched	note (matched), patient_id (not_checked), type (matched)	unknown	2.1 s	$0.00 metered
+unknown	intake readiness-mockmed-0017	readiness-shadow	ESCALATED shadow_matched	note (matched), patient_id (not_checked), type (matched)	unknown	2.1 s	$0.00 metered
+unknown	intake readiness-mockmed-0016	readiness-shadow	CAUGHT_ERROR shadow_wrong_record	note (matched), patient_id (differs), type (matched) · 1 differ	unknown	2.1 s	$0.00 metered

@@ -1,0 +1,17 @@
+[
+  {
+    "task_id": "readiness-mockmed-0000",
+    "sent_by_launcher": "Open the referral for Jane Sample (MRN P1), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 00 for review\",\n  \"type\": \"Triage\"\n}",
+    "after_flight_scrub": "Open the referral for <PERSON> (MRN <US_DRIVER_LICENSE>), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 00 for review\",\n  \"type\": \"Triage\"\n}"
+  },
+  {
+    "task_id": "readiness-mockmed-0001",
+    "sent_by_launcher": "Open the referral for Alex Testcase (MRN P2), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 01 for review\",\n  \"type\": \"Consult\"\n}",
+    "after_flight_scrub": "Open the referral for <PERSON> (MRN <US_DRIVER_LICENSE>), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 01 for review\",\n  \"type\": \"Consult\"\n}"
+  },
+  {
+    "task_id": "readiness-mockmed-0002",
+    "sent_by_launcher": "Open the referral for Sam Specimen (MRN P3), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 02 for review\",\n  \"type\": \"Triage\"\n}",
+    "after_flight_scrub": "Open the referral for <PERSON> (MRN <US_DRIVER_LICENSE>), add an encounter of the given type with the note, and save.\n\nInputs:\n{\n  \"note\": \"Synthetic note 02 for review\",\n  \"type\": \"Triage\"\n}"
+  }
+]
