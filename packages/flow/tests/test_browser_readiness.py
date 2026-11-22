@@ -321,6 +321,7 @@ def test_all_cdp_acquisitions_check_their_selected_page() -> None:
         "cli_worklist_pool.py": "_open",
         "agent_guard/session.py": "_connect",
         "copilot_runtime.py": "main",
+        "exceptions/watch.py": "watch_browser",
     }
     observed = {}
     for path in root.rglob("*.py"):

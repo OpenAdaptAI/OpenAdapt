@@ -884,7 +884,7 @@ A test fails when a command has no file or this list is out of date.
 - `business-decisions`
 - `console`
 - `deferred`
-- `exceptions`: Let any agent stop and ask a person: `serve` runs the `raise_exception` MCP tool, `watch` raises cards from a Chromium agent's page without the agent and blocks its saves while one is open, `list` shows waiting cards, and `answer` writes one closed answer signed with an approver key. A run goes on only after a verified `continue` or `done_by_person`. See [EXCEPTION_QUEUE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EXCEPTION_QUEUE.md).
+- `exceptions`: Let any agent stop and ask a person: `serve` runs the `raise_exception` MCP tool, `watch` raises cards from a Chromium agent's page without the agent and blocks its saves while one is open, `list` shows waiting cards, and `answer` writes one closed answer signed with an approver key. A run goes on only after a verified `continue` or `done_by_person`. See `packages/flow/docs/EXCEPTION_QUEUE.md`.
 - `explain`
 - `item-approval`
 - `replay`

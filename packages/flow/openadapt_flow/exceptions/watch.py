@@ -522,6 +522,8 @@ def watch_browser(
 
     from playwright.sync_api import sync_playwright
 
+    from openadapt_flow._browser_readiness import require_rendering_ready
+
     pw = sync_playwright().start()
     try:
         deadline = time.monotonic() + attach_wait_s
@@ -530,7 +532,11 @@ def watch_browser(
             try:
                 browser = pw.chromium.connect_over_cdp(cdp_endpoint)
                 page = _page(browser, watch.app_origin, page_url)
-            except Exception:  # noqa: BLE001 - not up yet
+                if page is not None:
+                    # The tab must render before its screen is trusted, as
+                    # for every other CDP attach (the guard's included).
+                    require_rendering_ready(browser, attached_page=page)
+            except Exception:  # noqa: BLE001 - not up or not rendering yet
                 page = None
             if page is None:
                 if browser is not None:

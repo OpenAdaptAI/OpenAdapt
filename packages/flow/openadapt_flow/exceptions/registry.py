@@ -54,6 +54,8 @@ from openadapt_types.exception_card import (
     card_digest,
 )
 
+from openadapt_flow.private_file import open_binary
+
 #: How long a card waits for a person by default, and at most.
 DEFAULT_DEADLINE_S = 15 * 60
 MAX_DEADLINE_S = 24 * 60 * 60
@@ -258,7 +260,7 @@ def _read_regular(path: Path, *, limit: int = _MAX_FILE_BYTES) -> Optional[bytes
     for a link, a non-regular file or one over ``limit``."""
 
     try:
-        fd = os.open(path, _flags(os.O_RDONLY))
+        fd = open_binary(path, _flags(os.O_RDONLY))
     except FileNotFoundError:
         return None
     try:
@@ -282,7 +284,7 @@ def _write_exclusive(path: Path, payload: bytes) -> None:
     """Create ``path`` once, 0600. Raises ``FileExistsError`` if it's there."""
 
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    fd = os.open(tmp, _flags(os.O_WRONLY | os.O_CREAT | os.O_EXCL), 0o600)
+    fd = open_binary(tmp, _flags(os.O_WRONLY | os.O_CREAT | os.O_EXCL), 0o600)
     try:
         view = memoryview(payload)
         while view:
@@ -298,7 +300,7 @@ def _write_exclusive(path: Path, payload: bytes) -> None:
         except OSError:
             pass
     try:
-        dfd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        dfd = open_binary(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     except OSError:
         return
     try:
