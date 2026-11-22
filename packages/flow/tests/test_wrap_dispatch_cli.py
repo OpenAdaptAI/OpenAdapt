@@ -610,3 +610,71 @@ def test_gate_options_without_the_item_approval_gate_are_refused(task, extra) ->
 def test_a_bad_fallback_request_id_is_a_clean_error(task, bad) -> None:
     with pytest.raises(SystemExit, match="fallback-request-id"):
         dc.run(run_args(task, "r1", "one", *FALLBACK, "--fallback-request-id", bad))
+
+
+@pytest.mark.parametrize(
+    "interrupt", [KeyboardInterrupt, lambda: SystemExit("agent exited")]
+)
+@pytest.mark.parametrize("where", ["gate", "agent"])
+def test_an_interrupted_fallback_is_stored_before_it_reraises(
+    task, monkeypatch, run1, interrupt, where
+) -> None:
+    """From the reviewer's probe: Ctrl-C at the gate, or a SystemExit in the
+    agent. The request is stored as a finished agent_fallback that may have
+    written, result.json says so, the marker stays, and a retry replays it."""
+    from openadapt_flow.wrap.fallback import fallback_root
+
+    install_reply(task.model, monkeypatch)
+    agent = Agent()
+    args = run_args(task, "r1", "one", *FALLBACK)
+
+    def gate(_request):
+        raise interrupt()
+
+    if where == "agent":
+        run1.after = lambda made: (_ for _ in ()).throw(interrupt())
+        gate = lambda _request: True  # noqa: E731
+    with pytest.raises((KeyboardInterrupt, SystemExit)):
+        dc.run(args, agent=agent, gate=gate)
+    root = fallback_root(task.setup.cache, PROMPT, {"value": ""})
+    child = dc.child_request_id("r1")
+    saved = json.loads((root / child / "result.json").read_text())
+    assert saved["path"] == "agent_fallback"
+    assert saved["status"] == "RECONCILIATION_REQUIRED"
+    assert json.loads((root / "in-flight.json").read_text())["state"] == "ended"
+    again = dc.run(args, agent=agent, gate=lambda r: pytest.fail("asked"))
+    assert again["replayed"] is True and agent.calls == 1
+    assert again["path"] == "agent_fallback"
+    assert again["status"] == "RECONCILIATION_REQUIRED"
+    assert again["outcome"] == "ESCALATED"
+    assert again["fallback"]["request_id"] == child
+    assert again["fallback"]["error"] in ("KeyboardInterrupt", "SystemExit")
+
+
+def test_a_reused_request_id_reports_nothing_ran(task, monkeypatch) -> None:
+    install_reply(task.model, monkeypatch)
+    dc.run(run_args(task, "r1", "one"))
+    conflict = dc.run(run_args(task, "r1", "two"))
+    assert conflict["status"] == "REQUEST_ID_CONFLICT"
+    assert conflict["path"] == "held" and len(task.model.sent) == 1
+
+
+def test_a_repair_file_write_failure_keeps_the_verified_save(
+    task, monkeypatch, run1
+) -> None:
+    from openadapt_flow.wrap import fallback as fb
+
+    install_reply(task.model, monkeypatch)
+    real = fb._write
+
+    def write(path, data, **kw):
+        if path.name == "repair.json":
+            raise OSError("disk full")
+        return real(path, data, **kw)
+
+    monkeypatch.setattr(fb, "_write", write)
+    result = dc.run(
+        run_args(task, "r1", "one", *FALLBACK), agent=Agent(), gate=lambda r: True
+    )
+    assert result["verified"]
+    assert result["fallback"]["repair"]["reason"] == "repair_failed:OSError"

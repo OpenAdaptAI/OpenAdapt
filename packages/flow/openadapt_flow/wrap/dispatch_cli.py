@@ -85,7 +85,13 @@ def dispatch_path(result: Mapping[str, Any]) -> str:
 
     if result.get("path") == FALLBACK_PATH:
         return FALLBACK_PATH
-    if result.get("status") in ("CACHE_HALTED", "NO_ADMITTED_PROGRAM"):
+    # Nothing ran for a held task, a miss, or a request id already used for
+    # other inputs.
+    if result.get("status") in (
+        "CACHE_HALTED",
+        "NO_ADMITTED_PROGRAM",
+        "REQUEST_ID_CONFLICT",
+    ):
         return "held"
     return "program"
 
@@ -340,14 +346,41 @@ def item_approval_gate(args: argparse.Namespace) -> Any:
     )
 
 
+class _Interrupted(Exception):
+    """Carries a KeyboardInterrupt or SystemExit through WrappedTask.call."""
+
+
 def _task(policy: Any, **options: Any) -> Any:
-    """A WrappedTask whose stored result is the whole dispatch envelope."""
+    """A WrappedTask whose stored result is the whole dispatch envelope.
+
+    WrappedTask.call stores RECONCILIATION_REQUIRED for an Exception. An
+    interrupt (Ctrl-C at the gate, a SystemExit in the agent) is carried
+    through that path as an Exception, so the request is stored as finished
+    and uncertain first; then the interrupt is raised again.
+    """
     from openadapt_flow.wrap import WrappedTask
 
     class DispatchTask(WrappedTask):
+        interrupted: Optional[BaseException] = None
+
+        def run(self, arguments: Mapping[str, Any]) -> Any:
+            try:
+                return super().run(arguments)
+            except Exception:
+                raise
+            except BaseException as exc:
+                self.interrupted = exc
+                raise _Interrupted(type(exc).__name__) from exc
+
         def finalize(self, result: dict[str, Any]) -> dict[str, Any]:
             last = getattr(policy, "last", None) if policy is not None else None
             return finish(result, last)
+
+        def call(self, request_id: str, arguments: Mapping[str, Any]) -> Any:
+            result = super().call(request_id, arguments)
+            if self.interrupted is not None:
+                raise self.interrupted
+            return result
 
     return DispatchTask(**options)
 

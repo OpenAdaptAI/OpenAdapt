@@ -714,13 +714,13 @@ class FallbackPolicy:
 
         try:
             reply = self.cache.open_repair(prompt, params, repair_desk=self.repair_desk)
+            # The repair token is a one-use capability for the person who
+            # demonstrates the fix; it stays in a private local file.
+            _write(run_root / "repair.json", reply)
         except RepairError:
             return {"opened": False, "reason": "no_one_step_repair"}
         except Exception as exc:  # noqa: BLE001 - the verified save stands
             return {"opened": False, "reason": f"repair_failed:{type(exc).__name__}"}
-        # The repair token is a one-use capability for the person who
-        # demonstrates the fix; it stays in a private local file.
-        _write(run_root / "repair.json", reply)
         return {
             "opened": True,
             "step_id": reply.get("step_id"),

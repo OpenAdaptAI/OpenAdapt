@@ -129,7 +129,9 @@ checks the record and runs
 `wrap-dispatch release TASK --person NAME --after-reconciling`. A run removes
 the marker only while it is still its own.
 
-A fallback that raises after it started still answers its request: the
+A fallback that raises after it started, or is interrupted (Ctrl-C at the
+gate, a `SystemExit` in the agent), still answers its request; an interrupt
+is raised again after the request is stored: the
 stored result has `path: agent_fallback`, `status: RECONCILIATION_REQUIRED`,
 and `fallback` naming the fallback request ID, its gate decisions and the
 exception's class; `result.json` in the run directory says the same, and a
@@ -214,6 +216,10 @@ The hold verbs:
 - A program hold left `running` by a live program replay is not told apart
   from a lost reply; release with `--after-reconciling` can archive it while
   that replay still runs.
+- A process killed outright (`SIGKILL`, power loss) mid-fallback leaves the
+  request reserved and the marker `running` until its process is gone; a
+  retry then returns `RECONCILIATION_REQUIRED` without the fallback's
+  details, and `result.json` may be missing.
 - A fallback marker whose owner is on another host, or that can't be read,
   has no release command: a person checks the record and removes
   `in-flight.json` by hand.
