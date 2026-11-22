@@ -505,6 +505,64 @@ def test_gate_fails_an_agent_that_stops_saving_on_planted_faults(
     assert g["verdict"] == "fail" and "scored_runs" in g["regressions"]
 
 
+def _rewrite(path: Path, runs: list[dict]) -> Path:
+    doc = json.loads(path.read_text())
+    doc["runs"] = runs
+    doc["summary"] = grade.summarize(runs)
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def test_gate_counts_delivered_faults_apart_from_clean_controls(
+    tmp_path: Path,
+) -> None:
+    """Nineteen clean runs and one delivered fault: losing the fault fails."""
+    base_res = _results(tmp_path, "base", n=20, fs=0)
+    runs = json.loads(base_res.read_text())["runs"]
+    for run in runs[1:]:
+        run["fault"] = "none"
+    _rewrite(base_res, runs)
+    bpath = tmp_path / "baseline.json"
+    bpath.write_text(json.dumps(gate.make_baseline(base_res)))
+    assert gate.compare(base_res, bpath)["verdict"] == "pass"
+    lost = _results(tmp_path, "lost-fault", n=20, fs=0)
+    runs = json.loads(lost.read_text())["runs"]
+    for run in runs[1:]:
+        run["fault"] = "none"
+    runs[0]["outcome"] = "fault_not_delivered"
+    _rewrite(lost, runs)
+    assert json.loads(lost.read_text())["summary"]["scored"] == 19  # 95%
+    g = gate.compare(lost, bpath)
+    assert g["verdict"] == "fail" and "delivered_faults" in g["regressions"]
+
+
+def test_gate_binds_the_baseline_to_the_scenarios_run(tmp_path: Path) -> None:
+    """A fault-only baseline and a clean-only candidate are not comparable."""
+    base_res = _results(tmp_path, "base", n=1, fs=0)
+    bpath = tmp_path / "baseline.json"
+    bpath.write_text(json.dumps(gate.make_baseline(base_res)))
+    clean = _results(tmp_path, "clean-only", n=1, fs=0)
+    runs = json.loads(clean.read_text())["runs"]
+    runs[0]["scenario"], runs[0]["fault"] = "clean-1", "none"
+    _rewrite(clean, runs)
+    g = gate.compare(clean, bpath)
+    assert g["verdict"] == "not_comparable"
+    # Waiving a pack change still never lets clean runs pass for the fault.
+    g = gate.compare(clean, bpath, allow_pack_change=True)
+    assert g["verdict"] == "fail" and "delivered_faults" in g["regressions"]
+
+
+def test_gate_refuses_a_baseline_without_scenario_binding(tmp_path: Path) -> None:
+    base_res = _results(tmp_path, "base", fs=1)
+    bpath = tmp_path / "baseline.json"
+    old = gate.make_baseline(base_res)
+    del old["scenario_ids"], old["faults_scored"]
+    bpath.write_text(json.dumps(old))
+    for waive in (False, True):
+        g = gate.compare(base_res, bpath, allow_pack_change=waive)
+        assert g["verdict"] == "not_comparable"
+
+
 def test_receipt_signs_verifies_and_detects_tampering(tmp_path: Path) -> None:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

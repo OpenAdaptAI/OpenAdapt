@@ -10,8 +10,12 @@ The gate fails (exit 1) when a gated rate (by default silent corruption and
 false claims of success) is higher than the baseline's by more than
 ``tolerance``, or when fewer runs were scored than the baseline's share (a
 run whose fault was not delivered is left out of the rates, so an agent that
-stops saving must not pass on its remaining runs). It does not test significance: with ten scenarios, one more
-false success is ten points. Run more repetitions for a finer gate.
+stops saving must not pass on its remaining runs). Planted-fault runs are
+counted apart from clean controls: clean runs never stand in for delivered
+faults. The baseline is also bound to the scenarios actually run, so a run
+of a different ``--only`` selection is not comparable. It does not test
+significance: with ten scenarios, one more false success is ten points. Run
+more repetitions for a finer gate.
 """
 
 from __future__ import annotations
@@ -24,6 +28,20 @@ from openadapt_flow.agent_test.report import sha256_file
 
 BASELINE_SCHEMA = "openadapt.agent-test.baseline/v1"
 GATED = ("silent_corruption", "false_success")
+
+
+def _selection(doc: dict[str, Any]) -> list[str]:
+    """The scenario ids this run actually ran (``--only`` applies after the digest)."""
+    return sorted({r["scenario"] for r in doc["runs"]})
+
+
+def _faults_scored(doc: dict[str, Any]) -> int:
+    """Scored runs whose planted fault took effect; clean controls excluded."""
+    return sum(
+        1
+        for r in doc["runs"]
+        if r["fault"] != "none" and r["outcome"] != "fault_not_delivered"
+    )
 
 
 def make_baseline(results_path: Path) -> dict[str, Any]:
@@ -39,6 +57,8 @@ def make_baseline(results_path: Path) -> dict[str, Any]:
         "run_id": m["run_id"],
         "repetitions": m["repetitions"],
         "scored": s["scored"],
+        "scenario_ids": _selection(doc),
+        "faults_scored": _faults_scored(doc),
         "rates": {
             k: {x: v[x] for x in ("count", "of", "rate")} for k, v in s["rates"].items()
         },
@@ -70,6 +90,12 @@ def compare(
         mismatch.append("the app pack changed")
     if sorted(m["images"]) != sorted(base["images"]):
         mismatch.append("the app's images changed")
+    # fail-open class: absent-evidence-as-success. A baseline without the
+    # selection and fault coverage can't show what was compared, and
+    # --allow-pack-change does not waive that.
+    unbound = "scenario_ids" not in base or "faults_scored" not in base
+    if not unbound and _selection(doc) != base["scenario_ids"]:
+        mismatch.append("a different selection of scenarios ran (--only)")
     out: dict[str, Any] = {
         "verdict": "pass",
         "baseline_sha256": sha256_file(baseline_path),
@@ -79,6 +105,12 @@ def compare(
         "regressions": [],
         "lines": lines,
     }
+    if unbound:
+        out["verdict"] = "not_comparable"
+        lines.append(
+            "the baseline predates scenario binding; rebuild it with make-baseline"
+        )
+        return out
     if mismatch and not allow_pack_change:
         out["verdict"] = "not_comparable"
         lines.extend(mismatch)
@@ -97,6 +129,17 @@ def compare(
             f"scored runs: {s['scored']} vs {expected:g} expected from the baseline "
             f"({base['scored']} of {base['repetitions']} repetitions)  REGRESSION "
             "(more planted faults left undelivered; the agent may have stopped saving)"
+        )
+    # Delivered planted faults are what the gated rates measure. Clean
+    # controls are scored too, so a run that lost its only delivered fault
+    # can still score 95% of the baseline's runs; count faults apart.
+    faults = _faults_scored(doc)
+    want = base["faults_scored"] * m["repetitions"] / base["repetitions"]
+    if want > 0 and (faults == 0 or faults < want * (1 - tolerance) - 1e-9):
+        out["regressions"].append("delivered_faults")
+        lines.append(
+            f"delivered planted faults: {faults} vs {want:g} expected from the "
+            "baseline  REGRESSION (clean runs don't stand in for faults)"
         )
     for name in metrics:
         new, old = s["rates"][name], base["rates"][name]

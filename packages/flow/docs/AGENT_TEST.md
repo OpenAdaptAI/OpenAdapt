@@ -142,9 +142,12 @@ than the baseline's by more than the tolerance. A run whose planted fault
 never took effect (the agent never saved) is left out of the rates, so the
 gate also fails when the run scored a smaller share of its runs than the
 baseline did (beyond the tolerance): an agent that stops saving fails instead
-of passing on its remaining runs. `--min-scored` additionally refuses (exit 2)
-a run with fewer scored runs than you set. It refuses (exit 2) a run
-whose scenario pack, app pack or images differ from the baseline's. The
+of passing on its remaining runs. Delivered planted faults are counted apart
+from clean controls, so clean runs never stand in for a lost fault.
+`--min-scored` additionally refuses (exit 2) a run with fewer scored runs
+than you set. It refuses (exit 2) a run whose scenario pack, app pack, images
+or selection of scenarios (`--only`) differ from the baseline's, and a
+baseline made before scenario binding (rebuild it with `make-baseline`). The
 agent may differ: that is what it compares. It does not test significance;
 with ten scenarios one more false success is ten points, so run more
 `--repetitions` for a finer gate.
