@@ -1,7 +1,7 @@
 {
  "case_id": "hbm-s03",
  "screen_id": "hbm_review",
- "url": "http://127.0.0.1:63754/bop/summary",
+ "url": "http://127.0.0.1:52675/bop/summary",
  "bound": [
   {
    "binding_id": "hbm_legal_name",

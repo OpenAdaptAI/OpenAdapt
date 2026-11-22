@@ -1,7 +1,7 @@
 {
  "case_id": "bfu-s04",
  "screen_id": "bfu_hub",
- "url": "http://127.0.0.1:63393/flood/hub",
+ "url": "http://127.0.0.1:51985/flood/hub",
  "bound": [
   {
    "binding_id": "bfu_insured_name",
