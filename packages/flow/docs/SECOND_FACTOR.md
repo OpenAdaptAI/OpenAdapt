@@ -42,8 +42,10 @@ recording and replay:
 1. **Claim.** The step is claimed for this run before anyone is asked. A
    retry, a loop back to the same state or a second call is refused without
    asking again.
-2. **Bind.** The focused element must be an `input` whose `autocomplete`
-   names `one-time-code`, and it must be empty. The page is made to draw
+2. **Bind.** The focused element must be a text, tel, password or search
+   `input` whose `autocomplete` names `one-time-code`, it must be empty, and
+   it must take at least 4 characters (one box of a field split into one box
+   per character is refused). The page is made to draw
    every such field as dots (`-webkit-text-security`), on the element and in
    a stylesheet every later document in the browser context gets. The field
    must report that it is masked. A backend that can't establish all of this
@@ -54,11 +56,14 @@ recording and replay:
    focus, be empty and be masked. A dialog that took focus, a field that was
    filled or replaced, or a lost binding refuses, and the code is dropped
    untyped.
-5. **Type once.** The code is typed through the bound element, not the page
-   keyboard. It is never typed again.
+5. **Type once.** The code is filled into the bound element whole, not sent
+   to the page keyboard, so no character can reach another field. A field
+   that takes fewer characters than this code is refused first. The code is
+   never typed again.
 6. **Read back.** The field must hold as many characters as the code. A page
-   that submits itself and removes the field counts as delivered, and the
-   next step checks the screen. Any other result stops the run with
+   that submits itself and removes the field counts as delivered but not
+   read back, and the next step checks the screen; under strict evidence
+   such a run is completed, not VERIFIED. Any other result stops the run with
    `second_factor_unverified`. The code is not typed again.
 
 Every screenshot taken after step 2 (a recorded frame, a model-facing
@@ -83,13 +88,23 @@ A declared task input typed into a code field is refused, and so is
 `⟦one-time-code⟧` typed into any other field. Nothing is typed in either case.
 
 The submit button of a form that holds a username, a password and a code
-signs in, and so does the submit of a form that holds only a code right after
-a username-and-password sign-in. Neither is classified as a save. A form that
-holds only a code anywhere else (a "Verify" button that confirms a payment)
-keeps the normal submit escalation.
+signs in. So does the submit of a form that holds only a code, once, right
+after a username-and-password sign-in, with nothing between them but the
+click that focuses the code field. Neither is classified as a save. Any
+other form that holds only a code (a second code page, or a "Verify" button
+that confirms a payment) keeps the normal submit escalation.
 
 The recorder doesn't detect push approvals yet. An `approval` step has to be
 added to the program by hand.
+
+## Limits
+
+- Only the local browser backend can take a code. A native, remote-desktop
+  or other backend refuses a code step with `second_factor_unbound`. An
+  approval step works on any backend.
+- A code field split into one box per character is refused.
+- A code page that submits itself as the last character lands can't be read
+  back, so a strict run that passes through one is completed, not VERIFIED.
 
 ## Where the code comes from
 

@@ -4705,7 +4705,11 @@ def _form_submit_steps(
     found: list[Step] = []
     typed = False
     typed_kinds: list[Optional[str]] = []
-    signed_in = False
+    # A username-and-password submit arms one code-only exemption. Only the
+    # click that focuses the code field may come between them; anything else,
+    # or that exemption's use, disarms it.
+    armed = False
+    clicks = 0
     for step in steps:
         if step.action is ActionKind.SECOND_FACTOR and step.one_time == "code":
             typed = True
@@ -4715,20 +4719,21 @@ def _form_submit_steps(
             typed = True
             typed_kinds.append(kinds.get(step.id) if step.secret else None)
             continue
+        pointer = step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
         raw = observations.get(step.id)
-        if (
-            typed
-            and raw is not None
-            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
-            and _is_form_save(raw)
-        ):
+        if typed and raw is not None and pointer and _is_form_save(raw):
             fields = sorted(map(str, typed_kinds))
-            follows_sign_in = fields == ["one-time-code"] and signed_in
-            signed_in = fields in _SIGN_IN_FIELD_SETS or follows_sign_in
-            if not signed_in:
+            exempt = fields in _SIGN_IN_FIELD_SETS or (
+                armed and fields == ["one-time-code"]
+            )
+            if not exempt:
                 found.append(step)
+            armed, clicks = fields == ["password", "username"], 0
             typed = False
             typed_kinds = []
+        elif not typed and step.action is not ActionKind.WAIT:
+            clicks += 1
+            armed = armed and pointer and clicks <= 1
     return found
 
 
