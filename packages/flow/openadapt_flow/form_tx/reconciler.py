@@ -2657,8 +2657,11 @@ class FormReconciler:
                         f"does not show it: {judged.reason}",
                     )
                 ]
-            # The row showed exactly this value: it is the popup's result.
-            displayed_result = return_after.current_value
+            # The row showed exactly this value: it is the popup's result,
+            # unless a declared result_anchor already gave one; that one is
+            # still compared below.
+            if displayed_result is None:
+                displayed_result = return_after.current_value
 
         # The value put back in the parent must be the figure the popup showed.
         # An estimator that shows one figure and hands back another (rounded,

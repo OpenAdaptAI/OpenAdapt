@@ -38,7 +38,7 @@ ORIGIN = "http://lookup.local"
 CLASSES = [("5461", "Bakery"), ("5812", "Restaurant"), ("7230", "Beauty salon")]
 
 
-def _form(lie: Optional[str]) -> str:
+def _form(lie: Optional[str], anchor_text: Optional[str] = None) -> str:
     rows = json.dumps(CLASSES)
     put_back = json.dumps(lie) if lie is not None else "code"
     return f"""<!doctype html><html><head><title>Application</title></head>
@@ -57,6 +57,7 @@ def _form(lie: Optional[str]) -> str:
   <label for="q">Search classes</label>
   <input id="q" name="q">
   <button id="go" type="button">Search</button>
+  {f'<label for="sel">Selected class</label><output id="sel">{anchor_text}</output>' if anchor_text else ""}
   <table><thead><tr><th>Code</th><th>Description</th><th></th></tr></thead>
   <tbody id="rows"></tbody></table>
 </dialog>
@@ -98,15 +99,22 @@ def _summary(record: dict[str, Any]) -> str:
 
 
 class _Portal:
-    def __init__(self, lie: Optional[str] = None) -> None:
+    def __init__(
+        self, lie: Optional[str] = None, anchor_text: Optional[str] = None
+    ) -> None:
         self.lie = lie
+        self.anchor_text = anchor_text
         self.submissions: list[dict[str, Any]] = []
 
     def handle(self, route: Route) -> None:
         req = route.request
         path = req.url[len(ORIGIN) :].split("?")[0]
         if path == "/app":
-            route.fulfill(status=200, content_type="text/html", body=_form(self.lie))
+            route.fulfill(
+                status=200,
+                content_type="text/html",
+                body=_form(self.lie, self.anchor_text),
+            )
         elif path == "/submit" and req.method == "POST":
             self.submissions.append(json.loads(req.post_data or "{}"))
             route.fulfill(status=200, content_type="application/json", body="{}")
@@ -117,7 +125,7 @@ class _Portal:
             route.fulfill(status=404, body="not found")
 
 
-def _pack(row_pattern: Optional[str]) -> FormPack:
+def _pack(row_pattern: Optional[str], anchor: bool = False) -> FormPack:
     return FormPack(
         pack_id="lookup-row",
         domain_schema="test.application/v1",
@@ -143,6 +151,11 @@ def _pack(row_pattern: Optional[str]) -> FormPack:
                 ),
                 compute_anchors=(FieldAnchorSpec(label_patterns=("^Search$",)),),
                 result_row_pattern=row_pattern,
+                result_anchor=(
+                    FieldAnchorSpec(label_patterns=("^Selected class$",))
+                    if anchor
+                    else None
+                ),
                 commit_anchor=FieldAnchorSpec(label_patterns=("^Select$",)),
                 parent_return_anchor=FieldAnchorSpec(label_patterns=("^Class code$",)),
                 return_output_key="class_code",
@@ -207,7 +220,9 @@ def chromium_browser() -> Any:
             browser.close()
 
 
-def _run(browser: Browser, portal: _Portal, row_pattern: Optional[str]) -> Any:
+def _run(
+    browser: Browser, portal: _Portal, row_pattern: Optional[str], anchor: bool = False
+) -> Any:
     ctx = browser.new_context(viewport={"width": 1280, "height": 800})
     try:
         ctx.route(f"{ORIGIN}/**", portal.handle)
@@ -217,7 +232,7 @@ def _run(browser: Browser, portal: _Portal, row_pattern: Optional[str]) -> Any:
         )
         surface.goto(f"{ORIGIN}/app")
         reconciler = FormReconciler(surface)
-        session = reconciler.create_session(_pack(row_pattern), _dossier())
+        session = reconciler.create_session(_pack(row_pattern, anchor), _dossier())
         return reconciler.run_until_halt_or_done(session)
     finally:
         ctx.close()
@@ -275,6 +290,16 @@ def test_a_row_with_no_matching_cell_stops_before_submit(
     assert result.halts[0].kind == FormHaltKind.POPUP_CONTRACT_FAILED
 
 
+def test_a_declared_result_anchor_is_still_compared(chromium_browser: Browser) -> None:
+    # The row shows 5461 and 5461 is put back, but the popup's own result
+    # field says 5812: the anchor comparison still stops the run.
+    portal = _Portal(anchor_text="5812")
+    result = _run(chromium_browser, portal, r"\d{4}", anchor=True)
+    assert portal.submissions == []
+    assert result.outcome == FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert result.halts[0].kind == FormHaltKind.PREFILL_VALUE_CONFLICT
+
+
 def test_an_unset_row_pattern_is_not_dumped() -> None:
     spec = PopupSubroutineSpec(
         subroutine_id="s",
@@ -288,4 +313,13 @@ def test_an_unset_row_pattern_is_not_dumped() -> None:
     with pytest.raises(ValueError):
         PopupSubroutineSpec.model_validate(
             {**spec.model_dump(mode="json"), "result_row_pattern": "("}
+        )
+    # The row is read through the shared text and date codecs only.
+    with pytest.raises(ValueError):
+        PopupSubroutineSpec.model_validate(
+            {
+                **spec.model_dump(mode="json"),
+                "result_row_pattern": r"\d+",
+                "return_codec": {"kind": "currency_cents"},
+            }
         )

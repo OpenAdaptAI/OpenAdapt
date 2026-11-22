@@ -428,6 +428,19 @@ class PopupSubroutineSpec(BaseModel):
                 raise ValueError(f"Invalid result row pattern {value!r}: {exc}") from exc
         return value
 
+    @model_validator(mode="after")
+    def _row_pattern_needs_a_text_codec(self) -> "PopupSubroutineSpec":
+        if self.result_row_pattern is not None and self.return_codec.kind not in (
+            FormCodecKind.WHITESPACE_COLLAPSE,
+            FormCodecKind.CASEFOLD,
+            FormCodecKind.ISO_DATE,
+        ):
+            raise ValueError(
+                "result_row_pattern needs a whitespace_collapse, casefold or "
+                "iso_date return_codec"
+            )
+        return self
+
     @model_serializer(mode="wrap")
     def _omit_unset_row_pattern(self, handler: Any) -> Any:
         # Left out while unset, so a pack written before the field existed
