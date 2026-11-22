@@ -89,6 +89,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="don't hand a verified run to the teach dir",
     )
+    p.add_argument(
+        "--ledger-row",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="write guard_ledger_row.json and guard_diff.private.json (default on)",
+    )
     p.add_argument("--json", action="store_true", help="print the result as JSON")
     p.set_defaults(func=cmd_guard)
 
@@ -98,6 +104,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
 
     from openadapt_flow.agent_guard.config import ConfigError, load_config
     from openadapt_flow.agent_guard.handoff import HandoffError, handoff
+    from openadapt_flow.agent_guard.readback import load_provider
     from openadapt_flow.agent_guard.session import guard_task
     from openadapt_flow.guard import GuardRefused, load_task
     from openadapt_flow.interactive_recorder import (
@@ -112,8 +119,10 @@ def cmd_guard(args: argparse.Namespace) -> int:
         if args.approval:
             cfg = replace(cfg, approval=args.approval)
         task = load_task(args.task)
+        cfg = replace(cfg, ledger_row=args.ledger_row)
+        readback = load_provider(cfg.readback_provider, task.params)
         validate_browser_cdp_endpoint(args.cdp)
-    except (ConfigError, GuardRefused, BrowserAttachError) as exc:
+    except (ConfigError, GuardRefused, BrowserAttachError, ValueError) as exc:
         print(f"guard: {getattr(exc, 'message', exc)}", file=sys.stderr)
         return 2
     out = Path(args.out)
@@ -149,6 +158,7 @@ def cmd_guard(args: argparse.Namespace) -> int:
             timeout_s=args.timeout,
             attach_wait_s=args.attach_wait,
             secret_fields=tuple(args.secret),
+            readback=readback,
             on_attached=lambda: print(
                 "guard: attached; saves are held until the right record is on screen",
                 file=sys.stderr,

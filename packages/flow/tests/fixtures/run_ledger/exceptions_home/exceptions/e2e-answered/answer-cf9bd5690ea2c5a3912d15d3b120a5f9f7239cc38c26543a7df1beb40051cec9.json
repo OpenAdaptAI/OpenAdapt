@@ -1,0 +1,13 @@
+{
+  "answer": "abort",
+  "approver_kind": "person",
+  "card_id": "sha256:cf9bd5690ea2c5a3912d15d3b120a5f9f7239cc38c26543a7df1beb40051cec9",
+  "decided_at": "2026-11-22T02:41:45.721610Z",
+  "kind": "second_factor",
+  "opened_at": "2026-11-22T02:41:42.899700Z",
+  "public_key": "40476c738e37f4a0e3012c097a42c379bc297f4cd49bbce3df4550e12fdef58d",
+  "reason": null,
+  "route": "cli",
+  "schema": "openadapt.exception-answer/v1",
+  "signature": "ed25519:736bf9ba41e9ad48e8f0913ed65b66ee9725738364a17e26fc17959a3a51dced9fc61bf56d0810a572e9c8488253bdf9184cf8ae51f8f6c97a0c8b54f5d27a00"
+}
