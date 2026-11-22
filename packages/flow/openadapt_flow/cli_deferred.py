@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from openadapt_flow.cli_hints import command
 from openadapt_flow.reports.parse import ReportError, ReportFormat
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -217,9 +218,7 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
         word = "VERIFIED" if item.state == "verified" else "RECONCILIATION_REQUIRED"
         print(f"{item.id}: {word} ({item.reason}; code {item.code})")
     print(f"Settled {len(settled)}; {len(waiting)} still waiting.")
-    from openadapt_flow.cli_hints import command
-
-    print("Open handoffs: " + command("handoff list --ledger " + str(ledger.directory)))
+    print("Open handoffs: " + command(f"handoff list --ledger {ledger.directory}"))
     return 0
 
 

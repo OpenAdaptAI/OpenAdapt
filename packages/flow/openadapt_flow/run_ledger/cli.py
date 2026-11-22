@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
 
+from openadapt_flow.cli_hints import command
+
 if TYPE_CHECKING:
     from openadapt_flow.run_ledger.store import LedgerStore
 
@@ -195,8 +197,6 @@ def cmd_list(args: argparse.Namespace) -> int:
             print(json.dumps(row.to_json(), sort_keys=True))
         return 0
     if not rows:
-        from openadapt_flow.cli_hints import command
-
         print("No rows yet. Add one with: " + command("ledger add RUN_DIR"))
         return 0
     for row in rows:
