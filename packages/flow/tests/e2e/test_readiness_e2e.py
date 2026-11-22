@@ -339,6 +339,8 @@ def test_shadow_run_to_scorecard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     if os.environ.get("OPENADAPT_WRITE_EVIDENCE") == "1":
         write_sample(tmp_path / "runs", _episode(0)["task_id"], tmp_path / "card", "matched")
         write_sample(tmp_path / "runs", _episode(1)["task_id"], tmp_path / "card", "mismatched")
+        wrong = _episode(min(WRONG_RECORD))["task_id"]
+        write_sample(tmp_path / "runs", wrong, tmp_path / "card", "wrong-record")
         EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
         EVIDENCE.write_text(
             json.dumps(

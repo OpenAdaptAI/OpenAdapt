@@ -412,13 +412,11 @@ been run through `readiness` yet; that is the next evidence step.
   is inside it). The hold refuses non-GET requests to other origins, but a
   `GET` to another origin from the page goes on, so a candidate could carry
   what is on screen out through the browser (an image URL, a navigation).
-- Scrubbing is the flight recorder's. In the scrubbed smoke test on MockMed
-  (`test_a_real_claude_loop_under_scrubbed_egress_on_mockmed`) the real
-  scrubber removed a planted patient name from a short string but not from
-  the computer-use preamble plus task text, so the name reached the stand-in
-  upstream; the test records this as an expected failure until the scrubber
-  catches it. Don't run `--egress scrubbed` on real records on the strength
-  of the scrubber alone.
+- Scrubbing is the flight recorder's. The scrubbed smoke test on MockMed
+  (`test_a_real_claude_loop_under_scrubbed_egress_on_mockmed`) checks one
+  planted patient name in the computer-use preamble plus task text: it does
+  not reach the stand-in upstream. That is one name in one prompt, not a
+  measured recall; scrub recall on real records has not been measured.
 - A save whose body is not form or JSON is `uncompared`, so its case is never
   `MATCHED`.
 - The program path takes field names from the form's labels; it was

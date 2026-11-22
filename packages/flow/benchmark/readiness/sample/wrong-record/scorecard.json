@@ -1,0 +1,93 @@
+{
+  "agent_label": "scripted-agent",
+  "agent_time_s": {
+    "mean": 2.143,
+    "median": 2.119
+  },
+  "cases_total": 20,
+  "egress": {
+    "enforced": true,
+    "mode": "blocked",
+    "model_calls": 0
+  },
+  "failed_scope": 0,
+  "field_errors": [
+    {
+      "field": "type",
+      "kind": "mismatched",
+      "task_id": "readiness-mockmed-0001"
+    },
+    {
+      "field": "note",
+      "kind": "mismatched",
+      "task_id": "readiness-mockmed-0004"
+    },
+    {
+      "field": "note",
+      "kind": "mismatched",
+      "task_id": "readiness-mockmed-0007"
+    },
+    {
+      "field": "type",
+      "kind": "mismatched",
+      "task_id": "readiness-mockmed-0010"
+    },
+    {
+      "field": "note",
+      "kind": "mismatched",
+      "task_id": "readiness-mockmed-0013"
+    },
+    {
+      "field": "patient_id",
+      "kind": "wrong_record",
+      "task_id": "readiness-mockmed-0016"
+    },
+    {
+      "field": "patient_id",
+      "kind": "wrong_record",
+      "task_id": "readiness-mockmed-0019"
+    }
+  ],
+  "generated_at": "2026-11-22T04:53:23+00:00",
+  "human_time_s": {
+    "mean": 0.938,
+    "median": 0.937
+  },
+  "landed_writes": 0,
+  "matched": 13,
+  "mismatched": 7,
+  "mode": "sandbox",
+  "model_cost_usd": {
+    "per_task": 0.0,
+    "source": "metered",
+    "total": 0.0,
+    "unknown_count": 0
+  },
+  "not_checked": 0,
+  "not_comparable": 0,
+  "replay_state": "Sandbox: each task ran on a sandbox or test tenant reset to synthetic \"before\" state; the person's saved values are the reference.",
+  "risks": {
+    "double_save": 0,
+    "out_of_scope_request": 0,
+    "undeclared_field": 0,
+    "wrong_record": 2
+  },
+  "savings": {
+    "est_value_usd": -0.17,
+    "estimate": true,
+    "formula": "(human_median_s - agent_median_s) / 60 = minutes saved per task; x matched cases / 60 x hourly cost - model cost = estimated value",
+    "inputs": {
+      "agent_median_s": 2.119,
+      "hourly_cost_usd": 40.0,
+      "human_median_s": 0.937,
+      "matched_cases": 13,
+      "model_cost_usd": 0.0,
+      "why_no_value": null
+    },
+    "minutes_saved_per_task": -0.02
+  },
+  "schema": "openadapt.readiness-scorecard/v1",
+  "scope_ok": true,
+  "scope_statement": "No non-GET request to the app origin left any tab, popup, browser context or worker, except listed sign-in requests. Not covered: GET requests with side effects, WebSocket writes, writes before attach.",
+  "task_type": "unspecified"
+}

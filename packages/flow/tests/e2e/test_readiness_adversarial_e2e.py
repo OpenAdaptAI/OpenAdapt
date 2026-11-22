@@ -597,8 +597,8 @@ def test_a_real_claude_loop_under_scrubbed_egress_on_mockmed(
     card = build_scorecard(compare_runs(episodes, tmp_path / "runs"))
     assert card["egress"] == {"mode": "scrubbed", "enforced": True, "model_calls": 2}
     assert card["model_cost_usd"]["source"] == "metered"
-    if b"Jane Sample" in fake.received_bytes():
-        # Open finding (flight recorder scrubber): the real scrubber removes
-        # this name from a short string but not from the computer-use
-        # preamble plus task text, so it reached the stand-in upstream.
-        pytest.xfail("the scrubber missed the planted name in the long prompt text")
+    sent = fake.received_bytes()
+    assert b"Jane Sample" not in sent, [
+        sent[max(0, i - 80): i + 40] for i in [sent.find(b"Jane Sample")]
+    ]
+    assert b"Jane" not in sent  # not even the first name

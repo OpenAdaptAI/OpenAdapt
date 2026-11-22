@@ -26,7 +26,8 @@ Asserted:
 - `scorecard.json` holds none of the notes or patient names.
 
 `results.json` is written by the test with `OPENADAPT_WRITE_EVIDENCE=1`, as
-is `sample/`: one matched, one mismatched and one `extra_target` task's
+is `sample/`: one matched, one mismatched, one wrong-record and one
+`extra_target` task's
 `run.json`, `case.json`, `egress.json`, `usage.json` (and
 `proposed_write.json`) with that run's `scorecard.json`, for the consumers'
 join tests (J1, J2). All values in them are synthetic.
