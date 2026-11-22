@@ -1,12 +1,12 @@
 # CHANGELOG
 
 
-## v0.25.0 (2026-11-22)
+## v0.24.1 (2026-11-22)
 
 ### Features
 
 - **Run receipts (`openadapt_types.receipt`, `openadapt_types.receipt_callback`).** DSSE-wrapped in-toto `record/run/v1` run receipts with signer roles, public allow-list verification, counterparty confirmations, handoff payload and item-approval bindings, RFC 8785 `report.canonical` subject digests, follow-up receipt chains (`predicate.follows`), and shared verification vectors.
-- **Exception cards and run ledger (`openadapt_types.exception_card`, `openadapt_types.run_ledger`).** Closed exception-queue card models and per-run accounting ledger schemas shared across executors and surfaces.
+- **Exception cards, run ledger, and managed jobs (`openadapt_types.exception_card`, `openadapt_types.run_ledger`, `openadapt_types.managed_job`).** Closed exception-queue card models, per-run accounting ledger schemas, and generalized managed-job contracts shared across executors and surfaces.
 - **Reward partial credit (`openadapt_types.reward`).** Configurable partial-credit scoring for a confirmed write followed by an escalation ([#1824](https://github.com/OpenAdaptAI/OpenAdapt/pull/1824)).
 
 
