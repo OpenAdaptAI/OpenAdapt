@@ -177,8 +177,8 @@ def test_an_authenticator_code_comes_from_a_person_and_never_persists(
     assert program is not None
     workflow = Workflow.load(Path(program["bundle"]))
     (code_step,) = [s for s in workflow.steps if s.one_time]
-    assert code_step.one_time == "code" and code_step.param == sf.ONE_TIME_CODE_PARAM
-    assert code_step.secret and code_step.text is None
+    assert code_step.action.value == "second_factor" and code_step.one_time == "code"
+    assert code_step.param is None and not code_step.secret and code_step.text is None
     assert sorted(workflow.secret_params) == ["password", "username"]
     assert sf.ONE_TIME_CODE_PARAM not in workflow.params
 
@@ -199,7 +199,7 @@ def test_an_authenticator_code_comes_from_a_person_and_never_persists(
         "second-run",
         {"username": USERNAME, "password": PASSWORD, "note": "second two-step note"},
     )
-    assert second.get("path") == "skill", second
+    assert second.get("path") == "skill", json.dumps(second, default=str)
     assert second["verified"] is True and second["model_calls"] == 0, json.dumps(second)
     assert second["receipt_outcome"] == "VERIFIED", second
     assert state.codes_accepted == accepted + 1

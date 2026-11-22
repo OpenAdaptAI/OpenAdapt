@@ -15,22 +15,36 @@
 
 <!-- version list -->
 
-## v3.4.0 (2026-11-21)
+## Unreleased
 
 ### Features
 
 - A sign-in that asks for a second factor (a code by text message or email,
   an authenticator code, or a push approval) no longer has to stop the
-  program. A step can carry `one_time` (`code` or `approval`). When it runs,
-  the run waits for a person through the configured source
-  (`OPENADAPT_SECOND_FACTOR_URL` for a hosted or customer-run runner's control
-  plane, or a local `OPENADAPT_SECOND_FACTOR_COMMAND`), types the code once
-  and keeps it nowhere. No source, no answer within the timeout, a decline or
-  a malformed answer stops the step before typing, with a closed
-  `second_factor_*` code. Over the control plane the code is sealed in the
-  person's browser to a one-step P-256 key. The wrap recorder turns a field
-  marked `autocomplete="one-time-code"` into such a step, and a code-only
-  form's submit counts as a sign-in, not a save. See docs/SECOND_FACTOR.md.
+  program. A `second_factor` step (`one_time` is `code` or `approval`) waits
+  for a person through the configured source (`OPENADAPT_SECOND_FACTOR_URL`
+  for a hosted or customer-run runner's control plane, or a local
+  `OPENADAPT_SECOND_FACTOR_COMMAND`). Before anyone is asked, the focused
+  field must be an empty `autocomplete="one-time-code"` input, and the page
+  is made to draw it as dots. After the answer the same field must still have
+  focus and be empty. The code is then typed once through that element, never
+  retried, and kept nowhere: not in a model's page listing, a screenshot, a
+  log, a receipt or the recording. No source, an answer after the deadline, a
+  decline, a multi-line or malformed answer, a field that changed while the
+  person answered, an API binding on the step, or a backend that can't bind
+  the field stops the step before typing, with a closed `second_factor_*`
+  code. The action is new, so an older runtime refuses the bundle instead of
+  skipping an approval. Over the control plane the code is sealed in the
+  person's browser to a one-step P-256 key, and a cached run's child process
+  gets the run token only with the control-plane URL. The wrap recorder turns
+  a field marked `autocomplete="one-time-code"` into such a step. A code-only
+  form's submit counts as a sign-in only right after a username-and-password
+  sign-in. See docs/SECOND_FACTOR.md.
+
+## v3.4.0 (2026-11-21)
+
+### Features
+
 - Dropdowns, searchable selects, type-aheads and native selects are recorded,
   compiled and run as one model, a choice (`OptionChoice` on a
   `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the

@@ -188,6 +188,7 @@ from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime import keyboard_delivery as keyboard_delivery_mod
+from openadapt_flow.runtime import second_factor_step
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -265,7 +266,6 @@ from openadapt_flow.runtime.secret_frames import persisted_run_frame
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.runtime.typed_echo import read_typed_echo
-from openadapt_flow.second_factor import runtime_value as _one_time_value
 from openadapt_flow.secret_inputs import (  # noqa: F401 - compatibility exports
     SECRET_ENV_PREFIX,
     require_secret_sources,
@@ -12834,6 +12834,8 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
                 before_png=before_png,
                 result=result,
             )
+        if step.action is ActionKind.SECOND_FACTOR:  # bind, ask, type once
+            return second_factor_step.act(self, step, workflow, params, result)
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
@@ -13355,13 +13357,8 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
 
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             if step.secret:  # never in the bundle/params (secret_inputs.py)
-                text, refusal = (
-                    _one_time_value(step, result)
-                    if step.one_time == "code"  # asked of a person now
-                    else step_secret_text(
-                        step, getattr(self, "secret_env_overrides", {})
-                    )
-                )
+                overrides = getattr(self, "secret_env_overrides", {})
+                text, refusal = step_secret_text(step, overrides)
                 if refusal is not None:
                     return refusal
             elif step.param is not None:
@@ -13797,8 +13794,6 @@ class Replayer(QualificationFaultInjection, AssetsHealingAndEvidence):
             return None
 
         if step.action is ActionKind.WAIT:
-            if step.one_time == "approval":  # a person approves on their device
-                return _one_time_value(step, result)[1]
             # WAIT means wait_settled only; the post-action settle handles it.
             return None
 

@@ -26,6 +26,7 @@ from openadapt_flow.compiler.compile import _form_submit_steps
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.recorder import CredentialFieldError, Recorder
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.runtime.second_factor_step import DeliveryLedger, Handoff
 from openadapt_flow.runtime.secret_frames import persisted_run_frame
 
 CODE = "482913"
@@ -135,7 +136,7 @@ def _http(plane: FakeControlPlane, clock: Optional[_Clock] = None) -> sf.HttpSou
 def test_a_sealed_code_reaches_the_run_and_the_control_plane_holds_no_code() -> None:
     plane = FakeControlPlane(["pending", 503, "code"])
     code = sf.obtain("code", "step_004", source=_http(plane), heartbeat=lambda: None)
-    assert code == CODE
+    assert isinstance(code, sf.OneTimeCode) and code.consume() == CODE
     (created,) = plane.created
     assert set(created) == {"schema", "kind", "step_id", "public_key", "timeout_s"}
     assert created["kind"] == "code" and created["step_id"] == "step_004"
@@ -211,7 +212,8 @@ def test_a_local_command_supplies_the_code(tmp_path: Path) -> None:
         "import sys\nassert sys.argv[1:] == ['code', 'step_004']\nprint('482 913')\n",
     )
     env = {sf.COMMAND_ENV: command}
-    assert sf.obtain("code", "step_004", env=env) == CODE
+    code = sf.obtain("code", "step_004", env=env)
+    assert code is not None and code.consume() == CODE
 
 
 @pytest.mark.parametrize(
@@ -248,11 +250,73 @@ def test_no_source_and_bad_timeouts_are_refused() -> None:
     assert sf.timeout_from_env({sf.TIMEOUT_ENV: "45"}) == 45.0
 
 
-@pytest.mark.parametrize("raw", ["123", "12345678901234567", "12 34 5!", 42, ""])
-def test_only_short_codes_of_letters_and_digits_are_typed(raw: object) -> None:
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "123",
+        "12345678901234567",
+        "12 34 5!",
+        42,
+        "",
+        "123456\n654321",  # two codes on two lines are not one code
+        "123\r456",
+        "123\t456",
+        "123\u2028456",
+    ],
+)
+def test_only_one_short_code_of_letters_and_digits_is_typed(raw: object) -> None:
     with pytest.raises(sf.SecondFactorRefused):
         sf.normalize_code(raw)
-    assert sf.normalize_code(" ab-12 34 ") == "ab1234"
+    assert sf.normalize_code(" ab-12 34 \n") == "ab1234"
+    assert sf.normalize_code("123\u00a0456") == "123456"
+    assert sf.normalize_code("123456\r\n") == "123456"  # a command's last line
+
+
+class _LateSource:
+    """A source that answers, but only after the deadline has passed."""
+
+    def __init__(self, clock: "_Clock", late_by: float) -> None:
+        self.clock = clock
+        self.late_by = late_by
+
+    def obtain(self, request: sf.Request, *, heartbeat: Any) -> Optional[str]:
+        self.clock.now += request.timeout_s + self.late_by
+        return CODE if request.kind == "code" else None
+
+
+@pytest.mark.parametrize("kind", ["code", "approval"])
+def test_an_answer_after_the_deadline_is_dropped_whatever_the_source(kind: str) -> None:
+    clock = _Clock()
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        sf.obtain(kind, "s", source=_LateSource(clock, 0.5), env={}, clock=clock)
+    assert refused.value.code == "second_factor_timeout"
+
+
+class _SlowPlane(FakeControlPlane):
+    """A poll that blocks past the deadline and then answers."""
+
+    def __init__(self, answers: list[Any], clock: "_Clock") -> None:
+        super().__init__(answers)
+        self.clock = clock
+
+    def get(self, url: str, *, headers: dict[str, str]) -> _Response:
+        self.clock.now += sf.DEFAULT_TIMEOUT_S + 1
+        return super().get(url, headers=headers)
+
+
+@pytest.mark.parametrize(
+    ("answer", "kind"), [("code", "code"), ("approved", "approval")]
+)
+def test_a_control_plane_answer_that_lands_late_is_dropped(
+    answer: str, kind: str
+) -> None:
+    clock = _Clock()
+    source = _http(_SlowPlane([answer], clock), clock)
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        source.obtain(
+            sf.Request(kind, "s", sf.DEFAULT_TIMEOUT_S), heartbeat=lambda: None
+        )
+    assert refused.value.code == "second_factor_timeout"
 
 
 # -- program shape -------------------------------------------------------------
@@ -262,31 +326,65 @@ def _code_step(**kw: Any) -> Step:
     values: dict[str, Any] = dict(
         id="step_004",
         intent="type the one-time sign-in code",
-        action=ActionKind.TYPE,
-        param=sf.ONE_TIME_CODE_PARAM,
-        secret=True,
+        action=ActionKind.SECOND_FACTOR,
         one_time="code",
     )
     values.update(kw)
     return Step(**values)
 
 
-def test_one_time_steps_have_one_shape_and_others_keep_their_bytes() -> None:
-    _code_step()
-    Step(id="s", intent="approve", action=ActionKind.WAIT, one_time="approval")
+def _approval_step(**kw: Any) -> Step:
+    return _code_step(
+        **{"id": "step_002", "intent": "approve", "one_time": "approval", **kw}
+    )
+
+
+#: The action values a runtime released before this one knows. An older
+#: runtime validates ``action`` against its own enum, so a one-time step,
+#: which no longer uses any of these, makes it refuse the whole bundle.
+RELEASED_ACTIONS = frozenset(
+    {
+        "click",
+        "double_click",
+        "right_click",
+        "drag",
+        "type",
+        "select_option",
+        "key",
+        "hotkey",
+        "wait",
+        "scroll",
+        "read",
+        "switch_surface",
+    }
+)
+
+
+def test_a_one_time_step_is_its_own_action_an_older_runtime_refuses() -> None:
+    from openadapt_flow.ir import ApiBinding
+
+    for step in (_code_step(), _approval_step()):
+        dumped = step.model_dump(mode="json")
+        assert dumped["action"] == "second_factor"
+        assert dumped["action"] not in RELEASED_ACTIONS
+    assert {k.value for k in ActionKind} - RELEASED_ACTIONS == {"second_factor"}
+    # Nothing can route a one-time step around the person: no anchor, text,
+    # param, secret, API binding or effects.
     for bad in (
-        dict(secret=False),
-        dict(text="123456", secret=True),
-        dict(param=None),
-        dict(action=ActionKind.CLICK),
+        dict(text="123456"),
+        dict(param=sf.ONE_TIME_CODE_PARAM),
+        dict(secret=True),
+        dict(key="Enter"),
+        dict(api_binding=ApiBinding(method="POST", url_template="/verify")),
+        dict(one_time=None),
     ):
         with pytest.raises(ValueError):
             _code_step(**bad)
-    with pytest.raises(ValueError):
-        Step(id="s", intent="x", action=ActionKind.WAIT, one_time="approval", text="x")
+    for action in (ActionKind.TYPE, ActionKind.WAIT):
+        with pytest.raises(ValueError):
+            Step(id="s", intent="x", action=action, one_time="code")
     plain = Step(id="s", intent="x", action=ActionKind.CLICK)
     assert "one_time" not in plain.model_dump(mode="json")
-    assert _code_step().model_dump(mode="json")["one_time"] == "code"
 
 
 def test_the_code_is_no_workflow_input_and_its_frames_are_black() -> None:
@@ -306,29 +404,199 @@ def test_the_code_is_no_workflow_input_and_its_frames_are_black() -> None:
         assert frame.convert("RGB").getextrema() == ((0, 0), (0, 0), (0, 0))
 
 
-def test_a_code_page_submit_signs_in_and_saves_nothing(monkeypatch) -> None:
+def test_a_code_only_submit_signs_in_only_right_after_a_sign_in(monkeypatch) -> None:
     from openadapt_flow.compiler import compile as compile_module
 
     monkeypatch.setattr(compile_module, "_is_form_save", lambda raw: True)
-    steps = [
-        _code_step(id="step_000"),
-        Step(id="step_001", intent="x", action=ActionKind.CLICK),
-        Step(id="step_002", intent="x", action=ActionKind.TYPE, text="a note"),
-        Step(id="step_003", intent="x", action=ActionKind.CLICK),
+
+    def typed(step_id: str) -> Step:
+        return Step(
+            id=step_id, intent="x", action=ActionKind.TYPE, param="p", secret=True
+        )
+
+    def click(step_id: str) -> Step:
+        return Step(id=step_id, intent="x", action=ActionKind.CLICK)
+
+    kinds = {"s0": "username", "s1": "password"}
+    signed_in_first = [
+        typed("s0"),
+        typed("s1"),
+        click("s2"),
+        _code_step(id="s3"),
+        click("s4"),
+        Step(id="s5", intent="x", action=ActionKind.TYPE, text="a note"),
+        click("s6"),
     ]
     found = _form_submit_steps(
-        steps, {"step_001": {}, "step_003": {}}, {"step_000": "one-time-code"}
+        signed_in_first, {s.id: {} for s in signed_in_first}, kinds
     )
-    assert [s.id for s in found] == ["step_003"]
+    assert [s.id for s in found] == ["s6"]
+    # A code alone with a "Verify" button can confirm a payment: escalated.
+    alone = [_code_step(id="s0"), click("s1")]
+    found = _form_submit_steps(alone, {"s1": {}}, {})
+    assert [s.id for s in found] == ["s1"]
+
+
+# -- the handoff -----------------------------------------------------------------
+
+
+class FakeField:
+    """A one-time-code field as :class:`PlaywrightOneTimeField` reports it."""
+
+    def __init__(self, **state: Any) -> None:
+        self.state: dict[str, Any] = dict(
+            kind="one-time-code",
+            empty=True,
+            length=0,
+            masked=False,
+            connected=True,
+            focused=True,
+        )
+        self.state.update(state)
+        self.typed: list[str] = []
+        self.after_type: dict[str, Any] = {}
+        self.on_check: Optional[Any] = None
+
+    def mask(self) -> None:
+        self.state["masked"] = True
+
+    def bind(self) -> dict[str, Any]:
+        return dict(self.state)
+
+    def check(self) -> Optional[dict[str, Any]]:
+        if self.on_check is not None:
+            hook, self.on_check = self.on_check, None
+            hook(self)
+        return dict(self.state)
+
+    def type_once(self, code: str) -> None:
+        self.typed.append(code)
+        self.state.update(empty=False, length=len(code), **self.after_type)
+
+
+def _asker(code: str = CODE, calls: Optional[list[str]] = None) -> Any:
+    def obtain(kind: str, step_id: str) -> Optional[sf.OneTimeCode]:
+        if calls is not None:
+            calls.append(kind)
+        return sf.OneTimeCode(code) if kind == "code" else None
+
+    return obtain
+
+
+def test_the_handoff_types_one_code_once_into_the_bound_field() -> None:
+    field, calls = FakeField(), []
+    handoff = Handoff(field, DeliveryLedger(), obtain=_asker(calls=calls))
+    assert handoff.deliver_code("s", key="s") is True
+    assert field.typed == [CODE] and calls == ["code"]
+    # The same step asks and types at most once per run, whatever calls again.
+    with pytest.raises(sf.SecondFactorRefused):
+        handoff.deliver_code("s", key="s")
+    assert field.typed == [CODE] and calls == ["code"]
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        dict(kind="other"),  # focus is not on a code field
+        dict(empty=False, length=3),  # a prefilled field
+    ],
+)
+def test_a_field_that_does_not_bind_is_refused_before_anyone_is_asked(
+    state: dict[str, Any],
+) -> None:
+    field, calls = FakeField(**state), []
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        Handoff(field, DeliveryLedger(), obtain=_asker(calls=calls)).deliver_code(
+            "s", key="s"
+        )
+    assert refused.value.code == "second_factor_unbound"
+    assert calls == [] and field.typed == []
+
+
+def test_a_field_that_cannot_be_masked_is_refused() -> None:
+    field = FakeField()
+    field.mask = lambda: None  # type: ignore[method-assign]
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        Handoff(field, DeliveryLedger(), obtain=_asker()).deliver_code("s", key="s")
+    assert refused.value.code == "second_factor_unbound" and field.typed == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        dict(focused=False),  # a dialog took focus while the person answered
+        dict(empty=False, length=1),  # something typed into it meanwhile
+        dict(connected=False),  # the field was replaced
+        dict(masked=False),  # the mask was removed
+    ],
+)
+def test_a_field_that_changed_while_waiting_gets_nothing(
+    change: dict[str, Any],
+) -> None:
+    field = FakeField()
+    field.on_check = lambda f: f.state.update(change)
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        Handoff(field, DeliveryLedger(), obtain=_asker()).deliver_code("s", key="s")
+    assert refused.value.code == "second_factor_unbound"
+    assert field.typed == []
+    assert CODE not in str(refused.value)
+
+
+def test_an_inconclusive_readback_halts_and_never_types_again() -> None:
+    field = FakeField()
+    field.after_type = {"length": 2}  # the page shows something else
+    handoff = Handoff(field, DeliveryLedger(), obtain=_asker())
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        handoff.deliver_code("s", key="s")
+    assert refused.value.code == "second_factor_unverified"
+    assert field.typed == [CODE]
+    with pytest.raises(sf.SecondFactorRefused):
+        handoff.deliver_code("s", key="s")
+    assert field.typed == [CODE]
+
+
+def test_a_page_that_submits_itself_counts_as_delivered_not_verified() -> None:
+    field = FakeField()
+    field.after_type = {"kind": "gone", "connected": False}
+    handoff = Handoff(field, DeliveryLedger(), obtain=_asker())
+    assert handoff.deliver_code("s", key="s") is False
+    assert field.typed == [CODE]
+
+
+def test_no_field_binding_refuses_before_asking() -> None:
+    calls: list[str] = []
+    with pytest.raises(sf.SecondFactorRefused) as refused:
+        Handoff(None, DeliveryLedger(), obtain=_asker(calls=calls)).deliver_code(
+            "s", key="s"
+        )
+    assert refused.value.code == "second_factor_unbound" and calls == []
+
+
+def test_a_one_time_code_never_shows_itself_and_is_used_once() -> None:
+    import copy
+    import pickle
+
+    code = sf.OneTimeCode(CODE)
+    assert CODE not in repr(code) and CODE not in str(code) and CODE not in f"{code}"
+    for leak in (pickle.dumps, copy.copy, copy.deepcopy):
+        with pytest.raises(TypeError):
+            leak(code)
+    assert code.consume() == CODE
+    with pytest.raises(RuntimeError):
+        code.consume()
 
 
 # -- replay ----------------------------------------------------------------------
 
 
-def _replay(tmp_path: Path, workflow: Workflow) -> tuple[Any, Any]:
+def _replay(
+    tmp_path: Path, workflow: Workflow, field: Optional[FakeField] = None
+) -> tuple[Any, Any]:
     from tests.test_replayer import FakeBackend, FakeVision
 
     backend = FakeBackend()
+    if field is not None:
+        backend.one_time_field = lambda: field  # type: ignore[attr-defined]
     bundle = tmp_path / "bundle"
     (bundle / "templates").mkdir(parents=True)
     report = Replayer(backend, vision=FakeVision()).run(
@@ -346,30 +614,67 @@ def _run_files(tmp_path: Path) -> bytes:
 def test_replay_types_the_code_once_and_writes_it_nowhere(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    command = _script(tmp_path, f"print('{CODE}')\n")
-    monkeypatch.setenv(sf.COMMAND_ENV, command)
-    report, backend = _replay(tmp_path, Workflow(name="w", steps=[_code_step()]))
+    monkeypatch.setenv(sf.COMMAND_ENV, _script(tmp_path, f"print('{CODE}')\n"))
+    field = FakeField()
+    report, backend = _replay(tmp_path, Workflow(name="w", steps=[_code_step()]), field)
     assert report.success, [r.error for r in report.results]
-    assert ("type", CODE) in backend.actions
+    assert field.typed == [CODE]
+    # Not through the generic TYPE path: no backend type_text call at all.
+    assert not any(a[0] == "type" for a in backend.actions)
+    (result,) = report.results
+    assert result.input_verified is True and result.actuation == "dom"
     assert CODE.encode() not in _run_files(tmp_path)
 
 
-def test_replay_with_no_source_stops_before_typing(tmp_path: Path) -> None:
+def test_replay_on_a_backend_that_cannot_bind_stops_before_asking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = tmp_path / "asked"
+    monkeypatch.setenv(
+        sf.COMMAND_ENV,
+        _script(tmp_path, f"open({str(asked)!r}, 'w').close()\nprint('{CODE}')\n"),
+    )
     report, backend = _replay(tmp_path, Workflow(name="w", steps=[_code_step()]))
+    assert not report.success
+    (result,) = report.results
+    assert "second_factor_unbound" in (result.error or "")
+    assert result.failure_category == "governed_refusal"
+    assert not asked.exists()
+    assert not any(a[0] == "type" for a in backend.actions)
+
+
+def test_replay_with_no_source_stops_before_typing(tmp_path: Path) -> None:
+    field = FakeField()
+    report, _backend = _replay(
+        tmp_path, Workflow(name="w", steps=[_code_step()]), field
+    )
     assert not report.success
     (result,) = report.results
     assert "second_factor_unavailable" in (result.error or "")
     assert result.failure_category == "governed_refusal"
-    assert not any(a[0] == "type" for a in backend.actions)
+    assert field.typed == []
+
+
+def test_replay_halts_on_an_inconclusive_readback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(sf.COMMAND_ENV, _script(tmp_path, f"print('{CODE}')\n"))
+    field = FakeField()
+    field.after_type = {"length": 0}
+    report, _backend = _replay(
+        tmp_path, Workflow(name="w", steps=[_code_step()]), field
+    )
+    assert not report.success
+    (result,) = report.results
+    assert "second_factor_unverified" in (result.error or "")
+    assert result.safety_halt and field.typed == [CODE]
 
 
 def test_replay_waits_for_a_push_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(sf.COMMAND_ENV, _script(tmp_path, "raise SystemExit(3)\n"))
-    step = Step(
-        id="step_000", intent="approve", action=ActionKind.WAIT, one_time="approval"
-    )
+    step = _approval_step(id="step_000")
     report, _backend = _replay(tmp_path, Workflow(name="w", steps=[step]))
     assert not report.success
     assert "second_factor_declined" in (report.results[0].error or "")
@@ -396,6 +701,7 @@ class CodePageBackend:
         self._png = buf.getvalue()
         self.typed: list[str] = []
         self.focus: Optional[str] = "one-time-code"
+        self.field = FakeField()
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -422,6 +728,9 @@ class CodePageBackend:
     def credential_field_at(self, x: int, y: int) -> Optional[str]:
         return "one-time-code"
 
+    def one_time_field(self) -> FakeField:
+        return self.field
+
 
 def test_recording_types_the_persons_code_and_keeps_only_the_param(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -432,7 +741,7 @@ def test_recording_types_the_persons_code_and_keeps_only_the_param(
     rec.withhold_credentials({"note": "a note"})
     rec.type_text(sf.ONE_TIME_CODE_MARKER)
     directory = rec.finish()
-    assert backend.typed == [CODE]
+    assert backend.field.typed == [CODE] and backend.typed == []
     events = [
         json.loads(line)
         for line in (directory / "events.jsonl").read_text().splitlines()
@@ -459,7 +768,20 @@ def test_recording_refuses_a_code_field_without_a_source_or_with_an_input(
     monkeypatch.setenv(sf.COMMAND_ENV, _script(tmp_path, f"print('{CODE}')\n"))
     with pytest.raises(CredentialFieldError):
         rec.type_text("a note")
-    assert backend.typed == []
+    assert backend.typed == [] and backend.field.typed == []
+
+
+def test_recording_refuses_when_focus_moves_while_the_person_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(sf.COMMAND_ENV, _script(tmp_path, f"print('{CODE}')\n"))
+    backend = CodePageBackend()
+    backend.field.on_check = lambda f: f.state.update(focused=False)
+    rec = Recorder(backend, tmp_path / "rec", app_url="http://fake.local/")
+    rec.withhold_credentials({"note": "a note"})
+    with pytest.raises(CredentialFieldError, match="second_factor_unbound"):
+        rec.type_text(sf.ONE_TIME_CODE_MARKER)
+    assert backend.field.typed == [] and backend.typed == []
 
 
 def test_the_dashboard_seal_vector_opens_here() -> None:
@@ -501,7 +823,7 @@ def test_a_cached_runs_child_gets_the_url_with_its_run_token(
     class Stop(Exception):
         pass
 
-    def fake_client(target: Any) -> Any:
+    def fake_client(target: Any, errlog: Any = None) -> Any:
         seen["env"] = dict(target.env)
         raise Stop
 
@@ -513,3 +835,12 @@ def test_a_cached_runs_child_gets_the_url_with_its_run_token(
     assert seen["env"][sf.URL_ENV].startswith("https://control.example/")
     assert seen["env"][sf.TOKEN_ENV] == "run-token"
     assert "UNRELATED_SECRET" not in seen["env"]
+
+
+def test_the_run_token_goes_to_a_child_only_with_the_url_that_uses_it() -> None:
+    token = {sf.TOKEN_ENV: "run-token", sf.TIMEOUT_ENV: "30"}
+    command = sf.source_env({**token, sf.COMMAND_ENV: "otp-tool"})
+    assert command == {sf.COMMAND_ENV: "otp-tool", sf.TIMEOUT_ENV: "30"}
+    assert sf.source_env(token) == {sf.TIMEOUT_ENV: "30"}
+    remote = sf.source_env({**token, sf.URL_ENV: "https://c.example/x"})
+    assert remote[sf.TOKEN_ENV] == "run-token" and sf.COMMAND_ENV not in remote

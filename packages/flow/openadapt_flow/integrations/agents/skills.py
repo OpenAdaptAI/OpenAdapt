@@ -1096,7 +1096,10 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
     # factor source (and its run token) is what the cached run needs too.
     env = {**get_default_environment(), **source_env()}
     target = StdioServerParameters(command=python, args=[str(server)], env=env)
-    async with stdio_client(target) as (read, write):
+    # The child's stderr goes to the stderr in use now. The client's default
+    # is the stream bound when mcp was first imported, which a host (or a
+    # test capture) may have closed since; spawning then fails.
+    async with stdio_client(target, errlog=sys.stderr) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = (await session.list_tools()).tools

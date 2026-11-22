@@ -468,21 +468,19 @@ class Recorder:
 
         The agent's text is discarded (it never has the code), unless it is a
         declared input, which is refused: a code field takes only a code. The
-        event names :data:`ONE_TIME_CODE_PARAM` and holds no value.
+        handoff (:mod:`openadapt_flow.runtime.second_factor_step`) binds the
+        field, masks it on screen, asks, re-checks and types once. The event
+        names :data:`ONE_TIME_CODE_PARAM` and holds no value.
         """
         from openadapt_flow import second_factor
+        from openadapt_flow.backends.one_time_field import one_time_field_for
+        from openadapt_flow.runtime.second_factor_step import DeliveryLedger, Handoff
 
         if text in (self._credential_inputs or {}):
             raise CredentialFieldError(
                 "a one-time code field takes only a code from a person, not a "
                 "declared input; nothing was typed"
             )
-        try:
-            code = second_factor.obtain("code", "recording") or ""
-        except second_factor.SecondFactorRefused as refused:
-            raise CredentialFieldError(
-                f"a one-time code field needs a code from a person ({refused})"
-            ) from None
         event.pop("text", None)
         event.update(
             param=ONE_TIME_CODE_PARAM,
@@ -493,7 +491,18 @@ class Recorder:
         )
         self._credential_fields.append((self._active_surface, "one-time-code", region))
         self.last_type_withheld = True
-        self._record(event, lambda: self._backend.type_text(code))
+        ledger = self.__dict__.setdefault("_second_factor_ledger", DeliveryLedger())
+        handoff = Handoff(one_time_field_for(self._backend), ledger)
+
+        def deliver() -> None:
+            try:
+                handoff.deliver_code("recording", key=f"recording:{self._i}")
+            except second_factor.SecondFactorRefused as refused:
+                raise CredentialFieldError(
+                    f"a one-time code field needs a code from a person ({refused})"
+                ) from None
+
+        self._record(event, deliver)
 
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
