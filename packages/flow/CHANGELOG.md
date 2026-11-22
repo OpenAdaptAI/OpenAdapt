@@ -19,6 +19,28 @@
 
 ### Features
 
+- Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
+  demonstrated click gets its role from what the backend counted: a commit
+  when it wrote, a navigation when the screen changed with no write. A live
+  commit holds only on exactly the demonstrated writes. `openadapt_flow.gui`
+  is a neutral view of a screen (role, name, state, containers) with adapters
+  for a browser page, an accessibility tree and a `form_tx` snapshot.
+- Checkbox attestations (`openadapt_flow.gui.attestations`) are declared in
+  pack data with the digest of their statement and ticked only on an
+  `AttestationGrant` from the person who attests. A grant is its own type, so
+  no intake value or derived fact can tick one. An undeclared box, changed
+  wording, a missing grant or an attestation bound to a field stops the run
+  before any box is ticked.
+- Hub pages of section dialogs (`openadapt_flow.gui.hub`). A dialog holding
+  an editable control is a form, never a confirmation. Each section is opened,
+  filled and saved, and its completion is read from its card on the hub after
+  the save, with the demonstrated number of writes.
+- Repeating structures (`openadapt_flow.gui.repeating`). An "add another"
+  group is learned from a demonstration. A run adds instances until the count
+  matches the intake, fills them in order and reads each one back by the
+  container it was written into. It never deletes an instance and stops on a
+  prefilled one.
+
 - One verdict kernel, `openadapt_flow.verdict`, for every check that turns
   evidence into held, refuted or not checked. It fixes the obligations from
   the plan first, settles results against them, and never passes an empty
