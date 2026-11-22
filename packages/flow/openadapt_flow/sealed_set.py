@@ -519,6 +519,7 @@ _V3_WRAP: Final[bytes] = b"openadapt.ai/sealed-set/v3/wrap\0"
 _V3_PAYLOAD: Final[bytes] = b"openadapt.ai/sealed-set/v3/payload\0"
 _V3_HEADER: Final[bytes] = b"openadapt.ai/sealed-set/v3/header"
 _V3_BUCKET_MAC: Final[bytes] = b"openadapt.ai/sealed-set/v3/bucket-mac"
+_V3_STORE: Final[bytes] = b"openadapt.ai/sealed-set/v3/store\0"
 PAYLOAD: Final[str] = "tink-aes256-gcm-hkdf-1mb"
 _MAC_EXCLUDED: Final[frozenset[str]] = frozenset({"mac", "bucket_mac", "set_digest"})
 
@@ -553,7 +554,16 @@ class V3Key:
     def __init__(self, dek: bytes, set_id: str, bucket: object = None) -> None:
         self._payload = _hkdf(dek, _V3_PAYLOAD + set_id.encode())
         self._header_key = _hkdf(dek, _V3_HEADER)
+        self._store = _hkdf(dek, _V3_STORE + set_id.encode())
         self.bucket = bucket
+
+    @property
+    def store_passphrase(self) -> str:
+        """The passphrase of the stores that keep their own containers inside
+        this set (durable checkpoints, approvals, transition evidence). It
+        comes from the set's data key, so shredding the bucket makes those
+        containers unreadable too, in backups as well."""
+        return base64.urlsafe_b64encode(self._store).decode("ascii")
 
     def seal(self, plaintext: bytes, *, aad: bytes) -> bytes:
         from openadapt_flow import stream_aead
@@ -637,11 +647,14 @@ def _open_v3(header: dict[str, object]) -> V3Key:
     ):
         raise SealedSetError("sealed-set version 3 header is malformed")
     inline = header.get("bucket_record")
+    inline = inline if isinstance(inline, dict) else None
     try:
-        record = kh.find_record(key_ref, inline if isinstance(inline, dict) else None)
+        record = kh.find_record(key_ref, inline)
         if record.get("bucket_id") != key_ref.get("bucket_id"):
             raise SealedSetError("the bucket record belongs to another set")
-        bucket = kh.open_bucket(record)
+        # A record the header supplies proves nothing about who wrote the
+        # set: only this computer's device keys or a recovery key open it.
+        bucket = kh.open_bucket(record, from_header=record is inline)
     except kh.NoRecipientKey as exc:
         raise SealedSetKeyError(str(exc)) from exc
     except kh.KeyHierarchyError as exc:
@@ -927,8 +940,6 @@ def _new_v3(
         if _explicit_passphrase(passphrase) and policy.mode != "org":
             return None
         bucket = kh.new_bucket(kind, policy)
-        if policy.records == "archive":
-            kh.archive(bucket, policy)
     except kh.KeyHierarchyError as exc:
         raise SealedSetError(f"Not writing an encrypted {kind}: {exc}") from exc
     set_id = secrets.token_hex(16)
@@ -941,7 +952,12 @@ def _new_v3(
         "cipher": "AES-256-GCM",
         "payload": PAYLOAD,
         "key_ref": bucket.key_ref(),
+        # Authenticated by the header MACs: shredding deletes the archive
+        # copy from this archive, whatever the policy says by then.
+        "records": policy.records,
     }
+    if policy.records == "archive":
+        header["key_archive"] = policy.key_archive
     header["stanzas"] = [
         {
             "type": kh.STANZA_TYPE,
@@ -1197,11 +1213,12 @@ class SealedSetWriter:
         bucket = getattr(self._key, "bucket", None)
         if bucket is None:
             return
-        kh.close(bucket)
+        try:
+            kh.close(bucket)
+        except kh.KeyHierarchyError as exc:
+            raise SealedSetError(f"refusing to seal {self.root}: {exc}") from exc
         if "bucket_record" in self._header:
             self._header["bucket_record"] = bucket.record
-        elif bucket.record.get("records") == "archive":
-            kh.archive(bucket)
         self._new = False
 
 
@@ -1512,92 +1529,141 @@ def key_record_of(root: Path | str) -> Optional[dict[str, object]]:
         return None
 
 
+_SHRED_HEADER_FIELDS: Final[tuple[str, ...]] = (
+    "bucket_record",
+    "stanzas",
+    "wrapped_key",
+    "salt",
+    "kdf",
+    "kdf_n",
+    "kdf_r",
+    "kdf_p",
+    "mac",
+    "bucket_mac",
+)
+
+
+def _delete_store_files(base: Path) -> list[str]:
+    """Delete the other stores' ciphertext inside a shredded set (durable
+    checkpoints, approvals). Idempotent; the set's own files stay, as
+    ciphertext nobody can open."""
+    removed: list[str] = []
+    for rel in _disk_files(base):
+        path = base / rel
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        if data[: len(crypto.SET_FILE_MAGIC)] in (
+            crypto.SET_FILE_MAGIC,
+            crypto.SET3_FILE_MAGIC,
+        ):
+            continue  # the set's own ciphertext, now unopenable
+        if crypto.is_encrypted(data):
+            path.unlink()
+            removed.append(rel)
+    return removed
+
+
+def _finish_shred(base: Path, header: dict[str, object]) -> dict[str, object]:
+    """Carry an interrupted or incomplete shred forward: delete any store
+    ciphertext still there, and retry the archive deletion this computer
+    recorded as pending. The header of a shredded set has no MAC, so nothing
+    here is chosen by it: the archive retry acts only on this computer's own
+    pending marker."""
+    from openadapt_flow import key_hierarchy as kh
+
+    previous = header.get("shred_record")
+    record: dict[str, object] = dict(previous) if isinstance(previous, dict) else {}
+    deleted = [*record.get("store_files_deleted", []), *_delete_store_files(base)]  # type: ignore[misc]
+    record["store_files_deleted"] = deleted
+    record["stores_deleted"] = True
+    bucket_id = record.get("bucket_id")
+    archive_done = record.get("archive_complete", record.get("complete")) is not False
+    if not archive_done and isinstance(bucket_id, str):
+        try:
+            archive_done = kh.retry_shred(bucket_id)
+        except kh.KeyHierarchyError:
+            archive_done = False
+        if archive_done:
+            record["copies_destroyed"] = [
+                *record.get("copies_destroyed", []),  # type: ignore[misc]
+                "archive",
+            ]
+    record["archive_complete"] = archive_done
+    record["complete"] = archive_done
+    header["shred_record"] = record
+    _replace_header(base, header)
+    if archive_done and isinstance(bucket_id, str):
+        try:
+            kh.clear_pending_shred(bucket_id)
+        except kh.KeyHierarchyError:
+            pass
+    return record
+
+
 def shred(root: Path | str) -> dict[str, object]:
     """Crypto-shred a sealed set.
 
-    A version 3 set: destroy its bucket key's tracked copies (this
-    computer's record, overwritten then deleted, and the organization
-    archive's copy), drop the record and data-key stanza from the header,
-    and delete the durable checkpoints and other stores' ciphertext inside
-    it. In solo mode (record inline) this reaches only the copy on this disk:
-    backups still hold a record the recovery key opens. An older set loses
-    its salt (v1) or wrapped key (v2) instead. Returns the shred record. It
-    can't be undone.
+    A version 3 set: authenticate its header with a key this computer holds
+    (so a changed header can't point the deletion at another set's key),
+    then destroy its bucket key's tracked copies (this computer's record,
+    overwritten then deleted, and the copy in the archive the set was
+    written to), drop the record and data-key stanza from the header, and
+    delete the durable checkpoints and other stores' ciphertext inside it.
+    The shred record says ``complete`` only after the last of these. In solo
+    mode (record inline) this reaches only the copy on this disk: backups
+    still hold a record the recovery key opens. An older set loses its salt
+    (v1) or wrapped key (v2) instead. Returns the shred record. It can't be
+    undone.
     """
     from openadapt_flow import key_hierarchy as kh
 
     base = Path(_abs(root))
-    removed: list[str] = []
     with mutation_lock(base):
         header = read_header(base)
-        previous = header.get("shred_record")
-        if header.get("shredded") and isinstance(previous, dict):
-            # Shredded before, with the archive copy still outstanding: retry.
-            if previous.get("complete") is False:
-                done = kh.retry_shred(str(previous.get("bucket_id")))
-                previous["complete"] = done
-                if done:
-                    previous["copies_destroyed"] = [
-                        *previous.get("copies_destroyed", []),  # type: ignore[list-item]
-                        "archive",
-                    ]
-                header["shred_record"] = previous
-                _replace_header(base, header)
-            return previous
-        shred_record: dict[str, object] = {"schema": kh.SHRED_SCHEMA}
-        if header.get("version") == ENVELOPE_VERSION and not header.get("shredded"):
-            inline = header.get("bucket_record")
+        if header.get("shredded"):
+            return _finish_shred(base, header)
+        shred_record: dict[str, object] = {
+            "schema": kh.SHRED_SCHEMA,
+            "copies_destroyed": [],
+            "complete": True,
+        }
+        if header.get("version") == ENVELOPE_VERSION:
             try:
-                record = kh.find_record(
-                    header.get("key_ref") or {},  # type: ignore[arg-type]
-                    inline if isinstance(inline, dict) else None,
+                key = _open_v3(header)
+            except SealedSetKeyError as exc:
+                raise SealedSetKeyError(
+                    f"Not shredding {base}: no key this computer holds "
+                    f"authenticates its header ({exc}), so Flow can't tell which "
+                    "key it may destroy. Nothing was destroyed. Shred it where "
+                    "it was written, or as the organization (its archive record "
+                    f"in {kh.buckets_dir()} and {kh.ORG_KEY_FILE_ENV})."
+                ) from exc
+            bucket = key.bucket
+            records = header.get("records") or bucket.record.get("records")  # type: ignore[attr-defined]
+            location = header.get("key_archive")
+            try:
+                shred_record = kh.shred(
+                    bucket.bucket_id,  # type: ignore[attr-defined]
+                    records=str(records) if records else None,
+                    key_archive=str(location) if location else None,
                 )
-                shred_record = kh.shred(record)
-            except kh.KeyHierarchyError:
-                # No record on this computer: still delete the archive copy
-                # (tracked as pending when the archive can't be reached).
-                key_ref = header.get("key_ref")
-                bucket_id = (
-                    key_ref.get("bucket_id") if isinstance(key_ref, dict) else None
-                )
-                if isinstance(bucket_id, str):
-                    shred_record = kh.shred({"bucket_id": bucket_id})
-                else:
-                    shred_record["copies_destroyed"] = []
-        for name in (
-            "bucket_record",
-            "stanzas",
-            "wrapped_key",
-            "salt",
-            "kdf",
-            "kdf_n",
-            "kdf_r",
-            "kdf_p",
-            "mac",
-            "bucket_mac",
-        ):
+            except kh.KeyHierarchyError as exc:
+                raise SealedSetError(f"Not shredding {base}: {exc}") from exc
+        for name in _SHRED_HEADER_FIELDS:
             header.pop(name, None)
         header["shredded"] = True
         header["version"] = ENVELOPE_VERSION
         header.setdefault("set_id", secrets.token_hex(16))
+        # Durable progress: not complete until the store files are gone too.
+        shred_record["archive_complete"] = shred_record.get("complete") is not False
+        shred_record["complete"] = False
+        shred_record["stores_deleted"] = False
+        shred_record["store_files_deleted"] = []
         header["shred_record"] = shred_record
         _replace_header(base, header)
-        for rel in _disk_files(base):
-            path = base / rel
-            try:
-                data = path.read_bytes()
-            except OSError:
-                continue
-            if data[: len(crypto.SET_FILE_MAGIC)] in (
-                crypto.SET_FILE_MAGIC,
-                crypto.SET3_FILE_MAGIC,
-            ):
-                continue  # the set's own ciphertext, now unopenable
-            if crypto.is_encrypted(data):
-                path.unlink()
-                removed.append(rel)
-        shred_record["store_files_deleted"] = removed
-    return shred_record
+        return _finish_shred(base, header)
 
 
 __all__ = [

@@ -89,9 +89,18 @@ def _assert_ciphertext_only(root: Path) -> None:
             assert TYPED not in data and not data.startswith(PNG[:8]), path
 
 
+def _make_archive(folder: Path) -> Path:
+    """An organization key archive as an administrator sets it up."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / kh.ARCHIVE_MARKER).write_text("")
+    return folder
+
+
 def _p256_policy(
     tmp_path: Path, monkeypatch, **extra
 ) -> tuple[Path, ec.EllipticCurvePrivateKey]:
+    if "key_archive" not in extra and not (tmp_path / "archive").exists():
+        _make_archive(tmp_path / "archive")
     org = ec.generate_private_key(ec.SECP256R1())
     spki = org.public_key().public_bytes(
         serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
@@ -356,7 +365,6 @@ def test_org_mode_with_an_rsa_oaep_recipient(home, tmp_path, monkeypatch) -> Non
             {
                 "schema": kh.POLICY_SCHEMA,
                 "mode": "org",
-                "records": "inline",
                 "recipients": [
                     {
                         "role": "org",
@@ -364,6 +372,7 @@ def test_org_mode_with_an_rsa_oaep_recipient(home, tmp_path, monkeypatch) -> Non
                         "public_key": base64.b64encode(spki).decode(),
                     }
                 ],
+                "key_archive": str(_make_archive(tmp_path / "archive")),
             }
         )
     )
@@ -371,6 +380,8 @@ def test_org_mode_with_an_rsa_oaep_recipient(home, tmp_path, monkeypatch) -> Non
     monkeypatch.setenv(kh.TRUST_USER_POLICY_ENV, "1")
     run = root.parent / "run"
     _seal(run, {"report.json": TYPED})
+    bucket_id = _header(run)["key_ref"]["bucket_id"]
+    archived = (tmp_path / "archive" / f"{bucket_id}.json").read_text()
     key_file = tmp_path / "rsa.pem"
     key_file.write_bytes(
         org.private_bytes(
@@ -381,6 +392,9 @@ def test_org_mode_with_an_rsa_oaep_recipient(home, tmp_path, monkeypatch) -> Non
     )
     monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "auditor"))
     at_rest.use_key_store(MemoryKeychain())
+    buckets = root.parent / "auditor" / "keys" / "buckets"
+    buckets.mkdir(parents=True)
+    (buckets / f"{bucket_id}.json").write_text(archived)
     monkeypatch.setenv(kh.ORG_KEY_FILE_ENV, str(key_file))
     assert sealed_set.read_bytes(run / "report.json") == TYPED
 
@@ -419,6 +433,11 @@ def test_a_machine_policy_wins_over_the_user_one(home, tmp_path, monkeypatch) ->
         )
     )
     monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", [str(machine)])
+    if os.name == "posix" and os.getuid() != 0:
+        # A machine policy a user owns is refused, plist or not.
+        with pytest.raises(kh.KeyHierarchyError, match="owned by root"):
+            kh.load_policy()
+    monkeypatch.setattr(kh, "_root_only", lambda info: True)  # as installed by MDM
     policy = kh.load_policy()
     assert policy.mode == "solo" and policy.source.startswith("machine:")
 
@@ -590,6 +609,7 @@ def test_after_an_outage_the_pending_records_archive_and_recording_resumes(
     with pytest.raises(sealed_set.SealedSetError, match="not reached the organization"):
         _seal(home[0].parent / "b", {"report.json": b"{}"})
     blocker.unlink()  # the archive is back
+    _make_archive(blocker)
     assert kh.archive_pending()["archived"] == 1
     assert kh.unarchived_count() == 0
     _seal(home[0].parent / "c", {"report.json": b"{}"})
@@ -604,6 +624,7 @@ def test_the_next_set_archives_pending_records_itself(
     _p256_policy(tmp_path, monkeypatch, max_unarchived=1)
     _seal(home[0].parent / "a", {"report.json": b"{}"})
     blocker.unlink()
+    _make_archive(blocker)
     _seal(home[0].parent / "b", {"report.json": b"{}"})  # no refusal
     assert kh.unarchived_count() == 0
 
@@ -614,3 +635,251 @@ def test_a_named_policy_file_that_is_missing_refuses(
     monkeypatch.setenv(kh.POLICY_ENV, str(tmp_path / "gone.json"))
     with pytest.raises(sealed_set.SealedSetError, match="never falls back"):
         _seal(home[0].parent / "run", {"report.json": b"{}"})
+
+
+# -- review round 3: archive evidence, shred authentication, races -------------
+
+
+def test_an_unmounted_archive_is_never_the_archive(home, tmp_path, monkeypatch) -> None:
+    """A mount point with nothing mounted is an empty local folder: records
+    are not delivered there, and a record missing from it is not deleted."""
+    root, _keychain = home
+    mount = tmp_path / "mnt"
+    mount.mkdir()  # no marker: the share is not mounted
+    _p256_policy(tmp_path, monkeypatch, key_archive=str(mount))
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    assert kh.unarchived_count() == 1 and list(mount.iterdir()) == []
+    record = sealed_set.shred(run)
+    assert record["complete"] is False and "archive" not in record["copies_destroyed"]
+
+
+def test_shred_uses_the_archive_the_set_was_written_to(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    bucket_id = _header(run)["key_ref"]["bucket_id"]
+    original = tmp_path / "archive" / f"{bucket_id}.json"
+    (tmp_path / "archive" / kh.ARCHIVE_MARKER).unlink()  # the share drops
+    assert sealed_set.shred(run)["complete"] is False
+    # The organization moves to a new archive, then to solo mode: neither
+    # may stand in for the archive that still holds the key.
+    _make_archive(tmp_path / "new-archive")
+    _p256_policy(tmp_path, monkeypatch, key_archive=str(tmp_path / "new-archive"))
+    assert sealed_set.shred(run)["complete"] is False
+    monkeypatch.delenv(kh.POLICY_ENV)
+    assert kh.archive_pending()["shreds_pending"] == 1
+    assert sealed_set.shred(run)["complete"] is False and original.is_file()
+    _make_archive(tmp_path / "archive")  # the original share is back
+    assert sealed_set.shred(run)["complete"] is True
+    assert not original.exists() and kh.pending_shreds() == []
+
+
+def test_shred_refuses_a_header_pointed_at_another_sets_key(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    a, b = root.parent / "a", root.parent / "b"
+    _seal(a, {"report.json": TYPED})
+    _seal(b, {"report.json": TYPED})
+    header = _header(a)
+    header["key_ref"] = _header(b)["key_ref"]
+    (a / sealed_set.HEADER).write_text(json.dumps(header))
+    with pytest.raises(sealed_set.SealedSetError):
+        sealed_set.shred(a)
+    assert sealed_set.read_bytes(b / "report.json") == TYPED
+
+
+def test_an_interrupted_shred_finishes_its_cleanup_on_retry(
+    home, tmp_path, monkeypatch
+) -> None:
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    run.mkdir()
+    (run / "checkpoints").mkdir()
+    (run / "checkpoints" / "s1.enc").write_bytes(
+        crypto.encrypt_bytes(b"{}", "k" * 20, aad=crypto.CHECKPOINT_AAD)
+    )
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    writer.write("report.json", TYPED)
+    writer.finalize(adopt_external=True)
+    real = sealed_set._delete_store_files
+
+    def crash(base: Path) -> list[str]:
+        raise KeyboardInterrupt  # the process dies before the stores go
+
+    monkeypatch.setattr(sealed_set, "_delete_store_files", crash)
+    with pytest.raises(KeyboardInterrupt):
+        sealed_set.shred(run)
+    assert _header(run)["shred_record"]["complete"] is False
+    assert (run / "checkpoints" / "s1.enc").exists()
+    monkeypatch.setattr(sealed_set, "_delete_store_files", real)
+    record = sealed_set.shred(run)
+    assert record["complete"] is True
+    assert record["store_files_deleted"] == ["checkpoints/s1.enc"]
+
+
+def test_a_shredded_record_is_never_written_back(home, tmp_path, monkeypatch) -> None:
+    """A writer still finalizing, or an archive worker holding the record in
+    memory, must not resurrect a key that a shred destroyed."""
+    root, _keychain = home
+    _p256_policy(tmp_path, monkeypatch)
+    run = root.parent / "run"
+    writer = sealed_set.SealedSetWriter(run, "run", sealed_set.passphrase_for("run"))
+    writer.write("report.json", TYPED)
+    bucket = writer._key.bucket
+    kh.shred(bucket.bucket_id, records="archive", key_archive=str(tmp_path / "archive"))
+    assert kh.archive(bucket) is False
+    with pytest.raises(sealed_set.SealedSetError, match="shredded"):
+        writer.finalize()
+    assert not (kh.buckets_dir() / f"{bucket.bucket_id}.json").exists()
+    assert not (tmp_path / "archive" / f"{bucket.bucket_id}.json").exists()
+
+
+def test_a_whole_replacement_set_does_not_open_with_the_org_key(
+    home, tmp_path, monkeypatch
+) -> None:
+    """Anyone who knows the organization's public key can wrap a bucket to it.
+    A record that arrives in a header is never opened with that key."""
+    root, _keychain = home
+    key_file, org = _p256_policy(tmp_path, monkeypatch)
+    forged_policy = kh.Policy(
+        mode="solo",
+        records="inline",
+        recipients=[kh.Recipient(kh.ROLE_ORG, kh.HPKE_P256, org.public_key())],
+    )
+    monkeypatch.setattr(kh, "load_policy", lambda: forged_policy)
+    forged = root.parent / "forged"
+    _seal(forged, {"report.json": b"forged evidence"})
+    org_fprs = [s["fpr"] for s in _header(forged)["bucket_record"]["stanzas"]]
+    assert kh.fingerprint(org.public_key()) in org_fprs
+    # The reviewer, on another computer, with the organization's key.
+    monkeypatch.setenv(at_rest.HOME_ENV, str(root.parent / "reviewer"))
+    at_rest.use_key_store(MemoryKeychain())
+    monkeypatch.setenv(kh.ORG_KEY_FILE_ENV, str(key_file))
+    with pytest.raises(sealed_set.SealedSetKeyError):
+        sealed_set.read_bytes(forged / "report.json")
+
+
+def test_organization_mode_requires_the_archive(home, tmp_path, monkeypatch) -> None:
+    _p256_policy(tmp_path, monkeypatch, records="inline")
+    with pytest.raises(kh.KeyHierarchyError, match="solo mode only"):
+        kh.load_policy()
+
+
+def test_a_zero_backlog_needs_the_archive_for_every_set(
+    home, tmp_path, monkeypatch
+) -> None:
+    _p256_policy(tmp_path, monkeypatch, max_unarchived=0)
+    _seal(home[0].parent / "a", {"report.json": b"{}"})  # healthy archive
+    assert kh.unarchived_count() == 0
+    (tmp_path / "archive" / kh.ARCHIVE_MARKER).unlink()
+    with pytest.raises(sealed_set.SealedSetError, match="allows 0 waiting"):
+        _seal(home[0].parent / "b", {"report.json": b"{}"})
+    assert kh.unarchived_count() == 0  # the refused set left no record
+
+
+def test_concurrent_writers_cannot_share_the_last_backlog_slot(
+    home, tmp_path, monkeypatch
+) -> None:
+    import threading
+
+    mount = tmp_path / "mnt"
+    mount.mkdir()
+    _p256_policy(tmp_path, monkeypatch, key_archive=str(mount), max_unarchived=1)
+    kh.load_policy()  # warm imports outside the race
+    results: list[str] = []
+    barrier = threading.Barrier(4)
+
+    def write(index: int) -> None:
+        barrier.wait()
+        try:
+            kh.new_bucket("run")
+            results.append("ok")
+        except kh.KeyHierarchyError:
+            results.append("refused")
+
+    threads = [threading.Thread(target=write, args=(i,)) for i in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(results) == ["ok", "refused", "refused", "refused"]
+    assert kh.unarchived_count() == 1
+
+
+def test_a_lost_keychain_entry_does_not_hide_the_recovery_code(
+    home, monkeypatch
+) -> None:
+    root, keychain = home
+    code, recipient = kh.new_recovery_code()
+    kh.save_recovery_recipient(recipient)
+    run = root.parent / "run"
+    _seal(run, {"report.json": TYPED})
+    keychain.values.clear()  # a restored home: the marker, not the entry
+    with pytest.raises(sealed_set.SealedSetError, match="missing"):
+        sealed_set.read_bytes(run / "report.json")
+    monkeypatch.setenv(kh.RECOVERY_CODE_ENV, code)
+    assert sealed_set.read_bytes(run / "report.json") == TYPED
+    # Writing still needs the device key, and still fails closed without it.
+    with pytest.raises((sealed_set.SealedSetError, at_rest.LocalKeyError)):
+        _seal(root.parent / "new", {"report.json": b"{}"})
+
+
+def test_each_platform_reads_only_its_own_policy_sources() -> None:
+    assert kh._platform_policy_sources("win32") == ["HKLM\\SOFTWARE\\Policies\\OpenAdapt"]
+    assert all(
+        not s.startswith("HKLM") for s in kh._platform_policy_sources("darwin")
+    )
+    assert kh._platform_policy_sources("linux") == ["/etc/openadapt/policy.json"]
+
+
+def test_a_root_owned_policy_others_can_write_is_not_trusted() -> None:
+    def info(mode: int, uid: int = 0) -> os.stat_result:
+        return os.stat_result((mode, 0, 0, 1, uid, 0, 0, 0, 0, 0))
+
+    assert kh._root_only(info(0o100644)) is True
+    assert kh._root_only(info(0o100664)) is False  # group-writable
+    assert kh._root_only(info(0o100646)) is False  # world-writable
+    assert kh._root_only(info(0o100644, uid=501)) is False
+
+
+def test_a_registry_policy_the_account_cannot_read_is_an_error(monkeypatch) -> None:
+    """Access denied under HKLM never reads as "no policy" (solo fallback)."""
+    import sys
+    import types
+
+    class Handle:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def open_key(hive, subkey):
+        if subkey.endswith("Missing"):
+            raise FileNotFoundError(subkey)
+        if subkey.endswith("Denied"):
+            raise PermissionError("access denied")
+        return Handle()
+
+    fake = types.SimpleNamespace(
+        HKEY_LOCAL_MACHINE=object(),
+        OpenKey=open_key,
+        QueryValueEx=lambda handle, name: (
+            json.dumps({"schema": kh.POLICY_SCHEMA, "mode": "solo"}),
+            1,
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    monkeypatch.setattr(kh.sys, "platform", "win32")
+    assert kh._read_machine_source("HKLM\\SOFTWARE\\Missing") is None
+    assert kh._read_machine_source("HKLM\\SOFTWARE\\Present")["mode"] == "solo"
+    monkeypatch.setattr(kh, "MACHINE_POLICY_SOURCES", ["HKLM\\SOFTWARE\\Denied"])
+    with pytest.raises(kh.KeyHierarchyError, match="can't be read"):
+        kh.load_policy()

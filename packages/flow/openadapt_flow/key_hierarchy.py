@@ -48,10 +48,12 @@ import os
 import secrets
 import stat
 import sys
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Optional
+from typing import Any, Final, Iterator, Optional
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
@@ -79,12 +81,27 @@ ROLE_ORG: Final[str] = "org"
 ROLE_BREAK_GLASS: Final[str] = "break-glass"
 ROLE_RECOVERY: Final[str] = "recovery"
 
+def _platform_policy_sources(platform: str) -> list[str]:
+    """The machine-scope policy sources this platform trusts. Each platform
+    reads only its own administrator-controlled sources: a macOS managed
+    preference path means nothing on Windows, where a user could create it."""
+    if platform == "darwin":
+        return [
+            "/Library/Managed Preferences/ai.openadapt.policy.plist",
+            "/etc/openadapt/policy.json",
+        ]
+    if platform == "win32":
+        return ["HKLM\\SOFTWARE\\Policies\\OpenAdapt"]
+    return ["/etc/openadapt/policy.json"]
+
+
 #: Machine-scope policy locations, first match wins. Tests replace this.
-MACHINE_POLICY_SOURCES: list[str] = [
-    "/Library/Managed Preferences/ai.openadapt.policy.plist",
-    "HKLM\\SOFTWARE\\Policies\\OpenAdapt",
-    "/etc/openadapt/policy.json",
-]
+MACHINE_POLICY_SOURCES: list[str] = _platform_policy_sources(sys.platform)
+#: The file an administrator puts at the root of ``key_archive``. Flow
+#: treats the archive as reachable only when it is there, so an unmounted
+#: share (an empty local folder at the mount point) never counts as the
+#: archive, and a record missing from it never counts as deleted.
+ARCHIVE_MARKER: Final[str] = ".openadapt-key-archive"
 
 _SUITE_LABEL: Final[bytes] = b"openadapt.ai/bucket/v1/wrap\0"
 _RECOVERY_SALT: Final[bytes] = b"openadapt.ai/recovery-key/v1"
@@ -553,42 +570,79 @@ class Policy:
         ]
 
 
+def _read_registry(subkey: str) -> Optional[dict]:  # pragma: no cover - Windows
+    """The ``Policy`` value under ``HKLM\\<subkey>``. None only when the key
+    does not exist; access denied or a key without the value is an error, so
+    a policy the account can't read never falls back to solo mode."""
+    import winreg
+
+    try:
+        handle = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey)
+    except FileNotFoundError:
+        return None
+    with handle:
+        value, _ = winreg.QueryValueEx(handle, "Policy")
+    return json.loads(value)
+
+
+def _read_trusted_file(path: Path) -> tuple[bytes, os.stat_result]:
+    """Read ``path`` once and return its bytes with the status of the file
+    actually read (not of whatever the path names a moment later)."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    return b"".join(chunks), info
+
+
+def _root_only(info: os.stat_result) -> bool:
+    """Owned by root and writable by nobody else (POSIX)."""
+    return info.st_uid == 0 and not info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+
+
 def _read_machine_source(source: str) -> Optional[dict]:
     if source.startswith("HKLM\\"):
         if sys.platform != "win32":
             return None
-        try:  # pragma: no cover - Windows only
-            import winreg
-
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, source[5:]) as handle:
-                value, _ = winreg.QueryValueEx(handle, "Policy")
-            return json.loads(value)
-        except OSError:  # pragma: no cover
-            return None
+        return _read_registry(source[5:])  # pragma: no cover - Windows only
     path = Path(source)
     if not path.is_file():
         return None
+    if os.name != "posix":
+        # A file path is a machine policy only where ownership can be checked.
+        raise KeyHierarchyError(
+            f"{path} can't be checked for administrator ownership on this "
+            "platform, so it is not trusted as a machine policy. Nothing was "
+            "written."
+        )
+    raw, info = _read_trusted_file(path)
+    if not _root_only(info):
+        raise KeyHierarchyError(
+            f"{path} must be owned by root and writable by root only; it is "
+            "not, so the machine policy can't be trusted. Nothing was written."
+        )
     if path.suffix == ".plist":
         import plistlib
 
-        data = plistlib.loads(path.read_bytes())
+        data = plistlib.loads(raw)
         body = data.get("Policy", data) if isinstance(data, dict) else None
         return json.loads(body) if isinstance(body, (str, bytes)) else body
-    if os.name == "posix":
-        info = path.stat()
-        if info.st_uid != 0 or info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-            raise KeyHierarchyError(
-                f"{path} must be owned by root and writable by root only; it is "
-                "not, so the machine policy can't be trusted. Nothing was written."
-            )
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(raw.decode("utf-8"))
 
 
 def load_policy() -> Policy:
     """The first policy found: machine sources first, then ``OPENADAPT_POLICY``.
     A user-writable file never overrides a machine one, and can set
-    organization mode only when it is root-owned (or the trust variable is
-    set, for development)."""
+    organization mode only when it is owned by root and writable by root
+    only (or the trust variable is set, for development)."""
     for source in MACHINE_POLICY_SOURCES:
         try:
             raw = _read_machine_source(source)
@@ -608,21 +662,33 @@ def load_policy() -> Policy:
             "that can't be read never falls back to solo mode. Nothing was written."
         )
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        data, info = _read_trusted_file(path)
+        raw = json.loads(data.decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise KeyHierarchyError(f"{path} is not a readable policy file") from exc
     policy = _parse_policy(raw, f"file: {path}")
     # Ownership proves only on POSIX; elsewhere an org policy must come from
-    # a machine source (Group Policy, the registry), never a user file.
-    if policy.mode == "org" and (os.name != "posix" or path.stat().st_uid != 0):
+    # a machine source (Group Policy, the registry), never a user file. The
+    # check is on the file actually read, and a root-owned file that others
+    # can write is no better than a user's.
+    if policy.mode == "org" and (os.name != "posix" or not _root_only(info)):
         if os.environ.get(TRUST_USER_POLICY_ENV) != "1":
             raise KeyHierarchyError(
-                f"{path} sets organization mode but is not owned by root, so it "
-                "can't be trusted (a user could swap the organization's key). "
-                "Install it as a machine policy. Nothing was written."
+                f"{path} sets organization mode but is not owned by root and "
+                "writable by root only, so it can't be trusted (a user could "
+                "swap the organization's key). Install it as a machine policy. "
+                "Nothing was written."
             )
         policy.source += " (user-owned, trusted for development)"
     return policy
+
+
+def _max_unarchived(value: Any, source: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise KeyHierarchyError(
+            f"{source}: max_unarchived must be a whole number, 0 or more"
+        )
+    return value
 
 
 def _parse_policy(raw: Any, source: str) -> Policy:
@@ -634,6 +700,15 @@ def _parse_policy(raw: Any, source: str) -> Policy:
     records = raw.get("records", "archive" if mode == "org" else "inline")
     if records not in ("archive", "inline"):
         raise KeyHierarchyError(f"{source}: records must be 'archive' or 'inline'")
+    if mode == "org" and records != "archive":
+        # Organization mode promises that shredding reaches every tracked
+        # copy, and an organization key never opens a record a header
+        # supplies (anyone who knows its public key could forge one).
+        raise KeyHierarchyError(
+            f"{source}: organization mode keeps key records in the archive "
+            "(records: archive); records: inline is solo mode only. Recording "
+            "and running stop until it does."
+        )
     entries = raw.get("recipients", [])
     if not isinstance(entries, list):
         raise KeyHierarchyError(f"{source}: recipients must be a list")
@@ -643,7 +718,7 @@ def _parse_policy(raw: Any, source: str) -> Policy:
         recipients=[Recipient.from_policy(entry) for entry in entries],
         key_archive=raw.get("key_archive"),
         require_hardware_device_key=bool(raw.get("require_hardware_device_key", False)),
-        max_unarchived=int(raw.get("max_unarchived", 50)),
+        max_unarchived=_max_unarchived(raw.get("max_unarchived", 50), source),
         source=source,
         org=raw.get("org"),
     )
@@ -717,12 +792,46 @@ def _stanza(recipient: Recipient, bucket_id: str, secret: bytes) -> dict[str, st
     }
 
 
+_BUCKET_THREAD_LOCK = threading.RLock()
+_bucket_depth = threading.local()
+
+
+@contextmanager
+def bucket_lock() -> Iterator[None]:
+    """Serialize every change to bucket records (create, archive, close,
+    shred) across threads and processes, so an archive worker can't write
+    back a record a shred just destroyed, and two writers can't both take
+    the last free slot under ``max_unarchived``. Re-entrant in a thread."""
+    with _BUCKET_THREAD_LOCK:
+        depth = getattr(_bucket_depth, "n", 0)
+        if depth:
+            _bucket_depth.n = depth + 1
+            try:
+                yield
+            finally:
+                _bucket_depth.n = depth
+        else:
+            from openadapt_flow import at_rest
+            from openadapt_flow.sealed_maintenance import mutation_lock
+
+            at_rest._private_dir(buckets_dir())
+            _bucket_depth.n = 1
+            try:
+                with mutation_lock(buckets_dir()):
+                    yield
+            finally:
+                _bucket_depth.n = 0
+
+
 def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
     """A fresh bucket for one sealed set, wrapped to the policy's recipients.
 
     Organization mode refuses without its active organization recipient and
-    archive (fail closed), and when ``max_unarchived`` records have not
-    reached the archive yet.
+    archive (fail closed). Its record is stored locally and sent to the
+    archive at once; when the archive can't take it and more than
+    ``max_unarchived`` records would then be waiting (0 means every record
+    must reach the archive first), the record is destroyed again and the set
+    is refused before anything is written.
     """
     policy = policy or load_policy()
     device = device_keys(create=True)
@@ -735,18 +844,6 @@ def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
             "the policy requires a hardware device key, and this computer has "
             "only a software key. Nothing was written."
         )
-    if policy.mode == "org" and policy.records == "archive":
-        pending = unarchived_count()
-        if pending >= policy.max_unarchived:
-            archive_pending(policy)  # the archive may be back
-            pending = unarchived_count()
-        if pending >= policy.max_unarchived:
-            raise KeyHierarchyError(
-                f"{pending} encrypted sets have not reached the organization key "
-                f"archive ({policy.key_archive}); the policy allows "
-                f"{policy.max_unarchived}. Reconnect so they archive. Nothing was "
-                "written."
-            )
     private = ec.generate_private_key(ec.SECP256R1())
     bucket_id = secrets.token_hex(16)
     secret = _scalar(private)
@@ -766,7 +863,7 @@ def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
     recovery = recovery_recipient()
     if recovery is not None:
         add(recovery)
-    record = {
+    record: dict[str, Any] = {
         "schema": BUCKET_SCHEMA,
         "bucket_id": bucket_id,
         "kind": kind,
@@ -779,8 +876,30 @@ def new_bucket(kind: str, policy: Optional[Policy] = None) -> Bucket:
         "stanzas": [_stanza(r, bucket_id, secret) for r in recipients],
     }
     bucket = Bucket(bucket_id, private, private.public_key(), record)
-    if policy.records == "archive":
+    if policy.records != "archive":
+        return bucket
+    # The archive this record goes to is fixed now: archiving and shredding
+    # later use it, whatever the policy says by then.
+    record["key_archive"] = policy.key_archive
+    with bucket_lock():
         _store_local(record)
+        if _archive_locked(bucket):
+            if unarchived_count():
+                _archive_pending_locked()  # the archive is back: send the rest
+            return bucket
+        waiting = unarchived_count()
+        if waiting > policy.max_unarchived:
+            _archive_pending_locked()  # the archive may be back
+            waiting = unarchived_count()
+        if waiting > policy.max_unarchived:
+            _destroy_local(bucket_id)
+            raise KeyHierarchyError(
+                f"{waiting - 1} encrypted sets have not reached the organization "
+                f"key archive ({policy.key_archive}), and the policy allows "
+                f"{policy.max_unarchived} waiting. Reconnect the archive (it "
+                f"needs its {ARCHIVE_MARKER} file) and run `openadapt-flow "
+                "at-rest archive`. Nothing was written."
+            )
     return bucket
 
 
@@ -796,47 +915,127 @@ def _store_local(record: dict[str, Any]) -> None:
     )
 
 
-def _archive_dir(policy: Policy) -> Path:
-    target = policy.key_archive or ""
+def _read_local(bucket_id: str) -> Optional[dict[str, Any]]:
+    path = _record_path(bucket_id)
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("bucket_id") != bucket_id:
+        raise KeyHierarchyError(f"the local key record {path} is malformed")
+    return data
+
+
+def _destroy_local(bucket_id: str) -> bool:
+    """Overwrite, then delete, this computer's record. True if there was one."""
+    path = _record_path(bucket_id)
+    if not path.is_file():
+        return False
+    size = path.stat().st_size
+    with open(path, "r+b") as handle:
+        handle.write(b"\0" * size)
+        handle.flush()
+        os.fsync(handle.fileno())
+    path.unlink()
+    return True
+
+
+def _archive_root(location: Optional[str]) -> Path:
+    """The archive folder, only when it is reachable: it must already exist
+    and hold :data:`ARCHIVE_MARKER`. Flow never creates it, so a missing
+    mount is never mistaken for an empty archive."""
+    target = location or ""
     if target.startswith("file://"):
         target = target[len("file://") :]
+    if not target:
+        raise KeyHierarchyError("no key_archive is recorded for this bucket")
     if "://" in target:
         raise KeyHierarchyError(
-            f"key_archive {policy.key_archive}: only a local or mounted path "
+            f"key_archive {location}: only a local or mounted path "
             "(file://) is supported yet; s3:// and smb:// are not built."
         )
-    return Path(target)
+    root = Path(target)
+    if not (root / ARCHIVE_MARKER).is_file():
+        raise KeyHierarchyError(
+            f"the key archive {location} is not reachable (no {ARCHIVE_MARKER} "
+            "file at its root: unmounted or not set up)"
+        )
+    return root
 
 
-def archive(bucket: Bucket, policy: Optional[Policy] = None) -> bool:
-    """Copy the bucket record to the organization's archive. The runtime
-    stanza is never archived. Returns False (and keeps the record local, as
-    unarchived) when the archive is unreachable."""
-    policy = policy or load_policy()
-    if policy.records != "archive":
+def _intended_archive(record: dict[str, Any], policy: Optional[Policy]) -> Optional[str]:
+    location = record.get("key_archive")
+    if isinstance(location, str) and location:
+        return location
+    return policy.key_archive if policy is not None else None
+
+
+def _archive_locked(bucket: Bucket, policy: Optional[Policy] = None) -> bool:
+    on_disk = _read_local(bucket.bucket_id)
+    if on_disk is None:
+        # Shredded (or never stored): never write a destroyed key back.
         return False
-    copy = dict(bucket.record)
+    record = dict(bucket.record)
+    location = _intended_archive(on_disk, policy) or _intended_archive(record, None)
+    copy = dict(record)
+    copy["key_archive"] = location
+    copy["archived"] = True
     copy["stanzas"] = [s for s in copy["stanzas"] if s["role"] != ROLE_RUNTIME]
     try:
-        folder = _archive_dir(policy)
-        folder.mkdir(parents=True, exist_ok=True)
-        target = folder / f"{bucket.bucket_id}.json"
-        target.write_text(json.dumps(copy, indent=2), encoding="utf-8")
-    except OSError:
+        root = _archive_root(location)
+        target = root / f"{bucket.bucket_id}.json"
+        tmp = root / f".{bucket.bucket_id}.{secrets.token_hex(4)}.tmp"
+        try:
+            with open(tmp, "xb") as handle:
+                handle.write(json.dumps(copy, indent=2).encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, target)  # never a truncated archive record
+        finally:
+            if os.path.lexists(tmp):
+                os.unlink(tmp)
+    except (OSError, KeyHierarchyError):
         return False
-    bucket.record["archived"] = True
+    record["key_archive"] = location
+    record["archived"] = True
+    bucket.record.update(record)
     _store_local(bucket.record)
     return True
 
 
+def archive(bucket: Bucket, policy: Optional[Policy] = None) -> bool:
+    """Copy the bucket record to the archive recorded for it (atomically).
+    The runtime stanza is never archived. Returns False (and keeps the
+    record local, as unarchived) when that archive is unreachable, and when
+    the record was shredded meanwhile (it is never written back)."""
+    if bucket.record.get("records") != "archive":
+        return False
+    with bucket_lock():
+        return _archive_locked(bucket, policy)
+
+
 def close(bucket: Bucket) -> None:
     """The set is written: drop the runtime stanza, so only the viewer,
-    organization or recovery key opens it from now on."""
+    organization or recovery key opens it from now on. An archive-mode
+    record that was shredded while the set was written is not brought back:
+    that refuses."""
     bucket.record["stanzas"] = [
         s for s in bucket.record["stanzas"] if s["role"] != ROLE_RUNTIME
     ]
-    if bucket.record.get("records") == "archive":
+    if bucket.record.get("records") != "archive":
+        return
+    with bucket_lock():
+        on_disk = _read_local(bucket.bucket_id)
+        if on_disk is None:
+            raise KeyHierarchyError(
+                "this set's key record was shredded while the set was being "
+                "written; it is not written back"
+            )
+        bucket.record["archived"] = bool(on_disk.get("archived"))
+        if on_disk.get("key_archive"):
+            bucket.record["key_archive"] = on_disk["key_archive"]
         _store_local(bucket.record)
+        if not bucket.record["archived"]:
+            _archive_locked(bucket)
 
 
 def unarchived_count() -> int:
@@ -849,28 +1048,43 @@ def unarchived_count() -> int:
             if not json.loads(path.read_text(encoding="utf-8")).get("archived"):
                 count += 1
         except (OSError, ValueError):
-            continue
+            count += 1  # unreadable: count it as waiting, never as archived
     return count
 
 
 def find_record(
     key_ref: dict[str, Any], inline: Optional[dict[str, Any]]
 ) -> dict[str, Any]:
+    """This computer's record for the bucket, else the one the header
+    carries. A record from a header is opened only by this computer's
+    device keys or a recovery key (:func:`open_bucket`)."""
     bucket_id = str(key_ref.get("bucket_id"))
+    local = _read_local(bucket_id)
+    if local is not None:
+        return local
     if inline is not None:
         return inline
-    path = _record_path(bucket_id)
-    if path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
     raise NoRecipientKey(
         f"this computer has no key record for bucket {bucket_id}. Open it as the "
-        "organization (its archive copy and key), or it was shredded."
+        "organization (copy its archive record into "
+        f"{buckets_dir()} and set {ORG_KEY_FILE_ENV}), or it was shredded."
     )
 
 
-def _candidates() -> list[Unwrapper]:
+def _candidates(
+    *, from_header: bool
+) -> tuple[list[Unwrapper], Optional[BaseException]]:
+    """The keys this computer can try, and the error reading the device key
+    raised (kept, so a lost keychain entry doesn't hide a valid recovery or
+    organization key). An organization key never opens a record a header
+    supplied: anyone who knows the organization's public key could have
+    made it."""
     out: list[Unwrapper] = []
-    device = device_keys(create=False)
+    deferred: Optional[BaseException] = None
+    try:
+        device = device_keys(create=False)
+    except (KeyHierarchyError, RuntimeError) as exc:
+        device, deferred = None, exc
     if device is not None:
         runtime, viewer = device
         out.append(runtime)
@@ -880,7 +1094,7 @@ def _candidates() -> list[Unwrapper]:
     if code:
         out.append(recovery_code_to_key(code))
     org_file = os.environ.get(ORG_KEY_FILE_ENV)
-    if org_file:
+    if org_file and not from_header:
         try:
             private = serialization.load_pem_private_key(
                 Path(org_file).read_bytes(), password=None
@@ -890,11 +1104,23 @@ def _candidates() -> list[Unwrapper]:
                 f"{ORG_KEY_FILE_ENV}: {org_file} can't be read"
             ) from exc
         out.append(SoftwareKey(private, ROLE_ORG, label="organization (file)"))
-    return out
+    return out, deferred
 
 
-def open_bucket(record: dict[str, Any], *, prefer_runtime: bool = True) -> Bucket:
-    """Unwrap a bucket's private half with the first key this computer holds."""
+_HEADER_ROLES: Final[frozenset[str]] = frozenset(
+    {ROLE_RUNTIME, ROLE_VIEWER, ROLE_DEVICE_SOFTWARE, ROLE_RECOVERY}
+)
+
+
+def open_bucket(
+    record: dict[str, Any], *, prefer_runtime: bool = True, from_header: bool = False
+) -> Bucket:
+    """Unwrap a bucket's private half with the first key this computer holds.
+
+    ``from_header``: the record came from the set's own header, not from
+    this computer's key store. Only a device key or a recovery key may open
+    it then, through a stanza of that role.
+    """
     if record.get("schema") != BUCKET_SCHEMA:
         raise KeyHierarchyError("not a bucket record")
     if record.get("shredded"):
@@ -906,13 +1132,16 @@ def open_bucket(record: dict[str, Any], *, prefer_runtime: bool = True) -> Bucke
             "the bucket record's public key does not match its fingerprint"
         )
     stanzas = {s.get("fpr"): s for s in record.get("stanzas") or []}
-    for key in _candidates():
+    keys, deferred = _candidates(from_header=from_header)
+    for key in keys:
         try:
             fpr = key.fpr
         except KeyHierarchyError:
             continue
         stanza = stanzas.get(fpr)
         if stanza is None:
+            continue
+        if from_header and str(stanza.get("role")) not in _HEADER_ROLES:
             continue
         info = _stanza_info(bucket_id, str(stanza["role"]), fpr)
         try:
@@ -929,6 +1158,8 @@ def open_bucket(record: dict[str, Any], *, prefer_runtime: bool = True) -> Bucke
                 "the unwrapped bucket key does not match the record"
             )
         return Bucket(bucket_id, private, private.public_key(), record)  # type: ignore[arg-type]
+    if deferred is not None:
+        raise deferred
     raise NoRecipientKey(
         "no key on this computer opens this encrypted set: it is wrapped for "
         + ", ".join(f"{s.get('role')} {s.get('fpr')}" for s in stanzas.values())
@@ -941,71 +1172,105 @@ def _pending_dir() -> Path:
     return _home() / "keys" / "shred-pending"
 
 
-def _delete_archive_copy(bucket_id: str, policy: Policy) -> bool:
-    """Delete the archive's copy; True when it is gone (or never existed)."""
+def _pending_path(bucket_id: str) -> Path:
+    return _pending_dir() / f"{_record_path(bucket_id).stem}.json"
+
+
+def _delete_archive_copy(bucket_id: str, location: Optional[str]) -> bool:
+    """Delete the archive's copy. True only when the archive is reachable
+    (its marker is there) and the copy is gone from it."""
     try:
-        target = _archive_dir(policy) / f"{bucket_id}.json"
+        target = _archive_root(location) / f"{bucket_id}.json"
         if target.is_file():
             target.unlink()
-        return not target.exists()
+        return not os.path.lexists(target)
     except (OSError, KeyHierarchyError):
         return False
 
 
-def shred(record: dict[str, Any], policy: Optional[Policy] = None) -> dict[str, Any]:
+def shred(
+    bucket_id: str,
+    *,
+    records: Optional[str],
+    key_archive: Optional[str],
+) -> dict[str, Any]:
     """Destroy every tracked copy of a bucket record: the local one
-    (overwritten, then deleted) and the archive copy.
+    (overwritten, then deleted) and the copy in the archive it was sent to.
+
+    ``records`` and ``key_archive`` come from the set's authenticated header
+    (the local record's own archive wins). The current policy plays no part:
+    a later switch to another archive or to solo mode must not leave the
+    original archive's copy behind.
 
     Returns the shred record (bucket id, time, copies destroyed; no key).
     ``complete`` is False while the archive copy could not be deleted (an
-    offline or read-only archive): a pending marker keeps the bucket id, and
+    offline, unmounted or read-only archive): a pending marker in this
+    computer's key store keeps the bucket id and that archive, and
     :func:`retry_shred` (``at-rest shred`` again, or ``at-rest archive``)
     finishes it.
     """
-    policy = policy or load_policy()
-    bucket_id = str(record["bucket_id"])
+    _record_path(bucket_id)  # validates the id
     removed: list[str] = []
-    path = _record_path(bucket_id)
-    if path.is_file():
-        size = path.stat().st_size
-        with open(path, "r+b") as handle:
-            handle.write(b"\0" * size)
-            handle.flush()
-            os.fsync(handle.fileno())
-        path.unlink()
-        removed.append("local")
-    complete = True
-    if policy.records == "archive":
-        if _delete_archive_copy(bucket_id, policy):
-            removed.append("archive")
-        else:
-            complete = False
-            _write_private(
-                _pending_dir() / f"{bucket_id}.json",
-                json.dumps(
-                    {"bucket_id": bucket_id, "archive": policy.key_archive}
-                ).encode(),
-            )
+    with bucket_lock():
+        local = _read_local(bucket_id)
+        if local is not None:
+            records = str(local.get("records") or records)
+            key_archive = _intended_archive(local, None) or key_archive
+        if _destroy_local(bucket_id):
+            removed.append("local")
+        complete = True
+        if records == "archive":
+            if key_archive and _delete_archive_copy(bucket_id, key_archive):
+                removed.append("archive")
+            else:
+                complete = False
+                _write_private(
+                    _pending_path(bucket_id),
+                    json.dumps(
+                        {"bucket_id": bucket_id, "key_archive": key_archive}
+                    ).encode(),
+                )
     return {
         "schema": SHRED_SCHEMA,
         "bucket_id": bucket_id,
         "shredded_at": time.time(),
         "copies_destroyed": removed,
-        "records": record.get("records"),
+        "records": records,
+        "key_archive": key_archive,
         "complete": complete,
     }
 
 
-def retry_shred(bucket_id: str, policy: Optional[Policy] = None) -> bool:
-    """Finish a shred whose archive deletion failed. True when done."""
-    policy = policy or load_policy()
-    marker = _pending_dir() / f"{_record_path(bucket_id).stem}.json"
-    if not marker.is_file():
-        return True
-    if not _delete_archive_copy(bucket_id, policy):
-        return False
-    marker.unlink()
-    return True
+def retry_shred(bucket_id: str) -> bool:
+    """Finish a shred whose archive deletion failed, in the archive its
+    pending marker names. True when that copy is gone. The marker stays
+    until :func:`clear_pending_shred`, so a crash before the caller records
+    completion is retried rather than forgotten. Without a marker on this
+    computer nothing is deleted and the answer is False: completion is never
+    assumed."""
+    with bucket_lock():
+        marker = _pending_path(bucket_id)
+        if not marker.is_file():
+            return False
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        location = data.get("key_archive") if isinstance(data, dict) else None
+        if not isinstance(location, str) or not location:
+            return False
+        return _delete_archive_copy(bucket_id, location)
+
+
+def clear_pending_shred(bucket_id: str) -> None:
+    with bucket_lock():
+        marker = _pending_path(bucket_id)
+        if marker.is_file():
+            marker.unlink()
+
+
+def has_pending_shred(bucket_id: str) -> bool:
+    return _pending_path(bucket_id).is_file()
 
 
 def pending_shreds() -> list[str]:
@@ -1013,35 +1278,55 @@ def pending_shreds() -> list[str]:
     return sorted(p.stem for p in folder.glob("*.json")) if folder.is_dir() else []
 
 
-def archive_pending(policy: Optional[Policy] = None) -> dict[str, int]:
-    """Archive every local record not yet archived, and finish pending shreds.
-    Idempotent: run it after the archive comes back."""
-    policy = policy or load_policy()
+def _archive_pending_locked() -> tuple[int, int]:
     done = failed = 0
-    if policy.records != "archive":
-        return {"archived": 0, "failed": 0, "shreds_pending": len(pending_shreds())}
     folder = buckets_dir()
     for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            if record.get("archived") or record.get("records") != "archive":
+                continue
+            bucket = Bucket(
+                str(record["bucket_id"]),
+                None,
+                serialization.load_der_public_key(_unb64(record["bucket_pub"])),  # type: ignore[arg-type]
+                record,
+            )
+        except (OSError, ValueError, KeyError, KeyHierarchyError):
             failed += 1
             continue
-        if record.get("archived"):
-            continue
-        bucket = Bucket(
-            str(record["bucket_id"]),
-            None,
-            serialization.load_der_public_key(_unb64(record["bucket_pub"])),  # type: ignore[arg-type]
-            record,
-        )
-        if archive(bucket, policy):
+        if _archive_locked(bucket):
             done += 1
         else:
             failed += 1
-    for bucket_id in pending_shreds():
-        retry_shred(bucket_id, policy)
-    return {"archived": done, "failed": failed, "shreds_pending": len(pending_shreds())}
+    return done, failed
+
+
+def archive_pending(policy: Optional[Policy] = None) -> dict[str, int]:
+    """Archive every local record not yet archived (each to the archive
+    recorded for it), and finish pending shreds. Idempotent: run it after
+    the archive comes back. A shred finished here is complete in the key
+    store; ``at-rest shred DIR`` again also marks the set's header."""
+    with bucket_lock():
+        done, failed = _archive_pending_locked()
+        for bucket_id in pending_shreds():
+            retry_shred(bucket_id)
+        still = [b for b in pending_shreds() if not _archive_copy_gone(b)]
+    return {"archived": done, "failed": failed, "shreds_pending": len(still)}
+
+
+def _archive_copy_gone(bucket_id: str) -> bool:
+    try:
+        data = json.loads(_pending_path(bucket_id).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    location = data.get("key_archive") if isinstance(data, dict) else None
+    if not isinstance(location, str) or not location:
+        return False
+    try:
+        return not os.path.lexists(_archive_root(location) / f"{bucket_id}.json")
+    except KeyHierarchyError:
+        return False
 
 
 def describe(policy: Policy) -> dict[str, Any]:
@@ -1076,7 +1361,11 @@ __all__ = [
     "Policy",
     "Recipient",
     "SoftwareKey",
+    "ARCHIVE_MARKER",
     "archive",
+    "archive_pending",
+    "bucket_lock",
+    "clear_pending_shred",
     "close",
     "describe",
     "device_keys",
