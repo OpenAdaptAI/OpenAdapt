@@ -124,6 +124,14 @@ def rows(section: Path) -> list[str]:
 
 def assemble(root: Path = SOURCES) -> str:
     """Return CAPABILITIES.md as the files under capabilities/ describe it."""
+    for path in root.iterdir():
+        if (
+            path.is_file()
+            and _visible(path)
+            and path.name not in ("README.md", STAMP.name)
+        ):
+            # A row here would never print: stop instead of dropping it.
+            raise SystemExit(f"{_rel(path)}: put row files in a section directory")
     commands = _load("build_command_map").render()
     parts = []
     for section in sections(root):

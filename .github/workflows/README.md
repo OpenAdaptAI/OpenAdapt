@@ -140,7 +140,7 @@ changes their sources. When each pull request regenerated them, every merge
 made the other open pull requests conflict. Now a pull request edits only the
 sources (a row file under `capabilities/`, a command file, README.md, ...),
 and `refresh-generated.yml` regenerates both pages after the change lands. It
-opens a draft pull request from `bot/refresh-generated-<sha>` and closes the
+opens a draft pull request from `bot/refresh-generated-<sha>-<run>` and closes the
 one it replaces; it never pushes to main. GitHub starts no workflows for a
 pull request the workflow token opens, so the pull request is a draft, and
 marking it ready runs CI. On a pull request, the smoke job's

@@ -95,7 +95,8 @@ jobs:
           # would a hand edit of the page that never reached a row file.
           removed="$(git diff -U0 -- CAPABILITIES.md | grep -E '^-[^-]' | cut -c2-200 | head -20 || true)"
           sha="$(git rev-parse --short=12 HEAD)"
-          branch="${prefix}${sha}"
+          # The run id keeps a rerun on the same commit off an old branch.
+          branch="${prefix}${sha}-${GITHUB_RUN_ID}"
           git switch -c "$branch"
           git add CAPABILITIES.md capabilities/CAPABILITIES.md.sha256 llms-full.txt
           git -c user.name="github-actions[bot]" \

@@ -167,3 +167,10 @@ def test_editor_and_os_leftovers_are_ignored(mod, tmp_path):
     )
     (root / ".DS_Store").write_text("x", "utf-8")
     assert "| a | 1 |" in mod.assemble(root)
+
+
+def test_a_row_file_outside_a_section_fails_the_build(mod, tmp_path):
+    root = _section(tmp_path, {"0010-a.md": "| a | 1 |\n"})
+    (root / "0100-lost.md").write_text("| lost | 1 |\n", "utf-8")
+    with pytest.raises(SystemExit):
+        mod.assemble(root)
