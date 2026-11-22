@@ -1,0 +1,15 @@
+{
+  "job_id": "job-0001",
+  "questions": {
+    "q1": {
+      "answered_at": "2026-11-20T14:02:00+00:00",
+      "asked_at": "2026-11-20T14:00:00+00:00",
+      "kind": "ambiguity",
+      "question_id": "q1",
+      "request_id": "aaaaaaaa",
+      "status": "yes",
+      "text": "Synthetic question text"
+    }
+  },
+  "schema_version": "openadapt.task-ledger/v1"
+}

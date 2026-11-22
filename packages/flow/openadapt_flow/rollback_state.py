@@ -76,8 +76,8 @@ _PROCESS_KEY = _new_key()
 class DatabaseReader:
     """Every table of a database, from frame.database-style settings.
 
-    profile is the app's bookkeeping profile (a name such as openemr,
-    or a loaded AppProfile). allow_tables are kept append-only.
+    profile is the app's bookkeeping profile (by profile name or a loaded
+    AppProfile). allow_tables are kept append-only.
     """
 
     dialect: str

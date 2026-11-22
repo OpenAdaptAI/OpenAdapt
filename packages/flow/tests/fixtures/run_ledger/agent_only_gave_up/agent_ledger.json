@@ -1,0 +1,11 @@
+{
+  "agent": "scripted",
+  "cost_usd": null,
+  "finished": false,
+  "input_tokens": 10,
+  "model_calls": 3,
+  "output_tokens": 20,
+  "summary": "Synthetic summary",
+  "usage_known": false,
+  "wall_seconds": 12.5
+}

@@ -854,3 +854,31 @@ def _run_break_it(
         halt_reason=(report.halt.reason if report.halt is not None else ""),
         system_of_record_records=record_count,
     )
+
+
+def run_demo_workflow_replay(
+    *,
+    workflow: Any,
+    bundle_dir: Path,
+    run_dir: Path,
+    break_it: bool = False,
+) -> Any:
+    """Serve the bundled MockMed demo app and replay a workflow bundle against it."""
+
+    from openadapt_flow.mockmed.fault_server import serve as serve_mockmed
+
+    stop: Optional[Callable[[], None]] = None
+    try:
+        base_url, _db, stop = serve_mockmed(port=0)
+        entry_query = TUTORIAL_BREAK_ENTRY_QUERY if break_it else TUTORIAL_ENTRY_QUERY
+        return run_tutorial_workflow(
+            base_url=base_url,
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            headed=False,
+            entry_query=entry_query,
+        )
+    finally:
+        if stop is not None:
+            stop()

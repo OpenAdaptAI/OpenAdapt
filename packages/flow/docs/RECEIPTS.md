@@ -12,6 +12,7 @@ two files beside `report.json` when the run ends, whatever its outcome:
 |---|---|---|
 | `receipt.json` | The receipt: a DSSE envelope over an in-toto statement, predicate type `https://openadapt.ai/record/run/v1`, signed with this computer's key | Yes, as a public card (below) |
 | `receipt.private.json` | The salts and values behind the receipt's commitments (`openadapt.receipt-openings/v1`, mode 0600) | No. It never leaves the computer |
+| `receipt.card.json` | The public card (`openadapt.receipt-card/v1`): the same signed envelope with only the Flow version opened (and the program name, for the synthetic tutorial) | Yes |
 
 A stopped run gets a receipt too. The outcome (`VERIFIED`, `STOPPED`,
 `UNKNOWN` or `FAILED`) is copied from the run and never upgraded: signing
@@ -24,7 +25,9 @@ changes the run's exit code and calls no model.
 - the program's id (a hash, never its name) and version digest;
 - the hour the run started;
 - the outcome and a reason code;
-- one line per write, with where it went (`gui` or `api`), the operation,
+- one line per write, and one per transaction or write receipt in the run
+  folder (`tx-receipt.cose`, `*.receipt.cbor`), named by that file's SHA-256
+  so it verifies on its own; each line has where it went (`gui` or `api`), the operation,
   its check (`confirmed`, `refuted` or `not_checked`), the check's strength
   (`read_back`, `same_screen` or `none`), and what it didn't check;
 - check counts;
@@ -35,6 +38,29 @@ changes the run's exit code and calls no model.
 URLs or page text.** Evidence files, screenshots included, appear only by
 SHA-256 digest. A verifier refuses a receipt or card that carries an image,
 a base64 blob, a URL or long text (`embedded_content`).
+
+A receipt may also carry **counterparty confirmations**: evidence read from
+another party's system about a handoff, such as a referral a portal later
+shows as recorded. Each confirmation states the kind of system, how it was
+read (a portal read-back, an API, or an acknowledgment message), its state
+(`sent`, `acknowledged`, `recorded_as_intended` or `recorded_differently`) and
+its own strength. Who the other party is, when it was observed, which fields
+it showed and any reason are salted commitments, never shown on a public card.
+The verifier prints each one on its own line, for example "Confirmed in the
+other party's system at 2026-11-20T23:41:07Z". That line never merges with or
+upgrades the signer line: "Signed by this computer" still means only that this
+computer signed the statement.
+
+A receipt handed to another party can also be **bound to the bytes it hands
+over**: a `payload` subject names the SHA-256 and media type of the MCP tool
+result, HTTP body or file. The receiver checks the bytes it got against it.
+And it says **how its writes were approved**, from Flow's item approval
+binding ([APPROVAL_AND_VERIFICATION.md](APPROVAL_AND_VERIFICATION.md)): the
+approval mode (`each_item`, `problems_only` or `not_gated`) and the kind of
+approver (a person or an agent delegate) are visible; who approved, the
+scope and the time are commitments. A receipt with no approval block says
+"No approval recorded", so a receipt never implies authority it doesn't
+record.
 
 ## Who signed it
 
@@ -71,8 +97,11 @@ Older files still verify, labelled "older format": `seal.json`
 (`local-seal/v1`), `public-seal.json` (`public-seal/v1`), Cloud-signed
 Execute receipts (`seal-signature/v1`), run summaries (`run-receipt/v2`),
 write receipts (`write-receipt/v1`) and transaction receipts
-(`tx-receipt/v1` to `v3`, with `--public-key`). For one release Flow also
-writes `seal.json` beside `receipt.json`; see
+(`tx-receipt/v1` to `v3`, with `--public-key`). `openadapt-flow local-seal anchor RUN_DIR` logs the receipt
+in Rekor too (`receipt.anchor.json`, over the payload's SHA-256, so a later
+countersignature doesn't change it), and a verifier then adds "Logged publicly
+at <time>". For one release Flow also writes `seal.json` beside
+`receipt.json`; see
 [OFFLINE_SEALS.md](OFFLINE_SEALS.md) for that format, its keys and its
 public-log anchor.
 
