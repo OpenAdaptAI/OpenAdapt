@@ -1,0 +1,108 @@
+{
+  "agent": {
+    "agent": "scripted",
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "calls": [],
+    "cost_usd": 0.0,
+    "finished": true,
+    "images_in_requests": 0,
+    "input_tokens": 0,
+    "model": null,
+    "model_calls": 0,
+    "model_requests_started": 0,
+    "model_seconds": 0.0,
+    "output_tokens": 0,
+    "prompt_tokens": 0,
+    "summary": null,
+    "tool_errors": 0,
+    "tool_invocations": [],
+    "usage_known": true,
+    "vision": null,
+    "wall_seconds": 3.586
+  },
+  "agent_error": null,
+  "attempt": "/tmp/acp-demo-out/4-fallback/kept/cache/fallback/wrap.fallback-2e89a8e2928331ef-42b4692268c2/fallback-dcd8fb13286d4db693bcdbb5d22f6ba2/run/wrap.fallback-2e89a8e2928331ef-42b4692268c2/attempts/20261122T023630-fbcf34",
+  "gates": [
+    {
+      "at": 1795314994.656737,
+      "control": "Submit to chart",
+      "decision": "approved_by_hold",
+      "identity": [
+        "Jane Sample",
+        "MRN P1"
+      ],
+      "missing": [],
+      "screenshot": "/tmp/acp-demo-out/4-fallback/kept/cache/fallback/wrap.fallback-2e89a8e2928331ef-42b4692268c2/fallback-dcd8fb13286d4db693bcdbb5d22f6ba2/run/wrap.fallback-2e89a8e2928331ef-42b4692268c2/attempts/20261122T023630-fbcf34/gates/gate-01.png",
+      "url": "http://127.0.0.1:54032/?fault=ok&idempotency=demo#encounter"
+    }
+  ],
+  "harness": {
+    "actions": 6,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 0,
+    "observations": 5,
+    "readbacks": 1,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "screenshots_requested": 0
+  },
+  "jit_status": "needs_human_admit",
+  "network_metadata": {
+    "api_binding": "UNAVAILABLE",
+    "capture_closed": true,
+    "causal_attribution": "UNAVAILABLE",
+    "events": [
+      {
+        "method": "POST",
+        "origin": null,
+        "path": null,
+        "phase": "request",
+        "status": null
+      },
+      {
+        "method": "POST",
+        "origin": null,
+        "path": null,
+        "phase": "response",
+        "status": 200
+      }
+    ],
+    "losses": [],
+    "mode": "metadata_only",
+    "records_complete": null,
+    "schema": "openadapt.network-metadata/v1"
+  },
+  "readbacks": [
+    {
+      "control": "Submit to chart",
+      "detail": "1 record saved for patient_id=p1, type=Triage, with every input",
+      "fields": [
+        "id",
+        "key",
+        "note",
+        "patient_id",
+        "source",
+        "type"
+      ],
+      "outcome": "landed"
+    }
+  ],
+  "record_check": {
+    "changed": 0,
+    "created": 1,
+    "fields": [
+      "id",
+      "key",
+      "note",
+      "patient_id",
+      "source",
+      "type"
+    ],
+    "passed": true,
+    "reasons": [],
+    "removed": 0
+  },
+  "seconds": 7.799
+}

@@ -45,7 +45,7 @@ def test_all_production_callers_pin_the_reviewed_action():
         "packages.yml",
         "quickstart-lifecycle.yml",
     }
-    assert len(production) == 11
+    assert len(production) == 12  # + the flow unit shards' tesseract
     assert len(local_selftests) == 5  # Exercise future helper edits, not the pin.
 
 
