@@ -128,7 +128,7 @@ def trial(mode: str, approve: bool) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--out", required=True)
     parser.add_argument("--modes", nargs="*", default=sorted(MODES))
     args = parser.parse_args()

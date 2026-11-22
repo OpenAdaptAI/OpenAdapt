@@ -660,7 +660,7 @@ def cmd_wrap_dispatch(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run as ``python -m openadapt_flow.wrap.dispatch_cli``."""
-    parser = argparse.ArgumentParser(prog="openadapt-flow")
+    parser = argparse.ArgumentParser(prog="openadapt-flow", allow_abbrev=False)
     register(parser.add_subparsers(dest="command", required=True))
     rows = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(["wrap-dispatch", *rows])
