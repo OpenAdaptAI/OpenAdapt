@@ -148,6 +148,20 @@ one that decodes to anything else can't be read, and the request is
 refused. A run inside a URL is left to the URL cut. A request nested too
 deeply to walk is refused.
 
+Two more layers catch what those shapes miss:
+
+- JSON escapes are decoded first, a few levels deep (`\/`, `\n`, `\"`,
+  `\uXXXX`, a JSON string of JSON), and runs are looked for in the decoded
+  text. When one is found, the decoded, scrubbed text is what is sent.
+- An image split into groups of any size (spaces, `&#10;`, `<br>`, quoted
+  concatenation) is found by joining the groups and decoding: only bytes
+  that start like an image count.
+- A backstop refuses any string that still holds a 512-character stretch
+  (whitespace and backslashes removed) that is at least 75% base64 letters
+  with at least 20% upper and 20% lower case, which is what base64 looks
+  like and prose, numbers, hex and URLs don't. A JWT or any other opaque
+  token that long refuses the request too; nothing is sent.
+
 Each image is OCR'd with tesseract. Each OCR line, split into table cells at
 wide gaps, goes through the same detection, and each value is painted over
 with its token written in the box.
