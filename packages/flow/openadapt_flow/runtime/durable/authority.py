@@ -38,15 +38,24 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import BaseModel, ConfigDict
 
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.runtime.durable.approval import (
     StateDiverged,
     approval_pause_digest,
 )
+from openadapt_flow.runtime.durable.delivery_observation import (
+    SCHEMA as UNCERTAINTY_OBSERVATION_SCHEMA,
+)
+from openadapt_flow.runtime.durable.delivery_observation import (
+    DeliveryUncertaintyObservation,
+)
 from openadapt_flow.terminal_verification_v2 import (
     MAX_DELIVERY_ARTIFACT_BYTES,
+    MAX_PERMIT_SNAPSHOT_AGE,
     ProductionDeliveryPermit,
     ProductionDeliveryPermitArtifact,
     ProductionDeliveryPermitChain,
+    ProductionDeliveryPermitV3Payload,
     ProductionDeliveryReceiptArtifact,
     ProductionPendingDeliveryPermit,
 )
@@ -176,6 +185,11 @@ def _windows_handle_attributes(kernel32: Any, handle: int) -> int:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _permit_receiver_now() -> datetime:
+    """The trusted local clock, sampled at the delivery boundary."""
+    return datetime.now(timezone.utc)
 
 
 def _default_db_path() -> Path:
@@ -441,7 +455,7 @@ class DurableAuthority:
             os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
         )
         try:
-            descriptor = os.open(self.db_path.parent, flags)
+            descriptor = open_binary(self.db_path.parent, flags)
         except OSError as exc:
             raise DurableAuthorityBusy(
                 "the external durable authority directory is unavailable"
@@ -474,7 +488,7 @@ class DurableAuthority:
         name = f".delivery-fence-{self.path_key}-{authority_revision}"
         flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 name,
                 flags,
                 0o600,
@@ -661,7 +675,7 @@ class DurableAuthority:
             # later, so a second durable run starting at the same moment (two
             # workers, two processes) saw a world-readable file and refused.
             try:
-                descriptor = os.open(
+                descriptor = open_binary(
                     self.db_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
                     0o600,
@@ -906,6 +920,36 @@ class DurableAuthority:
                 )
             connection.execute(
                 """
+            CREATE TABLE IF NOT EXISTS remote_delivery_uncertainty_observations (
+                path_key TEXT NOT NULL,
+                observation_id TEXT NOT NULL,
+                permit_artifact_sha256 TEXT NOT NULL,
+                permit_artifact_bytes BLOB NOT NULL,
+                observation_bytes BLOB NOT NULL,
+                locally_received_at TEXT NOT NULL,
+                PRIMARY KEY (path_key, observation_id)
+            )
+            """
+            )
+            observation_columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(remote_delivery_uncertainty_observations)"
+                ).fetchall()
+            }
+            if observation_columns != {
+                "path_key",
+                "observation_id",
+                "permit_artifact_sha256",
+                "permit_artifact_bytes",
+                "observation_bytes",
+                "locally_received_at",
+            }:
+                raise DurableAuthorityBusy(
+                    "the nonauthorizing observation schema is incompatible"
+                )
+            connection.execute(
+                """
             CREATE TABLE IF NOT EXISTS attended_journal (
                 path_key TEXT NOT NULL,
                 sequence INTEGER NOT NULL,
@@ -955,7 +999,7 @@ class DurableAuthority:
         key_path = self.db_path.with_name(self.db_path.name + ".journal-key")
         descriptor: Optional[int] = None
         try:
-            descriptor = os.open(
+            descriptor = open_binary(
                 key_path,
                 os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             )
@@ -966,7 +1010,7 @@ class DurableAuthority:
                 ) from None
             key = secrets.token_bytes(32)
             try:
-                descriptor = os.open(
+                descriptor = open_binary(
                     key_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                     0o600,
@@ -978,7 +1022,7 @@ class DurableAuthority:
                 handle.flush()
                 os.fsync(handle.fileno())
             try:
-                directory = os.open(key_path.parent, os.O_RDONLY)
+                directory = open_binary(key_path.parent, os.O_RDONLY)
             except OSError:
                 directory = -1
             if directory >= 0:
@@ -988,7 +1032,7 @@ class DurableAuthority:
                     pass
                 finally:
                     os.close(directory)
-            descriptor = os.open(
+            descriptor = open_binary(
                 key_path,
                 os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             )
@@ -1989,6 +2033,86 @@ class DurableAuthority:
             )
         return artifact
 
+    @staticmethod
+    def require_remote_delivery_fresh(
+        permit: _RemoteDeliveryPermit | None,
+        *,
+        now: datetime | None = None,
+        receiver_deadline: datetime | None = None,
+    ) -> None:
+        """Refuse authority that is no longer fresh at the receiver's input edge.
+
+        Issuance-time ordering alone does not bound a network-delayed response
+        or a retained permit. Production callers omit ``now`` so this check
+        reads the trusted receiver clock immediately before input; ``now`` is
+        an explicit test-clock hook, never a value from the response or run.
+        ``None`` is the local/non-managed delivery path and grants no permit.
+
+        Only a v3 artifact grants live permission. Its signed start deadline
+        is the issuer's conservative bound over session, lease, and registry
+        grants. The receiver never infers or extends those grants from unsigned
+        response metadata. Historical v2 artifacts remain audit data only.
+        """
+        if permit is None:
+            if receiver_deadline is not None:
+                received = _permit_receiver_now() if now is None else now
+                if (
+                    received.tzinfo is None
+                    or receiver_deadline.tzinfo is None
+                    or received >= receiver_deadline
+                ):
+                    raise DurableAuthorityBusy(
+                        "the local delivery lease expired before input"
+                    )
+            return
+        if not isinstance(permit, _RemoteDeliveryPermit):
+            raise DurableAuthorityBusy("remote delivery permit is invalid")
+        # Reopen the exact signed bytes, rather than trusting a cached object's
+        # timestamps. The receiver clock is sampled after signature validation.
+        artifact = DurableAuthority._parse_permit_artifact_bytes(
+            permit.permit_artifact_bytes
+        )
+        if (
+            artifact.canonical_bytes() != permit.permit_artifact.canonical_bytes()
+            or "sha256:" + hashlib.sha256(permit.permit_artifact_bytes).hexdigest()
+            != permit.permit_digest
+        ):
+            raise DurableAuthorityBusy("remote delivery permit changed before input")
+        payload = artifact.payload
+        if (
+            artifact.schema_version
+            != "openadapt.production-delivery-permit-artifact/v3"
+            or not isinstance(payload, ProductionDeliveryPermitV3Payload)
+        ):
+            raise DurableAuthorityBusy(
+                "live delivery requires a v3 signed input-start deadline"
+            )
+        deadline = datetime.fromisoformat(payload.delivery_not_after[:-1] + "+00:00")
+        checked = datetime.fromisoformat(
+            payload.qualification_signer_registry_checked_at[:-1] + "+00:00"
+        )
+        issued = datetime.fromisoformat(payload.issued_at[:-1] + "+00:00")
+        expires = datetime.fromisoformat(
+            payload.qualification_signer_registry_expires_at[:-1] + "+00:00"
+        )
+        received = _permit_receiver_now() if now is None else now
+        if not isinstance(received, datetime) or received.tzinfo is None:
+            raise DurableAuthorityBusy("receiver clock is not an aware UTC instant")
+        received = received.astimezone(timezone.utc)
+        if receiver_deadline is not None:
+            if receiver_deadline.tzinfo is None or received >= receiver_deadline:
+                raise DurableAuthorityBusy(
+                    "the local delivery lease expired before input"
+                )
+        if not checked <= issued <= received < min(expires, deadline):
+            raise DurableAuthorityBusy(
+                "remote delivery permit is expired or from the future at input"
+            )
+        if received - checked >= MAX_PERMIT_SNAPSHOT_AGE:
+            raise DurableAuthorityBusy(
+                "remote delivery permit signer-registry check is stale at input"
+            )
+
     def _require_remote_delivery_permit(
         self,
         manifest: Any,
@@ -2173,7 +2297,7 @@ class DurableAuthority:
             )
         if not (
             response["schema_version"]
-            == "openadapt.production-delivery-permit-issue/v2"
+            == "openadapt.production-delivery-permit-issue/v3"
             and response["status"] == "issued"
             and isinstance(response["execution_authority_id"], str)
             and _REMOTE_AUTHORITY_ID_RE.fullmatch(response["execution_authority_id"])
@@ -2231,7 +2355,7 @@ class DurableAuthority:
                 "remote delivery permit artifact does not bind the exact request"
             )
         permit_digest = "sha256:" + permit_artifact_sha256
-        return _RemoteDeliveryPermit(
+        permit = _RemoteDeliveryPermit(
             authority_id=response["execution_authority_id"],
             authority_origin=f"{parsed.scheme}://{parsed.netloc}",
             next_sequence=remote_delivery_sequence + 1,
@@ -2247,6 +2371,118 @@ class DurableAuthority:
             permit_artifact_bytes=permit_artifact_bytes,
             permit_artifact=permit_artifact,
         )
+        self.require_remote_delivery_fresh(permit)
+        return permit
+
+    def _refuse_delivery_uncertainty(self, connection: sqlite3.Connection) -> None:
+        if (
+            connection.execute(
+                "SELECT 1 FROM remote_delivery_uncertainty_observations "
+                "WHERE path_key = ? LIMIT 1",
+                (self.path_key,),
+            ).fetchone()
+            is not None
+        ):
+            raise DurableAuthorityBusy(
+                "non-authorizing delivery uncertainty is retained; no further input is authorized"
+            )
+
+    def _retain_delivery_uncertainty(
+        self,
+        manifest: Any,
+        permit: _RemoteDeliveryPermit,
+        raw: bytes,
+        value: dict[str, Any],
+        *,
+        attempt_id: str | None,
+        owner_nonce_sha256: str | None,
+    ) -> None:
+        try:
+            observation = DeliveryUncertaintyObservation.model_validate(value)
+        except ValueError as exc:
+            raise DurableAuthorityBusy(
+                "remote delivery uncertainty observation is invalid"
+            ) from exc
+        if (
+            observation.run_id != getattr(manifest, "remote_delivery_run_id", None)
+            or observation.dispatch_session_id != permit.dispatch_session_id
+            or observation.permit_id != permit.permit_id
+            or observation.one_use_claim_id != permit.one_use_claim_id
+            or observation.runtime_delivery_sequence != permit.runtime_delivery_sequence
+        ):
+            raise DurableAuthorityBusy(
+                "remote delivery uncertainty does not bind the pending edge"
+            )
+        with self._transaction() as connection:
+            self._validate_pending_delivery_owner(
+                connection,
+                manifest,
+                permit,
+                attempt_id=attempt_id,
+                owner_nonce_sha256=owner_nonce_sha256,
+            )
+            prior = connection.execute(
+                "SELECT permit_artifact_sha256, observation_bytes "
+                "FROM remote_delivery_uncertainty_observations "
+                "WHERE path_key = ? AND observation_id = ?",
+                (self.path_key, observation.observation_id),
+            ).fetchone()
+            if prior is not None:
+                if (
+                    prior["permit_artifact_sha256"]
+                    != permit.permit_artifact.artifact_sha256()
+                    or json.loads(bytes(prior["observation_bytes"])) != value
+                ):
+                    raise DurableAuthorityBusy(
+                        "the retained uncertainty observation changed"
+                    )
+                return
+            # Raw controller time is only an observation. Retain exact bytes,
+            # not a synthesized receipt, start instant, or advanced cursor.
+            connection.execute(
+                "INSERT INTO remote_delivery_uncertainty_observations "
+                "(path_key, observation_id, permit_artifact_sha256, "
+                "permit_artifact_bytes, observation_bytes, locally_received_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    self.path_key,
+                    observation.observation_id,
+                    permit.permit_artifact.artifact_sha256(),
+                    permit.permit_artifact_bytes,
+                    raw,
+                    _now(),
+                ),
+            )
+
+    def production_delivery_uncertainty_observations(self) -> tuple[bytes, ...]:
+        """Exact nonauthorizing controller observations, never receipt entries."""
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT observation_bytes FROM remote_delivery_uncertainty_observations "
+                "WHERE path_key = ? ORDER BY locally_received_at, observation_id",
+                (self.path_key,),
+            ).fetchall()
+        return tuple(bytes(row["observation_bytes"]) for row in rows)
+
+    def require_initial_delivery_fresh(
+        self, manifest: Any, permit: _RemoteDeliveryPermit
+    ) -> None:
+        """Require the protected pending initial edge, then sample the clock.
+
+        Folded API checkpoints may advance progress before the request. A
+        different pause, stale local snapshot or missing pending grant cannot
+        authorize that request, even when its signature remains valid.
+        """
+        with self._transaction() as connection:
+            self._refuse_delivery_uncertainty(connection)
+            record = self._validate_pending_delivery_owner(
+                connection, manifest, permit, attempt_id=None, owner_nonce_sha256=None
+            )
+            if self.store.continuation_state_digest() != record.progress_digest:
+                raise DurableAuthorityBusy(
+                    "durable state changed before the initial input boundary"
+                )
+        self.require_remote_delivery_fresh(permit)
 
     def acknowledge_remote_delivery(
         self,
@@ -2320,6 +2556,7 @@ class DurableAuthority:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        response_status = 200
         try:
             if self._remote_transport is not None:
                 response_bytes = self._remote_transport(
@@ -2344,7 +2581,21 @@ class DurableAuthority:
                         )
         except DurableAuthorityBusy:
             raise
-        except (HTTPError, URLError, OSError, TimeoutError) as exc:
+        except HTTPError as exc:
+            if exc.code != 409:
+                raise DurableAuthorityBusy(
+                    "remote delivery acknowledgment is unavailable or refused"
+                ) from exc
+            response_status = 409
+            try:
+                response_bytes = exc.read(MAX_REMOTE_AUTHORITY_RESPONSE_BYTES + 1)
+            except (OSError, TimeoutError) as read_error:
+                raise DurableAuthorityBusy(
+                    "remote delivery uncertainty observation could not be read"
+                ) from read_error
+            finally:
+                exc.close()
+        except (URLError, OSError, TimeoutError) as exc:
             raise DurableAuthorityBusy(
                 "remote delivery acknowledgment is unavailable or refused"
             ) from exc
@@ -2361,6 +2612,33 @@ class DurableAuthority:
             raise DurableAuthorityBusy(
                 "remote delivery acknowledgment returned invalid JSON"
             ) from exc
+        if response_status == 409:
+            if not (
+                isinstance(response_value, dict)
+                and response_value.get("schema_version")
+                == UNCERTAINTY_OBSERVATION_SCHEMA
+            ):
+                raise DurableAuthorityBusy(
+                    "HTTP 409 did not contain a nonauthorizing uncertainty observation"
+                )
+            self._retain_delivery_uncertainty(
+                manifest,
+                permit,
+                response_bytes,
+                response_value,
+                attempt_id=attempt_id,
+                owner_nonce_sha256=owner_nonce_sha256,
+            )
+            raise DurableAuthorityBusy(
+                "non-authorizing delivery uncertainty retained; no further input is authorized"
+            )
+        if (
+            isinstance(response_value, dict)
+            and response_value.get("schema_version") == UNCERTAINTY_OBSERVATION_SCHEMA
+        ):
+            raise DurableAuthorityBusy(
+                "delivery uncertainty observation requires HTTP 409"
+            )
         expected_keys = {
             "schema_version",
             "status",
@@ -2375,7 +2653,7 @@ class DurableAuthority:
             )
         if not (
             response_value["schema_version"]
-            == "openadapt.production-delivery-acknowledgment-result/v2"
+            == "openadapt.production-delivery-acknowledgment-result/v3"
             and response_value["status"] == "acknowledged"
             and isinstance(response_value["receipt_artifact_sha256"], str)
             and re.fullmatch(r"[a-f0-9]{64}", response_value["receipt_artifact_sha256"])
@@ -2602,6 +2880,7 @@ class DurableAuthority:
     ) -> _RemoteDeliveryPermit | None:
         marker_payload: bytes | None = None
         with self._transaction() as connection:
+            self._refuse_delivery_uncertainty(connection)
             record = self._owned(connection, manifest, attempt_id, owner_nonce_sha256)
             if record.reject_requested or record.attempt_phase not in {
                 "validating",
@@ -2653,6 +2932,7 @@ class DurableAuthority:
 
         marker_payload: bytes | None = None
         with self._transaction() as connection:
+            self._refuse_delivery_uncertainty(connection)
             record = self._read(connection)
             if (
                 record is None

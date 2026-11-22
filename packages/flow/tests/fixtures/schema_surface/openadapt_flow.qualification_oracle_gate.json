@@ -1,0 +1,369 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "BoundEffect": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "One proposed effect plus the channel it reads.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "effect_index": {
+      "title": "Effect Index",
+      "type": "integer"
+     },
+     "actuation_path": {
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "oracle_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Oracle Channels",
+      "type": "array"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "has_readback": {
+      "title": "Has Readback",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "step_id",
+     "effect_index",
+     "actuation_path",
+     "oracle_channels",
+     "kind",
+     "has_readback"
+    ],
+    "title": "BoundEffect",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "One proposed effect plus the channel it reads.",
+    "properties": {
+     "step_id": {
+      "title": "Step Id",
+      "type": "string"
+     },
+     "effect_index": {
+      "title": "Effect Index",
+      "type": "integer"
+     },
+     "actuation_path": {
+      "title": "Actuation Path",
+      "type": "string"
+     },
+     "oracle_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Oracle Channels",
+      "type": "array"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "has_readback": {
+      "title": "Has Readback",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "step_id",
+     "effect_index",
+     "actuation_path",
+     "oracle_channels",
+     "kind",
+     "has_readback"
+    ],
+    "title": "BoundEffect",
+    "type": "object"
+   }
+  },
+  "OracleGateResult": {
+   "validation": {
+    "$defs": {
+     "BoundEffect": {
+      "additionalProperties": false,
+      "description": "One proposed effect plus the channel it reads.",
+      "properties": {
+       "step_id": {
+        "title": "Step Id",
+        "type": "string"
+       },
+       "effect_index": {
+        "title": "Effect Index",
+        "type": "integer"
+       },
+       "actuation_path": {
+        "title": "Actuation Path",
+        "type": "string"
+       },
+       "oracle_channels": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Oracle Channels",
+        "type": "array"
+       },
+       "kind": {
+        "title": "Kind",
+        "type": "string"
+       },
+       "has_readback": {
+        "title": "Has Readback",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "step_id",
+       "effect_index",
+       "actuation_path",
+       "oracle_channels",
+       "kind",
+       "has_readback"
+      ],
+      "title": "BoundEffect",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Audit of channel disjointness plus the executed --break-it fault.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-oracle-gate/v1",
+      "default": "openadapt.qualification-oracle-gate/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "fixture": {
+      "default": "unchanged_store",
+      "title": "Fixture",
+      "type": "string"
+     },
+     "actor_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Actor Channels",
+      "type": "array"
+     },
+     "oracle_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Oracle Channels",
+      "type": "array"
+     },
+     "shared_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Shared Channels",
+      "type": "array"
+     },
+     "effects": {
+      "items": {
+       "$ref": "#/$defs/BoundEffect"
+      },
+      "title": "Effects",
+      "type": "array"
+     },
+     "break_it_executed": {
+      "default": false,
+      "title": "Break It Executed",
+      "type": "boolean"
+     },
+     "break_it_verdicts": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Break It Verdicts",
+      "type": "array"
+     },
+     "screen_claimed_success": {
+      "default": false,
+      "title": "Screen Claimed Success",
+      "type": "boolean"
+     },
+     "store_unchanged": {
+      "default": false,
+      "title": "Store Unchanged",
+      "type": "boolean"
+     },
+     "system_of_record_records": {
+      "default": 0,
+      "title": "System Of Record Records",
+      "type": "integer"
+     },
+     "passed": {
+      "default": false,
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "halt_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Halt Reason"
+     }
+    },
+    "title": "OracleGateResult",
+    "type": "object"
+   },
+   "serialization": {
+    "$defs": {
+     "BoundEffect": {
+      "additionalProperties": false,
+      "description": "One proposed effect plus the channel it reads.",
+      "properties": {
+       "step_id": {
+        "title": "Step Id",
+        "type": "string"
+       },
+       "effect_index": {
+        "title": "Effect Index",
+        "type": "integer"
+       },
+       "actuation_path": {
+        "title": "Actuation Path",
+        "type": "string"
+       },
+       "oracle_channels": {
+        "items": {
+         "type": "string"
+        },
+        "title": "Oracle Channels",
+        "type": "array"
+       },
+       "kind": {
+        "title": "Kind",
+        "type": "string"
+       },
+       "has_readback": {
+        "title": "Has Readback",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "step_id",
+       "effect_index",
+       "actuation_path",
+       "oracle_channels",
+       "kind",
+       "has_readback"
+      ],
+      "title": "BoundEffect",
+      "type": "object"
+     }
+    },
+    "additionalProperties": false,
+    "description": "Audit of channel disjointness plus the executed --break-it fault.",
+    "properties": {
+     "schema_version": {
+      "const": "openadapt.qualification-oracle-gate/v1",
+      "default": "openadapt.qualification-oracle-gate/v1",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "fixture": {
+      "default": "unchanged_store",
+      "title": "Fixture",
+      "type": "string"
+     },
+     "actor_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Actor Channels",
+      "type": "array"
+     },
+     "oracle_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Oracle Channels",
+      "type": "array"
+     },
+     "shared_channels": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Shared Channels",
+      "type": "array"
+     },
+     "effects": {
+      "items": {
+       "$ref": "#/$defs/BoundEffect"
+      },
+      "title": "Effects",
+      "type": "array"
+     },
+     "break_it_executed": {
+      "default": false,
+      "title": "Break It Executed",
+      "type": "boolean"
+     },
+     "break_it_verdicts": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Break It Verdicts",
+      "type": "array"
+     },
+     "screen_claimed_success": {
+      "default": false,
+      "title": "Screen Claimed Success",
+      "type": "boolean"
+     },
+     "store_unchanged": {
+      "default": false,
+      "title": "Store Unchanged",
+      "type": "boolean"
+     },
+     "system_of_record_records": {
+      "default": 0,
+      "title": "System Of Record Records",
+      "type": "integer"
+     },
+     "passed": {
+      "default": false,
+      "title": "Passed",
+      "type": "boolean"
+     },
+     "halt_reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Halt Reason"
+     }
+    },
+    "title": "OracleGateResult",
+    "type": "object"
+   }
+  }
+ }
+}

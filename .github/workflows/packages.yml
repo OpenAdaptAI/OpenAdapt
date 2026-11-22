@@ -117,6 +117,7 @@ jobs:
       flow_unit_shards: ${{ steps.classify.outputs.flow_unit_shards }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
+      eligibility: ${{ steps.classify.outputs.eligibility }}
       verify: ${{ steps.classify.outputs.verify }}
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
@@ -141,10 +142,10 @@ jobs:
         run: |
           set -euo pipefail
           # Both the matrix and the claims consumer use this exact count.
-          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=3; else unit_shards=2; fi
+          if [ "$EVENT_NAME" = pull_request ]; then unit_shards=4; else unit_shards=2; fi
           echo "flow_unit_shards=$unit_shards" >> "$GITHUB_OUTPUT"
           all() {
-            for pkg in flow types agent verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent eligibility verify capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -170,13 +171,18 @@ jobs:
           # fail on SIGPIPE and silently report "not changed".
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
+          # Both Flow fixtures and the released-launcher Seal tests consume
+          # this checkout's browser support, independently of installed Flow.
+          browser_support='^conftest\.py$|^packages/flow/(tests/(headless_guard|_attached_chromium)\.py|openadapt_flow/_browser_readiness\.py)$|^tests/test_browser_fixture_source\.py$'
           # Flow depends on the in-tree types, and its `capture` extra is tested
           # against the in-tree capture.
-          flow="$(hit "^packages/(flow|capture|types)/|$wf")"
+          flow="$(hit "^packages/(flow|capture|types)/|$browser_support|$wf")"
           # The types package is the leaf: only its own files re-run it.
           types="$(hit "^packages/types/|$wf")"
           # The agent shim is tested against the in-tree core.
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
+          # The optional eligibility connector is tested against the in-tree core.
+          eligibility="$(hit "^packages/(connectors/eligibility|flow|types)/|$wf")"
           verify="$(hit "^packages/(verify|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
@@ -186,7 +192,7 @@ jobs:
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
           # The Seal viewer inlines the program map's source.
-          seal_view="$(hit "^packages/(seal-view|program-graph)/|^openadapt/seal_view/|^tests/test_seal_view\.py$|^tests/fixtures/seal_view/|$wf")"
+          seal_view="$(hit "^packages/(seal-view|program-graph)/|^openadapt/seal_view/|^tests/test_seal_view\.py$|^tests/fixtures/seal_view/|$browser_support|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
@@ -194,6 +200,7 @@ jobs:
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
+            echo "eligibility=$eligibility"
             echo "verify=$verify"
             echo "capture=$capture"
             echo "privacy=$privacy"
@@ -225,7 +232,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -250,7 +257,7 @@ jobs:
         run: ruff check openadapt_types tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -294,7 +301,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -318,7 +325,7 @@ jobs:
         run: ruff check src tests scripts
       - name: Install uv (for the oldest-Python syntax check)
         if: matrix.python-version == '3.12'
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Syntax at the oldest supported Python (3.10)
         if: matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -331,6 +338,51 @@ jobs:
         run: |
           ruff check --isolated --select E9 --target-version py310 .
           uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
+      - name: Test
+        run: pytest -q
+
+  eligibility:
+    name: eligibility connector (py${{ matrix.python-version }})
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.eligibility == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+    defaults:
+      run:
+        working-directory: packages/connectors/eligibility
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/connectors/eligibility/uv.lock
+            packages/flow/uv.lock
+          cache-suffix: eligibility-py${{ matrix.python-version }}
+      - name: Install eligibility connector against the in-tree core
+        run: >-
+          python ../../../scripts/ci/locked_install.py
+          --lock 'packages/connectors/eligibility[dev]'
+          --editable packages/types --editable packages/flow
+          --editable packages/connectors/eligibility
+      - name: Confirm the in-tree packages are installed
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_eligibility, openadapt_flow
+          assert "packages/flow" in pathlib.Path(openadapt_flow.__file__).resolve().as_posix()
+          assert "packages/connectors/eligibility" in pathlib.Path(openadapt_eligibility.__file__).resolve().as_posix()
+          PY
+      - name: Ruff
+        run: ruff check openadapt_eligibility tests
       - name: Test
         run: pytest -q
 
@@ -354,7 +406,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -383,7 +435,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 98, "all independent-store controls must run"
+          assert len(cases) == 105, "all independent-store controls must run"
           # The PostgreSQL and MySQL quickstart controls need the database
           # services of verify-clean-install, which runs them; nothing else skips.
           skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
@@ -434,7 +486,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR and queue tiers: Python 3.12. Main, dispatch and nightly add the
+        # oldest supported Python, 3.10. On 2026-11-20 the 3.10 lane passed
+        # every one of its 88 pull-request runs and used 168 runner-minutes.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -470,7 +525,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: false
       - name: Build the in-tree types, Flow and Verify wheels
@@ -492,9 +547,17 @@ jobs:
         # database drivers. The MySQL charset guard must refuse a latin1
         # result charset before anything is written.
         run: |
+          verify_wheels=("$RUNNER_TEMP"/dist/openadapt_verify-*.whl)
+          if [[ ${#verify_wheels[@]} -ne 1 || ! -f ${verify_wheels[0]} ]]; then
+            echo "Expected exactly one built openadapt-verify wheel" >&2
+            exit 1
+          fi
           python -m venv "$RUNNER_TEMP/tests"
           "$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir \
-            --find-links "$RUNNER_TEMP/dist" 'openadapt-verify[mysql]' 'psycopg[binary]' pytest==9.2.0
+            --find-links "$RUNNER_TEMP/dist" "${verify_wheels[0]}[mysql]" \
+            "$RUNNER_TEMP"/dist/openadapt_types-*.whl \
+            "$RUNNER_TEMP"/dist/openadapt_flow-*.whl \
+            'psycopg[binary]' pytest==9.2.0
           cd packages/verify
           "$RUNNER_TEMP/tests/bin/python" -m pytest -q -p no:cacheprovider \
             tests/test_quickstart.py tests/test_guard.py tests/test_import_boundary.py \
@@ -530,7 +593,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -550,7 +613,7 @@ jobs:
         # "App knowledge lives in data"); the denylist is scripts/generality.toml.
         run: python scripts/check_engine_generality.py
       - name: Install uv (for the oldest-Python syntax check)
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Syntax at the oldest supported Python (3.10)
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
         # Python than requires-python allows (a 3.12 f-string, say) passed it
@@ -577,11 +640,12 @@ jobs:
             --disallow-untyped-decorators --extra-checks \
             openadapt_flow/identity_signals.py \
             openadapt_flow/policy.py \
-            openadapt_flow/qualification.py \
+            openadapt_flow/qualification/ \
             openadapt_flow/runtime/identity.py \
             openadapt_flow/runtime/identity_template.py \
             openadapt_flow/runtime/identity_vlm.py \
             openadapt_flow/runtime/replayer.py \
+            openadapt_flow/runtime/replay/ \
             openadapt_flow/runtime/resolver.py \
             openadapt_flow/submit_binding.py \
             openadapt_flow/runtime/effects/effect.py \
@@ -626,10 +690,11 @@ jobs:
         # Each shard runs one pytest-xdist worker per vCPU (four on
         # ubuntu-latest) and pays about 35 s of setup. Files are packed by
         # measured time (scripts/ci/flow_shards.py), so the shards finish
-        # together: a pull request's fast lane takes three shards, about five
-        # minutes each, to fit `ci` in ten minutes. The full suite on main and
-        # nightly takes two.
-        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '3' && '[{"shard":1,"of":3},{"shard":2,"of":3},{"shard":3,"of":3}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
+        # together. A pull request's fast lane takes four shards: with three,
+        # the identity, wire and verifier tests it must keep held each shard
+        # near 12 minutes of tests (run 44684203094). The full suite on main
+        # and nightly takes two.
+        include: ${{ fromJSON(needs.scope.outputs.flow_unit_shards == '4' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -642,7 +707,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -655,6 +720,11 @@ jobs:
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
           --editable packages/types --editable packages/capture --editable packages/flow --editable packages/agent --editable .
+      - name: Install tesseract for the flight scrubber's OCR tests
+        # pytesseract comes from Flow's dev extra (locked); this is its binary.
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: tesseract-ocr tesseract-ocr-eng
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit benchmark.harness.harness2
         # is written against; it has no runtime dependencies.
@@ -773,9 +843,44 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # Wall-clock bounds need an uncontended worker. The owning shard
+          # runs this unchanged case once after its parallel tests, then keeps
+          # both reports in the same required artifact and coverage file.
+          serial_case=tests/test_tx_acid_servers.py::test_50k_seed_speed_and_8_worker_background_concurrency
+          run_serial=false
+          for file in "${files[@]}"; do
+            if [ "$file" = "${serial_case%%::*}" ]; then run_serial=true; fi
+          done
+          unit_rc=0
           # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
           pytest -n logical --dist loadfile -v --durations=20 --basetemp=runs/ci \
-            $COVERAGE_ARGS --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}"
+            --deselect="$serial_case" $COVERAGE_ARGS \
+            --junitxml=runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml "${files[@]}" || unit_rc=$?
+          if "$run_serial"; then
+            serial_coverage=()
+            if [ -n "$COVERAGE_ARGS" ]; then serial_coverage=(--cov-append); fi
+            serial_rc=0
+            # shellcheck disable=SC2086 # Preserve the nightly coverage scope.
+            pytest -n 0 -v --basetemp=runs/ci-serial $COVERAGE_ARGS "${serial_coverage[@]}" \
+              --junitxml=runs/flow-serial.xml "$serial_case" || serial_rc=$?
+            python - "runs/flow-unit-shard-${{ matrix.shard }}-of-${{ matrix.of }}.xml" <<'PYTHON'
+          import sys
+          import xml.etree.ElementTree as ET
+          report = ET.parse(sys.argv[1])
+          serial = ET.parse("runs/flow-serial.xml").getroot()
+          name = "test_50k_seed_speed_and_8_worker_background_concurrency"
+          cases = list(serial.iter("testcase"))
+          assert len(cases) == 1, "serial seed case must run exactly once"
+          assert cases[0].get("name") == name
+          assert cases[0].get("classname") == "tests.test_tx_acid_servers"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          assert not any(c.get("name") == name for c in report.getroot().iter("testcase"))
+          report.getroot().extend(serial)
+          report.write(sys.argv[1], encoding="utf-8", xml_declaration=True)
+          PYTHON
+            if [ "$serial_rc" -ne 0 ]; then exit "$serial_rc"; fi
+          fi
+          exit "$unit_rc"
       # Before the claims upload, which tests expect to be the last step.
       - name: Upload coverage data
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -819,7 +924,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: .github/ci-tools/uv.lock
@@ -870,7 +975,7 @@ jobs:
           python-version: "3.12"
       # uv installs the locked requirements into the setup-python interpreter,
       # in seconds instead of minutes, from a cache keyed on the locks.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -1009,7 +1114,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: false
       - name: Signed update and rollback state machine (hermetic, fake build)
@@ -1045,7 +1150,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/flow/uv.lock"
@@ -1059,7 +1164,7 @@ jobs:
         # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
-        run: uv pip install --require-hashes -r ci/crewai-1.6.1.txt
+        run: uv pip install --no-config --require-hashes -r ci/crewai-1.6.1.txt
       - name: Install and launch Playwright browser
         timeout-minutes: 12
         run: >-
@@ -1114,7 +1219,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -1185,32 +1290,16 @@ jobs:
           persist-credentials: false
       - name: Install X11, D-Bus, GTK3 and AT-SPI
         timeout-minutes: 15
-        run: |
-          set -uo pipefail
-          sudo sed -i \
-            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt 2>/dev/null || true
-          update_ok=""
-          for attempt in 1 2 3; do
-            if sudo apt-get update; then
-              update_ok=1
-              break
-            fi
-            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
-            sleep $((attempt * 10))
-          done
-          if [ -z "$update_ok" ]; then
-            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
-            exit 1
-          fi
-          set -e
-          sudo apt-get install -y \
-            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          install-recommends: "true"
+          packages: >-
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
             libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -1266,7 +1355,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -1274,35 +1363,21 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install system dependencies
         timeout-minutes: 10
-        run: |
-          set -uo pipefail
-          # The runner's azure.archive.ubuntu.com mirror fails intermittently
-          # and once hung this step for over an hour. Prefer the canonical
-          # archive, retry, and keep the step bounded.
-          sudo sed -i \
-            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt 2>/dev/null || true
-          update_ok=""
-          for attempt in 1 2 3; do
-            if sudo apt-get update; then
-              update_ok=1
-              break
-            fi
-            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
-            sleep $((attempt * 10))
-          done
-          if [ -z "$update_ok" ]; then
-            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
-            exit 1
-          fi
-          set -e
-          sudo apt-get install -y ffmpeg libportaudio2
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          install-recommends: "true"
+          packages: ffmpeg libportaudio2
       - name: Install native AT-SPI build and smoke dependencies
         if: matrix.python-version == '3.10'
-        run: |
-          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          install-recommends: "true"
+          packages: >-
+            libgirepository1.0-dev libcairo2-dev pkg-config
             gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
-          pkg-config --modversion glib-2.0 gobject-introspection-1.0
+      - name: Check the GLib and GObject introspection versions
+        if: matrix.python-version == '3.10'
+        run: pkg-config --modversion glib-2.0 gobject-introspection-1.0
       - name: Install
         run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
       - name: Verify native AT-SPI dependency compatibility
@@ -1333,7 +1408,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -1367,7 +1442,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -1401,7 +1476,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/capture/uv.lock"
@@ -1451,7 +1526,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1475,7 +1550,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1502,7 +1577,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/privacy/uv.lock"
@@ -1561,7 +1636,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1589,7 +1664,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/tray/uv.lock"
@@ -1633,7 +1708,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "packages/desktop/uv.lock"
@@ -1705,7 +1780,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -1749,7 +1824,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
@@ -1818,6 +1893,7 @@ jobs:
       - scope
       - types
       - agent
+      - eligibility
       - verify
       - verify-clean-install
       - flow-lint
@@ -1874,6 +1950,7 @@ jobs:
           selects = {
               "types": "types",
               "agent": "agent",
+              "eligibility": "eligibility",
               "verify": "verify",
               "verify-clean-install": "verify",
               "flow-lint": "flow",
@@ -1949,7 +2026,7 @@ jobs:
         if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         if: needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
         with:
           enable-cache: true

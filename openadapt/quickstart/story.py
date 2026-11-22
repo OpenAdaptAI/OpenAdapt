@@ -110,11 +110,11 @@ class NextSteps:
     #: The command that checks one run folder, for its Seal page.
     verify_run: Optional[Callable[[Path], str]] = None
     #: In a terminal and outside CI only: asks once whether to publish the
-    #: run's public Seal, and does so on a yes. Called as
-    #: ``offer_publish(run_dir, say, ask)``; returns False, having said
-    #: nothing, when hosted Seals are not live.
+    #: public Seals of the checked run and the stopped run, and does so on a
+    #: yes. Called as ``offer_publish(run_dirs, say, ask)``; returns False,
+    #: having said nothing, when hosted Seals are not live.
     offer_publish: Optional[
-        Callable[[Path, Callable[[str], None], Callable[[str], str]], bool]
+        Callable[[list[Path], Callable[[str], None], Callable[[str], str]], bool]
     ] = None
 
 
@@ -297,12 +297,21 @@ def run_story(
             engine.run_all(inputs, finished)
         outcome.act2_seconds = clock() - act_start
         view.runs_total(outcome)
+        # A run that stopped before its first click, even on its second try,
+        # never reached the save. Say why in plain words; when no run got a
+        # ready screen, Act 3 would only stop the same way, so it is skipped.
+        unready = [run for run in outcome.runs if run.not_ready]
+        skip_break = bool(outcome.runs) and len(unready) == len(outcome.runs)
+        if unready:
+            note = getattr(view, "not_ready", None)
+            if note is not None:
+                note(unready[0].explanation, break_it and skip_break)
         # Sign the checked runs' reports while Act 3 runs; the finale waits.
         sealing = _in_background(lambda: engine.seal(list(outcome.runs)))
 
         # Act 3: break it.
         paging = None
-        if break_it:
+        if break_it and not skip_break:
             view.act(3, "Break it", scene.act3_subtitle)
             view.break_setup()
             if interactive:

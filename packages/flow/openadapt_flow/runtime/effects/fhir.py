@@ -1,6 +1,6 @@
-"""OpenEMR FHIR R4 system-of-record :class:`EffectVerifier` (primary substrate).
+"""FHIR R4 system-of-record :class:`EffectVerifier` (primary substrate).
 
-After a GUI write in OpenEMR (add a patient note / observation / encounter),
+After a GUI write to a FHIR-backed app (add a record / observation / note),
 this verifier queries the FHIR R4 API and confirms the resource ACTUALLY
 EXISTS in the system of record with the expected field values -- healthcare,
 the wedge. It is the ``api`` implementation tier of the RFC transition
@@ -9,9 +9,9 @@ end, and a deliberately DIFFERENT verifier *type* from :mod:`.rest`: the
 system of record answers in FHIR ``Bundle`` search-sets whose resources are
 nested (``subject.reference``, ``valueString``, ``code.text``), so the same
 :class:`Effect` contract is checked through a FHIR-shaped lens -- proving the
-protocol is substrate-agnostic, not MockMed-shaped.
+protocol is substrate-agnostic, not shaped to any demo app.
 
-Real FHIR contract (OpenEMR ``/apis/default/fhir/R4``, HL7 FHIR R4):
+Real FHIR contract (HL7 FHIR R4 REST search endpoint):
 
     GET {base}/{ResourceType}?{search params}
     Authorization: Bearer <oauth2 access token>
@@ -35,11 +35,11 @@ instead of ``access_token``. Each read asks it for a token; no token means the
 read is unreadable, and a 401 drops the cached token so the next poll gets a
 new one.
 
-LIVE vs contract-gated: point it at a real OpenEMR by setting
-``OPENEMR_FHIR_BASE_URL`` (+ a bearer token); tests that need a live instance
+LIVE vs contract-gated: point it at a real FHIR server by setting
+``FHIR_BASE_URL`` (+ a bearer token); tests that need a live instance
 are skipped when it is absent. CI exercises it against an in-repo fake that
 emits byte-faithful FHIR R4 ``Bundle`` JSON (``tests`` fixtures) -- the fake
-mirrors the real FHIR wire shape, never MockMed's screen.
+mirrors the real FHIR wire shape, never a demo screen.
 """
 
 from __future__ import annotations

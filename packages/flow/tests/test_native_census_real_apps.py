@@ -193,29 +193,41 @@ def wpf_worklist(tmp_path: Path):
             )
             procs.append(proc)
             owned.callback(stop_owned_process, proc)
-            last_point_state = "point discovery not reached"
+            latest_probe_state = "not_attempted"
 
             def items_from_owned_window(hwnd: int) -> Optional[list[Any]]:
-                nonlocal last_point_state
+                nonlocal latest_probe_state
+                # Reset on every attempt so an earlier point cannot describe
+                # a later missing window/list or failed discovery stage.
+                latest_probe_state = "window_lookup"
                 window = auto.ControlFromHandle(hwnd)
                 if window is None:
+                    latest_probe_state = "window_missing"
                     return None
+                latest_probe_state = "window_identity"
                 if window.ProcessId != proc.pid or window.Name != TITLE:
                     raise ValueError(
                         "rendered HWND does not identify the owned worklist"
                     )
+                latest_probe_state = "list_lookup"
                 listing = window.ListControl(searchDepth=3)
+                latest_probe_state = "list_existence"
                 if not listing.Exists(0, 0):
+                    latest_probe_state = "list_missing"
                     return None
+                latest_probe_state = "row_enumeration"
                 items = [
                     child
                     for child in listing.GetChildren()
                     if child.ControlTypeName == "ListItemControl"
                 ]
                 if len(items) != len(rows):
-                    last_point_state = f"UIA exposes {len(items)} of {len(rows)} rows"
+                    latest_probe_state = f"row_count_mismatch: UIA exposes {len(items)} of {len(rows)} rows"
                     return None
-                ready, last_point_state = _wpf_points_ready(auto, items, proc.pid)
+                latest_probe_state = "point_discovery"
+                ready, point_detail = _wpf_points_ready(auto, items, proc.pid)
+                outcome = "points_ready" if ready else "points_unproven"
+                latest_probe_state = f"{outcome}: {point_detail}"
                 return items if ready else None
 
             # One startup budget inside the existing 180s test limit leaves
@@ -232,7 +244,7 @@ def wpf_worklist(tmp_path: Path):
                 )
             except NativeAppStartupError as exc:
                 raise NativeAppStartupError(
-                    f"{exc}; point_readiness={last_point_state}"
+                    f"{exc}; latest_probe_state={latest_probe_state}"
                 ) from exc
 
         yield auto, start

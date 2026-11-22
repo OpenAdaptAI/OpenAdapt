@@ -94,7 +94,6 @@ tests/test_loop_shapes.py::test_a_row_without_a_note_skips_the_note  # 6s
 tests/test_loop_shapes.py::test_hashed_identity_still_verifies_each_row  # 23s
 tests/test_loop_shapes.py::test_held_out_rows_each_write_their_own_record  # 13s
 tests/test_loop_shapes.py::test_one_demonstration_of_several_rows_is_enough  # 12s
-tests/test_mcp_teach_surfaces.py::test_teach_on_a_remote_window  # 32s
 tests/test_multi_surface_attach.py::test_cdp_attach_records_a_popup_and_a_tab_as_surfaces  # 10s
 tests/test_multi_surface_backends.py::test_compiles_a_typed_backend_switch  # 7s
 tests/test_multi_surface_backends.py::test_switch_to_a_windows_app_that_is_not_the_recorded_one_halts  # 8s
@@ -139,3 +138,40 @@ tests/test_verify_run.py::test_cli_end_to_end  # 6s
 tests/test_win_agent_tls.py::test_wrong_pinned_fingerprint_is_rejected  # 8s
 tests/test_worklist_pool.py::test_pool_closes_process_workers_when_a_sibling_fails_to_open  # 12s
 tests/test_worklist_pool.py::test_process_worker_failed_open_ends_its_child  # 11s
+
+# 2026-11-20 refresh: cases over 5 s in the pull-request lane of CI run
+# 44684203094 (seconds summed across parametrized cases) that guard none of
+# identity, the wire check, approval, rollback, the verifier, the golden
+# VERIFIED path, zero model calls, protected paths, the source boundary or
+# credential and PHI handling. Those stay in the lane however long they take.
+tests/test_lifecycle_arms_mock.py::test_agent_script_authors_runs_and_maintains  # 50s
+tests/test_lifecycle_arms_mock.py::test_human_script_breaks_on_drift_and_hands_over  # 34s
+tests/test_lifecycle_arms_mock.py::test_agent_tools_registers_and_meters  # 6s
+tests/test_multi_surface_attach.py::test_cdp_attached_bundle_replays_in_the_same_browser  # 32s
+tests/test_multi_surface_e2e.py::test_compiles_one_bundle_across_popup_and_tab  # 12s
+tests/test_multi_surface_selfclose.py::test_nothing_returns_to_the_opener_on_its_own  # 8s
+tests/test_browser_owned_launch.py::test_real_open_failure_closes_only_its_owned_resources  # 34s
+tests/test_ui_dismiss_and_latency.py::test_mockmed_notice_dismiss_gets_no_record_written  # 23s
+tests/test_ui_dismiss_and_latency.py::test_mockmed_slow_open_click_records_the_patient_screen  # 9s
+tests/test_onprem_service.py::test_installer_derives_the_session_host_and_shows_it  # 12s
+tests/test_onprem_service.py::test_launchd_templates_render_to_valid_plists  # 7s
+tests/test_run_player.py::test_html_carries_real_step_data  # 10s
+tests/test_run_player.py::test_three_real_runs_captured  # 7s
+tests/test_run_player.py::test_player_data_json_has_no_image_bytes  # 6s
+tests/test_self_repair.py::test_a_give_up_still_counts_its_model_calls  # 7s
+tests/test_playwright_loop_guard.py::test_a_scoped_playwright_session_survives_between_tests  # 9s
+tests/test_playwright_loop_guard.py::test_a_timed_out_playwright_test_does_not_fail_the_next_browser_test  # 7s
+tests/test_compiler.py::TestCompileRecording::test_remote_typeahead_and_commit_compile_as_one_verified_selection  # 8s
+tests/test_tutorial_presentation.py::test_a_slow_save_still_records_its_system_of_record_delta  # 13s
+tests/test_check_it_dry_run_apps.py::test_cli_explicit_dry_mode_on_an_already_open_chromium_page  # 11s
+tests/test_rdp_backend.py::test_record_compile_replay_over_rdp_backend  # 10s
+tests/test_windows_backend.py::test_record_compile_replay_over_windows_backend  # 9s
+tests/test_write_leaderboard.py::test_committed_board_reproduces_from_the_rows  # 9s
+tests/test_cli_hints.py::test_printed_hints_never_hard_code_the_engine_spelling  # 9s
+tests/test_browser_teach.py::test_finish_refuses_without_a_download_or_with_an_unused_input  # 8s
+tests/test_competitor_drift_instrument.py::test_screen_blind_silent_on_each_fault_class  # 8s
+tests/test_harness2_traces.py::test_right_patient_write_is_verified  # 7s
+tests/test_surface_bindings.py::test_cli_replay_without_a_binding_halts_at_the_switch  # 7s
+tests/test_program_sections.py::test_sections_cli  # 6s
+tests/test_interactive_recorder.py::test_field_labels_captured_passively_on_type_events  # 21s
+tests/test_interactive_recorder.py::test_browser_recorder_retains_right_click_drag_and_shortcut  # 7s

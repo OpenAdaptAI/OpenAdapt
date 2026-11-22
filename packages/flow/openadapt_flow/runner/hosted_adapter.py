@@ -37,6 +37,7 @@ from openadapt_flow.ir import (
 )
 from openadapt_flow.private_file import (
     PrivateFileAclError,
+    open_binary,
     windows_descriptor_has_private_acl,
 )
 from openadapt_flow.production_qualification import (
@@ -1238,7 +1239,7 @@ class HostedRunnerAdapter:
                 path_before.st_mode
             ):
                 raise ValueError(f"{label} is not a private regular file")
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         except OSError as exc:
             raise ValueError(f"{label} could not be opened safely") from exc
         try:
@@ -1343,7 +1344,7 @@ class HostedRunnerAdapter:
         tmp = self._release_state_path.with_suffix(
             self._release_state_path.suffix + ".tmp"
         )
-        descriptor = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        descriptor = open_binary(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             os.write(descriptor, raw)
             os.fsync(descriptor)
@@ -1585,7 +1586,7 @@ class HostedRunnerAdapter:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = open_binary(path, flags, 0o600)
         try:
             os.write(descriptor, raw)
             os.fsync(descriptor)
@@ -1598,7 +1599,7 @@ class HostedRunnerAdapter:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = open_binary(path, flags, 0o600)
         try:
             offset = 0
             while offset < len(raw):
@@ -1625,7 +1626,7 @@ class HostedRunnerAdapter:
             except FileExistsError:
                 raise
             try:
-                directory = os.open(path.parent, os.O_RDONLY)
+                directory = open_binary(path.parent, os.O_RDONLY)
             except OSError:
                 directory = None
             if directory is not None:
@@ -2225,7 +2226,7 @@ class HostedRunnerAdapter:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = open_binary(path, flags, 0o600)
         try:
             raw = json.dumps(
                 params,

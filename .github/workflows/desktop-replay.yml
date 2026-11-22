@@ -11,7 +11,9 @@ name: Desktop replay
 #   as a continue-on-error step, so it reports but does not fail the job
 #   (packages/flow/tests/e2e/test_windows_hosted_governed.py). A gating
 #   step after it fails the job on any unsafe write the run made
-#   (scripts/ci/check_windows_governed_safety.py).
+#   (scripts/ci/check_windows_governed_safety.py). A separate gating proof
+#   checks one-shot native keyboard leases with real TYPE, KEY and HOTKEY
+#   receipts, UIA field read-back, planted lease faults and unchanged SQLite rows.
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -21,11 +23,14 @@ name: Desktop replay
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs it.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - packages/flow/openadapt_flow/**
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_native_keyboard_lease.py
       - packages/flow/tests/e2e/test_windows_hosted_governed.py
       - packages/flow/tests/_approver_keys.py
       - packages/flow/tests/conftest.py
@@ -35,6 +40,8 @@ on:
       - packages/flow/tests/test_check_it_dry_run_apps.py
       - packages/flow/tests/native_apps/check_it_gtk.py
       - packages/flow/tests/test_approval_form_window.py
+      - packages/flow/tests/test_binary_file_descriptors.py
+      - packages/flow/tests/_binary_descriptor_contract.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
@@ -56,8 +63,11 @@ concurrency:
 jobs:
   replay:
     name: windows replay (Patient Notes, WindowsBackend)
+    if: github.event.pull_request.draft != true
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     defaults:
       run:
         working-directory: packages/flow
@@ -65,11 +75,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -88,7 +99,101 @@ jobs:
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
+            tests/test_approval_form_window.py tests/test_binary_file_descriptors.py --junitxml=runs/windows-guards-junit.xml
+      - name: Native keyboard leases (real input, read-back and planted refusals)
+        timeout-minutes: 6
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_NATIVE_KEYBOARD_LEASE_EVIDENCE: ${{ runner.temp }}/nkl/evidence.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nkl"
+          {
+            git rev-parse HEAD
+            git rev-parse "HEAD^{tree}"
+            printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } | tee "$RUNNER_TEMP/nkl/source.log"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/nkl/cases" \
+            tests/e2e/test_native_keyboard_lease.py::test_native_keyboard_lease_actual_delivery_and_refusal \
+            --junitxml="$RUNNER_TEMP/nkl/junit.xml" 2>&1 | tee "$RUNNER_TEMP/nkl/pytest.log"
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path(os.environ["RUNNER_TEMP"]) / "nkl"
+          cases = list(ET.parse(root / "junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1
+          assert cases[0].get("name") == "test_native_keyboard_lease_actual_delivery_and_refusal"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          proof = json.loads((root / "evidence.json").read_text())
+          expected = {"type", "key", "hotkey", "stale_frame", "fresh_after_zero_input", "stale_focus", "replaced_target", "consumed_lease", "uncertain_ack"}
+          assert len(proof["cases"]) == len(expected)
+          assert {case["case"] for case in proof["cases"]} == expected
+          assert proof["passed"] is True and proof["agent_terminated"] is True and proof["fixture_terminated"] is True
+          assert proof["head"] == os.environ["EXPECTED_SOURCE_SHA"]
+          assert proof["rows_before"] == proof["rows_after"]
+          print(json.dumps({"native_lease_cases": len(expected), "skipped": 0, "rows_unchanged": True}))
+          PYTHON
+      - name: Exact editable values and bounded runtime TYPE retry
+        timeout-minutes: 6
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_NATIVE_EDITABLE_VALUE_EVIDENCE: ${{ runner.temp }}/nkl-editable/evidence.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nkl-editable"
+          {
+            git rev-parse HEAD
+            git rev-parse "HEAD^{tree}"
+            printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } | tee "$RUNNER_TEMP/nkl-editable/source.log"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/nkl-editable/cases" \
+            tests/e2e/test_native_keyboard_lease.py::test_native_editable_values_and_runtime_type_retry \
+            --junitxml="$RUNNER_TEMP/nkl-editable/junit.xml" 2>&1 | tee "$RUNNER_TEMP/nkl-editable/pytest.log"
+          python - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path(os.environ["RUNNER_TEMP"]) / "nkl-editable"
+          cases = list(ET.parse(root / "junit.xml").getroot().iter("testcase"))
+          assert len(cases) == 1
+          assert cases[0].get("name") == "test_native_editable_values_and_runtime_type_retry"
+          assert not any(cases[0].find(tag) is not None for tag in ("skipped", "failure", "error"))
+          proof = json.loads((root / "evidence.json").read_text())
+          assert proof["head"] == os.environ["EXPECTED_SOURCE_SHA"]
+          assert proof["passed"] is True and proof["agent_terminated"] is True and proof["fixture_terminated"] is True
+          assert proof["rows_before"] == proof["rows_after"]
+          assert len(proof["observations"]) == 8
+          positives = [case for case in proof["observations"] if "observation" in case]
+          assert len(positives) == 2 and {case["length"] for case in positives} == {0, 20}
+          for case in positives:
+              assert case["managed_before"] == case["managed_after"]
+              assert case["observation"]["schema"] == "openadapt.native-editable-value/v2"
+              assert case["observation"]["completeness_proof"]["method"] == "uia-value+wm-gettext"
+          long_case = next(case for case in proof["observations"] if case["case"] == "leaseLong-140")
+          assert long_case["managed_before"] == long_case["managed_after"] == proof["managed_initial"]["leaseLong"]
+          assert long_case["managed_before"]["live_length"] == 8196
+          for event in long_case["unavailable"]:
+              assert event["response"] == {"status": "unavailable", "complete": False, "reason": "provider_native_value_disagreement"}
+          assert len(proof["runtime"]) == 2 and {case["case"] for case in proof["runtime"]} == {"success", "uncertain"}
+          for case in proof["runtime"]:
+              assert case["planted"] and case["input_attempts"][0]["response"]["no_keyboard_input_delivered"] is True
+              assert case["retained_attempt_frame_sha256"] == case["input_attempts"][-1]["request"]["expected_frame_sha256"]
+              assert case["rows_after"] == proof["rows_before"]
+              assert len(case["preparation_events"]) == 1
+              result = case["report"]["results"][0]
+              if case["case"] == "uncertain":
+                  assert result["delivery_receipt"] is None
+                  assert result["delivery_uncertainty"]["operation"] == "physical_type_text"
+                  assert result["delivery_uncertainty"]["retried"] is False
+              else:
+                  assert result["delivery_receipt"] == case["input_attempts"][-1]["response"]["receipt"]
+          print(json.dumps({"editable_observation_cases": 8, "runtime_type_cases": 2, "skipped": 0, "rows_unchanged": True}))
+          PYTHON
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -144,6 +249,29 @@ jobs:
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
             ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/nkl-editable/*.json
+            ${{ runner.temp }}/nkl-editable/*.xml
+            ${{ runner.temp }}/nkl-editable/*.log
+            ${{ runner.temp }}/nkl-editable/cases/**/*.png
+            ${{ runner.temp }}/nkl-editable/cases/**/editable-value-evidence.json
+            ${{ runner.temp }}/nkl-editable/cases/**/lease-stored-initial.json
+            ${{ runner.temp }}/nkl-editable/cases/**/agent.log
+            ${{ runner.temp }}/nkl-editable/cases/**/patient_notes.ps1
+            ${{ runner.temp }}/nkl-editable/cases/**/patients.db
+            ${{ runner.temp }}/nkl-editable/cases/**/report.json
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-recording/*.json
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-recording/*.jsonl
+            ${{ runner.temp }}/nkl-editable/cases/**/runtime-bundle/workflow.json
+            ${{ runner.temp }}/nkl/*.json
+            ${{ runner.temp }}/nkl/*.xml
+            ${{ runner.temp }}/nkl/*.log
+            ${{ runner.temp }}/nkl/cases/**/evidence.json
+            ${{ runner.temp }}/nkl/cases/**/*.png
+            ${{ runner.temp }}/nkl/cases/**/agent.log
+            ${{ runner.temp }}/nkl/cases/**/lease-replaced.json
+            ${{ runner.temp }}/nkl/cases/**/patient_notes.ps1
+            ${{ runner.temp }}/nkl/cases/**/pn_db.py
+            ${{ runner.temp }}/nkl/cases/**/patients.db
             ${{ runner.temp }}/wg/**/report.json
             ${{ runner.temp }}/wg/**/agent.log
             ${{ runner.temp }}/wg/**/item-approval/*
@@ -155,6 +283,7 @@ jobs:
 
   freerdp:
     name: freerdp transport round trip (loopback RDP session)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -167,17 +296,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: freerdp-replay
       - name: Install the RDP client, shadow server and virtual display
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends \
-            xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
-          for t in Xvfb xfreerdp3 freerdp-shadow-cli3 xdotool; do command -v "$t"; done
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
+      - name: Check the RDP and display tools are on PATH
+        run: for t in Xvfb xfreerdp3 freerdp-shadow-cli3 xdotool; do command -v "$t"; done
       - name: Install from the lock
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev]'
@@ -202,6 +331,7 @@ jobs:
 
   check-it-gtk:
     name: Check without saving (GTK, ten cases, no skips)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -227,7 +357,7 @@ jobs:
           mkdir -p "$EVIDENCE_DIR"
           {
             git rev-parse HEAD
-            git rev-parse HEAD^{tree}
+            git rev-parse "HEAD^{tree}"
             printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
             cat /etc/os-release
             uname -a
@@ -236,18 +366,20 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: check-it-gtk
       - name: Install X11, D-Bus, GTK3 and AT-SPI
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
+        with:
+          packages: >-
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+      - name: Record the installed system packages
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
-            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
           dpkg-query -W at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 openbox xvfb \
             | tee "$EVIDENCE_DIR/system-packages.log"
       - name: Install the locked native Flow environment

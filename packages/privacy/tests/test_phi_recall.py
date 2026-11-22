@@ -261,3 +261,28 @@ def test_a_surname_that_spells_a_label_abbreviation_is_still_redacted(surname: s
 @pytest.mark.parametrize("text", ["Dr. Sin: 555-123-4567", "Sin john@example.com"])
 def test_a_surname_next_to_an_identifier_is_redacted_end_to_end(scrubber, text: str) -> None:
     assert "Sin" not in scrubber.scrub_text(text)
+
+
+@pytest.mark.parametrize("label", ["Username", "Password", "User name", "Passcode"])
+def test_a_sign_in_field_label_stays_readable(scrubber, label: str) -> None:
+    """The NER model reads a lone "Username" as a place and "Password" as an
+    organization; a sign-in form's labels are not identifiers."""
+    assert scrubber.scrub_text(label) == label
+    assert scrubber.scrub_text(f"landmark: '{label}' (left_of, 130px)") == (
+        f"landmark: '{label}' (left_of, 130px)"
+    )
+
+
+def test_a_name_beside_a_sign_in_label_is_still_redacted(scrubber) -> None:
+    assert scrubber.scrub_text("Username: John Smith") == "Username: <PERSON>"
+
+
+def test_only_a_span_that_is_exactly_a_sign_in_label_is_kept() -> None:
+    from presidio_analyzer import RecognizerResult
+
+    from openadapt_privacy.providers.presidio import _keep_sign_in_labels
+
+    text = "Password Smith"
+    label = RecognizerResult(entity_type="ORGANIZATION", start=0, end=8, score=0.85)
+    longer = RecognizerResult(entity_type="PERSON", start=0, end=14, score=0.85)
+    assert _keep_sign_in_labels(text, [label, longer]) == [longer]

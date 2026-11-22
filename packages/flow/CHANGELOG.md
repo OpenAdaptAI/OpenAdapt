@@ -15,6 +15,182 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- Effect locations (`openadapt.effect-location/v1`,
+  `openadapt_flow/effect_location/`): the place a careful person would look
+  again to see an intended value, stored as pack data. Each record holds the
+  demonstration path and start condition (`same_screen`, `fresh_navigation`,
+  `new_session`, `other_channel`), a locator (label, row key or region), the
+  expected value, a codec (including a `template` codec that reads one
+  summary row as two values and a `split_date` codec), the expected count
+  and an optional baseline. `evaluate_all` judges every planned value as
+  `held`, `refuted` or `not_checked`. A location that can't be reached,
+  found or read is `not_checked`, never a pass. The check level comes from
+  the start condition; the receipt word comes from
+  `check_level.outcome_word` when it is available. The engine holds no
+  application vocabulary: month names, yes and no words, currency signs and
+  tables come from the pack. See docs/EFFECT_LOCATION.md.
+
+## v3.4.0 (2026-11-21)
+
+### Features
+
+- Agent-to-agent handoffs. `openadapt-flow handoff send` attaches a run's
+  `record/run/v1` receipt to what one agent hands another: inline, detached
+  beside a file (`FILE.handoff.json`), or POSTed to a webhook.
+  `openadapt-flow handoff verify` checks one against the receiver's pinned
+  keys and returns a verdict (`openadapt.handoff-verdict/v1`). The verdict
+  gives the signer role, integrity, the checks passed and not checked, and
+  counterparty confirmation lines. It always says that a valid signature
+  proves who signed, not that the claim is true. `send` binds the payload as
+  the receipt's `payload` subject, re-signed by the run's own key, so a
+  receiver refuses other bytes (`payload_mismatch`) or a receipt that names
+  no payload (`payload_not_bound`). The private openings file never
+  travels (docs/HANDOFFS.md, docs/HANDOFF_RECEIPTS.md).
+- `openadapt-agent serve --handoffs` adds the MCP tools `get_handoff` and
+  `verify_handoff`. `serve --a2a` serves the same workflows over the A2A
+  (Agent2Agent) protocol 1.0 with the official `a2a-sdk` (new `a2a` extra):
+  - an Agent Card at `/.well-known/agent-card.json`;
+  - JSON-RPC and HTTP+JSON bindings;
+  - one skill per workflow plus `verify_handoff`;
+  - the draft extension `https://openadapt.ai/extensions/handoff-receipt/v1`.
+
+  It listens on 127.0.0.1 by default, needs a bearer token on any other
+  address, and refuses browser `Origin` and unknown `Host` headers. Every A2A
+  call goes through the MCP server's gate (`agent/contract_call.py`). Person
+  confirmations are not served, and only `done` is `TASK_STATE_COMPLETED`
+  (docs/A2A.md).
+
+- Dropdowns, searchable selects, type-aheads and native selects are recorded,
+  compiled and run as one model, a choice (`OptionChoice` on a
+  `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the
+  previous action opened is a choice when the control showed the option
+  afterwards; recording judges this from behaviour (an option role, or
+  same-shaped siblings that appeared after the previous press), never from a
+  widget library. Replay opens the control, types the wanted value when the
+  person searched, waits for the options to settle, clicks the one enabled
+  option whose label or value matches, and reads the control back against an
+  independent named field and an
+  exact expected committed value. A new label with no observable code mapping
+  stops before selection. Search folding requires causal opener/input-session
+  evidence and preserves the opening control's identity guards. A
+  missing, duplicate or disabled option, or a control that does not show the
+  choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
+  `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
+  resolved again by label or value before actuation, so a reordered list cannot
+  redirect a saved position. Native selection revalidates the semantic
+  option atomically before emitting change events and selects that exact
+  option even when different labels share a value. It avoids extra focus
+  callbacks and revalidates after `input` before emitting `change`. Native and
+  listed read-back require one stable shown/committed state inside a fixed
+  deadline. Failures after any backend-owned mutation retain uncertain
+  delivery, including opening, search and final confirmation. Native selects respect
+  disabled option groups and fieldsets. A choice on a field passed to
+  `--param` becomes that parameter. Interactive and attached recording no
+  longer refuse a native `<select>`, and lists that choose on press or on
+  release (where the browser sends no click to the option) are no longer
+  silently missing from the recording.
+- Browser `alert`/`confirm` answers are recorded in interactive and attached
+  recording, from the value the page received, and attached to the click
+  that raised them in the same producer document. The compiled answer also
+  requires the recorded dialog kind; a matching message on a different kind
+  is dismissed. A dialog from a different document stops recording.
+  A headed recording leaves the dialog for the person instead of letting
+  Playwright dismiss it. A program recorded this way stops on a dialog no
+  step expects (`dialog_unexpected`), including a before-unload warning
+  that would otherwise discard unsaved edits.
+- `openadapt wrap publish` refuses, before anything is uploaded, a program
+  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
+  Hosted runs verify a person's admission or one made with a CI admitter key.
+- For an admitter-key admission, publish checks that the organization has
+  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
+  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
+  and public key an owner or admin must register.
+- `openadapt login` with no token signs in through the browser: a PKCE
+  loopback grant on `127.0.0.1` that stores the same credential `push` and
+  `report-run` use. `--token`, `OPENADAPT_INGEST_TOKEN` and a stored token keep
+  the old path (#2379).
+
+### Fixes
+
+- A headed browser window that draws no frames (on macOS, one covered by a
+  full-size terminal window) no longer halts a run at its first step. The
+  page settle waited for two animation frames after the last change, which
+  such a window never draws, so the readiness gate timed out after 10 s with
+  "starting state not ready". When every other page signal is quiet and the
+  page has drawn no frame for a second, or the page is hidden, the settle now
+  falls back to two identical screenshots.
+- Choice labels, values, shape metadata and browser-dialog messages are
+  checked against declared secrets before capture. A matching or opaque
+  secret boundary stops recording before that text reaches its artifacts.
+- A screenshot interrupted by a navigation inside an iframe or by an open
+  browser dialog is retried instead of failing the recording or run.
+- A click on a `<label>` and the click the browser forwards to its control
+  record as one action.
+- Managed runs of an admitted program carry verification for that exact
+  dispatch through the CLI, public `Replayer` and deployment API. The proof
+  binds the admission, bundle, inputs, policy, run, dispatch session and
+  current trust registry. It is used once; resume verifies a fresh proof.
+  Missing or changed authority refuses before input.
+- Managed input requires a signed v3 permit with an exclusive input-start
+  deadline. The receiver checks it after preparation, immediately before each
+  desktop input or API request. Each API request retains its acknowledgment
+  before another request starts. A delayed permit, expired deadline or missing
+  receipt halts the run. Late completion evidence is retained as a separate
+  nonauthorizing uncertainty observation and cannot produce VERIFIED.
+- A governed MCP tool call no longer accepts an old or copied run report as a
+  new successful run. Each call binds its report to a fresh challenge and the
+  deployment that actually ran, and a missing or invalid completion after
+  launch is reported as uncertain, never as success (#2335).
+- Passphrase-derived keys, attended run keys and opened sealed sets are no
+  longer cached for the whole process. Each independent operation
+  authenticates again; caller-owned handles still reuse their key (#2341).
+  A durable checkpoint store counts as such a handle: it keeps the keys it
+  derived from its explicit key for its own lifetime. Without that, each
+  checkpoint read ran scrypt again, and the MockMed quickstart run took 28 s
+  instead of 3.5 s (131 derivations, now 1).
+- In reverse-proxy mode the wire tap relays a redirect to a path on the
+  upstream origin, rebuilt on the tap's own origin, instead of answering 502,
+  so it can front a form app that answers a save with Post/Redirect/Get. The
+  client's next request comes back through the tap. Browser route mode still
+  refuses every redirect, and the tap never follows one itself (#2392).
+- Guarded native keyboard delivery on a Windows agent that advertises
+  `native_keyboard_lease_v1` uses a one-shot focus lease over the authorized
+  control and frame. #2313 describes when it applies and what it checks.
+- A repair candidate id that would leave the repair store is refused (#2369).
+- `wrap publish` no longer refuses programs whose identity templates carry
+  `punctuation_body_keys`. These values are salted token hashes, the same
+  generated shape as the `c` and `r` keys, but the sanitizer sent them to
+  the PHI recognizer. It sometimes read one as an organization or a group
+  name and rewrote it, so publish stopped with `SANITIZATION_CHANGED_PROGRAM`.
+  Only an index key with a hex hash of 16 or more characters is kept. Free
+  text in that slot is still scrubbed.
+- An admitted managed run, and its resume, keep the policy the local Standard
+  gate chose when neither the CLI nor the deployment names one, instead of
+  exiting with code 2 (#2401).
+- Lens route induction can use a trace's observed effects, not only HTTP
+  methods, to assign route roles (#2393).
+- Generated verify contracts stop fewer correct writes: five generator causes
+  of false stops are fixed, each by one schema-independent rule (#2418).
+- `import openadapt_flow` loads its `ir` re-exports on first use, and the
+  qualification models and several replayer helpers moved into their own
+  modules. Names still import explicitly from their old modules;
+  `from openadapt_flow.qualification import *` no longer includes
+  `AUTOMATED_GUI_ACTUATIONS` or `build_outcome_envelope` (#2439, #2451, #2454,
+  #2455, #2456, #2459).
+
+### Requirements
+
+- The `privacy` extra needs `openadapt-privacy[presidio]>=1.1.4`, the first
+  release with `sanitization_config()`, which sanitized reuse and approval bind
+  to.
+- On Python 3.11 and newer, the lock moves Pillow, filelock and other
+  dependencies to a release that fixes an open security advisory. The
+  Python 3.10 lock keeps Pillow 12.3.0 and filelock 3.29.7 (#2383).
+
 ## v3.3.0 (2026-11-19)
 
 ### Fixes

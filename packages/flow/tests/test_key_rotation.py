@@ -113,7 +113,7 @@ def test_another_process_cache_observes_whole_header_revision(tmp_path):
     sealed_set.open_set(root, OLD)
     plan = plan_rewrap(root, old_key=OLD, new_key=NEW, key_id="k2")
     raw = plan.replacement
-    # Simulate publication in another process without this process's _forget.
+    # Simulate external publication; independent reads reauthenticate the header.
     (root / sealed_set.HEADER).write_bytes(raw)
     with pytest.raises(crypto.CryptoError):
         sealed_set.open_set(root, OLD)

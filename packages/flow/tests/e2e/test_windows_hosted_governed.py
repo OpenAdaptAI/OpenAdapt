@@ -23,6 +23,7 @@ Opt-in: skipped unless ``OAFLOW_WINDOWS_HOSTED_E2E=1`` on Windows.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import shutil
@@ -98,6 +99,16 @@ class _Person:
         rows = json.loads(shown.stdout)["requests"]
         waiting = [r for r in rows if r["status"] in ("waiting", "timed_out")]
         for row in waiting:
+            # A byte-corrupt approval frame cannot be shown to the approver.
+            from PIL import Image
+
+            from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+            store = ItemApprovalStore(self.run_dir)
+            request = store.read_request(row["request_id"])
+            frame = store.read_frame(request)
+            with Image.open(io.BytesIO(frame)) as image:
+                image.verify()
             self.shown.append(row)
             answered = _flow(
                 "item-approval",
@@ -411,10 +422,12 @@ def _save_frame(run_dir: Path) -> bytes:
 
 
 def _rows(rows: Any) -> list[dict[str, Any]]:
-    """The id and note of each record row, for the gating safety check."""
+    """Every column of each record row, for the gating safety check."""
 
     values = rows.values() if isinstance(rows, dict) else rows
-    return [{"id": r["id"], "note": r["note"]} for r in values]
+    return [
+        {key: r[key] for key in ("id", "first", "last", "dob", "note")} for r in values
+    ]
 
 
 def _outcome(run_dir: Path) -> dict[str, Any]:
@@ -575,6 +588,8 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
 
     # 1. A person answers while the run waits; the save lands and verifies.
     host.launch_app()
+    # Every launch reseeds the same rows; the check diffs each phase against them.
+    evidence["seed_rows"] = _rows(host.rows())
     _focus_app(backend, _points(backend))
     evidence["environment_before_run"] = list(
         backend.qualification_environment_identity() or ()
@@ -635,6 +650,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "exit": held.returncode,
         "tail": (held.stdout + held.stderr)[-3000:],
         "rows": _rows(rows),
+        "halts": _halts(run_dir),
         **_outcome(run_dir),
     }
     assert held.returncode != 0, evidence["held"]

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -15,13 +15,19 @@ import { processRecords, referral } from "./fixtures.js";
 
 afterEach(cleanup);
 
+function referralFoldTitle(id: string): string {
+  const group = referral.folds.groups.find((group) => group.id === id);
+  if (!group?.title) throw new Error(`Missing fixture fold title: ${id}`);
+  return group.title;
+}
+
 describe("host-driven workbench", () => {
   it("a controlled selection follows the host, and clicks report through onSelect", () => {
     const onSelect = vi.fn();
     const { rerender } = render(<ProgramWorkbench spec={processRecords} selectedId="write_update" onSelect={onSelect} />);
     expect(screen.getByLabelText("Selected program step").textContent).toContain("Write declared update");
     fireEvent.click(screen.getByRole("button", { name: /For each record/ }));
-    expect(onSelect).toHaveBeenCalledWith("for_each_record");
+    expect(onSelect).toHaveBeenCalledWith("for_each_record", "user");
     // The host has not changed selectedId yet, so the inspector stays put.
     expect(screen.getByLabelText("Selected program step").textContent).toContain("Write declared update");
     rerender(<ProgramWorkbench spec={processRecords} selectedId="for_each_record" onSelect={onSelect} />);
@@ -78,7 +84,7 @@ describe("host-driven workbench", () => {
 
   it("renders the inspector, the evidence lanes and the stop rules on their own", () => {
     render(<StepInspector spec={referral.spec} folds={referral.folds} nodeId="for_each::s::step_040" plainStopRules />);
-    expect(screen.getByLabelText("Selected program step").textContent).toContain("Create New Patient");
+    expect(screen.getByLabelText("Selected program step").textContent).toContain(referralFoldTitle("section:save-step_039"));
     expect(screen.getByText("Stops if reading the saved record back doesn’t confirm it.")).toBeTruthy();
     cleanup();
     render(<EvidenceLanes spec={processRecords} />);
@@ -87,14 +93,46 @@ describe("host-driven workbench", () => {
     render(<StopRules spec={referral.spec} trace={referral.trace} plainStopRules />);
     expect(screen.getByText(/this run stopped at step 29/)).toBeTruthy();
   });
+
+  it("uses the declared fold title even when it differs from every member title", () => {
+    const group = {
+      id: "review-record-changes",
+      title: "Review queued changes",
+      nodes: ["open_record", "write_update"],
+    };
+    const folds = { groups: [group] };
+    for (const node of processRecords.nodes!.filter((node) => group.nodes.includes(node.id))) {
+      expect(node.title).not.toBe(group.title);
+    }
+    render(<ProgramWorkbench spec={processRecords} folds={folds} initialSelectedId={group.id} />);
+    const card = screen.getByRole("button", { name: `Steps 03–04, 2 steps: ${group.title}.` });
+    expect(card.getAttribute("aria-pressed")).toBe("true");
+    expect(card.getAttribute("tabindex")).toBe("0");
+    expect(within(screen.getByLabelText("Selected program step")).getByRole("heading", { name: group.title })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));
+    const member = screen.getByRole("button", { name: /^step 03, action: Open current record/ });
+    expect(member.getAttribute("aria-pressed")).toBe("true");
+    expect(document.activeElement).toBe(member);
+    fireEvent.click(screen.getByRole("button", { name: `Fold into “${group.title}”` }));
+    expect(screen.getByRole("button", { name: `Steps 03–04, 2 steps: ${group.title}.` }).getAttribute("aria-pressed")).toBe("true");
+
+    cleanup();
+    const onSelect = vi.fn();
+    render(<StepInspector spec={processRecords} folds={folds} nodeId="write_update" onSelect={onSelect} />);
+    expect(within(screen.getByLabelText("Selected program step")).getByRole("heading", { name: group.title })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));
+    expect(onSelect.mock.calls).toEqual([["open_record", "user"]]);
+  });
 });
 
 describe("numbering", () => {
   it("numbers only the actions 1 to 29 and labels the loop", () => {
     render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} numbering="actions" trace={referral.trace} initialCursor={referral.trace.events.length} />);
     expect(screen.getByRole("button", { name: /^loop: / }).textContent).toContain("LOOP");
-    expect(screen.getByRole("button", { name: /^Steps 01–06, 6 steps: Who: title, first name, last name/ })).toBeTruthy();
-    const save = screen.getByRole("button", { name: /^Steps 28–29, 2 steps: Create New Patient/ });
+    const firstTitle = referralFoldTitle("section:fields-step_000");
+    const saveTitle = referralFoldTitle("section:save-step_039");
+    expect(screen.getByRole("button", { name: (name) => name.startsWith(`Steps 01–06, 6 steps: ${firstTitle}.`) })).toBeTruthy();
+    const save = screen.getByRole("button", { name: (name) => name.startsWith(`Steps 28–29, 2 steps: ${saveTitle}.`) });
     expect(save.getAttribute("data-run")).toBe("halted");
     fireEvent.click(screen.getByRole("tab", { name: "Stop rules" }));
     expect(screen.getByText(/this run stopped at step 28/)).toBeTruthy();

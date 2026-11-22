@@ -43,6 +43,7 @@ from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
     declared_surface_problem,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 
 # Import-light (pydantic only): the effect CONTRACT types double as the
@@ -111,7 +112,7 @@ class BackendConfig(BaseModel):
     deployment_surface: Optional[DeclaredSurface] = None
 
     #: The GUI URL to drive (the app under automation). None => the caller's
-    #: own default (e.g. ``replay`` serves the bundled MockMed demo).
+    #: own default (e.g. ``replay --demo-app`` serves the bundled demo).
     #: ``web`` only.
     url: Optional[str] = None
     #: Run the browser headed (visible). Default headless. ``web`` only.
@@ -143,7 +144,7 @@ class BackendConfig(BaseModel):
     agent_tls_pin: Optional[str] = None
 
     # -- native macOS --------------------------------------------------------
-    #: Owner application name/substring (e.g. ``"TextEdit"``). REQUIRED for
+    #: Owner application name/substring (e.g. ``"MyApp"``). REQUIRED for
     #: ``kind: macos``.
     macos_app: Optional[str] = None
     #: Window-title substring. The backend refuses ambiguous matches rather
@@ -1118,7 +1119,7 @@ class RollbackSection(BaseModel):
     #: Many record systems forbid deleting a chart for audit or legal reasons:
     #: prefer a ``void`` compensation there.
     allow_delete: bool = False
-    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: The app's versioned bookkeeping profile, by name (e.g. an app profile;
     #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
     #: the RL grader: which tables move on their own and how (append-only,
     #: session state, named columns). Never patient data. Applies to
@@ -1493,7 +1494,7 @@ def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
         # O_BINARY: on Windows a plain os.open reads in text mode, turning
         # CRLF into LF, so the bytes hashed wouldn't be the bytes written.
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-        fd = os.open(str(source), flags)
+        fd = open_binary(str(source), flags)
     except OSError as exc:
         raise ValueError(
             f"deployment config {source} can't be opened as a plain file: {exc}"
@@ -1992,6 +1993,40 @@ def _resolve_config_exprs(
         if value is None:
             raise ValueError(
                 f"effects.{section}[{key!r}] references run parameter "
+                f"{expr.param!r}, which was not supplied — pass it via "
+                "--param / --params-file (a verifier is never wired against "
+                "an unresolved selector)"
+            )
+        resolved[key] = value
+    return resolved
+
+
+def _resolve_sql_query_params(
+    exprs: Mapping[str, ValueExpr],
+    params: Optional[Mapping[str, object]],
+) -> dict[str, Optional[str]]:
+    """Resolve ``sql_query_params`` against the run's params, preserving explicit ``None``.
+
+    Missing parameters and unmapped ``map`` values still fail loud. Explicit
+    ``None`` (or ``ValueExpr(null=True)``) is passed through to
+    :class:`~openadapt_flow.runtime.effects.SqlRecordVerifier`, which rewrites
+    provably null-safe column equalities to ``IS NULL`` and refuses all other
+    uses.
+    """
+    values = dict(params or {})
+    resolved: dict[str, Optional[str]] = {}
+    for key, expr in exprs.items():
+        if expr.null or (
+            expr.param is not None
+            and expr.param in values
+            and values[expr.param] is None
+        ):
+            resolved[key] = None
+            continue
+        value = expr.resolve(values)
+        if value is None:
+            raise ValueError(
+                f"effects.sql_query_params[{key!r}] references run parameter "
                 f"{expr.param!r}, which was not supplied — pass it via "
                 "--param / --params-file (a verifier is never wired against "
                 "an unresolved selector)"
@@ -2574,8 +2609,7 @@ def _build_effect_verifier_unredacted(
             connect,
             cfg.sql_query,
             query_params=(
-                _resolve_config_exprs("sql_query_params", cfg.sql_query_params, params)
-                or None
+                _resolve_sql_query_params(cfg.sql_query_params, params) or None
             ),
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

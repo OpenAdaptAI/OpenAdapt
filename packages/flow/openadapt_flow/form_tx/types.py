@@ -1,0 +1,637 @@
+"""Typed contracts for the OpenAdapt Governed Form & Wizard Transaction Layer (form_tx).
+
+Zero application or vendor names. Pure declarative schemas for grounded input
+dossiers, UI mechanics profiles, form bindings, popup subroutines, epistemic
+halts, human co-pilot resolutions, summary read-back verdicts, and signed
+receipts.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+from enum import Enum
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
+UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
+FORM_PACK_SCHEMA: Literal["openadapt.form-pack/v1"] = "openadapt.form-pack/v1"
+FORM_RECEIPT_SCHEMA: Literal["openadapt.form-tx-receipt/v1"] = (
+    "openadapt.form-tx-receipt/v1"
+)
+PACK_PATCH_SCHEMA: Literal["openadapt.form-pack-patch/v1"] = (
+    "openadapt.form-pack-patch/v1"
+)
+
+
+def canonical_json_bytes(payload: Any) -> bytes:
+    """Deterministic canonical UTF-8 JSON bytes for hashing and signing."""
+    if isinstance(payload, BaseModel):
+        payload = payload.model_dump(mode="json")
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def canonical_sha256(payload: Any) -> str:
+    """Return hex SHA-256 over canonical JSON representation."""
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+
+
+def salted_sha256(value: Any, salt_hex: str) -> str:
+    """Return HMAC-SHA256 digest of canonical JSON value using ``salt_hex``."""
+    key = bytes.fromhex(salt_hex) if salt_hex else b"openadapt-form-tx"
+    return hmac.new(key, canonical_json_bytes(value), hashlib.sha256).hexdigest()
+
+
+class ProvenanceKind(str, Enum):
+    """Grounded authority for any value entered into a target form."""
+
+    INTAKE_DOCUMENT = "intake_document"
+    UPSTREAM_QUEUE = "upstream_queue"
+    SIGNED_POLICY_DEFAULT = "signed_policy_default"
+    HUMAN_OPERATOR = "human_operator"
+    ACCEPTED_PORTAL_PREFILL = "accepted_portal_prefill"
+
+
+class FormCodecKind(str, Enum):
+    """Deterministic normalization codecs for form entry and read-back."""
+
+    EXACT = "exact"
+    CASEFOLD = "casefold"
+    WHITESPACE_COLLAPSE = "whitespace_collapse"
+    TITLE_CASE = "title_case"
+    UPPER = "upper"
+    PHONE_DIGITS = "phone_digits"
+    ISO_DATE = "iso_date"
+    INTEGER = "integer"
+    CURRENCY_CENTS = "currency_cents"
+    BOOLEAN_YES_NO = "boolean_yes_no"
+    ENUM_MAP = "enum_map"
+
+
+class ControlKind(str, Enum):
+    """Structural UI control archetype."""
+
+    TEXT = "text"
+    SELECT = "select"
+    PORTAL_COMBOBOX = "portal_combobox"
+    RADIO_GROUP = "radio_group"
+    CHECKBOX = "checkbox"
+    DATE = "date"
+    POPUP_LAUNCHER = "popup_launcher"
+    READONLY_OUTPUT = "readonly_output"
+
+
+class PrefillPolicy(str, Enum):
+    """Fail-closed policy when a portal pre-populates a control on screen."""
+
+    HALT_ON_CONFLICT = "halt_on_conflict"
+    KEEP_IF_MATCHES_ELSE_HALT = "keep_if_matches_else_halt"
+    OVERWRITE_WITH_DOSSIER = "overwrite_with_dossier"
+
+
+class FormHaltKind(str, Enum):
+    """Closed taxonomy of fail-closed halts in ``form_tx``."""
+
+    UNGROUNDED_REQUIRED_FIELD = "ungrounded_required_field"
+    PREFILL_VALUE_CONFLICT = "prefill_value_conflict"
+    PREFILL_ENTITY_CONFLICT = "prefill_entity_conflict"
+    AMBIGUOUS_OPTION_OR_TARGET = "ambiguous_option_or_target"
+    PORTAL_VALIDATION_BLOCKED = "portal_validation_blocked"
+    POPUP_CONTRACT_FAILED = "popup_contract_failed"
+    MODAL_CONFIRMATION_REQUIRED = "modal_confirmation_required"
+    AUTH_WALL_DETECTED = "auth_wall_detected"
+    MUTATION_BUDGET_EXCEEDED = "mutation_budget_exceeded"
+
+
+class FormTxOutcome(str, Enum):
+    """Honest terminal or paused outcome of a ``form_tx`` execution."""
+
+    VERIFIED_DONE = "verified_done"
+    HALTED_NEEDS_HUMAN = "halted_needs_human"
+    ESCALATED_TO_OWNER = "escalated_to_owner"
+    AUTH_REQUIRED = "auth_required"
+    VALIDATION_BLOCKED = "validation_blocked"
+    READBACK_REFUTED = "readback_refuted"
+    DELIVERY_UNCERTAIN = "delivery_uncertain"
+    ABORTED_BY_HUMAN = "aborted_by_human"
+
+
+class HumanDecisionAction(str, Enum):
+    """Governed human resolution actions at a live halt."""
+
+    PROVIDE_VALUE = "provide_value"
+    ACCEPT_PORTAL_PREFILL = "accept_portal_prefill"
+    DISMISS_PORTAL_ENTITY = "dismiss_portal_entity"
+    CONFIRM_MODAL_ACTION = "confirm_modal_action"
+    FIXED_ON_SCREEN = "fixed_on_screen"
+    ESCALATE_TO_OWNER = "escalate_to_owner"
+    ABORT_RUN = "abort_run"
+
+
+class DossierFact(BaseModel):
+    """One grounded input value with explicit provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    key: str = Field(min_length=1)
+    value: Any
+    raw_value: Optional[str] = None
+    provenance: ProvenanceKind
+    source_id: str = Field(min_length=1)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class DossierEntity(BaseModel):
+    """Expected repeating entity row (such as a household member or contact)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    entity_kind: str = Field(min_length=1)
+    entity_id: str = Field(min_length=1)
+    fields: dict[str, DossierFact] = Field(default_factory=dict)
+
+
+class InputDossier(BaseModel):
+    """Provenance-carrying structured input packet for a form workflow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.form-dossier/v1"] = FORM_DOSSIER_SCHEMA
+    dossier_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    facts: dict[str, DossierFact] = Field(default_factory=dict)
+    entities: tuple[DossierEntity, ...] = ()
+    min_confidence: float = Field(default=0.9, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_fact_keys(self) -> "InputDossier":
+        for map_key, fact in self.facts.items():
+            if fact.key != map_key:
+                raise ValueError(
+                    f"Dossier fact key mismatch: dict key {map_key!r} != fact.key {fact.key!r}"
+                )
+        return self
+
+    def grounded_fact(self, key: str) -> Optional[DossierFact]:
+        """Return ``DossierFact`` only when present, non-empty, and above threshold."""
+        fact = self.facts.get(key)
+        if fact is None or fact.value is None:
+            return None
+        if isinstance(fact.value, str) and not fact.value.strip():
+            return None
+        if fact.confidence < self.min_confidence:
+            return None
+        return fact
+
+    def entities_of_kind(self, entity_kind: str) -> tuple[DossierEntity, ...]:
+        return tuple(e for e in self.entities if e.entity_kind == entity_kind)
+
+    def digest(self) -> str:
+        return canonical_sha256(self)
+
+
+class UIProfileSpec(BaseModel):
+    """Data-only profile describing asynchronous UI & validation mechanics."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.ui-profile/v1"] = UI_PROFILE_SCHEMA
+    profile_id: str = Field(min_length=1)
+    description: str = ""
+    busy_selectors: tuple[str, ...] = (
+        '[aria-busy="true"]',
+        '[data-busy="true"]',
+    )
+    error_banner_selectors: tuple[str, ...] = (
+        '[role="alert"]',
+        "[data-validation-banner]",
+        ".validation-banner",
+    )
+    field_error_selectors: tuple[str, ...] = (
+        '[aria-invalid="true"]',
+        "[data-field-error]",
+        ".field-error",
+    )
+    portal_listbox_selectors: tuple[str, ...] = (
+        '[role="listbox"]',
+        "[data-portal-listbox]",
+    )
+    portal_option_selectors: tuple[str, ...] = (
+        '[role="option"]',
+        "[data-option-value]",
+    )
+    modal_dialog_selectors: tuple[str, ...] = (
+        "dialog[open]",
+        '[role="dialog"][aria-modal="true"]',
+        "[data-modal-open='true']",
+    )
+    auth_wall_selectors: tuple[str, ...] = (
+        'input[type="password"]',
+        '[data-auth-wall="true"]',
+    )
+    authenticated_landmark_selectors: tuple[str, ...] = ()
+    keepalive_path: Optional[str] = None
+    debounce_grace_ms: int = Field(default=120, ge=0, le=5000)
+    settle_window_ms: int = Field(default=150, ge=20, le=5000)
+    max_settle_ms: int = Field(default=12000, ge=200, le=60000)
+
+
+class FieldCodecSpec(BaseModel):
+    """Declarative codec configuration for a field or extracted output."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: FormCodecKind = FormCodecKind.WHITESPACE_COLLAPSE
+    date_order: Literal["YMD", "MDY", "DMY"] = "YMD"
+    currency_symbol: Optional[Literal["$", "€", "£", "₹"]] = None
+    enum_aliases: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+
+class FieldAnchorSpec(BaseModel):
+    """Semantic, non-pixel control locator resilient across DOM re-renders."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label_patterns: tuple[str, ...] = ()
+    name_or_id_patterns: tuple[str, ...] = ()
+    section_patterns: tuple[str, ...] = ()
+    css_selector: Optional[str] = None
+    role: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_at_least_one_signal(self) -> "FieldAnchorSpec":
+        if (
+            not self.label_patterns
+            and not self.name_or_id_patterns
+            and not self.css_selector
+        ):
+            raise ValueError("FieldAnchorSpec requires at least one locator signal")
+        return self
+
+
+class FieldBindingSpec(BaseModel):
+    """Declarative binding from a canonical dossier key to a UI control."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    binding_id: str = Field(min_length=1)
+    dossier_key: str = Field(min_length=1)
+    anchor: FieldAnchorSpec
+    control_kind: ControlKind = ControlKind.TEXT
+    codec: FieldCodecSpec = Field(default_factory=FieldCodecSpec)
+    prefill_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT
+    triggers_re_render: bool = False
+    required_in_pack: bool = False
+    placeholder_values: tuple[str, ...] = ("", "-- Select --", "Select...", "Choose...")
+
+
+class EntityTableSpec(BaseModel):
+    """Detects server-prefilled entity rows (e.g., household members or patient matches)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    table_id: str = Field(min_length=1)
+    entity_kind: str = Field(min_length=1)
+    row_selector: str = Field(min_length=1)
+    column_selectors: dict[str, str] = Field(min_length=1)
+    key_fields: tuple[str, ...] = Field(min_length=1)
+    field_codecs: dict[str, FieldCodecSpec] = Field(default_factory=dict)
+    dismiss_button_selector: Optional[str] = None
+
+
+class PopupSubroutineSpec(BaseModel):
+    """Declarative child-window or popup calculator/lookup subroutine."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    subroutine_id: str = Field(min_length=1)
+    trigger_anchor: FieldAnchorSpec
+    popup_url_pattern: Optional[str] = None
+    popup_title_pattern: Optional[str] = None
+    bindings: tuple[FieldBindingSpec, ...] = ()
+    commit_anchor: FieldAnchorSpec
+    parent_return_anchor: FieldAnchorSpec
+    return_output_key: str = Field(min_length=1)
+    return_codec: FieldCodecSpec = Field(
+        default_factory=lambda: FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
+    )
+    condition_dossier_key: Optional[str] = None
+
+
+class ModalRuleSpec(BaseModel):
+    """Declarative detection of dynamic confirmation/duplicate modals."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    modal_id: str = Field(min_length=1)
+    container_selector: str = Field(min_length=1)
+    message_selector: Optional[str] = None
+    confirm_selector: str = Field(min_length=1)
+    cancel_selector: Optional[str] = None
+    policy: Literal["halt_for_human", "confirm_if_dossier_flag"] = "halt_for_human"
+    dossier_flag_key: Optional[str] = None
+
+
+class WizardScreenSpec(BaseModel):
+    """One logical screen/step in a multi-screen form or wizard."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    screen_id: str = Field(min_length=1)
+    landmark_selector: Optional[str] = None
+    title_pattern: Optional[str] = None
+    next_button_anchor: Optional[FieldAnchorSpec] = None
+    is_commit_screen: bool = False
+    commit_button_anchor: Optional[FieldAnchorSpec] = None
+
+
+class OutputExtractionSpec(BaseModel):
+    """Typed output value extracted after commit/summary verification."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    output_key: str = Field(min_length=1)
+    anchor: FieldAnchorSpec
+    codec: FieldCodecSpec = Field(default_factory=FieldCodecSpec)
+    required: bool = True
+
+
+class SummaryCheckSpec(BaseModel):
+    """Independent summary/search read-back verification contract."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    summary_url_path: Optional[str] = None
+    summary_landmark_selector: Optional[str] = None
+    search_input_anchor: Optional[FieldAnchorSpec] = None
+    search_submit_anchor: Optional[FieldAnchorSpec] = None
+    search_by_output_key: Optional[str] = None
+    field_readbacks: tuple[FieldBindingSpec, ...] = ()
+    outputs: tuple[OutputExtractionSpec, ...] = ()
+
+
+class FormPack(BaseModel):
+    """Data-only per-target form contract. Zero executable code."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.form-pack/v1"] = FORM_PACK_SCHEMA
+    pack_id: str = Field(min_length=1)
+    domain_schema: str = Field(min_length=1)
+    ui_profile_id: str = Field(min_length=1)
+    bindings: tuple[FieldBindingSpec, ...] = ()
+    entity_tables: tuple[EntityTableSpec, ...] = ()
+    popup_subroutines: tuple[PopupSubroutineSpec, ...] = ()
+    modal_rules: tuple[ModalRuleSpec, ...] = ()
+    screens: tuple[WizardScreenSpec, ...] = ()
+    summary_check: Optional[SummaryCheckSpec] = None
+    max_commit_mutations: int = Field(default=1, ge=0, le=10)
+
+    def digest(self) -> str:
+        return canonical_sha256(self)
+
+
+class ObservedOption(BaseModel):
+    """An option available inside a select, radio group, or portal combobox."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str
+    label: str
+
+
+class ObservedControl(BaseModel):
+    """Backend-agnostic snapshot of a single visible interactive or output element."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    control_id: str = Field(min_length=1)
+    dom_selector: str = Field(min_length=1)
+    tag: str = ""
+    input_type: str = ""
+    role: str = ""
+    name_attr: str = ""
+    id_attr: str = ""
+    label_text: str = ""
+    section_text: str = ""
+    current_value: str = ""
+    checked: Optional[bool] = None
+    required: bool = False
+    disabled: bool = False
+    readonly: bool = False
+    visible: bool = True
+    error_text: str = ""
+    options: tuple[ObservedOption, ...] = ()
+    is_secret: bool = False
+
+    @model_validator(mode="after")
+    def _scrub_secret_fields(self) -> "ObservedControl":
+        secret_detected = self.is_secret or self.input_type.lower() == "password"
+        if secret_detected:
+            object.__setattr__(self, "is_secret", True)
+            if self.current_value and self.current_value != "<secret>":
+                object.__setattr__(self, "current_value", "<secret>")
+        return self
+
+
+class ObservedEntityRow(BaseModel):
+    """One observed row in a dynamic entity table/card list."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    table_id: str
+    entity_kind: str
+    row_index: int
+    row_selector: str
+    values: dict[str, str]
+    has_dismiss_action: bool = False
+
+
+class ObservedModal(BaseModel):
+    """An active modal dialog blocking or prompting on the current surface."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    modal_id: str
+    container_selector: str
+    message_text: str = ""
+
+
+class FormSnapshot(BaseModel):
+    """Complete structural snapshot of the current form surface."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    url_origin_and_path: str
+    title: str = ""
+    screen_id: Optional[str] = None
+    auth_wall_present: bool = False
+    authenticated_landmark_present: bool = False
+    controls: tuple[ObservedControl, ...] = ()
+    entity_rows: tuple[ObservedEntityRow, ...] = ()
+    active_modals: tuple[ObservedModal, ...] = ()
+    banner_errors: tuple[str, ...] = ()
+    inflight_mutations: int = 0
+
+
+class FormHaltItem(BaseModel):
+    """Structured fail-closed halt emitted when autonomous action is unsafe."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    halt_id: str = Field(min_length=1)
+    kind: FormHaltKind
+    screen_id: Optional[str] = None
+    control_id: Optional[str] = None
+    dom_selector: Optional[str] = None
+    field_label: str = ""
+    section_text: str = ""
+    dossier_key: Optional[str] = None
+    portal_value: Optional[Any] = None
+    dossier_value: Optional[Any] = None
+    message: str = Field(min_length=1)
+    allowed_actions: tuple[HumanDecisionAction, ...] = (
+        HumanDecisionAction.PROVIDE_VALUE,
+        HumanDecisionAction.FIXED_ON_SCREEN,
+        HumanDecisionAction.ESCALATE_TO_OWNER,
+        HumanDecisionAction.ABORT_RUN,
+    )
+    available_options: tuple[ObservedOption, ...] = ()
+
+
+class HumanResolutionInput(BaseModel):
+    """Operator/co-pilot submission resolving an active ``FormHaltItem``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    halt_id: str = Field(min_length=1)
+    action: HumanDecisionAction
+    actor_id: str = Field(min_length=1)
+    actor_role: str = "operator"
+    provided_value: Optional[Any] = None
+    mapped_dossier_key: Optional[str] = None
+    remember_as_candidate_rule: bool = False
+    note: str = ""
+    idempotency_key: str = Field(min_length=1)
+
+
+class HumanResolutionRecord(BaseModel):
+    """Immutable ledger entry for a verified human decision during a run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    halt_id: str
+    halt_kind: FormHaltKind
+    action: HumanDecisionAction
+    actor_id: str
+    actor_role: str
+    field_signature: str
+    dossier_key: Optional[str] = None
+    resolved_value: Optional[Any] = None
+    remember_as_candidate_rule: bool = False
+    timestamp_utc: str
+    idempotency_key: str
+
+
+class ReadbackFieldVerdict(BaseModel):
+    """Field-by-field comparison between intended state and post-run read-back."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    dossier_key: str
+    codec_kind: FormCodecKind
+    passed: bool
+    provenance: ProvenanceKind
+    reason: str = ""
+
+
+class SummaryVerdict(BaseModel):
+    """Aggregate read-back verification result over summary/search screen."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    passed: bool
+    checked_count: int
+    failed_keys: tuple[str, ...] = ()
+    field_verdicts: tuple[ReadbackFieldVerdict, ...] = ()
+    extracted_outputs: dict[str, Any] = Field(default_factory=dict)
+    missing_required_outputs: tuple[str, ...] = ()
+
+
+class PackPatchCandidate(BaseModel):
+    """Governed candidate binding or policy induced from >=2 consistent human fixes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.form-pack-patch/v1"] = PACK_PATCH_SCHEMA
+    candidate_id: str
+    pack_id: str
+    field_signature: str
+    proposed_kind: Literal["field_binding", "prefill_policy", "default_escalation"]
+    proposed_dossier_key: Optional[str] = None
+    proposed_action: Optional[HumanDecisionAction] = None
+    supporting_run_count: int = Field(ge=2)
+    admitted: bool = False
+
+
+class FormTxReceiptPayload(BaseModel):
+    """Value-scrubbed cryptographic receipt payload proving verified form commit."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.form-tx-receipt/v1"] = FORM_RECEIPT_SCHEMA
+    receipt_id: str
+    run_id: str
+    request_id: str
+    pack_id: str
+    pack_digest: str
+    dossier_digest: str
+    outcome: FormTxOutcome
+    timestamp_utc: str
+    salt_hex: str
+    fields_filled_auto: int = Field(ge=0)
+    human_resolutions_count: int = Field(ge=0)
+    human_resolution_digests: tuple[str, ...] = ()
+    commit_mutations_observed: int = Field(ge=0)
+    readback_checked_count: int = Field(ge=0)
+    readback_passed: bool
+    salted_output_digests: dict[str, str] = Field(default_factory=dict)
+
+
+class SignedFormTxReceipt(BaseModel):
+    """Ed25519-signed receipt envelope for ``FormTxReceiptPayload``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    payload: FormTxReceiptPayload
+    payload_sha256: str
+    algorithm: Literal["Ed25519"] = "Ed25519"
+    public_key_hex: str
+    signature_hex: str
+
+
+class FormTxResult(BaseModel):
+    """Structured result returned by ``FormReconciler`` and ``QueueRunner``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    request_id: str
+    outcome: FormTxOutcome
+    safe_to_retry: bool
+    fields_filled_auto: int = 0
+    subroutines_completed: tuple[str, ...] = ()
+    halts: tuple[FormHaltItem, ...] = ()
+    human_resolutions: tuple[HumanResolutionRecord, ...] = ()
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    summary_verdict: Optional[SummaryVerdict] = None
+    receipt: Optional[SignedFormTxReceipt] = None
+    what_happened: str = ""

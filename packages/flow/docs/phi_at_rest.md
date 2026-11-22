@@ -102,11 +102,15 @@ What stays readable is listed under [What is not encrypted](#what-is-not-encrypt
 | `OPENADAPT_RECORDING_KEY` | Recordings. When it is unset, recordings use `OPENADAPT_BUNDLE_KEY`. |
 
 The key is a passphrase. Flow stretches it with scrypt (N=2^15, r=8, p=1)
-over a random per-directory salt, once per directory, and seals each file with
-AES-256-GCM under the derived key, a fresh random 96-bit nonce and the file's
-path in the associated data. Both primitives come from the `cryptography`
-package. Key management (KMS, escrow, rotation) is the operator's: Flow reads
-the passphrase from the environment and never writes it.
+over a random per-directory salt when it opens a reader or writer handle.
+That explicit handle reuses its derived key to seal or open files with
+AES-256-GCM, a fresh random 96-bit nonce for each write, and the file's path in
+the associated data. Independent path-helper reads authenticate again; the
+module retains no reader or passphrase cache. Caller inputs and derived keys
+remain sensitive memory; releasing a handle does not promise erasure. Both
+primitives come from the `cryptography` package. Key management (KMS, escrow,
+rotation) is the operator's: Flow reads the passphrase from the environment
+and never writes it.
 
 ## Sealed sets
 
@@ -210,10 +214,19 @@ place is refused. The external attended journal stores each decision-log
 snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
 cover the plaintext. A run whose attended files are plaintext from an earlier
 version still resumes, and its first encrypted write converts them.
-The key is stretched with scrypt once per run, under a random salt kept in the
-run's `.attended_state.encrypted` marker, and each file and journal row gets
-its own nonce under keys derived from it, so the cost doesn't grow with the
-number of files or journal rows. Each file names the salt it was sealed
+
+A durable store is itself a caller-owned handle. It keeps the keys it
+derived from its own explicit key, by salt and work factors, for its own
+lifetime, so one run stretches the passphrase once rather than once per
+checkpoint read. Each read still authenticates the container on disk. Another
+store, a changed key, or a store that reads the key from the environment
+derives again.
+File and journal operations derive their keys with scrypt under the random
+salt kept in the run's `.attended_state.encrypted` marker. A conversion
+operation reuses its local AEAD across the files it converts; independent
+reads and writes derive again, so the cost grows with the number of independent
+crypto operations. Each file and journal row still gets its own nonce. Each
+file names the salt it was sealed
 under, and a file whose salt is not the one in the run's marker is refused, so
 a file copied in from another run under the same key does not read. If two
 processes convert the same run at once, the one that loses the race to write

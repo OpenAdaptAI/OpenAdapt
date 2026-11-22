@@ -152,6 +152,33 @@ def _publish(run: Path, transport: Recorder, **kwargs) -> tuple[str | None, list
 # -- upload --------------------------------------------------------------------
 
 
+def _assert_preview_covers_document(preview: str, doc: dict) -> None:
+    def fields(value, path):
+        if isinstance(value, dict) and value:
+            return set().union(
+                *(fields(child, f"{path}.{key}") for key, child in value.items())
+            )
+        if isinstance(value, list) and value:
+            return set().union(*(fields(child, f"{path}[]") for child in value))
+        return {path}
+
+    found = []
+    for line in preview.splitlines():
+        if not line.startswith("  "):
+            section = line.lower()
+        else:
+            field, value = line.strip().split(": ", 1)
+            assert value
+            wire = (
+                field.lower().replace("sha-256", "sha256").replace(" (in order)", "[]")
+            )
+            wire = wire.replace(" / ", ".").replace(" ", "_")
+            found.append(f"{section}.{wire}")
+    assert len(found) == len(set(found))
+    expected = set().union(*(fields(value, key) for key, value in doc.items()))
+    assert set(found) == expected
+
+
 def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp_path):
     run = make_run()
     transport = Recorder(created())
@@ -167,9 +194,45 @@ def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp
     assert record == {"id": SEAL_ID, "url": url, "delete_token": TOKEN}
     assert stat.S_IMODE((run / "seal.publish.json").stat().st_mode) == 0o600
     assert f"Published: {url}" in said
-    # The exact card is shown before anything is sent.
-    shown = json.loads(said[0])
-    assert shown["card"] == json.loads(body)["card"]
+    doc = json.loads(body)
+    _assert_preview_covers_document(said[0], doc)
+    assert f"Exact upload: {(run / 'public-seal.json').resolve()}" in said
+    assert any("--show" in line for line in said)
+    assert doc["card"]["report_sha256"] not in said[0]
+    assert f"  Signature: {doc['seal']['signature']}" in said[0].splitlines()
+    assert any("the same key signed both" in line for line in said)
+
+
+@needs_engine
+def test_authorized_run_previews_scope_digest_and_issue_time_before_consent(make_run):
+    from openadapt_flow.offline_seal import seal_run
+
+    run = make_run()
+    seal_run(
+        run,
+        authorization=("a" * 64, "r3"),
+        replace_unanchored=True,
+        enqueue=False,
+    )
+    transport = Recorder()
+    shown = []
+
+    def decline(_question):
+        saved = json.loads((run / "public-seal.json").read_text())
+        _assert_preview_covers_document(shown[0], saved)
+        rows = shown[0].splitlines()
+        assert "  Authorization SHA-256: aaaaaaaa…aaaaaaaa" in rows
+        assert "  Scope item: r3" in rows
+        assert f"  Issued at: {saved['seal']['issued_at']}" in rows
+        assert "  Program name: null" in rows
+        assert "Identity claim" not in shown[0]
+        return "no"
+
+    url = publish(
+        run, interactive=True, ask=decline, say=shown.append, transport=transport
+    )
+    assert url is None
+    assert transport.requests == []
 
 
 def test_no_terminal_and_no_yes_refuses_without_a_request(make_run, tmp_path):
@@ -208,9 +271,9 @@ def test_the_prompt_defaults_to_no(make_run, tmp_path, answer):
 
 def test_the_prompt_text_is_the_agreed_one():
     assert PROMPT.format(host="app.openadapt.ai") == (
-        "This uploads the summary above to app.openadapt.ai and gives you a link. "
+        "This uploads the signed Seal to app.openadapt.ai and gives you a link. "
         "Anyone with the link can see it. It does not upload your inputs, "
-        "screenshots or records. Publish? [y/N] "
+        "screenshots or records. Type show for the exact bytes. Publish? [y/N] "
     )
 
 
@@ -331,6 +394,40 @@ def test_cli_without_a_terminal_exits_2_and_sends_nothing(
     assert not (run / "seal.publish.json").exists()
 
 
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        (("run-1", "run-2"), "run-2"),
+        (("run-2", "run-1"), "run-2"),
+        (("run-9", "run-10"), "run-9"),
+        (("run-10", "run-9"), "run-9"),
+    ],
+)
+def test_newest_sealed_run_equal_nanoseconds_uses_lexical_name(
+    tmp_path, monkeypatch, names, expected
+):
+    root = tmp_path / "openadapt-quickstart"
+    root.mkdir()
+    timestamp = 1_700_000_000_000_000_000
+    for name in (*names, "run-z"):
+        run = root / name
+        run.mkdir()
+        seal = run / "seal.json"
+        seal.write_text("{}", encoding="utf-8")
+        when = timestamp - 2_000_000_000 if name == "run-z" else timestamp
+        os.utime(seal, ns=(when, when))
+    assert {(root / name / "seal.json").stat().st_mtime_ns for name in names} == {
+        timestamp
+    }
+    assert (
+        root / "run-z" / "seal.json"
+    ).stat().st_mtime_ns == timestamp - 2_000_000_000
+    monkeypatch.chdir(tmp_path)
+    # Equal times use lexical order, not a claim about run sequence numbers.
+    assert cli._newest_sealed_run() == root / expected
+    assert not list(root.glob("*/public-seal.json"))
+
+
 def test_cli_dry_run_defaults_to_the_newest_quickstart_run(
     make_run, tmp_path, monkeypatch
 ):
@@ -343,7 +440,11 @@ def test_cli_dry_run_defaults_to_the_newest_quickstart_run(
     result = CliRunner().invoke(cli.main, ["seal", "publish", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert (newest / "public-seal.json").is_file()
-    assert '"steps_total":' in result.output
+    newest_doc = json.loads((newest / "public-seal.json").read_bytes())
+    assert (
+        f"  Steps total: {newest_doc['card']['steps_total']}"
+        in result.output.splitlines()
+    )
 
 
 def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch):
@@ -355,9 +456,32 @@ def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch
     )
     assert result.exit_code == 0, result.output
     assert f"Published: {ORIGIN}/seal#{SEAL_ID}" in result.output
-    # --yes skips the question, not the card: it is printed before the upload.
-    assert result.output.index('"card"') < result.output.index("Published:")
+    assert result.output.index("Card\n") < result.output.index("Published:")
+    assert '{"card"' not in result.output
     assert "Publish? [y/N]" not in result.output
+
+
+def test_cli_show_stdout_is_the_exact_upload_and_never_publishes(make_run, monkeypatch):
+    run = make_run()
+    transport = Recorder(created())
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    args = ["seal", "publish", str(run), "--github", "sample-org", "--names"]
+    result = CliRunner().invoke(cli.main, [*args, "--show", "--yes"])
+    assert result.exit_code == 0, result.output
+    exact = (run / "public-seal.json").read_bytes()
+    assert result.stdout_bytes == exact
+    assert transport.requests == []
+
+    posted = CliRunner().invoke(cli.main, [*args, "--yes", "--endpoint", ORIGIN])
+    assert posted.exit_code == 0, posted.output
+    assert transport.requests[0][2] == exact
+    if ENGINE:
+        assert "  Identity claim / login: sample-org" in posted.output.splitlines()
+
+    # Reading an already published Seal still writes only the upload bytes.
+    again = CliRunner().invoke(cli.main, [*args, "--show"])
+    assert again.exit_code == 0 and again.stdout_bytes == exact
+    assert len(transport.requests) == 1
 
 
 def test_cli_publish_help_runs_nothing(tmp_path):
@@ -651,7 +775,7 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     def ask(_question):
         raise AssertionError("asked while hosted Seals are not live")
 
-    assert offer(run, said.append, ask) is False
+    assert offer([run], said.append, ask) is False
     assert said == []
     assert not (run / "public-seal.json").exists()
     # One status check, to production's status route, and nothing else.
@@ -660,33 +784,101 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     ]
 
 
-def test_the_quickstart_offer_shows_the_card_then_asks_once(
+def test_the_quickstart_offer_shows_each_card_then_asks_once(
     make_run, tmp_path, monkeypatch
 ):
-    run = make_run()
+    checked = make_run()
+    stopped = make_run("run-broken", execution_outcome="HALTED", success=False)
     _terminal(monkeypatch)
     transport = Recorder(_status(True))
     monkeypatch.setattr(seal_publish, "urllib_transport", transport)
     offer = cli._quickstart_publish_offer()
     events: list[tuple[str, str]] = []
+    monkeypatch.chdir(tmp_path)
     offer(
-        run,
+        [run.relative_to(tmp_path) for run in (checked, stopped)],
         lambda line: events.append(("say", line)),
         lambda q: events.append(("ask", q)) or "",
     )
     asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
     assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
-    # The exact card that would be uploaded is printed before the question.
-    card = json.loads((run / "public-seal.json").read_text())["card"]
-    shown = [
-        json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
-    ]
-    assert shown and shown[0]["card"] == card
-    assert card["provenance"] == "synthetic-tutorial"
+    assert "2 signed Seals" in events[asks[0]][1] and "synthetic" in events[asks[0]][1]
+    before = [line for kind, line in events[: asks[0]] if kind == "say"]
+    previews = [line for line in before if line.startswith("Card\n")]
+    assert len(previews) == 2
+    for run, preview in zip((checked, stopped), previews):
+        path = (run / "public-seal.json").resolve()
+        doc = json.loads(path.read_bytes())
+        assert doc["card"]["provenance"] == "synthetic-tutorial"
+        _assert_preview_covers_document(preview, doc)
+        assert f"Exact upload: {path}" in before
+    assert not any(line.startswith("{") for line in before)
+    assert any("the same key signed both" in line for line in before)
+    assert any("--show" in line for line in before)
     assert events[-1] == ("say", "Not published.")
-    assert not (run / "seal.publish.json").exists()
+    assert not (checked / "seal.publish.json").exists()
+    assert not (stopped / "seal.publish.json").exists()
     # Only the status check was sent; a No uploads nothing.
     assert [r[0] for r in transport.requests] == ["GET"]
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_inspecting_both_seals_shows_the_exact_uploads_before_the_decision(
+    make_run, monkeypatch, accept
+):
+    runs = _quickstart_pair(make_run)
+    (runs[0] / "receipt.json").write_text(
+        json.dumps({"provenance": "synthetic-tutorial"})
+    )
+    _terminal(monkeypatch)
+    responses = [_status(True)]
+    if accept:
+        responses.extend([_created(SEAL_ID), _created(OTHER_ID), _status(True)])
+    transport = Recorder(*responses)
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    events = []
+    answers = iter(["--show", "y" if accept else ""])
+
+    def ask(prompt):
+        events.append(("ask", prompt))
+        assert [r[0] for r in transport.requests] == ["GET"]
+        return next(answers)
+
+    cli._quickstart_publish_offer()(
+        runs, lambda line: events.append(("say", line)), ask
+    )
+    asks = [i for i, (event, _) in enumerate(events) if event == "ask"]
+    assert len(asks) == 2
+    exact = [(run / "public-seal.json").read_bytes() for run in runs]
+    assert events[asks[0] + 1 : asks[1]] == [("say", data.decode()) for data in exact]
+    for run, data in zip(runs, exact):
+        result = CliRunner().invoke(
+            cli.main, ["seal", "publish", str(run), "--show", "--yes"]
+        )
+        assert result.exit_code == 0 and result.stdout_bytes == data
+    if ENGINE:
+        assert [json.loads(data)["card"]["outcome"] for data in exact] == [
+            "VERIFIED",
+            "HALTED",
+        ]
+        assert exact[0] != exact[1]
+    posts = [r[2] for r in transport.requests if r[0] == "POST"]
+    assert posts == (exact if accept else [])
+    assert all((run / "seal.publish.json").exists() == accept for run in runs)
+
+
+def test_compact_preview_keeps_empty_lists_and_groups_repeated_step_values():
+    doc = _golden_doc()
+    doc["card"]["steps"] = []
+    empty = seal_publish.card_text(doc)
+    _assert_preview_covers_document(empty, doc)
+    assert "  Steps: []" in empty.splitlines()
+    step = {"ok": True, "rung": "api", "evidence_class": "effect"}
+    doc["card"]["steps"] = [step, step, {**step, "ok": False}]
+    preview = seal_publish.card_text(doc)
+    _assert_preview_covers_document(preview, doc)
+    assert "  Steps (in order) / ok: true × 2, false" in preview.splitlines()
+    assert "  Steps (in order) / rung: api × 3" in preview.splitlines()
 
 
 @needs_engine
@@ -694,7 +886,7 @@ def test_the_tutorial_card_carries_the_program_name(make_run, tmp_path, monkeypa
     run = make_run()
     _terminal(monkeypatch)
     monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_status(True)))
-    cli._quickstart_publish_offer()(run, lambda _line: None, lambda _q: "")
+    cli._quickstart_publish_offer()([run], lambda _line: None, lambda _q: "")
     card = json.loads((run / "public-seal.json").read_text())["card"]
     assert card["program_name"] == "local-quickstart"
 
@@ -709,8 +901,8 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls: list[Path] = []
 
-    def offer(run_dir, say, ask):
-        calls.append(run_dir)
+    def offer(run_dirs, say, ask):
+        calls.append(run_dirs)
         say("offer shown")
         return True
 
@@ -722,9 +914,9 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
         next_steps=next_steps(cli._hint, cli._shell_quote, True, offer_publish=offer),
         clock=_clock(),
     )
-    assert calls == [root / "run-1"]
+    assert calls == [[root / "run-1"]]
     text = stream.getvalue()
-    assert text.index("Your Seal:") < text.index("offer shown") < text.index("Next:")
+    assert text.index("Your receipt:") < text.index("offer shown") < text.index("Next:")
     assert "seal publish" not in text
 
 
@@ -772,14 +964,14 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
     monkeypatch.chdir(tmp_path)
     calls: list[Path] = []
 
-    def offer(run_dir, say, ask):
-        calls.append(run_dir)
+    def offer(run_dirs, say, ask):
+        calls.append(run_dirs)
         say("offer shown")
         return True
 
     text = _rich_finale(tmp_path, offer)
-    assert calls == [tmp_path / "openadapt-quickstart" / "run-1"]
-    assert text.index("Your Seal") < text.index("offer shown") < text.index("Next  ")
+    assert calls == [[tmp_path / "openadapt-quickstart" / "run-1"]]
+    assert text.index("Your receipt") < text.index("offer shown") < text.index("Next  ")
     assert "Put it online" not in text
 
 
@@ -824,3 +1016,123 @@ def test_read_card_needs_both_files(tmp_path):
     assert card is not None
     assert (card.steps_ok, card.effects_confirmed, card.model_calls) == (6, 2, 0)
     assert card.short_digest == "6dd4a7f2d1ea"
+
+
+# -- the quickstart's two Seals -------------------------------------------------
+
+OTHER_ID = "C" * 43
+
+
+def _created(seal_id: str) -> Response:
+    body = {"id": seal_id, "url": f"{ORIGIN}/seal#{seal_id}", "delete_token": TOKEN}
+    return Response(201, {}, json.dumps(body).encode())
+
+
+def _quickstart_pair(make_run):
+    return [
+        make_run(),
+        make_run("run-broken", execution_outcome="HALTED", success=False),
+    ]
+
+
+def test_a_yes_uploads_both_and_gives_one_page_when_cloud_has_pairs(make_run):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder(_created(SEAL_ID), _created(OTHER_ID), _status(True))
+    said: list[str] = []
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "y",
+        say=said.append,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{SEAL_ID},{OTHER_ID}"
+    posts = [r for r in transport.requests if r[0] == "POST"]
+    assert [r[2] for r in posts] == [
+        (run / "public-seal.json").read_bytes() for run in runs
+    ]
+    assert transport.requests[-1][:2] == (
+        "GET",
+        f"{ORIGIN}{seal_publish.PAIRS_STATUS_PATH}",
+    )
+    assert any(link in line for line in said)
+    for run in runs:
+        assert json.loads((run / "seal.publish.json").read_text())["delete_token"]
+        assert any(f"seal unpublish {run}" in line for line in said)
+
+
+@pytest.mark.parametrize(
+    "pairs", [Response(404, {}, b'{"error":"not_found"}'), _status(False)]
+)
+def test_an_older_cloud_gets_one_link_per_seal(make_run, pairs):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder(_created(SEAL_ID), _created(OTHER_ID), pairs)
+    said: list[str] = []
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "yes",
+        say=said.append,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{OTHER_ID}"
+    assert any(f"/seal#{SEAL_ID}" in line for line in said)
+    assert any(f"/seal#{OTHER_ID}" in line for line in said)
+    assert not any("," in line and "/seal#" in line for line in said)
+
+
+def test_a_quickstart_run_already_online_is_not_uploaded_twice(make_run):
+    runs = _quickstart_pair(make_run)
+    (runs[0] / "seal.publish.json").write_text(
+        json.dumps(
+            {"id": SEAL_ID, "url": f"{ORIGIN}/seal#{SEAL_ID}", "delete_token": TOKEN}
+        )
+    )
+    transport = Recorder(_created(OTHER_ID), _status(True))
+    link = seal_publish.publish_quickstart(
+        runs,
+        ask=lambda _q: "y",
+        say=lambda _l: None,
+        endpoint_value=ORIGIN,
+        transport=transport,
+    )
+    assert link == f"{ORIGIN}/seal#{SEAL_ID},{OTHER_ID}"
+    assert [r[0] for r in transport.requests] == ["POST", "GET"]
+
+
+@pytest.mark.parametrize("answer", ["", "n", "no", "anything"])
+def test_anything_but_yes_uploads_nothing(make_run, answer):
+    runs = _quickstart_pair(make_run)
+    transport = Recorder()
+    said: list[str] = []
+    assert (
+        seal_publish.publish_quickstart(
+            runs,
+            ask=lambda _q: answer,
+            say=said.append,
+            endpoint_value=ORIGIN,
+            transport=transport,
+        )
+        is None
+    )
+    assert transport.requests == [] and said[-1] == "Not published."
+
+
+def test_the_finale_offers_the_stopped_run_with_the_checked_one(tmp_path):
+    from openadapt.quickstart.engine import SealFacts, SealPages
+    from openadapt.quickstart.story import Outcome
+    from openadapt.quickstart.view import publish_runs
+
+    root = tmp_path / "openadapt-quickstart"
+    for name in ("run-1", "run-broken"):
+        (root / name).mkdir(parents=True)
+        (root / name / "seal.html").write_text("")
+    pages = SealPages(
+        verified=root / "run-1" / "seal.html", broken=root / "run-broken" / "seal.html"
+    )
+    outcome = Outcome(root=root, seal=SealFacts("", 1), seal_pages=pages)
+    # The stopped run is offered only once it has its own Seal.
+    assert publish_runs(outcome) == [root / "run-1"]
+    (root / "run-broken" / "seal.json").write_text("{}")
+    assert publish_runs(outcome) == [root / "run-1", root / "run-broken"]
+    assert publish_runs(Outcome(root=root, seal=None, seal_pages=pages)) == []

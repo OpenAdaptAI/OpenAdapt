@@ -731,6 +731,22 @@ def _cmd_anchor(args: argparse.Namespace) -> int:
         f"entry {entry['uuid']}, log index {entry['logIndex']}, at {_utc(entry['integratedTime'])}"
     )
     print(f"{args.log_url.rstrip('/')}/api/v1/log/entries/{entry['uuid']}")
+    receipt_path = seal_path.with_name("receipt.json")
+    if target.is_dir() and receipt_path.is_file():
+        # The run's receipt, signed by the same key, is anchored with it.
+        from openadapt_flow.seal_anchor import anchor_receipt
+
+        try:
+            receipt_anchor = anchor_receipt(
+                receipt_path, signer, log_url=args.log_url, log_keys=log_keys
+            )
+        except (AnchorError, OSError, ValueError) as exc:
+            print(f"receipt not anchored: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"anchored: {anchor_path(receipt_path)} "
+            f"(entry {receipt_anchor['entry']['uuid']})"
+        )
     return 0
 
 

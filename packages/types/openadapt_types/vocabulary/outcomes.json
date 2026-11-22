@@ -81,7 +81,7 @@
     {
       "source": "clinic_tool_status",
       "repository": "OpenAdaptAI/openadapt-types",
-      "symbol": "openadapt_types/clinic_job.py ClinicToolStatusV1",
+      "symbol": "openadapt_types/managed_job.py ManagedToolStatusV1",
       "read_at": "origin/main 07b8b0c, read 2026-10-09",
       "values": ["VERIFIED", "HALTED", "RECONCILIATION_REQUIRED"]
     },
@@ -108,6 +108,10 @@
     }
   ],
   "not_run_outcomes": [
+    {
+      "symbol": "openadapt_types/run_ledger.py RunLedgerOutcome (verified, escalated, caught_error, failed, unknown)",
+      "reason": "An accounting bucket that openadapt_flow/run_ledger/outcome.py derives from the run's own outcome and evidence. It sums runs for a ledger and never replaces the run's outcome."
+    },
     {
       "symbol": "openadapt_flow/runtime/effects/effect.py Verdict (confirmed, refuted, indeterminate)",
       "reason": "One effect check inside a step. The run's outcome already accounts for it."
@@ -455,7 +459,7 @@
       }
     },
     "clinic_tool_status": {
-      "meaning": "The status on a clinic tool result. HALTED here is coarse.",
+      "meaning": "The status on a managed tool result. HALTED here is coarse.",
       "values": {
         "VERIFIED": {
           "result": "done",

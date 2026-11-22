@@ -10,7 +10,6 @@ the captured page to front first, so every capture is a live frame.
 
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +21,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
+from tests._attached_chromium import owned_chromium  # noqa: E402
 from tests.test_browser_attach import _chromium_executable  # noqa: E402
 
 _PAGE = (
@@ -65,9 +65,9 @@ def test_masked_capture_of_a_backgrounded_attached_tab_does_not_stall(
 
     profile = tmp_path / "profile"
     profile.mkdir()
-    process = subprocess.Popen(
+    with owned_chromium(
+        executable,
         [
-            str(executable),
             "--headless=new",
             "--no-sandbox",
             "--no-first-run",
@@ -77,12 +77,9 @@ def test_masked_capture_of_a_backgrounded_attached_tab_does_not_stall(
             f"--user-data-dir={profile}",
             "--window-size=1280,800",
             "--force-device-scale-factor=1",
-            app_url,
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
+        app_url,
+    ) as process:
         port_file = profile / "DevToolsActivePort"
         deadline = time.monotonic() + 20
         port_line = ""
@@ -115,9 +112,3 @@ def test_masked_capture_of_a_backgrounded_attached_tab_does_not_stall(
             page.set_default_timeout(10_000)
             for _ in range(12):
                 assert backend.screenshot().startswith(b"\x89PNG")
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()

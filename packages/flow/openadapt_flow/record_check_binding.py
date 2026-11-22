@@ -45,7 +45,7 @@ are inside ``workflow.json`` and covered by the sealed content digest.
 The binding file schema (JSON or YAML)::
 
     schema: openadapt.record-check-binding/v1
-    workflow_name: openimis-claim-intake
+    workflow_name: example-record-intake
     source_content_digest: <sha256 of the compiled program, optional pin>
     steps:
       - step: step_012

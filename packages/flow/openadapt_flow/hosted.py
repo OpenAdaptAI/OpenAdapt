@@ -58,6 +58,8 @@ from uuid import UUID
 import httpx
 import idna
 
+from openadapt_flow.private_file import open_binary
+
 __all__ = [
     "DEFAULT_HOST",
     "HostedError",
@@ -85,6 +87,8 @@ DEFAULT_HOST = "https://app.openadapt.ai"
 TOKEN_ENV = "OPENADAPT_INGEST_TOKEN"
 KEYRING_SERVICE = "openadapt-flow"
 PAIRING_SECRET_RE = re.compile(r"^oap_[A-Za-z0-9_-]{43}$")
+#: RFC 7636 section 4.1: 43 to 128 unreserved characters.
+PKCE_VERIFIER_RE = re.compile(r"^[A-Za-z0-9\-._~]{43,128}$")
 
 #: Environment variable naming the deployment lane (``cloud`` | ``byoc`` |
 #: ``regulated``). Falls back to ``config.toml`` ``[hosted] deployment_lane``.
@@ -724,8 +728,14 @@ def connect(
     device_name: Optional[str] = None,
     destination_kind: Optional[str] = None,
     trusted_hosts: Optional[list[str]] = None,
+    code_verifier: Optional[str] = None,
 ) -> dict[str, Any]:
     """Claim a five-minute browser pairing without clobbering a working token.
+
+    ``code_verifier`` is the RFC 7636 verifier for a pairing that a browser
+    login (:mod:`openadapt_flow.browser_login`) bound to an S256 challenge.
+    Cloud refuses such a pairing without it, so a code seen in transit is
+    useless on its own.
 
     The one-time secret authorizes only ``POST /api/local-bridge/pairings/claim``.
     The previous canonical token is snapshotted before the claim. The returned
@@ -757,11 +767,16 @@ def connect(
 
     clean_device = re.sub(r"[\x00-\x1f\x7f]", "", device_name or socket.gethostname())
     clean_device = clean_device.strip()[:80] or "this computer"
+    if code_verifier is not None and not PKCE_VERIFIER_RE.fullmatch(code_verifier):
+        raise HostedError("Login proof is malformed")
+    claim_body: dict[str, str] = {"pairing_secret": secret, "device_name": clean_device}
+    if code_verifier is not None:
+        claim_body["code_verifier"] = code_verifier
     claim_url = f"{resolved_host}/api/local-bridge/pairings/claim"
     try:
         response = httpx.post(
             claim_url,
-            json={"pairing_secret": secret, "device_name": clean_device},
+            json=claim_body,
             timeout=_API_TIMEOUT,
             follow_redirects=False,
         )
@@ -1346,10 +1361,10 @@ def push(
         approve_derivative,
         approved_archive_path,
         build_ingest_manifest,
+        ensure_current_derivative,
         load_and_verify_derivative,
         load_valid_approval,
         read_approved_archive,
-        sanitize_artifact,
         source_tree_sha256,
     )
 
@@ -1370,14 +1385,7 @@ def push(
             stamp = source_tree_sha256(src)[:12]
             derivative = root / f"artifact-{stamp}"
         try:
-            if not derivative.exists():
-                sanitize_artifact(src, derivative, kind=actual_kind)
-            else:
-                existing = load_and_verify_derivative(derivative)
-                if existing.get("source_tree_sha256") != source_tree_sha256(src):
-                    raise SanitizationError(
-                        "Existing derivative does not match the current source tree"
-                    )
+            derivative, _ = ensure_current_derivative(src, derivative, kind=actual_kind)
             if _auto_approve_enabled(auto_approve):
                 approve_derivative(
                     derivative,
@@ -1953,7 +1961,7 @@ def _client_run_id(run_path: Path) -> str:
         # opened descriptor back to this exact directory entry before reading
         # any bytes; O_NOFOLLOW is an added symlink refusal where available.
         try:
-            fd = os.open(id_path, flags)
+            fd = open_binary(id_path, flags)
         except FileNotFoundError as exc:
             raise HostedError(
                 "run report id changed while it was being opened"
@@ -2050,7 +2058,7 @@ def _client_run_id(run_path: Path) -> str:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        fd = os.open(id_path, flags, 0o600)
+        fd = open_binary(id_path, flags, 0o600)
     except FileExistsError:
         try:
             existing = id_path.lstat()
@@ -2092,7 +2100,7 @@ def _client_run_id(run_path: Path) -> str:
             directory_flags = os.O_RDONLY
             if hasattr(os, "O_DIRECTORY"):
                 directory_flags |= os.O_DIRECTORY
-            directory_fd = os.open(run_path, directory_flags)
+            directory_fd = open_binary(run_path, directory_flags)
             try:
                 os.fsync(directory_fd)
             finally:

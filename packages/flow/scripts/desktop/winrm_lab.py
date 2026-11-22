@@ -529,7 +529,9 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         from openadapt_flow.backends.parallels_vm import (  # noqa: PLC0415
             AgentEndpoint,
         )
-        from openadapt_flow.backends.win_agent import server as agent_server  # noqa: PLC0415
+        from openadapt_flow.backends.win_agent import (
+            server as agent_server,  # noqa: PLC0415
+        )
         from openadapt_flow.backends.win_agent.tls import (  # noqa: PLC0415
             generate_self_signed_cert,
         )
@@ -549,6 +551,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             Path(server_path or agent_server.__file__),
             rf"{guest_dir}\win_agent_server.py",
         )
+        for helper in ("keyboard_lease", "native_value"):
+            self.push_file(
+                Path(agent_server.__file__).with_name(helper + ".py"),
+                rf"{guest_dir}\win_agent_{helper}.py",
+            )
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{guest_dir}\agent-cert.pem")

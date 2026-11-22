@@ -57,6 +57,12 @@ from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.jit.lifecycle import AdmissionError
 from openadapt_flow.jit.lift import lift_params
 from openadapt_flow.jit.signature import TaskSignature
+from openadapt_flow.secret_inputs import (
+    credential_withholding_requested,
+    public_values,
+    require_credential_observation,
+    secret_environment,
+)
 
 __all__ = [
     "AdmissionError",
@@ -358,7 +364,7 @@ class SurfaceApp:
         """``<kind>://<target>``, from
         :func:`~openadapt_flow.surface_selection.surface_target_origin`. A
         canary admits the program on this origin only. An admission policy
-        names it in ``allowed_hosts`` the same way (``macos://textedit``); a
+        names it in ``allowed_hosts`` the same way (``macos://example-app``); a
         bare host there names a web app only."""
 
         from openadapt_flow.surface_selection import surface_target_origin
@@ -511,6 +517,10 @@ class Recording:
         dialect: str,
     ) -> None:
         self._owner = owner
+        self._withhold_credentials = credential_withholding_requested(
+            owner.withhold_credentials
+        )
+        self._credential_withholding_enabled = False
         self._params = dict(params)
         self._values = values
         self._dialect = dialect
@@ -569,6 +579,10 @@ class Recording:
         else:
             backend, self._close = owner.app.open()
         try:
+            # Withholding is requested for this capture. A missing field
+            # seam is unsupported, never proof that no credential is present.
+            if self._withhold_credentials:
+                require_credential_observation(backend)
             if owner.before_capture is not None:
                 # The public callback returns None. Widen only this runtime
                 # view so Python callers cannot silently return an awaitable.
@@ -614,6 +628,12 @@ class Recording:
             self.dispatcher = RecordingDispatcher(self)
             self.computer.dispatcher = self.dispatcher
             self._session.start_record()
+            # A password field, or the username field of a sign-in form,
+            # takes one of these values as a secret parameter: the recording
+            # names the input and never holds its text.
+            if self._withhold_credentials:
+                self._session.withhold_credentials(self._values)
+                self._credential_withholding_enabled = True
         except BaseException as error:
             callbacks = [self._close]
             if self.dispatcher is not None:
@@ -804,6 +824,7 @@ class Recording:
             self._dialect,
             guard=guard,
             readback=readback,
+            credential_withholding=self._credential_withholding_enabled,
         )
 
     def _dispatch_after_action(self, native: Mapping[str, Any]) -> None:
@@ -963,10 +984,16 @@ class CompiledAgent:
     #: Trusted process-local preparation/preflight on the capture backend.
     #: Not a canary/replay hook, an approval or a serialized task option.
     before_capture: Optional[Callable[[Any], None]] = field(default=None, repr=False)
+    #: Opt-in protection of declared values typed into observed credentials.
+    #: Wrap requests it; ordinary/manual capture retains its existing behavior.
+    withhold_credentials: bool = False
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # Enabled only by the compile-agent task loader, never a raw bundle path.
     _use_skill_repair: bool = field(default=False, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        credential_withholding_requested(self.withhold_credentials)
 
     # -- layout --------------------------------------------------------------
 
@@ -998,6 +1025,12 @@ class CompiledAgent:
 
     def candidate(self) -> Optional[dict[str, Any]]:
         path = self.program_dir / CANDIDATE_FILE
+        if path.is_file() and credential_withholding_requested(
+            self.withhold_credentials
+        ):
+            lifecycle.require_credential_withholding(
+                self.program_dir, bundle_dir=self.bundle_dir, key_dir=self.key_dir
+            )
         return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
     @property
@@ -1208,10 +1241,16 @@ class CompiledAgent:
         *,
         guard: Optional[TeachGuard] = None,
         readback: Any = None,
+        credential_withholding: bool = False,
     ) -> JitResult:
         program = self.program_dir
         lifecycle.mark_draft(self.bundle_dir)
-        lifted = lift_params(self.bundle_dir, values)
+        # A sign-in value the recording withheld is a secret parameter
+        # already; it is never typed as text, so there is nothing to lift.
+        lifted = lift_params(
+            self.bundle_dir,
+            public_values(values, getattr(session, "withheld_params", ())),
+        )
         candidate = {
             "state": lifecycle.BundleState.DRAFT.value,
             "status": NEEDS_HUMAN_ADMIT,
@@ -1221,6 +1260,7 @@ class CompiledAgent:
             "recorded_by": f"agent:{dialect}",
             "agent_principal_id": getattr(self.agent, "principal_id", None),
             "dialect": dialect,
+            "credential_withholding": credential_withholding,
             "policy": self.policy,
             "mine_effects": self.app.record_reader is not None,
             "model_key": self.model_key.provenance() if self.model_key else None,
@@ -1532,6 +1572,10 @@ class CompiledAgent:
 
         try:
             record = lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
+            if credential_withholding_requested(self.withhold_credentials):
+                lifecycle.require_credential_withholding(
+                    self.program_dir, bundle_dir=bundle(), key_dir=self.key_dir
+                )
             workflow = Workflow.load(bundle())
         except Exception as exc:  # noqa: BLE001 - any doubt is a refusal
             return refused(f"the admission does not hold: {exc}")
@@ -1544,7 +1588,9 @@ class CompiledAgent:
             return refused("the bundle changed after its admission was checked")
         if (record.get("task") or {}).get("key") != self.task.key:
             return refused("the admission is for a different task signature")
-        if sorted(workflow.params) != sorted(self.task.params):
+        if sorted({*workflow.params, *workflow.secret_params}) != sorted(
+            self.task.params
+        ):
             return refused("the admitted program's parameters do not match the task")
         if record.get("policy") != self.policy:
             return refused(
@@ -1629,6 +1675,13 @@ class CompiledAgent:
         def bundle() -> Path:
             return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
 
+        if credential_withholding_requested(self.withhold_credentials):
+            try:
+                lifecycle.require_credential_withholding(
+                    self.program_dir, bundle_dir=bundle(), key_dir=self.key_dir
+                )
+            except AdmissionError as exc:
+                return str(exc), None
         if attended_by is None:
             try:
                 lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
@@ -1657,33 +1710,39 @@ class CompiledAgent:
                 if attended_by
                 else "openadapt-flow-jit"
             ),
-            params=values,
+            params=public_values(values, workflow.secret_params),
         )
         if self.app.reset is not None:
             self.app.reset()
         backend, close = self.app.open()
         try:
-            report = Replayer(
-                backend,
-                effect_verifier=self.verifier,
-                governed_authorization=authorization,
-                durable=True,
-                require_settled=True,
-                attended_draft_by=attended_by,
-                draft_key_dir=self.key_dir,
-                deployment_surface=self.app.deployment_surface,
-            ).run(
-                workflow.model_copy(deep=True),
-                params=values,
-                bundle_dir=bundle(),
-                run_dir=run_dir,
-                execution_target_kind=self.app.kind,
-                execution_origin=self.app.origin if self.app.kind == "web" else None,
-                execution_entry_url=self.app.entry_url,
-                execution_target_origin=(
-                    None if self.app.kind == "web" else self.app.origin
-                ),
-            )
+            # A secret parameter (a sign-in the recording withheld) is typed
+            # from its environment variable, set from memory for this run only.
+            public = public_values(values, workflow.secret_params)
+            with secret_environment(values, workflow.secret_params):
+                report = Replayer(
+                    backend,
+                    effect_verifier=self.verifier,
+                    governed_authorization=authorization,
+                    durable=True,
+                    require_settled=True,
+                    attended_draft_by=attended_by,
+                    draft_key_dir=self.key_dir,
+                    deployment_surface=self.app.deployment_surface,
+                ).run(
+                    workflow.model_copy(deep=True),
+                    params=public,
+                    bundle_dir=bundle(),
+                    run_dir=run_dir,
+                    execution_target_kind=self.app.kind,
+                    execution_origin=(
+                        self.app.origin if self.app.kind == "web" else None
+                    ),
+                    execution_entry_url=self.app.entry_url,
+                    execution_target_origin=(
+                        None if self.app.kind == "web" else self.app.origin
+                    ),
+                )
         finally:
             close()
         return None, report
@@ -1862,6 +1921,7 @@ def compile_agent(
     teach_authorization: Any = None,
     on_screen: Sequence[str] = (),
     before_capture: Optional[Callable[[Any], None]] = None,
+    withhold_credentials: bool = False,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1893,6 +1953,10 @@ def compile_agent(
             warning is printed to stderr either way.
         require_distinct_reviewer_and_admitter: Refuse an admission by the
             principal who reviewed the draft. Off by default.
+        withhold_credentials: Trusted Python opt-in to protect declared inputs
+            in observed credential fields. Requires the backend observation seam
+            before capture. Ordinary capture is off by default and can contain
+            input values. Wrap always requests this protection.
         before_capture: Trusted Python callback receiving the exact owned
             backend after guarded opening and before recording or actor entry.
             Prepare and check the state before reserving a model operation.
@@ -1944,4 +2008,5 @@ def compile_agent(
         teach_authorization=teach_authorization,
         on_screen=tuple(str(t) for t in on_screen if str(t).strip()),
         before_capture=before_capture,
+        withhold_credentials=withhold_credentials,
     )

@@ -155,13 +155,37 @@ run before any action unless all of these hold:
 - the admission verifies against the admission key registered with the
   organization. The runner stages only that key, at
   `<key_dir>/keys/ed25519.pub`, because it trusts whatever key is there;
+- the admission was made by a person (`--person`) or with a CI admitter key
+  (`--admit-key`). For an admitter key, the runner also stages that one key,
+  under the principal id the admission names, from the admitter keys an owner
+  or admin registered with the organization. An admission an agent made under
+  a signed policy, or a repair, cannot run hosted, and `publish` refuses it;
 - the authorization names that exact admission;
 - the bundled `verify.yaml` has the SHA-256 the admission binds;
 - the run shape matches what the runner derives itself;
 - the profile is Standard. Regulated needs the qualification campaign.
 
+Each dispatch carries one verified authority bound to its exact admission,
+bundle, inputs, policy, run, dispatch session and trust registry. The CLI,
+public `Replayer` and deployment API use this same authority. It is used once;
+resume verifies a fresh one against the retained inputs and current keys.
+Every input checks the scope again after preparation.
+
+Each input also requires a signed v3 delivery permit. Immediately before the
+input, the receiver checks the signed `delivery_not_after` deadline, registry
+expiry and registry-check age. These limits have no grace period. An issued
+permit authorizes one input start until its deadline; revocation can refuse a
+new grant but does not retroactively revoke an already issued grant. API
+sequences obtain and acknowledge a separate permit for every request.
+
 Only then does the run read back through the bundled `verify.yaml`, and it is
-VERIFIED only when that read-back confirms the write. A run that rests on a
+VERIFIED only when that read-back confirms the write and every attempted
+input has its valid delivery receipt. A completion outside the signed timing
+limits retains raw uncertainty evidence, halts further input and requires
+reconciliation. A timely signed receipt remains valid historical evidence if
+its HTTPS response arrives later. Historical v2 artifacts remain readable,
+but cannot authorize live input. See [Managed authority lifetime](design/MANAGED_AUTHORITY_LIFETIME.md).
+ A run that rests on a
 qualification admission or a production authority file ignores the bundled
 file and reads back through its own deployment config.
 
@@ -193,9 +217,68 @@ The scrubber replaces any other principal it finds in these files with
 | --- | --- |
 | Organization | `GET /api/v1/whoami` (skipped with `--org` or `OPENADAPT_ORG_ID`) |
 | Admission key | `GET`, then if missing `POST /api/v1/org/{org}/admission-keys` |
+| Admitter key (admitter-key admissions only) | `GET /api/v1/org/{org}/admitter-keys`; registering one is for an owner or admin, in the dashboard |
 | Challenge | `POST /api/v1/org/{org}/validation-challenges` |
 | Upload | `POST /api/v1/org/{org}/workflow`, or `PUT /api/v1/org/{org}/workflow/{id}/definition` |
 | Check | `GET /api/v1/org/{org}/workflow/{id}/definition?qualification_id=...` |
+
+## Tasks that sign in
+
+A task can start by signing in to the app. Name the username and password as
+inputs like any other, for example
+`"Sign in as {username} with password {password}, then add a note with the text {note}"`.
+
+You don't mark them yourself. During the first run, the recorder checks each
+field the agent types into, using only the page's markup:
+
+- a password field: `type="password"`, or `autocomplete` naming
+  `current-password` or `new-password`;
+- the username field paired with it: `autocomplete="username"`, or a unique
+  text, email or phone candidate paired across the form's password controls.
+  Open shadow roots are included. Hidden password controls are still
+  candidates; ambiguous or unreadable controls refuse declared inputs before
+  typing.
+
+Their inputs become **secret parameters** of the program (`ir.Step.secret`).
+The recording, the program, the run records and the receipts keep the input's
+name and never its value. Each field is blacked out in every saved frame that
+shows it after it was typed into. A credential field that receives text
+matching none of the task's inputs is refused before anything is typed. The
+submit of a form containing exactly a username and a current password is
+classified as sign-in. Password changes and sign-ups keep the form-save
+escalation, and a button's independent write-risk classification still applies.
+
+Replay screenshots for any program with secret parameters are stored as
+black frames. The runtime keeps the original pixels in memory for its checks,
+but never writes those page pixels to the run report. This also covers a
+username echoed outside its original field after sign-in.
+
+The program types each secret from `OPENADAPT_FLOW_SECRET_<NAME>`, for
+example `OPENADAPT_FLOW_SECRET_PASSWORD`. The canary and later local runs set
+that variable from the value you passed, for that run only. To keep a value
+off the command line, export the variable instead of passing
+`--param password=...`. Distinct secret names must have distinct normalized
+environment keys; case or punctuation collisions are refused. Managed runs
+also refuse secret values in a params file, even if the dispatch digest matches.
+
+The values still sit in two places on your machine, and both stay there:
+
+- the task file's `canary_params`;
+- a teach authorization, if it names the sign-in inputs by digest.
+
+When text scrubbing works (`openadapt-flow[privacy]`), the model sees each
+input only as a placeholder. Without it, the first run's instruction carries
+the values to your model provider. Cached and hosted runs make no model
+calls.
+
+`publish` lists the secret parameters under `secret_parameters` in the upload
+and leaves them out of the call's inputs. The endpoint is callable only after
+an owner or admin attaches a vault set that holds a key named exactly like
+each secret parameter: on the workflow's page in the dashboard, or with
+`PUT /api/v1/org/<org>/workflow/<workflow>/secrets` and
+`{"secrets_ref": "<set name>"}`. Until then the definition answers
+`vault_set_required`. A call that sends a secret is refused. Each hosted run
+reads the values from the vault inside the sandbox.
 
 ## 6. Call it
 
@@ -231,6 +314,8 @@ uploaded.
 | `WORKFLOW_API_UNAVAILABLE` | The workflow API is not enabled for the organization. |
 | `ADMISSION_KEY_UNREGISTERED` | The cloud did not list or register the admission key. |
 | `ADMISSION_KEY_REVOKED` | The organization revoked this admission key. Admit the program again with a new `--key-dir`. |
+| `ADMISSION_MODE_UNSUPPORTED` | The program was admitted in a mode a hosted run cannot verify (an agent under a policy, or a repair). Admit it with `--person` or `--admit-key`. |
+| `ADMITTER_KEY_UNREGISTERED` | The program was admitted with a CI admitter key the organization has not registered. An owner or admin registers the named principal id and public key in the dashboard (Settings, Admitter keys) or with `POST /api/admitter-keys`. |
 | `NOT_ADMITTED` | The task has no admitted program yet. Run step 4. |
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
 | `ADMISSION_INVALID` | The admission signature does not verify with the local key, `keys/ed25519.pub` or `keys/ed25519.pem` is missing, or the cloud copy of the admission cannot be written (see "What the cloud learns about people"). |
@@ -247,3 +332,30 @@ uploaded.
 
 Exit codes: 0 published, 1 refused, 2 setup missing, 3 waiting (the upload was
 not confirmed, or the endpoint is not callable yet).
+
+
+### Credential observation before capture
+
+Automatic credential withholding requires a backend that can observe the
+focused field's credential type. If that capability is absent, noncallable
+or unavailable, capture refuses with
+`CAPTURE_CREDENTIAL_OBSERVATION_UNSUPPORTED` before recording or entering the
+actor. Pixels alone do not prove that a field is ordinary. Current screen-only
+RDP/Citrix backends therefore cannot use this automatic capture path.
+
+The explicit person-entered secret handoff remains available through
+`AuthoringSession.pause_for_input(secret=True)` and
+`continue_input(operator_confirmed=True)`. It names the secret parameter and
+redacts the person-marked field without recording its text. Trusted setup
+outside capture remains separate; a generic preparation callback does not
+exempt an automatic capture from the observation requirement.
+
+
+General `compile_agent` recording keeps its existing default,
+`withhold_credentials=False`; those recordings can contain input values.
+Trusted Python callers can request `withhold_credentials=True`. Wrap's
+`FirstRunCompiler` always requests it; task JSON cannot opt out. Protected
+callers also require the mode in the program's verified signed recorder or
+admission provenance before returning or running a cached program. Legacy,
+false or non-boolean claims cannot satisfy that requirement. An unsigned cache
+key or task file is not evidence that an earlier recording withheld values.

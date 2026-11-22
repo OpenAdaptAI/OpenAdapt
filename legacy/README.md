@@ -1,25 +1,22 @@
-> ## Important Notice: New Modular Architecture Available
+> ## This page describes the pre-1.0 project
 >
-> **This repository contains the legacy monolithic OpenAdapt codebase (v0.46.0), which is now frozen.**
+> **This directory holds the frozen v0.46.0 codebase.** Its description below
+> ("generative process automation", replay driven by model calls) is outdated.
 >
-> Active development has moved to a new **modular meta-package architecture** with better maintainability and cleaner separation of concerns.
+> **Current OpenAdapt:** give your agent a program, not a mouse. OpenAdapt is
+> the open-source, verified execution layer for computer-use agents. An agent,
+> or a person, does a task once in a web, desktop or remote-desktop app;
+> OpenAdapt compiles that run into a program that makes no model calls, reads
+> each save back from the system of record, and stops instead of guessing.
 >
-> **New packages:**
-> | Package | Description |
-> |---------|-------------|
-> | `openadapt` | Meta-package with unified CLI (v1.0.0+) |
-> | `openadapt-ml` | ML engine, training, inference |
-> | `openadapt-capture` | Event recording and storage |
-> | `openadapt-evals` | Benchmark evaluation |
-> | `openadapt-viewer` | HTML visualization |
-> | `openadapt-grounding` | UI element localization |
-> | `openadapt-retrieval` | Demo retrieval |
+> - Current documentation: [docs.openadapt.ai](https://docs.openadapt.ai)
+> - What it can do today: [CAPABILITIES.md](../CAPABILITIES.md)
+> - Current README: [README.md](../README.md)
+> - Try it: `uvx --python 3.12 openadapt@latest quickstart --break-it`
 >
-> **Quick start:** `pip install openadapt[all]`
->
-> **Migration guide:** See [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for migration instructions.
->
-> **Legacy users:** This codebase remains available. Install with `pip install openadapt==0.46.0`
+> **Legacy users:** this codebase remains available. Install it with the steps
+> in [Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version),
+> and see [docs/LEGACY_FREEZE.md](../docs/LEGACY_FREEZE.md) for migration notes.
 
 ---
 
@@ -86,24 +83,21 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ### Installation Scripts
 
-#### Windows
-- Press Windows Key, type "powershell", and press Enter
-- Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
-  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
-  </pre>
+The scripted installers in [`legacy/install/`](install/) set up the v0.46.0
+repository layout, from before the code moved under `legacy/`. They are kept as
+historical reference and are not maintained against the current repository, so
+this page no longer gives a command that runs them.
 
-#### MacOS
-- Download and install Git and Python 3.10
-- Press Command+Space, type "terminal", and press Enter
-- Copy and paste the following command into the terminal, and press Enter:
-  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
-  </pre>
+To use the legacy app, install the frozen release with the steps in
+[Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version).
+For current work, use the packages listed in the notice at the top of this page.
 
 <br/>
 
 ### Manual Setup
+
+These steps describe the v0.46.0 repository layout and are kept for reference.
+In the current repository this code lives under `legacy/`.
 
 Prerequisite:
 - Python 3.10
@@ -221,10 +215,10 @@ python -m openadapt.replay NaiveReplayStrategy
 
 Other replay strategies include:
 
-- [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Early proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
-- (*)[`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window.
-- (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
-- (*)[`VisualBrowserReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual_browser.py): Like VisualReplayStrategy but generates segments from the visible DOM read by the browser extension.
+- [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/stateful.py): Early proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
+- (*)[`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window.
+- (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
+- (*)[`VisualBrowserReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/strategies/visual_browser.py): Like VisualReplayStrategy but generates segments from the visible DOM read by the browser extension.
 
 
 The (*) prefix indicates strategies which accept an "instructions" parameter that is used to modify the recording, e.g.:
@@ -233,7 +227,7 @@ The (*) prefix indicates strategies which accept an "instructions" parameter tha
 python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
 ```
 
-See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
+See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 ### Browser integration
 
@@ -310,7 +304,7 @@ Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
 `ActionEvent`(s) based on the previously recorded `ActionEvent`s in order to
 accomplish the task specified in the
-[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/models.py#L46)
+[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/legacy/openadapt/models.py#L46)
 and narrated by the user in
 [`AudioInfo.words_with_timestamps`](https://github.com/OpenAdaptAI/OpenAdapt/pull/346/files#diff-224d5ce89a18f796cae99bf3da5a9862def2127db2ed38e68a07a25a8624166fR393),
 while accounting for differences in screen resolution, window size, application
