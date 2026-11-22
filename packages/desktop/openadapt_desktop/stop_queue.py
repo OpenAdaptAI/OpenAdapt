@@ -24,12 +24,6 @@ Cards come from three places:
   first, so every answer names a registered approver.
 * ``rearm_problems_only``: a task whose "only ask about problems" switch went
   off, when a signed re-arm is available.
-* ``exception``: a card any agent's run opened in Flow's exception registry
-  (a one-time code prompt, an unexpected dialog, a sign-in mid-task, a stall,
-  a possible duplicate, an ambiguous record, a task it can't finish). The
-  answer is the closed answer, signed with the approver key and written as
-  the card's answer file (:mod:`openadapt_desktop.exception_queue`); the
-  waiting run checks the signature itself.
 
 Similar cards share a ``batch_key``. A batch is answered with one choice and
 one signature, and each card in it is still checked on its own.
@@ -495,179 +489,6 @@ def card_for_rearm(switch: dict) -> dict[str, Any] | None:
     return _seal(card)
 
 
-# -- exception cards -------------------------------------------------------------
-
-#: Per kind: the question, and the closed answers with what each one does.
-#: Desktop shows its own words for each answer, and only answers the run's
-#: own card offers.
-_EXCEPTION_QUESTIONS = {
-    "second_factor": "The app wants a one-time code",
-    "unexpected_dialog": "A dialog is in the way",
-    "session_expired": "The app signed out partway through",
-    "timeout_or_stall": "The run has stalled",
-    "possible_duplicate": "Is this record already in the app?",
-    "ambiguous_record": "Which record is it?",
-    "cannot_complete": "The run can't finish this item",
-}
-
-_EXCEPTION_SKIP = Choice(
-    "skip", "Skip this item", "Nothing is saved. The run moves to the next item.", "exception:skip"
-)
-_EXCEPTION_ABORT = Choice(
-    "abort", "Stop the run", "Nothing more is saved. The whole run stops.", "exception:abort"
-)
-
-_EXCEPTION_CHOICES: dict[str, tuple[Choice, ...]] = {
-    "second_factor": (
-        Choice(
-            "done_by_person",
-            "I entered the code in the browser",
-            "You type the code in the live browser yourself, then the run goes on. "
-            "OpenAdapt never sees the code.",
-            "exception:done_by_person",
-        ),
-        _EXCEPTION_SKIP,
-        _EXCEPTION_ABORT,
-    ),
-    "unexpected_dialog": (
-        Choice(
-            "done_by_person",
-            "I dealt with the dialog",
-            "You close or answer it yourself, then the run goes on.",
-            "exception:done_by_person",
-        ),
-        Choice(
-            "continue",
-            "It's harmless, go on",
-            "The run goes on with the dialog as it is. Every check still runs.",
-            "exception:continue",
-        ),
-        _EXCEPTION_SKIP,
-        _EXCEPTION_ABORT,
-    ),
-    "session_expired": (
-        Choice(
-            "done_by_person",
-            "I signed in again",
-            "You sign in yourself in the live browser, then the run goes on. "
-            "OpenAdapt never sees the password.",
-            "exception:done_by_person",
-        ),
-        _EXCEPTION_SKIP,
-        _EXCEPTION_ABORT,
-    ),
-    "timeout_or_stall": (
-        Choice(
-            "continue",
-            "Keep waiting",
-            "The run tries the step again, with every check.",
-            "exception:continue",
-        ),
-        _EXCEPTION_SKIP,
-        _EXCEPTION_ABORT,
-    ),
-    "possible_duplicate": (
-        Choice(
-            "skip",
-            "Same record: don't add it",
-            "Nothing is saved. The item closes as skipped.",
-            "exception:skip",
-        ),
-        Choice(
-            "continue",
-            "Different record: go on",
-            "The run goes on to fill the form. The save still needs every check.",
-            "exception:continue",
-        ),
-        Choice(
-            "done_by_person",
-            "I'll do this one by hand",
-            "OpenAdapt saves nothing. The item closes as done by a person.",
-            "exception:done_by_person",
-        ),
-        _EXCEPTION_ABORT,
-    ),
-    "ambiguous_record": (
-        Choice(
-            "done_by_person",
-            "I opened the right record",
-            "You open the right record yourself, then the run goes on from there.",
-            "exception:done_by_person",
-        ),
-        _EXCEPTION_SKIP,
-        Choice(
-            "decline",
-            "This item shouldn't be done",
-            "Nothing is saved. The item closes as declined.",
-            "exception:decline",
-        ),
-    ),
-    "cannot_complete": (
-        Choice(
-            "done_by_person",
-            "I did it by hand",
-            "OpenAdapt saves nothing. The item closes as done by a person.",
-            "exception:done_by_person",
-        ),
-        _EXCEPTION_SKIP,
-        _EXCEPTION_ABORT,
-    ),
-}
-
-#: Card kinds that are exception cards (one card kind, many exception kinds).
-EXCEPTION_KIND = "exception"
-
-
-def card_for_exception(raw: dict) -> dict[str, Any] | None:
-    """A card from Flow's exception registry as a queue card, or None.
-
-    ``raw`` is a card :func:`openadapt_desktop.exception_queue.open_cards`
-    already checked. Its summary was scrubbed by the run before it was
-    written. Each exception is answered on its own: no batch.
-    """
-
-    kind = raw.get("kind") if isinstance(raw, dict) else None
-    table = _EXCEPTION_CHOICES.get(str(kind))
-    if table is None:
-        return None
-    offered = {c.get("id") for c in raw.get("choices") or [] if isinstance(c, dict)}
-    choices = [c for c in table if c.id in offered]
-    if not choices:
-        return None
-    card = {
-        "schema": CARD_SCHEMA,
-        "kind": EXCEPTION_KIND,
-        "exception_kind": kind,
-        "source": {
-            "type": "exception",
-            "id": raw["card_id"],
-            "run_ref": raw["run_ref"],
-        },
-        "workflow_id": "",
-        "task_name": str(raw.get("task_id") or raw["run_ref"]),
-        "label": "",
-        "question": _EXCEPTION_QUESTIONS[str(kind)],
-        "summary": str(raw.get("summary") or ""),
-        "evidence": {
-            "source": [],
-            "record": [],
-            "differences": [],
-            "candidates": [],
-            "reason": "",
-            "step": "",
-            "expected": "",
-            "observed": "",
-            "screenshot": None,
-        },
-        "choices": [c.public() for c in [*choices, _LEAVE]],
-        "expires_at": raw.get("deadline_at"),
-        "created_at": raw.get("opened_at"),
-        "batch_key": None,
-        "status": "waiting",
-    }
-    return _seal(card)
-
-
 def choice_for(card: dict, choice_id: str) -> Choice | None:
     """The full choice behind a card's button, or None if it doesn't offer it."""
 
@@ -679,9 +500,6 @@ def choice_for(card: dict, choice_id: str) -> Choice | None:
         return next((c for c in _APPROVAL_CHOICES if c.id == choice_id), None)
     if card["kind"] == "rearm_problems_only":
         return Choice("rearm", "", "", "rearm") if choice_id == "rearm" else None
-    if card["kind"] == EXCEPTION_KIND:
-        table = _EXCEPTION_CHOICES.get(str(card.get("exception_kind")), ())
-        return next((c for c in table if c.id == choice_id), None)
     table = _ITEM_CHOICES.get(card["kind"], {})
     return next((c for c in table.values() if c.id == choice_id), None)
 
@@ -713,16 +531,9 @@ def decision_message(card_ids: Iterable[str], choice_id: str, *, decided_at: str
 
 
 def sort_cards(cards: list[dict]) -> list[dict]:
-    """Waiting saves and exceptions first (they expire), then the oldest stop."""
+    """Waiting saves first (they expire), then the oldest stop first."""
 
-    # A run holding on an exception waits with a deadline, like a save.
-    order = {
-        "approve_save": 0,
-        EXCEPTION_KIND: 0,
-        "confirm_save": 1,
-        "same_record": 2,
-        "halted": 3,
-    }
+    order = {"approve_save": 0, "confirm_save": 1, "same_record": 2, "halted": 3}
     return sorted(
         cards,
         key=lambda c: (order.get(c["kind"], 4), str(c.get("created_at") or "")),
@@ -733,12 +544,10 @@ __all__ = [
     "CARD_SCHEMA",
     "DECISION_DOMAIN",
     "DECISION_SCHEMA",
-    "EXCEPTION_KIND",
     "MAX_BATCH",
     "RECORD_CHECK_ACTIONS",
     "Choice",
     "card_for_approval",
-    "card_for_exception",
     "card_for_item",
     "card_for_rearm",
     "choice_for",
