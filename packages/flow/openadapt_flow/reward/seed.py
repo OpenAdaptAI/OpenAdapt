@@ -1,13 +1,13 @@
-"""Synthetic MockMed reward fixtures for ``serve-reward --seed-mockmed``.
+"""Synthetic demo reward fixtures for ``serve-reward``.
 
 Two bundles and two stores:
 
-* ``contracts/mockmed`` reads ``mockmed/records.db`` through the ``sqlite``
+* The tier-2 bundle reads ``records.db`` through the ``sqlite``
   recipe (channel ``db``, tier 2) and carries a self-signed certificate
   issued at policy update 0. The database starts with two rows for the
   duplicate patient and nothing for anybody else, so an episode has to write
   something before it can be verified.
-* ``contracts/mockmed-tier0`` reads ``mockmed/screen.json`` through the
+* The tier-0 bundle reads ``screen.json`` through the
   ``screen_dump`` recipe (channel ``ocr``, tier 0). Its receipts are
   ``development_only`` and never certified, whatever the dump says.
 
@@ -30,19 +30,52 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from openadapt_flow.reward.bundle import (
-    SYNTHETIC_ENVIRONMENT_ID,
-    SYNTHETIC_TASK_ID,
     _write,
     write_bundle,
 )
 
-MOCKMED_TASK_ID = SYNTHETIC_TASK_ID
-MOCKMED_ENVIRONMENT_ID = SYNTHETIC_ENVIRONMENT_ID
+
+class _BundleIds(TypedDict):
+    task_id: str
+    environment_id: str
+    certificate_id: str
+    required_effects: list[dict[str, Any]]
+    forbidden_effects: list[dict[str, Any]]
+    identity_keys: list[str]
+
+
+_DEMO_REQUIRED_EFFECTS: list[dict[str, Any]] = [
+    {
+        "kind": "record_written",
+        "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
+        "expected_count": 1,
+        "count_new_only": True,
+    }
+]
+
+_DEMO_FORBIDDEN_EFFECTS: list[dict[str, Any]] = [
+    {
+        "kind": "record_written",
+        "match": {"patient_id": {"param": "patient_id"}, "type": "Discharge"},
+        "expected_count": 1,
+    }
+]
+
+MOCKMED_TASK_ID = "task_mockmed_encounter_note"
+MOCKMED_ENVIRONMENT_ID = "environment_mockmed_synthetic"
+_SEED_BUNDLE_IDS: _BundleIds = {
+    "task_id": MOCKMED_TASK_ID,
+    "environment_id": MOCKMED_ENVIRONMENT_ID,
+    "certificate_id": "reward_certificate_mockmed",
+    "required_effects": _DEMO_REQUIRED_EFFECTS,
+    "forbidden_effects": _DEMO_FORBIDDEN_EFFECTS,
+    "identity_keys": ["patient_id"],
+}
 MOCKMED_CONTRACT_ID = "reward_contract_mockmed"
 MOCKMED_TIER0_CONTRACT_ID = "reward_contract_mockmed_tier0"
 MOCKMED_HONEST_PATIENT = "patient-honest-0001"
@@ -93,6 +126,7 @@ def seed_mockmed(
         key=key,
         issuer_key_id=issuer_key_id,
         certify=True,
+        **_SEED_BUNDLE_IDS,
     )
     tier0 = data_dir / "contracts" / "mockmed-tier0"
     write_bundle(
@@ -107,6 +141,7 @@ def seed_mockmed(
         key=key,
         issuer_key_id=issuer_key_id,
         certify=False,
+        **_SEED_BUNDLE_IDS,
     )
     return {"tier2": tier2, "tier0": tier0}
 

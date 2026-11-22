@@ -1130,6 +1130,18 @@ def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str
     )
 
 
+def _print_terminal_receipt(
+    run_dir: Path, report, *, require_opt_in: bool = False
+) -> None:
+    from openadapt_flow.receipt_record import receipt_after_run
+
+    note = receipt_after_run(
+        run_dir, require_opt_in=require_opt_in, expected_report=report
+    )
+    if note:
+        print(note, file=sys.stderr)
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -1176,6 +1188,8 @@ def _finish_replay(
             print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    if args is not None:
+        _print_terminal_receipt(run_dir, report)
     _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
@@ -5176,6 +5190,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
     _maybe_attest_run(run_dir, report, args)
+    _print_terminal_receipt(run_dir, report, require_opt_in=True)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
@@ -8488,7 +8503,7 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     if records_path is not None:
         print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
-        "\nEvery byte that would leave this machine is in receipt.json. "
+        "\nEvery byte that would leave this machine is in run-summary.json. "
         "Publishing is a separate, explicit step."
     )
     print(
@@ -11290,23 +11305,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_sections_parser(sub)
 
-    p = sub.add_parser(
-        "seal",
-        help=(
-            "Encrypt every file of a bundle that can hold patient data with "
-            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
-            "index, verify it, and publish it atomically at a new path"
-        ),
-        allow_abbrev=False,
-    )
-    p.add_argument("source", help="Existing workflow bundle directory")
-    p.add_argument(
-        "-o",
-        "--out",
-        required=True,
-        help="New destination directory (must not already exist)",
-    )
-    p.set_defaults(func=_cmd_seal)
+    from openadapt_flow.cli_encrypt import register as _register_encrypt
+
+    _register_encrypt(sub, _cmd_seal)
 
     from openadapt_flow.countersign.cli import add_countersign_parser
 
@@ -12877,7 +12878,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            "LOCAL ONLY: write a shareable run summary (run-summary.png / .json / "
             ".md) into DIR instead of contacting any host. The receipt is "
             "generated from a closed allow-list -- closed enums, counts, "
             "digests, versions -- and can carry no screenshot, OCR text, typed "
@@ -13178,44 +13179,32 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+    from openadapt_flow.cli_fleet import register_fleet_parser
+    from openadapt_flow.cli_receipt import register as _register_receipt
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
     from openadapt_flow.cli_rollback import register as _register_rollback
+    from openadapt_flow.cli_shadow import register as _register_shadow
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+    from openadapt_flow.hooks.cli import add_parser as _add_hooks_parser
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+    from openadapt_flow.learn import register as _register_learn
+    from openadapt_flow.txplan.cli import add_parser as _add_plan_parser
+    from openadapt_flow.txplan.proxy_cli import add_parser as _add_proxy_parser
 
     _register_rollback(sub)
-
-    from openadapt_flow.cli_shadow import register as _register_shadow
-
     _register_shadow(sub)
-
-    from openadapt_flow.cli_receipt import register as _register_receipt
-
     _register_receipt(sub)
-
-    from openadapt_flow.learn import register as _register_learn
-
     _register_learn(sub)
-
-    from openadapt_flow.cli_reconcile import register as _register_reconcile
-
     _register_reconcile(sub)
-
-    from openadapt_flow.cli_cleanup import register as _register_cleanup
-
     _register_cleanup(sub)
-
-    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
-
     _add_jit_parser(sub)
-
-    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
-
     _add_compile_agent_parser(sub)
-
-    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
-
     _add_guard_parser(sub)
-
-    from openadapt_flow.cli_fleet import register_fleet_parser
-
+    _add_hooks_parser(sub)
+    _add_plan_parser(sub)
+    _add_proxy_parser(sub)
     register_fleet_parser(sub)
 
     parser.add_task_help()
@@ -13397,43 +13386,28 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
 
     missing = [
-        name
-        for name in ("fastapi", "uvicorn", "openadapt_types")
-        if find_spec(name) is None
+        n for n in ("fastapi", "uvicorn", "openadapt_types") if find_spec(n) is None
     ]
     if missing:
         raise SystemExit(
             f"serve-execute needs {', '.join(missing)} — install the "
             "execute extra:  pip install 'openadapt-flow[execute]'"
         )
-    from openadapt_flow.execute import SELF_SIGNED_NOTICE
-    from openadapt_flow.execute.app import serve
-    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+    from openadapt_flow.execute.app import run_serve_execute
 
-    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
-    store = ExecuteService(
-        data_dir,
-        token=args.token,
-        seed_mockmed=bool(args.seed_mockmed),
-        deployment=getattr(args, "config", None),
-    )
-    print("openadapt-flow reference Execute")
-    print(f"  http://{args.host}:{args.port}")
-    print(f"  data dir     {data_dir}")
-    print(f"  token        {store.token}")
-    print("  issuer       self_signed")
-    print(f"  fingerprint  {store.fingerprint}")
-    print(f"  {SELF_SIGNED_NOTICE}")
+    seeded = ()
     if args.seed_mockmed:
-        print("  seeded MockMed admissions (ok + banner-lie)")
-    serve(
-        data_dir,
+        from openadapt_flow.mockmed.execute_seed import demo_admissions
+
+        seeded = demo_admissions()
+    return run_serve_execute(
+        data_dir=Path(args.data_dir) if args.data_dir else None,
         host=args.host,
         port=args.port,
-        token=store.token,
-        service=store,
+        token=args.token,
+        seed_admissions=seeded,
+        deployment=getattr(args, "config", None),
     )
-    return 0
 
 
 def _cmd_serve_reward(args: argparse.Namespace) -> int:
@@ -14214,13 +14188,12 @@ def main(
             args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
-            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
-            # never changes the run's exit code.
-            from openadapt_flow.offline_seal import seal_after_run
+            # Terminal handlers sign receipts. Keep the old Seal here for one release.
+            from openadapt_flow.receipt_record import after_run_notes
 
             run_dir = getattr(args, "run_dir", None)
-            note = seal_after_run(Path(run_dir) if run_dir else None)
-            if note:
+            folder = Path(run_dir) if run_dir else None
+            for note in after_run_notes(folder, include_receipt=False):
                 print(note, file=sys.stderr)
         return code
     except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:

@@ -41,6 +41,17 @@ class SandboxSafetyError(ValueError):
     """Raised when sandbox certification targets a non-loopback origin without opt-in."""
 
 
+class InductionRefused(ValueError):
+    """The trace never shows a record at its own URL, so no lens is proposed.
+
+    A lens reads the target record back at its item route. A trace in which no
+    response carries a record whose id is the last segment of the request path
+    gives no evidence for that route; a route invented from naming patterns
+    would read the wrong thing (a search endpoint, a query API) and look like a
+    lens.
+    """
+
+
 _STATIC_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".js",
@@ -591,6 +602,20 @@ def _record_id(rec: Mapping[str, Any], field_name: str) -> Optional[str]:
     return text or None
 
 
+def _shows_item_route(scoped: list[_HarExchange]) -> bool:
+    """True when some 2xx response is one record served at its own URL."""
+    for ex in scoped:
+        if ex.method not in {"GET", "POST", "PUT", "PATCH"} or len(ex.segments) < 2:
+            continue
+        rec, _ = _unwrap_single_record(ex.resp_json)
+        if rec is None:
+            continue
+        for cand in _ID_CANDIDATE_KEYS:
+            if _record_id(rec, cand) == ex.segments[-1]:
+                return True
+    return False
+
+
 def _infer_effect_routes(scoped: list[_HarExchange]) -> Optional[_EffectRoutes]:
     """Find the entity route whose roles the trace's effects establish."""
     groups: dict[tuple[tuple[str, ...], str], list[tuple[_HarExchange, str]]] = {}
@@ -609,42 +634,54 @@ def _infer_effect_routes(scoped: list[_HarExchange]) -> Optional[_EffectRoutes]:
                 wrappers.setdefault(key, wrapper)
                 break
 
+    def _find_create(
+        id_field: str, members: list[tuple[_HarExchange, str]]
+    ) -> Optional[_HarExchange]:
+        known_ids = {rid for _, rid in members}
+        first_seen: dict[str, int] = {}
+        for ex, rid in members:
+            first_seen.setdefault(rid, ex.seq)
+        for ex in scoped:
+            if ex.method not in {"POST", "PUT", "PATCH"}:
+                continue
+            rec, _ = _unwrap_single_record(ex.resp_json)
+            if rec is None:
+                continue
+            created = _record_id(rec, id_field)
+            if (
+                created is not None
+                and created in known_ids
+                and ex.segments[-1:] != (created,)
+                and ex.seq < first_seen[created]
+            ):
+                return ex
+        return None
+
+    # An entity needs a write the trace shows: an update on the item route,
+    # or a create whose record the trace then reads at that route.
     best_key: Optional[tuple[tuple[str, ...], str]] = None
-    best_score: tuple[int, int, int] = (0, 0, -1)
+    best_score: tuple[int, int, int, int] = (0, 0, 0, -1)
+    best_create: Optional[_HarExchange] = None
     for key, members in groups.items():
         n_mut = sum(1 for ex, _ in members if ex.method != "GET")
         n_read = sum(1 for ex, _ in members if ex.method == "GET")
-        if n_mut == 0:
+        create_ex = _find_create(key[1], members)
+        if n_mut == 0 and create_ex is None:
             continue
-        score = (n_mut, n_read, max(ex.seq for ex, _ in members))
+        score = (
+            n_mut,
+            int(create_ex is not None),
+            n_read,
+            max(ex.seq for ex, _ in members),
+        )
         if score > best_score:
-            best_key, best_score = key, score
+            best_key, best_score, best_create = key, score, create_ex
     if best_key is None:
         return None
 
     parent, id_field = best_key
     members = groups[best_key]
-    known_ids = {rid for _, rid in members}
-    first_seen: dict[str, int] = {}
-    for ex, rid in members:
-        first_seen.setdefault(rid, ex.seq)
-
-    create: Optional[_HarExchange] = None
-    for ex in scoped:
-        if ex.method not in {"POST", "PUT", "PATCH"}:
-            continue
-        rec, _ = _unwrap_single_record(ex.resp_json)
-        if rec is None:
-            continue
-        rid = _record_id(rec, id_field)
-        if (
-            rid is not None
-            and rid in known_ids
-            and ex.segments[-1:] != (rid,)
-            and ex.seq < first_seen[rid]
-        ):
-            create = ex
-            break
+    create = best_create
 
     delete = next(
         (
@@ -689,14 +726,59 @@ def _looks_like_metadata_or_volatile(key: str, value: Any) -> bool:
     return False
 
 
+def _null_or_empty(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value == "")
+
+
+def learn_null_empty_codecs(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    written_paths: Optional[set[str]] = None,
+) -> dict[str, FieldCodec]:
+    """Fields whose value moved between ``None`` and ``""`` and nothing else.
+
+    Many apps store an untouched optional field as ``NULL`` until a form save
+    sends ``""`` back for it, or the reverse. Without a declaration the judge
+    reads that as a clobber (OpenAdapt #2391). Each field this returns gets a
+    ``null_empty`` codec, so only that field treats the two as one value; any
+    non-empty change on it is still judged exactly. Fields in
+    ``written_paths`` are skipped: a value the write asked for is not a server
+    rewrite.
+    """
+    flat_before = _flatten_record(before)
+    flat_after = _flatten_record(after)
+    skip = written_paths or set()
+    learned: dict[str, FieldCodec] = {}
+    for path, old in flat_before.items():
+        if path in skip or path not in flat_after:
+            continue
+        new = flat_after[path]
+        if (
+            old is not new
+            and old != new
+            and _null_or_empty(old)
+            and _null_or_empty(new)
+        ):
+            learned[path] = FieldCodec(kind="null_empty")
+    return learned
+
+
 def induce_lens_from_har(
     har: Mapping[str, Any],
     *,
     entity_name: Optional[str] = None,
     intended_inputs: Optional[Mapping[str, Any]] = None,
     llm_proposer: Optional[Callable[[Mapping[str, Any]], EntityLensSpec]] = None,
+    allow_unobserved_item_route: bool = False,
 ) -> EntityLensSpec:
-    """Compile an ``EntityLensSpec`` from 1-2 browser/HTTP HAR 1.2 traces."""
+    """Compile an ``EntityLensSpec`` from 1-2 browser/HTTP HAR 1.2 traces.
+
+    A trace that never shows a record at its own URL raises
+    ``InductionRefused``. ``allow_unobserved_item_route=True`` instead
+    proposes an item route from the collection path; use it only when the
+    lens is then certified on a sandbox, whose probes read the guessed route
+    back and fail if it serves a different record.
+    """
     exchanges = _parse_har_exchanges(har)
 
     if llm_proposer is not None:
@@ -731,6 +813,15 @@ def induce_lens_from_har(
     base_url = max(origin_counts.items(), key=lambda kv: kv[1])[0]
     scoped = [ex for ex in exchanges if ex.origin == base_url]
     effect = _infer_effect_routes(scoped)
+    if effect is None and not allow_unobserved_item_route:
+        raise InductionRefused(
+            "no write the trace can attribute to a record: no update on a URL "
+            "ending in the returned record's id, and no create whose record "
+            "is then served at such a URL"
+            if _shows_item_route(scoped)
+            else "no item route in the trace: no response carries a record "
+            "whose id is the last segment of its request path"
+        )
     if effect is not None:
         # Learn only from the entity's own exchanges, so records of another
         # collection that share an id never feed its codecs or snapshots.
@@ -1086,6 +1177,7 @@ def induce_lens_from_har(
             elif path not in create_defaults_list:
                 create_defaults_list.append(path)
 
+    null_empty_paths: list[str] = []
     requested_values: set[tuple[str, str]] = set()
     for ex in scoped:
         if ex.method in {"POST", "PUT", "PATCH"} and ex.req_data:
@@ -1103,6 +1195,12 @@ def induce_lens_from_har(
                     continue
                 old_val = prev_rec[path]
                 if new_val == old_val:
+                    continue
+                # NULL became "" (or the reverse): one empty value, spelled two
+                # ways. Learn it for this field; never a clobber or a replace.
+                if _null_or_empty(old_val) and _null_or_empty(new_val):
+                    if path not in null_empty_paths:
+                        null_empty_paths.append(path)
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
                 # changed it, or server metadata key not in user-supplied fields. A
@@ -1186,6 +1284,9 @@ def induce_lens_from_har(
                     if codec is not None:
                         field_codecs[path] = codec
                     break
+
+    for path in null_empty_paths:
+        field_codecs.setdefault(path, FieldCodec(kind="null_empty"))
 
     # Step 7: Induce stable identity_fields.
     volatile_set = set(volatile_list)
@@ -1762,6 +1863,13 @@ def probe_put_semantics(
                             and _looks_like_metadata_or_volatile(path, m_val)
                         ):
                             volatile_list.append(path)
+                    # The merged write sent every untouched field back as read;
+                    # one the server stored as the other empty spelling gets
+                    # a null_empty codec.
+                    for path, codec in learn_null_empty_codecs(
+                        r0, r_merged, set(flat_upd)
+                    ).items():
+                        codecs.setdefault(path, codec)
 
         for path in pending_volatile:
             if path not in volatile_list and path not in create_defaults_list:
@@ -2472,10 +2580,12 @@ def certify_lens_on_sandbox(
 
 __all__ = [
     "DefaultFrameAndIntentJudge",
+    "InductionRefused",
     "SandboxSafetyError",
     "apply_field_codec",
     "certify_lens_on_sandbox",
     "induce_lens_from_har",
     "infer_field_codec",
     "probe_put_semantics",
+    "learn_null_empty_codecs",
 ]
