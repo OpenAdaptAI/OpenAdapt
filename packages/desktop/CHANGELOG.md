@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.31.1 (2026-11-22)
+
+### Bug Fixes
+
+- **desktop**: refuse symlink exception cards on Windows
+
+
+
 ## v0.31.0 (2026-11-21)
 
 ### Features
