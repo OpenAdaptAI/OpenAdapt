@@ -346,6 +346,7 @@ def outbound_lines(
     for entry in store.latest_entries():
         row = RunLedgerRowV1.model_validate(entry["row"])
         declared = set(entry.get("declared_fields") or [])
+        declared_ids = set(entry.get("declared_task_ids") or [])
         doc = row.summary().to_json() if summary else row.to_json()
         model = AgentRunSummaryV1 if summary else RunLedgerRowV1
         allowed = {f.alias or name for name, f in model.model_fields.items()}
@@ -357,6 +358,11 @@ def outbound_lines(
                 if where == "fields_written.name" and label in declared:
                     # A field name the run's own task, verify or readiness
                     # config declares (``patient_id``): a name, not a value.
+                    continue
+                if where == "task_id" and label in declared_ids:
+                    # The task id the run's own guard task or readiness
+                    # files name (Presidio reads readiness-mockmed-0002 as
+                    # an organisation): the operator's id, not a value.
                     continue
                 try:
                     scrubbed = scrubber.scrub_text(label)

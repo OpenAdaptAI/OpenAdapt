@@ -10,9 +10,11 @@
   "fields_differing": [
     "note"
   ],
+  "guard_verdict": "REFUTED",
   "hold_ms": 12.0,
   "readback_tier": "independent_readback",
   "schema": "openadapt.guard-ledger-row/v1",
   "task_id": "prod-agent-wrong-value-00",
-  "verdict": "CAUGHT_ERROR"
+  "verdict": "CAUGHT_ERROR",
+  "verdict_reason": "readback_refuted"
 }

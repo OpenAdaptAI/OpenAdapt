@@ -8,9 +8,11 @@
     "type"
   ],
   "fields_differing": [],
+  "guard_verdict": "VERIFIED",
   "hold_ms": 3315.1,
   "readback_tier": "independent_readback",
   "schema": "openadapt.guard-ledger-row/v1",
   "task_id": "prod-approval-approve-ok",
-  "verdict": "VERIFIED"
+  "verdict": "VERIFIED",
+  "verdict_reason": "readback_verified"
 }

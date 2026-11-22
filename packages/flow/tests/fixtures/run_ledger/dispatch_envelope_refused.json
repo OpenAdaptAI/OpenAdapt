@@ -22,6 +22,7 @@
         "removed": 0
       },
       "passed": false,
+      "readable": true,
       "reasons": [
         "0 new records of the task's record appeared; the task makes one (wrong record, or not saved)"
       ],

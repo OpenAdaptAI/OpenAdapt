@@ -159,6 +159,8 @@ def collect_shadow_run(folder: Path) -> Contribution:
     out = Contribution(name, files=[run_path], executor_kind="agent")
     if (tid := _task_id(run.get("task_id"))) is not None:
         out.task_ids.append(tid)
+        # P1's own run file names the task: the operator's id, not a value.
+        out.declared_task_ids.add(tid)
     out.duration_s = _float(run.get("agent_wall_s"))
 
     usage_doc = _optional(folder, "usage.json", AGENT_USAGE_SCHEMA, out)
@@ -220,6 +222,7 @@ def collect_shadow_run(folder: Path) -> Contribution:
     if case is not None:
         if (tid := _task_id(case.get("task_id"))) is not None:
             out.task_ids.append(tid)
+            out.declared_task_ids.add(tid)
         for row in case.get("fields") or []:
             if (
                 not isinstance(row, dict)
@@ -295,11 +298,18 @@ def is_dispatch_result(doc: Any) -> bool:
 
 
 def _nothing_written(check: Any) -> bool:
-    """P7's ``_nothing_written``: the record check saw no change."""
+    """P7's ``_nothing_written``: both reads of the record check succeeded
+    (``readable: true``) and saw no change. An unreadable store also reports
+    zero counts, so a check without ``readable: true`` (an older one, or a
+    failed read) proves nothing."""
 
-    return isinstance(check, Mapping) and all(
-        _int(check.get(key)) == 0 and not isinstance(check.get(key), bool)
-        for key in ("created", "changed", "removed")
+    return (
+        isinstance(check, Mapping)
+        and check.get("readable") is True
+        and all(
+            _int(check.get(key)) == 0 and not isinstance(check.get(key), bool)
+            for key in ("created", "changed", "removed")
+        )
     )
 
 
@@ -386,12 +396,16 @@ def collect_fallback_result(path: Path) -> Contribution:
     check = fallback.get("task_record_check")
     if check is None:
         check = doc.get("record_check")
-    verified = doc.get("verified") is True and bool(
-        isinstance(check, Mapping) and check.get("passed") is True
+    # P7's ``confirmed``: the final read was readable and passed.
+    confirmed = (
+        isinstance(check, Mapping)
+        and check.get("readable") is True
+        and check.get("passed") is True
     )
     reason = fallback_reason(
         status,
-        verified=verified,
+        verified=doc.get("verified") is True,
+        confirmed=confirmed,
         nothing_written=_nothing_written(check),
         something_written=_something_written(check),
         program_halted_before_effect=program.get("receipt_outcome")
@@ -470,7 +484,7 @@ def _guard_task_fields(path: Path, task_ids: set[str]) -> set[str]:
         return set()
     if doc.get("task_id") not in task_ids:
         return set()  # another task's config declares nothing for this run
-    names: set[str] = set()
+    names: set[str] = {"task_id:" + str(doc["task_id"])}
     for key in ("expected_record", "intended_fields"):
         value = doc.get(key)
         if isinstance(value, dict):
@@ -517,6 +531,14 @@ def declared_fields(files: Iterable[Path], task_ids: Iterable[str]) -> set[str]:
         elif path.suffix == ".json":
             names |= _guard_task_fields(path, ids)
     return names
+
+
+def split_declared(names: set[str]) -> tuple[set[str], set[str]]:
+    """``(field names, task ids)``: a guard task declares its own task id as
+    ``task_id:<id>`` beside its field names."""
+
+    ids = {n[len("task_id:") :] for n in names if n.startswith("task_id:")}
+    return {n for n in names if not n.startswith("task_id:")}, ids
 
 
 def config_files(files: Iterable[Path]) -> list[Path]:

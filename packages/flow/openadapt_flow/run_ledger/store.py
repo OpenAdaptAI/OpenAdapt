@@ -12,7 +12,9 @@ Each ``rows.jsonl`` line is ``{"row": <openadapt.run-ledger/v1>, "run_digest":
 ``declared_fields`` lists the field names the run's own task, verify or
 readiness reference config declares; ``ledger export`` and ``push`` let only
 those field names past the scrubber check (an entry without the key exempts
-nothing). ``run_digest`` hashes the source
+nothing).
+``declared_task_ids`` lists the task ids the run's own guard task or
+readiness files name, under the same rule. ``run_digest`` hashes the source
 files (paths and bytes); ``run_ref`` hashes the run's resolved path, so a run
 whose files change later (an approval answered after the first ``add``) gets
 a new row and :meth:`LedgerStore.latest` keeps the newest one per run. A
@@ -484,6 +486,7 @@ class LedgerStore:
                     "run_ref": run_ref,
                     "added_at": _now(),
                     "declared_fields": sorted(collected.declared_fields),
+                    "declared_task_ids": sorted(collected.declared_task_ids),
                 }
             )
             body = "".join(json.dumps(e, sort_keys=True) + "\n" for e in entries)

@@ -5,9 +5,11 @@
   "diff_path": null,
   "fields_checked": [],
   "fields_differing": [],
+  "guard_verdict": null,
   "hold_ms": 3271.7,
   "readback_tier": null,
   "schema": "openadapt.guard-ledger-row/v1",
   "task_id": "prod-approval-decline-ok",
-  "verdict": "CAUGHT_ERROR"
+  "verdict": "ESCALATED",
+  "verdict_reason": "person_declined"
 }

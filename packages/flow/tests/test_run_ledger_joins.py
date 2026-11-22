@@ -295,7 +295,7 @@ def test_run_dir_exceptions_folder_is_not_p6s_location(tmp_path):
 
 
 def test_an_approved_verified_fallback_is_verified():
-    row, _, _ = build_row(FIXTURES / "fallback_verified")
+    row, _, _ = build_row(FIXTURES / "fallback_verified_readable")
     assert _outcome(row) == ("VERIFIED", "readback_verified")
     assert row.readback_tier == "independent_readback"
     assert row.executor_kind == "agent"
@@ -307,10 +307,24 @@ def test_an_approved_verified_fallback_is_verified():
 
 
 def test_a_refused_gate_is_a_decline_not_schema_unrecognised():
-    row, _, _ = build_row(FIXTURES / "fallback_refused")
+    row, _, _ = build_row(FIXTURES / "fallback_refused_readable")
     assert _outcome(row) == ("ESCALATED", "person_declined")
     # The agent attempt's own run1.json (agent: null) isn't read again.
+    row, _, _ = build_row(FIXTURES / "fallback_refused")
+    assert row.outcome_reason != "schema_unrecognised"
     assert row.sources == ("result.json",)
+
+
+def test_a_record_check_without_readable_true_proves_nothing():
+    # P7's TaskRecordCheck says readable: false when a read failed; the zero
+    # counts then prove nothing. An older check has no flag at all.
+    for fixture, verified_or_not in (
+        ("fallback_refused_unreadable", ("UNKNOWN", "write_unconfirmed")),
+        ("fallback_refused", ("UNKNOWN", "write_unconfirmed")),
+        ("fallback_verified", ("UNKNOWN", "reconciliation_required")),
+    ):
+        row, _, _ = build_row(FIXTURES / fixture)
+        assert _outcome(row) == verified_or_not, fixture
 
 
 def test_the_dispatcher_envelope_is_wrapped_tasks_result_plus_dispatch_fields():
@@ -354,7 +368,7 @@ def test_a_wrap_record_of_a_verified_fallback_is_verified(tmp_path):
 
 def test_a_refused_gate_with_a_write_on_record_is_not_a_clean_decline(tmp_path):
     run = tmp_path / "run"
-    shutil.copytree(FIXTURES / "fallback_refused", run)
+    shutil.copytree(FIXTURES / "fallback_refused_readable", run)
     doc = json.loads((run / "result.json").read_text())
     doc["replay"]["fallback"]["task_record_check"]["created"] = 1
     (run / "result.json").write_text(json.dumps(doc))
@@ -483,15 +497,14 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
         pytest.skip("openadapt-privacy's text scrubber can't run here")
     store = _store(tmp_path)
     for path in sorted(FIXTURES.iterdir()):
-        if path.name in ("shadow_no_case", "shadow_extra_target"):
-            # No case.json declares its fields (see below); and Presidio
-            # reads the task id readiness-mockmed-0002 as an organisation.
-            continue
+        if path.name == "shadow_no_case":
+            continue  # no case.json declares its fields: see below
         if path.name.startswith(("shadow_", "fallback_")):
             store.add(path)
         elif path.name.startswith("guard_") and not path.name.endswith("_config"):
             config = FIXTURES / f"{path.name}_config"
-            store.add(path, config=tuple(sorted(config.iterdir())))
+            files = tuple(sorted(config.iterdir())) if config.is_dir() else ()
+            store.add(path, config=files)
     lines = outbound_lines(store, summary=True, scrubber=scrubber)
     assert len(lines) == len(store.latest())
     # With no case.json, nothing declares patient_id: the export refuses.
@@ -583,3 +596,62 @@ def test_a_guard_rows_field_diff_alone_does_not_pick_the_bucket(tmp_path):
 def test_no_intervals_is_unknown_unless_nobody_was_asked(fixture, expected):
     row, _, _ = build_row(FIXTURES / fixture)
     assert row.human.intervention_s == expected
+
+
+# -- task ids: exempt only when the run's own files declare them ----------------------
+
+
+class _ReadsTaskIdAsOrg(_Presidio):
+    """What Presidio does to P1's extra-target sample's task id."""
+
+    def __init__(self) -> None:
+        super().__init__("readiness-mockmed-0002")
+
+
+def test_a_declared_task_id_passes_the_scrubber_check(tmp_path):
+    store = _store(tmp_path)
+    store.add(FIXTURES / "shadow_extra_target")
+    (entry,) = store.entries()
+    assert entry["declared_task_ids"] == ["readiness-mockmed-0002"]
+    (line,) = outbound_lines(store, summary=True, scrubber=_ReadsTaskIdAsOrg())
+    assert json.loads(line)["task_id"] == "readiness-mockmed-0002"
+
+
+def test_a_task_id_no_run_file_declares_still_refuses(tmp_path):
+    # The same id, given only with --task-id: nothing in the run names it.
+    store = _store(tmp_path)
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "flight_held", run)
+    store.add(run, task_id="readiness-mockmed-0002")
+    with pytest.raises(LedgerRefused, match="task_id"):
+        outbound_lines(store, summary=True, scrubber=_ReadsTaskIdAsOrg())
+
+
+def test_a_guard_task_declares_its_own_task_id(tmp_path):
+    config = tuple(sorted((FIXTURES / "guard_approved_ok_config").iterdir()))
+    store = _store(tmp_path)
+    store.add(FIXTURES / "guard_approved_ok", config=config)
+    assert store.entries()[0]["declared_task_ids"] == ["prod-approval-approve-ok"]
+    plain = LedgerStore(tmp_path / "plain")
+    plain.add(FIXTURES / "guard_approved_ok")
+    assert plain.entries()[0]["declared_task_ids"] == []
+
+
+# -- P5's current row (guard_verdict, verdict_reason) ---------------------------------
+
+
+@pytest.mark.parametrize("fixture", ["guard_row_p5_verified", "guard_row_p5_declined"])
+def test_p5s_current_row_alone_decides_no_bucket(fixture):
+    # Real rows from P5's d0a1e92f3 (its own tests against MockMed's fault
+    # server): verdict VERIFIED / ESCALATED, guard_verdict, verdict_reason.
+    doc = json.loads((FIXTURES / fixture / "guard_ledger_row.json").read_text())
+    assert {"guard_verdict", "verdict_reason"} <= set(doc)
+    row, _, _ = build_row(FIXTURES / fixture)
+    assert _outcome(row) == ("UNKNOWN", "completed_unverified")
+    assert row.readback_tier == doc["readback_tier"]
+
+
+def test_p5s_row_times_still_count():
+    row, _, _ = build_row(FIXTURES / "guard_row_p5_declined")
+    assert len(row.human.intervals) == 1
+    assert row.human.intervention_s is not None

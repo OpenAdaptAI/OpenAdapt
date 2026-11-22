@@ -359,26 +359,32 @@ def fallback_reason(
     status: object,
     *,
     verified: bool,
+    confirmed: bool = False,
     nothing_written: bool,
     something_written: bool,
     program_halted_before_effect: bool,
 ) -> str:
     """The reason for one P7 fallback run (J5). ``verified`` is P7's own
-    rule (a passed record check and every gate approved by the person);
-    ``nothing_written`` / ``something_written`` come from the cache's record
-    check of the task's record."""
+    flag (every gate approved by the person and a passed record check);
+    ``confirmed`` is the record check itself: readable and passed.
+    ``nothing_written`` needs a readable check with zero changes;
+    ``something_written`` is a check that counted a change."""
 
     if not isinstance(status, str) or status not in FALLBACK_STATUS_REASON:
         return (
             "readback_refuted"
-            if something_written and not verified
+            if something_written and not confirmed
             else ("unmapped_outcome")
         )
     fixed = FALLBACK_STATUS_REASON[status]
     if fixed is not None:
         return fixed
     if status == "VERIFIED":
-        return "readback_verified" if verified else "self_approved"
+        if not verified:
+            return "self_approved"
+        # A record check that isn't readable (or predates ``readable``)
+        # doesn't confirm the save; P7 itself now says RECONCILIATION_REQUIRED.
+        return "readback_verified" if confirmed else "reconciliation_required"
     if status == "GATE_REFUSED":
         # The person at the gate said no. With the record check showing no
         # write, it is a decline, not a catch (skeptic #16).

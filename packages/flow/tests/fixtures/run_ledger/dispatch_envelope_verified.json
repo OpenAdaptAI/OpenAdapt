@@ -26,6 +26,7 @@
         "removed": 0
       },
       "passed": true,
+      "readable": true,
       "reasons": [],
       "removed": 0
     }

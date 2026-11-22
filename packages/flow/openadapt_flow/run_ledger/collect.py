@@ -156,6 +156,9 @@ class Contribution:
     #: Field names the run's own task, verify or readiness reference config
     #: declares (``ledger export`` lets only these past the scrubber check).
     declared_fields: set[str] = field(default_factory=set)
+    #: Task ids the run's own task or readiness files declare (the same rule
+    #: as field names: ``ledger export`` may let these past the scrubber).
+    declared_task_ids: set[str] = field(default_factory=set)
     #: True when the source shows no person was asked during the run (a
     #: shadow hold, a guard run with approval ``not_gated``): the row's
     #: ``intervention_s`` is then 0 rather than unknown.
@@ -1043,10 +1046,23 @@ class Collected:
     def declared_fields(self) -> set[str]:
         """Every field name the run's own config declares (finding a)."""
 
-        names = set(self.config_fields)
+        from openadapt_flow.run_ledger.readers import split_declared
+
+        names = split_declared(self.config_fields)[0]
         for contribution in self.contributions:
             names |= contribution.declared_fields
         return names
+
+    @property
+    def declared_task_ids(self) -> set[str]:
+        """Task ids the run's own guard task or readiness files declare."""
+
+        from openadapt_flow.run_ledger.readers import split_declared
+
+        ids = split_declared(self.config_fields)[1]
+        for contribution in self.contributions:
+            ids |= contribution.declared_task_ids
+        return ids
 
     @property
     def files(self) -> list[Path]:

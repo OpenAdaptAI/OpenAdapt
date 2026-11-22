@@ -142,7 +142,7 @@ copies of their real (synthetic) files from the 2026-11-21 end-to-end run;
 | Source | Keys read | Outcome |
 | --- | --- | --- |
 | Readiness run directory (P1): a folder with `run.json` (`openadapt.readiness-task-run/v1`) | `run.json` `task_id`, `status`, `agent_wall_s`, `landed_writes`, `usage`, `model_cost_usd`; `case.json` (`openadapt.readiness-case/v1`) `task_id`, `status`, `landed_writes`, `fields[].name`, `kind`, `human`, `proposed`; `proposed_write.json` `fields[].name`, `value`; `usage.json` `calls`, tokens, `model`, `cost_usd`; `egress.json` `model_calls`, `cost_usd`, `cost_source` | See the shadow table. Nothing else in the folder is read: a `guard_ledger_row.json` or `guard_events.jsonl` there belongs to the shadow hold. |
-| `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`, P5) | `task_id`, `fields_checked[]`, `fields_differing[]` (names), `approval_opened_at`, `approval_decided_at`, `readback_tier` | None: the row is never a bucket source (`verdict` isn't read). The guard's `summary.json` and the read-back decide. A differing field shows as `differs`. |
+| `guard_ledger_row.json` (`openadapt.guard-ledger-row/v1`, P5) | `task_id`, `fields_checked[]`, `fields_differing[]` (names), `approval_opened_at`, `approval_decided_at`, `readback_tier` | None: the row is never a bucket source (`verdict`, `guard_verdict` and `verdict_reason` aren't read). The guard's `summary.json` and the read-back decide. A differing field shows as `differs`. |
 | P7 fallback `result.json` (`<cache>/fallback/<task>/<id>/`, with `replay`) or a `wrap-dispatch --result` envelope (with `outcome` and `fallback`); no schema field, recognised by `path`, `status`, `verified` and those keys | `status`, `verified`, `path`, `seconds`, `model_calls`, `cost_usd`, `usage_known`, the policy record (`replay.fallback`, or the envelope's `fallback`) `task_record_check`, `replay.program.receipt_outcome`, `compile.run1.gates[].at` / `decision`, `compile.task_key`, `request_id` | See the fallback table. The envelope's `outcome` is not read. The agent attempt under `run/` is not read again. |
 | `$OPENADAPT_HOME/exceptions/<run_ref>/` (P6): `card-<id>.json` (`openadapt.exception-card/v1`), `answer-<id>.json` (`openadapt.exception-answer/v1`) | card `task_id`, `kind`, `opened_at`, `card_id`; answer `card_id`, `kind`, `opened_at`, `decided_at` | ESCALATED: `second_factor` for that kind, else `exception_card`. An expired card (`decided_at: null`) or one not answered yet makes the person's time unknown. A card for another task id makes the row `task_id_conflict`. |
 | `flight.json` (`openadapt.flight-run/v1`, P3) | `task_id`, `executor_label`, `started_at`, `ended_at`, `model`, `gate_events[].kind` | A `held` with no later `allowed` or `refused`: ESCALATED (`gate_held`). A `refused`: CAUGHT_ERROR (`gate_refused`). |
@@ -187,9 +187,10 @@ refused) replaces calls and cost with the proxy's count (`metered` when its
 
 | `status` (`path: agent_fallback`) | Bucket (reason) |
 | --- | --- |
-| VERIFIED with P7's `verified` and a passed record check | VERIFIED (`readback_verified`, independent: the record check read the system of record before and after) |
-| GATE_REFUSED, record check shows no write | ESCALATED (`person_declined`) |
-| GATE_REFUSED or COST_CAP_EXCEEDED, record check missing or shows a write | UNKNOWN (`write_unconfirmed`) |
+| VERIFIED with P7's `verified` and a record check that is `readable: true` and passed | VERIFIED (`readback_verified`, independent: the record check read the system of record before and after) |
+| VERIFIED, but the record check isn't `readable: true` (a failed read, or an older check without the flag) | UNKNOWN (`reconciliation_required`) |
+| GATE_REFUSED, record check `readable: true` with no write | ESCALATED (`person_declined`) |
+| GATE_REFUSED or COST_CAP_EXCEEDED, record check missing, not `readable: true`, or showing a write | UNKNOWN (`write_unconfirmed`). An unreadable store also reports zero counts, so zeros alone prove nothing. |
 | COST_CAP_EXCEEDED, no write | FAILED (`policy_rejected_no_write`) |
 | GATE_NOT_PROVED | UNKNOWN (`self_approved`) |
 | RECONCILIATION_REQUIRED | UNKNOWN (`reconciliation_required`) |
@@ -264,6 +265,12 @@ no POSIX mode to set.
   ones; and for `FAILED_SCOPE` or a case with no proposal, whose field rows
   compare never built, nothing). Any other name the scrubber would rewrite still refuses, and an
   entry added before this rule exempts nothing.
+  The same rule covers the row's `task_id`: it is let through only when the
+  run's own files name it (a readiness `run.json` or `case.json`, or a guard
+  task whose `task_id` matches). Presidio reads `readiness-mockmed-0002` as
+  an organisation; P1's own run file names it, so it may leave. An id given
+  only with `--task-id` still refuses when the scrubber rewrites it. The
+  entry keeps these as `declared_task_ids`.
 
 Cloud receives `null` for every value the sources don't give
 (`started_at`, `ended_at`, `duration_s`, the `model` counts and cost,

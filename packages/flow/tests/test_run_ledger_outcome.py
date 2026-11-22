@@ -192,8 +192,13 @@ def test_refuted_readback_plus_model_looks_fine_is_caught_error(tmp_path: Path) 
         ("guard_wrong_value", C, "readback_refuted"),
         ("guard_wrong_patient", C, "save_blocked_wrong_record"),
         # J5: P7 fallback results.
-        ("fallback_verified", V, "readback_verified"),
-        ("fallback_refused", E, "person_declined"),
+        # P7's current record check says readable: true.
+        ("fallback_verified_readable", V, "readback_verified"),
+        ("fallback_refused_readable", E, "person_declined"),
+        # Missing (older P7) or false readable proves nothing.
+        ("fallback_verified", U, "reconciliation_required"),
+        ("fallback_refused", U, "write_unconfirmed"),
+        ("fallback_refused_unreadable", U, "write_unconfirmed"),
         ("dispatch_envelope_verified.json", V, "readback_verified"),
         ("dispatch_envelope_refused.json", E, "person_declined"),
         # A program's halt before the save: the absent effect isn't a catch.
