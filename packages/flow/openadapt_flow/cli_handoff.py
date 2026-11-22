@@ -16,7 +16,7 @@ import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 
 def handoff_group(sub: argparse._SubParsersAction) -> argparse._SubParsersAction:
@@ -235,7 +235,7 @@ def record_in_ledger(
         value = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         value = None
-    fields: dict[str, tuple[str, str]] = {}
+    fields: dict[str, tuple[str, Literal["text"]]] = {}
     key = None
     if isinstance(value, dict):
         if key_field is not None:
