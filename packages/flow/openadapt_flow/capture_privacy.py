@@ -435,7 +435,12 @@ def _minimize_har_body(
     container["text"] = ""
     if isinstance(params, list):
         container["params"] = []
-    if raw is None and isinstance(previous, Mapping):
+    if isinstance(previous, Mapping) and (
+        raw is None or raw == restore_kept_json(previous)
+    ):
+        # Minimized before (and maybe reloaded, which put its kept fields
+        # back as text): keep its description, re-checked against this
+        # policy. Any other text is new and is minimized afresh.
         descriptor: Optional[dict[str, Any]] = minimizer.refilter(previous)
     elif raw is None and isinstance(params, list) and params:
         descriptor = _minimize_params(params, minimizer)

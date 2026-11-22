@@ -1906,7 +1906,7 @@ def dump_har(
     only ``keep_fields`` values survive (default: the policy's id and version
     fields), the rest become keyed hashes. ``raw_bodies=True`` keeps them for
     debugging and needs ``path``; a file is always sealed under the at-rest key
-    (``write_private_record``). TODO(#2423): use the key hierarchy's data key.
+    (``write_private_record``) and nothing is returned (``""``). TODO(#2423): use the key hierarchy's data key.
     """
     from openadapt_flow.capture_privacy import BodyMinimizer, minimize_har
 
@@ -1938,7 +1938,8 @@ def dump_har(
     if path is not None:
         out = Path(path)
         write_private_record(out, payload.encode("utf-8"))
-    return payload
+    # Raw bodies are only ever in the sealed file, not handed back.
+    return "" if raw_bodies else payload
 
 
 def load_har(

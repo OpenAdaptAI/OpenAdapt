@@ -451,11 +451,26 @@ def test_replay_keeps_writes_whose_evidence_was_withheld(tmp_path: Path) -> None
         method="GET", url="http://app.test/api?query=" + quote("mutation { x }")
     )
     live = tap.summary()
-    replay = _replayed(tap, tmp_path, keep_fields=("query",))
-    assert replay.mutations_allowed + replay.mutations_blocked == (
-        live.mutations_allowed + live.mutations_blocked
-    )
-    assert replay.read_requests == live.read_requests
+    # Default fields hash the GraphQL documents; "query" keeps them.
+    for kw in ({}, {"keep_fields": ("query",)}):
+        replay = _replayed(tap, tmp_path, **kw)
+        assert replay.mutations_allowed + replay.mutations_blocked == (
+            live.mutations_allowed + live.mutations_blocked
+        )
+        assert replay.read_requests == live.read_requests
+
+
+def test_reloading_a_minimized_har_keeps_its_descriptions(tmp_path: Path) -> None:
+    first = json.loads(dump_har(_tap()))
+    second = json.loads(dump_har(load_har(json.dumps(first))))
+    for a, b in zip(first["log"]["entries"], second["log"]["entries"]):
+        for side, key in (("request", "postData"), ("response", "content")):
+            if key in a[side]:
+                assert a[side][key][cp.HAR_FIELD] == b[side][key][cp.HAR_FIELD]
+
+
+def test_raw_har_is_not_returned_in_memory(tmp_path: Path) -> None:
+    assert dump_har(_tap(), tmp_path / "raw.har", raw_bodies=True) == ""
 
 
 def test_floor_without_tap_metadata() -> None:
