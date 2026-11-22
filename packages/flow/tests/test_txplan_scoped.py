@@ -22,9 +22,18 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from openadapt_flow.txplan.audit import AuditReader, AuditSource, Cursor, pick  # noqa: E402
+from openadapt_flow.txplan.audit import (  # noqa: E402
+    AuditReader,
+    AuditSource,
+    Cursor,
+    pick,
+)
 from openadapt_flow.txplan.engine import Ctx, TxRefused  # noqa: E402
-from openadapt_flow.txplan.scoped import ApiTools, default_send, scoped_write  # noqa: E402
+from openadapt_flow.txplan.scoped import (  # noqa: E402
+    ApiTools,
+    default_send,
+    scoped_write,
+)
 from openadapt_flow.txplan.spec import TxSpec  # noqa: E402
 from openadapt_flow.txplan.state import State  # noqa: E402
 
@@ -41,6 +50,8 @@ class AuditedStore:
         self.hidden_reads = 0  # the log shows a write only after this many log reads
         self.idempotency_keys: list[str] = []
         self.empty_to_null = False
+        #: Writes refused because ``If-Match`` named an older ``updated``.
+        self.precondition_failed = 0
 
     def log(self, actor: str, rid: int, action: str) -> None:
         self.events.append(
@@ -75,6 +86,14 @@ class AuditedStore:
             def _body(self) -> dict[str, Any]:
                 n = int(self.headers.get("Content-Length") or 0)
                 return json.loads(self.rfile.read(n)) if n else {}
+
+            def _stale(self, rid: int) -> bool:
+                want = self.headers.get("If-Match")
+                if want is None or want == str(store.records[rid]["updated"]):
+                    return False
+                store.precondition_failed += 1
+                self._send(412, {})
+                return True
 
             def _rid(self) -> Optional[int]:
                 parts = urlsplit(self.path).path.strip("/").split("/")
@@ -135,6 +154,8 @@ class AuditedStore:
                 if rid is None or rid not in store.records:
                     return self._send(404, {})
                 body = self._body()
+                if self._stale(rid):
+                    return
                 with store.lock:
                     store.writes += 1
                     store.records[rid] = {**body, "id": rid, "updated": time.time()}
@@ -145,6 +166,8 @@ class AuditedStore:
                 rid = self._rid()
                 if rid is None or rid not in store.records:
                     return self._send(404, {})
+                if self._stale(rid):
+                    return
                 with store.lock:
                     store.writes += 1
                     del store.records[rid]
@@ -162,7 +185,14 @@ def _spec(
     search: bool = True,
     idem: bool = False,
     logs: Optional[list[str]] = None,
+    precondition: bool = True,
 ) -> TxSpec:
+    # The record's ``updated`` is its version: a write naming an older one is refused.
+    cond: dict[str, Any] = (
+        {"precondition": {"source": "field", "field": "updated"}}
+        if precondition
+        else {}
+    )
     scoped: dict[str, Any] = {
         "audit_ref": "item/{id}",
         "identity": ["title"],
@@ -227,8 +257,13 @@ def _spec(
                                 "method": "PUT",
                                 "path": "/api/items/{id}",
                                 "replace": True,
+                                **cond,
                             },
-                            "delete": {"method": "DELETE", "path": "/api/items/{id}"},
+                            "delete": {
+                                "method": "DELETE",
+                                "path": "/api/items/{id}",
+                                **cond,
+                            },
                             "delete_reversible": True,
                             "scoped": scoped,
                         }
@@ -332,6 +367,7 @@ def test_partial_write_is_a_hard_failure(lab: Any) -> None:
         "qty": 1,
         "colour": "red",
         "note": None,
+        "updated": 1.0,
     }
     store.next_id = 2
 
@@ -359,6 +395,7 @@ def test_clobbered_field_on_a_replace_is_a_hard_failure(lab: Any) -> None:
         "qty": 1,
         "colour": "red",
         "note": None,
+        "updated": 1.0,
     }
     store.next_id = 2
 
@@ -393,20 +430,34 @@ def test_duplicate_create_is_a_hard_failure(lab: Any) -> None:
 
 def test_duplicate_update_is_a_hard_failure(lab: Any) -> None:
     store, url, state = lab
-    store.records[1] = {"id": 1, "title": "Synthetic H", "qty": 1, "note": None}
+    store.records[1] = {
+        "id": 1,
+        "title": "Synthetic H",
+        "qty": 1,
+        "note": None,
+        "updated": 1.0,
+    }
     store.next_id = 2
 
     def twice(adapter: Any, coll: Any, **kw: Any) -> Any:
         default_send(adapter, coll, **kw)
         return default_send(adapter, coll, **kw)
 
-    out = _write(_ctx(url, state), op="update", rid="1", fields={"qty": 2}, send=twice)
+    # Without a precondition: with one, the server refuses the second send.
+    ctx = _ctx(url, state, precondition=False)
+    out = _write(ctx, op="update", rid="1", fields={"qty": 2}, send=twice)
     assert out["outcome"] == "FAILED" and "duplicate_write" in out["codes"], out
 
 
 def test_collateral_edit_by_the_same_actor_is_a_hard_failure(lab: Any) -> None:
     store, url, state = lab
-    store.records[7] = {"id": 7, "title": "Synthetic other", "qty": 1, "note": None}
+    store.records[7] = {
+        "id": 7,
+        "title": "Synthetic other",
+        "qty": 1,
+        "note": None,
+        "updated": 1.0,
+    }
     store.next_id = 8
 
     def collateral(adapter: Any, coll: Any, **kw: Any) -> Any:
@@ -422,7 +473,13 @@ def test_collateral_edit_by_the_same_actor_is_a_hard_failure(lab: Any) -> None:
 
 def test_another_actors_edit_is_outside_the_scope(lab: Any) -> None:
     store, url, state = lab
-    store.records[7] = {"id": 7, "title": "Synthetic other", "qty": 1, "note": None}
+    store.records[7] = {
+        "id": 7,
+        "title": "Synthetic other",
+        "qty": 1,
+        "note": None,
+        "updated": 1.0,
+    }
     store.next_id = 8
 
     def busy(adapter: Any, coll: Any, **kw: Any) -> Any:
@@ -476,7 +533,13 @@ def test_a_log_that_never_shows_the_write_is_not_verified(lab: Any) -> None:
 
 def test_a_log_that_records_no_updates_says_so(lab: Any) -> None:
     store, url, state = lab
-    store.records[1] = {"id": 1, "title": "Synthetic N", "qty": 1, "note": None}
+    store.records[1] = {
+        "id": 1,
+        "title": "Synthetic N",
+        "qty": 1,
+        "note": None,
+        "updated": 1.0,
+    }
     store.next_id = 2
     ctx = _ctx(url, state, logs=["create"])
     out = _write(ctx, op="update", rid="1", fields={"qty": 2})
@@ -1321,3 +1384,75 @@ def test_proxy_cli_api_only_gets_a_stable_default_task(
     first, second = seen
     assert first["task"] == second["task"] and first["task"].startswith("proxy-")
     assert first["api_spec"] is not None and "agent" in first["secrets_"]
+
+
+# -- stale baseline: a whole-record write over another caller's edit ---------------
+
+
+def _seed(store: AuditedStore) -> None:
+    store.records[1] = {
+        "id": 1,
+        "title": "Synthetic LU",
+        "qty": 1,
+        "colour": "red",
+        "note": None,
+        "updated": 1.0,
+    }
+    store.next_id = 2
+
+
+def _after_another_edit(url: str):  # type: ignore[no-untyped-def]
+    """A send that lets another caller save the record first (after the
+    pre-read), then sends the write from the now-stale baseline."""
+
+    def send(adapter: Any, coll: Any, **kw: Any) -> Any:
+        with _other(url, token="nurse") as other:
+            rec = other.get("/api/items/1").json()
+            got = other.put("/api/items/1", json={**rec, "colour": "blue"})
+            assert got.status_code == 200
+        return default_send(adapter, coll, **kw)
+
+    return send
+
+
+def test_unconditional_replace_over_another_callers_edit_is_not_verified(
+    lab: Any,
+) -> None:
+    # Issue 2474 item 1: the PUT body is the pre-read record, so it puts
+    # colour back to red. The read-back equals the baseline and the audit
+    # check sees only this actor, so nothing else can catch the lost update.
+    store, url, state = lab
+    _seed(store)
+    out = _write(
+        _ctx(url, state, precondition=False),
+        op="update",
+        rid="1",
+        fields={"qty": 5},
+        send=_after_another_edit(url),
+    )
+    assert store.records[1]["colour"] == "red"  # the other edit was erased
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert "unconditional_write" in out["codes"]
+
+
+def test_conditional_replace_over_another_callers_edit_is_refused(lab: Any) -> None:
+    store, url, state = lab
+    _seed(store)
+    out = _write(
+        _ctx(url, state),
+        op="update",
+        rid="1",
+        fields={"qty": 5},
+        send=_after_another_edit(url),
+    )
+    assert store.precondition_failed == 1
+    assert store.records[1]["colour"] == "blue" and store.records[1]["qty"] == 1
+    assert out["outcome"] == "HALTED" and out["codes"] == ["stale_baseline"], out
+
+
+def test_conditional_replace_sends_the_version_it_read(lab: Any) -> None:
+    store, url, state = lab
+    _seed(store)
+    out = _write(_ctx(url, state), op="update", rid="1", fields={"qty": 5})
+    assert out["outcome"] == "VERIFIED", out
+    assert store.precondition_failed == 0 and store.records[1]["qty"] == 5

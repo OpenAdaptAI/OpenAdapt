@@ -20,6 +20,8 @@ class RestStore:
 
     def __init__(self, *, replace: bool = False) -> None:
         self.records: dict[int, dict[str, Any]] = {}
+        #: Writes refused because ``If-Match`` named an older version.
+        self.precondition_failed = 0
         self.next_id = 1
         self.replace = replace
         self.lock = threading.Lock()
@@ -39,6 +41,10 @@ class RestStore:
             self.records[rid] = rec
             return dict(rec)
 
+    @staticmethod
+    def etag(rec: dict[str, Any]) -> str:
+        return f'"{rec["updated"]!r}"'
+
     def server(self) -> tuple[ThreadingHTTPServer, str]:
         store = self
 
@@ -46,9 +52,13 @@ class RestStore:
             def log_message(self, *a: Any) -> None:
                 pass
 
-            def _send(self, code: int, body: Any = None) -> None:
+            def _send(
+                self, code: int, body: Any = None, etag: Optional[str] = None
+            ) -> None:
                 data = b"" if body is None else json.dumps(body).encode()
                 self.send_response(code)
+                if etag:
+                    self.send_header("ETag", etag)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -74,7 +84,17 @@ class RestStore:
                 rid = self._id()
                 if rid is None or rid not in store.records:
                     return self._send(404, {})
-                self._send(200, store.records[rid])
+                rec = store.records[rid]
+                self._send(200, rec, store.etag(rec))
+
+            def _stale(self, rid: int) -> bool:
+                """An ``If-Match`` that names an older version: refuse (412)."""
+                want = self.headers.get("If-Match")
+                if want is None or want == store.etag(store.records[rid]):
+                    return False
+                store.precondition_failed += 1
+                self._send(412, {})
+                return True
 
             def do_POST(self) -> None:  # noqa: N802
                 if self.path != "/api/items":
@@ -87,6 +107,8 @@ class RestStore:
                 if rid is None or rid not in store.records:
                     return self._send(404, {})
                 body = self._body()
+                if self._stale(rid):
+                    return
                 store.writes += 1
                 with store.lock:
                     old = store.records[rid]
@@ -105,6 +127,8 @@ class RestStore:
                 rid = self._id()
                 if rid is None or rid not in store.records:
                     return self._send(404, {})
+                if self._stale(rid):
+                    return
                 store.writes += 1
                 with store.lock:
                     del store.records[rid]

@@ -40,7 +40,13 @@ import os
 import time
 from typing import Any, Callable, Mapping, Optional
 
-from openadapt_flow.txplan.adapters import AdapterError, RestAdapter
+from openadapt_flow.txplan.adapters import (
+    AdapterError,
+    RestAdapter,
+    StaleBaseline,
+    precondition_for,
+    unconditional,
+)
 from openadapt_flow.txplan.audit import (
     Audit,
     AuditError,
@@ -68,8 +74,10 @@ HARD = (
     "duplicate_write",
     "collateral_mutation",
 )
-#: Not verified: the read-back or the log never settled.
-SOFT = ("audit_lag", "audit_unreadable", "recovery_unproven")
+#: Not verified: the read-back or the log never settled, or the write could
+#: have erased another caller's edit unseen (no precondition on a whole-record
+#: write or a delete).
+SOFT = ("audit_lag", "audit_unreadable", "recovery_unproven", "unconditional_write")
 
 Send = Callable[..., Optional[str]]
 _ABSENT = object()
@@ -127,6 +135,7 @@ def _request(
     body: Any = None,
     headers: Optional[Mapping[str, str]] = None,
     encoding: str = "json",
+    refused: Any = (),
 ) -> tuple[int, Any]:
     kw: dict[str, Any] = {"json": body}
     if encoding == "form" and body is not None:
@@ -135,6 +144,8 @@ def _request(
         resp = adapter.http.request(method, path, headers=dict(headers or {}), **kw)
     except Exception as exc:  # noqa: BLE001 - delivery unknown
         raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
+    if resp.status_code in refused:
+        raise StaleBaseline(f"{method} refused: the record changed since it was read")
     if resp.status_code >= 400:
         raise AdapterError(f"{method} returned {resp.status_code}")
     try:
@@ -157,8 +168,11 @@ def default_send(
     key: str,
     marker: Optional[str],
     path: Optional[Mapping[str, Any]] = None,
+    condition: Optional[Mapping[str, str]] = None,
 ) -> Optional[str]:
-    """Make the write once; return the record's id."""
+    """Make the write once; return the record's id. ``condition`` is the
+    precondition header from the baseline read: a server that finds the
+    record changed refuses the write (:class:`StaleBaseline`)."""
     scoped = coll.scoped
     assert scoped is not None
     route = getattr(coll, op, None)
@@ -167,6 +181,11 @@ def default_send(
     headers: dict[str, str] = {}
     if adapter.system.idempotency_header:
         headers[adapter.system.idempotency_header] = key
+    if route.precondition is not None and op != "create":
+        if not condition:
+            # Stale-baseline class: a declared precondition is never dropped.
+            raise AdapterError("no version was read for the precondition")
+        headers.update(condition)
     values = {**(baseline or {}), **fields, **(path or {}), "id": rid}
     if op == "create":
         body: Any = {**scoped.create_body, **fields}
@@ -190,6 +209,11 @@ def default_send(
         body,
         headers,
         scoped.encoding,
+        refused=(
+            route.precondition.refused_status
+            if route.precondition is not None and op != "create"
+            else ()
+        ),
     )
     if op == "create":
         new = (got or {}).get(route.id_from or coll.id_field)
@@ -402,10 +426,16 @@ def _search(
 
 
 def _read(
-    adapter: RestAdapter, coll: Collection, rid: str, where: Mapping[str, Any]
+    adapter: RestAdapter,
+    coll: Collection,
+    rid: str,
+    where: Mapping[str, Any],
+    etag_out: Optional[list[Any]] = None,
 ) -> Optional[dict[str, Any]]:
     got = adapter._call(
-        coll.read.method, adapter._fill(coll.read.path, {**where, "id": rid})
+        coll.read.method,
+        adapter._fill(coll.read.path, {**where, "id": rid}),
+        etag_out=etag_out,
     )
     if got is not None and not isinstance(got, dict):
         raise AdapterError("a read did not return an object")
@@ -548,9 +578,11 @@ def scoped_write(
             return out
 
         baseline = None
+        condition: Optional[dict[str, str]] = None
         recovering = entry is not None and entry.status in ("begun", "sent")
         if op != "create":
-            baseline = _read(adapter, coll, str(rid), where)
+            etag: list[Any] = []
+            baseline = _read(adapter, coll, str(rid), where, etag)
             # A crash after a delete landed leaves no record: recover it below,
             # don't halt as if nothing was ever sent.
             if baseline is None and not recovering:
@@ -570,6 +602,28 @@ def scoped_write(
                     f"{collection}/{rid} does not exist; nothing was sent",
                     {"run_dir": str(run)},
                 )
+            if baseline is not None:
+                try:
+                    # Stale-baseline class: the write carries the version
+                    # read with the baseline, from the same response.
+                    condition = precondition_for(
+                        coll, op, baseline, etag[0] if etag else None
+                    )
+                except AdapterError as exc:
+                    tx["codes"] = ["no_version"]
+                    run = _write_run(
+                        state,
+                        digest,
+                        "api",
+                        outcome="HALTED",
+                        results=[],
+                        tx=tx,
+                        approval=None,
+                        started=started,
+                    )
+                    raise TxRefused(
+                        "no_version", f"{exc}; nothing was sent", {"run_dir": str(run)}
+                    ) from exc
 
         sent_id: Optional[str] = None
         cursor: Optional[Cursor] = None
@@ -579,6 +633,8 @@ def scoped_write(
             begun = next(e for e in reversed(entry.events) if e["event"] == "begun")
             cursor = Cursor.from_json(begun["cursor"]) if begun.get("cursor") else None
             baseline = begun.get("baseline", baseline)
+            # The version that goes with that baseline, never a newer one.
+            condition = begun.get("condition")
             found, proven_absent = _recover(
                 adapter,
                 coll,
@@ -637,7 +693,7 @@ def scoped_write(
             if existing:
                 sent_id, skip_send = existing[0], True
                 notes.append("marker_found_before_send")
-        if entry is None:
+        if entry is None or entry.status == "refused":
             # Durable before the send: a crash after it leaves a ``begun`` to recover.
             state.record(
                 key,
@@ -646,6 +702,7 @@ def scoped_write(
                 payload=payload,
                 cursor=cursor.to_json() if cursor else None,
                 baseline=baseline,
+                condition=condition,
             )
         if not skip_send:
             try:
@@ -659,6 +716,24 @@ def scoped_write(
                     key=key,
                     marker=marker,
                     path=where,
+                    **({"condition": condition} if condition else {}),
+                )
+            except StaleBaseline:
+                # The server refused the write: the record changed since the
+                # baseline read. Nothing was written; nothing is resolved.
+                state.record(key, "refused", reason="stale_baseline")
+                tx["codes"] = ["stale_baseline"]
+                return _finish(
+                    ctx,
+                    digest,
+                    key,
+                    tx,
+                    started,
+                    outcome="HALTED",
+                    verified=None,
+                    payload=payload,
+                    result={"id": None, "codes": ["stale_baseline"]},
+                    record_key=False,
                 )
             except AdapterError as exc:
                 state.record(key, "sent", result={"id": None, "error": str(exc)[:200]})
@@ -696,6 +771,12 @@ def scoped_write(
             notes=notes,
             sleep=sleep,
         )
+        if unconditional(coll, op):
+            # Stale-baseline class: a whole-record write or a delete sent with
+            # no version check can erase an edit another caller made after
+            # the pre-read, and read back exactly like this write. The audit
+            # check sees only this actor, so it can't rule that out.
+            codes.append("unconditional_write")
         hard = [c for c in codes if c in HARD]
         soft = [c for c in codes if c in SOFT]
         if hard:

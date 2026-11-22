@@ -71,12 +71,41 @@ class Auth(_Closed):
     value_env: str
 
 
+class Precondition(_Closed):
+    """A server-enforced condition on a write: the record must still be the
+    version OpenAdapt read (``If-Match``). Without one, a whole-record write
+    or a delete can erase another caller's edit made after the read."""
+
+    header: str = Field(default="If-Match", pattern=r"^[A-Za-z0-9-]{1,64}$")
+    #: Where the version comes from: the read's ``ETag`` response header, or
+    #: a field of the record as read (a dotted path: ``meta.versionId``).
+    source: Literal["etag", "field"] = "etag"
+    field: Optional[str] = None
+    #: How the header value is written; ``{value}`` is the version
+    #: (``W/"{value}"`` for a weak FHIR tag).
+    format: str = "{value}"
+    #: Statuses by which the server says the record changed, so nothing was written.
+    refused_status: list[int] = Field(default_factory=lambda: [412])
+
+    @model_validator(mode="after")
+    def _check(self) -> "Precondition":
+        if (self.source == "field") != bool(self.field):
+            raise ValueError("precondition: field goes with source: field")
+        if "{value}" not in self.format:
+            raise ValueError("precondition: format must hold {value}")
+        return self
+
+
 class Route(_Closed):
     method: str = "GET"
     path: str
     #: update only: the server replaces the whole record, so OpenAdapt sends
     #: the baseline merged with the planned fields (and the full baseline on undo).
     replace: bool = False
+    #: update and delete: send the version that was read, so the server
+    #: refuses the write if the record changed since. A replace update or a
+    #: delete without one is never VERIFIED: a lost update can't be excluded.
+    precondition: Optional[Precondition] = None
     #: list only: pagination.
     page_param: Optional[str] = None
     per_page_param: Optional[str] = "per_page"

@@ -29,12 +29,15 @@ from openadapt_flow.txplan.adapters import (
     ChangedSinceApply,
     Diverged,
     MailAdapter,
+    RestAdapter,
     SqlAdapter,
+    StaleBaseline,
     adapter_for,
     after_image,
     column_digests,
     diff_frames,
     same,
+    unconditional,
     volatile_columns,
 )
 from openadapt_flow.txplan.spec import (
@@ -726,7 +729,21 @@ def make_plan(ctx: Ctx, task: str, raw: Sequence[Mapping[str, Any]]) -> dict[str
     for w in writes:
         base = None
         if w["op"] in ("update", "delete"):
-            base = ctx.adapter(w["system"]).read(w["collection"], w["id"])
+            adapter = ctx.adapter(w["system"])
+            if isinstance(adapter, RestAdapter):
+                base, etag = adapter.read_versioned(w["collection"], w["id"])
+                if base is not None:
+                    # Stale-baseline class: the write carries the version
+                    # read here, so the server refuses it if the record
+                    # changed since; the plan digest binds it.
+                    try:
+                        cond = adapter.condition(w, base, etag)
+                    except AdapterError as exc:
+                        raise TxRefused("no_version", str(exc)) from exc
+                    if cond:
+                        w["if_match"] = cond
+            else:
+                base = adapter.read(w["collection"], w["id"])
             if base is None and w["ledger"] == "free":
                 raise TxRefused(
                     "record_missing", f"{w['system']} {w['collection']} {w['id']}"
@@ -939,13 +956,62 @@ def approve_plan(
 # -- apply ---------------------------------------------------------------------
 
 
+def _unconditional(spec: TxSpec, w: Mapping[str, Any]) -> bool:
+    system = spec.system(w["system"])
+    if not isinstance(system, RestSystem):
+        return False
+    return unconditional(system.collection(w.get("collection")), w["op"])
+
+
+def _post_image(images: Mapping[str, Any], volatile: Sequence[str]) -> dict[str, Any]:
+    """What a committed statement left, as digests, for a later replay to
+    read back: the rows it added or changed, and the rows it removed."""
+    after = dict(images.get("after") or {})
+    return {
+        "after": after,
+        "gone": sorted(r for r in images.get("before") or {} if r not in after),
+        "volatile": list(volatile),
+    }
+
+
+def _sql_effect_holds(adapter: Any, image: Any) -> Optional[bool]:
+    """Stale-cached-verdict class: a replay re-reads the database. True only
+    when every row the statement left still reads as it committed and every
+    row it removed is still gone; None when there is no image to compare."""
+    if not isinstance(image, Mapping) or not isinstance(image.get("after"), Mapping):
+        return None
+    skip = set(image.get("volatile") or [])
+
+    def kept(rid: str, cols: Mapping[str, str]) -> dict[str, str]:
+        table = rid.split("/", 1)[0]
+        return {c: d for c, d in cols.items() if f"{table}.{c}" not in skip}
+
+    now_ = adapter.frame()
+    for rid, want in image["after"].items():
+        got = now_.get(rid)
+        if got is None or kept(rid, got) != kept(rid, want):
+            return False
+    return not any(rid in now_ for rid in image.get("gone") or [])
+
+
 def _readback(
-    ctx: Ctx, w: Mapping[str, Any], base: Any, result: Mapping[str, Any]
+    ctx: Ctx,
+    w: Mapping[str, Any],
+    base: Any,
+    result: Mapping[str, Any],
+    *,
+    replay: bool = False,
 ) -> tuple[Optional[bool], Optional[dict]]:
     adapter = ctx.adapter(w["system"])
     if isinstance(adapter, MailAdapter):
         return None, None
     if w["op"] == "sql":
+        if replay:
+            # A replay sends nothing: its stored flag says what committed
+            # then, not what the database holds now.
+            if result.get("post_commit_matches") is not True:
+                return False, None
+            return _sql_effect_holds(adapter, result.get("post_image")), None
         # Committed only when its own diff matched the plan, and confirmed
         # only when the committed rows, read again, still match it.
         return result.get("post_commit_matches") is True, None
@@ -1053,7 +1119,9 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                     if entry.status == "held":
                         tx["held"] = tx.get("held", 0) + 1
                     else:
-                        replay_verified, _ = _readback(ctx, w, base, entry.result)
+                        replay_verified, _ = _readback(
+                            ctx, w, base, entry.result, replay=True
+                        )
                         if replay_verified is not True:
                             tx["unverified_replays"] = (
                                 tx.get("unverified_replays", 0) + 1
@@ -1155,6 +1223,28 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
                 continue
             try:
                 result = ctx.adapter(w["system"]).apply(w, base, key)
+            except StaleBaseline:
+                # The server refused the conditional write: the record moved
+                # since the plan read it, so nothing was written over it.
+                state.record(
+                    key,
+                    "refused",
+                    plan=digest,
+                    payload=payload,
+                    reason="stale_baseline",
+                )
+                stop = "stale_baseline"
+                tx["stale_baseline"] = tx.get("stale_baseline", 0) + 1
+                results.append(
+                    _line(
+                        ok=False,
+                        verified=False,
+                        irreversible=False,
+                        payload=payload,
+                        code="stale_baseline_not_written",
+                    )
+                )
+                continue
             except Diverged:
                 state.record(
                     key, "refused", plan=digest, payload=payload, reason="diverged"
@@ -1194,21 +1284,31 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
             if crash_after and sent >= crash_after:
                 os._exit(70)
             rows_image = result.pop("_images", None)
+            if rows_image is not None:
+                result["post_image"] = _post_image(rows_image, w.get("volatile") or [])
             state.record(key, "applied", plan=digest, payload=payload, result=result)
             verified, got = _readback(ctx, w, base, result)
+            result.pop("post_image", None)
             images[key] = {
                 "result": result,
                 "after": _norm(spec.system(w["system"]), w, got),
             }
             if rows_image is not None:
                 images[key]["rows"] = rows_image
+            code = "confirmed" if verified else "refuted"
+            if verified and _unconditional(spec, w):
+                # Stale-baseline class: sent with no version check, so another
+                # caller's edit after the plan read may have been erased and
+                # still read back like this write. Confirmed, not VERIFIED.
+                verified, code = None, "confirmed_unconditional"
+                tx["unconditional_writes"] = tx.get("unconditional_writes", 0) + 1
             results.append(
                 _line(
-                    ok=bool(verified),
+                    ok=verified is not False,
                     verified=verified,
                     irreversible=False,
                     payload=payload,
-                    code="confirmed" if verified else "refuted",
+                    code=code,
                 )
             )
         after = ctx.frames(list(priv["frames"]))
@@ -1236,7 +1336,10 @@ def apply_plan(ctx: Ctx, digest: str) -> dict[str, Any]:
         ok = not stop and not missed and not false and not tx["refuted"]
         outcome = (
             "VERIFIED"
-            if ok and not tx.get("held") and not tx.get("unverified_replays")
+            if ok
+            and not tx.get("held")
+            and not tx.get("unverified_replays")
+            and not tx.get("unconditional_writes")
             else ("COMPLETED_UNVERIFIED" if ok else "RECONCILIATION_REQUIRED")
         )
         run = _write_run(
@@ -1591,8 +1694,34 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
                             )
                         )
                         continue
-                adapter.apply(w, base, key)
+                try:
+                    adapter.apply(w, base, key)
+                except StaleBaseline:
+                    # The server refused the conditional write: the record
+                    # changed after the recheck read. Nothing was written.
+                    state.record(
+                        key,
+                        "uncertain",
+                        plan=digest,
+                        payload=w["payload_sha256"],
+                        reason="changed during holdback",
+                    )
+                    results.append(
+                        _line(
+                            ok=False,
+                            verified=None,
+                            irreversible=True,
+                            payload=w["payload_sha256"],
+                            code="changed_during_holdback",
+                        )
+                    )
+                    continue
                 verified, _ = _readback(ctx, w, base, {"id": w.get("id")})
+                if verified and _unconditional(ctx.spec, w):
+                    # Stale-baseline class: the recheck read and the send are
+                    # two requests, and nothing made the send conditional.
+                    verified = None
+                    tx["unconditional"] = tx.get("unconditional", 0) + 1
             state.unhold(key)
             state.record(
                 key,
@@ -1602,19 +1731,38 @@ def release(ctx: Ctx, digest: str, *, at: Optional[float] = None) -> dict[str, A
                 read_back=verified,
             )
             tx["released"] += 1
+            unconditional_release = verified is None and not isinstance(
+                adapter, MailAdapter
+            )
             results.append(
                 _line(
-                    ok=bool(verified),
+                    ok=bool(verified) or unconditional_release,
                     verified=verified,
                     irreversible=True,
                     payload=w["payload_sha256"],
-                    code="released" if verified else "release_refuted",
+                    code=(
+                        "released"
+                        if verified
+                        else (
+                            "released_unconditional"
+                            if unconditional_release
+                            else "release_refuted"
+                        )
+                    ),
                 )
             )
         outcome = (
             "VERIFIED"
             if results and all(r["effect_verified"] for r in results)
-            else ("COMPLETED_UNVERIFIED" if not results else "RECONCILIATION_REQUIRED")
+            else (
+                "COMPLETED_UNVERIFIED"
+                if not results
+                or all(
+                    r["effect_verified"] or r["tx_code"] == "released_unconditional"
+                    for r in results
+                )
+                else "RECONCILIATION_REQUIRED"
+            )
         )
         run = _write_run(
             state,

@@ -106,6 +106,7 @@ def _spec(
     rest_url: str | None = None,
     mail: MailSink | None = None,
     holdback: float = 60,
+    precondition: bool = True,
 ) -> Path:
     systems: list[dict[str, Any]] = []
     if db is not None:
@@ -119,6 +120,8 @@ def _spec(
             }
         )
     if rest_url is not None:
+        # The store's ETag: the write is refused if the record moved since read.
+        cond: dict[str, Any] = {"precondition": {}} if precondition else {}
         systems.append(
             {
                 "name": "tasks",
@@ -139,8 +142,13 @@ def _spec(
                             "method": "PATCH",
                             "path": "/api/items/{id}",
                             "replace": True,
+                            **cond,
                         },
-                        "delete": {"method": "DELETE", "path": "/api/items/{id}"},
+                        "delete": {
+                            "method": "DELETE",
+                            "path": "/api/items/{id}",
+                            **cond,
+                        },
                         "server_fields": ["updated"],
                         "derived": {"done": ["done_at"]},
                     }
@@ -1130,3 +1138,174 @@ def test_proxy_serves_an_extra_toolset(tmp_path: Path) -> None:
     assert names[-1] == "api_read" and "sql_preview" in names
     assert proxy.call("api_read", {}) == ('{"tool": "api_read"}', False)
     server.http.server_close()
+
+
+# -- stale baseline: a whole-record write or a delete over another caller's edit
+
+
+def _edit_before_send(
+    monkeypatch: pytest.MonkeyPatch, store: RestStore, rid: int
+) -> None:
+    """Another caller saves a change to the record after every check OpenAdapt
+    makes and before its write arrives (the last read-then-send window)."""
+    original = RestAdapter.apply
+
+    def apply(self: RestAdapter, write: Any, baseline: Any, key: str) -> Any:
+        with store.lock:
+            store.records[rid]["title"] = "edited by someone else"
+            store.records[rid]["updated"] = store.records[rid]["updated"] + 1.0
+        return original(self, write, baseline, key)
+
+    monkeypatch.setattr(RestAdapter, "apply", apply)
+
+
+def _update(rid: int, **fields: Any) -> dict[str, Any]:
+    return {
+        "system": "tasks",
+        "collection": "item",
+        "op": "update",
+        "id": rid,
+        "fields": fields,
+    }
+
+
+def test_unconditional_replace_over_a_concurrent_edit_is_not_verified(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Issue 2481 item 2, issue 2474 item 1: the replace body is the plan's
+    # baseline, so the PUT writes the old title back over the other edit and
+    # the read-back of the planned field still passes.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, precondition=False))
+    plan = _go(ctx, "T-lost", [_update(3, amount=7)])
+    _edit_before_send(monkeypatch, store, 3)
+    applied = engine.apply_plan(ctx, plan["digest"])
+    assert store.records[3]["title"] == "item 3"  # the other edit was erased
+    assert applied["outcome"] == "COMPLETED_UNVERIFIED", applied
+    assert applied["tx"]["unconditional_writes"] == 1
+
+
+def test_conditional_replace_over_a_concurrent_edit_is_refused_by_the_server(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    plan = _go(ctx, "T-412", [_update(3, amount=7)])
+    _edit_before_send(monkeypatch, store, 3)
+    applied = engine.apply_plan(ctx, plan["digest"])
+    assert store.precondition_failed == 1
+    assert store.records[3]["title"] == "edited by someone else"
+    assert store.records[3]["amount"] == 30
+    assert applied["outcome"] == "RECONCILIATION_REQUIRED", applied
+    assert applied["tx"]["stale_baseline"] == 1 and applied["tx"]["sent"] == 0
+
+
+def test_conditional_replace_without_a_concurrent_edit_is_verified(
+    tmp_path: Path, rest
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url))
+    plan = _go(ctx, "T-ok", [_update(3, amount=7)])
+    applied = engine.apply_plan(ctx, plan["digest"])
+    assert applied["outcome"] == "VERIFIED", applied
+    assert store.records[3]["amount"] == 7 and store.precondition_failed == 0
+
+
+def _delete(rid: int) -> dict[str, Any]:
+    return {"system": "tasks", "collection": "item", "op": "delete", "id": rid}
+
+
+def test_unconditional_held_delete_after_its_recheck_is_not_verified(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Issue 2481 item 2: release rechecks the record with a read, then sends;
+    # an edit between the two is deleted with it, and the read-back (gone)
+    # still passes.
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, holdback=0, precondition=False))
+    plan = _go(ctx, "T-del", [_delete(5)])
+    assert engine.apply_plan(ctx, plan["digest"])["tx"]["held"] == 1
+    _edit_before_send(monkeypatch, store, 5)
+    out = engine.release(ctx, plan["digest"])
+    assert 5 not in store.records
+    assert out["outcome"] == "COMPLETED_UNVERIFIED", out
+    assert out["tx"]["unconditional"] == 1
+
+
+def test_conditional_held_delete_after_its_recheck_is_refused_by_the_server(
+    tmp_path: Path, rest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, url = rest
+    ctx = _ctx(_spec(tmp_path, rest_url=url, holdback=0))
+    plan = _go(ctx, "T-del412", [_delete(5)])
+    engine.apply_plan(ctx, plan["digest"])
+    _edit_before_send(monkeypatch, store, 5)
+    out = engine.release(ctx, plan["digest"])
+    assert store.records[5]["title"] == "edited by someone else"
+    assert out["outcome"] == "RECONCILIATION_REQUIRED", out
+    assert store.precondition_failed == 1
+
+
+def test_a_declared_precondition_the_read_cannot_fill_refuses_the_plan(
+    tmp_path: Path, rest
+) -> None:
+    _, url = rest
+    path = _spec(tmp_path, rest_url=url)
+    data = yaml.safe_load(path.read_text())
+    route = data["systems"][0]["collections"][0]["update"]
+    route["precondition"] = {"source": "field", "field": "no_such_field"}
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(TxRefused) as refused:
+        engine.make_plan(_ctx(path), "T-nov", [_update(3, amount=7)])
+    assert refused.value.code == "no_version"
+
+
+# -- replay: a raw statement's stored verdict is not today's database ---------
+
+
+def test_sql_replay_rereads_the_rows_instead_of_reusing_the_stored_flag(
+    tmp_path: Path,
+) -> None:
+    # Issue 2481 item 3: the statement committed and matched; a person then
+    # reverted the row. The same task and payload replay, nothing is sent,
+    # and the replay must read the database, not the post-commit flag.
+    db = _db(tmp_path / "crm.sqlite")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    stmt = {
+        "system": "crm",
+        "op": "sql",
+        "fields": {"sql": "UPDATE customers SET balance = 999 WHERE id = 3"},
+    }
+    first = engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])
+    assert first["outcome"] == "VERIFIED", first
+    con = sqlite3.connect(db)
+    con.execute("UPDATE customers SET balance = 30 WHERE id = 3")
+    con.commit()
+    con.close()
+    again = engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])
+    assert again["tx"]["replays"] == 1 and again["tx"]["sent"] == 0
+    assert again["tx"].get("unverified_replays") == 1, again
+    assert again["outcome"] == "COMPLETED_UNVERIFIED", again
+
+
+def test_sql_replay_whose_rows_still_hold_is_verified(tmp_path: Path) -> None:
+    db = _db(tmp_path / "crm.sqlite")
+    ctx = _ctx(_spec(tmp_path, db=db))
+    stmt = {
+        "system": "crm",
+        "op": "sql",
+        "fields": {"sql": "INSERT INTO orders (customer, total) VALUES (1, 1.5)"},
+    }
+    assert engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])["outcome"] == (
+        "VERIFIED"
+    )
+    again = engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])
+    assert again["tx"]["replays"] == 1 and not again["tx"].get("unverified_replays")
+    assert again["outcome"] == "VERIFIED", again
+    # The inserted row removed out of band: the replay is no longer VERIFIED.
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM orders WHERE total = 1.5")
+    con.commit()
+    con.close()
+    third = engine.apply_plan(ctx, _go(ctx, "T1", [stmt])["digest"])
+    assert third["tx"].get("unverified_replays") == 1, third

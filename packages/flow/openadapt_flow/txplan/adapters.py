@@ -57,6 +57,53 @@ class Diverged(AdapterError):
     """The statement did something other than the plan showed. Nothing landed."""
 
 
+class StaleBaseline(AdapterError):
+    """The server refused a conditional write: the record changed since it was
+    read. Nothing was written."""
+
+
+def unconditional(coll: Collection, op: str) -> bool:
+    """Stale-baseline class: a write that overwrites or removes fields outside
+    the intent (a replace update, a delete) with no server-enforced check that
+    the record is still the version read. Another caller's edit made after the
+    read can be erased and still read back like a correct write."""
+    if op not in ("update", "delete"):
+        return False
+    route = getattr(coll, op, None)
+    if route is None or (op == "update" and not route.replace):
+        return False
+    return route.precondition is None
+
+
+def _dotted(record: Optional[Mapping[str, Any]], path: str) -> Any:
+    got: Any = record
+    for part in path.split("."):
+        if not isinstance(got, Mapping) or part not in got:
+            return None
+        got = got[part]
+    return got
+
+
+def precondition_for(
+    coll: Collection, op: str, record: Optional[Mapping[str, Any]], etag: Any
+) -> Optional[dict[str, str]]:
+    """The header that makes this write conditional on the version read, or
+    None when the route declares no precondition. A declared precondition
+    whose version the read did not give is an error, never an unconditional
+    write."""
+    route = getattr(coll, op, None)
+    pre = getattr(route, "precondition", None)
+    if pre is None:
+        return None
+    value = etag if pre.source == "etag" else _dotted(record, str(pre.field))
+    if value in (None, "") or isinstance(value, (bool, Mapping, list)):
+        raise AdapterError(f"the read of {coll.name} gave no version to send")
+    text = pre.format.replace("{value}", str(value))
+    if any(c in text for c in "\r\n\x00"):
+        raise AdapterError(f"the version of {coll.name} is not a header value")
+    return {pre.header: text}
+
+
 def after_raw(
     diff: Mapping[str, Any],
     frame: Mapping[str, Mapping[str, str]],
@@ -300,8 +347,11 @@ class RestAdapter:
         *,
         params: Optional[Mapping[str, Any]] = None,
         key: Optional[str] = None,
+        condition: Optional[Mapping[str, str]] = None,
+        refused: Sequence[int] = (),
+        etag_out: Optional[list[Any]] = None,
     ) -> Any:
-        headers = {}
+        headers = dict(condition or {})
         if key and self.system.idempotency_header:
             headers[self.system.idempotency_header] = key
         try:
@@ -310,6 +360,12 @@ class RestAdapter:
             )
         except Exception as exc:  # noqa: BLE001 - transport failure: delivery unknown
             raise AdapterError(f"{method} failed: {type(exc).__name__}") from exc
+        if condition and resp.status_code in refused:
+            raise StaleBaseline(
+                f"{method} refused: the record changed since it was read"
+            )
+        if etag_out is not None:
+            etag_out.append(resp.headers.get("ETag"))
         if resp.status_code == 404 and method == "GET":
             return None
         if resp.status_code >= 400:
@@ -328,13 +384,32 @@ class RestAdapter:
         return {k: v for k, v in record.items() if k not in coll.server_fields}
 
     def read(self, collection: Optional[str], rid: str) -> Optional[Record]:
+        return self.read_versioned(collection, rid)[0]
+
+    def read_versioned(
+        self, collection: Optional[str], rid: str
+    ) -> tuple[Optional[Record], Any]:
+        """The record and the ``ETag`` of the same response."""
         coll = self.coll(collection)
-        got = self._call(coll.read.method, self._fill(coll.read.path, {"id": rid}))
+        etag: list[Any] = []
+        got = self._call(
+            coll.read.method, self._fill(coll.read.path, {"id": rid}), etag_out=etag
+        )
         if got is None:
-            return None
+            return None, None
         if not isinstance(got, dict):
             raise AdapterError("a read did not return an object")
-        return got
+        return got, (etag[0] if etag else None)
+
+    def condition(
+        self, write: Mapping[str, Any], baseline: Optional[Record], etag: Any
+    ) -> Optional[dict[str, str]]:
+        """The precondition header for a planned write, from its baseline read."""
+        if write.get("op") not in ("update", "delete"):
+            return None
+        return precondition_for(
+            self.coll(write.get("collection")), write["op"], baseline, etag
+        )
 
     def frame(self, collection: Optional[str]) -> dict[str, dict[str, str]]:
         coll = self.coll(collection)
@@ -436,11 +511,17 @@ class RestAdapter:
         if route is None:
             raise AdapterError(f"{coll.name} declares no {op}")
         values = {**(baseline or {}), **fields, "id": write.get("id")}
+        condition = write.get("if_match")
+        if route.precondition is not None and op != "create" and not condition:
+            # Stale-baseline class: a declared precondition is never dropped.
+            raise AdapterError("the plan holds no version for the precondition")
         got = self._call(
             route.method,
             self._fill(route.path, values),
             None if op == "delete" else self._body(coll, route, baseline, fields),
             key=key,
+            condition=condition if op != "create" else None,
+            refused=route.precondition.refused_status if route.precondition else (),
         )
         if op == "create":
             rid = (got or {}).get(route.id_from or coll.id_field)
@@ -600,8 +681,24 @@ class SqlAdapter:
                     r"`?([A-Za-z0-9_$]+)`?\s*\.\s*`?[A-Za-z0-9_$]+", sql
                 )
             }
+            # A trigger's writes are part of the statement: one that names
+            # another database, or calls a routine whose writes can't be
+            # read from here, makes the statement's scope unobservable.
+            cur.execute(
+                "SELECT action_statement FROM information_schema.triggers "
+                "WHERE trigger_schema = DATABASE()"
+            )
+            bodies = "\n".join(str(r[0] or "") for r in cur.fetchall())
+            if re.search(r"\bCALL\b", bodies, re.IGNORECASE):
+                raise Diverged("a trigger calls a routine the frame can't observe")
+            named |= {
+                m.lower()
+                for m in re.findall(
+                    r"`?([A-Za-z0-9_$]+)`?\s*\.\s*`?[A-Za-z0-9_$]+", bodies
+                )
+            }
             if named & others:
-                raise Diverged("the statement names another database")
+                raise Diverged("the statement or a trigger names another database")
 
     def _tables(self, cur: Any) -> list[str]:
         d = self.system.dialect
@@ -734,6 +831,25 @@ class SqlAdapter:
     def _exec(
         self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]
     ) -> dict[str, Any]:
+        result = self._exec_one(cur, write, baseline)
+        if self.system.dialect == "postgresql":
+            # Unobserved-scope class: a deferred constraint trigger fires at
+            # COMMIT, after every check and frame read. Fire it now, inside
+            # the transaction, where the scope check and the frame see it.
+            cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        sql = (
+            str((write.get("fields") or {}).get("sql", ""))
+            if write["op"] == "sql"
+            else ""
+        )
+        # Every op, not only raw SQL: a trigger on a planned insert, update or
+        # delete can write outside the frame too.
+        self._refuse_unobserved_writes(cur, sql)
+        return result
+
+    def _exec_one(
+        self, cur: Any, write: Mapping[str, Any], baseline: Optional[Record]
+    ) -> dict[str, Any]:
         table = str(write["collection"])
         key = self.system.tables.get(table)
         if key is None and write["op"] != "sql":
@@ -742,7 +858,6 @@ class SqlAdapter:
         if op == "sql":
             cur.execute(str((write.get("fields") or {})["sql"]))
             rows = max(0, int(cur.rowcount or 0))
-            self._refuse_unobserved_writes(cur, str(write["fields"]["sql"]))
             return {"rows": rows}
         fields = {k: untag(v) for k, v in (write.get("fields") or {}).items()}
         assert key is not None
