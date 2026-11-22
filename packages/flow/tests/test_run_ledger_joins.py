@@ -1063,3 +1063,76 @@ def test_export_checks_source_paths_like_labels(tmp_path):
     assert any(part.startswith("src-") for s in sources for part in s.split("/"))
     # The real paths stay in the local row.
     assert "result-drift-approved.json" in store.rows()[0].sources
+
+
+# -- P7's outside_run counts and its own status (after #2478) -----------------------
+
+_RUN3_RESULTS = (
+    RUN3_FALLBACK / "cache" / "fallback" / "wrap.fallback-e28afecc2347807a-1035f74ad522"
+)
+_RUN3_DECLINED = _RUN3_RESULTS / "fallback-26d212a3c6483cd967c68cb19948794c25abc33d"
+_RUN3_APPROVED = _RUN3_RESULTS / "fallback-ca9527beac76e04f400612a30e06cb3373c2914b"
+
+
+def _edited_result(tmp_path: Path, source: Path, edit) -> Path:
+    run = tmp_path / source.name
+    run.mkdir()
+    doc = json.loads((source / "result.json").read_text())
+    edit(doc)
+    (run / "result.json").write_text(json.dumps(doc))
+    return run
+
+
+def test_the_real_run3_fallback_results():
+    row, _, _ = build_row(_RUN3_APPROVED)
+    assert _outcome(row) == ("VERIFIED", "readback_verified")
+    row, _, _ = build_row(_RUN3_DECLINED)
+    assert _outcome(row) == ("ESCALATED", "person_declined")
+
+
+@pytest.mark.parametrize(
+    "outside",
+    [{"created": 0, "changed": 1, "removed": 0}, None],
+    ids=["a-write-elsewhere", "no-outside-run"],
+)
+def test_a_decline_with_an_outside_run_write_is_not_no_write(tmp_path, outside):
+    # P7 counts a change to another record during the run, or a check with
+    # no outside_run, as a possible write: never "nothing was written".
+    def edit(doc):
+        check = doc["replay"]["fallback"]["task_record_check"]
+        if outside is None:
+            check.pop("outside_run", None)
+        else:
+            check["outside_run"] = outside
+
+    row, _, _ = build_row(_edited_result(tmp_path, _RUN3_DECLINED, edit))
+    assert _outcome(row) == ("UNKNOWN", "write_unconfirmed")
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("status", "RECONCILIATION_REQUIRED"), ("run_status", "GATE_NOT_PROVED")],
+)
+def test_a_verified_fallback_needs_p7s_own_status_to_agree(tmp_path, key, value):
+    def edit(doc):
+        doc["replay"]["fallback"][key] = value
+
+    row, _, _ = build_row(_edited_result(tmp_path, _RUN3_APPROVED, edit))
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
+
+
+def test_a_wrap_record_needs_p7s_own_status_to_agree(tmp_path):
+    record = (
+        RUN3_FALLBACK
+        / "runs"
+        / "drift-approved"
+        / "openadapt-agent"
+        / "runs"
+        / "run-b480e452b3ba49aab785d2ca.json"
+    )
+    doc = json.loads(record.read_text())
+    doc["result"]["fallback"]["status"] = "RECONCILIATION_REQUIRED"
+    path = tmp_path / record.name
+    path.write_text(json.dumps(doc))
+    row, _, _ = build_row(path)
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")

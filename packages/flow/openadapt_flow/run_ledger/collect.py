@@ -624,10 +624,14 @@ def collect_agent_run_record(path: Path) -> Contribution:
             if isinstance(policy, dict) and "task_record_check" in policy
             else result.get("record_check")
         )
+        from openadapt_flow.run_ledger.readers import policy_agrees
+
         fallback_unproved = not (
             isinstance(check, dict)
             and check.get("readable") is True
             and check.get("passed") is True
+            and isinstance(policy, dict)
+            and policy_agrees(policy)
         )
     out.executor_kind = (
         "program" if path_kind == "skill" else "agent" if path_kind == "agent" else None
