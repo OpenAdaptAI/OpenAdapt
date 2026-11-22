@@ -33,8 +33,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Optional
 
-from openadapt_flow.cli_hints import command
-
 #: The program, or the agent, needs a person to look before the task goes on.
 _ESCALATED = frozenset(
     {
@@ -654,7 +652,7 @@ def cmd_wrap_dispatch(args: argparse.Namespace) -> int:
             return 0
         result = run(args)
     except (TaskArgumentsError, TaskSetupError) as exc:
-        print(f"{command('wrap-dispatch')}: {exc}", file=sys.stderr)
+        print(f"wrap-dispatch: {exc}", file=sys.stderr)
         return 2
     _emit(result, args.result)
     return 0 if result.get("verified") is True else 1
