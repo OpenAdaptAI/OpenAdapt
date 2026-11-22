@@ -52,6 +52,10 @@ def _iso(year: int, month: int, day: int) -> str:
 
 def _number(codec: Codec, text: str, *, affixes: tuple[str, ...]) -> Decimal:
     body = _collapse(text)
+    # A sign may sit outside or inside a currency sign: "-$250" or "$-250".
+    sign = ""
+    if body.startswith("-"):
+        sign, body = "-", body.removeprefix("-").strip()
     for affix in sorted(affixes, key=len, reverse=True):
         if affix and body.startswith(affix):
             body = body.removeprefix(affix).strip()
@@ -59,9 +63,8 @@ def _number(codec: Codec, text: str, *, affixes: tuple[str, ...]) -> Decimal:
         if affix and body.endswith(affix):
             body = body.removesuffix(affix).strip()
             break
-    sign = ""
-    if body.startswith("-"):
-        sign, body = "-", body[1:]
+    if not sign and body.startswith("-"):
+        sign, body = "-", body.removeprefix("-")
     dec = re.escape(codec.decimal_mark) if codec.decimal_mark else None
     frac = rf"(?:{dec}\d+)?" if dec else ""
     plain = rf"\d+{frac}"
@@ -190,6 +193,8 @@ def canonical(codec: Codec, expected: Any) -> Any:
             raise CodecError("the expected value is a bool, not a number")
         if isinstance(expected, int):
             return Decimal(expected)
+        if isinstance(expected, Decimal) and expected.is_finite():
+            return expected
         if isinstance(expected, str) and _PLAIN_NUMBER.match(expected):
             return Decimal(expected)
         raise CodecError("the expected value is not a number")

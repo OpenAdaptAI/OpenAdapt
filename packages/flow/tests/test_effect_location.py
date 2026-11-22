@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -192,6 +193,10 @@ def test_money_compares_whole_amounts_in_minor_units() -> None:
     assert status(m, reading("$12,50.00")) == "not_checked"
     no_affix = loc(keys=("cost",), codec=Codec("money"), expected={"cost": 125000})
     assert status(no_affix, reading("$1,250.00")) == "not_checked"
+    refund = loc(keys=("cost",), codec=money, expected={"cost": -25000})
+    assert status(refund, reading("-$250.00")) == "held"
+    assert status(refund, reading("$-250.00")) == "held"
+    assert status(refund, reading("--$250.00")) == "not_checked"
     as_text = loc(keys=("cost",), codec=money, expected={"cost": "125000"})
     assert status(as_text, reading("$1,250.00")) == "not_checked"
 
@@ -202,6 +207,10 @@ def test_units_and_numbers() -> None:
     assert status(unit, reading("12.5kg")) == "held"
     assert status(unit, reading("12.5 lb")) == "not_checked"
     assert status(unit, reading("13 kg")) == "refuted"
+    dec = loc(keys=("n",), codec=Codec("number"), expected={"n": Decimal("2.50")})
+    assert status(dec, reading("2.5")) == "held"
+    nan = loc(keys=("n",), codec=Codec("number"), expected={"n": Decimal("NaN")})
+    assert status(nan, reading("2.5")) == "not_checked"
     num = loc(keys=("n",), codec=Codec("number"), expected={"n": True})
     assert status(num, reading("1")) == "not_checked"
 
