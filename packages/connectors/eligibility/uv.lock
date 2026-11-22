@@ -495,6 +495,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a'", specifier = ">=1.3.1,<2" },
     { name = "aardwolf", marker = "extra == 'rdp'", specifier = "==0.2.14" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'grounder'", specifier = ">=0.40" },
@@ -534,6 +535,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'vision'", specifier = ">=1.26" },
     { name = "onnxruntime", marker = "extra == 'local-grounding'", specifier = ">=1.17" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
+    { name = "openadapt-flow", extras = ["agent"], marker = "extra == 'a2a'" },
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'browser'" },
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'capture'" },
     { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'linux'" },
@@ -582,6 +584,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'service-mlx'", specifier = ">=5.14,<5.18" },
     { name = "uiautomation", marker = "sys_platform == 'win32' and extra == 'dev'", specifier = ">=2.0.20" },
     { name = "uvicorn", marker = "python_full_version >= '3.11' and extra == 'openenv'", specifier = ">=0.29" },
+    { name = "uvicorn", marker = "extra == 'a2a'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'console'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'dev'", specifier = ">=0.29" },
     { name = "uvicorn", marker = "extra == 'execute'", specifier = ">=0.29" },
@@ -596,7 +599,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["vision", "native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "connector-windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "claude-agent-sdk", "openai-agents", "langgraph"]
+provides-extras = ["vision", "native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "connector-windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "a2a", "claude-agent-sdk", "openai-agents", "langgraph"]
 
 [[package]]
 name = "openadapt-types"
