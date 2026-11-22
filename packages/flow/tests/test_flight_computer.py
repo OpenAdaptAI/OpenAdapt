@@ -578,3 +578,19 @@ def test_a_deployment_can_add_safe_labels_but_not_a_commit(monkeypatch):
     monkeypatch.setenv(SAFE_LABELS_ENV, '["Triage", "Submit"]')  # refused whole
     tool = LabelledTool({(10, 20): "button Triage"})
     assert isinstance(GatedComputer(tool, RefuseGate())(**_click()), HeldResult)
+
+
+def test_ocr_text_that_starts_with_a_role_word_is_not_a_role():
+    for text in ("Tab Delete record", "Combobox Discharge"):
+        tool = FakeTool()
+        computer = GatedComputer(tool, RefuseGate(), ocr=lambda png, x, y, t=text: t)
+        assert isinstance(computer(**_click()), HeldResult)
+        assert tool.calls == []
+
+
+def test_a_look_alike_cancel_is_held_but_a_declared_non_ascii_label_passes():
+    tool = LabelledTool({(10, 20): "button Сancel"})  # Cyrillic С
+    assert isinstance(GatedComputer(tool, RefuseGate())(**_click()), HeldResult)
+    tool = LabelledTool({(10, 20): "button Zurück"})
+    GatedComputer(tool, RefuseGate(), safe_labels=["Zurück"])(**_click())
+    assert tool.calls == [_click()]

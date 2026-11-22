@@ -19,9 +19,9 @@ this terminal, --gate file writes an item-approval request Desktop or a
 paired phone answers, --gate refuse holds every one.
 
 CMD runs under an OS egress block (openadapt_flow.flight.egress): on macOS,
-sandbox-exec denies every outbound connection except to loopback, so a model
-call that skips the proxy can't leave the machine; everything CMD starts
-(a browser included) reaches loopback only. Where the block isn't available
+sandbox-exec denies every outbound connection except to loopback, so a
+direct connection from CMD or anything it starts (a browser included)
+fails; work handed to a process outside that tree is not covered. Where the block isn't available
 (any other system) the run refuses to start unless --allow-unenforced-egress
 is given; --no-egress-block turns it off on macOS too. Either is recorded in
 flight.json and egress.json.

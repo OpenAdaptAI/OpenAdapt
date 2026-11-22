@@ -217,20 +217,28 @@ def _env_safe_labels() -> frozenset[str]:
 
 
 def label_is_safe(
-    label: Optional[str], extra: frozenset[str] = frozenset()
+    label: Optional[str],
+    extra: frozenset[str] = frozenset(),
+    *,
+    roles: bool = True,
 ) -> Optional[str]:
-    """Why a click on ``label`` may pass without a person, or None (held)."""
+    """Why a click on ``label`` may pass without a person, or None (held).
+
+    ``roles`` is True only for a label from the accessibility hook: OCR text
+    that starts with "Tab" or "Combobox" is not a role."""
     if not label:
         return None
-    role, name = split_role(label)
+    role, name = split_role(label) if roles else (None, label.strip())
     if role in SAFE_ROLES:
         return f"a {role} (focus or view only)"
     if label_is_commit(name):
         return None
     key = normalise_label(name)
-    if not key.isascii():
-        return None
-    if key in SAFE_LABELS or key in extra:
+    if key in extra:
+        return f"{key!r} was declared safe for this deployment"
+    # The built-in list is ASCII: a look-alike letter from another script
+    # ("Сancel" with a Cyrillic С) is not on it.
+    if key.isascii() and key in SAFE_LABELS:
         return f"{key!r} is a known-safe control"
     return None
 
@@ -410,7 +418,7 @@ def classify(
             )
         elif verb:
             reason = f"the target reads {label!r} ({verb})"
-        elif label_is_safe(label, safe_labels):
+        elif label_is_safe(label, safe_labels, roles=source == "accessibility"):
             return Classification(False, kind, x, y, label, source, "", op_dicts)
         else:
             reason = (

@@ -77,8 +77,28 @@ def _centers(url: str) -> dict[str, tuple[int, int]]:
     return out
 
 
+def _require_tesseract() -> None:
+    """flight checks the scrubber end to end before it starts, and that
+    needs pytesseract and the tesseract binary even with a stand-in
+    scrubber. CI without them skips; elsewhere their absence fails."""
+    import shutil
+
+    try:
+        import pytesseract  # noqa: F401
+    except ImportError:
+        missing = "pytesseract"
+    else:
+        missing = "" if shutil.which("tesseract") else "the tesseract binary"
+    if missing:
+        if os.environ.get("CI"):
+            pytest.skip(f"CI without {missing}")
+        raise AssertionError(f"{missing} is missing; flight can't start without it")
+
+
 def test_flight_meters_scrubs_and_holds_the_save(tmp_path, monkeypatch):
     from openadapt_flow import privacy
+
+    _require_tesseract()
     from openadapt_flow.flight.cli import cmd_flight
     from openadapt_flow.mockmed.server import serve
 

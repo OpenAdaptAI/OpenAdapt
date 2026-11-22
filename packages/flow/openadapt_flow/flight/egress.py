@@ -33,6 +33,9 @@ API (the J7 contract):
   outbound connection except to loopback (and DNS lookups); it is checked
   by running a sandboxed connect to a TEST-NET address, which must fail
   with "operation not permitted". There is no block on other systems yet.
+  It covers direct connections from the process tree it starts; work the
+  agent hands to a process outside it (``open``, Apple Events, an XPC
+  helper, an already running browser or daemon) is not covered.
 
 ``env``
     The variables the agent gets: ``ANTHROPIC_BASE_URL`` and
@@ -40,7 +43,10 @@ API (the J7 contract):
     ``HTTP_PROXY`` / ``ALL_PROXY`` at a trap on the same port (loopback is
     exempt through ``NO_PROXY``). A client that ignores the base URLs but
     honours the proxy variables is refused there, and each attempt is
-    counted as a blocked call. Merge it over the agent's own environment.
+    counted as a blocked call (with or without the OS block; not with
+    ``use_block=False``). Anything else that honours them (a browser on
+    Linux, an agent's telemetry) is trapped too and refuses the run. Merge
+    it over the agent's own environment.
 
 ``wrap(argv)``
     ``argv`` under the egress block (``sandbox-exec -p <profile> ...``), or
@@ -259,14 +265,17 @@ class ScrubbedEgress:
             def local_text(text: str) -> str:
                 return scrub_outbound_text(text, scrubber) or ""
 
-            timeline = Timeline(
-                self.run_dir / "egress",
-                task_id=self.run_dir.name,
-                executor_label="agent",
-                scrub_image=None,
-                scrub_text=local_text if scrubber is not None else None,
-                scrub_record={"mode": "on" if self.scrub else "off"},
-            )
+            try:
+                timeline = Timeline(
+                    self.run_dir / "egress",
+                    task_id=self.run_dir.name,
+                    executor_label="agent",
+                    scrub_image=None,
+                    scrub_text=local_text if scrubber is not None else None,
+                    scrub_record={"mode": "on" if self.scrub else "off"},
+                )
+            except Exception as exc:  # noqa: BLE001 - e.g. strict at-rest mode
+                raise EgressRefused(f"nothing was started: {exc}") from None
             self._timeline = timeline
         try:
             self._proxy = FlightProxy(
@@ -301,6 +310,17 @@ class ScrubbedEgress:
     def env(self) -> dict[str, str]:
         proxy = self.proxy
         env = proxy.model_env()
+        if not self.use_block:
+            # The caller turned the block off to get the old behaviour:
+            # no forward-proxy trap either.
+            for name in list(env):
+                if name.lower() in (
+                    "https_proxy",
+                    "http_proxy",
+                    "all_proxy",
+                    "no_proxy",
+                ):
+                    del env[name]
         if self.gate is not None:
             from openadapt_flow.flight.computer import GATE_URL_ENV
 
