@@ -606,6 +606,16 @@ class Guard:
                 approval_request_sha256=request.digest(),
                 approval_run_dir=str(self.dir),
             )
+        if answer is not None:
+            # A verified answer, either way: who decided goes on the record
+            # (and the ledger row), a decline as much as an approval.
+            self._approver = {
+                "kind": "person",
+                "id": answer.approver_id
+                or (answer.attestation.signer if answer.attestation else None)
+                or "unauthenticated-person",
+                "policy_ref": self._policy_ref,
+            }
         if answer is None or answer.decision != "approve":
             reason = code or "declined"
             self._save("declined", reason=reason)
@@ -622,13 +632,6 @@ class Guard:
             "answer_sha256": answer.digest(),
             "decided_by": answer.decided_by,
             "route": answer.route,
-        }
-        self._approver = {
-            "kind": "person",
-            "id": answer.approver_id
-            or (answer.attestation.signer if answer.attestation else None)
-            or "unauthenticated-person",
-            "policy_ref": self._policy_ref,
         }
         return None
 
