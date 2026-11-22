@@ -35,7 +35,9 @@ Not covered: ``possible_duplicate`` (it needs a read of the app's records),
 non-browser agents, saves over a WebSocket (``Fetch`` doesn't see them),
 tabs other than the one watched, a save sent before the next look at the page
 (``poll_s``), and a run with no watch running. The watch is not a sandbox: it can't stop an
-agent that has its own way to the app, or one that kills the watch.
+agent that has its own way to the app, or one that kills the watch. A watch
+that loses its DevTools session exits 4 (holding) or 5 and blocks nothing
+from then on; the guard remains the backstop.
 """
 
 from __future__ import annotations
@@ -161,6 +163,8 @@ class ExceptionWatch:
         #: until the page stops showing them.
         self._settled: set[str] = set()
         self._save_seen = False
+        #: Why the watch lost the tab (``session_lost``, ``browser_lost``).
+        self.lost: Optional[str] = None
         self._screen: Optional[str] = None
         self._last_change: Optional[float] = None
         self._last_request: Optional[float] = None
@@ -276,9 +280,39 @@ class ExceptionWatch:
         self.card = None
         return outcome
 
-    def stop_code(self) -> int:
-        """The watch's exit code: 0, or 3 when an answer stopped the run."""
+    def note_decision_failed(self, code: Optional[str], error: str) -> None:
+        """The browser refused a continue or a block (logged, not fatal)."""
 
+        self._log("request_decision_failed", code=code, error=error[:64])
+
+    def mark_lost(self, reason: str) -> None:
+        """The watch can no longer see or hold the tab. From here it blocks
+        nothing: the guard (``openadapt-flow guard``) is the backstop."""
+
+        self.lost = reason
+        self._log(
+            "watch_lost",
+            reason=reason,
+            card_open=self.card is not None,
+            stopped=self.stopped,
+        )
+        import sys
+
+        print(
+            f"exceptions: WATCH LOST ({reason}): saves are no longer held by "
+            "the watch"
+            + ("; a card was open or the run was stopped" if self.holding else ""),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    def stop_code(self) -> int:
+        """The watch's exit code: 0; 3 when an answer stopped the run; 4 when
+        the watch lost the tab's session while it was holding saves (a card
+        open or a stop); 5 when it lost the session otherwise."""
+
+        if self.lost is not None:
+            return 4 if self.holding else 5
         return 3 if self.stopped is not None else 0
 
 
@@ -298,7 +332,11 @@ def _blocked_body(code: str) -> str:
     return base64.b64encode(payload.encode("utf-8")).decode("ascii")
 
 
-def _decide(cdp: Any, watch: ExceptionWatch, params: Mapping[str, Any]) -> None:
+def _decide(cdp: Any, watch: ExceptionWatch, params: Mapping[str, Any]) -> bool:
+    """Continue or block one paused request. False when the browser refused
+    the decision (the page aborted the request, or the session is gone): the
+    caller checks the session. A request the page aborted was never sent."""
+
     from openadapt_flow.agent_guard.requests import HeldRequest
 
     request_id = str(params.get("requestId") or "")
@@ -306,21 +344,85 @@ def _decide(cdp: Any, watch: ExceptionWatch, params: Mapping[str, Any]) -> None:
         code = watch.on_request(HeldRequest.from_cdp(params))
     except Exception:  # noqa: BLE001 - the watch can't tell: block while holding
         code = "exception_open" if watch.holding else None
-    if code is None:
-        cdp.send("Fetch.continueRequest", {"requestId": request_id})
-        return
-    cdp.send(
-        "Fetch.fulfillRequest",
-        {
-            "requestId": request_id,
-            "responseCode": 409,
-            "responseHeaders": [
-                {"name": "Content-Type", "value": "application/json"},
-                {"name": BLOCK_HEADER, "value": f"blocked; code={code}"},
-            ],
-            "body": _blocked_body(code),
-        },
-    )
+    try:
+        if code is None:
+            cdp.send("Fetch.continueRequest", {"requestId": request_id})
+        else:
+            cdp.send(
+                "Fetch.fulfillRequest",
+                {
+                    "requestId": request_id,
+                    "responseCode": 409,
+                    "responseHeaders": [
+                        {"name": "Content-Type", "value": "application/json"},
+                        {"name": BLOCK_HEADER, "value": f"blocked; code={code}"},
+                    ],
+                    "body": _blocked_body(code),
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 - one request must not end the watch
+        watch.note_decision_failed(code, type(exc).__name__)
+        return False
+    return True
+
+
+def _alive(cdp: Any) -> bool:
+    """The watch's own DevTools session still answers."""
+
+    try:
+        cdp.send("Runtime.evaluate", {"expression": "1", "returnByValue": True})
+        return True
+    except Exception:  # noqa: BLE001 - detached or the browser is gone
+        return False
+
+
+def run_loop(
+    watch: ExceptionWatch,
+    page: Any,
+    cdp: Any,
+    paused: list[Mapping[str, Any]],
+    *,
+    poll_s: float = 0.5,
+    max_s: Optional[float] = None,
+    stop: Optional[Callable[[], bool]] = None,
+) -> None:
+    """The watch's loop over an attached tab and its own Fetch session.
+
+    Ends when the tab closes, ``stop()`` or ``max_s``, or when the session is
+    lost while the tab is still open (:meth:`ExceptionWatch.mark_lost`).
+    """
+
+    started = time.monotonic()
+    next_look = 0.0
+    while not page.is_closed():
+        while paused:
+            if not _decide(cdp, watch, paused.pop(0)) and not _alive(cdp):
+                watch.mark_lost("session_lost")
+                return
+        if time.monotonic() >= next_look:
+            if not _alive(cdp):
+                if page.is_closed():
+                    return
+                watch.mark_lost("session_lost")
+                return
+            try:
+                snapshot = page.evaluate(SNAPSHOT_JS)
+            except Exception:  # noqa: BLE001 - navigating: look again
+                snapshot = None
+            if isinstance(snapshot, Mapping):
+                watch.observe(snapshot)
+            watch.poll()
+            next_look = time.monotonic() + poll_s
+        if stop is not None and stop():
+            return
+        if max_s is not None and time.monotonic() - started >= max_s:
+            return
+        try:
+            page.wait_for_timeout(50)  # delivers CDP events
+        except Exception:  # noqa: BLE001 - the browser went away
+            if not page.is_closed():
+                watch.mark_lost("browser_lost")
+            return
 
 
 def _page(browser: Any, app_origin: str, page_url: Optional[str]) -> Any:
@@ -384,33 +486,12 @@ def watch_browser(
         )
         if on_attached is not None:
             on_attached()
-        started = time.monotonic()
-        next_look = 0.0
         try:
-            while not page.is_closed():
-                while paused:
-                    _decide(cdp, watch, paused.pop(0))
-                if time.monotonic() >= next_look:
-                    try:
-                        snapshot = page.evaluate(SNAPSHOT_JS)
-                    except Exception:  # noqa: BLE001 - navigating: look again
-                        snapshot = None
-                    if isinstance(snapshot, Mapping):
-                        watch.observe(snapshot)
-                    watch.poll()
-                    next_look = time.monotonic() + poll_s
-                if stop is not None and stop():
-                    break
-                if max_s is not None and time.monotonic() - started >= max_s:
-                    break
-                page.wait_for_timeout(50)  # delivers CDP events
+            run_loop(watch, page, cdp, paused, poll_s=poll_s, max_s=max_s, stop=stop)
         finally:
             # Paused requests go on when the session detaches: decide them first.
-            while paused:
-                try:
-                    _decide(cdp, watch, paused.pop(0))
-                except Exception:  # noqa: BLE001 - the tab is gone
-                    break
+            while paused and _decide(cdp, watch, paused.pop(0)):
+                pass
             try:
                 cdp.detach()
             except Exception:  # noqa: BLE001 - the tab is gone

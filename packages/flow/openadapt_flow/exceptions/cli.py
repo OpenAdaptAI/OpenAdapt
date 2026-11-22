@@ -257,6 +257,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             {
                 "run_ref": run_ref,
                 "stopped": watch.stopped,
+                "lost": watch.lost,
                 "outcomes": [o.wire() for o in watch.outcomes],
             }
         )

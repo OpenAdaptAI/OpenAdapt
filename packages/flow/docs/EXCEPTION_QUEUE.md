@@ -82,6 +82,16 @@ browser. A verified `continue` or `done_by_person` lifts the hold. Any other
 outcome (a stop answer, an expiry, an answer off the roster) blocks every
 later save for the rest of the run, and the watch exits 3.
 
+The watch holds saves only while it is attached. A request the page aborts
+while it is paused, or a block the browser refuses, is logged
+(`request_decision_failed`) and the watch goes on. If the watch loses its own
+DevTools session while the tab is still open, it says so on stderr, writes
+`watch_lost` to `exceptions_watch.jsonl`, reports `"lost"` in its output and
+exits 4 when it was holding saves (a card open or a stop) or 5 otherwise. A
+dead watch blocks nothing from then on, so run it beside the guard
+(`openadapt-flow guard`): the guard still holds each save until the record on
+screen is the right one, and reads it back.
+
 The watch and the guard each pause requests in their own DevTools session,
 and Chromium hands a paused request to the session that attached last first.
 Start the watch after the guard has attached (`guard: attached` on its
