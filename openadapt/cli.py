@@ -2209,6 +2209,32 @@ def agent(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "handoff",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def handoff(command_ctx: click.Context) -> None:
+    """Hand a result to another agent with its run's receipt, and verify one.
+
+    `send FILE --run RUN_DIR` attaches the run's receipt (inline, `--detached`
+    beside the file, or `--post URL` to a webhook). `verify FILE.handoff.json`
+    checks it against your pinned keys and says who signed it, what was
+    checked, and that a valid signature proves who signed, not that the claim
+    is true. Also available as `openadapt verify handoff`.
+    """
+    _require_supported_python()
+    args = list(command_ctx.args)
+    if args[:1] in ([], ["-h"], ["--help"]):
+        click.echo(command_ctx.get_help())
+        sys.exit(0 if args else 2)
+    sys.exit(_invoke_flow(["handoff", *args]))
+
+
+@main.command(
     "receipt",
     context_settings={
         "ignore_unknown_options": True,

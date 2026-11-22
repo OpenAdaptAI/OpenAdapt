@@ -1,0 +1,1717 @@
+{
+  "summary": {
+    "score_scope": "automated",
+    "manual_verification_required": [
+      "CARD-CLIENT-001",
+      "CARD-SIGN-001",
+      "CARD-SIGN-002",
+      "CARD-SIGN-003",
+      "CARD-SIGN-004",
+      "AUTH-TLS-001",
+      "AUTH-TLS-002",
+      "AUTH-SERVER-001",
+      "BIND-CUSTOM-002"
+    ],
+    "timestamp": "2026-11-21T06:51:05.927798+00:00",
+    "sut_url": "http://localhost:9999",
+    "spec_version": "",
+    "overall_compatibility": "75.0%",
+    "must_compatibility": "76.0%",
+    "should_compatibility": "57.1%",
+    "may_compatibility": "100.0%"
+  },
+  "per_requirement": {
+    "CARD-DISC-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestAgentCardDiscovery::test_agent_card_retrievable"
+      ]
+    },
+    "CARD-STRUCT-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestAgentCardStructure::test_agent_card_validates_against_schema",
+        "tests/compatibility/agent_card/test_agent_card.py::TestAgentCardStructure::test_required_fields_present"
+      ]
+    },
+    "CARD-PROTO-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestAgentCardProtocol::test_supported_interfaces_non_empty"
+      ]
+    },
+    "CARD-PROTO-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestAgentCardProtocol::test_each_interface_validates_against_schema"
+      ]
+    },
+    "BIND-FIELD-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestBindingFieldDeclaration::test_all_protocols_declared"
+      ]
+    },
+    "BIND-CUSTOM-001": {
+      "level": "SHOULD",
+      "status": "SKIPPED",
+      "transports": {
+        "agent_card": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card.py::TestCustomBindingIdentifiers::test_custom_binding_identifiers_are_uris"
+      ]
+    },
+    "CARD-CACHE-001": {
+      "level": "SHOULD",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card_caching.py::TestAgentCardCacheControl::test_cache_control_has_max_age",
+        "tests/compatibility/agent_card/test_agent_card_caching.py::TestAgentCardCacheControl::test_cache_control_present"
+      ]
+    },
+    "CARD-CACHE-002": {
+      "level": "SHOULD",
+      "status": "PASS",
+      "transports": {
+        "agent_card": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card_caching.py::TestAgentCardETag::test_etag_present"
+      ]
+    },
+    "CARD-CACHE-003": {
+      "level": "MAY",
+      "status": "SKIPPED",
+      "transports": {
+        "agent_card": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/agent_card/test_agent_card_caching.py::TestAgentCardLastModified::test_last_modified_present"
+      ]
+    },
+    "DM-ART-001": {
+      "level": "MUST",
+      "status": "FAIL",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "FAIL",
+        "http_json": "FAIL"
+      },
+      "errors": [
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts",
+        "Response contains no artifacts"
+      ],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[grpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[http_json]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[jsonrpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[grpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[http_json]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[jsonrpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[grpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[http_json]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[jsonrpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[grpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[http_json]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[jsonrpc]",
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-MSG-001": {
+      "level": "MUST",
+      "status": "FAIL",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "FAIL",
+        "http_json": "FAIL"
+      },
+      "errors": [
+        "Expected a Message response, but got a Task or no payload",
+        "Expected a Message response, but got a Task or no payload"
+      ],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[grpc]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[http_json]",
+        "tests/compatibility/core_operations/test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[jsonrpc]",
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-TASK-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-TASK-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-MSG-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-PART-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-STATUS-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-SERIAL-004": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestSendMessageResponseSchema::test_response_validates_against_schema"
+      ]
+    },
+    "DM-SERIAL-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestCamelCaseFieldNames::test_no_snake_case_keys"
+      ]
+    },
+    "DM-SERIAL-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestEnumSerialization::test_enum_values_are_strings"
+      ]
+    },
+    "DM-SERIAL-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestTimestampFormat::test_timestamps_are_iso8601_utc"
+      ]
+    },
+    "DM-SERIAL-005": {
+      "level": "SHOULD",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_data_model.py::TestIgnoreUnrecognizedFields::test_extra_fields_ignored_jsonrpc",
+        "tests/compatibility/core_operations/test_data_model.py::TestIgnoreUnrecognizedFields::test_extra_fields_ignored_rest"
+      ]
+    },
+    "CORE-ERR-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCoreErrorStructure::test_error_has_code_and_message_jsonrpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestCoreErrorStructure::test_error_has_code_and_message_rest"
+      ]
+    },
+    "CORE-ERR-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCoreInputValidation::test_malformed_request_rejected_jsonrpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestCoreInputValidation::test_malformed_request_rejected_rest"
+      ]
+    },
+    "CORE-CAP-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityPushNotifications::test_push_not_supported_jsonrpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityPushNotifications::test_push_not_supported_rest"
+      ]
+    },
+    "CORE-CAP-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "jsonrpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityStreaming::test_streaming_not_supported_jsonrpc"
+      ]
+    },
+    "CORE-CAP-004": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityExtensionRequired::test_missing_required_extension_returns_error_http_json",
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityExtensionRequired::test_missing_required_extension_returns_error_jsonrpc"
+      ]
+    },
+    "CORE-CAP-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestCapabilityExtendedCard::test_extended_card_not_supported_jsonrpc"
+      ]
+    },
+    "CARD-EXT-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED",
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardNotConfigured::test_extended_card_not_configured_grpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardNotConfigured::test_extended_card_not_configured_http_json",
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardNotConfigured::test_extended_card_not_configured_jsonrpc"
+      ]
+    },
+    "CARD-EXT-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED",
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardRequiresAuth::test_extended_card_requires_auth_grpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardRequiresAuth::test_extended_card_requires_auth_http_json",
+        "tests/compatibility/core_operations/test_error_handling.py::TestExtendedCardRequiresAuth::test_extended_card_requires_auth_jsonrpc"
+      ]
+    },
+    "VER-SERVER-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestVersionErrors::test_unsupported_version_returns_error_jsonrpc",
+        "tests/compatibility/core_operations/test_error_handling.py::TestVersionErrors::test_unsupported_version_returns_error_rest"
+      ]
+    },
+    "VER-SERVER-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestVersionErrors::test_empty_version_treated_as_default_jsonrpc"
+      ]
+    },
+    "JSONRPC-ERR-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestJsonRpcErrorStructure::test_error_object_structure",
+        "tests/compatibility/jsonrpc/test_error_info.py::TestJsonRpcErrorDetails::test_present_error_data_is_any_array"
+      ]
+    },
+    "JSONRPC-ERR-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestJsonRpcErrorStructure::test_a2a_error_codes_in_range"
+      ]
+    },
+    "JSONRPC-SSE-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestJsonRpcErrorStructure::test_a2a_error_type_mappings",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeMappings::test_push_notification_not_supported_error",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeMappings::test_task_not_cancelable_error",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeMappings::test_task_not_found_error",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeMappings::test_unsupported_operation_error",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeMappings::test_version_not_supported_error",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[CancelTask-nonexistent]",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[GetTask-nonexistent]",
+        "tests/compatibility/jsonrpc/test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[SendMessage-bad-version]"
+      ]
+    },
+    "JSONRPC-ERR-003": {
+      "level": "SHOULD",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestJsonRpcErrorStructure::test_error_data_contains_error_info",
+        "tests/compatibility/jsonrpc/test_error_info.py::TestJsonRpcWellKnownErrorDetails::test_error_data_uses_well_known_type"
+      ]
+    },
+    "HTTP_JSON-ERR-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestRestErrorStructure::test_error_uses_aip193_format",
+        "tests/compatibility/http_json/test_problem_details.py::TestAIP193ErrorFormat::test_code_field_matches_http_status",
+        "tests/compatibility/http_json/test_problem_details.py::TestAIP193ErrorFormat::test_error_object_present"
+      ]
+    },
+    "HTTP_JSON-ERR-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestRestErrorStructure::test_a2a_error_info_in_details",
+        "tests/compatibility/http_json/test_problem_details.py::TestAIP193ErrorInfo::test_details_contains_error_info",
+        "tests/compatibility/http_json/test_problem_details.py::TestAIP193ErrorInfo::test_error_info_reason_matches_condition",
+        "tests/compatibility/http_json/test_problem_details.py::TestAIP193ErrorInfo::test_error_info_valid"
+      ]
+    },
+    "GRPC-ERR-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_error_handling.py::TestGrpcErrorStructure::test_grpc_error_for_nonexistent_task",
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcErrorInfo::test_error_info_in_status_details"
+      ]
+    },
+    "STREAM-ORDER-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_multi_stream.py::TestMultiStreamOrdering::test_events_broadcast_to_all_streams[grpc]"
+      ]
+    },
+    "STREAM-ORDER-003": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_multi_stream.py::TestMultiStreamOrdering::test_streams_receive_same_events_in_order[grpc]"
+      ]
+    },
+    "STREAM-ORDER-004": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_multi_stream.py::TestMultiStreamOrdering::test_closing_one_stream_does_not_affect_others[grpc]"
+      ]
+    },
+    "PUSH-CREATE-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_create_push_config[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_create_push_config[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_create_push_config[jsonrpc]"
+      ]
+    },
+    "PUSH-CREATE-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_config_persists[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_config_persists[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_config_persists[jsonrpc]"
+      ]
+    },
+    "PUSH-GET-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_push_config[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_push_config[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_push_config[jsonrpc]"
+      ]
+    },
+    "PUSH-GET-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_nonexistent_config_returns_error[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_nonexistent_config_returns_error[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_get_nonexistent_config_returns_error[jsonrpc]"
+      ]
+    },
+    "PUSH-LIST-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_list_push_configs[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_list_push_configs[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_list_push_configs[jsonrpc]"
+      ]
+    },
+    "PUSH-DEL-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_push_config[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_push_config[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_push_config[jsonrpc]"
+      ]
+    },
+    "PUSH-DEL-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_is_idempotent[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_is_idempotent[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationCrud::test_delete_is_idempotent[jsonrpc]"
+      ]
+    },
+    "PUSH-DELIVER-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_includes_auth[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_includes_auth[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_includes_auth[jsonrpc]"
+      ]
+    },
+    "PUSH-DELIVER-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_at_least_once[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_at_least_once[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_at_least_once[jsonrpc]"
+      ]
+    },
+    "PUSH-DELIVER-003": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "SKIPPED",
+        "http_json": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_payload_format[grpc]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_payload_format[http_json]",
+        "tests/compatibility/core_operations/test_push_notifications.py::TestPushNotificationDelivery::test_delivery_payload_format[jsonrpc]"
+      ]
+    },
+    "CORE-SEND-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-001-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-001-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-001-jsonrpc]"
+      ]
+    },
+    "CORE-SEND-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-003-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-003-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-SEND-003-jsonrpc]"
+      ]
+    },
+    "CORE-STREAM-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-001-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-001-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-001-jsonrpc]"
+      ]
+    },
+    "CORE-STREAM-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-002-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-002-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-002-jsonrpc]"
+      ]
+    },
+    "CORE-STREAM-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-003-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-003-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-STREAM-003-jsonrpc]"
+      ]
+    },
+    "CORE-GET-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-GET-002-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-GET-002-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-GET-002-jsonrpc]"
+      ]
+    },
+    "CORE-LIST-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-001-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-001-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-001-jsonrpc]"
+      ]
+    },
+    "CORE-LIST-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-002-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-002-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-002-jsonrpc]"
+      ]
+    },
+    "CORE-LIST-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-003-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-003-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-003-jsonrpc]"
+      ]
+    },
+    "CORE-LIST-004": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-004-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-004-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-004-jsonrpc]"
+      ]
+    },
+    "CORE-LIST-005": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-005-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-005-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-LIST-005-jsonrpc]"
+      ]
+    },
+    "CORE-CANCEL-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-CANCEL-003-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-CANCEL-003-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-CANCEL-003-jsonrpc]"
+      ]
+    },
+    "CORE-EXECUTION-MODE-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-001-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-001-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-001-jsonrpc]"
+      ]
+    },
+    "CORE-EXECUTION-MODE-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-002-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-002-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-EXECUTION-MODE-002-jsonrpc]"
+      ]
+    },
+    "CORE-MULTI-001a": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-001a-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-001a-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-001a-jsonrpc]"
+      ]
+    },
+    "CORE-MULTI-002a": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-002a-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-002a-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-002a-jsonrpc]"
+      ]
+    },
+    "CORE-MULTI-003": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-003-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-003-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-003-jsonrpc]"
+      ]
+    },
+    "CORE-MULTI-004": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-004-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-004-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[CORE-MULTI-004-jsonrpc]"
+      ]
+    },
+    "STREAM-SUB-004": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[STREAM-SUB-004-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[STREAM-SUB-004-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_must_requirement[STREAM-SUB-004-jsonrpc]",
+        "tests/compatibility/grpc/test_streaming.py::TestGrpcStreaming::test_streaming_error_propagation",
+        "tests/compatibility/jsonrpc/test_sse_streaming.py::TestSseSubscribeToTask::test_subscribe_nonexistent_task_returns_error"
+      ]
+    },
+    "CORE-MULTI-001": {
+      "level": "MAY",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-001-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-001-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-001-jsonrpc]"
+      ]
+    },
+    "CORE-MULTI-002": {
+      "level": "MAY",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-002-grpc]",
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-002-http_json]",
+        "tests/compatibility/core_operations/test_requirements.py::test_may_requirement[CORE-MULTI-002-jsonrpc]"
+      ]
+    },
+    "STREAM-ORDER-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "grpc": "SKIPPED",
+        "jsonrpc": "PASS",
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_stream_ordering.py::TestStreamEventOrdering::test_streaming_event_ordering[grpc]",
+        "tests/compatibility/core_operations/test_stream_ordering.py::TestStreamEventOrdering::test_streaming_event_ordering[http_json]",
+        "tests/compatibility/core_operations/test_stream_ordering.py::TestStreamEventOrdering::test_streaming_event_ordering[jsonrpc]"
+      ]
+    },
+    "CORE-HIST-001": {
+      "level": "SHOULD",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryLengthZeroGetTask::test_get_task_history_length_zero[grpc]"
+      ]
+    },
+    "CORE-HIST-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryLengthLimit::test_get_task_history_does_not_exceed_limit[grpc]"
+      ]
+    },
+    "CORE-HIST-003": {
+      "level": "SHOULD",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryLengthZeroSendMessage::test_send_message_history_length_zero[grpc]"
+      ]
+    },
+    "CORE-HIST-004": {
+      "level": "MAY",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryPersistence::test_get_task_returns_history[grpc]"
+      ]
+    },
+    "CORE-HIST-005": {
+      "level": "SHOULD",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryOrdering::test_history_messages_in_chronological_order[grpc]"
+      ]
+    },
+    "CORE-HIST-006": {
+      "level": "SHOULD",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_history.py::TestHistoryContent::test_history_content_matches_sent_messages[grpc]"
+      ]
+    },
+    "CORE-GET-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestGetTask::test_get_task_returns_current_state[grpc]"
+      ]
+    },
+    "CORE-CANCEL-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestCancelTask::test_cancel_task_returns_updated_state[grpc]"
+      ]
+    },
+    "CORE-CANCEL-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestCancelTask::test_cancel_terminal_task_returns_error[grpc]"
+      ]
+    },
+    "CORE-SEND-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestMultiTurn::test_send_message_to_terminal_task[grpc]"
+      ]
+    },
+    "CORE-MULTI-005": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestMultiTurn::test_infer_context_from_task[grpc]"
+      ]
+    },
+    "CORE-MULTI-006": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestMultiTurn::test_reject_mismatching_context[grpc]"
+      ]
+    },
+    "STREAM-SUB-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestSubscribeLifecycle::test_subscribe_terminates_at_terminal_state[grpc]"
+      ]
+    },
+    "STREAM-SUB-003": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_task_lifecycle.py::TestSubscribeLifecycle::test_subscribe_rejects_terminal_task[grpc]"
+      ]
+    },
+    "JSONRPC-FMT-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestJsonRpcFormat::test_response_validates_jsonrpc_envelope"
+      ]
+    },
+    "JSONRPC-FMT-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestJsonRpcFormat::test_content_type_is_application_json"
+      ]
+    },
+    "JSONRPC-SVC-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestJsonRpcMethodNames::test_bindings_use_spec_method_names"
+      ]
+    },
+    "JSONRPC-SVC-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestJsonRpcServiceParams::test_extensions_header_accepted"
+      ]
+    },
+    "JSONRPC-SSE-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "jsonrpc": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestJsonRpcStreaming::test_streaming_content_type",
+        "tests/compatibility/jsonrpc/test_sse_streaming.py::TestSseStreamingFormat::test_streaming_events_contain_stream_response",
+        "tests/compatibility/jsonrpc/test_sse_streaming.py::TestSseStreamingFormat::test_streaming_events_have_jsonrpc_envelope"
+      ]
+    },
+    "HTTP_JSON-SVC-001": {
+      "level": "SHOULD",
+      "status": "FAIL",
+      "transports": {
+        "http_json": "FAIL"
+      },
+      "errors": [
+        "Error Content-Type should be application/a2a+json for 1.0.1"
+      ],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestFormat::test_response_content_type",
+        "tests/compatibility/http_json/test_problem_details.py::TestHttpJsonErrorMediaType::test_error_content_type"
+      ]
+    },
+    "HTTP_JSON-FMT-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestFormat::test_response_validates_against_schema"
+      ]
+    },
+    "HTTP_JSON-SVC-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestServiceParams::test_extensions_header_accepted"
+      ]
+    },
+    "HTTP_JSON-URL-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestUrlPatterns::test_url_patterns_defined"
+      ]
+    },
+    "HTTP_JSON-URL-002": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestUrlPatterns::test_http_methods_correct"
+      ]
+    },
+    "HTTP_JSON-QP-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestQueryParams::test_query_params_are_camel_case"
+      ]
+    },
+    "HTTP_JSON-SSE-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestRestStreaming::test_streaming_content_type"
+      ]
+    },
+    "GRPC-SVC-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestGrpcService::test_grpc_response_validates_against_proto"
+      ]
+    },
+    "GRPC-SVC-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestGrpcProto3::test_response_uses_proto3"
+      ]
+    },
+    "GRPC-META-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestGrpcServiceParams::test_extensions_metadata_accepted"
+      ]
+    },
+    "GRPC-ERR-003": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/core_operations/test_transport_behavior.py::TestGrpcStreaming::test_grpc_streaming_works",
+        "tests/compatibility/grpc/test_streaming.py::TestGrpcStreaming::test_streaming_cancellation",
+        "tests/compatibility/grpc/test_streaming.py::TestGrpcStreaming::test_streaming_message_structure",
+        "tests/compatibility/grpc/test_streaming.py::TestGrpcStreaming::test_streaming_response_type"
+      ]
+    },
+    "GRPC-ERR-002": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcStatusCodes::test_cancel_missing_task_returns_not_found",
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcStatusCodes::test_push_not_supported_returns_expected_error",
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcStatusCodes::test_task_not_found_returns_not_found",
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcStatusCodes::test_unsupported_operation_returns_expected_error",
+        "tests/compatibility/grpc/test_status_codes.py::TestGrpcStatusCodes::test_version_not_supported_returns_expected_error"
+      ]
+    },
+    "STREAM-SUB-001": {
+      "level": "MUST",
+      "status": "SKIPPED",
+      "transports": {
+        "grpc": "SKIPPED"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/grpc/test_streaming.py::TestGrpcStreaming::test_subscribe_first_event_is_task"
+      ]
+    },
+    "HTTP_JSON-STATUS-001": {
+      "level": "MUST",
+      "status": "PASS",
+      "transports": {
+        "http_json": "PASS"
+      },
+      "errors": [],
+      "test_ids": [
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_cancel_missing_task_returns_404",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_content_type_not_supported_returns_expected_error",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_push_not_supported_returns_400",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_success_returns_2xx",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_task_not_found_returns_404",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_unsupported_operation_returns_400",
+        "tests/compatibility/http_json/test_http_status.py::TestHttpJsonStatusCodes::test_version_not_supported_returns_400"
+      ]
+    },
+    "CARD-CLIENT-001": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "CARD-SIGN-001": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "CARD-SIGN-002": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "CARD-SIGN-003": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "CARD-SIGN-004": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-TLS-001": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-TLS-002": {
+      "level": "SHOULD",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-SERVER-001": {
+      "level": "SHOULD",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-SERVER-002": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-001": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-002": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-003": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-004": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-005": {
+      "level": "SHOULD",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-INTASK-006": {
+      "level": "SHOULD",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-SCOPE-001": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-SCOPE-002": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "AUTH-SCOPE-003": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "VER-CLIENT-001": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "VER-SERVER-001": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "VER-CLIENT-002": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "BIND-CUSTOM-002": {
+      "level": "MUST",
+      "status": "MANUAL",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "BIND-EQUIV-001": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "BIND-EQUIV-002": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "BIND-EQUIV-003": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "BIND-EQUIV-004": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    },
+    "GRPC-SVC-003": {
+      "level": "MUST",
+      "status": "NOT TESTED",
+      "transports": {},
+      "errors": [],
+      "test_ids": []
+    }
+  },
+  "per_transport": {
+    "agent_card": {
+      "total": 11,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 2
+    },
+    "grpc": {
+      "total": 72,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 72
+    },
+    "jsonrpc": {
+      "total": 81,
+      "passed": 61,
+      "failed": 5,
+      "skipped": 15
+    },
+    "http_json": {
+      "total": 78,
+      "passed": 58,
+      "failed": 6,
+      "skipped": 14
+    }
+  },
+  "agent_card": {
+    "name": "OpenAdapt",
+    "description": "Runs compiled OpenAdapt workflows on this computer and checks that they saved. A finished run's result carries its signed receipt when Flow wrote one, and any agent can send a handoff to be verified.",
+    "supportedInterfaces": [
+      {
+        "url": "http://127.0.0.1:9999/a2a/jsonrpc",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      },
+      {
+        "url": "http://127.0.0.1:9999/a2a/rest",
+        "protocolBinding": "HTTP+JSON",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "provider": {
+      "url": "https://openadapt.ai",
+      "organization": "OpenAdapt"
+    },
+    "version": "2.2.2",
+    "documentationUrl": "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/A2A.md",
+    "capabilities": {
+      "streaming": true,
+      "pushNotifications": false,
+      "extensions": [
+        {
+          "uri": "https://openadapt.ai/extensions/handoff-receipt/v1",
+          "description": "Task results carry the run's record/run/v1 receipt (in-toto Statement in a DSSE envelope) as an openadapt.handoff-document/v1 artifact part; verify_handoff returns an openadapt.handoff-verdict/v1 verdict.",
+          "params": {
+            "receipt_predicate": "https://openadapt.ai/record/run/v1",
+            "verdict_schema": "openadapt.handoff-verdict/v1",
+            "media_type": "application/vnd.openadapt.handoff+json",
+            "handoff_schema": "openadapt.handoff-document/v1",
+            "envelope": "dsse"
+          }
+        }
+      ],
+      "extendedAgentCard": false
+    },
+    "defaultInputModes": [
+      "application/json"
+    ],
+    "defaultOutputModes": [
+      "application/json",
+      "application/vnd.openadapt.handoff+json"
+    ],
+    "skills": [
+      {
+        "id": "add_triage_note",
+        "name": "add_triage_note",
+        "description": "Sandbox: add a triage note to the first referral in a synthetic clinic app. Nothing real changes. Done means: The note is in the synthetic app's record store, confirmed by reading the store directly after the save. Send a data part {\"skill\": \"add_triage_note\", \"inputs\": {...}, \"request_id\": \"...\"}. A finished run's result includes its signed receipt when Flow wrote one.",
+        "tags": [
+          "openadapt",
+          "workflow",
+          "receipt"
+        ],
+        "inputModes": [
+          "application/json"
+        ],
+        "outputModes": [
+          "application/json",
+          "application/vnd.openadapt.handoff+json"
+        ]
+      },
+      {
+        "id": "verify_handoff",
+        "name": "Verify a handoff",
+        "description": "Send another agent's result with its receipt (an openadapt.handoff-document/v1 document, as a data part or a application/vnd.openadapt.handoff+json file part). Returns who signed it, whether it is intact, which checks passed and which were not checked, and any confirmation read from the other party's system. A valid signature proves who signed, not that the claim is true.",
+        "tags": [
+          "verification",
+          "receipt",
+          "handoff",
+          "in-toto",
+          "dsse"
+        ],
+        "inputModes": [
+          "application/json",
+          "application/vnd.openadapt.handoff+json"
+        ],
+        "outputModes": [
+          "application/json"
+        ]
+      }
+    ]
+  }
+}
