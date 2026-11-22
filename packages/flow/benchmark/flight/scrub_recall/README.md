@@ -10,10 +10,13 @@ number and name) and once as a rendered form screenshot.
 
 - `presidio`: the openadapt-privacy scrubber alone, which is what the flight
   proxy used before 2026-11-21;
-- `flight`: what the proxy sends now (`openadapt_flow.flight.scrub`), with
-  each text sent as a tool result. A JSON text there is scrubbed value by
-  value; the same JSON sent as plain message text is scrubbed as one string,
-  which is weaker and was not measured.
+- `flight`: what the proxy sends now (`openadapt_flow.flight.scrub`).
+
+Each text is measured three ways: sent as a tool result (`text`; a JSON text
+there is scrubbed value by value), as plain message text (`text_message`; a
+JSON text is then one string), and as plain message text after a 600-character
+agent preamble (`text_long`, `LONG_PREAMBLE` in `corpus.py`), the way a
+computer-use loop sends its task.
 
 A field leaks when its value, lower-cased with everything but letters and
 digits removed, is a substring of the output treated the same way. A name
@@ -25,17 +28,27 @@ the original image count.
 python measure.py --seed 7 --count 50 --out results/2026-11-21-seed7.json
 ```
 
-## Result (2026-11-21, seed 7, 50 records, 250 fields per medium)
+## Result (2026-11-21, seed 7, 50 records, 250 fields per path)
 
-| | Text recall | Image recall |
-|---|---|---|
-| Presidio alone | 196/250 (78.4%) | 168/249 (67.5%) |
-| Flight scrubber | 246/250 (98.4%) | 245/249 (98.4%) |
+| | Tool result | Message text | Long message | Image |
+|---|---|---|---|---|
+| Presidio alone | 196/250 (78.4%) | 196/250 (78.4%) | 193/250 (77.2%) | 168/249 (67.5%) |
+| Flight scrubber | 246/250 (98.4%) | 245/250 (98.0%) | 244/250 (97.6%) | 245/249 (98.4%) |
 
-Every miss of the flight scrubber is a name: 4 of 50 in text, 4 of 50 in
-images. Dates, record numbers, phones and addresses: no misses. One phone
-in one image was unreadable to tesseract before scrubbing and is not
-counted.
+Every miss of the flight scrubber is a name: 4, 5 and 6 of 50 in the three
+text paths, 4 of 50 in images. Dates, record numbers, phones and addresses:
+no misses. One phone in one image was unreadable to tesseract before
+scrubbing and is not counted. A name in a JSON text sent as message text
+can be missed when JSON escapes it (`Gr\u00fcnewald`).
+
+History: the first measurement had only the tool-result and image paths
+(98.4% each). A readiness smoke run then showed Presidio missing a name in
+a long prompt that it found in the same sentence alone, so the scrubber now
+also runs NER on each line, sentence and quoted string. The long-message and
+message-text paths were added with that change. The tool-result number fell
+to 97.6% with the first version of the change (pieces before the whole
+string); running the whole string first brought it back to 98.4%. That
+ordering was chosen after seeing seed 7.
 
 What this does and doesn't show:
 

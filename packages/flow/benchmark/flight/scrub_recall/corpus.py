@@ -119,6 +119,20 @@ CITIES = [
     ("Lakewood", "CO"),
     ("Milford", "CT"),
 ]
+#: A long agent preamble (written for this corpus, naming no app). The
+#: recall run puts it before each text, as a computer-use loop does.
+LONG_PREAMBLE = (
+    "You are a staff member using your organisation's web application in a "
+    "web browser. The screen is 1280 by 800 pixels and you are already signed "
+    "in. Use only this app, and change nothing the task doesn't ask for. Do "
+    "the task and save it once. Take a screenshot before each click, and "
+    "check the record on screen before you type anything.\n\n"
+    "When you have finished, or if you can't finish, stop acting and end "
+    "your reply with one final line in exactly one of these two forms:\n"
+    "RESULT: DONE\n"
+    "RESULT: NOT DONE <the reason, in one line>\n\n"
+    "The task:\n"
+)
 MONTHS = [
     "January",
     "February",

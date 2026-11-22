@@ -304,3 +304,66 @@ def test_synthetic_phi_never_reaches_the_model_payload(tmp_path: Path):
     assert sent["input"][0]["name"] == "fill_field"
     assert sent["input"][2]["call_id"] == "call_2"
     assert sent["input"][2]["current_url"] == "https://emr.example.test/<path removed>"
+
+
+#: The computer-use preamble the readiness runner's Claude agent sends
+#: (benchmark/readiness/claude_cu_agent.py on the readiness branch), followed
+#: by the task text the runner builds (instruction, then the inputs as JSON).
+#: The real scrubber found "Jane Sample" in the task line alone but not in
+#: this whole string.
+READINESS_PREAMBLE = """\
+You are a staff member using your organisation's web application in a web \
+browser. The screen is 1280x800 pixels and you are already signed in. Use \
+only this app, and change nothing the task doesn't ask for. Do the task and \
+save it once.
+
+When you have finished, or if you can't finish, stop acting and end your \
+reply with one final line in exactly one of these two forms:
+RESULT: DONE
+RESULT: NOT DONE <the reason, in one line>
+
+The task:
+"""
+
+
+def test_a_name_in_the_long_readiness_prompt_never_reaches_the_provider(
+    tmp_path: Path,
+):
+    scrubber = _scrubber()
+    task = (
+        "For Jane Sample: Open the patient, add an encounter of the given type "
+        "with the note, and save.\n\nInputs:\n"
+        + json.dumps(
+            {"note": "Synthetic note 00 for review", "type": "Triage"},
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    body = {
+        "model": "claude-sonnet-5-5",
+        "max_tokens": 64,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": READINESS_PREAMBLE + task},
+                    {"type": "text", "text": 'Notes: {"patient": "Jane Sample"}'},
+                ],
+            }
+        ],
+    }
+    provider = FakeProvider().start()
+    timeline = Timeline(tmp_path / "run", task_id="long", executor_label="test")
+    proxy = FlightProxy(
+        timeline, upstreams={"anthropic": provider.url}, scrubber=scrubber
+    ).start()
+    try:
+        assert _post(proxy.base_url("anthropic") + "/v1/messages", body) == 200
+    finally:
+        proxy.stop()
+        provider.stop()
+    raw = provider.received_bytes()
+    for form in _forms("Jane Sample"):
+        assert form.encode() not in raw, f"{form!r} reached the provider"
+    sent = json.loads(provider.requests[0]["body"])["messages"][0]["content"][0]
+    assert "RESULT: DONE" in sent["text"] and '"type": "Triage"' in sent["text"]

@@ -28,8 +28,11 @@ Each string goes through two passes:
    record ids and names in paths and query strings are not left to NER.
 2. The deterministic patterns in :data:`PATTERNS` (dates, phone numbers,
    e-mail, street addresses, numbers of five or more digits, and values
-   after a ``Name:``/``MRN:``/``DOB:`` style label), then the
-   openadapt-privacy text scrubber (Presidio), then the patterns again.
+   after a ``Name:``/``MRN:``/``DOB:`` style label); then the
+   openadapt-privacy text scrubber (Presidio) on the whole string, then
+   again on each line, sentence and quoted string separately (it misses
+   names in long text that it finds in the same sentence alone); then the
+   patterns again.
 
 Images (Anthropic base64 ``image`` blocks, ``data:image/...`` URLs) are
 always redacted with openadapt-privacy image redaction, then OCR'd with
@@ -274,6 +277,81 @@ def redact_image_patterns(
     return out.getvalue()
 
 
+# -- chunked NER -------------------------------------------------------------
+
+#: Longest piece of text sent to the NER scrubber in one call.
+_CHUNK_MAX = 200
+#: A JSON-style quoted string inside text: its value is scrubbed alone.
+_QUOTED = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+_PLACEHOLDER = re.compile(r"<[A-Z_]+>")
+#: Entity types the piece-by-piece pass does not act on by itself.
+_CONTEXT_ONLY = {"<ORGANIZATION>"}
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+
+
+def _pieces(line: str) -> list[tuple[str, bool]]:
+    """(piece, scrub it) for one line: quoted strings and sentences apart."""
+    out: list[tuple[str, bool]] = []
+    last = 0
+    for m in _QUOTED.finditer(line):
+        out.extend(_sentences(line[last : m.start()]))
+        out.append(('"', False))
+        out.append((m.group(1), True))
+        out.append(('"', False))
+        last = m.end()
+    out.extend(_sentences(line[last:]))
+    return out
+
+
+def _sentences(text: str) -> list[tuple[str, bool]]:
+    out: list[tuple[str, bool]] = []
+    last = 0
+    for m in _SENTENCE_END.finditer(text):
+        out.append((text[last : m.start()], True))
+        out.append((m.group(0), False))
+        last = m.end()
+    out.append((text[last:], True))
+    # A sentence longer than the limit is cut at word boundaries, with
+    # overlap-free pieces; NER still sees each word in some context.
+    split: list[tuple[str, bool]] = []
+    for piece, scrub in out:
+        while scrub and len(piece) > _CHUNK_MAX:
+            cut = piece.rfind(" ", 0, _CHUNK_MAX)
+            cut = cut if cut > 0 else _CHUNK_MAX
+            split.append((piece[:cut], True))
+            piece = piece[cut:]
+        split.append((piece, scrub))
+    return split
+
+
+def _ner_chunked(text: str, ner: Callable[[str], Optional[str]]) -> str:
+    """``text`` with ``ner`` run on each line, sentence and quoted string
+    separately; separators are kept. Raises ScrubRefused when ``ner``
+    returns no text."""
+    lines = text.split("\n")
+    out_lines = []
+    for line in lines:
+        parts = []
+        for piece, scrub in _pieces(line):
+            if scrub and any(ch.isalpha() for ch in piece):
+                cleaned = ner(piece)
+                if not isinstance(cleaned, str):
+                    raise ScrubRefused("the text scrubber returned no text")
+                added = set(_PLACEHOLDER.findall(cleaned)) - set(
+                    _PLACEHOLDER.findall(piece)
+                )
+                if added and added <= _CONTEXT_ONLY:
+                    # Out of context, NER calls a capitalised word ("DONE")
+                    # an organisation; that alone is left to the whole-string
+                    # pass, which sees the context.
+                    cleaned = piece
+                parts.append(cleaned)
+            else:
+                parts.append(piece)
+        out_lines.append("".join(parts))
+    return "\n".join(out_lines)
+
+
 # -- the scrubber ------------------------------------------------------------
 
 
@@ -299,11 +377,14 @@ class Scrub:
         if hit is not None:
             return hit
         # Patterns first (NER can split a street number or a record
-        # number into a date and leave the rest), then NER, then patterns
-        # again on what NER left.
+        # number into a date and leave the rest), then NER on the whole
+        # string, then NER again on each line, sentence and quoted string
+        # (Presidio misses a name in a long prompt that it finds in the same
+        # sentence alone), then the patterns again on what NER left.
         out = scrub_outbound_text(scrub_pattern_text(value), self.scrubber)
         if not isinstance(out, str):
             raise ScrubRefused("the text scrubber returned no text")
+        out = _ner_chunked(out, lambda t: scrub_outbound_text(t, self.scrubber))
         out = scrub_pattern_text(out)
         with self._lock:
             self._texts[key] = out
