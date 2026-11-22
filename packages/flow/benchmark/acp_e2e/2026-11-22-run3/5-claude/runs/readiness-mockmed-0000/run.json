@@ -1,0 +1,45 @@
+{
+  "agent_wall_s": 13.836,
+  "before_screen": true,
+  "double_save": false,
+  "egress": {
+    "cost_source": "metered",
+    "cost_usd": 0.035427,
+    "enforced": true,
+    "mode": "scrubbed",
+    "model_calls": 4,
+    "reason": null,
+    "refused": false,
+    "refused_requests": 0
+  },
+  "ended": "held",
+  "exit_code": -15,
+  "extra_target_writes": 0,
+  "held": 1,
+  "landed_writes": 0,
+  "model_cost_source": "metered",
+  "model_cost_usd": 0.035427,
+  "notes": [],
+  "other_origin_refused": 0,
+  "proposed": true,
+  "requests": {
+    "save": 1
+  },
+  "schema": "openadapt.readiness-task-run/v1",
+  "session": "fresh",
+  "status": "HELD",
+  "target_gate": {
+    "errors": [],
+    "extra_targets": {},
+    "gate_lost": false,
+    "ungated_targets": {}
+  },
+  "task_id": "readiness-mockmed-0000",
+  "usage": {
+    "calls": 4,
+    "cost_usd": 0.035427,
+    "input_tokens": 33544,
+    "model": "claude-sonnet-5-5",
+    "output_tokens": 418
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "agent_wall_s": 2.014,
+  "before_screen": true,
+  "double_save": false,
+  "egress": {
+    "cost_source": "metered",
+    "cost_usd": 0.0,
+    "enforced": true,
+    "mode": "blocked",
+    "model_calls": 0,
+    "reason": null,
+    "refused": false,
+    "refused_requests": 0
+  },
+  "ended": "held",
+  "exit_code": 0,
+  "extra_target_writes": 0,
+  "held": 1,
+  "landed_writes": 0,
+  "model_cost_source": "metered",
+  "model_cost_usd": 0.0,
+  "notes": [],
+  "other_origin_refused": 0,
+  "proposed": true,
+  "requests": {
+    "save": 1
+  },
+  "schema": "openadapt.readiness-task-run/v1",
+  "session": "fresh",
+  "status": "HELD",
+  "target_gate": {
+    "errors": [],
+    "extra_targets": {},
+    "gate_lost": false,
+    "ungated_targets": {}
+  },
+  "task_id": "readiness-mockmed-0008",
+  "usage": {
+    "calls": 0,
+    "cost_usd": 0.0,
+    "input_tokens": 0,
+    "model": null,
+    "output_tokens": 0
+  }
+}

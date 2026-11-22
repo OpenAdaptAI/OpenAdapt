@@ -1,0 +1,29 @@
+{
+  "canary_len": 19,
+  "ledger_add_exit": 0,
+  "push_dry_run_exit": 0,
+  "payload_rows": 1,
+  "canary_in_payload": false,
+  "canary_in_ledger_text_files": false,
+  "planted_names_in_payload": [],
+  "evidence_copied": [
+    "1-shadow/runs/readiness-mockmed-0002/usage.json",
+    "1-shadow/runs/readiness-mockmed-0002/egress.json",
+    "1-shadow/runs/readiness-mockmed-0002/run.json"
+  ],
+  "evidence_left": [
+    "1-shadow/runs/readiness-mockmed-0002/agent.log: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/before_screen.txt: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/case.json: carries field values",
+    "1-shadow/runs/readiness-mockmed-0002/egress: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/guard_events.jsonl: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/held: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/proposed_write.json: carries field values",
+    "1-shadow/runs/readiness-mockmed-0002/pseudonyms.json: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/stray-notes.txt: not an exported file type",
+    "1-shadow/runs/readiness-mockmed-0002/stray.json: not an exported file type"
+  ],
+  "canary_in_evidence": false,
+  "planted_files_in_evidence": [],
+  "ok": true
+}

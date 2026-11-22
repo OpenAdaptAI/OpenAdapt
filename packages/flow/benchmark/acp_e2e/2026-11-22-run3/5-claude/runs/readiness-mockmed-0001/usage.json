@@ -1,0 +1,8 @@
+{
+  "calls": 4,
+  "cost_usd": 0.03632,
+  "input_tokens": 33733,
+  "model": "claude-sonnet-5-5",
+  "output_tokens": 487,
+  "schema": "openadapt.agent-usage/v1"
+}

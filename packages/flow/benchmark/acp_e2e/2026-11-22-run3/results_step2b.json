@@ -1,0 +1,29 @@
+{
+  "card_kind": "second_factor",
+  "save_while_open": {
+    "status": 409,
+    "header": "blocked; code=exception_open"
+  },
+  "writes_while_open": 0,
+  "guard_verdict": "VERIFIED",
+  "writes_after_answer": 1,
+  "events": [
+    "watch_started",
+    "card_opened",
+    "request_blocked",
+    "answer"
+  ],
+  "note_in_log": false,
+  "run_ref": "watch-2fa-run3",
+  "watch": {
+    "exit": 0,
+    "stopped": null,
+    "outcomes": [
+      {
+        "kind": "second_factor",
+        "answer": "done_by_person",
+        "proceed": true
+      }
+    ]
+  }
+}

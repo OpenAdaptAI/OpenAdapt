@@ -1,0 +1,10 @@
+36 runs
+  VERIFIED     5
+  ESCALATED    19
+  CAUGHT_ERROR 10
+  FAILED       0
+  UNKNOWN      2
+A person's time: 0.32 min (unknown for 5 runs)
+Model cost: $0.1082 (unknown for 9 runs)
+Median duration: 2.048s
+[exit 0]

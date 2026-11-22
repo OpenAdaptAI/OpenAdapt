@@ -1,0 +1,18 @@
+{
+  "approval_decided_at": "2026-11-22T05:56:15.516537+00:00",
+  "approval_opened_at": "2026-11-22T05:56:12.212849+00:00",
+  "approver_kind": "person",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [
+    "note",
+    "type"
+  ],
+  "fields_differing": [],
+  "guard_verdict": "VERIFIED",
+  "hold_ms": 3382.3,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-approve-correct",
+  "verdict": "VERIFIED",
+  "verdict_reason": "readback_verified"
+}

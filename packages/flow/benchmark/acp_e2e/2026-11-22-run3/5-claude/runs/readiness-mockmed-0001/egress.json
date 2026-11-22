@@ -1,0 +1,8 @@
+{
+  "cost_source": "metered",
+  "cost_usd": 0.03632,
+  "enforced": true,
+  "mode": "scrubbed",
+  "model_calls": 4,
+  "refused_requests": 0
+}

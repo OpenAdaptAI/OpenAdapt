@@ -1,0 +1,15 @@
+{
+  "approval_decided_at": "2026-11-22T05:58:04.305838+00:00",
+  "approval_opened_at": "2026-11-22T05:58:01.211946+00:00",
+  "approver_kind": "person",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [],
+  "fields_differing": [],
+  "guard_verdict": "RECONCILIATION_REQUIRED",
+  "hold_ms": 3185.5,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-not-saved",
+  "verdict": "UNKNOWN",
+  "verdict_reason": "reconciliation_required"
+}

@@ -1,0 +1,217 @@
+[
+  {
+    "task_id": "prod-approve-correct",
+    "scenario": "ok",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": "VERIFIED",
+    "blocked": [],
+    "write_requests": 1,
+    "truth_fault_class": "correct",
+    "card_shown": true,
+    "card_values_checked": true,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": false,
+    "portal_says_exactly": true,
+    "answered": "approve",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "VERIFIED",
+      "approver_kind": "person",
+      "fields_checked": [
+        "note",
+        "type"
+      ],
+      "fields_differing": [],
+      "readback_tier": "independent_readback"
+    }
+  },
+  {
+    "task_id": "prod-approve-wrong-value-no-adapter",
+    "scenario": "agent_wrong_value",
+    "write_adapter": false,
+    "person_decision": "approve",
+    "guard_verdict": "REFUTED",
+    "blocked": [],
+    "write_requests": 1,
+    "truth_fault_class": "partial",
+    "card_shown": true,
+    "card_values_checked": false,
+    "card_fields_after_not_read": [
+      "note",
+      "type"
+    ],
+    "card_says_exactly": false,
+    "portal_says_exactly": false,
+    "answered": "approve",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "CAUGHT_ERROR",
+      "approver_kind": "person",
+      "fields_checked": [
+        "note",
+        "type"
+      ],
+      "fields_differing": [
+        "note"
+      ],
+      "readback_tier": "independent_readback"
+    }
+  },
+  {
+    "task_id": "prod-wrong-value-with-adapter",
+    "scenario": "agent_wrong_value",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": null,
+    "blocked": [
+      "write_value_not_declared"
+    ],
+    "write_requests": 0,
+    "truth_fault_class": "absent",
+    "card_shown": false,
+    "card_values_checked": null,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": null,
+    "portal_says_exactly": null,
+    "answered": null,
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "CAUGHT_ERROR",
+      "approver_kind": "none",
+      "fields_checked": [],
+      "fields_differing": [],
+      "readback_tier": null
+    }
+  },
+  {
+    "task_id": "prod-decline",
+    "scenario": "ok",
+    "write_adapter": true,
+    "person_decision": "decline",
+    "guard_verdict": null,
+    "blocked": [
+      "declined"
+    ],
+    "write_requests": 0,
+    "truth_fault_class": "absent",
+    "card_shown": true,
+    "card_values_checked": true,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": false,
+    "portal_says_exactly": true,
+    "answered": "decline",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "ESCALATED",
+      "approver_kind": "person",
+      "fields_checked": [],
+      "fields_differing": [],
+      "readback_tier": null
+    }
+  },
+  {
+    "task_id": "prod-wrong-patient",
+    "scenario": "agent_wrong_patient",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": null,
+    "blocked": [
+      "write_wrong_record"
+    ],
+    "write_requests": 0,
+    "truth_fault_class": "absent",
+    "card_shown": false,
+    "card_values_checked": null,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": null,
+    "portal_says_exactly": null,
+    "answered": null,
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "CAUGHT_ERROR",
+      "approver_kind": "none",
+      "fields_checked": [],
+      "fields_differing": [],
+      "readback_tier": null
+    }
+  },
+  {
+    "task_id": "prod-not-saved",
+    "scenario": "no_persist",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": "RECONCILIATION_REQUIRED",
+    "blocked": [],
+    "write_requests": 1,
+    "truth_fault_class": "absent",
+    "card_shown": true,
+    "card_values_checked": true,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": false,
+    "portal_says_exactly": true,
+    "answered": "approve",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "UNKNOWN",
+      "approver_kind": "person",
+      "fields_checked": [],
+      "fields_differing": [],
+      "readback_tier": "independent_readback"
+    }
+  },
+  {
+    "task_id": "prod-clean-01",
+    "scenario": "ok",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": "VERIFIED",
+    "blocked": [],
+    "write_requests": 1,
+    "truth_fault_class": "correct",
+    "card_shown": true,
+    "card_values_checked": true,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": false,
+    "portal_says_exactly": true,
+    "answered": "approve",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "VERIFIED",
+      "approver_kind": "person",
+      "fields_checked": [
+        "note",
+        "type"
+      ],
+      "fields_differing": [],
+      "readback_tier": "independent_readback"
+    }
+  },
+  {
+    "task_id": "prod-clean-02",
+    "scenario": "ok",
+    "write_adapter": true,
+    "person_decision": "approve",
+    "guard_verdict": "VERIFIED",
+    "blocked": [],
+    "write_requests": 1,
+    "truth_fault_class": "correct",
+    "card_shown": true,
+    "card_values_checked": true,
+    "card_fields_after_not_read": [],
+    "card_says_exactly": false,
+    "portal_says_exactly": true,
+    "answered": "approve",
+    "person_error": null,
+    "ledger_row": {
+      "verdict": "VERIFIED",
+      "approver_kind": "person",
+      "fields_checked": [
+        "note",
+        "type"
+      ],
+      "fields_differing": [],
+      "readback_tier": "independent_readback"
+    }
+  }
+]

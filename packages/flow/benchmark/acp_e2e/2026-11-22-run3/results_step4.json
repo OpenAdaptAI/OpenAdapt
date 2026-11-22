@@ -1,0 +1,60 @@
+{
+  "compile_admit_s": 22.2,
+  "happy": {
+    "path": "program",
+    "outcome": "VERIFIED",
+    "status": "VERIFIED",
+    "verified": true,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "approvals": null,
+    "repair_opened": null,
+    "saved": "correct",
+    "saved_rows": 1,
+    "seconds": 5.8,
+    "gate_answers": [],
+    "person_answered": null
+  },
+  "drift-approved": {
+    "path": "agent_fallback",
+    "outcome": "VERIFIED",
+    "status": "VERIFIED",
+    "verified": true,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "approvals": 1,
+    "repair_opened": true,
+    "saved": "correct",
+    "saved_rows": 1,
+    "seconds": 23.12,
+    "gate_answers": [
+      {
+        "decision": "approved",
+        "code": null,
+        "route": "desktop_run_it"
+      }
+    ],
+    "person_answered": "approve"
+  },
+  "drift-declined": {
+    "path": "agent_fallback",
+    "outcome": "ESCALATED",
+    "status": "GATE_REFUSED",
+    "verified": false,
+    "model_calls": 0,
+    "cost_usd": 0.0,
+    "approvals": 0,
+    "repair_opened": null,
+    "saved": "none",
+    "saved_rows": 0,
+    "seconds": 5.72,
+    "gate_answers": [
+      {
+        "decision": "refused",
+        "code": "declined",
+        "route": null
+      }
+    ],
+    "person_answered": "decline"
+  }
+}

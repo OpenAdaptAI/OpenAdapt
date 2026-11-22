@@ -1,0 +1,20 @@
+{
+  "approval_decided_at": "2026-11-22T05:56:25.116948+00:00",
+  "approval_opened_at": "2026-11-22T05:56:22.029585+00:00",
+  "approver_kind": "person",
+  "diff_path": "guard_diff.private.json",
+  "fields_checked": [
+    "note",
+    "type"
+  ],
+  "fields_differing": [
+    "note"
+  ],
+  "guard_verdict": "REFUTED",
+  "hold_ms": 3165.5,
+  "readback_tier": "independent_readback",
+  "schema": "openadapt.guard-ledger-row/v1",
+  "task_id": "prod-approve-wrong-value-no-adapter",
+  "verdict": "CAUGHT_ERROR",
+  "verdict_reason": "readback_refuted"
+}

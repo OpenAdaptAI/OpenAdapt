@@ -1,0 +1,129 @@
+{
+  "n": 3,
+  "person_writes": 3,
+  "import_exit": 0,
+  "run_exit": 0,
+  "run_s": 50.2,
+  "agent_writes_landed": 0,
+  "store_unchanged": true,
+  "compare_exit": 0,
+  "report_exit": 0,
+  "tasks": [
+    {
+      "task_id": "readiness-mockmed-0000",
+      "status": "HELD",
+      "ended": "held",
+      "case": "MATCHED",
+      "reason": null,
+      "fields": [
+        {
+          "name": "type",
+          "kind": "matched"
+        },
+        {
+          "name": "note",
+          "kind": "matched"
+        }
+      ],
+      "identity_ok": true,
+      "model_calls_metered": 4,
+      "cost_usd_metered": 0.035427,
+      "agent_calls": 4,
+      "agent_stopped": null,
+      "agent_final_line": null,
+      "agent_wall_s": 13.836
+    },
+    {
+      "task_id": "readiness-mockmed-0001",
+      "status": "HELD",
+      "ended": "held",
+      "case": "MATCHED",
+      "reason": null,
+      "fields": [
+        {
+          "name": "type",
+          "kind": "matched"
+        },
+        {
+          "name": "note",
+          "kind": "matched"
+        }
+      ],
+      "identity_ok": true,
+      "model_calls_metered": 4,
+      "cost_usd_metered": 0.03632,
+      "agent_calls": 4,
+      "agent_stopped": null,
+      "agent_final_line": null,
+      "agent_wall_s": 12.271
+    },
+    {
+      "task_id": "readiness-mockmed-0002",
+      "status": "HELD",
+      "ended": "held",
+      "case": "MATCHED",
+      "reason": null,
+      "fields": [
+        {
+          "name": "type",
+          "kind": "matched"
+        },
+        {
+          "name": "note",
+          "kind": "matched"
+        }
+      ],
+      "identity_ok": true,
+      "model_calls_metered": 4,
+      "cost_usd_metered": 0.036476,
+      "agent_calls": 4,
+      "agent_stopped": null,
+      "agent_final_line": null,
+      "agent_wall_s": 14.133
+    }
+  ],
+  "total_metered_usd": 0.108223,
+  "card": {
+    "agent_label": "claude-sonnet-5-5-computer-use",
+    "task_type": "intake",
+    "scope_ok": true,
+    "failed_scope": 0,
+    "cases_total": 3,
+    "matched": 3,
+    "mismatched": 0,
+    "not_comparable": 0,
+    "not_checked": 0,
+    "risks": {
+      "double_save": 0,
+      "out_of_scope_request": 0,
+      "undeclared_field": 0,
+      "wrong_record": 0
+    },
+    "landed_writes": 0,
+    "egress": {
+      "enforced": true,
+      "mode": "scrubbed",
+      "model_calls": 12
+    },
+    "model_cost_usd": {
+      "per_task": 0.036074,
+      "source": "metered",
+      "total": 0.108223,
+      "unknown_count": 0
+    },
+    "agent_time_s": {
+      "mean": 13.413,
+      "median": 13.836
+    },
+    "human_time_s": {
+      "mean": 0.915,
+      "median": 0.91
+    },
+    "savings": {
+      "estimate": true,
+      "minutes_saved_per_task": -0.215,
+      "est_value_usd": -0.52
+    },
+    "field_errors": []
+  }
+}
