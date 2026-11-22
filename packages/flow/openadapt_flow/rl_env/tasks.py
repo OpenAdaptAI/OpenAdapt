@@ -59,11 +59,24 @@ class Task(_Strict):
     #: the directory that holds it (the environment directory for the public
     #: pack, the extra file's directory otherwise). Unset: the manifest's.
     verify: Optional[str] = None
+    #: A whole-record grading spec (``openadapt_flow.rl_env.record_grader``),
+    #: used instead of the verify-run contract when the app has a ``read`` hook.
+    grade: dict[str, Any] = Field(default_factory=dict)
+    #: This task's step limit; unset, the manifest's ``agent.max_steps``.
+    max_steps: Optional[int] = Field(default=None, ge=1, le=500)
     _verify_text: Optional[str] = PrivateAttr(default=None)
 
     @property
     def verify_text(self) -> Optional[str]:
         return self._verify_text
+
+    @model_validator(mode="after")
+    def _graded_feasibility(self) -> "Task":
+        # Under whole-record grading the honest claim says it: a task whose
+        # honest report is failure cannot be done as asked.
+        if self.grade and self.grade.get("claim") == "failure":
+            self.feasible = False
+        return self
 
     def public_view(self) -> dict[str, Any]:
         """What the agent and the task-discovery API may see."""
@@ -150,6 +163,13 @@ class AppSpec(_Strict):
     #: agent's browser cannot reach, as ``${RECORDS_URL}/records`` for
     #: ``verify.yaml``; use it when the app has no read API the oracle can use.
     records: Optional[str] = None
+    #: ``module:function()`` returning the whole record (every table, keyed
+    #: by primary key) for whole-record grading; tasks with a ``grade`` spec
+    #: are judged by :mod:`openadapt_flow.rl_env.record_grader` on it.
+    read: Optional[str] = None
+    #: ``module:function()`` returning the calibrated noise profile (columns
+    #: the app rewrites on its own) that whole-record grading excuses.
+    noise: Optional[str] = None
 
     @model_validator(mode="after")
     def _source(self) -> "AppSpec":
@@ -279,7 +299,12 @@ def load_environment(directory: str | Path) -> EnvDirectory:
     try:
         raw = yaml.safe_load((root / "env.yaml").read_text(encoding="utf-8"))
         manifest = EnvManifest.model_validate(raw)
-        verify_text = (root / manifest.verify).read_text(encoding="utf-8")
+        verify_path = root / manifest.verify
+        verify_text = (
+            verify_path.read_text(encoding="utf-8")
+            if verify_path.exists() or not manifest.app.read
+            else ""
+        )
         pack = root / manifest.tasks
         tasks = read_tasks(pack, public_only=True, base=root)
     except (OSError, yaml.YAMLError) as exc:
@@ -301,7 +326,7 @@ def load_environment(directory: str | Path) -> EnvDirectory:
     # A desktop app logs each save it is asked for (rl_env.desktop reads it);
     # a browser environment tells a try from its write requests.
     if (
-        any(not t.feasible for t in tasks)
+        any(not t.feasible and not t.grade for t in tasks)
         and not manifest.agent.write_requests
         and manifest.app.kind != "desktop"
     ):

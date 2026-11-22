@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -233,7 +232,11 @@ def card_sha256(card: Mapping[str, Any]) -> str:
 
 
 def public_run_id(key_id: str, run_id: str) -> str:
-    """``p-`` and 16 hex of SHA-256(key_id + run_id): stable, and reveals neither."""
+    """``p-`` and 16 hex of unsalted SHA-256(key_id + run_id).
+
+    This identifier is deterministic: repeated inputs produce linkable IDs.
+    When key_id is known, guesses of run_id can be checked against the ID.
+    """
     digest = hashlib.sha256((key_id + run_id).encode("utf-8")).hexdigest()
     return "p-" + digest[:16]
 
@@ -387,10 +390,9 @@ def _name(value: Any, what: str) -> Optional[str]:
 
 def _provenance(run_dir: Path) -> Provenance:
     """``synthetic-tutorial`` only when the run's own receipt says so."""
-    try:
-        receipt = json.loads((run_dir / "receipt.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return "production"
+    from openadapt_flow.receipt import read_run_summary
+
+    receipt = read_run_summary(run_dir)
     if isinstance(receipt, dict) and receipt.get("provenance") == "synthetic-tutorial":
         return "synthetic-tutorial"
     return "production"

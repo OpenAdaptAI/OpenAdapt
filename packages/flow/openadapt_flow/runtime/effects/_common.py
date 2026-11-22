@@ -218,7 +218,7 @@ def judge_records(
         ]
     key_holders: list[dict[str, Any]] = []
     if effect.composite_key:
-        # Several fields together are the key (OpenEMR: lname + fname + DOB).
+        # Several fields together are the composite key (e.g. last + first + date).
         # The save's own record is counted by exact text, so a correct save
         # is never held. Records that carry the key are then counted across
         # the WHOLE read set, pre-existing ones included and before any

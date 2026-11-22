@@ -1,0 +1,11 @@
+{
+  "command": [
+    "openadapt",
+    "quickstart",
+    "--break-it"
+  ],
+  "term_program": "iTerm.app",
+  "cols": 120,
+  "exit_code": 0,
+  "seconds": 39.1
+}

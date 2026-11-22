@@ -45,7 +45,7 @@ EMR_SQL = [
 
 
 def pn_reset(drift: str) -> dict:
-    if drift not in ("none", "siblings", "decoy", "reorder"):
+    if drift not in ("none", "siblings", "decoy", "reorder", "absent"):
         raise ValueError(f"unknown drift {drift!r}")
     subprocess.run(
         [

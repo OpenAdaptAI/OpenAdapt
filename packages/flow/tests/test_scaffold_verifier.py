@@ -13,10 +13,12 @@ tests/test_report.py's synthetic builders. The load-bearing contracts:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+from openadapt_flow import crypto, sealed_set
 from openadapt_flow.__main__ import build_parser, main
 from openadapt_flow.ir import (
     ActionKind,
@@ -27,11 +29,14 @@ from openadapt_flow.ir import (
     StepResult,
     Workflow,
 )
+from openadapt_flow.record_check_identity import IDENTITY_PROPOSED_NAME
+from openadapt_flow.record_check_synthesis import PROOF_NAME, PROPOSED_NAME
 from openadapt_flow.scaffold_verifier import (
     CONTRACT_FILENAME,
     candidates_from_bundle,
     candidates_from_recording,
     classify_target,
+    generation_filenames,
     write_draft,
 )
 
@@ -238,6 +243,255 @@ class TestScaffoldVerifier:
         helptext = parser.format_help()
         assert "scaffold-verifier" in helptext
         assert "explain" in helptext
+
+
+def _tree(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_write_draft_refuses_an_occupied_generation(tmp_path: Path) -> None:
+    rec = _recording_dir(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    prior = b"prior-candidate: true\n"
+    (out / PROPOSED_NAME).write_bytes(prior)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        write_draft(rec, out)
+    assert (out / PROPOSED_NAME).read_bytes() == prior
+    assert not (out / CONTRACT_FILENAME).exists()
+    assert _tree(out) == {PROPOSED_NAME: prior}
+
+
+def _entry_cases() -> list[tuple[str | None, str]]:
+    occupied = [
+        (name, shape)
+        for name in generation_filenames()
+        for shape in ("file", "directory", "dangling-link")
+    ]
+    return [*occupied, ("notes.txt", "unrelated"), (None, "fresh")]
+
+
+@pytest.mark.parametrize(("name", "shape"), _entry_cases())
+def test_generation_entries_are_refused_without_following(
+    tmp_path: Path, name: str | None, shape: str
+) -> None:
+    """Reserved names occupy the directory as a file, directory or link.
+
+    A dangling link to a missing path outside ``--out`` is not followed.
+    An unrelated file and a fresh directory still publish one draft.
+    """
+    rec = _recording_dir(tmp_path)
+    out = tmp_path / "out"
+    outside = tmp_path / "outside-target"
+    if shape != "fresh":
+        out.mkdir()
+    if shape == "file":
+        assert name is not None
+        (out / name).write_bytes(b"prior-bytes\n")
+    elif shape == "directory":
+        assert name is not None
+        (out / name).mkdir()
+        (out / name / "kept").write_bytes(b"inside\n")
+    elif shape == "dangling-link":
+        assert name is not None
+        (out / name).symlink_to(Path("..") / outside.name)
+    elif shape == "unrelated":
+        assert name is not None
+        (out / name).write_bytes(b"keep\n")
+
+    if shape in ("file", "directory", "dangling-link"):
+        assert name is not None
+        with pytest.raises(
+            SystemExit, match="already holds a verifier generation"
+        ) as raised:
+            main(["scaffold-verifier", str(rec), "--out", str(out)])
+        assert name in str(raised.value)
+        assert [path.name for path in out.iterdir()] == [name]
+        entry = out / name
+        if shape == "file":
+            assert entry.read_bytes() == b"prior-bytes\n"
+            assert not entry.is_symlink()
+        elif shape == "directory":
+            assert entry.is_dir() and not entry.is_symlink()
+            assert (entry / "kept").read_bytes() == b"inside\n"
+            assert [path.name for path in entry.iterdir()] == ["kept"]
+        else:
+            assert entry.is_symlink()
+            assert os.readlink(entry) == os.path.join("..", outside.name)
+            assert not outside.exists()
+        return
+
+    assert main(["scaffold-verifier", str(rec), "--out", str(out)]) == 0
+    draft = out / CONTRACT_FILENAME
+    assert draft.is_file() and not draft.is_symlink()
+    if shape == "unrelated":
+        assert name is not None
+        assert (out / name).read_bytes() == b"keep\n"
+        assert not (out / name).is_symlink()
+
+
+def _sealed_recording(rec: Path, key: str, *, generation: dict[str, bytes]) -> None:
+    events = (
+        json.dumps(
+            {
+                "i": 0,
+                "kind": "click",
+                "x": 5,
+                "y": 5,
+                "field_label": "Save encounter",
+            }
+        ).encode()
+        + b"\n"
+    )
+    with sealed_set.writing(rec, "recording", key) as writer:
+        writer.write(
+            "meta.json",
+            json.dumps({"params": {"note": "Synthetic note"}}).encode(),
+        )
+        writer.write("events.jsonl", events)
+        for name, payload in generation.items():
+            writer.write(name, payload)
+
+
+def test_sealed_draft_reuse_and_plaintext_out_leave_the_set_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    _sealed_recording(rec, key, generation={})
+    assert main(["scaffold-verifier", str(rec)]) == 0
+    opened = sealed_set.SealedSet.open(rec, key)
+    assert CONTRACT_FILENAME in opened.files()
+    draft = opened.read_bytes(CONTRACT_FILENAME)
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="Drop --out"):
+        main(["scaffold-verifier", str(rec), "--out", str(tmp_path / "plain")])
+    assert not (tmp_path / "plain").exists()
+    assert _tree(rec) == before
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert _tree(rec) == before
+    again = sealed_set.SealedSet.open(rec, key)
+    assert again.read_bytes(CONTRACT_FILENAME) == draft
+    outside = b"".join(
+        path.read_bytes()
+        for path in tmp_path.rglob("*")
+        if path.is_file() and rec not in path.parents and path != rec
+    )
+    assert draft not in outside
+
+
+def test_sealed_candidate_reuse_keeps_the_prior_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    proposed = b"schema_version: prior\nneeds_operator_confirmation: true\n"
+    proof = b'{"approved": false, "status": "draft"}\n'
+    _sealed_recording(
+        rec,
+        key,
+        generation={PROPOSED_NAME: proposed, PROOF_NAME: proof},
+    )
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert _tree(rec) == before
+    opened = sealed_set.SealedSet.open(rec, key)
+    assert opened.read_bytes(PROPOSED_NAME) == proposed
+    assert opened.read_bytes(PROOF_NAME) == proof
+    assert CONTRACT_FILENAME not in opened.files()
+
+
+# These four are already recording inventory. read_discovery.json and
+# check_coverage.json are not, so planting them would add a sealed filename.
+_SEALED_GENERATION_NAMES = (
+    PROPOSED_NAME,
+    PROOF_NAME,
+    IDENTITY_PROPOSED_NAME,
+    CONTRACT_FILENAME,
+)
+
+
+@pytest.mark.parametrize("name", _SEALED_GENERATION_NAMES)
+def test_sealed_logical_file_occupies_without_a_plaintext_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    payload = b"sealed-prior\n"
+    _sealed_recording(rec, key, generation={name: payload})
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert _tree(rec) == before
+    opened = sealed_set.SealedSet.open(rec, key)
+    assert opened.read_bytes(name) == payload
+    if name != CONTRACT_FILENAME:
+        assert CONTRACT_FILENAME not in opened.files()
+
+
+def test_sealed_directory_on_a_logical_name_is_not_a_new_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    _sealed_recording(rec, key, generation={})
+    (rec / CONTRACT_FILENAME).mkdir()
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert (rec / CONTRACT_FILENAME).is_dir()
+    assert not (rec / CONTRACT_FILENAME).is_symlink()
+    assert _tree(rec) == before
+    assert not (rec / f"{CONTRACT_FILENAME}{sealed_set.SEALED_SUFFIX}").exists()
+
+
+def test_sealed_symlink_is_still_rejected_without_following(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    outside = tmp_path / "outside-target"
+    _sealed_recording(rec, key, generation={})
+    (rec / CONTRACT_FILENAME).symlink_to(Path("..") / outside.name)
+    before = _tree(rec)
+    assert main(["scaffold-verifier", str(rec)]) == 2
+    assert "REFUSED" in capsys.readouterr().err
+    assert (rec / CONTRACT_FILENAME).is_symlink()
+    assert os.readlink(rec / CONTRACT_FILENAME) == os.path.join("..", outside.name)
+    assert not outside.exists()
+    assert _tree(rec) == before
+
+
+def test_sealed_plaintext_out_refuses_before_following_a_dangling_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    plain = tmp_path / "plain"
+    outside = tmp_path / "outside-target"
+    _sealed_recording(rec, key, generation={})
+    plain.mkdir()
+    (plain / CONTRACT_FILENAME).symlink_to(Path("..") / outside.name)
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="Drop --out"):
+        main(["scaffold-verifier", str(rec), "--out", str(plain)])
+    assert (plain / CONTRACT_FILENAME).is_symlink()
+    assert os.readlink(plain / CONTRACT_FILENAME) == os.path.join("..", outside.name)
+    assert not outside.exists()
+    assert [path.name for path in plain.iterdir()] == [CONTRACT_FILENAME]
+    assert _tree(rec) == before
 
 
 # ---------------------------------------------------------------------------

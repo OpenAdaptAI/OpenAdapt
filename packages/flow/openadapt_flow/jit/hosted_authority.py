@@ -63,6 +63,7 @@ __all__ = [
     "hosted_readback",
     "is_admitted_program",
     "managed_admission_refusal",
+    "program_admission_edge_refusal",
     "readback_effects",
     "readback_sha256",
     "run_shape",
@@ -259,6 +260,8 @@ def managed_admission_refusal(
         return "the bundle is not an admitted program with a read-back check"
     try:
         manifest = verify_admission(bundle, key_dir=key_dir)
+        if manifest.get("admission_mode", "person") not in {"person", "admitter_key"}:
+            return "the admission mode cannot authorize a hosted program"
         digest = admission_sha256(bundle)
         readback_effects(bundle)
         bound = readback_sha256(bundle)
@@ -269,10 +272,29 @@ def managed_admission_refusal(
         return "the bundled read-back check is not the one the admission binds"
     if getattr(authorization, "approval_source", None) != approval_source(digest):
         return "the run authorization does not name this program's admission"
+    content = getattr(getattr(workflow, "manifest", None), "content_digest", None)
+    if (
+        not isinstance(content, str)
+        or getattr(authorization, "bundle_content_digest", None) != content
+    ):
+        return "the run authorization does not name this bundle"
     return None
 
 
-# -- the copy of the admission that goes to the cloud ---------------------------
+def program_admission_edge_refusal(
+    authorization: Any, workflow: Any, *, managed_dispatch_binding: Any = None
+) -> Optional[str]:
+    """Refuse unless this exact dispatch carries freshly verified authority.
+
+    A previous verification in this process never grants authority to another
+    run, authorization, input set, policy, registry or dispatch session.
+    """
+    from openadapt_flow.jit.dispatch_authority import ProgramDispatchAuthority
+
+    authority = getattr(managed_dispatch_binding, "program_admission_authority", None)
+    if not isinstance(authority, ProgramDispatchAuthority):
+        return "the managed program has no verified per-dispatch authority"
+    return authority.refusal(workflow, managed_dispatch_binding, authorization)
 
 
 def _pseudonymized(manifest: Mapping[str, Any], keys: Path) -> dict[str, Any]:

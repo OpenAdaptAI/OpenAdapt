@@ -1,0 +1,43 @@
+{
+  "description": "recorded_as_intended with reason receiver_unreachable: refused when the openings are read.",
+  "document": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiY2hlY2tzIjp7ImF1dGhvcml6YXRpb24iOnsiY29uZmlybWVkIjowLCJyZXF1aXJlZCI6MH0sImVmZmVjdHMiOnsiY29uZmlybWVkIjoyLCJyZXF1aXJlZCI6Mn0sImlkZW50aXR5Ijp7ImNvbmZpcm1lZCI6NSwicmVxdWlyZWQiOjV9LCJsaW5lc19jb25maXJtZWQiOjIsImxpbmVzX25vdF9jaGVja2VkIjowLCJsaW5lc19yZWZ1dGVkIjowLCJwb3N0Y29uZGl0aW9ucyI6eyJjb25maXJtZWQiOjMsInJlcXVpcmVkIjozfX0sImNvbmZpcm1hdGlvbnMiOlt7ImNvbW1pdG1lbnRzIjp7ImNvdW50ZXJwYXJ0eSI6ImM3ZjFjZWY2NmI0YjRmOTY1NWU5MWYxNmJiYzllOGQ4MTUzYjkxYjdiMjU4MzFhMmUzYTM5NDEzYzQ5MWYzYTAiLCJmaWVsZC4wIjoiZTA0OGQ2NjVmYzcyMzEwNjQxNjlkNzU0OTEwMDU0ZjM0OWE2NzA2NWFlOTMyNjBmYjU5NTIyOGFkZGQ5ZjJhNSIsIm9ic2VydmVkX2F0IjoiYmY2NDhkZmI5ZDUzM2MyNmQxYWVhNDAxOTlhYTA4NWVkMmJmZTBiM2U1ZWVlMmIyMTQzZTI2ZTJhNGU1OTVjMSIsInJlYXNvbiI6ImViNjc5NjJlMzAwN2UyZDNkNDM2ZmYwMWVmOTJjZTJmMmQ3N2RiOGE3ZjBkYWUyZWMzZTFlZTRmOTQ1ZGNkNmUifSwiZGlmZmVyaW5nX2NvdW50IjowLCJmb3Jfc3RlcCI6NCwia2luZCI6ImNvdW50ZXJwYXJ0eV9jb25maXJtYXRpb24iLCJyZWFkX21ldGhvZCI6InBvcnRhbF9yZWFkX2JhY2siLCJzdGF0ZSI6InJlY29yZGVkX2FzX2ludGVuZGVkIiwic3RyZW5ndGgiOiJyZWFkX2JhY2siLCJzeXN0ZW1fa2luZCI6ImVociJ9XSwiZGlzY2xvc3VyZSI6eyJjb21taXRtZW50cyI6e30sInZlcnNpb24iOiJvcGVuYWRhcHQucHVibGljLWRpc2Nsb3N1cmUvdjEifSwibGluZXMiOlt7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOltdLCJvcGVyYXRpb24iOiJ3cml0ZSIsInN0ZXAiOjIsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifSx7ImNoZWNrIjoiY29uZmlybWVkIiwibm90X2NoZWNrZWQiOlsiZmllbGRfdmFsdWVzIl0sIm9wZXJhdGlvbiI6ImlycmV2ZXJzaWJsZV93cml0ZSIsInN0ZXAiOjQsInN0cmVuZ3RoIjoicmVhZF9iYWNrIiwidGFyZ2V0X2tpbmQiOiJndWkifV0sIm1vZGVsX2NhbGxzIjowLCJvdXRjb21lIjoiVkVSSUZJRUQiLCJwcm9ncmFtIjp7ImlkIjoicHJvZy01YmIyMWFhMGYyZTZhYzMyIiwidmVyc2lvbl9zaGEyNTYiOiIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyIn0sInJlYXNvbl9jb2RlIjoidmVyaWZpZWQiLCJzdGFydGVkX2hvdXIiOiIyMDI2LTExLTIwVDIzOjAwOjAwWiIsInN0ZXBzIjp7Im9rIjo1LCJ0b3RhbCI6NX19LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9vcGVuYWRhcHQuYWkvcmVjb3JkL3J1bi92MSIsInN1YmplY3QiOlt7ImRpZ2VzdCI6eyJzaGEyNTYiOiIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIn0sIm5hbWUiOiJyZXBvcnQuanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIifSwibmFtZSI6ImJ1bmRsZSJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "keyid": "seal-ed25519-b7a5ba90250d87f2",
+        "sig": "JuLM5U2yw6U/b0xn6CxGgZXiiRrvLEIJGgjwi7UTRsYZ7Vk+o+0cOSmugRBcJNsMbxW4omAMreFmh3ISqnpFAA=="
+      }
+    ]
+  },
+  "expected": {
+    "ok": false,
+    "reason": "inconsistent",
+    "signer_lines": [
+      "Not verified: the receipt contradicts itself"
+    ]
+  },
+  "openings": {
+    "openings": {
+      "confirmations.0.counterparty": {
+        "salt": "b67beccc7c33b4ef471b7bdcad9e4bb52c0b98099499fa6876c8c22e93858846",
+        "value": "ehr:cp-abababababababab"
+      },
+      "confirmations.0.field.0": {
+        "salt": "24fbd94029ecbd16abad2875b500a848ea6491fb9719196818087e40dfb36fa8",
+        "value": "dob:a44c4b0129118145ea62c619a0c477fd8e7b3b57299d880a873ece8ca7c6b634"
+      },
+      "confirmations.0.observed_at": {
+        "salt": "d0009956fa678f84cebae9e38f33695e1e22ed53bdd31af8da11b37f7425f5d4",
+        "value": "2026-11-20T23:41:07Z"
+      },
+      "confirmations.0.reason": {
+        "salt": "7cb648683fb2777a6a61c86bd37dcf72efaeaf2d98126f83caefbd63713a7442",
+        "value": "receiver_unreachable"
+      }
+    },
+    "payload_sha256": "e0c17901c264295e5a20da850f833542ae722d09954cae29fcae717a3f8ae2ff",
+    "schema": "openadapt.receipt-openings/v1"
+  },
+  "registry": "registry.json"
+}

@@ -192,3 +192,46 @@ b0fd15ee8584cc3b646ae9bab04b4f9acbc59292:packages/flow/tests/fixtures/bundle_com
 b0fd15ee8584cc3b646ae9bab04b4f9acbc59292:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:85
 # PR #2239: a synthetic skill task key in a test admission body, not a key.
 ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_artifact.py:generic-api-key:1367
+
+# PR #2293: type annotation and a signer loader call; AST confirms no string literal.
+843e59bd733199cf3ba36296212580500d11824d:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:840
+
+# PR #2293: moved Ed25519 type annotation; AST matches prior source and has no literal.
+7571d9c86e1911d70b17e81cfa72ea7464a192cf:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+
+# PR #2294: deliberately synthetic sign-in sentinel in the original e2e commit.
+# No real account uses it. This exact historical finding alone is excluded;
+# a new commit, path, rule or line still scans normally.
+4f919d5a2267cae1e8668d4a0aed3d1b0291f22a:packages/flow/tests/e2e/test_wrap_sign_in_e2e.py:generic-api-key:40
+# PR #2308: exact historical Python type annotations, reviewed as source code.
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:57
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:120
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:132
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/reconciler.py:generic-api-key:102
+# PR #2295: synthetic privacy sentinel, never a credential. Later source builds
+# the same test value at runtime; this pins only the historical false positive.
+e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets_e2e.py:generic-api-key:201
+# PR #2299: the literal GitLab-shaped string is explicitly SYNTHETIC-CREDENTIAL
+# in the auth-reference refusal matrix. This exact historical test finding only.
+cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
+# PR #2300: ZQX-CANARY-SECRET is a synthetic leak canary the connector pilot
+# tests search for in every egress body, never a credential. This exact finding only.
+f92237889163b242800c6aecd7c334c174ce4428:packages/flow/tests/test_connector_pilot.py:generic-api-key:56
+# #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
+5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
+# PR #2411: benchmark/hooks_live/runs/*/report.json from one live hooks run. Each match is
+# "hold_key", a SHA-256 digest of a declared write's name and values (or of a call), not a
+# credential. The reports must stay byte-identical because signed receipts cover them; the
+# field is named hold_sha256 from the next commit on.
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-15b7cdba4d534cdf/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-20bd0d5202aebae2/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-4bbe7d211bdab090/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-52984979eabaa0ad/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5d86278519ee576e/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-5e9e2f18db8db211/report.json:generic-api-key:14
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-93a7facdefde72e6/report.json:generic-api-key:8
+075417ff50b15d443f31be4fc591ec07be9ced49:packages/flow/benchmark/hooks_live/runs/hk-bdb55e83345cda8b/report.json:generic-api-key:8
+# PR #2498: the RFC 6455 sample WebSocket nonce sent as Sec-WebSocket-Key by a
+# relay test in one commit; not a credential. The test now draws a nonce from
+# os.urandom at runtime.
+e09ebaec9b380b8217471cccb4031511ac7c966e:packages/flow/tests/test_readiness_devtools_relay.py:generic-api-key:44

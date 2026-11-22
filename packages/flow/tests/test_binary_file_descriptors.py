@@ -14,7 +14,6 @@ from PIL import Image
 
 from openadapt_flow.approval_mode import item_approval
 from openadapt_flow.approval_mode.model import ApprovalMode
-from openadapt_flow.eligibility import artifact
 from openadapt_flow.private_file import open_binary
 from tests._binary_descriptor_contract import (
     assert_descriptor_roundtrip,
@@ -39,9 +38,7 @@ def test_descriptor_model_preserves_arbitrary_bytes(
     assert_descriptor_roundtrip(tmp_path, open_binary, payload)
 
 
-@pytest.mark.parametrize(
-    "writer", [item_approval._write_exclusive, artifact._write_exclusive]
-)
+@pytest.mark.parametrize("writer", [item_approval._write_exclusive])
 @settings(
     max_examples=30,
     deadline=None,
@@ -103,9 +100,39 @@ def test_raw_descriptor_entry_points_cannot_fall_back_to_text_open():
     covered = raw_descriptor_owners(source)
     assert "approval_mode/item_approval.py" in covered
     assert "write_ledger.py" in covered
+    assert "exceptions/registry.py" in covered
 
 
 def test_binary_open_refuses_an_explicit_text_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert_explicit_text_mode_refused(tmp_path, monkeypatch, open_binary)
+
+
+def test_copilot_offline_decision_records_preserve_physical_bytes(tmp_path, crt_files):
+    import json
+
+    from openadapt_flow.copilot_bridge import CopilotSessionBridge
+    from openadapt_flow.form_tx.types import HumanDecisionAction, HumanResolutionInput
+
+    bridge = CopilotSessionBridge(tmp_path / "mailbox")
+    decision = HumanResolutionInput(
+        halt_id="binary-halt",
+        action=HumanDecisionAction.PROVIDE_VALUE,
+        actor_id="synthetic-operator",
+        provided_value="reader café\r\nsecond line\x1a",
+        idempotency_key="binary-decision",
+    )
+    expected = (
+        json.dumps(
+            decision.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    assert bridge.append_decision(decision) == (True, 1)
+    assert bridge.decisions_path.read_bytes() == expected
+    assert bridge.append_decision(decision) == (False, 1)
+    assert bridge.decisions_path.read_bytes() == expected

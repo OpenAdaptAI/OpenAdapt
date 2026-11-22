@@ -1,7 +1,7 @@
 """Propose identity evidence for clicks a bundle runs without a right-record check.
 
 docs/LIMITS.md: identity protection applies only where it is armed, and a live
-OpenEMR bundle armed 4 to 7 of its 12 clicks. ``scaffold-verifier --bundle``
+A real web bundle armed 4 to 7 of its 12 clicks. ``scaffold-verifier --bundle``
 reports identity coverage before and after evidence taken from the recording's
 DOM / accessibility context near each unarmed click.
 

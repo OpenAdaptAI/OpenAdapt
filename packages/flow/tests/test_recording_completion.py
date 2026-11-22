@@ -56,6 +56,7 @@ def _recording(tmp_path):
         on_screen=(),
         task=SimpleNamespace(task_id=scope.task_id),
         on_warning=None,
+        withhold_credentials=False,
         _write_draft=write_draft,
         _capture_refused=refuse,
     )

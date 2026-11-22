@@ -1,0 +1,8 @@
+verifier:
+  kind: rest
+  records_path: /api/db
+  records_key: records
+  records_complete: true
+  base_url: http://127.0.0.1:64866
+  timeout_s: 2.0
+  poll_interval_s: 0.05

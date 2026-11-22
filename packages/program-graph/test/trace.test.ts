@@ -50,3 +50,18 @@ describe("run trace", () => {
     expect(traceStateAt(trace, 10_000).cursor).toBe(trace.events.length);
   });
 });
+
+
+it("binds the display wrapper to independent source-body runs without conferring authority", () => {
+  const source = referral.trace.source as any;
+  const display = source.display_derivation;
+  expect(display.executed).toBe(false);
+  expect(display.qualified).toBe(false);
+  expect(display.source_body_content_digest).toBe(source.bundle_content_digest);
+  expect(display.display_bundle_content_digest).not.toBe(source.bundle_content_digest);
+  expect(display.worklist_report_sha256).toEqual(source.runs.map((run: any) => run.report_sha256));
+  expect(display.record_count).toBe(source.runs.length);
+  for (const event of referral.trace.events.filter((event) => event.node.includes("::s::"))) {
+    expect(display.node_to_body_step[event.node]).toBe(event.node.split("::s::")[1]);
+  }
+});

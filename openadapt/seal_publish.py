@@ -5,7 +5,7 @@ this computer. Publishing builds the run's *public* Seal (``public-seal.json``,
 :mod:`openadapt_flow.public_seal`): counts, outcomes, the step strip, digests
 and the hour the run started, signed by the same key. The program name is in
 it only with ``--names`` (or for the synthetic tutorial), because a program
-name can be a person's name. The exact card is always printed first; only
+name can be a person's name. Every public field is listed before consent; only
 that file is uploaded, and only after the person says yes:
 
 * in a terminal, a y/N prompt that defaults to No;
@@ -20,6 +20,7 @@ Every network call goes through a :data:`Transport`, so tests replace it.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -29,7 +30,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Iterator, Mapping, Optional
 from urllib.parse import urlsplit
 
 DEFAULT_ENDPOINT = "https://app.openadapt.ai"
@@ -46,9 +47,9 @@ _QUICKSTART_ROOT = re.compile(r"openadapt-quickstart(-[0-9]+)?")
 
 #: The exact consent question; ``{host}`` is the endpoint's host.
 PROMPT = (
-    "This uploads the summary above to {host} and gives you a link. Anyone "
+    "This uploads the signed Seal to {host} and gives you a link. Anyone "
     "with the link can see it. It does not upload your inputs, screenshots or "
-    "records. Publish? [y/N] "
+    "records. Type show for the exact bytes. Publish? [y/N] "
 )
 
 
@@ -143,12 +144,24 @@ def hosted_seals_live(
     """True only when ``origin`` answers 200 ``{"enabled": true}`` within ``timeout_s``.
 
     Anything else (an error, a timeout, a 404 from a Cloud without the route,
-    ``{"enabled": false}``) is False. The wait is bounded with a thread, since
-    a socket timeout does not bound the DNS lookup.
+    ``{"enabled": false}``) is False.
+    """
+    return _status_true(origin + STATUS_PATH, transport=transport, timeout_s=timeout_s)
+
+
+def _status_true(
+    url: str,
+    *,
+    transport: Optional[Transport] = None,
+    timeout_s: float = STATUS_TIMEOUT_S,
+) -> bool:
+    """GET ``url``; True only for 200 ``{"enabled": true}`` within ``timeout_s``.
+
+    The wait is bounded with a thread, since a socket timeout does not bound
+    the DNS lookup.
     """
     import threading
 
-    url = origin + STATUS_PATH
     headers = {"Accept": "application/json"}
     if transport is None:
         real = _module_transport()
@@ -161,7 +174,7 @@ def hosted_seals_live(
     def ask() -> None:
         try:
             answer.append(transport("GET", url, None, headers))
-        except Exception:  # noqa: BLE001 - any failure means "do not offer"
+        except Exception:  # noqa: BLE001 - any failure means "no"
             pass
 
     worker = threading.Thread(target=ask, name="seal-status", daemon=True)
@@ -192,6 +205,7 @@ def consent(
     interactive: bool,
     ask: Callable[[str], str],
     host: str,
+    show: Optional[Callable[[], None]] = None,
     env: Optional[Mapping[str, str]] = None,
 ) -> bool:
     """True only on an explicit yes. Raises PublishError (exit 2) when none can be had.
@@ -211,11 +225,22 @@ def consent(
         raise PublishError(
             "Not published: no terminal to ask. Pass --yes to publish.", 2
         )
+    return _ask_consent(PROMPT.format(host=host), ask, show)
+
+
+def _ask_consent(
+    prompt: str, ask: Callable[[str], str], show: Optional[Callable[[], None]]
+) -> bool:
+    """Inspect locally as often as requested; only an explicit yes authorizes a send."""
     try:
-        answer = ask(PROMPT.format(host=host))
+        while True:
+            answer = ask(prompt).strip().lower()
+            if show is None or answer not in ("show", "s", "--show"):
+                break
+            show()
     except EOFError:
         return False
-    return answer.strip().lower() in ("y", "yes")
+    return answer in ("y", "yes")
 
 
 # -- building ---------------------------------------------------------------
@@ -249,9 +274,8 @@ def tutorial_provenance(run_dir: Path) -> Optional[str]:
         except OSError:
             pass
     for folder in folders:
-        try:
-            receipt = json.loads((folder / "receipt.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        receipt = _read_run_summary(folder)
+        if receipt is None:
             continue
         if (
             isinstance(receipt, dict)
@@ -295,12 +319,61 @@ def build(
 
 
 def card_text(doc: Mapping[str, Any]) -> str:
-    """The exact card that is uploaded, and the key that signs it."""
-    return json.dumps(
-        {"card": doc["card"], "signed_by": doc["seal"]["key_id"]},
-        indent=2,
-        sort_keys=True,
+    """List the actual public fields. Repeated step fields share a line in run order."""
+    lines = []
+    for section, fields in doc.items():
+        lines.append(section.title())
+        values: dict[str, list[str]] = {}
+        for name, value in fields.items():
+            for label, shown in _preview_fields(name, value):
+                values.setdefault(label, []).append(shown)
+        for label, items in values.items():
+            runs = []
+            for item, group in itertools.groupby(items):
+                count = sum(1 for _ in group)
+                runs.append(item if count == 1 else f"{item} × {count}")
+            label = label.replace("[]", " (in order)").replace(".", " / ")
+            label = label.replace("_", " ").capitalize().replace("sha256", "SHA-256")
+            if label.endswith(" id"):
+                label = label[:-2] + "ID"
+            lines.append(f"  {label}: {', '.join(runs)}")
+    return "\n".join(lines)
+
+
+def _preview_seals(
+    docs: list[tuple[Path, dict[str, Any]]], say: Callable[[str], None]
+) -> None:
+    for run_dir, doc in docs:
+        say(card_text(doc))
+        say(f"Exact upload: {run_dir.resolve() / 'public-seal.json'}")
+    say(
+        "Type --show at the prompt to read the exact bytes. "
+        "For the seal publish command, add --show to inspect without uploading."
     )
+    say(
+        "Anyone who sees two Seals can compare their key IDs to see "
+        "if the same key signed both."
+    )
+
+
+def _preview_fields(name: str, value: Any) -> Iterator[tuple[str, str]]:
+    """Yield a path and value for each leaf, including explicit nulls and empty lists."""
+    if isinstance(value, dict) and value:
+        for key, child in value.items():
+            yield from _preview_fields(f"{name}.{key}", child)
+    elif isinstance(value, list) and value:
+        for child in value:
+            yield from _preview_fields(f"{name}[]", child)
+    else:
+        if isinstance(value, str):
+            shown = value
+            if name.endswith(("_sha256", "_digest")) and re.fullmatch(
+                "[0-9a-f]{64}", value
+            ):
+                shown = f"{value[:8]}…{value[-8:]}"
+        else:
+            shown = json.dumps(value)
+        yield name, shown
 
 
 # -- publishing ---------------------------------------------------------------
@@ -405,6 +478,10 @@ def upload(
         "delete_token": token,
     }
     _write_record(run_dir, record)
+    # Noted next to the Seal key, so `openadapt login` can claim it later.
+    from openadapt.seal_claim import remember
+
+    remember(run_dir, record, doc, origin)
     return record
 
 
@@ -432,6 +509,9 @@ def unpublish(run_dir: Path, *, origin: Optional[str], transport: Transport) -> 
         )
     if response.status in (204, 410):
         (run_dir / PUBLISH_FILE).unlink(missing_ok=True)
+        from openadapt.seal_claim import forget
+
+        forget([seal_id])
         if response.status == 204:
             return f"Unpublished. {link_for(origin, seal_id)} no longer shows the Seal."
         return f"Already gone: {link_for(origin, seal_id)} shows no Seal."
@@ -475,8 +555,12 @@ def check_link(
     transport: Transport,
     origin: Optional[str] = None,
     say: Callable[[str], None] = print,
+    pinned: Optional[Callable[[str], bool]] = None,
 ) -> int:
-    """Fetch a hosted Seal and check its signature here. 0 when valid."""
+    """Fetch a hosted Seal and check its signature here. 0 when valid.
+
+    With ``pinned``, the signing key must also be one this computer trusts
+    (active in its pinned registry), as a downloaded file's must."""
     parsed = parse_link(url, origin)
     if parsed is None:
         say(f"not valid: not a hosted Seal link: {url}")
@@ -513,6 +597,10 @@ def check_link(
     result = public_seal.verify_public_seal(doc)
     if not result.ok:
         say(f"not valid: {result.reason}")
+        return 1
+    if pinned is not None and not pinned(str(result.key_id)):
+        say("  Not verified: unknown signer")
+        say(f"  (key {result.key_id} isn't pinned here, or was revoked)")
         return 1
     from openadapt_flow.offline_seal import seal_sha256
 
@@ -571,8 +659,8 @@ def publish(
 ) -> Optional[str]:
     """Build, show, ask, upload. Returns the link, or None when nothing was sent.
 
-    The exact card is always printed before anything is asked or sent;
-    ``yes`` skips the question, never the card. Raises :class:`PublishError`
+    All public fields are shown before anything is asked or sent;
+    ``yes`` skips the question, never the preview. Raises :class:`PublishError`
     with an exit code for each refusal.
     """
     run_dir = Path(run_dir)
@@ -583,7 +671,7 @@ def publish(
         say(f"To take it down: {command(f'seal unpublish {_quote(run_dir)}')}")
         return str(existing["url"])
     doc = build(run_dir, names=names, github=github, provenance=provenance)
-    say(card_text(doc))
+    _preview_seals([(run_dir, doc)], say)
     if dry_run:
         say(f"Dry run: wrote {run_dir / 'public-seal.json'}. Nothing was uploaded.")
         return None
@@ -595,6 +683,7 @@ def publish(
         interactive=interactive,
         ask=ask,
         host=host_of(origin),
+        show=lambda: say(public_bytes(doc).decode("utf-8")),
     ):
         say("Not published.")
         return None
@@ -605,6 +694,87 @@ def publish(
     say(f"Delete token saved to {run_dir / PUBLISH_FILE} (only you have it).")
     say(f"To take it down: {command(f'seal unpublish {_quote(run_dir)}')}")
     return str(record["url"])
+
+
+#: Answers ``{"enabled": true}`` only while Cloud shows two Seals on one page
+#: (``/seal#<id>,<id>``). Older Clouds answer 404, and the CLI prints one link
+#: per Seal instead.
+PAIRS_STATUS_PATH = "/api/public/local-seal-pairs/status"
+
+#: The quickstart's one question, for both of its Seals.
+QUICKSTART_PROMPT = (
+    "This uploads {subjects} to {host} and gives you a link. "
+    "Anyone with the link can see the public fields above. They hold no inputs, screenshots or "
+    "records, and the runs used synthetic data. Publish? [y/N] "
+)
+
+
+def pair_link(origin: str, seal_ids: list[str]) -> str:
+    return f"{origin}/seal#{','.join(seal_ids)}"
+
+
+def pairs_live(origin: str, *, transport: Optional[Transport] = None) -> bool:
+    """True only when Cloud's pair status route answers ``{"enabled": true}``."""
+    return _status_true(origin + PAIRS_STATUS_PATH, transport=transport)
+
+
+def publish_quickstart(
+    run_dirs: list[Path],
+    *,
+    ask: Callable[[str], str],
+    say: Callable[[str], None] = print,
+    endpoint_value: Optional[str] = None,
+    transport: Optional[Transport] = None,
+    command: Callable[[str], str] = lambda rest: f"openadapt {rest}",
+) -> Optional[str]:
+    """Offer the quickstart's Seals (the checked run, then the stopped run) at once.
+
+    Each card is built and written to its run's ``public-seal.json`` first, and
+    every public field is shown with the full path to its file, so the exact
+    bytes can be read before answering. One y/N question, default No, covers
+    both. Returns the link to open (one page for both when Cloud supports it),
+    or None when nothing was sent.
+    """
+    origin = endpoint(endpoint_value)
+    docs = []
+    for run_dir in run_dirs:
+        docs.append(
+            (Path(run_dir), build(Path(run_dir), provenance="synthetic-tutorial"))
+        )
+    if not docs:
+        return None
+    _preview_seals(docs, say)
+
+    def show() -> None:
+        for _, doc in docs:
+            say(public_bytes(doc).decode("utf-8"))
+
+    subjects = "1 signed Seal" if len(docs) == 1 else f"{len(docs)} signed Seals"
+    if not _ask_consent(
+        QUICKSTART_PROMPT.format(subjects=subjects, host=host_of(origin)), ask, show
+    ):
+        say("Not published.")
+        return None
+    sender = transport or _module_transport()
+    records = []
+    for run_dir, doc in docs:
+        existing = read_record(run_dir)
+        if existing is not None and existing.get("id"):
+            records.append(existing)
+            continue
+        records.append(upload(run_dir, doc, origin=origin, transport=sender))
+    ids = [str(record["id"]) for record in records]
+    if len(ids) > 1 and pairs_live(origin, transport=transport):
+        link = pair_link(origin, ids)
+        say(f"Published. Both runs on one page: {link}")
+    else:
+        link = str(records[-1]["url"])
+        for (run_dir, doc), record in zip(docs, records):
+            say(f"Published {doc['card'].get('outcome', '')}: {record['url']}")
+    say("Each run folder keeps its delete token. To take one down:")
+    for run_dir, _ in docs:
+        say(f"  {command(f'seal unpublish {_quote(run_dir)}')}")
+    return link
 
 
 __all__ = [
@@ -623,7 +793,23 @@ __all__ = [
     "hosted_seals_live",
     "in_ci",
     "parse_link",
+    "pair_link",
+    "pairs_live",
     "publish",
+    "publish_quickstart",
     "unpublish",
     "upload",
 ]
+
+
+def _read_run_summary(folder: Path) -> Optional[dict]:
+    """The run summary from ``run-summary.json``, or an older ``receipt.json``."""
+    for name in ("run-summary.json", "receipt.json"):
+        try:
+            data = json.loads((folder / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        # Any summary, never the signed receipt (a DSSE envelope).
+        if isinstance(data, dict) and "payloadType" not in data:
+            return data
+    return None

@@ -114,7 +114,7 @@ def build_backend(
         if not cfg.macos_app:
             raise ValueError(
                 "backend.kind 'macos' requires backend.macos_app "
-                "(e.g. --macos-app TextEdit)"
+                "(e.g. --macos-app MyApp)"
             )
         from openadapt_flow.backends.macos_backend import MacOSBackend
 

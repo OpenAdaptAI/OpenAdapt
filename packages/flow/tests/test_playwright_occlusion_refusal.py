@@ -68,10 +68,12 @@ def page():
             browser = pw.chromium.launch()
         except Exception as exc:
             pytest.skip(f"chromium unavailable: {exc}")
-        page = browser.new_page(viewport={"width": 640, "height": 400})
-        page.set_content(_HTML, wait_until="load")
-        yield page
-        browser.close()
+        try:
+            page = browser.new_page(viewport={"width": 640, "height": 400})
+            page.set_content(_HTML, wait_until="load")
+            yield page
+        finally:
+            browser.close()
 
 
 def test_normal_element_resolves_handle(page) -> None:

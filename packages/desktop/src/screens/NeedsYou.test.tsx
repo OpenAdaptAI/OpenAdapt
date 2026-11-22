@@ -304,5 +304,6 @@ it("shows no field diff when the record check recorded none", async () => {
 it("labels fields in plain words", () => {
   expect(fieldLabel("dob")).toBe("DOB");
   expect(fieldLabel("first_name")).toBe("First name");
-  expect(fieldLabel("patient_mrn")).toBe("Patient MRN");
+  expect(fieldLabel("account_id")).toBe("Account ID");
+  expect(fieldLabel("item_sku")).toBe("Item SKU");
 });

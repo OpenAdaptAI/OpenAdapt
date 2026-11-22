@@ -1,0 +1,134 @@
+{
+  "receiver": "OpenEMR 7.0.3 (docker, synthetic, second instance)",
+  "read": "FHIR R4 Patient search, read-only token",
+  "delivery": "OpenEMR standard REST API (write token)",
+  "cases": {
+    "intended": {
+      "expected": [
+        "recorded_as_intended",
+        null,
+        []
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_as_intended|None|": 20
+      }
+    },
+    "benign_format": {
+      "expected": [
+        "recorded_as_intended",
+        null,
+        []
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_as_intended|None|": 20
+      }
+    },
+    "wrong_date": {
+      "expected": [
+        "recorded_differently",
+        null,
+        [
+          "birth_date"
+        ]
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_differently|None|birth_date": 20
+      }
+    },
+    "swapped_date": {
+      "expected": [
+        "recorded_differently",
+        null,
+        [
+          "birth_date"
+        ]
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_differently|None|birth_date": 20
+      }
+    },
+    "wrong_patient_field": {
+      "expected": [
+        "recorded_differently",
+        null,
+        [
+          "family_name"
+        ]
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_differently|None|family_name": 20
+      }
+    },
+    "wrong_sex": {
+      "expected": [
+        "recorded_differently",
+        null,
+        [
+          "sex"
+        ]
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "recorded_differently|None|sex": 20
+      }
+    },
+    "never_arrived": {
+      "expected": [
+        "sent",
+        "not_found",
+        []
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "sent|not_found|": 20
+      }
+    },
+    "duplicate": {
+      "expected": [
+        "sent",
+        "ambiguous_key",
+        []
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "sent|ambiguous_key|": 20
+      }
+    },
+    "unreachable": {
+      "expected": [
+        "sent",
+        "receiver_unreachable",
+        []
+      ],
+      "runs": 20,
+      "as_expected": 20,
+      "got": {
+        "sent|receiver_unreachable|": 20
+      }
+    }
+  },
+  "total_runs": 180,
+  "as_expected": 180,
+  "date": "2026-11-21",
+  "repeat_per_case": 20,
+  "host": "zenbook lab, WSL Docker, project ho-openemr",
+  "pytest": "53 passed (test_handoffs.py, test_handoffs_live_openemr.py, test_deferred_report.py) via remote-run.sh slot gate",
+  "code_head": "80fae9911fbd439733a5ecbbf81fcfb4b8f2326f",
+  "earlier_runs": [
+    "13c6e3f68: 180 of 180 at 20 per case",
+    "13c6e3f68: 45 of 45 at 5 per case"
+  ]
+}

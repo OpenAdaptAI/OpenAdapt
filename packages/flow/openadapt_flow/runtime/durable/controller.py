@@ -68,7 +68,9 @@ from openadapt_flow.runtime.durable.first_local_delivery import (
 from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
     ProgramCheckpoint,
+    ProgramDeliveryCursor,
     bundle_version,
+    history_hash,
 )
 
 if TYPE_CHECKING:
@@ -783,6 +785,85 @@ class DurableRun:
                 "the write-ahead pause was not committed"
             ) from exc
 
+    def arm_first_local_program_delivery(
+        self,
+        step: Step,
+        cursor: ProgramDeliveryCursor,
+        *,
+        actuation: Literal["gui", "api"],
+    ) -> str:
+        """Fence one exact pre-callback interpreter cursor before local input."""
+        from openadapt_flow.runtime.durable.continuation import (
+            current_continuation_token,
+        )
+
+        try:
+            require_current_local_delivery_owner(self.store.run_dir)
+            fields = cursor.fields()
+            if (
+                self._manifest.delivery_authority_kind != "customer_local"
+                or current_continuation_token() is not None
+                or fields["run_id"] != self.run_id
+                or fields["workflow_name"] != self.workflow_name
+                or fields["bundle_version"] != self.bundle_version
+                or fields["step_id"] != step.id
+                or self.store.checkpoints()
+                or self.store.read_pending() is not None
+                or self._active_pause_digest != self.store.model_digest(None)
+            ):
+                raise FirstLocalDeliveryHeld(
+                    "the exact program first-leg cursor is unavailable"
+                )
+            checkpoints = self.store.program_checkpoints()
+            last = checkpoints[-1] if checkpoints else None
+            prefix = list(last.transition_history) if last is not None else []
+            if (
+                len(checkpoints) != fields["program_checkpoint_seq"]
+                or (
+                    last is not None
+                    and (
+                        last.seq != len(checkpoints)
+                        or last.run_id != self.run_id
+                        or last.bundle_version != self.bundle_version
+                    )
+                )
+                or fields["program_parent_history_hash"] != history_hash(prefix)
+                or fields["program_history"]
+                != [*prefix, *fields["program_history_delta"]]
+            ):
+                raise FirstLocalDeliveryHeld(
+                    "verified program progress does not match this edge"
+                )
+            authority = self._authority.validate(self._manifest)
+            if authority.progress_digest != self._authority_digest:
+                raise FirstLocalDeliveryHeld("the durable program progress changed")
+            pending = PendingEscalation(
+                **cursor.pending_fields(),
+                step_index=0,
+                intent=step.intent,
+                category="delivery_uncertain",
+                reason="the first local program delivery may have started; never resend it",
+                proposed_options=[FIRST_LOCAL_RECONCILE_OPTION],
+                resume_from_step_id=(
+                    last.verified_state_id if last is not None else None
+                ),
+                delivery_uncertainty=ActionDeliveryUncertainty(
+                    operation=FIRST_LOCAL_DELIVERY,
+                    native=actuation == "gui",
+                    observed_at=_utc_now(),
+                    cause_type=FIRST_LOCAL_DELIVERY_CAUSE,
+                ),
+                created_at=_now_not_before(*(c.created_at for c in checkpoints)),
+            )
+            self.store.cas_pending(self._active_pause_digest, pending)
+            self._active_pause_digest = self.store.model_digest(pending)
+            self._sync_authority()
+            return self._active_pause_digest
+        except (OSError, StateDiverged, ValueError) as exc:
+            raise FirstLocalDeliveryHeld(
+                "the program write-ahead pause was not committed"
+            ) from exc
+
     def _first_local_pause(
         self,
         step_index: int,
@@ -1092,7 +1173,9 @@ class DurableRun:
 
     # -- Phase-2 program (state-machine) durability --------------------------
 
-    def record_program_checkpoint(self, checkpoint: ProgramCheckpoint) -> None:
+    def record_program_checkpoint(
+        self, checkpoint: ProgramCheckpoint, *, first_local_pause_digest: str = ""
+    ) -> None:
         """Persist one verified-state interpreter checkpoint (Phase-2 program).
 
         Called by the program interpreter after each ``action`` state that
@@ -1104,8 +1187,52 @@ class DurableRun:
             raise StateDiverged(
                 "the program checkpoint does not match the active run identity"
             )
-        self.store.write_program_checkpoint(self._after_active_pause(checkpoint))
-        self._sync_authority()
+        if first_local_pause_digest:
+            try:
+                require_current_local_delivery_owner(self.store.run_dir)
+                pending = self.store.read_pending()
+                if (
+                    pending is None
+                    or not pending.program
+                    or pending.delivery_uncertainty is None
+                    or not is_first_local_delivery(pending.delivery_uncertainty)
+                    or self.store.model_digest(pending) != first_local_pause_digest
+                    or self._active_pause_digest != first_local_pause_digest
+                    or ProgramDeliveryCursor.from_pending(
+                        pending, bundle_version=self.bundle_version
+                    )
+                    != ProgramDeliveryCursor.from_checkpoint(checkpoint)
+                    or checkpoint.delivery_attempted is not True
+                    or not checkpoint.new_effect_keys
+                    or not checkpoint.new_effect_evidence
+                    or checkpoint.new_unverified_effect_keys
+                    or checkpoint.new_unverified_effects
+                    or checkpoint.skipped
+                    or checkpoint.attended_transition is not None
+                    or checkpoint.attended_capability_digest is not None
+                    or checkpoint.delivery_uncertainty is not None
+                    or (checkpoint.actuation == "api")
+                    == pending.delivery_uncertainty.native
+                ):
+                    raise FirstLocalDeliveryHeld(
+                        "the exact program delivery result was not verified"
+                    )
+                checkpoint = checkpoint.model_copy(
+                    update={"first_local_pause_sha256": approval_pause_digest(pending)}
+                )
+            except (ValueError, TypeError, StateDiverged, OSError):
+                raise FirstLocalDeliveryHeld(
+                    "the exact program checkpoint cursor could not be validated"
+                ) from None
+        try:
+            self.store.write_program_checkpoint(self._after_active_pause(checkpoint))
+            self._sync_authority()
+        except (OSError, StateDiverged, ValueError) as exc:
+            if first_local_pause_digest:
+                raise FirstLocalDeliveryHeld(
+                    "the exact program result checkpoint was not committed"
+                ) from exc
+            raise
         # Keep the old pause as the restart anchor until terminal completion or
         # a replacement halt is durably committed.
 
