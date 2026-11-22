@@ -15,7 +15,14 @@ import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
@@ -395,6 +402,14 @@ class PopupSubroutineSpec(BaseModel):
     # ``return_codec``, or the run stops before submit. A declared result that
     # cannot be read is also a stop.
     result_anchor: Optional[FieldAnchorSpec] = None
+    # For a lookup table (one row per result, each with its own commit
+    # button): a pattern that exactly one cell of the chosen row must match in
+    # full, such as a code column. That cell is read just before the commit
+    # click and the value put back in the parent must equal it under
+    # ``return_codec`` (``whitespace_collapse``, ``casefold`` or ``iso_date``),
+    # or the run stops before submit. A row with no such cell, or more than
+    # one, is also a stop.
+    result_row_pattern: Optional[str] = None
     commit_anchor: FieldAnchorSpec
     parent_return_anchor: FieldAnchorSpec
     return_output_key: str = Field(min_length=1)
@@ -402,6 +417,25 @@ class PopupSubroutineSpec(BaseModel):
         default_factory=lambda: FieldCodecSpec(kind=FormCodecKind.CURRENCY_CENTS)
     )
     condition_dossier_key: Optional[str] = None
+
+    @field_validator("result_row_pattern")
+    @classmethod
+    def _row_pattern_compiles(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"Invalid result row pattern {value!r}: {exc}") from exc
+        return value
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_row_pattern(self, handler: Any) -> Any:
+        # Left out while unset, so a pack written before the field existed
+        # dumps and hashes exactly as before.
+        data = handler(self)
+        if isinstance(data, dict) and data.get("result_row_pattern") is None:
+            data.pop("result_row_pattern", None)
+        return data
 
 
 class ModalRuleSpec(BaseModel):

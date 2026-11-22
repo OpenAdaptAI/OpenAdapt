@@ -17,6 +17,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from openadapt_flow.effect_location import Reading
 from openadapt_flow.form_tx.codecs import (
     CodecValueError,
     collapse_whitespace,
@@ -27,6 +28,7 @@ from openadapt_flow.form_tx.codecs import (
     values_equivalent,
 )
 from openadapt_flow.form_tx.judge import SummaryJudge
+from openadapt_flow.form_tx.lookup_location import judge_returned_value, row_reading
 from openadapt_flow.form_tx.playwright_surface import (
     PopupContractError,
     SurfaceSettleTimeoutError,
@@ -2395,6 +2397,7 @@ class FormReconciler:
         )
         commit_selector: Optional[str] = None
         displayed_result: Optional[str] = None
+        row_read: Optional[Reading] = None
         with popup_cm as popup_surface:
             popup_snap = _popup_snapshot(popup_surface)
 
@@ -2562,6 +2565,9 @@ class FormReconciler:
                         )
                     ]
 
+            if subroutine.result_row_pattern is not None:
+                # Echo before commit: read the chosen row before it closes.
+                row_read = row_reading(subroutine, popup_commit, run_id=session.run_id)
             commit_selector = popup_commit.dom_selector
             popup_surface.click(commit_selector)
 
@@ -2633,6 +2639,26 @@ class FormReconciler:
                 "control": return_after or return_before,
             }
             return [halt]
+
+        if row_read is not None:
+            judged = judge_returned_value(
+                subroutine, row_read, return_after.current_value, run_id=session.run_id
+            )
+            if judged.status != "held":
+                return [
+                    self._popup_contract_halt(
+                        session,
+                        after_parent_snap,
+                        subroutine,
+                        f"popup_row|{subroutine.subroutine_id}|{judged.code}",
+                        f"Popup {subroutine.subroutine_id!r} put "
+                        f"{return_after.current_value!r} in "
+                        f"{subroutine.return_output_key!r}, and the chosen row "
+                        f"does not show it: {judged.reason}",
+                    )
+                ]
+            # The row showed exactly this value: it is the popup's result.
+            displayed_result = return_after.current_value
 
         # The value put back in the parent must be the figure the popup showed.
         # An estimator that shows one figure and hands back another (rounded,
