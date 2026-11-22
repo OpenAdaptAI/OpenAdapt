@@ -238,30 +238,40 @@ def test_no_pinned_root_means_nobody_can_answer(
 
 
 def test_a_service_fallback_saves_after_a_phone_approval(
-    model,
-    monkeypatch,
-    run1,
-    approver,
-    tmp_path,
+    model, monkeypatch, run1, approver, tmp_path
 ) -> None:
+    """The real decision portal finds the request under the runs root it
+    scans and records the phone's tap; the waiting gate lets the save go."""
+    from openadapt_flow.console import save_approvals
+
     install_reply(model, monkeypatch)
-    gate = ItemApprovalGate(wait_s=5, approvals_dir=tmp_path / "approvals")
-    real_bind = gate.bind
+    approvals = tmp_path / "approvals"
+    gate = ItemApprovalGate(wait_s=5, approvals_dir=approvals)
+    tapped: list = []
 
-    def bind(run_root: Path, request_id: str) -> None:
-        real_bind(run_root, request_id)
-        answering(gate, person(route=DECISION_PORTAL_ROUTE, signer=portal_signer()))
+    def phone(_seconds: float) -> None:
+        if tapped:
+            return
+        [row] = save_approvals.list_save_approvals(approvals)
+        detail = save_approvals.save_approval_detail(approvals, row.request_id)
+        payload = save_approvals.SaveApprovalActionRequest(
+            action="verify_and_resume",
+            task_digest=detail["task_digest"],
+            task_signature=detail["task"]["signature"],
+        )
+        tapped.append(
+            save_approvals.decide_save_approval(approvals, row.request_id, payload)
+        )
 
-    gate.bind = bind  # type: ignore[method-assign]
+    gate._sleep = phone
     chosen = policy(model, gate=gate)
     result = chosen.run(PROMPT, PARAMS, Agent())
-    assert result.verified and result.status == "VERIFIED"
+    assert result.verified and result.status == "VERIFIED" and len(tapped) == 1
     assert model.rows == [{"id": "f1", "kind": "synthetic", "value": "one"}]
-    # The approval folder sits where Desktop or the portal scans for it.
-    assert (
-        tmp_path / "approvals" / chosen.last["request_id"] / "item-approval"
-    ).is_dir()
-    assert chosen.last["gate_answers"][0]["decision"] == "approved"
+    assert (approvals / chosen.last["request_id"] / "item-approval").is_dir()
+    [answer] = chosen.last["gate_answers"]
+    assert answer["decision"] == "approved"
+    assert answer["route"] == DECISION_PORTAL_ROUTE
 
 
 def test_a_service_fallback_with_no_pin_never_starts(

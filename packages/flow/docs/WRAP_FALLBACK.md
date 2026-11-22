@@ -18,12 +18,31 @@ openadapt-flow wrap-dispatch --task task.json --request-id r-118 \
 
 In Python, wrap the task's `SkillCache`:
 
+With no terminal (a service), a person approves each save from Desktop's Run
+it or a paired phone instead:
+
+```bash
+openadapt-flow wrap-dispatch --task task.json --request-id r-118 \
+    --param note="Synthetic follow-up" \
+    --fallback agent --fallback-max-cost-usd 0.50 \
+    --fallback-gate item-approval --fallback-approvals-dir ~/.openadapt/runs
+```
+
+In Python, wrap the task's `SkillCache`:
+
 ```python
 from openadapt_flow.wrap.fallback import FallbackPolicy
 
-policy = FallbackPolicy(cache, max_cost_usd=0.50)  # gate: the terminal confirm
-run = policy.run(prompt, params, agent)
+policy = FallbackPolicy(
+    cache, max_cost_usd=0.50, agent_factory=make_agent
+)  # gate: the terminal confirm
+run = policy.run(prompt, params, None)
 ```
+
+`agent_factory` is called only once a fallback may start; without it the
+policy uses the agent `run` is given. Either way, `run` only replays the
+admitted program: with none it returns `NO_ADMITTED_PROGRAM` and starts
+nothing.
 
 ## When the agent gets the task
 
@@ -39,10 +58,12 @@ status text:
   `steps_requiring_reconciliation` (from `openadapt_flow.transaction`) lists
   no step.
 - The halted reply recorded exactly zero model calls.
-- The cache's own record check of the halted run found no new, changed or
-  removed record of the task's record. The policy keeps that check beside the
-  halt, so a later call that finds the task held can fall back on the same
-  halt.
+- The cache's own record check of the halted run read the system of record
+  both before and after (`readable: true`) and found no new, changed or
+  removed record of the task's record. An unreadable store also reports zero
+  changes, so it never counts as "nothing written". The policy keeps that
+  check beside the halt, so a later call that finds the task held can fall
+  back on the same halt.
 
 It never falls back on `RECONCILIATION_REQUIRED`, a lost reply,
 `RECORD_CHECK_FAILED`, `RECEIPT_NOT_VERIFIED`, `MODEL_CALLS_NOT_ZERO`, a
@@ -62,8 +83,9 @@ directory beside the task's cache (`<cache_dir>/fallback/<task>/<request>/`):
 - the right-record check before every save;
 - a pre-commit gate before every save. The default `TerminalGate` is
   compile-agent's terminal confirmation; with no terminal it refuses, and the
-  agent is not started (`FALLBACK_GATE_UNATTENDED`). Any object with
-  `__call__(request) -> bool` can be the gate;
+  agent is not started (`FALLBACK_GATE_UNATTENDED`). `ItemApprovalGate`
+  (below) needs no terminal. Any object with `__call__(request) -> bool` can
+  be the gate;
 - the app's origin fence;
 - a read-back of every save from the system of record, and the record check
   of run 1;
@@ -72,7 +94,20 @@ directory beside the task's cache (`<cache_dir>/fallback/<task>/<request>/`):
   refuses a save when the spend so far is over the cap or unknown. An agent
   with model calls and no settable cap is not started
   (`FALLBACK_COST_UNBOUNDED`);
-- its own request ID (default `<request-id>.fallback`), which runs once.
+- its own request ID, which runs once. `wrap-dispatch` derives it from the
+  dispatch request ID by digest (`fallback-` and 40 hex characters), so any
+  valid request ID (up to 128 characters, any characters) works, and records
+  the dispatch request ID as `parent_request_id`.
+
+A fallback is `VERIFIED` only when run 1's record check passed, every gate
+was approved by the person, and a final task-scoped read (the baseline taken
+as the run started against a fresh read after it) confirms exactly one new
+record of the task's record with its values and nothing else changed on it.
+When the final read disagrees (a duplicate, a changed or removed record, an
+unreadable store), or a stopped run can't show it wrote nothing, the status is
+`RECONCILIATION_REQUIRED`: no repair is opened, the in-flight marker stays,
+and `fallback.run_status` keeps what the run itself reported, beside both
+readings (`record_check` and `fallback.task_record_check`).
 
 The run's draft program is never confirmed or admitted. A verified fallback
 leaves the task held and opens a repair candidate with
@@ -82,10 +117,41 @@ person demonstrates and approves the repair, and
 `SkillCache.complete_repair` runs its canaries and selects it. Nothing in the
 fallback path does either step.
 
-A fallback that raises, or ends without proving what it wrote, leaves an
-in-flight marker. Every later fallback of the task then returns
-`RECONCILIATION_REQUIRED` until a person checks the record and runs
-`wrap-dispatch release TASK --person NAME --after-reconciling`.
+While a fallback may save, an in-flight marker names it: its request ID, a
+nonce, its process ID and host. A fallback that raises, or ends without
+proving what it wrote, leaves the marker, marked `ended`. Every later
+fallback of the task then returns `RECONCILIATION_REQUIRED` until a person
+checks the record and runs
+`wrap-dispatch release TASK --person NAME --after-reconciling`. A run removes
+the marker only while it is still its own.
+
+## The gate without a terminal
+
+`--fallback-gate item-approval` (`openadapt_flow.wrap.approval_gate.ItemApprovalGate`)
+asks through the item-approval store that `each_item` runs and the agent
+guard use. Before each save, the fallback run writes
+`item-approval/request-<id>.json` with the gate screenshot under
+`--fallback-approvals-dir/<fallback request id>/` (default: the fallback
+run's directory), and waits up to `--fallback-approval-wait-s` (default 60).
+A person answers in Desktop's Run it (`openadapt-flow item-approval approve`)
+or on a paired phone through the decision portal, when that runs root is one
+they scan.
+
+The save goes through only for an answer decided by a person, signed by an
+approver key on the pinned approver roster, for that exact request, before
+it expired, and not by the agent that asked. A decline, no answer in time, an
+answer after expiry, an unsigned answer, a key off the roster and a missing
+screenshot all refuse the save. The pin is `--fallback-approver-root`,
+`OPENADAPT_APPROVER_ROOT`, or the `approvers` section of
+`--fallback-approvers-config` (then the only pin counted). With no pin whose
+roster verifies, no person's answer could count, so the agent is not started
+(`FALLBACK_GATE_UNATTENDED`).
+
+The agent's own run deadline keeps running while it waits at the gate: a
+provider agent's run is at most 120 seconds (`--max-run-seconds`), so the
+wait must be shorter than that, and the person has less time than the wait
+when the agent is slow to reach the save. Whatever happens at the deadline,
+the final read decides the outcome as above.
 
 ## The dispatcher
 
@@ -94,7 +160,7 @@ in-flight marker. Every later fallback of the task then returns
 | Situation | Result `path` | `status` |
 | --- | --- | --- |
 | The program ran | `program` | its status (`VERIFIED`, `HALTED` ...) |
-| No admitted program | `held` | `NO_ADMITTED_PROGRAM` (nothing runs; `openadapt wrap` makes the first run) |
+| No admitted program, including one evicted after a `status` check | `held` | `NO_ADMITTED_PROGRAM` (nothing runs; `openadapt wrap` makes the first run) |
 | The task is held, no fallback | `held` | `CACHE_HALTED` |
 | The fallback ran or was refused | `agent_fallback` | `VERIFIED`, `GATE_REFUSED`, `COST_CAP_EXCEEDED` ... |
 
@@ -104,8 +170,9 @@ Each run prints one JSON object with `openadapt wrap`'s per-run fields
 `receipt_outcome`, `receipt_binding`), with `path` as in the table, plus
 `outcome` (`VERIFIED`, `ESCALATED`, `CAUGHT_ERROR` or `FAILED`) and
 `fallback` (what the policy did, or null). `--result FILE` also writes it to
-a file. Requests go through the same run store as `openadapt wrap`, so a
-retried request ID returns its first result.
+a file. Requests go through the same run store as `openadapt wrap`, and the
+stored result is this whole object, `NO_ADMITTED_PROGRAM` included: a retried
+request ID returns its first result, `fallback` and all, and runs nothing.
 
 The hold verbs:
 
@@ -114,8 +181,13 @@ The hold verbs:
   the task's fallback runs.
 - `wrap-dispatch release TASK --person NAME`: a person at a terminal types
   `release`. The hold file is archived next to a record of who released it.
-  A hold that may have written (`running`, unreadable) or a stuck fallback
-  needs `--after-reconciling`.
+  Without `--after-reconciling`, only a hold whose own evidence proves
+  nothing was written is released: a halt that may fall back (the checks
+  above, without the record check), or a hold whose program never ran. Any
+  other hold (a `RECONCILIATION_REQUIRED` reply, a write, `running`,
+  unreadable) and an unfinished fallback need `--after-reconciling`. A
+  fallback that is still running, or whose owner is on another host or
+  can't be identified, is never released (`FALLBACK_RUNNING`).
 - `wrap-dispatch evict TASK`: sets the program aside as evidence; the next
   `openadapt wrap` run compiles afresh.
 
@@ -125,8 +197,13 @@ The hold verbs:
   [#2406](https://github.com/OpenAdaptAI/OpenAdapt/pull/2406) under mcp
   1.30.0. The end-to-end test runs the program in-process until then.
 - `openadapt wrap run` does not dispatch through this policy yet (#2407).
-- The gate is the terminal confirmation. The guard approval card and the
-  flight gate are the next gates.
+- A program hold left `running` by a live program replay is not told apart
+  from a lost reply; release with `--after-reconciling` can archive it while
+  that replay still runs.
+- The item-approval gate's request shows the gate screenshot and the
+  control; it does not list the field values being saved (no `fields`).
+- No real model agent has run the fallback; the benchmark's agent is
+  scripted.
 - Fallback runs have no receipt of their own (#2394); the evidence is the
   harness's gate log, read-backs and record check.
 
