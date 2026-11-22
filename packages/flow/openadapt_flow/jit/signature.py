@@ -69,7 +69,7 @@ class TaskSignature:
     """What a cached program is for.
 
     Args:
-        task_id: A stable id the caller picks, such as ``mockmed.add_note``.
+        task_id: A stable id the caller picks, such as ``demo.add_note``.
         instruction: The task as told to the computer-use agent. ``{name}``
             placeholders are filled from the run's parameters.
         params: Parameter name to type (``"string"``, ``"integer"``,

@@ -1,0 +1,25 @@
+{
+  "finished_at": "2026-11-20T08:00:04+00:00",
+  "host": "synthetic",
+  "mode": "skill-cache",
+  "pid": null,
+  "request_id": "req-0001",
+  "result": {
+    "cost_usd": 0.0,
+    "model_calls": 0,
+    "path": "skill",
+    "receipt": "receipts/x.json",
+    "receipt_outcome": "VERIFIED",
+    "seconds": 3.9,
+    "status": "VERIFIED",
+    "usage": [],
+    "usage_known": true,
+    "verified": true,
+    "wire_checked": false
+  },
+  "run_id": "run-0001",
+  "schema": "openadapt-agent.run/v1",
+  "started_at": "2026-11-20T08:00:00+00:00",
+  "state": "finished",
+  "workflow": "wrap:abc"
+}

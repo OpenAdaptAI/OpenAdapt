@@ -13,8 +13,6 @@ import type {
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { Button, Callout, Card, CardHead, Field, Pill } from "../ui/primitives";
 
-const POLICY = "clinical-write";
-
 const GUIDED_FAULT_CASES: {
   id: string;
   kind: QualificationCaseKind;
@@ -63,7 +61,7 @@ function secretEnvironmentReference(name: string): string {
 // that this screen cannot see.
 function deployBlocker(project: QualificationProject): string {
   if (!project.graph.bundle.encrypted) {
-    return "Seal and encrypt this version before you deploy it.";
+    return "Encrypt this version before you deploy it.";
   }
   if (!project.capability_coverage?.satisfied) {
     return "Run cases that cover every required runner capability before you deploy.";
@@ -216,7 +214,7 @@ export function QualificationLifecycle({
     try {
       const response = await engineInvoke<QualificationResponse>(command, {
         workflow_id: workflowId,
-        policy: POLICY,
+        ...(project.policy ? { policy: project.policy } : {}),
         ...params,
       });
       if (!response.ok) {
@@ -301,7 +299,7 @@ export function QualificationLifecycle({
         CMD.IMPORT_QUALIFICATION_RESULTS,
         {
           workflow_id: workflowId,
-          policy: POLICY,
+          ...(project.policy ? { policy: project.policy } : {}),
           signed_results_json: await file.text(),
         },
       );
@@ -787,7 +785,7 @@ export function QualificationLifecycle({
               void artifactAction(CMD.SEAL_QUALIFICATION_WORKFLOW, "seal")
             }
           >
-            Seal and encrypt version
+            Encrypt version
           </Button>
           <Button
             disabled={Boolean(busy)}
