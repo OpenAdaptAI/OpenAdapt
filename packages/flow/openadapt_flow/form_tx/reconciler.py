@@ -26,6 +26,7 @@ from openadapt_flow.form_tx.codecs import (
     values_equivalent,
 )
 from openadapt_flow.form_tx.judge import SummaryJudge
+from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
@@ -68,16 +69,9 @@ __all__ = [
     "ReconcilerSession",
 ]
 
-_PRIMARY_ENTITY_KINDS = frozenset(
-    {
-        "primary_applicant",
-        "primary_insured",
-        "applicant",
-        "insured",
-        "primary",
-        "self",
-    }
-)
+#: Entity kinds that name the person the form is about (data:
+#: ``presets/words/primary_entity_kinds.json``).
+_PRIMARY_ENTITY_KINDS = frozenset(load_words("primary_entity_kinds"))
 _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "",
     "-- Select --",

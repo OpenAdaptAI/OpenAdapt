@@ -1,0 +1,13 @@
+{
+  "schema": "openadapt.form-word-list/v1",
+  "name": "primary_entity_kinds",
+  "about": "Entity kinds a dossier uses for the person the form is about. An entity table also expects these entities when they carry the table's key fields.",
+  "words": [
+    "primary_applicant",
+    "primary_insured",
+    "applicant",
+    "insured",
+    "primary",
+    "self"
+  ]
+}

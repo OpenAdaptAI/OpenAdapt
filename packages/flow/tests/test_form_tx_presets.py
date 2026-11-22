@@ -79,3 +79,76 @@ def test_an_unknown_preset_is_refused() -> None:
         load_domain_schema("no_such_preset")
     with pytest.raises(ValueError):
         load_domain_schema("../pack_compiler")
+
+
+# -- word lists ------------------------------------------------------------------
+
+
+def _old_constant(sha: str, source: str, name: str) -> object:
+    """A module constant's value at ``sha``: a literal, or frozenset(literal)."""
+
+    import ast
+
+    got = subprocess.run(
+        ["git", "-C", str(ROOT), "show", f"{sha}:{source}"],
+        capture_output=True,
+        text=True,
+    )
+    if got.returncode != 0:
+        pytest.skip("no git history for the commit before the move")
+    for node in ast.parse(got.stdout).body:
+        targets = (
+            [node.target]
+            if isinstance(node, ast.AnnAssign)
+            else getattr(node, "targets", [])
+        )
+        if any(getattr(t, "id", None) == name for t in targets):
+            value = node.value
+            if (
+                isinstance(value, ast.Call)
+                and getattr(value.func, "id", "") == "frozenset"
+            ):
+                return frozenset(ast.literal_eval(value.args[0]))
+            return ast.literal_eval(value)  # type: ignore[arg-type]
+    raise AssertionError(f"{name} not found in {source} at {sha}")
+
+
+def _primary_entity_kinds() -> object:
+    from openadapt_flow.form_tx import reconciler
+
+    return reconciler._PRIMARY_ENTITY_KINDS
+
+
+#: word list: (current value, the commit before the move, file, constant)
+MOVED_WORDS = {
+    "primary_entity_kinds": (
+        _primary_entity_kinds,
+        "2f506d6c463aef8098fc8fcc2fd5bc46e55c1829",
+        "packages/flow/openadapt_flow/form_tx/reconciler.py",
+        "_PRIMARY_ENTITY_KINDS",
+    ),
+}
+
+
+@pytest.mark.parametrize("words", sorted(MOVED_WORDS))
+def test_the_constant_equals_the_old_one(words: str) -> None:
+    current, sha, source, name = MOVED_WORDS[words]
+    old = _old_constant(sha, source, name)
+    now = current()
+    assert type(now) is type(old)
+    assert now == old
+
+
+@pytest.mark.parametrize("words", sorted(MOVED_WORDS))
+def test_each_word_list_ships_as_json(words: str) -> None:
+    from openadapt_flow.form_tx.presets import load_words
+
+    assert load_words(words)
+    assert words not in preset_names()
+
+
+def test_an_unknown_word_list_is_refused() -> None:
+    from openadapt_flow.form_tx.presets import load_words
+
+    with pytest.raises(ValueError):
+        load_words("no_such_list")

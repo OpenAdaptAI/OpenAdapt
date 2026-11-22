@@ -1,11 +1,15 @@
 """Domain presets for ``form_tx`` pack induction, kept as data.
 
-A preset is a canonical domain schema (the fields a kind of form asks for,
+A domain preset is a canonical domain schema (the fields a kind of form asks for,
 with label synonyms) used by ``induce_form_pack`` and the ``--domain`` flag.
 It is vocabulary for one kind of form, so it lives here as JSON
 (``openadapt.form-domain-preset/v1``), not in the engine's code. The
 ``build_*_domain_schema`` functions in ``pack_compiler`` load these files and
 return the same objects they used to build.
+
+A word list (``openadapt.form-word-list/v1``, ``presets/words/*.json``) holds
+the words one rule looks for, such as the entity kinds that name the person a
+form is about. The module constants that used to hold them load these files.
 """
 
 from __future__ import annotations
@@ -18,10 +22,18 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from openadapt_flow.form_tx.pack_compiler import CanonicalDomainSchema
 
-__all__ = ["PRESET_SCHEMA", "load_domain_schema", "preset_names"]
+__all__ = [
+    "PRESET_SCHEMA",
+    "WORD_LIST_SCHEMA",
+    "load_domain_schema",
+    "load_words",
+    "preset_names",
+]
 
 PRESET_SCHEMA = "openadapt.form-domain-preset/v1"
+WORD_LIST_SCHEMA = "openadapt.form-word-list/v1"
 _DIR = Path(__file__).resolve().parent
+_WORDS = _DIR / "words"
 
 
 def preset_names() -> tuple[str, ...]:
@@ -49,3 +61,21 @@ def load_domain_schema(name: str) -> "CanonicalDomainSchema":
     from openadapt_flow.form_tx.pack_compiler import CanonicalDomainSchema
 
     return CanonicalDomainSchema.model_validate(_raw(name))
+
+
+def load_words(name: str) -> tuple[str, ...]:
+    """The words of word list ``name`` (``presets/words/<name>.json``), in order."""
+
+    names = {p.stem for p in _WORDS.glob("*.json")}
+    if name not in names:
+        raise ValueError(f"unknown form_tx word list {name!r}")
+    data = json.loads((_WORDS / f"{name}.json").read_text(encoding="utf-8"))
+    words = data.get("words") if isinstance(data, dict) else None
+    if (
+        data.get("schema") != WORD_LIST_SCHEMA
+        or data.get("name") != name
+        or not isinstance(words, list)
+        or not all(isinstance(w, str) for w in words)
+    ):
+        raise ValueError(f"word list {name!r} is not {WORD_LIST_SCHEMA}")
+    return tuple(words)
