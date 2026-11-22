@@ -79,10 +79,19 @@ exact same set: `id IN (9, 10)` after `id = 9` is held too. The default task
 is one per database and project folder, stable across proxy restarts. Use
 `--task` to start a new one. A statement that only inserts is keyed by its table, with the same
 rule. An identical statement after the first apply changes nothing, and its
-dry run is empty.
+dry run is empty. A replay (the same task and payload, nothing sent) is
+`VERIFIED` only when the rows the statement left still read as it committed
+them and the rows it removed are still gone. The stored post-commit check is
+not reused.
 
 **What the dry run covers.** It covers SQL effects inside the transaction:
-rows, triggers that write rows, and cascades. It does not cover effects
+rows, triggers that write rows, and cascades. On PostgreSQL, deferred
+constraint triggers are made to fire inside the transaction (`SET CONSTRAINTS
+ALL IMMEDIATE`) before the checks. A statement or planned write whose
+triggers change rows outside the current schema is refused (`diverged`),
+because the frame reads only that schema. On MySQL, a trigger in the
+database that names another database or calls a routine refuses every
+write, because MySQL can't count a transaction's rows per table. It does not cover effects
 outside the database: a trigger that calls out, `NOTIFY` listeners, email
 sent by the application, sequences (a rolled-back `nextval` is not returned),
 or MySQL DDL (MySQL commits DDL at once, so it is refused). An app that other
@@ -169,6 +178,20 @@ keys.
 - any frame moved since the plan, which makes the plan stale (`plan_stale`).
   In that case the approval isn't consumed;
 - the plan has no unused approval (`not_approved`, `approval_consumed`).
+
+**Lost updates (REST).** A `replace: true` update sends the baseline the plan
+read, merged with the planned fields, and a delete removes the whole record.
+If another caller saves the record after that read, the write erases their
+edit, and the read-back still looks right. A route can declare a
+`precondition`: the version read with the baseline goes out as `If-Match`,
+taken from the read's `ETag` (`precondition: {}`) or from a field
+(`precondition: {source: field, field: meta.versionId, format: 'W/"{value}"'}`).
+A server that finds a newer version refuses the write (`412`); nothing is
+written, and the result is `stale_baseline` (apply) or
+`changed_during_holdback` (release). A replace update or a delete on a route
+with no precondition is at best `COMPLETED_UNVERIFIED`
+(`confirmed_unconditional`, `released_unconditional`), because a lost update
+can't be ruled out.
 
 After the writes, apply reads every frame again and compares the diff with
 the prediction. A **missed effect** is something the read-back found that the

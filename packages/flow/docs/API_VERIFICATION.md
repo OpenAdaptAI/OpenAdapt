@@ -140,6 +140,14 @@ holds field paths, codes and counts, never record values. The receipt line is
 
 - Changes made by another caller, and server-side effects the log doesn't
   attribute to this caller, such as a trigger or a background job.
+- A write sent over another caller's edit. A `replace: true` update sends
+  the pre-read record with the intent merged in, so an edit saved between the
+  pre-read and the send is erased and reads back like a correct write. With
+  a `precondition` on the route (`If-Match` from the read's `ETag` or a
+  version field, as in [TRANSACTIONS.md](TRANSACTIONS.md)), the server
+  refuses such a write and the outcome is `HALTED` (`stale_baseline`).
+  Without one, a replace update or a delete is never `VERIFIED`: it is
+  `COMPLETED_UNVERIFIED` with `unconditional_write`.
 - Changes of a kind the log doesn't record. Gitea's activity feed records
   creates, comments, closes and reopens, but not title or body edits.
 - On a create, fields the server adds. Only the intended fields are judged.
