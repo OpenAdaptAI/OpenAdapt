@@ -74,19 +74,21 @@ The check level comes from the start condition the adapter achieved:
 | Start | Check level |
 | --- | --- |
 | `same_screen` | 1, `same_screen` |
-| `fresh_navigation` | 2, `reopened` |
+| `fresh_navigation` | 2, `reopened`; 3 with basis `fresh_reload` when the adapter proves the navigation fetched from the server (cache bypassed, the request kept) |
 | `new_session` | 3, `separate_session`, basis `separate_session` |
 | `other_channel` | 4, `system_of_record`, with the basis the adapter names (`system_api`, `activity_log`, `db_frame` or `owned_connection`) |
 
 The receipt word comes from `openadapt_types.check_level.outcome_word`, so
 this package never decides what `VERIFIED` means. A same-screen read or a
-fresh navigation is `SHOWN`. A new session is `VERIFIED`. Another channel is
+fresh navigation without the reload proof is `SHOWN`; a proven fresh reload
+is `VERIFIED`. A new session is `VERIFIED`. Another channel is
 `VERIFIED` only with a basis, otherwise `RECORDED`. Until `outcome_word` is on
 main, the word is `None`.
 
 The adapter states the start condition it achieved and binds the reading to
 the run. The evaluator can't see whether a navigation really fetched from the
-server; the adapter must prove it before it says `fresh_navigation`.
+server; the adapter must prove it (a cache-bypassing request and its
+response, kept as evidence) before it names the `fresh_reload` basis.
 
 ## Fail-open testing
 
