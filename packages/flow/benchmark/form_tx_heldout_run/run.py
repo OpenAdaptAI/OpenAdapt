@@ -44,7 +44,11 @@ SUITES = {
     # answer key is decrypted in memory by its own scorer.
     "set4v2": ("form_tx_set4v2", "benchmark.form_tx_heldout_run.packs5"),
     "set4v2b0": ("form_tx_set4v2", "benchmark.form_tx_heldout_run.packs5b0"),
+    # Set 4 v2 after unsealing (now a dev set): the B packs moved onto the
+    # general GUI mechanisms (pack ``gui``). See packs6/__init__.py.
+    "set4v2gui": ("form_tx_set4v2", "benchmark.form_tx_heldout_run.packs6"),
 }
+ATTESTER = {"name": ""}
 _SUITE = {"name": "heldout"}
 
 
@@ -465,6 +469,13 @@ def run_case(
             dossier_for(intake, request_id=f"{case_id}-req"),
             run_id=f"run-{case_id}",
         )
+        # Attestations are ticked only on a grant from the person attesting,
+        # given here by --attester (off by default: the run then stops at
+        # every attestation). Recorded on the row.
+        from openadapt_flow.form_tx.gui_bridge import grants_for
+
+        session.attestation_grants = grants_for(pack, ATTESTER["name"])
+        out["attester"] = ATTESTER["name"] or None
         result = reconciler.run_until_halt_or_done(session)
         n = 0
         while result.halts and result.outcome in (
@@ -582,9 +593,16 @@ def main(argv: list[str]) -> int:
         help="directory for one per-control JSON log per case (intake value, "
         "observed value, label, option map, page text); synthetic data only",
     )
+    ap.add_argument(
+        "--attester",
+        default="",
+        help="the person who attests the pack's declared attestation statements "
+        "for every case of this run (off by default: the run stops at each one)",
+    )
     ap.add_argument("portals", nargs="*")
     args = ap.parse_args(argv)
     CONTROL_LOG["dir"] = args.control_log
+    ATTESTER["name"] = args.attester
     _use_suite(args.suite)
     OPERATOR_TOOLS_ON["on"] = args.operator_estimator
     answer_key = load_answer_key()

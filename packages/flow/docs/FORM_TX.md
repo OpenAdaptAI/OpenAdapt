@@ -160,6 +160,41 @@ submitted after such a stop. An error on or after the submit click ends
 integrity under that local key. It is not a server attestation, external witness,
 or independent proof that every backend effect has been observed.
 
+### The general GUI mechanisms (`FormPack.gui`)
+
+A pack opts into `openadapt_flow.gui` with a `GuiMechanismsSpec`
+(`form_tx/gui_pack.py`); `form_tx/gui_bridge.py` runs it from three points
+in the reconciler. Every field is pack data, and the engine names no app.
+
+- **Repeating groups** (`repeats`). On the named screen, before its next
+  control, every item of the intake list is entered into its own instance
+  ("Traveller 2", a table row) and read back there. A prefilled instance,
+  more instances than items, or an add that did not add exactly one blank
+  instance stops. An instance that already shows the intake (after a walk
+  back) is checked and not written again. Each instance field is in the
+  write ledger, so it is read back or reported `not_checked`.
+- **Hub pages** (`hubs`). Each section is opened, filled by the pack's own
+  bindings, saved, and counted done only when its card on the hub reads
+  done. A stop inside a section (a type-ahead pick) resumes into the same
+  dialog. A sign-in dialog after a save goes to the sign-in wall. The hub is
+  left through its declared step only when every card reads done.
+- **Steps** (`steps`). A screen's next control drawn as a link, a tab or a
+  button the form surface does not list is taken with `gui.steps.take_step`
+  and must navigate without writing.
+- **Attestations** (`attestations`). On the commit screen, each declared
+  box is ticked only on an `AttestationGrant` in `session.attestation_grants`
+  (`gui_bridge.grants_for(pack, attester)`). With no grant, the run stops
+  before the commit. Never bind an attestation to an intake or derived fact.
+- **`stop_on_blank_choice`**. A visible select or radio group that no
+  binding covers, the pack does not list in `unbound_controls`, and that is
+  still blank stops before the screen is left.
+- **Review rows beside their values.** With `gui` set, a review read-back
+  the snapshot could not pair is read as a label element and the element
+  after it; a different value stops before the commit.
+
+A modal that holds an editable control is never confirmed through a
+`confirm_if_dossier_flag` rule when the pack has `gui`.
+
 ## Sessions, queue jobs, and operator decisions
 
 `WarmSessionLease` requires positive authenticated-landmark evidence. A 200

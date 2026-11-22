@@ -32,6 +32,7 @@ from openadapt_flow.form_tx.playwright_surface import (
     SurfaceSettleTimeoutError,
 )
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
+from openadapt_flow.form_tx import gui_bridge
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
     FormSurfaceBackend,
@@ -3398,6 +3399,8 @@ class FormReconciler:
                     if flag_fact is not None and _is_truthy_flag(flag_fact.value):
                         flag_truthy = True
 
+                if flag_truthy and gui_bridge.is_form_dialog(session, snapshot, obs_modal):
+                    flag_truthy = False  # a form dialog is never a confirmation
                 if rule is not None and flag_truthy:
                     active_surface.click(rule.confirm_selector)
                     session.confirmed_modals.add(obs_modal.modal_id)
@@ -3633,6 +3636,16 @@ class FormReconciler:
             if current_screen is not None:
                 self._note_screen(session, current_screen.screen_id)
 
+            # The pack's general GUI mechanisms (repeating groups, hub pages,
+            # link steps, blank choices); a pack without ``gui`` skips this.
+            gui_out = gui_bridge.before_leaving_screen(
+                self, session, active_surface, snapshot, current_screen
+            )
+            if gui_out == gui_bridge.CONTINUE:
+                continue
+            if isinstance(gui_out, FormTxResult):
+                return gui_out
+
             # Controls no binding covers, before the screen is left.
             unbound_halt = self._scan_unbound_controls(session, snapshot)
             if unbound_halt is not None:
@@ -3664,6 +3677,11 @@ class FormReconciler:
                         halts=(review_halt,),
                         what_happened=review_halt.message,
                     )
+                gui_halt = gui_bridge.before_commit(
+                    self, session, active_surface, snapshot, current_screen
+                )
+                if gui_halt is not None:
+                    return gui_halt
                 if current_screen.commit_button_anchor is None:
                     raise ValueError(
                         f"Commit screen {current_screen.screen_id!r} has no commit_button_anchor"

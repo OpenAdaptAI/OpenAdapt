@@ -19,6 +19,14 @@
 
 ### Features
 
+- `form_tx` runs the general GUI mechanisms when a pack opts in with
+  `FormPack.gui` (`form_tx.gui_pack`, `form_tx.gui_bridge`): repeating groups
+  filled from an intake list and checked per instance, hub pages walked
+  section by section with completion read from each card, steps drawn as
+  links, and attestations ticked only on a grant passed to the run. With
+  `stop_on_blank_choice`, a question no binding answers that is still blank
+  stops before the screen is left, and review rows drawn as a label beside
+  its value are read before the commit. A pack without `gui` is unchanged.
 - Links, tabs and menu items can be steps (`openadapt_flow.gui.steps`). Each
   demonstrated click gets its role from what the backend counted: a commit
   when it wrote, a navigation when the screen changed with no write. A live

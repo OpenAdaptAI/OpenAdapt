@@ -81,6 +81,7 @@ __all__ = [
     "judge_hub_screen",
     "learn_hub",
     "run_section",
+    "save_section",
 ]
 
 
@@ -362,6 +363,28 @@ def run_section(
     if actuator.write_count() != w0:
         return stop("opening the section wrote", opened=True)
     fill(opened, dialog)
+    return save_section(actuator, section, dialog, run_id=run_id)
+
+
+def save_section(
+    actuator: Actuator,
+    section: SectionSpec,
+    dialog: Dialog,
+    *,
+    run_id: str = "",
+) -> SectionOutcome:
+    """Save an open, filled section dialog and confirm on the hub that it is
+    done. :func:`run_section` ends with this; a caller that paused while the
+    dialog was open (a person had to answer a field) resumes with it. The
+    dialog must still be the only one open, the save control must be inside
+    it, the dialog must close with the demonstrated writes, and the card must
+    then show done on a fresh read."""
+
+    sid = section.section_id
+
+    def stop(reason: str, **kw: Any) -> SectionOutcome:
+        return SectionOutcome(sid, Status.NOT_CHECKED, reason, **kw)
+
     filled = actuator.observe()
     if [d.handle for d in filled.dialogs] != [dialog.handle]:
         return stop("the dialog changed while it was filled", opened=True)

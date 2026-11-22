@@ -524,9 +524,16 @@ class FormPack(BaseModel):
     # otherwise named on the receipt as not covered; one listed here keeps
     # the run from verified_done instead.
     required_intake_keys: tuple[str, ...] = ()
+    # The general GUI mechanisms this pack opts into (``form_tx.gui_pack``):
+    # link and tab steps, attestations, repeating groups, hub pages.
+    gui: Optional["GuiMechanismsSpec"] = None
 
     def digest(self) -> str:
-        return canonical_sha256(self)
+        # A pack without ``gui`` hashes exactly as it did before the field.
+        data = self.model_dump(mode="json")
+        if data.get("gui") is None:
+            data.pop("gui", None)
+        return canonical_sha256(data)
 
 
 class ObservedOption(BaseModel):
@@ -907,3 +914,8 @@ class FormTxResult(BaseModel):
     summary_verdict: Optional[SummaryVerdict] = None
     receipt: Optional[SignedFormTxReceipt] = None
     what_happened: str = ""
+
+
+from openadapt_flow.form_tx.gui_pack import GuiMechanismsSpec  # noqa: E402
+
+FormPack.model_rebuild()
