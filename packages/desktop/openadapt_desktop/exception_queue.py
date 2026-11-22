@@ -240,7 +240,11 @@ def answer(
     if card is None:
         return {"ok": False, "code": "card_changed", "error": "The stop was answered or is gone."}
     if choice not in {c.get("id") for c in card["choices"]}:
-        return {"ok": False, "code": "choice_not_offered", "error": "That choice isn't on this stop."}
+        return {
+            "ok": False,
+            "code": "choice_not_offered",
+            "error": "That choice isn't on this stop.",
+        }
     decided = now().astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     if _after(decided, card["deadline_at"]):
         return {"ok": False, "code": "card_expired", "error": "The stop expired."}
@@ -259,7 +263,11 @@ def answer(
     except FileExistsError:
         return {"ok": False, "code": "card_changed", "error": "The stop was answered first."}
     except OSError:
-        return {"ok": False, "code": "registry_unwritable", "error": "Desktop couldn't save the answer."}
+        return {
+            "ok": False,
+            "code": "registry_unwritable",
+            "error": "Desktop couldn't save the answer.",
+        }
     return {
         "ok": True,
         "answer": choice,

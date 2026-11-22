@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import stat
+import struct
+import zlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -47,11 +49,19 @@ SUMMARY = (
     "mail maribel@example.test"
 )
 
-PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
-    b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-    b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+def _png_1x1() -> bytes:
+    """A valid one-pixel RGB PNG, built without an imaging library."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(b"\x00\xff\xff\xff")
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+PNG = _png_1x1()
 
 
 class FakeScrubber:
@@ -165,7 +175,8 @@ def test_the_summary_is_scrubbed_and_cut(registry):
     for planted in PLANTED:
         assert planted.encode() not in blob
     assert b"<PERSON>" in blob
-    assert card.task_id == "T-[number]"
+    # A token holding four or more digits is masked whole.
+    assert card.task_id == "[number]"
 
 
 def test_without_a_scrubber_the_card_says_only_the_kinds_own_words(registry):

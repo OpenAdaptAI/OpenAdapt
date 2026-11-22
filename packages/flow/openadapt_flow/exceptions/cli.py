@@ -155,13 +155,17 @@ def cmd_list(args: argparse.Namespace) -> int:
 def cmd_answer(args: argparse.Namespace) -> int:
     from openadapt_types.exception_card import ExceptionAnswerV1, answer_message
 
-    from openadapt_flow.execute.keys import sign_bytes
     from openadapt_flow.exceptions.registry import (
         ExceptionRegistryError,
         parse_time,
         roster_verifier,
     )
-    from openadapt_flow.jit.authority import AuthorityError, load_encrypted_key, public_hex
+    from openadapt_flow.execute.keys import sign_bytes
+    from openadapt_flow.jit.authority import (
+        AuthorityError,
+        load_encrypted_key,
+        public_hex,
+    )
 
     def refuse(code: str, message: str) -> int:
         if args.json:

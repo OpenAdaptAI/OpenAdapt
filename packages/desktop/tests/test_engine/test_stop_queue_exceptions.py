@@ -275,7 +275,9 @@ def test_a_choice_the_card_doesnt_offer_changes_nothing(queue):  # noqa: F811
     disp, _db, _keychain = queue
     raw = _write_card("second_factor")
     (card,) = _cards(disp)
-    result = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "continue"})
+    result = disp.dispatch(
+        "answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "continue"}
+    )
     assert result["ok"] is False and result["code"] == "choice_not_offered"
     assert not _answer_file(raw).exists()
 
@@ -308,7 +310,11 @@ def test_a_cancelled_prompt_writes_nothing(queue, enclave):  # noqa: F811
     assert not _answer_file(raw).exists()
 
 
-def test_a_card_answered_elsewhere_during_the_prompt_is_not_overwritten(queue, enclave, monkeypatch):  # noqa: F811
+def test_a_card_answered_elsewhere_during_the_prompt_is_not_overwritten(
+    queue,  # noqa: F811
+    enclave,  # noqa: F811
+    monkeypatch,
+):
     disp, _db, _keychain = queue
     raw = _write_card()
     (card,) = _cards(disp)
