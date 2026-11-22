@@ -12,8 +12,8 @@ CSRF token in a query parameter such as ``main.php?csrf_token=...``, OAuth redir
 * the value of a secret query, fragment or form parameter: one in
   :data:`DEFAULT_PARAMS` (``PHPSESSID=``, ``access_token=``, ``code=``,
   ``state=``, ``signature=``, ...) or one whose name has a CSRF, XSRF,
-  token or session-id part (:func:`is_credential_name`: ``csrf_token_form=``,
-  ``token_main=``, ``auth_token=``);
+  token or session-id part (:func:`is_credential_name`: ``form_csrf_token=``,
+  ``session_token=``, ``auth_token=``);
 * the value of a credential header (``Authorization``, ``Cookie``,
   ``Set-Cookie`` and the rest of :data:`DEFAULT_HEADERS`), in a
   ``Name: value`` line, a JSON key, or a ``{"name": ..., "value": ...}`` pair;
@@ -234,7 +234,7 @@ def is_credential_name(name: str, *, header: bool = False) -> bool:
 
     The name is split into parts on anything but letters and digits; a part
     that is a token, CSRF/XSRF token or session id makes it one
-    (``csrf_token_form``, ``X-CSRF-Token``, ``app_sessid``). For a
+    (``form_csrf_token``, ``X-CSRF-Token``, ``app_sessid``). For a
     header (``header=True``) an ``authorization`` part does too
     (``Espo-Authorization``); elsewhere that word names an approval, not a
     credential. A parameter or header named so is redacted in every app and

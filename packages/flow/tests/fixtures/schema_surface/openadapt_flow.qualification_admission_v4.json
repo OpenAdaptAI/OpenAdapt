@@ -1,0 +1,163 @@
+{
+ "pydantic": "2.13.4",
+ "models": {
+  "VerifiedQualificationAdmissionV4": {
+   "validation": {
+    "additionalProperties": false,
+    "description": "v4 authority returned only after signature, pin, and digest checks pass.",
+    "properties": {
+     "admission_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Admission Artifact Sha256",
+      "type": "string"
+     },
+     "admission_id_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Admission Id Sha256",
+      "type": "string"
+     },
+     "evidence_identity_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Evidence Identity Sha256",
+      "type": "string"
+     },
+     "registry_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Registry Sha256",
+      "type": "string"
+     },
+     "registry_revision": {
+      "minimum": 1,
+      "title": "Registry Revision",
+      "type": "integer"
+     },
+     "registry_expires_at": {
+      "default": null,
+      "title": "Registry Expires At",
+      "type": "null"
+     },
+     "issuer_key_id": {
+      "const": "qa-ed25519-9cf4bca214c01d79",
+      "default": "qa-ed25519-9cf4bca214c01d79",
+      "title": "Issuer Key Id",
+      "type": "string"
+     },
+     "bundle_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Bundle Sha256",
+      "type": "string"
+     },
+     "admitted_runtime_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Admitted Runtime Sha256",
+      "type": "string"
+     },
+     "evidence_class": {
+      "enum": [
+       "private-customer",
+       "remote-safe-synthetic"
+      ],
+      "title": "Evidence Class",
+      "type": "string"
+     },
+     "revocation_state_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Revocation State Sha256",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_artifact_sha256",
+     "admission_id_sha256",
+     "evidence_identity_sha256",
+     "registry_sha256",
+     "registry_revision",
+     "bundle_sha256",
+     "admitted_runtime_sha256",
+     "evidence_class",
+     "revocation_state_sha256"
+    ],
+    "title": "VerifiedQualificationAdmissionV4",
+    "type": "object"
+   },
+   "serialization": {
+    "additionalProperties": false,
+    "description": "v4 authority returned only after signature, pin, and digest checks pass.",
+    "properties": {
+     "admission_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Admission Artifact Sha256",
+      "type": "string"
+     },
+     "admission_id_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Admission Id Sha256",
+      "type": "string"
+     },
+     "evidence_identity_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Evidence Identity Sha256",
+      "type": "string"
+     },
+     "registry_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Registry Sha256",
+      "type": "string"
+     },
+     "registry_revision": {
+      "minimum": 1,
+      "title": "Registry Revision",
+      "type": "integer"
+     },
+     "registry_expires_at": {
+      "default": null,
+      "title": "Registry Expires At",
+      "type": "null"
+     },
+     "issuer_key_id": {
+      "const": "qa-ed25519-9cf4bca214c01d79",
+      "default": "qa-ed25519-9cf4bca214c01d79",
+      "title": "Issuer Key Id",
+      "type": "string"
+     },
+     "bundle_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Bundle Sha256",
+      "type": "string"
+     },
+     "admitted_runtime_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Admitted Runtime Sha256",
+      "type": "string"
+     },
+     "evidence_class": {
+      "enum": [
+       "private-customer",
+       "remote-safe-synthetic"
+      ],
+      "title": "Evidence Class",
+      "type": "string"
+     },
+     "revocation_state_sha256": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Revocation State Sha256",
+      "type": "string"
+     }
+    },
+    "required": [
+     "admission_artifact_sha256",
+     "admission_id_sha256",
+     "evidence_identity_sha256",
+     "registry_sha256",
+     "registry_revision",
+     "bundle_sha256",
+     "admitted_runtime_sha256",
+     "evidence_class",
+     "revocation_state_sha256"
+    ],
+    "title": "VerifiedQualificationAdmissionV4",
+    "type": "object"
+   }
+  }
+ }
+}

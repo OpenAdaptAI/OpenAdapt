@@ -1,0 +1,60 @@
+# The receiving clinic for the referral-intake handoff tests: a second,
+# separate, synthetic OpenEMR 7.0.3 with its own database. Nothing here is
+# shared with any other OpenEMR stack. Ports are loopback only.
+#
+#   docker compose -f docker-compose.yml up -d --wait
+#   OPENEMR_COMPOSE_FILE=$PWD/docker-compose.yml \
+#   OPENEMR_BASE_HTTPS=https://127.0.0.1:9781 \
+#     eval "$(../openemr_live/setup.sh)"
+#
+# See README.md.
+
+name: ho-openemr
+
+services:
+  mysql:
+    image: mariadb:11.4
+    command:
+      - mariadbd
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --innodb-buffer-pool-size=96M
+      - --performance-schema=OFF
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - receiver_db:/var/lib/mysql
+
+  openemr:
+    image: openemr/openemr:7.0.3
+    ports:
+      - "127.0.0.1:9780:80"
+      - "127.0.0.1:9781:443"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: pass
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/var/www/localhost/htdocs/openemr/sites/default/sqlconf.php"]
+      interval: 15s
+      timeout: 5s
+      retries: 80
+    volumes:
+      - receiver_sites:/var/www/localhost/htdocs/openemr/sites
+      - receiver_logs:/var/log
+
+volumes:
+  receiver_db:
+  receiver_sites:
+  receiver_logs:

@@ -1,6 +1,6 @@
 [package]
 name = "openadapt-desktop"
-version = "0.30.6"
+version = "0.31.3"
 description = "Installed companion for OpenAdapt authoring, teaching, and local pairing"
 authors = ["OpenAdapt AI"]
 license = "MIT"
@@ -21,6 +21,7 @@ full = ["enterprise", "community", "federated"]
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 # Drop the default `zip` feature: it only serves Tauri v1 compressed bundles
 # (.msi.zip, .AppImage.tar.gz) and pulls zip 4.x (RUSTSEC-2026-0367/0368/0369).

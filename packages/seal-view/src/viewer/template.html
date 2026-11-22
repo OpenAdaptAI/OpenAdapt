@@ -1,14 +1,15 @@
 <!doctype html>
-<!-- OpenAdapt Seal viewer (@openadapt/seal-view, MIT). Includes Preact, MIT License, Copyright (c) 2015-present Jason Miller. -->
+<!-- OpenAdapt Receipt viewer (@openadapt/seal-view, MIT). Includes Preact, MIT License, Copyright (c) 2015-present Jason Miller. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
-<meta name="color-scheme" content="dark">
-<title>OpenAdapt Seal</title>
-<style>html,body{margin:0;background:#030507;color:#eaf0f6}/*CSS*/</style>
+<meta name="color-scheme" content="dark light">
+<title>OpenAdapt Receipt</title>
+<script>(function(){var t=null;try{t=localStorage.getItem('oa-theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',t)})()</script>
+<style>html,body{margin:0;background:var(--oa-canvas,#05080d);color:var(--oa-text,#edf1f7)}/*CSS*/</style>
 </head>
 <body>
 <div id="root"></div>

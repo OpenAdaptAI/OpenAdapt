@@ -24,9 +24,11 @@
 set -euo pipefail
 
 # --- config -----------------------------------------------------------------
-COMPOSE_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml"
+# OPENEMR_COMPOSE_FILE and OPENEMR_BASE_HTTPS point this script at another
+# stack (benchmark/handoff_receiver uses them).
+COMPOSE_FILE="${OPENEMR_COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml}"
 DC=(docker compose -f "$COMPOSE_FILE")
-BASE_HTTPS="https://localhost:9390"
+BASE_HTTPS="${OPENEMR_BASE_HTTPS:-https://localhost:9390}"
 FHIR_BASE="${BASE_HTTPS}/apis/default/fhir"
 OE_USER="admin"
 OE_PASS="pass"
@@ -36,7 +38,7 @@ OE_PASS="pass"
 #   - OpenEMR's FHIR API exposes Observation/Encounter READ only (there is no
 #     `user/Observation.write`), so the live write path is a FHIR Patient
 #     POST, independently read back through FHIR.
-SCOPES="openid offline_access api:fhir user/Patient.read user/Patient.write user/Observation.read user/Encounter.read"
+SCOPES="${OPENEMR_SCOPES:-openid offline_access api:fhir user/Patient.read user/Patient.write user/Observation.read user/Encounter.read}"
 
 log() { echo "[setup] $*" >&2; }
 # MariaDB 11.x ships the `mariadb` client (not `mysql`).

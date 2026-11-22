@@ -812,8 +812,12 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
                     portal_value="J. Rivera",
                     dossier_value="Jordan Rivera",
                     message="Portal prefill differs from grounded dossier.",
+                    # The reconciler's value-conflict halts offer these actions.
                     allowed_actions=(
                         HumanDecisionAction.ACCEPT_PORTAL_PREFILL,
+                        HumanDecisionAction.PROVIDE_VALUE,
+                        HumanDecisionAction.FIXED_ON_SCREEN,
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
                         HumanDecisionAction.ABORT_RUN,
                     ),
                 ),
@@ -862,6 +866,8 @@ def test_sidepanel_idle_running_text_input_badge_and_scroll(chrome_copilot):
     )
 
     val_card = panel_page.locator('.halt-card[data-halt-id="halt-scalar-conflict"]')
+    # "Submit Value & Continue" on a value conflict needs an input to read from.
+    assert val_card.locator('input[data-role="operator-input"]').count() == 1
     val_card.locator('button[data-action="accept_portal_prefill"]').click()
     panel_page.wait_for_function(
         """() => document.querySelector('.halt-card[data-halt-id="halt-scalar-conflict"]')?.dataset.decisionAck === 'true'""",

@@ -1243,8 +1243,17 @@ export interface ApproverKeyStatus {
 export interface StopCard {
   schema: "openadapt.desktop-stop-card/v1";
   card_id: string;
-  kind: "approve_save" | "same_record" | "confirm_save" | "halted" | "rearm_problems_only";
-  source: { type: "item" | "approval" | "switch"; id: string; [key: string]: unknown };
+  kind: "approve_save" | "same_record" | "confirm_save" | "halted" | "rearm_problems_only" | "exception";
+  /** With kind "exception": the run's closed exception kind (second_factor, ...). */
+  exception_kind?:
+    | "second_factor"
+    | "unexpected_dialog"
+    | "session_expired"
+    | "timeout_or_stall"
+    | "possible_duplicate"
+    | "ambiguous_record"
+    | "cannot_complete";
+  source: { type: "item" | "approval" | "switch" | "exception"; id: string; [key: string]: unknown };
   workflow_id: string;
   task_name: string;
   label: string;

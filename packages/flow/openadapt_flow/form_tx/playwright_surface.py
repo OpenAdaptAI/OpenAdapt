@@ -1210,6 +1210,10 @@ class PlaywrightFormSurface:
         self._scoped_to_page_only = _scoped_to_page_only
 
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs: dict[int, tuple[int, bool, str]] = {}
+        self._confirmed_page_mutation_seqs: dict[int, str] = {}
+        self._failed_page_mutation_seqs: set[int] = set()
         self._total_mutation_count = 0
         self._all_time_raw_mutations = 0
         self._inflight_mutation_ids: set[int] = set()
@@ -1226,7 +1230,8 @@ class PlaywrightFormSurface:
         try:
             self._event_target.on("request", self._on_request)
             self._event_target.on("requestfinished", self._on_request_done)
-            self._event_target.on("requestfailed", self._on_request_done)
+            self._event_target.on("requestfailed", self._on_request_failed)
+            self._event_target.on("response", self._on_response)
         except Exception:
             pass
 
@@ -1238,6 +1243,35 @@ class PlaywrightFormSurface:
     def mutation_count(self) -> int:
         """Count of non-ignored state-changing HTTP requests since construction/reset."""
         return self._mutation_count
+
+    @property
+    def confirmed_mutation_count(self) -> int:
+        """Non-ignored state-changing requests the server answered with 2xx/3xx."""
+        return self._confirmed_mutation_count
+
+    def has_confirmed_mutation_since(
+        self, since_mutation_count: int, *, url_patterns: Sequence[str] = ()
+    ) -> bool:
+        """Return True iff this page started a non-ignored mutation after
+        ``since_mutation_count`` that succeeded with 2xx/3xx (matching
+        ``url_patterns`` when given) and no own-page mutation started after it
+        failed."""
+        if any(seq > since_mutation_count for seq in self._failed_page_mutation_seqs):
+            return False
+        confirmed_paths = [
+            path
+            for seq, path in self._confirmed_page_mutation_seqs.items()
+            if seq > since_mutation_count
+        ]
+        if not confirmed_paths:
+            return False
+        if url_patterns:
+            return any(
+                path == pat or fnmatch.fnmatchcase(path, pat)
+                for path in confirmed_paths
+                for pat in url_patterns
+            )
+        return True
 
     @property
     def total_mutation_count(self) -> int:
@@ -1254,6 +1288,10 @@ class PlaywrightFormSurface:
 
     def reset_mutation_counter(self) -> None:
         self._mutation_count = 0
+        self._confirmed_mutation_count = 0
+        self._pending_mutation_seqs.clear()
+        self._confirmed_page_mutation_seqs.clear()
+        self._failed_page_mutation_seqs.clear()
         self._total_mutation_count = 0
 
     def _detach(self) -> None:
@@ -1263,21 +1301,25 @@ class PlaywrightFormSurface:
         for ev_name, cb in (
             ("request", self._on_request),
             ("requestfinished", self._on_request_done),
-            ("requestfailed", self._on_request_done),
+            ("requestfailed", self._on_request_failed),
+            ("response", self._on_response),
         ):
             try:
                 self._event_target.remove_listener(ev_name, cb)
             except Exception:
                 pass
 
-    def _request_belongs_to_surface(self, request: Any) -> bool:
-        if not self._scoped_to_page_only:
-            return True
+    def _request_belongs_to_own_page(self, request: Any) -> bool:
         try:
             frame = request.frame
             return frame is not None and frame.page == self._page
         except Exception:
             return False
+
+    def _request_belongs_to_surface(self, request: Any) -> bool:
+        if not self._scoped_to_page_only:
+            return True
+        return self._request_belongs_to_own_page(request)
 
     def _is_ignored_mutation_path(self, url_path: str) -> bool:
         for pat in self._ignored_mutation_paths:
@@ -1303,9 +1345,43 @@ class PlaywrightFormSurface:
         req_path = urlsplit(raw_url).path or "/"
         if not self._is_ignored_mutation_path(req_path):
             self._mutation_count += 1
+            self._pending_mutation_seqs[id(request)] = (
+                self._mutation_count,
+                self._request_belongs_to_own_page(request),
+                req_path,
+            )
 
     def _on_request_done(self, request: Any) -> None:
         self._inflight_mutation_ids.discard(id(request))
+        self._pending_mutation_seqs.pop(id(request), None)
+
+    def _on_request_failed(self, request: Any) -> None:
+        self._inflight_mutation_ids.discard(id(request))
+        entry = self._pending_mutation_seqs.pop(id(request), None)
+        if entry is not None:
+            seq, is_own_page, _path = entry
+            if is_own_page:
+                self._failed_page_mutation_seqs.add(seq)
+
+    def _on_response(self, response: Any) -> None:
+        """Count state-changing requests started on this surface that succeeded."""
+        try:
+            request = response.request
+            if self._detached or not self._request_belongs_to_surface(request):
+                return
+            status = int(response.status)
+        except Exception:
+            return
+        entry = self._pending_mutation_seqs.get(id(request))
+        if entry is None:
+            return
+        seq, is_own_page, req_path = entry
+        if 200 <= status < 400:
+            self._confirmed_mutation_count += 1
+            if is_own_page:
+                self._confirmed_page_mutation_seqs[seq] = req_path
+        elif is_own_page:
+            self._failed_page_mutation_seqs.add(seq)
 
     def _is_page_closed(self) -> bool:
         try:

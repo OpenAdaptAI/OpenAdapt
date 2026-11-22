@@ -293,6 +293,7 @@ def test_live_reconciler_native_host_handoff_and_saved_readback(tmp_path):
             summary_landmark_selector="#summary",
             field_readbacks=(summary,),
         ),
+        commit_url_patterns=("/save",),
     )
     dossier = InputDossier(
         dossier_id="synthetic-dossier", request_id="synthetic-request"
