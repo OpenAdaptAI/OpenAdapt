@@ -379,7 +379,8 @@ actions the executor reported.
 - The proxy only sees calls that use `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL`.
   On macOS a direct connection from a client with a hard-coded base URL is
   blocked; elsewhere, with `--allow-unenforced-egress`, it is not (unless it
-  honours `HTTPS_PROXY`), and `flight` warns when no call came through.
+  honours `HTTPS_PROXY`). A run whose agent writes no `usage.json` is then
+  refused (see the egress block).
 - Scrubbing blinds the agent to the personal data it scrubs (see above).
 - OpenAI models are not in the price table, so their cost is recorded as
   unknown.

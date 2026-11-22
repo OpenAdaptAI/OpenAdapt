@@ -594,3 +594,75 @@ def test_a_look_alike_cancel_is_held_but_a_declared_non_ascii_label_passes():
     tool = LabelledTool({(10, 20): "button Zurück"})
     GatedComputer(tool, RefuseGate(), safe_labels=["Zurück"])(**_click())
     assert tool.calls == [_click()]
+
+
+# -- review round: drags, other keys, typing, unknown actions ---------------
+
+
+def test_a_drag_onto_or_from_a_button_is_held():
+    tool = LabelledTool({(10, 20): "textbox Note", (90, 20): "button Save"})
+    computer = GatedComputer(tool, RefuseGate())
+    drag = {
+        "action": "left_click_drag",
+        "start_coordinate": [10, 20],
+        "coordinate": [90, 20],
+    }
+    assert isinstance(computer(**drag), HeldResult)
+    assert tool.calls == []
+    tool = LabelledTool({(10, 20): "textbox Note", (90, 20): "textbox Other"})
+    GatedComputer(tool, RefuseGate())(**drag)
+    assert len(tool.calls) == 1
+
+
+def test_the_openai_wrapper_gates_drags_and_every_click_button():
+    class Cua(FakeCuaComputer):
+        def drag(self, path):
+            self.calls.append(("drag", (path,)))
+
+        def label_at(self, x, y):
+            return "button Submit"
+
+    inner = Cua()
+    computer = GatedComputerCall(inner, RefuseGate())
+    computer.drag([{"x": 1, "y": 2}, {"x": 30, "y": 40}])
+    computer.click(5, 5, button="back")
+    assert inner.calls == []
+
+
+@pytest.mark.parametrize(
+    "focused,key,held",
+    [
+        ("button Remove row", "Delete", True),
+        ("textbox Name", "Delete", False),
+        ("button Save", "ctrl+d", True),
+        ("textarea Note", "ctrl+Return", True),
+        ("button Open", "Tab", False),
+        ("button Open", "ctrl+c", False),
+        ("button Next", "x", True),
+        ("textbox Name", "x", False),
+    ],
+)
+def test_other_keys_fail_closed(focused, key, held):
+    class Focused(FakeTool):
+        def focused_label(self) -> str:
+            return focused
+
+    tool = Focused()
+    GatedComputer(tool, RefuseGate())(action="key", text=key)
+    assert (tool.calls == []) is held
+
+
+def test_typing_into_a_focused_button_is_held():
+    class Focused(FakeTool):
+        def focused_label(self) -> str:
+            return "button Save"
+
+    tool = Focused()
+    GatedComputer(tool, RefuseGate())(action="type", text="ok go")
+    assert tool.calls == []
+
+
+def test_an_action_the_translators_refuse_is_held():
+    tool = FakeTool()
+    GatedComputer(tool, RefuseGate())(action="left_mouse_down")
+    assert tool.calls == []
