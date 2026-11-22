@@ -147,7 +147,8 @@ def test_a_code_screen_opens_a_card_and_blocks_saves_until_a_person_answers(
     assert watch.observe(CODE_SCREEN) is None
     assert watch.observe(FORM_SCREEN) is None
     assert watch.observe(CODE_SCREEN) == "second_factor"
-    assert watch.stop_code() == 0
+    # Ending now would leave that new card unanswered: not a clean exit.
+    assert watch.stop_code() == 6
     events = [e["event"] for e in _events(tmp_path)]
     assert events[:5] == [
         "watch_started",
@@ -251,3 +252,142 @@ def test_a_bad_run_ref_is_refused_before_anything_runs(tmp_path: Path, roster) -
             verify=roster_verifier(key_dir, public_hex(key)),
             app_origin=APP,
         )
+
+
+class _Page:
+    def __init__(self, snapshot: dict) -> None:
+        self.snapshot = snapshot
+
+    def is_closed(self) -> bool:
+        return False
+
+    def evaluate(self, _js: str) -> dict:
+        return self.snapshot
+
+    def wait_for_timeout(self, _ms: int) -> None:
+        return None
+
+
+class _Cdp:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict]] = []
+
+    def send(self, method: str, params: dict | None = None) -> dict:
+        self.sent.append((method, params or {}))
+        return {}
+
+
+def _paused(path: str = "/api/encounter", rid: str = "1") -> dict:
+    return {
+        "requestId": rid,
+        "request": {"url": APP + path, "method": "POST", "headers": {}},
+        "resourceType": "Fetch",
+    }
+
+
+def _decisions(cdp: _Cdp) -> list[str]:
+    return [m for m, _ in cdp.sent if m.startswith("Fetch.")]
+
+
+def test_a_registry_it_cannot_write_refuses_every_write_and_exits_4(
+    tmp_path: Path, roster
+) -> None:
+    """The reviewer's probe: the card can't be written (an unwritable folder
+    stands in for a full disk). Nothing paused or later goes on."""
+
+    import os
+
+    from openadapt_flow.exceptions.watch import _decide, run_loop
+
+    key_dir, key = roster
+    root = tmp_path / "registry"
+    root.mkdir()
+    os.chmod(root, 0o500)
+    try:
+        watch = ExceptionWatch(
+            ExceptionRegistry(root),
+            run_ref="watch-run",
+            verify=roster_verifier(key_dir, public_hex(key)),
+            app_origin=APP,
+            events_path=tmp_path / "run" / WATCH_EVENTS,
+        )
+        cdp = _Cdp()
+        run_loop(watch, _Page(CODE_SCREEN), cdp, [], poll_s=0.01, max_s=5)
+        assert watch.failed is not None and watch.lost == "watch_failed"
+        assert watch.stop_code() == 4
+        # A save paused at that moment, and any later one, is refused.
+        for rid in ("2", "3"):
+            assert _decide(cdp, watch, _paused(rid=rid)) is True
+        assert _decisions(cdp) == ["Fetch.fulfillRequest", "Fetch.fulfillRequest"]
+        assert all(
+            p["responseCode"] == 409 for m, p in cdp.sent if m.startswith("Fetch.")
+        )
+        lost = [e for e in _events(tmp_path) if e["event"] == "watch_lost"]
+        assert lost and lost[0]["reason"] == "watch_failed"
+    finally:
+        os.chmod(root, 0o700)
+
+
+def test_a_request_it_cannot_classify_is_refused(tmp_path: Path, roster) -> None:
+    from openadapt_flow.exceptions.watch import _decide
+
+    watch = _watch(tmp_path, roster)
+    cdp = _Cdp()
+    assert _decide(cdp, watch, {"requestId": "1", "request": "not a request"}) is True
+    [(method, params)] = cdp.sent
+    assert method == "Fetch.fulfillRequest" and params["responseCode"] == 409
+
+
+def test_ending_with_a_card_open_is_not_a_clean_exit(tmp_path: Path, roster) -> None:
+    from openadapt_flow.exceptions.watch import run_loop
+
+    watch = _watch(tmp_path, roster)
+    run_loop(watch, _Page(CODE_SCREEN), _Cdp(), [], poll_s=0.01, max_s=0.2)
+    assert watch.card is not None and watch.lost is None
+    assert watch.stop_code() == 6
+
+
+def test_cmd_watch_turns_any_failure_into_a_documented_code(
+    tmp_path: Path, roster, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    import argparse
+
+    from openadapt_flow.exceptions import cli, watch
+
+    config = tmp_path / "guard.yaml"
+    (tmp_path / "verify.yaml").write_text(
+        "schema_version: openadapt.verify/v1\n"
+        "verifier: {kind: rest, base_url: 'http://127.0.0.1:8123',"
+        " records_path: /api/records}\n"
+        "effects: [{kind: record_written, match: {note: {param: note}}}]\n"
+    )
+    config.write_text(
+        "schema_version: openadapt.agent-guard/v1\n"
+        f"app_url: {APP}/\n"
+        "verify: verify.yaml\n"
+    )
+
+    def broken(w: ExceptionWatch, **_kw: object) -> int:
+        w.observe(CODE_SCREEN)  # a card is open ...
+        raise ValueError("something the loop didn't expect")  # ... and it breaks
+
+    monkeypatch.setattr(watch, "watch_browser", broken)
+    key_dir, key = roster
+    args = argparse.Namespace(
+        approver_root=public_hex(key),
+        key_dir=str(key_dir),
+        config=str(config),
+        run_ref="watch-run",
+        run_dir=str(tmp_path / "run"),
+        registry=str(tmp_path / "registry"),
+        task_id=None,
+        deadline_s=None,
+        stall_s=None,
+        cdp="http://127.0.0.1:9",
+        page_url=None,
+        poll_s=0.5,
+        max_s=None,
+    )
+    assert cli.cmd_watch(args) == 4
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["lost"] == "watch_failed" and out["failed"] == "ValueError"

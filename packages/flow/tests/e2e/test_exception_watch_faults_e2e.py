@@ -197,7 +197,8 @@ def test_an_aborted_paused_save_does_not_end_the_watch(
         "the block",
     )
     assert hits == []
-    assert watch.stop_code() == 0
+    assert watch.lost is None
+    assert watch.stop_code() == 6  # it would end with the card unanswered
 
 
 def test_a_dropped_session_while_a_card_is_open_exits_loudly(

@@ -63,6 +63,8 @@ __all__ = [
     "SNAPSHOT_JS",
     "WATCH_EVENTS",
     "ExceptionWatch",
+    "WatchAttachError",
+    "run_loop",
     "watch_browser",
 ]
 
@@ -163,8 +165,12 @@ class ExceptionWatch:
         #: until the page stops showing them.
         self._settled: set[str] = set()
         self._save_seen = False
-        #: Why the watch lost the tab (``session_lost``, ``browser_lost``).
+        #: Why the watch lost the tab (``session_lost``, ``browser_lost``,
+        #: ``watch_failed``).
         self.lost: Optional[str] = None
+        #: The watch's own error (detection, opening a card, polling): from
+        #: then on every write is refused until the process exits.
+        self.failed: Optional[str] = None
         self._screen: Optional[str] = None
         self._last_change: Optional[float] = None
         self._last_request: Optional[float] = None
@@ -189,7 +195,9 @@ class ExceptionWatch:
     def holding(self) -> bool:
         """Saves are blocked right now."""
 
-        return self.card is not None or self.stopped is not None
+        return (
+            self.card is not None or self.stopped is not None or self.failed is not None
+        )
 
     def on_request(self, request: Any) -> Optional[str]:
         """``None``: let the paused request go on; else the block's code."""
@@ -200,9 +208,12 @@ class ExceptionWatch:
         kind = classify(request, app_origin=self.app_origin, not_saves=self.not_saves)
         if kind == "save":
             self._save_seen = True
-        if kind not in ("save", "other_origin") or not self.holding:
+        if self.failed is not None and kind != "read":
+            code = "watch_failed"  # the watch broke: no write goes on
+        elif kind not in ("save", "other_origin") or not self.holding:
             return None
-        code = "exception_open" if self.card is not None else "exception_stopped"
+        else:
+            code = "exception_open" if self.card is not None else "exception_stopped"
         self._log(
             "request_blocked",
             code=code,
@@ -298,25 +309,48 @@ class ExceptionWatch:
         )
         import sys
 
+        what = (
+            "every write is refused until the watch exits; after that the "
+            "watch holds nothing"
+            if self.failed is not None
+            else "saves are no longer held by the watch"
+        )
         print(
-            f"exceptions: WATCH LOST ({reason}): saves are no longer held by "
-            "the watch"
+            f"exceptions: WATCH LOST ({reason}): {what}"
             + ("; a card was open or the run was stopped" if self.holding else ""),
             file=sys.stderr,
             flush=True,
         )
 
+    def fail(self, error: BaseException) -> None:
+        """The watch's own code failed: refuse every write from here on."""
+
+        self.failed = type(error).__name__
+        self.mark_lost("watch_failed")
+
     def stop_code(self) -> int:
-        """The watch's exit code: 0; 3 when an answer stopped the run; 4 when
-        the watch lost the tab's session while it was holding saves (a card
-        open or a stop); 5 when it lost the session otherwise."""
+        """The watch's exit code:
+
+        * 0: the tab closed or the watch was stopped with nothing open;
+        * 3: an answer stopped the run;
+        * 4: the watch failed or lost the tab's session while holding saves
+          (a card open, a stop, or its own error);
+        * 5: it lost the session with nothing held;
+        * 6: it ended (``max_s``, a signal) with a card still unanswered.
+        """
 
         if self.lost is not None:
             return 4 if self.holding else 5
-        return 3 if self.stopped is not None else 0
+        if self.stopped is not None:
+            return 3
+        return 6 if self.card is not None else 0
 
 
 # -- the browser loop ------------------------------------------------------------
+
+
+class WatchAttachError(RuntimeError):
+    """The watch found no tab to watch (nothing was held)."""
 
 
 def _blocked_body(code: str) -> str:
@@ -327,6 +361,9 @@ def _blocked_body(code: str) -> str:
         "Nothing was sent. Wait, then save again."
         if code == "exception_open"
         else "A person stopped this run. Nothing was sent; write nothing more."
+        if code == "exception_stopped"
+        else "OpenAdapt can't check this request. Nothing was sent; stop and "
+        "tell a person."
     )
     payload = json.dumps({"error": code, "message": message})
     return base64.b64encode(payload.encode("utf-8")).decode("ascii")
@@ -342,8 +379,8 @@ def _decide(cdp: Any, watch: ExceptionWatch, params: Mapping[str, Any]) -> bool:
     request_id = str(params.get("requestId") or "")
     try:
         code = watch.on_request(HeldRequest.from_cdp(params))
-    except Exception:  # noqa: BLE001 - the watch can't tell: block while holding
-        code = "exception_open" if watch.holding else None
+    except Exception:  # noqa: BLE001 - can't tell what it is: refuse it
+        code = "request_unclassified"
     try:
         if code is None:
             cdp.send("Fetch.continueRequest", {"requestId": request_id})
@@ -409,9 +446,15 @@ def run_loop(
                 snapshot = page.evaluate(SNAPSHOT_JS)
             except Exception:  # noqa: BLE001 - navigating: look again
                 snapshot = None
-            if isinstance(snapshot, Mapping):
-                watch.observe(snapshot)
-            watch.poll()
+            try:
+                if isinstance(snapshot, Mapping):
+                    watch.observe(snapshot)
+                watch.poll()
+            except Exception as exc:  # noqa: BLE001 - fail closed
+                # Detection, the card, or its answer broke (a full disk, an
+                # unwritable registry): refuse every write until exit.
+                watch.fail(exc)
+                return
             next_look = time.monotonic() + poll_s
         if stop is not None and stop():
             return
@@ -470,7 +513,7 @@ def watch_browser(
                     browser.close()
                     browser = None
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("no tab on the app's origin to watch")
+                    raise WatchAttachError("no tab on the app's origin to watch")
                 time.sleep(0.25)
         cdp = page.context.new_cdp_session(page)
         paused: list[Mapping[str, Any]] = []
@@ -488,6 +531,8 @@ def watch_browser(
             on_attached()
         try:
             run_loop(watch, page, cdp, paused, poll_s=poll_s, max_s=max_s, stop=stop)
+        except Exception as exc:  # noqa: BLE001 - fail closed, then exit 4
+            watch.fail(exc)
         finally:
             # Paused requests go on when the session detaches: decide them first.
             while paused and _decide(cdp, watch, paused.pop(0)):

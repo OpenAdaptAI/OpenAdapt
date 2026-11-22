@@ -200,6 +200,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     from openadapt_flow.exceptions.watch import (
         WATCH_EVENTS,
         ExceptionWatch,
+        WatchAttachError,
         watch_browser,
     )
 
@@ -249,15 +250,21 @@ def cmd_watch(args: argparse.Namespace) -> int:
                 flush=True,
             ),
         )
-    except RuntimeError as exc:
+    except WatchAttachError as exc:
         print(f"exceptions: {exc}", file=sys.stderr)
         return 2
+    except BaseException as exc:  # noqa: BLE001 - any failure is loud, never 1
+        if isinstance(exc, (SystemExit, KeyboardInterrupt)) and not watch.holding:
+            raise
+        watch.fail(exc if isinstance(exc, Exception) else RuntimeError(str(exc)))
+        code = watch.stop_code()
     print(
         json.dumps(
             {
                 "run_ref": run_ref,
                 "stopped": watch.stopped,
                 "lost": watch.lost,
+                "failed": watch.failed,
                 "outcomes": [o.wire() for o in watch.outcomes],
             }
         )

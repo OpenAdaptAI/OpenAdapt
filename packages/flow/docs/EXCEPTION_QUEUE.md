@@ -79,15 +79,22 @@ the app's origin that `not_saves` doesn't list, or a write to another origin.
 Reads go through, and so does a write `not_saves` lists, so list the form a
 person submits a code or a sign-in with, and they can do it in the live
 browser. A verified `continue` or `done_by_person` lifts the hold. Any other
-outcome (a stop answer, an expiry, an answer off the roster) blocks every
-later save for the rest of the run, and the watch exits 3.
+outcome (a stop answer, an expiry, an answer off the roster) makes the watch
+block every later save for as long as it runs, and it exits 3 when it ends.
+A watch that ends (`--max-s` or a signal) with a card still unanswered exits
+6.
 
 The watch holds saves only while it is attached. A request the page aborts
 while it is paused, or a block the browser refuses, is logged
 (`request_decision_failed`) and the watch goes on. If the watch loses its own
 DevTools session while the tab is still open, it says so on stderr, writes
 `watch_lost` to `exceptions_watch.jsonl`, reports `"lost"` in its output and
-exits 4 when it was holding saves (a card open or a stop) or 5 otherwise. A
+exits 4 when it was holding saves (a card open or a stop) or 5 otherwise.
+If the watch's own code fails (a detector, opening a card on a full disk or
+an unwritable registry, reading an answer), it refuses every paused and later
+write with a `409` until it exits, logs `watch_lost` with reason
+`watch_failed`, and exits 4. A request it can't classify is refused, not let
+through. A
 dead watch blocks nothing from then on, so run it beside the guard
 (`openadapt-flow guard`): the guard still holds each save until the record on
 screen is the right one, and reads it back.
