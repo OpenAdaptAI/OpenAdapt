@@ -505,6 +505,11 @@ def test_mailbox_sources_have_no_listener_or_win_agent() -> None:
     bind_src = (root / "runner_bind.py").read_text(encoding="utf-8")
     assert "wait_seconds" not in bind_src
     assert "def claim" not in bind_src
+    # The one listener is the opt-in A2A adapter (`serve --a2a`), in its own
+    # module, bound to loopback unless the operator names an address.
+    a2a_src = (root / "a2a_server.py").read_text(encoding="utf-8")
+    assert 'DEFAULT_HOST = "127.0.0.1"' in a2a_src
+    assert "needs --a2a-token-file" in a2a_src
     mailbox_src = (root / "mailbox.py").read_text(encoding="utf-8")
     assert 'method="POST"' in mailbox_src
     assert 'method="GET"' not in mailbox_src

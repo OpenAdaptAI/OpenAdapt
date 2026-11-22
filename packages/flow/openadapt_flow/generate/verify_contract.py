@@ -310,7 +310,7 @@ class ChildGroup:
     #: the row is still expected, with this value empty.
     co_owners: list[str] = field(default_factory=list)
     #: The app adds this row with an empty value when the task leaves the
-    #: parameter out (Redmine's custom field values): expected then too.
+    #: parameter out (such as custom field values): expected then too.
     empty_when_null: bool = False
     #: The parameter whose value the rows hold (``children`` may hold a
     #: second group for it: a call's lead is its parent and an attendee).
@@ -653,7 +653,7 @@ def _pick(
     """The best location. Among tied ones: the one whose column is named
     like the parameter (``stage``, not ``last_stage``); else drop a column
     that is only a copy of another tied one, lower-cased or digits only, in
-    every row of its table (EspoCRM's ``email_address.lower``,
+    every row of its table (such as a normalized lowercase email column,
     ``phone_number.numeric``)."""
 
     loc, tied = best(found)
@@ -1370,7 +1370,7 @@ def _touched_rows(
 
 def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
     """A whole-number column of the main record that went up by exactly one
-    in every update demonstration (Redmine's ``lock_version``)."""
+    in every update demonstration (such as an optimistic ``lock_version``)."""
 
     t = schema.tables[plan.anchor]
     if len(t.primary_key) != 1:
@@ -1411,8 +1411,8 @@ def _audit_source(
 ) -> Optional[dict[str, Any]]:
     """A table that gained, in every update demonstration, a row naming the
     main record (a column holding its key) and the acting user (a column
-    holding the actor's id): the app's own audit trail of saves (EspoCRM's
-    ``action_history_record``, Dolibarr's agenda events)."""
+    holding the actor's id): the app's own audit trail of saves (such as
+    audit history or agenda event tables)."""
 
     t = schema.tables[plan.anchor]
     if len(t.primary_key) != 1 or not actor_values:
@@ -4160,6 +4160,29 @@ def choose(
         if _exists(found, params):
             return found, params
         return _load_for(base / files[entry["mode"]], params), params
+    from openadapt_flow.generate.compositional import compose_and_admit
+
+    params = {**flatten(values), **dict(extra_params or {})}
+    try:
+        composed = compose_and_admit(
+            manifest_path, entry, given, lists, cleared, params
+        )
+    except ValueError as exc:
+        raise GenerateError(
+            f"composed {kind} contract for fields {sorted(given)} failed admission: {exc}"
+        ) from exc
+    if composed is not None:
+        write_doc, found_doc, _ = composed
+        base = manifest_path.parent
+        found = _load_doc_for(found_doc, params, base_dir=base, name=f"{kind}.found")
+        if _exists(found, params):
+            return found, params
+        return (
+            _load_doc_for(
+                write_doc, params, base_dir=base, name=f"{kind}.{entry['mode']}"
+            ),
+            params,
+        )
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
@@ -4226,6 +4249,24 @@ def _field_set(
         demos_sha256=str(inputs["demos_sha256"]),
     )
     return dict(result["files"])
+
+
+def _load_doc_for(
+    doc: Mapping[str, Any],
+    params: Mapping[str, Any],
+    *,
+    base_dir: Path,
+    name: str,
+) -> Any:
+    """Load an in-memory contract document with the same phone-shape rule as :func:`_load_for`."""
+
+    from openadapt_flow.generate.compositional import apply_phone_rule
+    from openadapt_flow.verifier import Contract
+
+    prepared = apply_phone_rule(doc, params)
+    contract = Contract.from_dict(prepared, name=name)
+    contract.config._base_dir = Path(base_dir).resolve()
+    return contract
 
 
 def _load_for(path: Path, params: Mapping[str, Any]) -> Any:

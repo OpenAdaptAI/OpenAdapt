@@ -510,6 +510,29 @@ class SkillCache:
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
         compiler, key = self._compiler(prompt, params)
+        served = self._compiled(compiler, key, params, started)
+        if served is not None:
+            return served
+        return self._first_run(compiler, key, prompt, params, agent, started)
+
+    def replay_only(self, prompt: str, params: Mapping[str, Any]) -> Optional[SkillRun]:
+        """The admitted program, or the hold, and never a first run.
+
+        None when the task has no admitted program (a miss): no agent is
+        involved, so a miss can't start one.
+        """
+
+        started = time.monotonic()
+        compiler, key = self._compiler(prompt, params)
+        return self._compiled(compiler, key, params, started)
+
+    def _compiled(
+        self,
+        compiler: Any,
+        key: dict[str, Any],
+        params: Mapping[str, Any],
+        started: float,
+    ) -> Optional[SkillRun]:
         if (compiler.dir / _STOP_FILE).exists() or (
             compiler.dir / _STOP_FILE
         ).is_symlink():
@@ -539,7 +562,7 @@ class SkillCache:
                     stream.flush()
                     os.fsync(stream.fileno())
             return self._held(compiler, started)
-        return self._first_run(compiler, key, prompt, params, agent, started)
+        return None
 
     def _held(self, compiler: Any, started: float) -> SkillRun:
         try:
@@ -1005,6 +1028,8 @@ class TaskRecordCheck:
     removed: int
     #: Writes to other records during the run (other users, other tasks).
     outside_run: dict[str, int] = field(default_factory=dict)
+    #: False when either read failed: the zero counts then prove nothing.
+    readable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -1032,7 +1057,7 @@ def task_record_check(
 
     if before is None or after is None:
         return TaskRecordCheck(
-            False, ["the system of record could not be read"], 0, 0, 0
+            False, ["the system of record could not be read"], 0, 0, 0, readable=False
         )
 
     def mine(record: Optional[Mapping[str, Any]]) -> bool:

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "openadapt",
+    "quickstart",
+    "--break-it"
+  ],
+  "term_program": "Apple_Terminal",
+  "cols": 250,
+  "exit_code": 0,
+  "seconds": 39.7
+}
