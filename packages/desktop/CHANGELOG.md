@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.31.0 (2026-11-21)
+
+### Features
+
+- **guard**: approval card values beside the source, ReadbackProvider seam, per-save ledger row
+- **desktop**: The stop queue now lists exception cards from any run on this
+  computer that asked a person (a one-time code prompt, an unexpected dialog,
+  a sign-in partway through, a stall, a possible duplicate, an ambiguous
+  record, a task it can't finish), not only Desktop's own runs. Each card is
+  answered on its own, here or on a paired phone, and the answer is signed
+  with the same approver key as other stop answers.
+
+### Bug Fixes
+
+- **guard**: The phone's approval card for an agent's save no longer says
+  "exactly what will be saved" when OpenAdapt could not read the values the
+  save sends. It shows the task's value beside each sent value, flags a
+  difference, and says plainly when the sent values were not read or checked.
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes
