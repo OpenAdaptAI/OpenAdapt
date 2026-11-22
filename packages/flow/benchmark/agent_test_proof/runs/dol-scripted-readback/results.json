@@ -175,7 +175,7 @@
     "silent_corruption": 0
    }
   },
-  "cost_usd": 0.0
+  "model_calls": 0
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=8&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=9&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=17&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -383,7 +380,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=15&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -449,7 +445,6 @@
     "final_text": "RESULT: NOT DONE read-back: List\\((\\d+)\\) gave 2, not 1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -514,7 +509,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=18&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -579,7 +573,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9681/contact/card.php?id=19&save_lastsearch_values=1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -640,7 +633,6 @@
     "final_text": "RESULT: NOT DONE read-back: List\\((\\d+)\\) gave 0, not 1"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -702,7 +694,6 @@
     "final_text": "RESULT: NOT DONE read-back: missing ['555-0203']"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -768,7 +759,6 @@
     "final_text": "RESULT: NOT DONE read-back: missing ['555-0204']"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [

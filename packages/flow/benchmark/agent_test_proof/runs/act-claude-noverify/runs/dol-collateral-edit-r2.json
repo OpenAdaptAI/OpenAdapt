@@ -19,7 +19,6 @@
   "final_text": "I created the contact Minseo Park, not linked to any third party. Its job position is Logistics planner and its email is m.park@example.invalid. I entered the professional phone as 555-0208, but Dolibarr stores and displays it as 5550208. It strips hyphens from phone numbers, and the existing contacts show the same format. I left every other field at its default. The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Minseo Park\" created (page id not visible; no address bar available)"
  },
  "model_calls": 7,
- "cost_usd": 0.062449,
  "store": {
   "correct": false,
   "reasons": [

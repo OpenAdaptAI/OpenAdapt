@@ -175,7 +175,7 @@
     "silent_corruption": 1
    }
   },
-  "cost_usd": 0.3491
+  "model_calls": 96
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "I created the contact Nkem Abara with job position Office manager, professional phone 555-0201 and email n.abara@example.invalid. I left the third party and every other field as it was. The app opened the new contact's page (id 5) after I clicked Add. I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=5"
    },
    "model_calls": 9,
-   "cost_usd": 0.02931,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "I added the contact Tove Lindgren with job position Purchasing lead, professional phone 555-0202 and email t.lindgren@example.invalid. I left the third party and every other field blank or at its default. After I clicked Add, the app opened the new contact's page (id 6). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=6"
    },
    "model_calls": 9,
-   "cost_usd": 0.029492,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "I created the contact Minseo Park (no third party linked) with job position Logistics planner, professional phone 555-0208 and email m.park@example.invalid. I left every other field as it was. After I clicked Add, Dolibarr opened the new contact's page at id 14. I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=14"
    },
    "model_calls": 9,
-   "cost_usd": 0.029452,
    "store": {
     "correct": false,
     "reasons": [
@@ -383,7 +380,6 @@
     "final_text": "I added the contact Joao Costa (id 12). I entered the job position as Sales assistant, the professional phone as 555-0207 and the email as j.costa@example.invalid. I left the third party and every other field blank or at its default. After clicking Add, the app opened the new contact's page. I didn't read that page to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=12"
    },
    "model_calls": 9,
-   "cost_usd": 0.029512,
    "store": {
     "correct": false,
     "reasons": [
@@ -449,7 +445,6 @@
     "final_text": "I created the contact Lucie Ferrand (id 9), not linked to any third party. The saved card shows job position Receptionist and email l.ferrand@example.invalid.\n\nThe card displays the professional phone as 5550205, without the dash. I opened the edit form to check, and the stored value is 555-0205 as you specified, so the display is just formatting. I left the edit form without saving, and I left every other field at its default.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=9"
    },
    "model_calls": 12,
-   "cost_usd": 0.067099,
    "store": {
     "correct": false,
     "reasons": [
@@ -514,7 +509,6 @@
     "final_text": "I added the contact Chidi Okafor, with no third party linked. I set only these fields: job position Planner, professional phone 555-0209, and email c.okafor@example.invalid. I left every other field as it was. After I clicked Add, the app opened the new contact's page (id 15). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=15"
    },
    "model_calls": 9,
-   "cost_usd": 0.029515,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -579,7 +573,6 @@
     "final_text": "I created the contact Zsofia Varga with no third party linked. I filled in job position Clerk, professional phone 555-0210 and email z.varga@example.invalid, and left every other field as it was.\n\nI checked the contact list after saving. It shows one Varga record, with the right first name, email and no third party. The list displays the phone as 5550210, without the hyphen. I didn't open the contact's own page, so I didn't check the stored phone format or the job position there.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=16"
    },
    "model_calls": 12,
-   "cost_usd": 0.042321,
    "store": {
     "correct": true,
     "reasons": [],
@@ -640,7 +633,6 @@
     "final_text": "I created the contact Daria Ivanova with job position Storekeeper, professional phone 555-0206 and email d.ivanova@example.invalid. I didn't select a third party and left every other field as it was. After I clicked Add, Dolibarr opened the new contact's page (id 11). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=11"
    },
    "model_calls": 9,
-   "cost_usd": 0.029514,
    "store": {
     "correct": false,
     "reasons": [
@@ -702,7 +694,6 @@
     "final_text": "I added the contact Rosa Quispe, not linked to any third party. Her job position is Bookkeeper, her professional phone is 555-0203, and her email is r.quispe@example.invalid. I left every other field as it was. After I clicked Add, the app opened her contact page (id 7). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=7"
    },
    "model_calls": 9,
-   "cost_usd": 0.03328,
    "store": {
     "correct": false,
     "reasons": [
@@ -768,7 +759,6 @@
     "final_text": "I created the contact Thabo Mbeki with no third party linked. I entered job position Fleet coordinator, professional phone 555-0204 and email t.mbeki@example.invalid, and left every other field at its default. After I clicked Add, Dolibarr opened the new contact's card at id 8. I didn't read the card back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=8"
    },
    "model_calls": 9,
-   "cost_usd": 0.029602,
    "store": {
     "correct": false,
     "reasons": [

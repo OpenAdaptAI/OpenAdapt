@@ -19,7 +19,6 @@
   "final_text": "I created the contact Nkem Abara with job position Office manager, professional phone 555-0201 and email n.abara@example.invalid. I left the third party and every other field as it was. The app opened the new contact's page (id 5) after I clicked Add. I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=5"
  },
  "model_calls": 9,
- "cost_usd": 0.02931,
  "store": {
   "correct": true,
   "reasons": [],

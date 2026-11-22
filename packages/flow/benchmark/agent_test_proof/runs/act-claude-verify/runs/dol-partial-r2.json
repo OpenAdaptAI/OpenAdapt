@@ -19,7 +19,6 @@
   "final_text": "I added the contact Rosa Quispe, with no third party, job position Bookkeeper, professional phone 555-0203 and email r.quispe@example.invalid. The contact list now shows four contacts: the three original ones, unchanged, plus one Rosa Quispe.\n\nThe phone didn't save when I first created the contact, so I opened it, re-entered 555-0203 and saved again. Dolibarr stores and shows it as 5550203, with the hyphen dropped. The three existing contacts show their phone numbers the same way.\n\nRESULT: DONE Contact \"Rosa Quispe\" created in Third-parties > Contacts/Addresses (Dolibarr 20.0.2); I did not capture the record's id or URL."
  },
  "model_calls": 14,
- "cost_usd": 0.128653,
  "store": {
   "correct": true,
   "reasons": [],

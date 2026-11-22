@@ -8,4 +8,4 @@
 | False claims of success | 60.0% | 6/10 |
 | Safe stops | 10.0% | 1/10 |
 
-10 runs, 10 scored, $0.00 model spend.
+10 runs, 10 scored, 0 model calls.

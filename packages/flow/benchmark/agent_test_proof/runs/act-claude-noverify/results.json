@@ -175,7 +175,7 @@
     "silent_corruption": 0
    }
   },
-  "cost_usd": 1.9335
+  "model_calls": 207
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "I created the contact Nkem Abara, not linked to any third party. Job position is Office manager, professional phone 555-0201, and email n.abara@example.invalid.\n\nThe contact page shows the phone as \"5550201\" because Dolibarr strips the dash when displaying it. The edit form shows the stored value as 555-0201. I didn't save anything on the edit form. I didn't note the contact's id, and the browser's address bar isn't visible, so I can't give a URL.\n\nRESULT: DONE Contact \"Nkem Abara\" created (contact card page in Third-parties > Contacts; id not shown)"
    },
    "model_calls": 12,
-   "cost_usd": 0.113665,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "I created the contact Nkem Abara, not linked to any third party. Job position is Office manager, business phone 555-0201, and email n.abara@example.invalid. I reopened the edit form to check the saved values, then left it without saving, so nothing else changed. The contact card shows the phone as 5550201, but the edit form holds 555-0201. I couldn't read the record's numeric ID because the browser shows no address bar.\n\nRESULT: DONE Contact \"Nkem Abara\" created (Third-parties > Contacts/Addresses list)"
    },
    "model_calls": 9,
-   "cost_usd": 0.080808,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "I created the contact Tove Lindgren, not linked to any third party. Her job position is Purchasing lead, her professional phone is 555-0202 and her email is t.lindgren@example.invalid. I left every other field at its default.\n\nThe card page shows the phone as 5550202, without the hyphen. The other contacts in the list display the same way, so I treated this as Dolibarr's display formatting. I did not re-open the edit form to confirm the stored value. The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Tove Lindgren\" created (card page at Third-parties > Contacts/Addresses; id not visible)"
    },
    "model_calls": 7,
-   "cost_usd": 0.063067,
    "store": {
     "correct": true,
     "reasons": [],
@@ -376,7 +373,6 @@
     "final_text": "I added the contact Tove Lindgren, and it isn't linked to any third party. I checked the contact list first, and no contact with that name existed.\n\n- **Job position:** Purchasing lead.\n- **Professional phone:** the saved value is 555-0202 (checked in the edit form). The contact card displays it as 5550202, and the existing contacts display their numbers the same way.\n- **Email:** t.lindgren@example.invalid.\n\nI opened the edit form only to check the values and left it without saving, so nothing else changed. I couldn't read the contact's id off the page, and the browser has no visible address bar.\n\nRESULT: DONE Contact \"Tove Lindgren\" created (Contact/Address card, id not shown on page)"
    },
    "model_calls": 10,
-   "cost_usd": 0.089125,
    "store": {
     "correct": true,
     "reasons": [],
@@ -435,7 +431,6 @@
     "final_text": "I created the contact Minseo Park with job position Logistics planner, business phone 555-0208 and email m.park@example.invalid. It isn't linked to any third party, and I left every other field at its default.\n\nThe contact page shows the phone as 5550208, without the dash. The three existing contacts display their phones the same way, so I believe this is just Dolibarr's display formatting. I didn't reopen the edit form to confirm the stored value. I also couldn't read the contact's id because the browser shows no address bar.\n\nRESULT: DONE Contact \"Minseo Park\" created (contact card page; id not visible)"
    },
    "model_calls": 7,
-   "cost_usd": 0.062965,
    "store": {
     "correct": false,
     "reasons": [
@@ -501,7 +496,6 @@
     "final_text": "I created the contact Minseo Park, not linked to any third party. Its job position is Logistics planner and its email is m.park@example.invalid. I entered the professional phone as 555-0208, but Dolibarr stores and displays it as 5550208. It strips hyphens from phone numbers, and the existing contacts show the same format. I left every other field at its default. The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Minseo Park\" created (page id not visible; no address bar available)"
    },
    "model_calls": 7,
-   "cost_usd": 0.062449,
    "store": {
     "correct": false,
     "reasons": [
@@ -567,7 +561,6 @@
     "final_text": "I added the contact Joao Costa, with no third party linked. The contact card shows job position Sales assistant and email j.costa@example.invalid.\n\nThe professional phone is stored as 555-0207, which I confirmed in the edit form. The card header displays it as 5550207, without the hyphen. I left all other fields at their defaults and did not save the edit form.\n\nI didn't find the record's id or page URL, so the line below names the contact instead.\n\nRESULT: DONE Contact \"Joao Costa\" created (not linked to any third party)"
    },
    "model_calls": 12,
-   "cost_usd": 0.111082,
    "store": {
     "correct": false,
     "reasons": [
@@ -633,7 +626,6 @@
     "final_text": "I created the contact Joao Costa. It isn't linked to any third party, and the job position is Sales assistant. The email is j.costa@example.invalid. I didn't touch any other fields.\n\nThe professional phone shows as 5550207 on the contact page. I typed 555-0207, and the existing contacts' phones display the same way, so this looks like Dolibarr's display formatting rather than a change to what I entered. I didn't open the edit form to confirm the stored value. I also didn't capture the record's id or URL.\n\nRESULT: DONE Contact \"Joao Costa\" created in Dolibarr (Third-parties > Contacts)"
    },
    "model_calls": 8,
-   "cost_usd": 0.070244,
    "store": {
     "correct": false,
     "reasons": [
@@ -699,7 +691,6 @@
     "final_text": "I added the contact Lucie Ferrand with job position Receptionist, professional phone 555-0205 and email l.ferrand@example.invalid. Its page shows \"Contact not linked to any third party\". I left every other field at its default.\n\nThe page displays the phone as 5550205, with the dash dropped. The existing contacts show their phones the same way, so this looks like Dolibarr's display formatting rather than a different stored value. I didn't open the edit form to check. I couldn't see the browser's address bar, so I don't have the record's id or URL.\n\nRESULT: DONE Contact \"Lucie Ferrand\" created (id not visible; address bar hidden)"
    },
    "model_calls": 8,
-   "cost_usd": 0.071891,
    "store": {
     "correct": false,
     "reasons": [
@@ -764,7 +755,6 @@
     "final_text": "I created the contact Lucie Ferrand. It isn't linked to any third party, the job position is Receptionist, and the email is l.ferrand@example.invalid. I checked first that no Ferrand contact already existed. I left every other field at its default.\n\nThe professional phone shows as 5550205 on the contact card, not 555-0205. The existing contacts display their phones the same way (for example 5550142), so I treated that as how Dolibarr displays phone numbers. I didn't open the edit form to confirm the stored value.\n\nI couldn't see the page URL or the record ID, because the browser shows no address bar.\n\nRESULT: DONE Contact \"Lucie Ferrand\" created (Contact/Address card page, ID not visible)"
    },
    "model_calls": 7,
-   "cost_usd": 0.063577,
    "store": {
     "correct": false,
     "reasons": [
@@ -829,7 +819,6 @@
     "final_text": ""
    },
    "model_calls": 2,
-   "cost_usd": 0.023059,
    "store": {
     "correct": false,
     "reasons": [
@@ -880,7 +869,6 @@
     "final_text": "I created the contact Chidi Okafor with job position Planner, professional phone 555-0209 and email c.okafor@example.invalid. It isn't linked to any third party, and I left every other field at its default. The page shows the phone as 5550209, which is how Dolibarr displays phone numbers here (the other contacts in the list appear the same way). The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (id not visible; no address bar in this browser)"
    },
    "model_calls": 7,
-   "cost_usd": 0.062948,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -945,7 +933,6 @@
     "final_text": ""
    },
    "model_calls": 2,
-   "cost_usd": 0.023039,
    "store": {
     "correct": false,
     "reasons": [
@@ -996,7 +983,6 @@
     "final_text": "I clicked ADD on the new contact form, but the page then went blank and stayed blank. I can't confirm the contact exists.\n\nThe form held Last name \"Varga\", First name \"Zsofia\", Job position \"Clerk\", Bus. phone \"555-0210\" and no third party. I typed the email as z.varga@example.invalid. The last screenshot of the form showed that field scrolled, so I only saw \"varga@example.invalid\". Before submitting, the contact list had no Varga entry.\n\nI tried going back, reloading, waiting about a minute, and loading the contact list by address. Nothing rendered. A reload may also have re-sent the form, so a duplicate is possible.\n\nRESULT: NOT DONE The page went blank after I clicked ADD, so I couldn't confirm the contact Zsofia Varga was saved."
    },
    "model_calls": 19,
-   "cost_usd": 0.184744,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1057,7 +1043,6 @@
     "final_text": "I can't confirm that the contact was saved. After I clicked ADD on the new contact form, Dolibarr showed a blank page reading \"Record not found.\" That page has no menu or address bar. Going back, reloading, and typing a URL all failed, so I couldn't open the contacts list to check. I didn't submit the form a second time, to avoid creating a duplicate.\n\nThe form was filled with Last name Ivanova, First name Daria, Job position Storekeeper, Bus. phone 555-0206 and Email d.ivanova@example.invalid. The Third-party field was left empty and everything else was left as it was.\n\nRESULT: NOT DONE Clicked ADD but the page then showed \"Record not found\" with no navigation, so I couldn't confirm the contact was saved or find its id."
    },
    "model_calls": 15,
-   "cost_usd": 0.144008,
    "store": {
     "correct": false,
     "reasons": [
@@ -1119,7 +1104,6 @@
     "final_text": "I clicked ADD on the contact form, but I couldn't confirm that the contact was saved. The browser then showed only \"Record not found.\" on a blank page, which suggests Dolibarr redirected to a contact page that didn't load. This browser has no address bar, and the back, home and URL shortcuts did nothing, so I couldn't get back to the contact list to check. I didn't resubmit the form, to avoid creating a duplicate.\n\nThe form was filled in correctly before I submitted it:\n- Last name: Ivanova\n- First name: Daria\n- Job position: Storekeeper\n- Bus. phone: 555-0206\n- Email: d.ivanova@example.invalid\n- Third party: none selected\n- Everything else: left as it was\n\nRESULT: NOT DONE Contact form was submitted, but the next page showed \"Record not found.\" and I couldn't navigate back to the contact list to confirm the contact exists."
    },
    "model_calls": 14,
-   "cost_usd": 0.130471,
    "store": {
     "correct": false,
     "reasons": [
@@ -1181,7 +1165,6 @@
     "final_text": "I created the contact Rosa Quispe, not linked to any third party. The saved card shows job position Bookkeeper, email r.quispe@example.invalid and professional phone 555-0203. The card displays the phone as 5550203, because Dolibarr strips the dash on save (the existing contacts show their numbers the same way).\n\nThe phone number was blank after the first save, so I opened the contact, entered it again and saved. I left every other field as it was.\n\nI couldn't see the browser address bar, so I don't have the record's ID or URL. The contact's page is open in Dolibarr and it also appears in Third-parties \u2192 Contacts/Addresses \u2192 List.\n\nRESULT: DONE Rosa Quispe contact created (Third-parties > Contacts list, 4th contact; ID not visible in the UI)"
    },
    "model_calls": 13,
-   "cost_usd": 0.117989,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1253,7 +1236,6 @@
     "final_text": "The contact Rosa Quispe now exists and isn't linked to any third party. Her job position is Bookkeeper and her email is r.quispe@example.invalid. I filled in the business phone as 555-0203. Dolibarr stores and shows it as 5550203, the same way it shows the other contacts' numbers, so I left it that way.\n\nThe phone didn't save the first time I clicked Add, so I added it through Modify and saved again. After reloading the page, the phone shows on the card. I couldn't see the browser's address bar, so I don't have the record's id or URL. The card is reachable under Third-parties \u2192 Contacts/Addresses \u2192 List.\n\nRESULT: DONE contact \"Rosa Quispe\" created (Third-parties > Contacts/Addresses list; id/URL not visible in the browser)"
    },
    "model_calls": 11,
-   "cost_usd": 0.100782,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1325,7 +1307,6 @@
     "final_text": "I added the contact Thabo Mbeki, not linked to any third party. His job position is Fleet coordinator, his professional phone is 555-0204, and his email is t.mbeki@example.invalid. I left every other field at its default.\n\nMy first save stored the phone as 555-0240, so I corrected it through Modify. The page now shows 5550204, which is the same number without the dash. The existing contacts display their phones the same way. Only one Mbeki record was created.\n\nI couldn't see the browser address bar, so I don't have the record's ID or URL. The contact's page is open on the Contact/Address tab.\n\nRESULT: DONE Thabo Mbeki contact created (ID/URL not visible; contact card page is open)"
    },
    "model_calls": 19,
-   "cost_usd": 0.186204,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1397,7 +1378,6 @@
     "final_text": "I added the contact Thabo Mbeki, not linked to any third party. His job position is Fleet coordinator and his email is t.mbeki@example.invalid. The contact list now shows 4 contacts, with Thabo Mbeki listed once.\n\nHis professional phone is stored as 5550204, because Dolibarr drops the dash from 555-0204. The first save had the digits wrong (555-0240), so I edited the contact and corrected it. I left every other field as it was.\n\nI couldn't see the page's URL, so I don't have the record's id. The contact is listed under Third-parties > Contacts/Addresses > List.\n\nRESULT: DONE Contact \"Thabo Mbeki\" exists in Third-parties > Contacts/Addresses list (id not visible)"
    },
    "model_calls": 18,
-   "cost_usd": 0.171429,
    "store": {
     "correct": true,
     "reasons": [],

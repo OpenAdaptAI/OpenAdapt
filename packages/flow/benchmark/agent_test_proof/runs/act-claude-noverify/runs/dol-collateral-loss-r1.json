@@ -19,7 +19,6 @@
   "final_text": "I added the contact Joao Costa, with no third party linked. The contact card shows job position Sales assistant and email j.costa@example.invalid.\n\nThe professional phone is stored as 555-0207, which I confirmed in the edit form. The card header displays it as 5550207, without the hyphen. I left all other fields at their defaults and did not save the edit form.\n\nI didn't find the record's id or page URL, so the line below names the contact instead.\n\nRESULT: DONE Contact \"Joao Costa\" created (not linked to any third party)"
  },
  "model_calls": 12,
- "cost_usd": 0.111082,
  "store": {
   "correct": false,
   "reasons": [

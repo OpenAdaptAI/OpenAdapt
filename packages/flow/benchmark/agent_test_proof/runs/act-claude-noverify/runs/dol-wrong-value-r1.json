@@ -19,7 +19,6 @@
   "final_text": "I added the contact Thabo Mbeki, not linked to any third party. His job position is Fleet coordinator, his professional phone is 555-0204, and his email is t.mbeki@example.invalid. I left every other field at its default.\n\nMy first save stored the phone as 555-0240, so I corrected it through Modify. The page now shows 5550204, which is the same number without the dash. The existing contacts display their phones the same way. Only one Mbeki record was created.\n\nI couldn't see the browser address bar, so I don't have the record's ID or URL. The contact's page is open on the Contact/Address tab.\n\nRESULT: DONE Thabo Mbeki contact created (ID/URL not visible; contact card page is open)"
  },
  "model_calls": 19,
- "cost_usd": 0.186204,
  "store": {
   "correct": true,
   "reasons": [],

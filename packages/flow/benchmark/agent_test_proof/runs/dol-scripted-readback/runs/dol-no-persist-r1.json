@@ -19,7 +19,6 @@
   "final_text": "RESULT: NOT DONE read-back: List\\((\\d+)\\) gave 0, not 1"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

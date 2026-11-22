@@ -175,7 +175,7 @@
     "silent_corruption": 1
    }
   },
-  "cost_usd": 0.0
+  "model_calls": 0
  },
  "runs": [
   {
@@ -200,7 +200,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -260,7 +259,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -320,7 +318,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -387,7 +384,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -454,7 +450,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -520,7 +515,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -586,7 +580,6 @@
     "final_text": "the card did not show the values"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -648,7 +641,6 @@
     "final_text": "the card did not show the values"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -711,7 +703,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -778,7 +769,6 @@
     "final_text": "saved and read the card back"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [

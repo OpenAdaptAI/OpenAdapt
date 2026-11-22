@@ -19,7 +19,6 @@
   "final_text": "Created Minseo Park with the requested details and no third-party link.\n\nRESULT: DONE Minseo Park"
  },
  "model_calls": 15,
- "cost_usd": 0.069592,
  "store": {
   "correct": false,
   "reasons": [

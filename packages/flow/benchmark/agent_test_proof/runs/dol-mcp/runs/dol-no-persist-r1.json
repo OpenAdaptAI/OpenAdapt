@@ -19,7 +19,6 @@
   "final_text": "I created the contact Daria Ivanova with job position Storekeeper, professional phone 555-0206 and email d.ivanova@example.invalid. I didn't select a third party and left every other field as it was. After I clicked Add, Dolibarr opened the new contact's page (id 11). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=11"
  },
  "model_calls": 9,
- "cost_usd": 0.029514,
  "store": {
   "correct": false,
   "reasons": [

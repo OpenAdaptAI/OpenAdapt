@@ -15,6 +15,19 @@
  "run_id": "20261121T071300Z-cc9769",
  "repetitions": 1,
  "scored": 10,
+ "scenario_ids": [
+  "dol-clean-1",
+  "dol-clean-2",
+  "dol-collateral-edit",
+  "dol-collateral-loss",
+  "dol-duplicate",
+  "dol-late-revert",
+  "dol-lost-response",
+  "dol-no-persist",
+  "dol-partial",
+  "dol-wrong-value"
+ ],
+ "faults_scored": 8,
  "rates": {
   "completed_correctly": {
    "count": 3,
@@ -42,5 +55,5 @@
    "rate": 0.4
   }
  },
- "results_sha256": "sha256:e850e230a62a5439cb9a1f46d8882a33061f25440c360ea5bf8282eb9b3cf26c"
+ "results_sha256": "sha256:33a3a024082298a430cbaad78bfe895c06159776546d80d2a98e08ef783b978c"
 }

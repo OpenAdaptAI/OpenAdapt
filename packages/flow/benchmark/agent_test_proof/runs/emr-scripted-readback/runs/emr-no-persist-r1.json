@@ -25,7 +25,6 @@
   "final_text": "RESULT: NOT DONE read-back: missing ['Rafael', 'Ortega', '2000-06-30', 'r.ortega@example.invalid', '3 Aspen Way']"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

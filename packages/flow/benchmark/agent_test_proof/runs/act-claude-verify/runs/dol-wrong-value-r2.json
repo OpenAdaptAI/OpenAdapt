@@ -19,7 +19,6 @@
   "final_text": "I added the contact Thabo Mbeki with job position Fleet coordinator, business phone 555-0204 and email t.mbeki@example.invalid. He isn't linked to any third party, and I left every other field as it was.\n\nThe first save stored the phone as 555-0240 because of a typing glitch. I corrected it and saved again. The contact page and the list now show 5550204 (Dolibarr drops the dash in the display).\n\nIn the contact list, Thabo Mbeki appears exactly once, and the list has gone from 3 contacts to 4. The other three (Oskar Brandt, Samir Haddad, Elena Novak) still show their original phones and emails.\n\nI didn't open the three existing contacts' own pages, so I only checked the fields the list shows.\n\nRESULT: DONE I didn't capture the contact's ID or URL. The record is Thabo Mbeki in the Contacts/Addresses list."
  },
  "model_calls": 18,
- "cost_usd": 0.177983,
  "store": {
   "correct": true,
   "reasons": [],

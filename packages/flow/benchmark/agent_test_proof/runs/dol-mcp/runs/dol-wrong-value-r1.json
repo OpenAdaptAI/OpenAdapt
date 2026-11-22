@@ -19,7 +19,6 @@
   "final_text": "I created the contact Thabo Mbeki with no third party linked. I entered job position Fleet coordinator, professional phone 555-0204 and email t.mbeki@example.invalid, and left every other field at its default. After I clicked Add, Dolibarr opened the new contact's card at id 8. I didn't read the card back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=8"
  },
  "model_calls": 9,
- "cost_usd": 0.029602,
  "store": {
   "correct": false,
   "reasons": [

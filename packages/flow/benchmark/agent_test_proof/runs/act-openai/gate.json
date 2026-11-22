@@ -1,6 +1,6 @@
 {
  "verdict": "fail",
- "baseline_sha256": "sha256:a2597398f8b234d78b6efa665dfa0723b858911752c56fe88c4bcea51f14b220",
+ "baseline_sha256": "sha256:af27b15750a56f6115c42ea8600b8db2f61caaf35d904c43f9ebc15f08cd8a29",
  "baseline_agent": {
   "id": "claude-cu/claude-sonnet-5-5",
   "kind": "claude-cu",

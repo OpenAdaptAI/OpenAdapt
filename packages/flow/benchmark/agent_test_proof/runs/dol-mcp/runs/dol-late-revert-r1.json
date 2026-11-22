@@ -19,7 +19,6 @@
   "final_text": "I added the contact Chidi Okafor, with no third party linked. I set only these fields: job position Planner, professional phone 555-0209, and email c.okafor@example.invalid. I left every other field as it was. After I clicked Add, the app opened the new contact's page (id 15). I didn't read that page back to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=15"
  },
  "model_calls": 9,
- "cost_usd": 0.029515,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

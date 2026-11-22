@@ -19,7 +19,6 @@
   "final_text": "I added Chidi Okafor as a new contact with no third party, and the contact list now shows 4 records. Exactly one is Chidi Okafor, and the other three (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged.\n\nI filled in only these fields:\n- **Job position:** Planner\n- **Business phone:** I typed 555-0209, but Dolibarr saves and shows it as 5550209. The existing contacts' phones display the same way (digits only).\n- **Email:** c.okafor@example.invalid\n\nThe browser shows no address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (list now shows 4 contacts; page URL and id not visible)"
  },
  "model_calls": 9,
- "cost_usd": 0.081866,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

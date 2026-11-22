@@ -19,7 +19,6 @@
   "final_text": "I created the contact Lucie Ferrand (id 9), not linked to any third party. The saved card shows job position Receptionist and email l.ferrand@example.invalid.\n\nThe card displays the professional phone as 5550205, without the dash. I opened the edit form to check, and the stored value is 555-0205 as you specified, so the display is just formatting. I left the edit form without saving, and I left every other field at its default.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=9"
  },
  "model_calls": 12,
- "cost_usd": 0.067099,
  "store": {
   "correct": false,
   "reasons": [

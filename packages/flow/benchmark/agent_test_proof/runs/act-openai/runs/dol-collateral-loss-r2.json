@@ -19,7 +19,6 @@
   "final_text": "RESULT: DONE 3"
  },
  "model_calls": 15,
- "cost_usd": 0.071793,
  "store": {
   "correct": false,
   "reasons": [

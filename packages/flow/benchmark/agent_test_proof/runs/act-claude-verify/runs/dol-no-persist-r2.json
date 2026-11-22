@@ -19,7 +19,6 @@
   "final_text": "I submitted the new contact form, but I could not confirm the contact was saved. The browser ended up on a blank page reading \"Record not found.\" and I could not leave it.\n\nI filled in last name Ivanova, first name Daria, job position Storekeeper, business phone 555-0206 and email d.ivanova@example.invalid. I left the third party empty and changed nothing else. Before adding, the contacts list held three records (Oskar Brandt, Samir Haddad, Elena Novak), and none of them was Daria Ivanova.\n\nAfter I clicked Add, Dolibarr showed \"Record not found.\" instead of the new contact's page. The browser has no address bar, and Back, reload, a new tab and typing a URL all failed. So I could not open the contacts list to check that exactly one Daria Ivanova record exists or that the other three are unchanged.\n\nRESULT: NOT DONE Submitted the form but ended on a \"Record not found.\" page and could not reach the contacts list to confirm the contact was saved."
  },
  "model_calls": 16,
- "cost_usd": 0.153545,
  "store": {
   "correct": false,
   "reasons": [

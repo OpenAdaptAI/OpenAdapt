@@ -19,7 +19,6 @@
   "final_text": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify that the contact was created."
  },
  "model_calls": 11,
- "cost_usd": 0.051228,
  "store": {
   "correct": false,
   "reasons": [

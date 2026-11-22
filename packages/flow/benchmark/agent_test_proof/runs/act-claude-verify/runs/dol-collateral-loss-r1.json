@@ -19,7 +19,6 @@
   "final_text": "I created the Joao Costa contact, but Elena Novak, who was on the contact list before, has since vanished from it. I didn't touch her record. I didn't delete or edit her, and my only edit screen was opened and left without saving.\n\nThe new contact is saved with:\n- **Name:** Joao Costa, not linked to any third party\n- **Job position:** Sales assistant\n- **Professional phone:** 555-0207\n- **Email:** j.costa@example.invalid\n- **Everything else:** left blank or at its default\n\nIt appears exactly once on the contact list.\n\nBefore I added Joao, the list held three contacts: Oskar Brandt, Samir Haddad and Elena Novak. After saving, it holds Oskar Brandt, Joao Costa and Samir Haddad. Searching for \"Novak\" returns no record under either the Open or Closed status. I can't restore her from here, so the check that no other records changed fails.\n\nRESULT: NOT DONE Contact Joao Costa was created correctly, but existing contact Elena Novak is no longer on the contact list and I can't restore her."
  },
  "model_calls": 19,
- "cost_usd": 0.190441,
  "store": {
   "correct": false,
   "reasons": [

@@ -19,7 +19,6 @@
   "final_text": "RESULT: DONE 4"
  },
  "model_calls": 15,
- "cost_usd": 0.070543,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

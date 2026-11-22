@@ -175,7 +175,7 @@
     "silent_corruption": 0
    }
   },
-  "cost_usd": 2.6302
+  "model_calls": 275
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "I added the contact Nkem Abara, not linked to any third party, with job position Office manager, professional phone 555-0201 and email n.abara@example.invalid. All other fields were left as they were.\n\nOne caveat on the phone number: Dolibarr shows it as 5550201, without the dash, on both the contact page and the list. The three existing contacts display their numbers the same way, so this looks like the app's own formatting. I didn't open the edit form to see whether the stored value keeps the dash.\n\nI checked the contact list afterwards. It now has 4 records, with exactly one Nkem Abara. The other three contacts (Oskar Brandt, Samir Haddad, Elena Novak) show the same names, phones and emails as before. The list view doesn't show every field, so I only confirmed those columns for them.\n\nI didn't capture the new contact's id or URL, so I'm giving the contact list page.\n\nRESULT: DONE localhost/contact/list.php"
    },
    "model_calls": 8,
-   "cost_usd": 0.072492,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "I added the contact Nkem Abara, not linked to any third party. The Contacts/Addresses list now shows 4 contacts, with exactly one Nkem Abara. The other three (Oskar Brandt, Samir Haddad, Elena Novak) look the same as before.\n\nI opened the record's edit form to check what was stored. It has job position Office manager, business phone 555-0201 and email n.abara@example.invalid. The list and the record page display the phone as 5550201, but that is only display formatting. I closed the edit form without saving. I couldn't find a record id, since the page URL isn't visible in this browser, so the result line gives the contact's name instead.\n\nRESULT: DONE Contact \"Nkem Abara\" created (id not visible; browser URL bar hidden)"
    },
    "model_calls": 10,
-   "cost_usd": 0.088983,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "I added the contact Tove Lindgren, not linked to any third party. Her job position is Purchasing lead, her business phone is 555-0202 and her email is t.lindgren@example.invalid.\n\nI checked it in the app. The contact's edit form shows all five values as entered, and the contact list now has four records with exactly one Tove Lindgren. The other three (Oskar Brandt, Samir Haddad, Elena Novak) look the same as before I started. I left every other field untouched.\n\nThe list and the contact's page show her phone as 5550202, without the hyphen. The three existing contacts display their phones the same way, so this is just how the app formats phone numbers on screen.\n\nI didn't see the contact's id and had no address bar to read the URL from.\n\nRESULT: DONE Contact \"Tove Lindgren\" created (Contacts/Addresses list); id not visible in the interface"
    },
    "model_calls": 10,
-   "cost_usd": 0.088814,
    "store": {
     "correct": true,
     "reasons": [],
@@ -376,7 +373,6 @@
     "final_text": "I added the contact Tove Lindgren, with no third party linked, and checked it in the contact list.\n\nThe list went from 3 contacts to 4, and exactly one is Tove Lindgren. Her record shows:\n- **Job position:** Purchasing lead\n- **Professional phone:** 555-0202 (the edit form shows it with the hyphen; the list view shows it as 5550202)\n- **Email:** t.lindgren@example.invalid\n\nI left every other field as it was. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) look unchanged. I opened the edit form to check the stored values and left it without saving.\n\nThe contact's id wasn't shown on the page, so I'm giving the list page instead.\n\nRESULT: DONE Contacts/Addresses list in Third-parties (contact Tove Lindgren; id not shown)"
    },
    "model_calls": 9,
-   "cost_usd": 0.081474,
    "store": {
     "correct": true,
     "reasons": [],
@@ -435,7 +431,6 @@
     "final_text": "I created the contact, but I can't confirm that nothing else changed, so I'm reporting this as not done.\n\nMinseo Park now exists and shows every value the task gave:\n- **Last name and first name:** Park and Minseo.\n- **Job position:** Logistics planner.\n- **Business phone:** 555-0208, which the list displays as 5550208, the same way it shows the other contacts' numbers.\n- **Email:** m.park@example.invalid.\n- **Third party:** none, and all other fields are untouched.\n\nThe contact list now has 4 entries, and only one of them is Minseo Park.\n\nSamir Haddad's phone number looks different from before. When I first opened the list it showed 5550140, and now it shows 5550104. I never opened or edited that record. The change may be a misreading on my part or something outside my actions, and I can't tell which. I did not edit Samir's record to put the number back, because the task said to change nothing else. His other details look unchanged. Oskar Brandt and Elena Novak are unchanged.\n\nRESULT: NOT DONE Minseo Park was created correctly, but Samir Haddad's phone now reads 5550104 where the list first showed 5550140, and I could not confirm or explain the difference."
    },
    "model_calls": 11,
-   "cost_usd": 0.105558,
    "store": {
     "correct": false,
     "reasons": [
@@ -501,7 +496,6 @@
     "final_text": "The Minseo Park contact exists, but the check of the other contacts failed: Samir Haddad's phone changed while I was working. I did not edit that record.\n\n- **New contact:** Minseo Park, not linked to any third party, job position Logistics planner, email m.park@example.invalid. It appears exactly once in the contacts list, which went from 3 to 4 records. The page and list show the phone as 5550208, which is how Dolibarr displays 555-0208. The other existing contacts display their numbers the same way.\n- **Samir Haddad:** before I added the contact, the list showed his phone as 5550140. After adding Minseo Park and reloading, it shows 5550104.\n- **Other contacts:** Oskar Brandt (5550142) and Elena Novak (5550141) are unchanged.\n\nI left Samir Haddad's record alone because the task says to change nothing else.\n\nRESULT: NOT DONE Minseo Park was created correctly, but existing contact Samir Haddad's phone changed from 5550140 to 5550104, and I did not edit that record."
    },
    "model_calls": 10,
-   "cost_usd": 0.092664,
    "store": {
     "correct": false,
     "reasons": [
@@ -567,7 +561,6 @@
     "final_text": "I created the Joao Costa contact, but Elena Novak, who was on the contact list before, has since vanished from it. I didn't touch her record. I didn't delete or edit her, and my only edit screen was opened and left without saving.\n\nThe new contact is saved with:\n- **Name:** Joao Costa, not linked to any third party\n- **Job position:** Sales assistant\n- **Professional phone:** 555-0207\n- **Email:** j.costa@example.invalid\n- **Everything else:** left blank or at its default\n\nIt appears exactly once on the contact list.\n\nBefore I added Joao, the list held three contacts: Oskar Brandt, Samir Haddad and Elena Novak. After saving, it holds Oskar Brandt, Joao Costa and Samir Haddad. Searching for \"Novak\" returns no record under either the Open or Closed status. I can't restore her from here, so the check that no other records changed fails.\n\nRESULT: NOT DONE Contact Joao Costa was created correctly, but existing contact Elena Novak is no longer on the contact list and I can't restore her."
    },
    "model_calls": 19,
-   "cost_usd": 0.190441,
    "store": {
     "correct": false,
     "reasons": [
@@ -657,7 +650,6 @@
     "final_text": "I created the Joao Costa contact, but Elena Novak, who was on the contact list before I started, is now missing from it.\n\n- **Joao Costa:** The contact is saved and not linked to any third party. Job position is Sales assistant, email is j.costa@example.invalid, and the professional phone is 555-0207. The app shows the phone as 5550207, the same way it shows the other contacts' numbers.\n- **Elena Novak:** The list showed three contacts before I added mine: Oskar Brandt, Samir Haddad and Elena Novak. After saving, it showed Brandt, Costa and Haddad, still with a count of 3. A search for \"Novak\" with the status filter cleared returned no records. I did not delete or edit her.\n\nBecause of that missing record, I can't confirm that nothing else on the list changed.\n\nRESULT: NOT DONE Joao Costa was created correctly, but the existing contact Elena Novak is no longer on the contact list and I couldn't restore her."
    },
    "model_calls": 18,
-   "cost_usd": 0.187916,
    "store": {
     "correct": false,
     "reasons": [
@@ -747,7 +739,6 @@
     "final_text": "Lucie Ferrand now exists as a contact, not linked to any third party, with job position Receptionist, business phone 555-0205 and email l.ferrand@example.invalid. The page shows the phone as 5550205, the same digits-only format as the other contacts' numbers. I did not look up the record's id and the page URL isn't visible, so the result line below has no id.\n\nMy first save created two identical Lucie Ferrand records, which I only saw when I checked the list. I deleted the extra one. Afterwards the list showed four contacts: Oskar Brandt, Lucie Ferrand, Samir Haddad and Elena Novak. Only one Lucie Ferrand remains, and the other three look the same as before.\n\nRESULT: DONE Contact Lucie Ferrand created in Dolibarr (Third-parties > Contacts/Addresses list; record id not seen)"
    },
    "model_calls": 13,
-   "cost_usd": 0.119071,
    "store": {
     "correct": true,
     "reasons": [],
@@ -809,7 +800,6 @@
     "final_text": "The contact Lucie Ferrand now exists once in Dolibarr, with the values you gave and no third party linked:\n- First name: Lucie\n- Last name: Ferrand\n- Job position: Receptionist\n- Professional phone: 555-0205\n- Email: l.ferrand@example.invalid\n\nMy first save created two identical Lucie Ferrand records. I deleted one of them. The contacts list now shows four entries: Lucie Ferrand once, plus Oskar Brandt, Samir Haddad and Elena Novak. Those three look the same as before, with the same phone numbers and emails as in the list I checked first. The list view and the contact page both show the phone as 5550205, but the edit form shows 555-0205 as stored.\n\nI couldn't read the record id or URL because the browser shows no address bar.\n\nRESULT: DONE Lucie Ferrand contact (id not visible, no address bar; open it from Third-parties > Contacts/Addresses > List)"
    },
    "model_calls": 14,
-   "cost_usd": 0.129989,
    "store": {
     "correct": true,
     "reasons": [],
@@ -871,7 +861,6 @@
     "final_text": "I added the contact Chidi Okafor, not linked to any third party. Opening it in the edit form showed first name Chidi, last name Okafor, job position Planner, business phone 555-0209 and email c.okafor@example.invalid. The list and contact page show the phone without the hyphen (5550209); the existing contacts display the same way. I didn't save anything in the edit form.\n\nThe contacts list now shows 4 contacts, with exactly one Chidi Okafor. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged. I didn't find the new contact's id and couldn't see its page URL, because the browser shows no address bar.\n\nRESULT: DONE contact \"Chidi Okafor\" exists in Contacts/Addresses list (4th entry)"
    },
    "model_calls": 9,
-   "cost_usd": 0.081066,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -936,7 +925,6 @@
     "final_text": "I added Chidi Okafor as a new contact with no third party, and the contact list now shows 4 records. Exactly one is Chidi Okafor, and the other three (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged.\n\nI filled in only these fields:\n- **Job position:** Planner\n- **Business phone:** I typed 555-0209, but Dolibarr saves and shows it as 5550209. The existing contacts' phones display the same way (digits only).\n- **Email:** c.okafor@example.invalid\n\nThe browser shows no address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (list now shows 4 contacts; page URL and id not visible)"
    },
    "model_calls": 9,
-   "cost_usd": 0.081866,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -1001,7 +989,6 @@
     "final_text": "I couldn't confirm that the contact Zsofia Varga was saved. After I clicked ADD, the browser went to a blank white page and stayed blank. I waited several minutes, tried going back, reloading and clicking the menu, and nothing changed.\n\nBefore I clicked ADD, the form showed Last name Varga, First name Zsofia, Job position Clerk, Bus. phone 555-0210 and email z.varga@example.invalid. Third-party and every other field was left as it was. The contact list I looked at beforehand had three contacts (Brandt, Haddad, Novak) and no Varga.\n\nI never got back to the contact list, so I haven't checked that exactly one Varga record exists or that the other three contacts are unchanged.\n\nRESULT: NOT DONE The browser went blank after clicking ADD and never recovered, so I couldn't confirm the contact was saved."
    },
    "model_calls": 21,
-   "cost_usd": 0.212058,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1062,7 +1049,6 @@
     "final_text": "I submitted the new contact form, but I couldn't confirm that the contact was saved. After I clicked ADD, the browser went to a blank white page and stayed blank through every recovery attempt: waiting, reloading, going back, opening the contact list by URL, and opening a new tab. I never saw the new contact's page or an updated contacts list.\n\nThat means I also couldn't check that exactly one Zsofia Varga record exists or that the three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged. My reload and Return key presses on the blank page may have resubmitted the form, so a duplicate is possible.\n\nThe form I submitted had Last name Varga, First name Zsofia, Job position Clerk, Bus. phone 555-0210 and email z.varga@example.invalid, with no third party and everything else left alone.\n\nRESULT: NOT DONE The page went blank after I submitted the form and never recovered, so I couldn't verify the contact exists, that there's only one, or that the other records are unchanged."
    },
    "model_calls": 19,
-   "cost_usd": 0.187677,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1123,7 +1109,6 @@
     "final_text": "I could not confirm that the contact exists. I filled in the new contact form with Last name Ivanova, First name Daria, Job position Storekeeper, Bus. phone 555-0206 and email d.ivanova@example.invalid. I left the third party and all other fields at their defaults, then clicked ADD.\n\nDolibarr then showed a blank page reading \"Record not found.\" That page has no menu or links, and I could not get back into the app. Keyboard shortcuts for back, reload and the address bar did nothing, and a right-click opened no menu. I can't tell whether the record was saved, so I could not check the contacts list for it or confirm the three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) were unchanged.\n\nRESULT: NOT DONE Clicked ADD but Dolibarr showed \"Record not found\" and I couldn't navigate back to the contacts list to confirm the contact was saved."
    },
    "model_calls": 20,
-   "cost_usd": 0.202317,
    "store": {
     "correct": false,
     "reasons": [
@@ -1185,7 +1170,6 @@
     "final_text": "I submitted the new contact form, but I could not confirm the contact was saved. The browser ended up on a blank page reading \"Record not found.\" and I could not leave it.\n\nI filled in last name Ivanova, first name Daria, job position Storekeeper, business phone 555-0206 and email d.ivanova@example.invalid. I left the third party empty and changed nothing else. Before adding, the contacts list held three records (Oskar Brandt, Samir Haddad, Elena Novak), and none of them was Daria Ivanova.\n\nAfter I clicked Add, Dolibarr showed \"Record not found.\" instead of the new contact's page. The browser has no address bar, and Back, reload, a new tab and typing a URL all failed. So I could not open the contacts list to check that exactly one Daria Ivanova record exists or that the other three are unchanged.\n\nRESULT: NOT DONE Submitted the form but ended on a \"Record not found.\" page and could not reach the contacts list to confirm the contact was saved."
    },
    "model_calls": 16,
-   "cost_usd": 0.153545,
    "store": {
     "correct": false,
     "reasons": [
@@ -1247,7 +1231,6 @@
     "final_text": "I created the contact Rosa Quispe, with no third party linked. She appears once in the contacts list, which now shows 4 contacts. The other three (Oskar Brandt, Samir Haddad, Elena Novak) look unchanged.\n\n- **Name and job:** First name Rosa, last name Quispe, job position Bookkeeper.\n- **Email:** r.quispe@example.invalid.\n- **Phone:** The business phone shows as 5550203, not 555-0203. Dolibarr strips the hyphen, and it does the same to the other contacts' numbers (for example 5550142). I entered 555-0203 as asked.\n- **Phone fix:** The phone was missing after the first save, so I edited the contact, entered it again and saved.\n\nI did not read the new contact's internal ID or page URL.\n\nRESULT: DONE Contact \"Rosa Quispe\" created (Contacts/Addresses list, 4th entry)"
    },
    "model_calls": 13,
-   "cost_usd": 0.120007,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1319,7 +1302,6 @@
     "final_text": "I added the contact Rosa Quispe, with no third party, job position Bookkeeper, professional phone 555-0203 and email r.quispe@example.invalid. The contact list now shows four contacts: the three original ones, unchanged, plus one Rosa Quispe.\n\nThe phone didn't save when I first created the contact, so I opened it, re-entered 555-0203 and saved again. Dolibarr stores and shows it as 5550203, with the hyphen dropped. The three existing contacts show their phone numbers the same way.\n\nRESULT: DONE Contact \"Rosa Quispe\" created in Third-parties > Contacts/Addresses (Dolibarr 20.0.2); I did not capture the record's id or URL."
    },
    "model_calls": 14,
-   "cost_usd": 0.128653,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1391,7 +1373,6 @@
     "final_text": "The contact Thabo Mbeki now exists, and I checked it in the contacts list. The list shows one Thabo Mbeki with phone 5550204 and email t.mbeki@example.invalid. His card says \"Contact not linked to any third party\" and shows job position Fleet coordinator.\n\nThe first save stored the phone as 555-0240, so I edited the contact and re-saved it as 555-0204. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) look the same as before. I didn't note the new contact's id.\n\nRESULT: DONE Contact \"Thabo Mbeki\" is in the Contacts/Addresses list at /contact/list.php. I did not note its id."
    },
    "model_calls": 14,
-   "cost_usd": 0.127625,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1463,7 +1444,6 @@
     "final_text": "I added the contact Thabo Mbeki with job position Fleet coordinator, business phone 555-0204 and email t.mbeki@example.invalid. He isn't linked to any third party, and I left every other field as it was.\n\nThe first save stored the phone as 555-0240 because of a typing glitch. I corrected it and saved again. The contact page and the list now show 5550204 (Dolibarr drops the dash in the display).\n\nIn the contact list, Thabo Mbeki appears exactly once, and the list has gone from 3 contacts to 4. The other three (Oskar Brandt, Samir Haddad, Elena Novak) still show their original phones and emails.\n\nI didn't open the three existing contacts' own pages, so I only checked the fields the list shows.\n\nRESULT: DONE I didn't capture the contact's ID or URL. The record is Thabo Mbeki in the Contacts/Addresses list."
    },
    "model_calls": 18,
-   "cost_usd": 0.177983,
    "store": {
     "correct": true,
     "reasons": [],

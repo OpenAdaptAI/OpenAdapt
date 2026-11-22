@@ -19,7 +19,6 @@
   "final_text": "I can't confirm that the contact was saved. After I clicked ADD on the new contact form, Dolibarr showed a blank page reading \"Record not found.\" That page has no menu or address bar. Going back, reloading, and typing a URL all failed, so I couldn't open the contacts list to check. I didn't submit the form a second time, to avoid creating a duplicate.\n\nThe form was filled with Last name Ivanova, First name Daria, Job position Storekeeper, Bus. phone 555-0206 and Email d.ivanova@example.invalid. The Third-party field was left empty and everything else was left as it was.\n\nRESULT: NOT DONE Clicked ADD but the page then showed \"Record not found\" with no navigation, so I couldn't confirm the contact was saved or find its id."
  },
  "model_calls": 15,
- "cost_usd": 0.144008,
  "store": {
   "correct": false,
   "reasons": [

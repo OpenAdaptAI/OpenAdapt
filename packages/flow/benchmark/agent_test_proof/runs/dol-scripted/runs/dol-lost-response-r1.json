@@ -19,7 +19,6 @@
   "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": true,
   "reasons": [],

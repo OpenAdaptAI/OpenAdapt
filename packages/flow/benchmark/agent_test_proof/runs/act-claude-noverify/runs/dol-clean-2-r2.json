@@ -19,7 +19,6 @@
   "final_text": "I added the contact Tove Lindgren, and it isn't linked to any third party. I checked the contact list first, and no contact with that name existed.\n\n- **Job position:** Purchasing lead.\n- **Professional phone:** the saved value is 555-0202 (checked in the edit form). The contact card displays it as 5550202, and the existing contacts display their numbers the same way.\n- **Email:** t.lindgren@example.invalid.\n\nI opened the edit form only to check the values and left it without saving, so nothing else changed. I couldn't read the contact's id off the page, and the browser has no visible address bar.\n\nRESULT: DONE Contact \"Tove Lindgren\" created (Contact/Address card, id not shown on page)"
  },
  "model_calls": 10,
- "cost_usd": 0.089125,
  "store": {
   "correct": true,
   "reasons": [],

@@ -1,6 +1,6 @@
 {
  "verdict": "fail",
- "baseline_sha256": "sha256:fb4c780e490e815d006fa4871f0c81c046c444a47ce9dbf8b81ad3aad84fd7a8",
+ "baseline_sha256": "sha256:d90f1d366052f1927181a2b2d67f402848ccfbbcdaa67677784f47150593c954",
  "baseline_agent": {
   "id": "scripted-readback",
   "kind": "scripted-readback",

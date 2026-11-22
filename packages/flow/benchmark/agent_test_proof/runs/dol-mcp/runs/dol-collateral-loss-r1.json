@@ -19,7 +19,6 @@
   "final_text": "I added the contact Joao Costa (id 12). I entered the job position as Sales assistant, the professional phone as 555-0207 and the email as j.costa@example.invalid. I left the third party and every other field blank or at its default. After clicking Add, the app opened the new contact's page. I didn't read that page to check the saved values.\n\nRESULT: DONE http://127.0.0.1:9687/contact/card.php?id=12"
  },
  "model_calls": 9,
- "cost_usd": 0.029512,
  "store": {
   "correct": false,
   "reasons": [

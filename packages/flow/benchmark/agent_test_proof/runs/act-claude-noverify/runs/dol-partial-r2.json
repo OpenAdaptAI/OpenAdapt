@@ -19,7 +19,6 @@
   "final_text": "The contact Rosa Quispe now exists and isn't linked to any third party. Her job position is Bookkeeper and her email is r.quispe@example.invalid. I filled in the business phone as 555-0203. Dolibarr stores and shows it as 5550203, the same way it shows the other contacts' numbers, so I left it that way.\n\nThe phone didn't save the first time I clicked Add, so I added it through Modify and saved again. After reloading the page, the phone shows on the card. I couldn't see the browser's address bar, so I don't have the record's id or URL. The card is reachable under Third-parties \u2192 Contacts/Addresses \u2192 List.\n\nRESULT: DONE contact \"Rosa Quispe\" created (Third-parties > Contacts/Addresses list; id/URL not visible in the browser)"
  },
  "model_calls": 11,
- "cost_usd": 0.100782,
  "store": {
   "correct": true,
   "reasons": [],

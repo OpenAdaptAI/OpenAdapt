@@ -20,7 +20,6 @@
   "final_text": "the card did not show the values"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

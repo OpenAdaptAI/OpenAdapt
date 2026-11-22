@@ -19,7 +19,6 @@
   "final_text": "I created the contact Chidi Okafor with job position Planner, professional phone 555-0209 and email c.okafor@example.invalid. It isn't linked to any third party, and I left every other field at its default. The page shows the phone as 5550209, which is how Dolibarr displays phone numbers here (the other contacts in the list appear the same way). The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Chidi Okafor\" created (id not visible; no address bar in this browser)"
  },
  "model_calls": 7,
- "cost_usd": 0.062948,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

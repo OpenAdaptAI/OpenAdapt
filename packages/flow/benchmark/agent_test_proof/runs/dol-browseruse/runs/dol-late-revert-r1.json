@@ -20,7 +20,6 @@
   "final_text": "saved and read the card back"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

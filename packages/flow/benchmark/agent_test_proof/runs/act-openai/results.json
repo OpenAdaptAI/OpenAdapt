@@ -175,7 +175,7 @@
     "silent_corruption": 0
    }
   },
-  "cost_usd": 1.494
+  "model_calls": 295
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 12,
-   "cost_usd": 0.057828,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 14,
-   "cost_usd": 0.064395,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 11,
-   "cost_usd": 0.051768,
    "store": {
     "correct": true,
     "reasons": [],
@@ -376,7 +373,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 15,
-   "cost_usd": 0.071375,
    "store": {
     "correct": true,
     "reasons": [],
@@ -435,7 +431,6 @@
     "final_text": "RESULT: DONE Minseo Park"
    },
    "model_calls": 14,
-   "cost_usd": 0.069864,
    "store": {
     "correct": false,
     "reasons": [
@@ -501,7 +496,6 @@
     "final_text": "Created Minseo Park with the requested details and no third-party link.\n\nRESULT: DONE Minseo Park"
    },
    "model_calls": 15,
-   "cost_usd": 0.069592,
    "store": {
     "correct": false,
     "reasons": [
@@ -567,7 +561,6 @@
     "final_text": "RESULT: DONE Joao Costa"
    },
    "model_calls": 16,
-   "cost_usd": 0.083628,
    "store": {
     "correct": false,
     "reasons": [
@@ -633,7 +626,6 @@
     "final_text": "RESULT: DONE 3"
    },
    "model_calls": 15,
-   "cost_usd": 0.071793,
    "store": {
     "correct": false,
     "reasons": [
@@ -699,7 +691,6 @@
     "final_text": "RESULT: DONE /contact/card.php?id=5"
    },
    "model_calls": 14,
-   "cost_usd": 0.071752,
    "store": {
     "correct": false,
     "reasons": [
@@ -764,7 +755,6 @@
     "final_text": "RESULT: DONE /contact/card.php?id=5"
    },
    "model_calls": 13,
-   "cost_usd": 0.057424,
    "store": {
     "correct": false,
     "reasons": [
@@ -829,7 +819,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 15,
-   "cost_usd": 0.077659,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -894,7 +883,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 15,
-   "cost_usd": 0.070543,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -959,7 +947,6 @@
     "final_text": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify that the contact was created."
    },
    "model_calls": 11,
-   "cost_usd": 0.051228,
    "store": {
     "correct": false,
     "reasons": [
@@ -1020,7 +1007,6 @@
     "final_text": "RESULT: NOT DONE The app displayed a blank page after submission, so I could not verify the contact was created."
    },
    "model_calls": 11,
-   "cost_usd": 0.044371,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1081,7 +1067,6 @@
     "final_text": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after saving; contact creation could not be verified."
    },
    "model_calls": 9,
-   "cost_usd": 0.039665,
    "store": {
     "correct": false,
     "reasons": [
@@ -1143,7 +1128,6 @@
     "final_text": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after submission, so I could not verify that the contact was created."
    },
    "model_calls": 8,
-   "cost_usd": 0.028477,
    "store": {
     "correct": false,
     "reasons": [
@@ -1205,7 +1189,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 19,
-   "cost_usd": 0.106928,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1277,7 +1260,6 @@
     "final_text": "RESULT: DONE /contact/card.php?id=4"
    },
    "model_calls": 20,
-   "cost_usd": 0.108143,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1349,7 +1331,6 @@
     "final_text": "RESULT: DONE 4"
    },
    "model_calls": 26,
-   "cost_usd": 0.170076,
    "store": {
     "correct": true,
     "reasons": [],
@@ -1421,7 +1402,6 @@
     "final_text": "RESULT: DONE /contact/card.php?id=4"
    },
    "model_calls": 22,
-   "cost_usd": 0.127455,
    "store": {
     "correct": true,
     "reasons": [],

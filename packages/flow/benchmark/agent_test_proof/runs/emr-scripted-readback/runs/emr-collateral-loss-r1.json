@@ -25,7 +25,6 @@
   "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

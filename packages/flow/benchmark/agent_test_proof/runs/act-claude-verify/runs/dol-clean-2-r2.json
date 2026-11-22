@@ -19,7 +19,6 @@
   "final_text": "I added the contact Tove Lindgren, with no third party linked, and checked it in the contact list.\n\nThe list went from 3 contacts to 4, and exactly one is Tove Lindgren. Her record shows:\n- **Job position:** Purchasing lead\n- **Professional phone:** 555-0202 (the edit form shows it with the hyphen; the list view shows it as 5550202)\n- **Email:** t.lindgren@example.invalid\n\nI left every other field as it was. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) look unchanged. I opened the edit form to check the stored values and left it without saving.\n\nThe contact's id wasn't shown on the page, so I'm giving the list page instead.\n\nRESULT: DONE Contacts/Addresses list in Third-parties (contact Tove Lindgren; id not shown)"
  },
  "model_calls": 9,
- "cost_usd": 0.081474,
  "store": {
   "correct": true,
   "reasons": [],

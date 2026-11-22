@@ -53,10 +53,10 @@
    "rate": 0.375
   }
  },
- "cost_usd": 0.0,
- "results_sha256": "sha256:5b4c5a62ed99b02b6f3d74ee18576c0e9e4d37708686effa0cd051c0037d14c7",
- "report_sha256": "sha256:7592331341bfb014a6d3ae0bcde72ba94879d8620fc5510163928312f4d745f7",
+ "results_sha256": "sha256:3048641ab7897cdace558917eaf1dc0cea236cedd41b3d794ed8cda8c6878880",
+ "report_sha256": "sha256:b5ead663062bd848326e6d97cb6c999adc881b6df1ad3d353d8c4f0f49101555",
  "openadapt_flow": "2.6.0",
  "gate": null,
- "signature": null
+ "signature": null,
+ "model_calls": 0
 }

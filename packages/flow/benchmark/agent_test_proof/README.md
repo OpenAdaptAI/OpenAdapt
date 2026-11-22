@@ -10,7 +10,7 @@ All data is synthetic. The receipts are unsigned (digests only).
 
 **Where it ran.** The apps ran in Docker on the lab laptop (WSL2): Dolibarr 20.0.2, OpenEMR 8.0.0.3 and EspoCRM 8.4, each with MariaDB, all pulled by image reference. The harness, the headless browser and every model call ran on the Mac. The Action ran under `act` (`-P ubuntu-latest=-self-hosted`, [`lab-gate.yml`](lab-gate.yml)), with `start-app: "false"`; it reached the lab's stack over SSH (`--docker`) and the app's port. A second, hosted run of the Action on GitHub's `ubuntu-latest` started the app on the runner itself (`.github/workflows/agent-test-action.yml`).
 
-The raw runs are in `runs/<name>/`: `results.json`, `report.html`, `receipt.json`, `gate.json`, and per-scenario evidence (the transcript and the table before and after, raw). The screenshots were left out to keep the repository small. Machine paths are replaced with `lab/` and `packages/flow/`. Model spend for all of it: $6.60 of the $40 cap (`~/.openadapt/agent-test/spend.json`).
+The raw runs are in `runs/<name>/`: `results.json`, `report.html`, `receipt.json`, `gate.json`, and per-scenario evidence (the transcript and the table before and after, raw). The screenshots were left out to keep the repository small. Machine paths are replaced with `lab/` and `packages/flow/`. Model prices are not published here; each run's `results.json` keeps its model call count.
 
 ## Every scenario, with the model-free agents
 
@@ -44,11 +44,11 @@ On EspoCRM it checks only that the name appears, so it catches nothing beyond th
 1. The same agent with that instruction removed: an agent change.
 2. OpenAI computer use (`openai-cu`, `gpt-6.1-sol`) with no added instruction: a different agent and model.
 
-| Run | Scored | Completed correctly | Silent corruption | False success | Safe stops | Gate | Spend |
+| Run | Scored | Completed correctly | Silent corruption | False success | Safe stops | Gate | Model calls |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
-| claude-cu + verify prompt (baseline) | 20 | 10 (50%) | 2 (10%) | 2 (10%) | 6 (30%) | - | $2.63 |
-| claude-cu, verify prompt removed | 18 | 8 (44%) | 3 (17%) | 7 (39%) | 2 (11%) | **FAIL** | $1.93 |
-| openai-cu | 19 | 8 (42%) | 4 (21%) | 8 (42%) | 2 (11%) | **FAIL** | $1.49 |
+| claude-cu + verify prompt (baseline) | 20 | 10 (50%) | 2 (10%) | 2 (10%) | 6 (30%) | - | 275 |
+| claude-cu, verify prompt removed | 18 | 8 (44%) | 3 (17%) | 7 (39%) | 2 (11%) | **FAIL** | 207 |
+| openai-cu | 19 | 8 (42%) | 4 (21%) | 8 (42%) | 2 (11%) | **FAIL** | 295 |
 
 **What changed.** With the instruction, Claude found both collateral changes in both repetitions and said NOT DONE: another contact's phone was changed, or a contact was deleted. It also deleted the duplicate contact and fixed the blank or wrong phone, which counts as completed correctly.
 
@@ -66,7 +66,7 @@ Without the instruction, it said done on all four collateral runs and on both du
 - The false-success rise is not noise: on the collateral and duplicate runs, false success went from 0 of 6 with the instruction to 6 of 6 without it, and 6 of 6 for OpenAI.
 - The silent-corruption rise for the first candidate is one run, which is within noise.
 
-**The $0 version.** The same check runs with `scripted-readback` as the baseline and `scripted` as the candidate. Under `act` (`runs/act-scripted`) the gate failed with silent corruption at 40% against 10%, and false success at 70% against 30%.
+**The model-free version.** The same check runs with `scripted-readback` as the baseline and `scripted` as the candidate. Under `act` (`runs/act-scripted`) the gate failed with silent corruption at 40% against 10%, and false success at 70% against 30%.
 
 On GitHub's hosted runner the self-test job passed, in 5 min 18 s for the whole job. That job covered checkout, installing from source, pulling the images, starting Dolibarr twice, 20 scenarios, and the gate failing the candidate as expected. The baseline step alone, which installs, pulls, starts Dolibarr and runs 10 scenarios, took 3 min 3 s. This is the cold-start time behind the 15-minute criterion; the run was [44880123740](https://github.com/OpenAdaptAI/OpenAdapt/actions/runs/44880123740).
 
@@ -74,11 +74,11 @@ On GitHub's hosted runner the self-test job passed, in 5 min 18 s for the whole 
 
 All three ran on Dolibarr, 10 scenarios each, through `openadapt test run`.
 
-| Agent | Completed correctly | Silent corruption | False success | Spend |
+| Agent | Completed correctly | Silent corruption | False success | Model calls |
 | --- | ---: | ---: | ---: | ---: |
-| `claude-code-mcp`: Claude Code (`claude -p --bare`, Sonnet), with only the MCP browser tools | 3 | 4 | 7 | $0.37 |
-| `browser-use:examples/cdp_agent.py`: a model-free script on the harness's browser over CDP | 2 | 4 | 6 | $0 |
-| `--agent-cmd`: a shell script that only reports NOT DONE (2 scenarios) | 0 | 0 | 0 | $0 |
+| `claude-code-mcp`: Claude Code (`claude -p --bare`, Sonnet), with only the MCP browser tools | 3 | 4 | 7 | 96 |
+| `browser-use:examples/cdp_agent.py`: a model-free script on the harness's browser over CDP | 2 | 4 | 6 | 0 |
+| `--agent-cmd`: a shell script that only reports NOT DONE (2 scenarios) | 0 | 0 | 0 | 0 |
 
 The coding agent never re-read its save ("I didn't re-read the saved card to check the values"). It said done in all 10 scenarios; 3 of those were right (the two clean ones and the lost response).
 

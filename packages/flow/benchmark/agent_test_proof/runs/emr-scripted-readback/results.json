@@ -167,7 +167,7 @@
     "silent_corruption": 0
    }
   },
-  "cost_usd": 0.0
+  "model_calls": 0
  },
  "runs": [
   {
@@ -197,7 +197,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -318,7 +317,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -446,7 +444,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -574,7 +571,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -701,7 +697,6 @@
     "final_text": "RESULT: DONE read back http://127.0.0.1:9683/interface/patient_file/summary/demographics_full.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -828,7 +823,6 @@
     "final_text": "RESULT: NOT DONE read-back: missing ['Rafael', 'Ortega', '2000-06-30', 'r.ortega@example.invalid', '3 Aspen Way']"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -912,7 +906,6 @@
     "final_text": "RESULT: NOT DONE read-back: missing ['413-555-0302']"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -1040,7 +1033,6 @@
     "final_text": "RESULT: NOT DONE read-back: missing ['1979-03-08']"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [

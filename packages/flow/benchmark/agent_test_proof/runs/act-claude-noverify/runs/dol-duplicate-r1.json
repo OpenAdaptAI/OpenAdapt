@@ -19,7 +19,6 @@
   "final_text": "I added the contact Lucie Ferrand with job position Receptionist, professional phone 555-0205 and email l.ferrand@example.invalid. Its page shows \"Contact not linked to any third party\". I left every other field at its default.\n\nThe page displays the phone as 5550205, with the dash dropped. The existing contacts show their phones the same way, so this looks like Dolibarr's display formatting rather than a different stored value. I didn't open the edit form to check. I couldn't see the browser's address bar, so I don't have the record's id or URL.\n\nRESULT: DONE Contact \"Lucie Ferrand\" created (id not visible; address bar hidden)"
  },
  "model_calls": 8,
- "cost_usd": 0.071891,
  "store": {
   "correct": false,
   "reasons": [

@@ -19,7 +19,6 @@
   "final_text": "RESULT: NOT DONE The app returned \u201cRecord not found\u201d after submission, so I could not verify that the contact was created."
  },
  "model_calls": 8,
- "cost_usd": 0.028477,
  "store": {
   "correct": false,
   "reasons": [

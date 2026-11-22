@@ -19,7 +19,6 @@
   "final_text": "RESULT: DONE read back http://127.0.0.1:9689/#Account"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

@@ -19,7 +19,6 @@
   "final_text": "I created the contact Nkem Abara, not linked to any third party. Job position is Office manager, business phone 555-0201, and email n.abara@example.invalid. I reopened the edit form to check the saved values, then left it without saving, so nothing else changed. The contact card shows the phone as 5550201, but the edit form holds 555-0201. I couldn't read the record's numeric ID because the browser shows no address bar.\n\nRESULT: DONE Contact \"Nkem Abara\" created (Third-parties > Contacts/Addresses list)"
  },
  "model_calls": 9,
- "cost_usd": 0.080808,
  "store": {
   "correct": true,
   "reasons": [],

@@ -19,7 +19,6 @@
   "final_text": "I clicked ADD on the contact form, but I couldn't confirm that the contact was saved. The browser then showed only \"Record not found.\" on a blank page, which suggests Dolibarr redirected to a contact page that didn't load. This browser has no address bar, and the back, home and URL shortcuts did nothing, so I couldn't get back to the contact list to check. I didn't resubmit the form, to avoid creating a duplicate.\n\nThe form was filled in correctly before I submitted it:\n- Last name: Ivanova\n- First name: Daria\n- Job position: Storekeeper\n- Bus. phone: 555-0206\n- Email: d.ivanova@example.invalid\n- Third party: none selected\n- Everything else: left as it was\n\nRESULT: NOT DONE Contact form was submitted, but the next page showed \"Record not found.\" and I couldn't navigate back to the contact list to confirm the contact exists."
  },
  "model_calls": 14,
- "cost_usd": 0.130471,
  "store": {
   "correct": false,
   "reasons": [

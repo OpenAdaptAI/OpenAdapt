@@ -19,7 +19,6 @@
   "final_text": "I did not attempt the task: dol-clean-1\nRESULT: NOT DONE this command agent only reports\n"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

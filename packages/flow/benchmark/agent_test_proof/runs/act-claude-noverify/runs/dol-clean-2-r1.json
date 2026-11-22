@@ -19,7 +19,6 @@
   "final_text": "I created the contact Tove Lindgren, not linked to any third party. Her job position is Purchasing lead, her professional phone is 555-0202 and her email is t.lindgren@example.invalid. I left every other field at its default.\n\nThe card page shows the phone as 5550202, without the hyphen. The other contacts in the list display the same way, so I treated this as Dolibarr's display formatting. I did not re-open the edit form to confirm the stored value. The browser shows no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE Contact \"Tove Lindgren\" created (card page at Third-parties > Contacts/Addresses; id not visible)"
  },
  "model_calls": 7,
- "cost_usd": 0.063067,
  "store": {
   "correct": true,
   "reasons": [],

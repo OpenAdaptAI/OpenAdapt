@@ -175,7 +175,7 @@
     "silent_corruption": 1
    }
   },
-  "cost_usd": 0.0
+  "model_calls": 0
  },
  "runs": [
   {
@@ -199,7 +199,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=20"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -258,7 +257,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=21"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -317,7 +315,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=29"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -383,7 +380,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=27"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -449,7 +445,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=24"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -514,7 +509,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=30"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "late": "reverted 1 new record(s)",
    "store": {
     "correct": false,
@@ -579,7 +573,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": true,
     "reasons": [],
@@ -640,7 +633,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=26"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -702,7 +694,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=22"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [
@@ -768,7 +759,6 @@
     "final_text": "RESULT: DONE http://127.0.0.1:9681/contact/card.php?id=23"
    },
    "model_calls": 0,
-   "cost_usd": 0.0,
    "store": {
     "correct": false,
     "reasons": [

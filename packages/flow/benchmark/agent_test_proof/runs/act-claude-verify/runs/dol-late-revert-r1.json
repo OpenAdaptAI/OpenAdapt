@@ -19,7 +19,6 @@
   "final_text": "I added the contact Chidi Okafor, not linked to any third party. Opening it in the edit form showed first name Chidi, last name Okafor, job position Planner, business phone 555-0209 and email c.okafor@example.invalid. The list and contact page show the phone without the hyphen (5550209); the existing contacts display the same way. I didn't save anything in the edit form.\n\nThe contacts list now shows 4 contacts, with exactly one Chidi Okafor. The three existing contacts (Oskar Brandt, Samir Haddad, Elena Novak) are unchanged. I didn't find the new contact's id and couldn't see its page URL, because the browser shows no address bar.\n\nRESULT: DONE contact \"Chidi Okafor\" exists in Contacts/Addresses list (4th entry)"
  },
  "model_calls": 9,
- "cost_usd": 0.081066,
  "late": "reverted 1 new record(s)",
  "store": {
   "correct": false,

@@ -25,7 +25,6 @@
   "final_text": "RESULT: NOT DONE read-back: missing ['413-555-0302']"
  },
  "model_calls": 0,
- "cost_usd": 0.0,
  "store": {
   "correct": false,
   "reasons": [

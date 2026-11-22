@@ -53,18 +53,18 @@
    "rate": 0.1111
   }
  },
- "cost_usd": 1.9335,
- "results_sha256": "sha256:42aa264b987a2673ef31f2bd4f090cc109e3c840447c552d018df216ec39db22",
- "report_sha256": "sha256:2877b87c3ccb363ba502427ebce17cbaca6f85495e17b4facb79a0f44daa7ead",
+ "results_sha256": "sha256:5d028359cc498c3f6f26ae81efb8d3a40daeb01d6dc7e655a3aaa1224d1635e8",
+ "report_sha256": "sha256:c5eb1a22cd9ab997b21332a8c89adbb7a855790d23ff2b2bee16c4ee37511e22",
  "openadapt_flow": "2.6.0",
  "gate": {
   "verdict": "fail",
-  "baseline_sha256": "sha256:a2597398f8b234d78b6efa665dfa0723b858911752c56fe88c4bcea51f14b220",
+  "baseline_sha256": "sha256:af27b15750a56f6115c42ea8600b8db2f61caaf35d904c43f9ebc15f08cd8a29",
   "regressions": [
    "silent_corruption",
    "false_success"
   ],
   "tolerance": 0.05
  },
- "signature": null
+ "signature": null,
+ "model_calls": 207
 }
