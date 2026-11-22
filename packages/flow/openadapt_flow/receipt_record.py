@@ -209,12 +209,113 @@ def _write_lines(report: Mapping[str, Any], results: list[Any]) -> list[dict[str
     return lines
 
 
+#: Signed per-write receipts a run folder may hold, each one line.
+_EVIDENCE_GLOBS = (
+    ("tx_receipt", "tx-receipt.cose"),
+    ("write_receipt", "*.receipt.cbor"),
+)
+_EVIDENCE_CHECK: dict[str, tuple[str, str, list[str]]] = {
+    "CONFIRMED": ("confirmed", "read_back", []),
+    "REFUTED": ("refuted", "read_back", []),
+}
+
+
+def _verified_verdict(
+    kind: str,
+    path: Path,
+    data: bytes,
+    run_dir: Path,
+    public_raw: Optional[bytes],
+) -> Optional[str]:
+    """The verdict of an evidence receipt that verifies, else None.
+
+    A write receipt must verify against this computer's key; a transaction
+    receipt against the signing key of its own workdir inside this run."""
+    if kind == "write_receipt":
+        if public_raw is None:
+            return None
+        from openadapt_flow.write_receipt import verify
+
+        return str(
+            verify(data, issuer_public=public_raw, log_public=None).payload.verdict
+        )
+    from cryptography.hazmat.primitives import serialization
+
+    from openadapt_flow.tx.receipt import _SIGNER_KEY_FILENAME, verify_tx_receipt
+
+    root = Path(run_dir).resolve()
+    for parent in Path(path).resolve().parents:
+        if root not in (parent, *parent.parents):
+            break
+        key_file = parent / _SIGNER_KEY_FILENAME
+        if key_file.is_file():
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+                Ed25519PrivateKey,
+            )
+
+            key = serialization.load_pem_private_key(key_file.read_bytes(), None)
+            if not isinstance(key, Ed25519PrivateKey):
+                return None
+            return str(verify_tx_receipt(path, key.public_key()).get("outcome"))
+    return None
+
+
+def evidence_lines(
+    run_dir: Optional[Path],
+    first_step: int,
+    *,
+    public_raw: Optional[bytes] = None,
+) -> list[dict[str, Any]]:
+    """One line per transaction or write receipt in ``run_dir``, by digest.
+
+    The line copies the receipt's own verdict (``CONFIRMED``, ``REFUTED``;
+    anything else is ``not_checked``/``uncertain``). Its ``evidence.sha256``
+    names the receipt file, which verifies on its own (``openadapt verify``).
+    """
+    if run_dir is None or not Path(run_dir).is_dir():
+        return []
+    found: list[tuple[str, Path]] = []
+    for kind, pattern in _EVIDENCE_GLOBS:
+        found += [
+            (kind, p) for p in sorted(Path(run_dir).rglob(pattern)) if p.is_file()
+        ]
+    lines: list[dict[str, Any]] = []
+    # Every file counts (truncation class): the caller's line limit decides
+    # what a receipt can show, never a silent cut here.
+    for offset, (kind, path) in enumerate(found):
+        data = path.read_bytes()
+        verdict = None
+        try:
+            # Unverified-evidence class: a verdict is promoted only from a
+            # receipt whose signature verifies; anything else is not checked.
+            verdict = _verified_verdict(kind, path, data, Path(run_dir), public_raw)
+        except Exception:  # noqa: BLE001 - unverifiable: the line says not checked
+            verdict = None
+        check, strength, not_checked = _EVIDENCE_CHECK.get(
+            str(verdict), ("not_checked", "none", ["uncertain"])
+        )
+        lines.append(
+            {
+                "step": first_step + offset,
+                "target_kind": "api",
+                "operation": "write",
+                "check": check,
+                "strength": strength,
+                "not_checked": list(not_checked),
+                "evidence": {"kind": kind, "sha256": hashlib.sha256(data).hexdigest()},
+            }
+        )
+    return lines
+
+
 def build_statement(
     report: Mapping[str, Any],
     report_sha256: str,
     *,
     flow_version: Optional[str] = None,
     salt: Any = None,
+    run_dir: Optional[Path] = None,
+    evidence_key: Optional[bytes] = None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, str]]]:
     """The ``record/run/v1`` statement for a run report, and its private openings."""
     from openadapt_types import receipt as r
@@ -230,6 +331,13 @@ def build_statement(
         lines = _write_lines(report, results)
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         raise ReceiptRecordError("invalid_write_evidence") from exc
+    # Signed per-write evidence receipts in the run folder join the lines;
+    # every one counts against the limit and decides the outcome.
+    lines += evidence_lines(run_dir, len(results), public_raw=evidence_key)
+    if len(lines) > r.MAX_LINES:
+        raise ReceiptRecordError(
+            "too_many_writes", "the complete write list exceeds the receipt limit"
+        )
     tally = {
         k: sum(1 for line in lines if line["check"] == k)
         for k in ("confirmed", "refuted", "not_checked")
@@ -395,8 +503,20 @@ def _write_locked(
     if report.get("transaction_outcome") == "SAVED_AWAITING_CHECK":
         raise ReceiptRecordError("readback_pending")
     digest = hashlib.sha256(raw).hexdigest()
-    statement, openings = build_statement(report, digest, flow_version=flow_version)
+    if flow_version is None:
+        from openadapt_flow import __version__ as flow_version
     chosen = signer or signer_for(home, env=env)
+    try:
+        evidence_key = chosen.public_raw()
+    except KeyUnavailable as exc:
+        raise ReceiptRecordError(exc.code, str(exc)) from exc
+    statement, openings = build_statement(
+        report,
+        digest,
+        flow_version=flow_version,
+        run_dir=run_dir,
+        evidence_key=evidence_key,
+    )
     kid = r.key_id(chosen.public_raw())
     entry = chosen.registry_entry()
     registry = [r.RoleKey(kid, entry["public_key"], "this_computer")]
@@ -438,6 +558,9 @@ def _write_locked(
                     raise ReceiptRecordError(
                         "already_signed", "receipt facts differ from the settled report"
                     )
+                write_public_card(
+                    run_dir, existing, r.loads_strict(private.read_bytes())["openings"]
+                )
                 return existing
         except (OSError, ValueError) as exc:
             raise ReceiptRecordError("existing_unreadable", str(out)) from exc
@@ -463,7 +586,63 @@ def _write_locked(
         os.link(out, legacy)
     _write(private, r.private_openings(envelope, openings), private=True)
     _write(out, envelope)
+    write_public_card(run_dir, envelope, openings)
     return envelope
+
+
+def public_reveal(run_dir: Path) -> list[str]:
+    """What a run's public card opens: the Flow version; the program name only
+    for the synthetic tutorial (a program name can be a person's name).
+
+    Unbound-evidence class: the unsigned summary's marker alone never opens
+    the name; the signed report must carry the tutorial's approval source."""
+    from openadapt_flow.offline_seal import loads_strict
+    from openadapt_flow.receipt import read_run_summary
+
+    summary = read_run_summary(run_dir) or {}
+    reveal = ["flow_version"]
+    try:
+        report = loads_strict((Path(run_dir) / "report.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        report = {}
+    if (
+        summary.get("provenance") == "synthetic-tutorial"
+        and isinstance(report, Mapping)
+        and report.get("governed_approval_source") == "openadapt-flow-tutorial"
+    ):
+        reveal.append("program_name")
+    return reveal
+
+
+def write_public_card(
+    run_dir: Path,
+    envelope: Mapping[str, Any],
+    openings: Mapping[str, Mapping[str, str]],
+) -> Path:
+    """Write ``receipt.card.json``: the same signed envelope, allow-listed openings only.
+
+    Never re-signed, so the card can't say anything the receipt doesn't. It
+    holds no screenshot, typed value, URL or page text.
+    """
+    from openadapt_types import receipt as r
+
+    statement = r.loads_strict(base64.b64decode(str(envelope["payload"])))
+    commitments = (
+        statement.get("predicate", {}).get("disclosure", {}).get("commitments", {})
+    )
+    reveal = public_reveal(Path(run_dir))
+    for field_path in reveal:
+        opening = openings.get(field_path)
+        if opening is not None and commitments.get(field_path) != r.commitment(
+            field_path, str(opening["salt"]), str(opening["value"])
+        ):
+            # Unbound-evidence class: a card opens only what the receipt
+            # committed to.
+            raise ReceiptRecordError("opening_mismatch", f"{field_path} for the card")
+    card = r.public_card(envelope, openings, reveal=reveal)
+    path = Path(run_dir) / CARD_FILE
+    _write(path, card)
+    return path
 
 
 def save_settled_report(run_dir: Path, report: "RunReport") -> "RunReport":
@@ -645,13 +824,55 @@ def verify_run_receipt(
             if name != "report.json" and (run_dir / "report.json").is_file():
                 # Say which bytes it covers: never a silent pass for a
                 # report.json that changed after signing.
-                return replace(
+                result = replace(
                     result,
                     detail="covers report.pre-seal.json; report.json changed after signing",
                 )
-            return result
+            return _with_anchor(run_dir, envelope, result, registry)
     if not sealed_set.is_file(run_dir / "report.json"):
         # A run folder's receipt is checked against its report: without the
         # signed bytes there is nothing to verify it over.
         return r._refuse("malformed", "the run folder has no report.json")
     return r._refuse("bad_signature", "report.json changed after it was signed")
+
+
+def _with_anchor(
+    run_dir: Path,
+    envelope: Mapping[str, Any],
+    result: "ReceiptVerification",
+    registry: Sequence["RoleKey"],
+) -> "ReceiptVerification":
+    """Add "Logged publicly at <time>" when ``receipt.anchor.json`` verifies.
+
+    The anchor must be signed by a key that signed the receipt and is pinned
+    here. An anchor file that doesn't verify refuses the receipt.
+    """
+    import dataclasses
+    from datetime import datetime, timezone
+
+    from openadapt_types import receipt as r
+
+    from openadapt_flow.seal_anchor import (
+        anchor_path,
+        load_anchor,
+        verify_receipt_anchor,
+    )
+
+    path = anchor_path(run_dir / RECEIPT_FILE)
+    if not path.is_file():
+        return result
+    anchor = load_anchor(run_dir / RECEIPT_FILE)
+    for check in result.signers:
+        key = next((k for k in registry if k.key_id == check.key_id), None)
+        if key is None:
+            continue
+        found = verify_receipt_anchor(
+            envelope, anchor, base64.b64decode(key.public_key)
+        )
+        if found.ok and found.integrated_time is not None:
+            when = datetime.fromtimestamp(found.integrated_time, timezone.utc)
+            line = f"Logged publicly at {when.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            return dataclasses.replace(
+                result, signer_lines=(*result.signer_lines, line)
+            )
+    return r._refuse("inconsistent", f"{path.name} doesn't verify for this receipt")
