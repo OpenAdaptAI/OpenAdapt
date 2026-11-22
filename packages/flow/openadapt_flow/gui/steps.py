@@ -199,7 +199,7 @@ def judge_step(ev: StepEvidence) -> Result:
     - ``commit``: exactly ``expected_writes`` new writes, on a complete read
       with no error shown. No write, or a different number, is refuted.
     - ``navigate``: the screen changed and nothing was written.
-    - ``in_place``: nothing was written.
+    - ``in_place``: nothing was written and the screen did not move.
     - ``unknown`` or any role nobody listed: not checked.
 
     A write count that is missing, negative or not a whole number is not
@@ -242,6 +242,11 @@ def judge_step(ev: StepEvidence) -> Result:
             return Result.refuted(subject, obs, "the screen did not change")
         if ev.moved is not True:
             return Result.not_checked(subject, "the screen after the step was not read")
+    elif role is StepRole.IN_PLACE:
+        if ev.moved is True:
+            return Result.refuted(subject, obs, "an in-place step moved the screen")
+        if ev.moved is not False:
+            return Result.not_checked(subject, "the screen after the step was not read")
     if ev.after_complete is not True:
         return Result.not_checked(subject, "the screen after the step was read in part")
     return Result.held(subject, obs, f"{role.value} as demonstrated")
@@ -272,8 +277,8 @@ def take_step(
     """Resolve ``spec`` on the live screen, click it, and judge it.
 
     Nothing is clicked when the control is missing or ambiguous, or when the
-    step is a commit and the backend cannot count writes (a commit there
-    could never be shown, so it is not attempted)."""
+    backend cannot count writes (no step could be judged there, so none is
+    attempted)."""
 
     subject = Subject(run_id=run_id, surface="gui", key=spec.step_id, field="step")
     before_screen = screen if screen is not None else actuator.observe()
@@ -286,9 +291,13 @@ def take_step(
             Result.not_checked(subject, "the control is disabled"), False, ctrl
         )
     w0 = actuator.write_count()
-    if spec.role is StepRole.COMMIT and w0 is None:
+    if w0 is None:
+        # Without a write count no step can be judged (a navigation must be
+        # shown not to write), so none is taken.
         return StepOutcome(
-            Result.not_checked(subject, "this backend cannot count writes; no commit"),
+            Result.not_checked(
+                subject, "this backend cannot count writes; no step is taken"
+            ),
             False,
             ctrl,
         )
