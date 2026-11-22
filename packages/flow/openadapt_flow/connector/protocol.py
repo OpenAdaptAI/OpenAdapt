@@ -10,9 +10,9 @@ opaque relative KEYS (:class:`ByocStorage`) the Connector resolves against the
 storage it is configured with. The control plane holds no URL to those bytes and
 signs no access to them.
 
-The model is intentionally ``extra="ignore"`` (the control plane may add PHI-free
-fields; a Connector must not brittle-fail on an additive change). The governance
-posture is instead enforced EXPLICITLY by :meth:`ByocJob.ensure_governed`, which
+Legacy payloads can still be parsed for inspection. Unknown outer fields are
+retained, never silently dropped; live execution rejects them. The governance
+posture is enforced by :meth:`ByocJob.ensure_governed`, which
 fail-closes when the dispatch is missing the governed policy, the run-scoped
 callback capability, or the immutable bundle binding — or when it carries an
 our-owned signed URL that has no place on the byoc path.
@@ -20,13 +20,39 @@ our-owned signed URL that has no place on the byoc path.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import re
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from openadapt_flow.ir import ExecutionTargetKind
 from openadapt_flow.runner.dispatch_envelope import ManagedDispatchEnvelope
+from openadapt_flow.runner.protocol import DISPATCH_BINDING_LOCAL_FIELDS
+
+if TYPE_CHECKING:
+    from openadapt_flow.qualification_admission_v2 import (
+        QualificationAdmissionEnvelope as QualificationAdmissionEnvelopeV2,
+    )
+
+#: The exact keys Flow's ManagedDispatchEnvelope reads (Cloud adds others).
+FLOW_DISPATCH_WIRE_KEYS = (
+    "schema_version",
+    "run_id",
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "authorization",
+    "dispatch_binding_sha256",
+)
+MANAGED_DELIVERY_AUTHORITY_CAPABILITY = "managed_delivery_authority_v3"
+PROGRAM_ADMISSION_SCHEMA = "openadapt.program-admission-reference/v1"
+PROGRAM_ADMISSION_ADMITTER_SCHEMA = "openadapt.program-admission-reference/v2"
+PROGRAM_ADMISSION_APPROVAL_PREFIX = "hosted:program-admission:"
+_HEX64 = re.compile(r"[a-f0-9]{64}\Z")
+_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z"
+)
+_PRINCIPAL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
 
 
 class ByocJobParseError(ValueError):
@@ -45,7 +71,7 @@ class ByocGovernanceError(ValueError):
 class ByocStorage(BaseModel):
     """Customer-owned storage reference (opaque relative keys)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     #: Hint only; the Connector's own config is authoritative.
     backend: Optional[str] = None
@@ -66,7 +92,7 @@ class GroundingModel(BaseModel):
     environment, inside the customer perimeter.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
     provider: Optional[str] = None
@@ -74,12 +100,16 @@ class GroundingModel(BaseModel):
     model: str = ""
     api_key_env: str = ""
     phi_egress_attested: bool = False
+    #: Hosts allowed to receive PHI-bearing grounding requests. Cloud always
+    #: sends it (empty by default). The customer's deployment profile stays
+    #: authoritative: the engine reads its own runtime.phi_grounding_allowlist.
+    phi_grounding_allowlist: list[str] = Field(default_factory=list)
 
 
 class ByocJob(BaseModel):
-    """One PHI-free BYOC dispatch descriptor."""
+    """One BYOC descriptor; parsing alone never authorizes live execution."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     mode: str = "replay"
     run_id: str
@@ -105,12 +135,19 @@ class ByocJob(BaseModel):
     #: Run-scoped bearer capability presented as ``x-run-token`` on the PHI-free
     #: callback. It proves this run and must remain private.
     run_token: Optional[str] = None
-    #: Exact Cloud-issued, one-run authority. It stays PHI-free and is written
-    #: to a private local file before the governed child starts.
-    managed_dispatch: Optional[ManagedDispatchEnvelope] = None
+    #: Exact Cloud-issued, one-run authority, as Cloud sends it: the six Flow
+    #: wire keys plus the authority reference (``program_admission`` for an
+    #: admitted wrap program, or ``qualification_admission`` and its digest).
+    #: Kept raw here; :meth:`flow_dispatch` projects the exact Flow envelope
+    #: that is written to a private local file before the governed child
+    #: starts, and :meth:`program_admission` validates the reference.
+    managed_dispatch: Optional[dict[str, Any]] = None
     #: HTTPS endpoint that issues monotonic per-action delivery permits for the
     #: exact managed dispatch. The run-scoped ``run_token`` authenticates it.
     managed_delivery_authority_url: Optional[str] = None
+    #: Retained Cloud session, required by live execution and bound again by
+    #: the signed v3 permit. Never inferred from an untrusted response.
+    managed_dispatch_session_id: Optional[str] = None
     bundle_version_id: Optional[str] = None
     runtime_validation_id: Optional[str] = None
     #: SHA-256 of the exact approved sanitized derivative ZIP bytes staged at
@@ -132,14 +169,17 @@ class ByocJob(BaseModel):
         """Fail closed unless every governance requirement is present.
 
         Args:
-            require_run_token: when True (the live default) a dispatch without a
-                run-scoped callback token is refused — we would be unable to
-                report its outcome, so we must not run it. Set False only for a
-                mock/dev control plane that bypasses callback auth.
+            require_run_token: retained for legacy callers. Live managed
+                execution always requires its callback token and session;
+                False cannot authorize an older/mock payload.
 
         Raises:
             ByocGovernanceError: on the first missing requirement.
         """
+        if self.mode != "replay":
+            raise ByocGovernanceError(
+                "byoc live connector only supports governed replay jobs"
+            )
         if self.bundle_download_url:
             raise ByocGovernanceError(
                 "byoc dispatch carries an our-owned bundle URL; the bundle must "
@@ -177,14 +217,44 @@ class ByocJob(BaseModel):
                 "byoc managed dispatch and delivery authority must be supplied "
                 "together (fail closed)"
             )
+        if (
+            self.model_extra
+            or (self.storage is not None and self.storage.model_extra)
+            or self.grounding_model.model_extra
+        ):
+            raise ByocGovernanceError(
+                "byoc live dispatch carries unsupported governance fields"
+            )
+        if self.managed_dispatch is None or not self.managed_delivery_authority_url:
+            raise ByocGovernanceError(
+                "byoc live execution requires exact managed delivery authority"
+            )
+        if not isinstance(self.managed_dispatch_session_id, str) or not _UUID.fullmatch(
+            self.managed_dispatch_session_id
+        ):
+            raise ByocGovernanceError(
+                "byoc live execution requires a canonical managed dispatch session"
+            )
         if self.managed_dispatch is not None:
+            if not self.run_token:
+                raise ByocGovernanceError(
+                    "byoc managed dispatch requires its run-scoped callback token"
+                )
+            envelope = self.flow_dispatch()
             try:
-                authorization = self.managed_dispatch.exact_authorization()
+                authorization = envelope.exact_authorization()
             except ValueError as exc:
                 raise ByocGovernanceError(
                     "byoc managed dispatch has an invalid authorization binding"
                 ) from exc
-            if self.managed_dispatch.run_id != self.run_id:
+            if self.program_admission() is None and not self._qualification_ok(
+                envelope
+            ):
+                raise ByocGovernanceError(
+                    "byoc managed dispatch carries neither a program admission "
+                    "nor an exact qualification admission (fail closed)"
+                )
+            if envelope.run_id != self.run_id:
                 raise ByocGovernanceError(
                     "byoc managed dispatch belongs to a different run (fail closed)"
                 )
@@ -222,6 +292,161 @@ class ByocJob(BaseModel):
                 "resolve from the customer's storage (fail closed)"
             )
 
+    def flow_dispatch(self) -> ManagedDispatchEnvelope:
+        """Consume the closed authority union before writing its six Flow keys."""
+        from openadapt_flow.runtime.authorization import GovernedRunAuthorization
+
+        raw = self.managed_dispatch
+        if not isinstance(raw, dict):
+            raise ByocGovernanceError("byoc managed dispatch is malformed")
+        program = "program_admission" in raw
+        extension = (
+            {"program_admission"}
+            if program
+            else {"qualification_admission", "qualification_admission_sha256"}
+        )
+        if set(raw) != set(FLOW_DISPATCH_WIRE_KEYS) | extension:
+            raise ByocGovernanceError("byoc managed authority union is not closed")
+        if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
+            raise ByocGovernanceError("byoc managed dispatch version is not canonical")
+        authorization = raw.get("authorization")
+        if not isinstance(authorization, dict) or set(authorization) - set(
+            GovernedRunAuthorization.model_fields
+        ):
+            raise ByocGovernanceError(
+                "byoc managed authorization has unsupported fields"
+            )
+        if any(
+            authorization.get(key) is not None for key in DISPATCH_BINDING_LOCAL_FIELDS
+        ):
+            raise ByocGovernanceError(
+                "byoc remote dispatch cannot supply runner-local authority"
+            )
+        try:
+            envelope = ManagedDispatchEnvelope.model_validate(
+                {key: raw[key] for key in FLOW_DISPATCH_WIRE_KEYS}
+            )
+        except (ValidationError, ValueError) as exc:
+            raise ByocGovernanceError(
+                "byoc managed dispatch does not match the Flow envelope"
+            ) from exc
+        if program:
+            if (
+                self.program_admission() is None
+                or envelope.authorization.qualification_admission is not None
+                or envelope.authorization.qualification_admission_sha256 is not None
+            ):
+                raise ByocGovernanceError("byoc program admission reference is invalid")
+        elif not self._qualification_ok(envelope):
+            raise ByocGovernanceError(
+                "byoc qualification admission does not bind this job"
+            )
+        return envelope
+
+    def program_admission(self) -> Optional[dict[str, str]]:
+        """The exact person-v1 or admitter-v2 reference, without downgrading."""
+        raw = self.managed_dispatch
+        if not isinstance(raw, dict):
+            return None
+        reference = raw.get("program_admission")
+        authorization = raw.get("authorization")
+        if (
+            "qualification_admission" in raw
+            or "qualification_admission_sha256" in raw
+            or not isinstance(reference, dict)
+            or not isinstance(authorization, dict)
+            or authorization.get("execution_profile") != "standard"
+        ):
+            return None
+        common = {"schema_version", "admission_sha256", "public_key_hex"}
+        version = reference.get("schema_version")
+        if version == PROGRAM_ADMISSION_SCHEMA:
+            if set(reference) != common:
+                return None
+        elif version == PROGRAM_ADMISSION_ADMITTER_SCHEMA:
+            if (
+                set(reference)
+                != common
+                | {
+                    "admission_mode",
+                    "admitted_by_principal_id",
+                    "admitter_public_key_hex",
+                }
+                or reference.get("admission_mode") != "admitter_key"
+                or not isinstance(reference.get("admitted_by_principal_id"), str)
+                or not _PRINCIPAL.fullmatch(reference["admitted_by_principal_id"])
+                or not isinstance(reference.get("admitter_public_key_hex"), str)
+                or not _HEX64.fullmatch(reference["admitter_public_key_hex"])
+            ):
+                return None
+        else:
+            return None
+        if (
+            not isinstance(reference.get("admission_sha256"), str)
+            or not _HEX64.fullmatch(reference["admission_sha256"])
+            or not isinstance(reference.get("public_key_hex"), str)
+            or not _HEX64.fullmatch(reference["public_key_hex"])
+            or authorization.get("approval_source")
+            != PROGRAM_ADMISSION_APPROVAL_PREFIX + reference["admission_sha256"]
+        ):
+            return None
+        return dict(reference)
+
+    def qualification_admission(self) -> QualificationAdmissionEnvelopeV2:
+        """Parse the actual outer signed v2 proof; parsing is not authority."""
+        from openadapt_flow.qualification_admission_v2 import (
+            QualificationAdmissionEnvelope,
+        )
+
+        raw = self.managed_dispatch or {}
+        admission = raw.get("qualification_admission")
+        digest = raw.get("qualification_admission_sha256")
+        if (
+            "program_admission" in raw
+            or not isinstance(admission, dict)
+            or set(admission) != {"payload", "algorithm", "signature"}
+            or not isinstance(digest, str)
+            or not _HEX64.fullmatch(digest)
+        ):
+            raise ByocGovernanceError(
+                "byoc signed qualification reference is malformed"
+            )
+        try:
+            parsed = QualificationAdmissionEnvelope.model_validate(admission)
+        except (ValidationError, ValueError) as exc:
+            raise ByocGovernanceError(
+                "byoc qualification proof is not admission v2"
+            ) from exc
+        if (
+            parsed.model_dump(mode="json") != admission
+            or parsed.artifact_sha256() != digest
+        ):
+            raise ByocGovernanceError("byoc qualification proof digest does not match")
+        return parsed
+
+    def _qualification_ok(self, envelope: ManagedDispatchEnvelope) -> bool:
+        # The outer v2 artifact is distinct from the runtime-local v1 field,
+        # which Cloud cannot populate. The executor must verify the artifact
+        # against independent operator context through the authority-file path.
+        if (
+            envelope.authorization.qualification_admission is not None
+            or envelope.authorization.qualification_admission_sha256 is not None
+        ):
+            return False
+        try:
+            payload = self.qualification_admission().payload
+        except ByocGovernanceError:
+            return False
+        return (
+            payload.tenant_id == self.org_id
+            and payload.workflow_id == self.workflow_id
+            and payload.workflow_version_id == self.bundle_version_id
+            and payload.bundle_version_id == self.bundle_version_id
+            and payload.runtime_validation_id == self.runtime_validation_id
+            and payload.bundle_artifact_sha256 == self.bundle_sha256
+            and payload.bundle_content_digest == envelope.bundle_content_digest
+        )
+
     def report_ref(self) -> Optional[str]:
         """The customer-storage key the report is written to (opaque to us)."""
         if self.storage and self.storage.report_ref:
@@ -239,6 +464,10 @@ def parse_job(
             required identifiers). The caller reports the refusal; it never runs
             a job it could not parse.
     """
+    if "lease_job_id" in payload:
+        raise ByocJobParseError(
+            "byoc payload cannot replace its authenticated lease id"
+        )
     try:
         job = ByocJob.model_validate(payload)
     except ValidationError as exc:

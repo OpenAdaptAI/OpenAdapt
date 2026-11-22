@@ -971,6 +971,73 @@ function saveFields(presentation) {
   }));
 }
 
+// `presentation.sources`: a guarded save's source column, `{label, source,
+// status, differs, intended, held_differs}` per field, kept by Flow beside the
+// request and bound to its digest. `intended` is the task's value, shown beside
+// the value the held request sends; `held_differs` flags them differing.
+// Anything malformed drops the column; the fields still show.
+const NOT_READ = "not read";
+function saveSources(presentation) {
+  const raw = presentation && presentation.sources;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_FIELDS) return null;
+  const ok = raw.every(
+    (row) =>
+      row &&
+      typeof row.label === "string" &&
+      (row.source === null || typeof row.source === "string") &&
+      typeof row.status === "string" &&
+      typeof row.differs === "boolean" &&
+      (row.intended === undefined || row.intended === null || typeof row.intended === "string") &&
+      (row.held_differs === undefined || typeof row.held_differs === "boolean") &&
+      (row.screen === undefined || row.screen === null || typeof row.screen === "string") &&
+      (row.screen_differs === undefined || typeof row.screen_differs === "boolean"),
+  );
+  if (!ok) return null;
+  return new Map(
+    raw.map((row) => [
+      row.label,
+      {
+        source: row.source,
+        differs: row.differs,
+        intended: typeof row.intended === "string" ? row.intended : null,
+        heldDiffers: row.held_differs === true,
+        screen: typeof row.screen === "string" ? row.screen : null,
+        screenDiffers: row.screen_differs === true,
+      },
+    ]),
+  );
+}
+
+const UNCHECKED_EXPLANATION =
+  "OpenAdapt didn't confirm that these are the values this save will send, so they were not checked before saving. Compare the screen with what the task says before you approve.";
+
+// A save an agent asked for: it carries the agent's provenance, or a value
+// Flow couldn't read. An older Flow (Desktop pins 2.4.1) sends both for every
+// guarded save and neither for a compiled program's own save.
+function agentSave(presentation) {
+  if (presentation.provenance) return true;
+  const fields = Array.isArray(presentation.fields) ? presentation.fields : [];
+  return fields.some((f) => f && (f.after === NOT_READ || f.before === NOT_READ));
+}
+
+// Whether the card may say "exactly what will be saved". Flow says so with
+// `values_checked`. An older Flow sends no flag: a compiled program's save
+// keeps its wording, and an agent's save is not checked (fail closed). A
+// ledger question saves nothing, so the flag doesn't apply.
+function valuesChecked(presentation) {
+  if (presentation.kind === "question") return true;
+  if (presentation.values_checked === true) return true;
+  if (presentation.values_checked === false) return false;
+  return !agentSave(presentation);
+}
+
+// Without checked values, any "exactly" in Flow's wording is replaced.
+function saveExplanation(presentation) {
+  const text = typeof presentation.explanation === "string" ? presentation.explanation : "";
+  if (!valuesChecked(presentation) && (!text || /exactly/i.test(text))) return UNCHECKED_EXPLANATION;
+  return text || "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.";
+}
+
 // `presentation.provenance`: why an agent asked for this save. The agent's
 // reason is its own account and is shown as a quote, never as a finding.
 // Lines of what it saw that read like an instruction to an agent are shown
@@ -1028,10 +1095,12 @@ async function openSave(item) {
     step,
     question: presentation.question || "Save this?",
     why: String(presentation.step_intent || "").trim() || "OpenAdapt filled the form and stopped before saving.",
-    then:
-      presentation.explanation ||
-      "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.",
+    then: saveExplanation(presentation),
     fields: saveFields(presentation),
+    sources: saveSources(presentation),
+    // "Exactly what will be saved" only when the values were checked
+    // (valuesChecked: an agent's save from an older Flow never is).
+    exact: valuesChecked(presentation),
     provenance: saveProvenance(presentation),
     frameUrl: null,
     frameOk: false,
@@ -1164,7 +1233,12 @@ function expire(card) {
 function evidenceMarkup(card) {
   if (card.frameState === "none") return "";
   const big = card.kind === "save" && !card.fields;
-  const title = card.kind === "save" ? "Exactly what will be saved" : "Screen when it stopped";
+  const title =
+    card.kind === "save"
+      ? card.exact === false
+        ? "The screen when the agent asked"
+        : "Exactly what will be saved"
+      : "Screen when it stopped";
   let sub;
   if (card.frameState === "loading") sub = "Loading the picture";
   else if (card.frameState === "missing") sub = card.kind === "save" ? "Couldn't be shown" : "Not available";
@@ -1183,17 +1257,45 @@ function evidenceMarkup(card) {
   return `<button class="evidence${big ? " big" : ""}" id="evidence" type="button" data-screen>${image}${label}</button>`;
 }
 
+// The source line reuses the stop queue's side-by-side classes (stops.css).
+function sourceMarkup(card, field) {
+  if (!card.sources) return "";
+  const row = card.sources.get(field.label);
+  if (!row) return "";
+  const text = row.source === null ? "none given" : row.source === "" ? "empty" : row.source;
+  // Flow compares the values (dates, numbers) and sends the result.
+  const intended =
+    row.intended === null
+      ? ""
+      : `<span class="stops-record">${row.heldDiffers ? '<span class="stops-flag">Differs</span> ' : ""}Task says: <strong>${esc(row.intended === "" ? "empty" : row.intended)}</strong></span>`;
+  // With no write adapter: the value the form showed when the agent asked.
+  const onScreen =
+    row.screen === null
+      ? ""
+      : `<span class="stops-record">${row.screenDiffers ? '<span class="stops-flag">Differs</span> ' : ""}On screen at the save: <strong>${esc(row.screen === "" ? "empty" : row.screen)}</strong></span>`;
+  return `${onScreen}${intended}<span class="stops-record">${row.differs ? '<span class="stops-flag">Differs</span> ' : ""}Source: <strong>${esc(text)}</strong></span>`;
+}
+
 function fieldsMarkup(card) {
   if (!card.fields) return "";
+  const unread = card.fields.some((field) => field.after === NOT_READ || field.before === NOT_READ);
   return `<dl class="fields" aria-label="What this save writes">${card.fields
     .map(
       (field) => `<div><dt>${esc(field.label)}</dt><dd>${
-        field.before != null && field.before !== field.after
-          ? `<s><span class="sr">Was </span>${esc(field.before)}</s>`
-          : ""
-      }${field.after === "" ? '<span class="empty">(empty)</span>' : esc(field.after)}</dd></div>`,
+        field.before === NOT_READ
+          ? '<span class="stops-record">Now: not read</span>'
+          : field.before != null && field.before !== field.after
+            ? `<s><span class="sr">Was </span>${esc(field.before)}</s>`
+            : ""
+      }${field.after === "" ? '<span class="empty">(empty)</span>' : esc(field.after)}${sourceMarkup(card, field)}</dd></div>`,
     )
-    .join("")}</dl>`;
+    .join("")}</dl>${
+    card.exact === false
+      ? '<p class="stops-reason" role="note">OpenAdapt could not read the values this save will send, so they were not checked before saving. Compare the screen with what the task says.</p>'
+      : unread
+        ? '<p class="stops-reason" role="note">A value marked not read was not checked; this approval does not cover it.</p>'
+        : ""
+  }`;
 }
 
 function provenanceMarkup(card) {
@@ -2093,7 +2195,11 @@ function openMore() {
     ? `<button class="opt" type="button" data-screen><b>${
         card.kind === "save" ? "See the full screen" : "See the screen it kept"
       }</b><span>${
-        card.kind === "save" ? "The form exactly as OpenAdapt will save it." : "Kept when it stopped. Not live."
+        card.kind === "save"
+          ? card.exact === false
+            ? "The agent's screen when it asked. Its values were not read."
+            : "The form exactly as OpenAdapt will save it."
+          : "Kept when it stopped. Not live."
       }</span></button>`
     : "";
   const closes =
@@ -2136,11 +2242,12 @@ function openScreen() {
   const card = deck.card;
   if (!card || !card.frameOk) return;
   const save = card.kind === "save";
+  const exact = card.exact !== false;
   openSheet(
-    `<h2 id="sheet-title">${save ? "Exactly what will be saved" : "The screen it kept"}</h2>
-     <p class="sub">${save ? "The form as OpenAdapt will save it." : "Kept when it stopped. Not live, so check the application."} Drag to pan. Tap the picture to fit it.</p>
+    `<h2 id="sheet-title">${save ? (exact ? "Exactly what will be saved" : "The screen when the agent asked") : "The screen it kept"}</h2>
+     <p class="sub">${save ? (exact ? "The form as OpenAdapt will save it." : "The agent's screen when it asked. OpenAdapt did not read the values it will send.") : "Kept when it stopped. Not live, so check the application."} Drag to pan. Tap the picture to fit it.</p>
      <div class="screen-wrap" id="screen-wrap"><img id="frame" src="${esc(card.frameUrl)}"
-       alt="${save ? "The filled form, exactly as OpenAdapt will save it." : "The screen OpenAdapt kept when it stopped."}"></div>
+       alt="${save ? (exact ? "The filled form, exactly as OpenAdapt will save it." : "The agent's screen when it asked to save.") : "The screen OpenAdapt kept when it stopped."}"></div>
      <button class="quiet" type="button" data-close>Back to the card</button>`,
     () => {
       const wrap = $("screen-wrap");

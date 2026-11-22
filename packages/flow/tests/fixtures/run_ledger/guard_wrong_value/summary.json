@@ -1,0 +1,24 @@
+{
+  "approval": "not_gated",
+  "blocked": [],
+  "ended": "read_back",
+  "hold_ms": [
+    12.0
+  ],
+  "mode": "fail_closed",
+  "model_calls": 0,
+  "notes": [],
+  "readback_ms": 1075.7,
+  "receipt_path": "/tmp/acp-demo-out/2-gated/runs/prod-agent-wrong-value-00/guard/guard-fddd1fab2045226572814c5406cf33ff/effect-receipt.json",
+  "recording": "/tmp/acp-demo-out/2-gated/runs/prod-agent-wrong-value-00/recording",
+  "requests": {
+    "save": 1
+  },
+  "saves_held": 1,
+  "schema": "openadapt.agent-guard-run/v1",
+  "scope_blocked": [],
+  "seconds": 5.158,
+  "task_id": "prod-agent-wrong-value-00",
+  "verdict": "REFUTED",
+  "would_block": []
+}
