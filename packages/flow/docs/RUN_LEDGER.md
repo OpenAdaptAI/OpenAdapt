@@ -255,8 +255,9 @@ A fallback gate in `result.json` keeps one time, not an opened/decided pair,
 so a person's time on it is unknown (`null`), not zero. The envelope keeps
 no gate times at all, so its row's time is unknown too. A wrap run record
 (`openadapt-agent.run/v1`) whose result `path` is `agent_fallback` is read
-like an agent's first run, but `verified: true` counts only with a
-`record_check` that is `readable: true` and passed; without one it is UNKNOWN
+like an agent's first run, but `verified: true` counts only with P7's final
+read, `result.fallback.task_record_check` (`result.record_check` on older
+records), being `readable: true` and passed; without one it is UNKNOWN
 (`reconciliation_required`).
 
 ### Merging sources
@@ -296,7 +297,7 @@ no POSIX mode to set.
 | `ledger list [--json]` | Every row. |
 | `ledger show ROW_ID [--show-values]` | One row; with `--show-values`, also the sidecar's values. |
 | `ledger summary [--since ISO] [--task-type T] [--json]` | Runs per outcome, a person's minutes, model cost, median duration. Rows whose time or cost is unknown are counted as unknown, not as zero. |
-| `ledger export --out FILE` | Value-free JSONL, written owner-only (0600). Always requires openadapt-privacy's text scrubber (`--require-scrubber` is kept for old scripts). |
+| `ledger export --out FILE` | Value-free JSONL, written owner-only (0600). Always requires openadapt-privacy's text scrubber (`--require-scrubber` is kept for old scripts). Export keeps `sources`; each path part gets the same scrubber check as the labels, and a part the scrubber would rewrite leaves as an opaque `src-<16 hex>` (the same keyed digest as task ids). The local row keeps the real paths. |
 | `ledger push [--host URL] [--dry-run]` | POSTs each row without `sources`, as `openadapt.agent-run-summary/v1`, to `/api/runs/ingest-agent-run` with `OPENADAPT_API_KEY`. |
 
 `export` and `push` screen each row and refuse a row when:

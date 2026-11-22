@@ -616,7 +616,14 @@ def collect_agent_run_record(path: Path) -> Contribution:
         # only with the record check that proves it: readable and passed
         # (P7's ``confirmed``). A record without one proves nothing.
         path_kind = "agent"
-        check = result.get("record_check")
+        # P7 keeps the policy's record in the result's ``fallback``; its
+        # task_record_check is the final read (``record_check`` on older ones).
+        policy = result.get("fallback")
+        check = (
+            policy.get("task_record_check")
+            if isinstance(policy, dict) and "task_record_check" in policy
+            else result.get("record_check")
+        )
         fallback_unproved = not (
             isinstance(check, dict)
             and check.get("readable") is True

@@ -347,25 +347,31 @@ def test_the_dispatcher_envelopes_outcome_is_not_read(tmp_path):
         assert _outcome(row) == expected
 
 
-def test_a_wrap_record_of_a_verified_fallback_needs_its_record_check(tmp_path):
-    env = json.loads((FIXTURES / "dispatch_envelope_verified.json").read_text())
-    result = {k: v for k, v in env.items() if k not in ("outcome", "fallback")}
-    record = {
-        "schema": "openadapt-agent.run/v1",
-        "request_id": "r-118",
-        "state": "finished",
-        "result": result,
-    }
-    path = tmp_path / "run-0001.json"
-    path.write_text(json.dumps(record))
-    row, _, _ = build_row(path)
-    # verified: true with no readable record check proves nothing.
-    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
-    result["record_check"] = {"readable": True, "passed": True, "created": 1}
-    path.write_text(json.dumps(record))
-    row, _, _ = build_row(path)
+def test_a_wrap_record_of_a_verified_fallback_reads_p7s_record_check(tmp_path):
+    # Review on 0a886f1df: P7's run store record keeps the policy record in
+    # result.fallback (task_record_check), not result.record_check.
+    record = (
+        RUN3_FALLBACK
+        / "runs"
+        / "drift-approved"
+        / "openadapt-agent"
+        / "runs"
+        / "run-b480e452b3ba49aab785d2ca.json"
+    )
+    row, _, _ = build_row(record)
     assert _outcome(row) == ("VERIFIED", "readback_verified")
     assert row.executor_kind == "agent"
+    # Without a readable task_record_check, verified: true proves nothing.
+    doc = json.loads(record.read_text())
+    doc["result"]["fallback"]["task_record_check"]["readable"] = False
+    path = tmp_path / "run-b480e452b3ba49aab785d2ca.json"
+    path.write_text(json.dumps(doc))
+    row, _, _ = build_row(path)
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
+    del doc["result"]["fallback"]
+    path.write_text(json.dumps(doc))
+    row, _, _ = build_row(path)
+    assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
 
 
 def test_a_refused_gate_with_a_write_on_record_is_not_a_clean_decline(tmp_path):
@@ -1040,3 +1046,20 @@ def test_an_answered_question_stays_escalated():
     row, _, _ = build_row(FIXTURES / "task_ledger_question")
     assert _outcome(row) == ("ESCALATED", "question_asked")
     assert row.human.intervention_s == 120.0
+
+
+def test_export_checks_source_paths_like_labels(tmp_path):
+    # Review on 0a886f1df: export carries sources; a path part the scrubber
+    # would rewrite leaves as an opaque src-<hex>, never as text.
+    store = _store(tmp_path)
+    run = tmp_path / "Zelda-Quintanilla"
+    shutil.copytree(FIXTURES / "run3_fallback", run)
+    store.add(run / "result-drift-approved.json")
+    scrubber = _Presidio("result-drift-approved.json", "drift-approved")
+    (line,) = outbound_lines(store, summary=False, scrubber=scrubber)
+    sources = json.loads(line)["sources"]
+    assert "result-drift-approved.json" not in sources
+    assert not any("drift-approved" in part for s in sources for part in s.split("/"))
+    assert any(part.startswith("src-") for s in sources for part in s.split("/"))
+    # The real paths stay in the local row.
+    assert "result-drift-approved.json" in store.rows()[0].sources

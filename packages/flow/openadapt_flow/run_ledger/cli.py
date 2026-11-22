@@ -425,10 +425,33 @@ def _screen_one(
                 doc["task_id"] = opaque(label)
             elif scrubbed != label:
                 return f"the scrubber would rewrite its {where}"
+        if "sources" in doc:
+            # Export keeps the source paths: each path part gets the same
+            # check, and a part the scrubber would rewrite leaves as an
+            # opaque ``src-<16 hex>`` (the same keyed digest as task ids).
+            doc["sources"] = [
+                "/".join(
+                    _opaque_part(part, scrubber, opaque) for part in path.split("/")
+                )
+                for path in doc["sources"]
+            ]
     line = json.dumps(doc, sort_keys=True)
     if any(value in line for value in values):
         return "it contains a value from a private sidecar"
     return (line,)
+
+
+def _opaque_part(part: str, scrubber: Any, opaque: Callable[[str], str]) -> str:
+    try:
+        scrubbed = scrubber.scrub_text(part)
+    except Exception as exc:  # a scrubber that can't run refuses all
+        raise LedgerRefused(
+            f"the text scrubber could not run ({type(exc).__name__}); "
+            "nothing was written"
+        ) from exc
+    if scrubbed == part:
+        return part
+    return "src-" + opaque(part)[len("tid-") :]
 
 
 def outbound_lines(
