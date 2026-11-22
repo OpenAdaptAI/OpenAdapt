@@ -1,0 +1,85 @@
+NOTICE:  database "oa_ext_tx" does not exist, skipping
+[00:24:29] 120 statements done
+[00:25:10] acrfence {'trials': 20, 'held_not_applied': 20, 'double_effects_through': 0, 'control_duplicates': 20}
+[00:25:12] trigger {'predicted_tables': {'audit': {'added': 5, 'changed': 0, 'removed': 0}, 'users': {'added': 0, 'changed': 5, 'removed': 0}}, 'apply': 'VERIFIED', 'missed': 0, 'undo': 'RECONCILIATION_REQUIRED', 'collateral': 5}
+[00:25:15] mcp {'tools': ['sql_query', 'sql_preview', 'sql_apply', 'sql_undo'], 'apply': 'VERIFIED', 'undo': 'ROLLED_BACK'}
+[00:25:15] {
+  "acrfence": {
+    "control_duplicates": 20,
+    "double_effects_through": 0,
+    "held_not_applied": 20,
+    "trials": 20
+  },
+  "apply_verified": 120,
+  "by_kind": {
+    "bulk_update": 15,
+    "delete_cascade": 15,
+    "delete_where": 15,
+    "expr_update": 15,
+    "insert_select": 15,
+    "insert_values": 15,
+    "migration_like": 15,
+    "update_join": 15
+  },
+  "code_sha": "c88d728c77fa822ec1b3ffb9638b52047970cdd5",
+  "db_back_to_start": 120,
+  "false_diffs": 0,
+  "independent_disagreements": 0,
+  "mcp_sdk_session": {
+    "apply": "VERIFIED",
+    "tools": [
+      "sql_query",
+      "sql_preview",
+      "sql_apply",
+      "sql_undo"
+    ],
+    "undo": "ROLLED_BACK"
+  },
+  "missed_effects": 0,
+  "preview_s_median": 0.865,
+  "receipts": {
+    "tx-apply": {
+      "approval_bound_to_plan_digest": 142,
+      "approver_agent": 3,
+      "approver_none": 20,
+      "approver_person": 139,
+      "runs": 162,
+      "verified": 162
+    },
+    "tx-plan": {
+      "approver_none": 162,
+      "runs": 162,
+      "verified": 162
+    },
+    "tx-undo": {
+      "approval_bound_to_plan_digest": 122,
+      "approver_agent": 3,
+      "approver_person": 119,
+      "runs": 122,
+      "verified": 122
+    }
+  },
+  "rows_touched": 1490,
+  "statements": 120,
+  "trigger_probe": {
+    "apply": "VERIFIED",
+    "collateral": 5,
+    "missed": 0,
+    "predicted_tables": {
+      "audit": {
+        "added": 5,
+        "changed": 0,
+        "removed": 0
+      },
+      "users": {
+        "added": 0,
+        "changed": 5,
+        "removed": 0
+      }
+    },
+    "undo": "RECONCILIATION_REQUIRED"
+  },
+  "undo_success_rate": 1.0,
+  "undo_supported": 120,
+  "undo_verified": 120
+}
