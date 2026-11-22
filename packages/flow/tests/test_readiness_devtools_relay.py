@@ -38,10 +38,14 @@ def _status(url: str) -> int:
 
 
 def _upgrade(relay: DevToolsRelay, path: str) -> bytes:
+    import base64
+    import os
+
+    nonce = base64.b64encode(os.urandom(16)).decode()  # a fresh WebSocket nonce
     with socket.create_connection(("127.0.0.1", relay.port), timeout=5) as sock:
         sock.sendall(
             f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
-            "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            f"Connection: Upgrade\r\nSec-WebSocket-Key: {nonce}\r\n"
             "Sec-WebSocket-Version: 13\r\n\r\n".encode()
         )
         return sock.recv(200)
@@ -71,8 +75,9 @@ def test_with_the_token_a_client_drives_the_browser(relay: DevToolsRelay) -> Non
     wire = CdpWire(ws, lambda method, params, session: events.append(method))
     try:
         target = wire.send("Target.createTarget", {"url": "about:blank"})["targetId"]
-        session = wire.send("Target.attachToTarget", {"targetId": target, "flatten": True})[
-            "sessionId"]
+        session = wire.send(
+            "Target.attachToTarget", {"targetId": target, "flatten": True}
+        )["sessionId"]
         out = wire.send("Runtime.evaluate", {"expression": "6*7"}, session_id=session)
         assert out["result"]["value"] == 42
         # Another client can't use this client's session.
@@ -100,8 +105,14 @@ def test_playwright_connects_with_the_token(relay: DevToolsRelay) -> None:
     with sync_playwright() as pw:
         with pytest.raises(Exception):  # noqa: B017 - any refusal
             pw.chromium.connect_over_cdp(f"http://127.0.0.1:{relay.port}", timeout=5000)
-    assert json.loads(urllib.request.urlopen(  # noqa: S310
-        relay.http_url + "/json/version", timeout=5).read())["webSocketDebuggerUrl"] == relay.ws_url
+    assert (
+        json.loads(
+            urllib.request.urlopen(  # noqa: S310
+                relay.http_url + "/json/version", timeout=5
+            ).read()
+        )["webSocketDebuggerUrl"]
+        == relay.ws_url
+    )
 
 
 def _server(body: bytes):
@@ -144,9 +155,12 @@ def test_the_browser_reaches_the_app_and_nothing_else() -> None:
             page = browser.new_context().new_page()
             page.goto(app_origin + "/")
             assert page.text_content("#app") == "app"
-            assert page.evaluate(
-                f"fetch({json.dumps(app_origin + '/again')}).then(r => r.status, e => 'failed')"
-            ) == 200
+            assert (
+                page.evaluate(
+                    f"fetch({json.dumps(app_origin + '/again')}).then(r => r.status, e => 'failed')"
+                )
+                == 200
+            )
             got = page.evaluate(
                 f"fetch({json.dumps(other_origin + '/leak?d=1')}, {{mode: 'no-cors'}})"
                 ".then(() => 'answered', () => 'failed')"
@@ -157,7 +171,7 @@ def test_the_browser_reaches_the_app_and_nothing_else() -> None:
             )
             ws = page.evaluate(
                 f"""new Promise(done => {{
-                    const s = new WebSocket({json.dumps('ws://127.0.0.1:' + str(other.server_address[1]) + '/ws')});
+                    const s = new WebSocket({json.dumps("ws://127.0.0.1:" + str(other.server_address[1]) + "/ws")});
                     s.onopen = () => done('open'); s.onerror = () => done('failed');
                     setTimeout(() => done('timeout'), 20000);
                 }})"""
@@ -166,7 +180,7 @@ def test_the_browser_reaches_the_app_and_nothing_else() -> None:
                 f"""new Promise(done => {{
                     const i = new Image(); i.onload = () => done('loaded');
                     i.onerror = () => done('failed');
-                    i.src = {json.dumps(other_origin + '/pixel?d=1')};
+                    i.src = {json.dumps(other_origin + "/pixel?d=1")};
                 }})"""
             )
             browser.close()
@@ -191,23 +205,34 @@ def test_a_new_context_cannot_take_its_own_proxy() -> None:
     app_origin = f"http://127.0.0.1:{app.server_address[1]}"
     other_origin = f"http://127.0.0.1:{other.server_address[1]}"
     with sync_playwright() as pw:
-        relay = DevToolsRelay(headless_shell(pw.chromium.executable_path),
-                              allowed_origins=(app_origin,)).start()
+        relay = DevToolsRelay(
+            headless_shell(pw.chromium.executable_path), allowed_origins=(app_origin,)
+        ).start()
         try:
             wire = CdpWire(browser_ws_url(relay.http_url), lambda *a: None)
-            for params in ({"proxyServer": "direct://"},
-                           {"proxyBypassList": "*"},
-                           {"originsWithUniversalNetworkAccess": [other_origin]},
-                           {"someFutureKey": True}):
+            for params in (
+                {"proxyServer": "direct://"},
+                {"proxyBypassList": "*"},
+                {"originsWithUniversalNetworkAccess": [other_origin]},
+                {"someFutureKey": True},
+            ):
                 with pytest.raises(CdpError, match="refused"):
                     wire.send("Target.createBrowserContext", params)
-            for method in ("Network.loadNetworkResource", "Target.exposeDevToolsProtocol",
-                           "Browser.executeBrowserCommand"):
+            for method in (
+                "Network.loadNetworkResource",
+                "Target.exposeDevToolsProtocol",
+                "Browser.executeBrowserCommand",
+            ):
                 with pytest.raises(CdpError, match="refused"):
                     wire.send(method, {})
             ctx = wire.send("Target.createBrowserContext", {"disposeOnDetach": True})
-            wire.send("Target.createTarget", {"url": other_origin + "/exfil?d=1",
-                                              "browserContextId": ctx["browserContextId"]})
+            wire.send(
+                "Target.createTarget",
+                {
+                    "url": other_origin + "/exfil?d=1",
+                    "browserContextId": ctx["browserContextId"],
+                },
+            )
             import time
 
             time.sleep(2)
@@ -241,9 +266,11 @@ def _stun_probe(block_webrtc: bool) -> bool:
     udp.settimeout(6)
     try:
         with sync_playwright() as pw:
-            relay = DevToolsRelay(headless_shell(pw.chromium.executable_path),
-                                  allowed_origins=(app_origin,),
-                                  block_webrtc=block_webrtc).start()
+            relay = DevToolsRelay(
+                headless_shell(pw.chromium.executable_path),
+                allowed_origins=(app_origin,),
+                block_webrtc=block_webrtc,
+            ).start()
             try:
                 browser = pw.chromium.connect_over_cdp(relay.http_url)
                 page = browser.new_context().new_page()
