@@ -129,6 +129,7 @@ def _check(vision, verifier, pc, tmp_path, step=None):
         allow_model_grounding=True,
         poll_interval_s=0.0,
     )
+    rp._egress.bind_run(tmp_path / "run")  # off-box frames need a ledger
     step = step if step is not None else _step(pc)
     result = StepResult(step_id=step.id, intent=step.intent, ok=False)
     ok, _frame, failed = rp._check_postconditions(step, _png(), tmp_path, {}, result)

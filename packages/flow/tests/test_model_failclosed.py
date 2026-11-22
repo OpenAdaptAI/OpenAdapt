@@ -177,6 +177,7 @@ def _identity_step() -> tuple[Step, Workflow, Resolution]:
 def test_identity_vlm_call_counts_as_model_call(monkeypatch, tmp_path, verdict):
     vlm = _OffBoxIdentityVLM(verdict)
     rp = Replayer(FakeBackend(), identity_vlm=vlm, allow_model_grounding=True)
+    rp._egress.bind_run(tmp_path / "run")
     crop = _crop_png()
     monkeypatch.setattr(rp, "_identifier_crops", lambda *a, **k: (crop, crop))
     step, workflow, res = _identity_step()
@@ -191,6 +192,7 @@ def test_off_box_identity_crops_never_report_no_external_calls(monkeypatch, tmp_
 
     vlm = _OffBoxIdentityVLM("different")
     rp = Replayer(FakeBackend(), identity_vlm=vlm, allow_model_grounding=True)
+    rp._egress.bind_run(tmp_path / "run")
     crop = _crop_png()
     monkeypatch.setattr(rp, "_identifier_crops", lambda *a, **k: (crop, crop))
     step, workflow, res = _identity_step()
@@ -546,3 +548,31 @@ def test_counts_from_a_raised_step_never_land_on_the_next_run(tmp_path):
     fresh = StepResult(step_id="s1", intent="x", ok=True)
     recorder.drain(fresh)
     assert fresh.identity_vlm_calls == 0
+
+
+def test_no_bound_ledger_means_no_off_box_call(monkeypatch):
+    from openadapt_flow.runtime.model_egress import LEDGER_ENV, EgressRecorder
+
+    monkeypatch.delenv(LEDGER_ENV, raising=False)
+    recorder = EgressRecorder()
+    grounder = _OffBoxGrounder()
+    wrapped = recorder.wrap("grounder", grounder)
+    assert wrapped.locate(b"frame", "click Save") is None
+    assert grounder.calls == 0 and recorder.entries == []
+
+
+def test_model_grounder_checked_at_the_url_its_client_uses(wiring, monkeypatch):
+    # The Anthropic SDK takes ANTHROPIC_BASE_URL from the environment; the
+    # regulated check must see that URL, not the empty configured base_url.
+    pytest.importorskip("anthropic")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://10.20.30.40:8080")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    monkeypatch.setenv("OPENADAPT_FLOW_SEND_UNSCRUBBED", "wiring unit test")
+    runtime = RuntimeSection(
+        profile="regulated",
+        grounding_model=GroundingModelConfig(
+            enabled=True, provider="anthropic", model="pinned-m"
+        ),
+    )
+    _build(runtime_config=runtime, phi_mode=False)
+    assert wiring.get("fallback") is None

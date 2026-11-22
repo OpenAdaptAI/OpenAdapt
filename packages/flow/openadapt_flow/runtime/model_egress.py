@@ -77,8 +77,7 @@ class EgressRecorder:
         self.ledger_path: Optional[Path] = None
         self.run_ref: Optional[str] = None
         self.step_id: Optional[str] = None
-        #: Every ledger line this recorder made, also when no run is bound
-        #: (a replayer driven outside ``run``, as unit tests do).
+        #: Every ledger line this recorder wrote.
         self.entries: list[dict[str, Any]] = []
         self._pending = {
             "identity_vlm_calls": 0,
@@ -112,11 +111,17 @@ class EgressRecorder:
                 if isinstance(f, (bytes, bytearray))
             ],
         }
-        if self.ledger_path is not None:
-            try:
-                append_ledger_line(self.ledger_path, entry)
-            except OSError:
-                return False
+        # No run bound (a replayer driven outside ``run``): only the ledger
+        # ``OPENADAPT_FLOW_EGRESS_LEDGER`` names will do; with none, don't send.
+        path = self.ledger_path
+        if path is None and os.environ.get(LEDGER_ENV, "").strip():
+            path = Path(os.environ[LEDGER_ENV].strip())
+        if path is None:
+            return False
+        try:
+            append_ledger_line(path, entry)
+        except OSError:
+            return False
         self.entries.append(entry)
         return True
 
