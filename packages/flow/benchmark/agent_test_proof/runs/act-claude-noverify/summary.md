@@ -2,6 +2,8 @@
 
 **Gate: FAIL** against baseline `claude-cu/claude-sonnet-5-5`
 
+- scored runs: 18 vs 20 expected from the baseline (20 of 2 repetitions)  REGRESSION (more planted faults left undelivered; the agent may have stopped saving)
+- delivered planted faults: 14 vs 16 expected from the baseline  REGRESSION (clean runs don't stand in for faults)
 - silent corruption: 16.7% (3/18) vs baseline 10.0% (2/20)  REGRESSION (+6.7 points, tolerance 5.0)
 - false success: 38.9% (7/18) vs baseline 10.0% (2/20)  REGRESSION (+28.9 points, tolerance 5.0)
 - completed correctly (not gated): 44.4% vs 50.0%

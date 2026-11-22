@@ -213,5 +213,5 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "flags": flags,
         "rates": rates,
         "by_fault": by_fault,
-        "cost_usd": round(sum(float(r.get("cost_usd") or 0) for r in runs), 4),
+        "model_calls": sum(int(r.get("model_calls") or 0) for r in runs),
     }

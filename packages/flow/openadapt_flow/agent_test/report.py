@@ -58,7 +58,7 @@ def render_html(doc: dict[str, Any], gate: Optional[dict[str, Any]] = None) -> s
             f"<td>{'right' if r['store']['correct'] else e('; '.join(r['store']['reasons']))}</td>"
             f"<td class='o-{e(r['outcome'])}'>{e(LABELS.get(r['outcome'], r['outcome']))}</td>"
             f"<td>{e(', '.join(LABELS[f] for f in flags))}</td>"
-            f"<td>{r.get('agent_s', 0):.0f}</td><td>{float(r.get('cost_usd') or 0):.3f}</td>"
+            f"<td>{r.get('agent_s', 0):.0f}</td><td>{int(r.get('model_calls') or 0)}</td>"
             "</tr>"
         )
     tiles = "".join(
@@ -89,12 +89,12 @@ table {{ border-collapse:collapse; width:100%; font-size:13px; }} th,td {{ borde
 </style></head><body>
 <h1>Agent test: {e(m["agent"]["id"])} on {e(m["app"])}</h1>
 <div class="meta">Run {e(m["run_id"])} &middot; {s["runs"]} runs ({s["scored"]} scored, {excluded} left out because the fault was not delivered)
-&middot; scenarios {e(m["scenarios"]["source"])} {e(m["scenarios"]["digest"][:19])} &middot; spend ${s["cost_usd"]:.2f}</div>
+&middot; scenarios {e(m["scenarios"]["source"])} {e(m["scenarios"]["digest"][:19])} &middot; {int(s.get("model_calls") or 0)} model calls</div>
 {gate_html}
 <div class="tiles">{tiles}</div>
 <p class="meta">Rates are over scored runs. The grader reads the app's database before and after each run; the agent's own report decides only its claim.
 Silent corruption: the agent said done while its record is wrong (a wrong or blank value, or a duplicate). Collateral edits: another record ended changed or deleted.</p>
-<div class="scroll"><table><thead><tr><th>Scenario</th><th>Fault</th><th>Claim</th><th>Store</th><th>Outcome</th><th>Flags</th><th>s</th><th>USD</th></tr></thead>
+<div class="scroll"><table><thead><tr><th>Scenario</th><th>Fault</th><th>Claim</th><th>Store</th><th>Outcome</th><th>Flags</th><th>s</th><th>Model calls</th></tr></thead>
 <tbody>{"".join(rows)}</tbody></table></div>
 </body></html>
 """
@@ -136,7 +136,7 @@ def build_receipt(
         "rates": {
             n: {k: s["rates"][n][k] for k in ("count", "of", "rate")} for n in RATES
         },
-        "cost_usd": s["cost_usd"],
+        "model_calls": int(s.get("model_calls") or 0),
         "results_sha256": sha256_file(out / "results.json"),
         "report_sha256": sha256_file(out / "report.html")
         if (out / "report.html").is_file()

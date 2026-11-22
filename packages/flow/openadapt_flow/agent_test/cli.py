@@ -140,7 +140,7 @@ def _gate_and_write(
     paths = report.write_outputs(out, doc, g, sign_key)
     s = doc["summary"]
     print(
-        f"\n{doc['meta']['agent']['id']} on {doc['meta']['app']}: {s['runs']} runs, {s['scored']} scored, ${s['cost_usd']:.2f}"
+        f"\n{doc['meta']['agent']['id']} on {doc['meta']['app']}: {s['runs']} runs, {s['scored']} scored, {int(s.get('model_calls') or 0)} model calls"
     )
     for name in (
         "completed_correctly",
@@ -193,7 +193,7 @@ def _summary(out: Path, doc: dict, g: Optional[dict]) -> None:
         )
     lines += [
         "",
-        f"{s['runs']} runs, {s['scored']} scored, ${s['cost_usd']:.2f} model spend.",
+        f"{s['runs']} runs, {s['scored']} scored, {int(s.get('model_calls') or 0)} model calls.",
     ]
     text = "\n".join(lines) + "\n"
     (out / "summary.md").write_text(text)

@@ -593,6 +593,69 @@ def test_receipt_signs_verifies_and_detects_tampering(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("shape", ["old_with_cost", "new_model_calls", "neither"])
+def test_gate_writes_outputs_for_old_and_new_results_without_prices(
+    tmp_path: Path, shape: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from openadapt_flow.agent_test import cli
+
+    base = _results(tmp_path, "base", fs=1)
+    bpath = tmp_path / "baseline.json"
+    bpath.write_text(json.dumps(gate.make_baseline(base)))
+    res = _results(tmp_path, "run", fs=1)
+    doc = json.loads(res.read_text())
+    if shape == "old_with_cost":  # a results.json written before prices left
+        doc["summary"].pop("model_calls", None)
+        doc["summary"]["cost_usd"] = 1.2345
+        for r in doc["runs"]:
+            r["cost_usd"] = 0.1234
+    elif shape == "new_model_calls":
+        for r in doc["runs"]:
+            r.pop("cost_usd", None)
+            r["model_calls"] = 3
+        doc["summary"] = grade.summarize(doc["runs"])
+    else:
+        doc["summary"].pop("model_calls", None)
+        for r in doc["runs"]:
+            r.pop("cost_usd", None)
+    res.write_text(json.dumps(doc))
+    assert cli._gate_and_write(res.parent, bpath, 0.05, None) == 0
+    out = res.parent
+    text = "".join(
+        (out / f).read_text() for f in ("report.html", "receipt.json", "summary.md")
+    )
+    text += capsys.readouterr().out
+    assert "$" not in text.replace("$GITHUB_STEP_SUMMARY", "")
+    assert "cost_usd" not in text and "1.23" not in text and "0.123" not in text
+    want = 30 if shape == "new_model_calls" else 0
+    assert json.loads((out / "receipt.json").read_text())["model_calls"] == want
+    assert f"{want} model calls" in (out / "summary.md").read_text()
+
+
+def test_summarize_counts_model_calls_not_prices() -> None:
+    runs = [
+        {
+            "outcome": "completed_correctly",
+            "fault": "none",
+            "model_calls": 2,
+            "cost_usd": 9.0,
+            "silent_corruption": False,
+            "collateral_edit": False,
+            "agent_collateral": False,
+        },
+        {
+            "outcome": "completed_correctly",
+            "fault": "none",
+            "model_calls": None,
+            "silent_corruption": False,
+            "collateral_edit": False,
+            "agent_collateral": False,
+        },
+    ]
+    s = grade.summarize(runs)
+    assert s["model_calls"] == 2 and "cost_usd" not in s
+
+
 # -- the MCP browser server's protocol ------------------------------------------------------
 
 
