@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "source": "OpenAdaptAI/openadapt-web",
+  "commit": "a8dc57ffb04bbadec242d3e1356a4cef6b36e9e0",
+  "exported_by": "scripts/export-semantic-theme.mjs, then only semantic-theme.css kept: the offline viewer allows no fonts (its CSP has no font-src) and has a size budget",
+  "files": {
+    "semantic-theme.css": {
+      "source": "styles/semantic-theme.css",
+      "sha256": "6680f37c3cd653d0c2ba46200458b76897aa1b79e132ede823806221f9907493"
+    }
+  }
+}

@@ -281,7 +281,7 @@ class ExecutionTarget(BaseModel):
         if self.backend == "web" and not self.url:
             # Flow's interactive web recorder deliberately requires an exact
             # URL. Its separate demo-record command is the canonical bundled
-            # MockMed quickstart, so keep Desktop's blank-URL path useful
+            # bundled quickstart demo, so keep Desktop's blank-URL path useful
             # without inventing an implicit public URL.
             return [
                 "demo-record",

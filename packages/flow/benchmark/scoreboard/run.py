@@ -236,7 +236,13 @@ def _ledger_view(ledger: Path, result: dict[str, Any]) -> _LedgerView:
 
 
 def _agent_item(
-    task_name: str, url: str, instruction: str, ledger: str, max_cost: float, box: Any
+    task_name: str,
+    url: str,
+    instruction: str,
+    ledger: str,
+    max_cost: float,
+    box: Any,
+    model: str = AGENT_MODEL,
 ) -> None:
     """One agent-alone item, in a child process (see arm_agent)."""
 
@@ -245,7 +251,7 @@ def _agent_item(
     task = task_module(task_name)
     agent = ClaudeComputerUseAgent(
         ledger_path=Path(ledger),
-        model=AGENT_MODEL,
+        model=model,
         system=SYSTEM_TEMPLATE.format(app=task.APP),
         max_cost_usd=max_cost,
     )

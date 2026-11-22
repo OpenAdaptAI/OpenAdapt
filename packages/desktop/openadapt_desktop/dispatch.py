@@ -81,7 +81,7 @@ _APPROVER_KEY_SETUP_CODES = frozenset(
 #: Stop cards a paired phone may answer through Desktop. A waiting save is
 #: answered through the portal's own save approval; turning "only ask about
 #: problems" back on is answered on the computer.
-PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted"})
+PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted", "exception"})
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
 
@@ -2749,13 +2749,13 @@ class EngineDispatcher:
         """Inspect Flow's canonical graph, coverage, and certification contract."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             first_replay_review_is_draft,
             inspect_bundle,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             result = inspect_bundle(
@@ -3694,13 +3694,13 @@ class EngineDispatcher:
         """Persist a pass/fail policy attempt into the resealed local bundle."""
 
         from openadapt_desktop.qualification import (
-            DEFAULT_QUALIFICATION_POLICY,
             certify_bundle,
             first_replay_review_is_draft,
         )
 
         workflow_id = str(params.get("workflow_id") or "")
-        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_policy = params.get("policy")
+        policy = str(raw_policy).strip() or None if raw_policy is not None else None
         try:
             bundle = self._qualification_bundle_dir(workflow_id)
             bundle_key = self._qualification_bundle_key(workflow_id)
@@ -3862,7 +3862,7 @@ class EngineDispatcher:
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before export")
             if not qualified["graph"]["bundle"]["encrypted"]:
-                raise ValueError("Seal and encrypt this workflow version before export")
+                raise ValueError("Encrypt this workflow version before export")
             row = self.services.db.get_bundle(workflow_id) or {}
             exports = self.config.data_dir / "exports"
             staging = exports / f".{workflow_id}-{uuid.uuid4().hex}.zip"
@@ -3915,7 +3915,7 @@ class EngineDispatcher:
             if not qualified.get("certification_current"):
                 raise ValueError("Certify this exact workflow version before deployment")
             if not qualified["graph"]["bundle"]["encrypted"]:
-                raise ValueError("Seal and encrypt this workflow version before deployment")
+                raise ValueError("Encrypt this workflow version before deployment")
             if not self.services.flow_bridge.supports_command("push"):
                 raise ValueError("The bundled Flow runtime does not support governed deployment")
             env = bundle_key_environment(workflow_id)
@@ -4490,7 +4490,7 @@ class EngineDispatcher:
     def _stop_cards(self) -> list[dict]:
         """Every card the queue shows now, rebuilt from the stores."""
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.work_items import OPEN, TEACHING, public_item
 
         names = {
@@ -4519,7 +4519,7 @@ class EngineDispatcher:
             card = stop_queue.card_for_rearm(switch)
             if card is not None:
                 cards.append(card)
-        return stop_queue.sort_cards(cards)
+        return stop_queue.sort_cards(cards + exception_queue.stop_cards())
 
     def _rearm_offer(self, workflow_id: str) -> dict | None:
         """Flow's re-arm offer for a task's switch, with the clean items named."""
@@ -4819,7 +4819,7 @@ class EngineDispatcher:
     ) -> dict:
         from datetime import datetime, timezone
 
-        from openadapt_desktop import stop_queue
+        from openadapt_desktop import exception_queue, stop_queue
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
         params = {"shown_ms": shown_ms}
@@ -4841,6 +4841,8 @@ class EngineDispatcher:
             }
         if choice_id == "leave":
             return {"ok": True, "results": [], "changed": 0}
+        if any(card["kind"] == stop_queue.EXCEPTION_KIND for card in cards):
+            return exception_queue.answer_stop_cards(self, cards, choice_id, sign, device)
         if any(card["kind"] == "rearm_problems_only" for card in cards):
             if len(cards) != 1 or device is not None:
                 return {

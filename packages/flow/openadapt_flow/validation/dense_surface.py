@@ -2,7 +2,7 @@
 
 The bounded identity evidence (``docs/validation/IDENTITY_EVIDENCE.md``: false accept
 0.000%, false abort 26.17%) is measured on SYNTHETIC corpora — string pairs
-with hand-injected OCR noise — and, at the product level, on CLEAN OpenEMR
+with hand-injected OCR noise — and, at the product level, on clean production
 identity banners. Neither is the surface where a wrong-patient write actually
 does damage: a DENSE, SIBLING-HEAVY record list, where OCR noise is worst
 (small dense rows, adjacent-row bleed) and near-duplicate names sit one row
@@ -415,7 +415,7 @@ def render_table_html(
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         f"<style>{css}</style></head><body>"
-        "<div id='hdr'>MockMed &mdash; Patient Records (demo, all data fake)</div>"
+        "<div id='hdr'>Synthetic Records Table (demo, all data fake)</div>"
         "<div id='toolbar'>Search results &mdash; "
         f"{table.n_rows} patients</div>"
         "<div id='spacer'></div>"
@@ -1272,7 +1272,7 @@ def render_markdown(result: dict[str, Any], agg: dict[str, Any]) -> str:
         "(`docs/validation/IDENTITY_EVIDENCE.md`: **false accept 0.000%, false "
         f"abort {_pct(SYNTHETIC_FALSE_ABORT)}**) are measured on SYNTHETIC "
         "corpora (string pairs with hand-injected OCR noise) and, at the "
-        "product level, on CLEAN OpenEMR identity banners. This study "
+        "product level, on clean production identity banners. This study "
         "measures the SAME matcher on the surface where a wrong-patient "
         "write actually does damage: a dense, sibling-heavy record LIST, "
         "rendered as HTML, screenshotted, and read by the repo's own OCR "

@@ -13,6 +13,8 @@
 //              commands? }
 import { createRoot } from 'react-dom/client'
 import '@openadapt/program-graph/styles.css'
+// The shared semantic theme roles (--oa-*), light and dark, without fonts.
+import '../vendor/semantic-theme/semantic-theme.css'
 import SealPage, { sealPageMeta } from '../components/SealPage.jsx'
 import { sealPageProps } from '../lib/sealProps.mjs'
 
@@ -20,11 +22,11 @@ const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 
 function Problem({ text }) {
     return (
-        <main style={{ font: '16px/1.5 system-ui, sans-serif', color: '#eaf0f6', padding: '48px 24px', maxWidth: 640, margin: '0 auto' }}>
-            <h1 style={{ fontSize: 22 }}>This Seal can&apos;t be shown</h1>
+        <main style={{ font: '16px/1.5 var(--oa-font-body)', color: 'var(--oa-text)', padding: '48px 24px', maxWidth: 640, margin: '0 auto' }}>
+            <h1 style={{ fontSize: 22 }}>This receipt can&apos;t be shown</h1>
             <p>{text}</p>
             <p>
-                Check it from a terminal instead: <code>openadapt seal verify RUN_FOLDER</code>
+                Check it from a terminal instead: <code>openadapt verify RUN_FOLDER</code>
             </p>
         </main>
     )
@@ -40,7 +42,7 @@ async function main() {
         data = null
     }
     if (!data || !data.report_b64 || !data.seal_text) {
-        root.render(<Problem text="The page has no run in it. Write one with: openadapt seal view RUN_FOLDER" />)
+        root.render(<Problem text="The page has no run in it. Write one with: openadapt receipt view RUN_FOLDER" />)
         return
     }
     const files = {
@@ -50,6 +52,8 @@ async function main() {
         tsaText: data.tsa_text ?? null,
         tsrBytes: data.tsr_b64 ? bytes(data.tsr_b64) : null,
         auth: data.auth ?? null,
+        receiptText: data.receipt_text ?? null,
+        receiptKeys: data.receipt_keys ?? null,
     }
     let props
     try {

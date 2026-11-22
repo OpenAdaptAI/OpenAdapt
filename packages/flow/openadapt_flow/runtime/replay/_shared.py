@@ -202,7 +202,7 @@ def _frame_viewport(frame_png: bytes) -> tuple[int, int]:
 PC_TEMPLATE_THRESHOLD = 0.9
 # REGION_STABLE asserts recorded structure, not palette.  The ordinary
 # grayscale template matcher remains the first (stricter) check; this edge-map
-# threshold is a color-invariant fallback.  Exact v1.16.1 MockMed evidence
+# threshold is a color-invariant fallback.  Exact v1.16.1 fixture evidence
 # measured correct theme+parameter substitution at 0.86 and a true blocking
 # modal at 0.24, leaving a deliberate margin on both sides.
 PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8

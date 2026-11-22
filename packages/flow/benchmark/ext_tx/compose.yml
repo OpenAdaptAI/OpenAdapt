@@ -1,0 +1,22 @@
+# External transaction safety lab (openadapt plan): a REST app and an email sink.
+# Ports bind to loopback inside WSL; the harness runs there through remote-run.sh.
+# Synthetic data only. The database-backed app is the standing zen-dolibarr fixture.
+name: oa-ext-tx
+services:
+  vikunja:
+    image: vikunja/vikunja:2.7.1
+    environment:
+      VIKUNJA_SERVICE_PUBLICURL: http://127.0.0.1:9670/
+      VIKUNJA_SERVICE_ENABLEREGISTRATION: "true"
+      VIKUNJA_SERVICE_SECRET: synthetic-lab-jwt-secret-not-a-real-one
+      VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: /db/vikunja.db
+    ports: ["127.0.0.1:9670:3456"]
+    tmpfs: ["/db:uid=1000", "/app/vikunja/files:uid=1000"]
+    mem_limit: 512m
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    environment:
+      MP_MAX_MESSAGES: "20000"
+    ports: ["127.0.0.1:9671:1025", "127.0.0.1:9672:8025"]
+    mem_limit: 256m
