@@ -1,0 +1,52 @@
+{
+  "cost_usd": 0.0,
+  "fallback": {
+    "admitted": false,
+    "approvals": 0,
+    "decisions": [
+      "refused_by_gate"
+    ],
+    "fallback": true,
+    "gates": [
+      "refused_by_hold"
+    ],
+    "repair": null,
+    "request_id": "fallback-084420b471744764a6e39508abc32eff",
+    "status": "GATE_REFUSED",
+    "task_record_check": {
+      "changed": 0,
+      "created": 0,
+      "outside_run": {
+        "changed": 0,
+        "created": 0,
+        "removed": 0
+      },
+      "passed": false,
+      "readable": true,
+      "reasons": [
+        "0 new records of the task's record appeared; the task makes one (wrong record, or not saved)"
+      ],
+      "removed": 0
+    }
+  },
+  "model_calls": 0,
+  "outcome": "ESCALATED",
+  "path": "agent_fallback",
+  "reason": "cached_tool_result",
+  "receipt": null,
+  "receipt_binding": {
+    "reason": "NO_RECEIPT",
+    "schema": "openadapt.receipt-binding/1",
+    "status": "UNBOUND"
+  },
+  "receipt_outcome": null,
+  "replayed": false,
+  "request_id": "r-119",
+  "run_id": "run-0002",
+  "seconds": 6.025,
+  "status": "GATE_REFUSED",
+  "usage": [],
+  "usage_known": true,
+  "verified": false,
+  "wire_checked": false
+}

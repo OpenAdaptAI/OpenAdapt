@@ -18,6 +18,7 @@
         "reversible",
         "consequential",
         "irreversible",
+        "clinical_write",
         "clinical_write"
       ],
       "title": "StepClass",
@@ -25,7 +26,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Which kinds of approver may decide each class of step.\n\nThe default allows only a person for every class. A deployment may\nwiden a class to rules, agents or systems. ``clinical_write`` accepts a\nnon-person approver only when ``clinical_write_opt_in_sha256`` pins the\ncustomer's signed opt-in.",
+  "description": "Which kinds of approver may decide each class of step.\n\nThe default allows only a person for every class. A deployment may\nwiden a class to rules, agents or systems. ``HIGH_RISK_WRITE`` (v1 wire\nkey ``clinical_write``) accepts a non-person approver only when\n``high_risk_write_opt_in_sha256`` (v1 wire field\n``clinical_write_opt_in_sha256``) pins the customer's signed opt-in.",
   "properties": {
     "allowed": {
       "additionalProperties": {

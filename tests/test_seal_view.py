@@ -1,4 +1,4 @@
-"""The offline Seal page: ``openadapt.seal_view`` and the viewer it ships.
+"""The offline receipt page: ``openadapt.seal_view`` and the viewer it ships.
 
 The fixtures are a real quickstart run's files (tests/fixtures/seal_view).
 The browser tests open the written page from ``file://`` in Chromium and
@@ -65,6 +65,11 @@ def _data(page: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def test_only_this_computers_own_key_is_labelled_this_computer(runs):
+    """A --keys registry the caller supplied is a pinned key, never "this computer"."""
+    assert "signer" not in _data(_page(runs / "run-1"))["host"]
+
+
 def test_the_viewer_ships_in_the_package_with_a_slot_and_no_network():
     html = viewer_template()
     assert html.count(DATA_SLOT) == 1
@@ -128,7 +133,7 @@ def test_a_page_checked_against_this_computers_key_says_so(runs, monkeypatch):
         write_seal_page(runs / "run-1", program=PROGRAM, about={"app": "MockMed"})
     )
     assert data["keys"] == KEYS
-    assert data["host"]["trustWords"] == "checked against your computer's Seal key"
+    assert data["host"]["trustWords"] == "checked against this computer's signing key"
 
 
 def test_witness_files_are_embedded_only_when_the_run_has_them(runs):
@@ -264,7 +269,19 @@ def test_the_page_verifies_the_quickstarts_real_seal(browser, runs):
     reader = Reader(browser, _page(runs / "run-1"))
     try:
         text = reader.verdict("Valid")
-        assert "signed by this computer's Seal key" not in text  # keys were given
+        assert (
+            "checked against this computer's signing key" not in text
+        )  # keys were given
+        signer = reader.page.locator("[data-signer]")
+        assert signer.get_attribute("data-signer") == "signed"
+        # The keys were given by the caller: a pinned key, never "this computer".
+        assert "Signed by a pinned key" in signer.inner_text()
+        # The format is in the Raw tab, not the headline.
+        assert "older format" not in signer.inner_text().lower()
+        reader.page.locator("[data-tab='raw']").click()
+        fmt = reader.page.locator("[data-format]").inner_text()
+        assert fmt == "Format: local-seal/v1, still verifies"
+        reader.page.locator("[data-tab='summary']").click()
         assert reader.page.locator("h1").inner_text() == "Saved and checked"
         stats = reader.page.locator("dl").inner_text()
         assert "6/6" in stats and "2/2" in stats
@@ -278,18 +295,42 @@ def test_the_page_verifies_the_quickstarts_real_seal(browser, runs):
         reader.close()
 
 
-def test_a_tampered_report_shows_not_valid(browser, runs):
+def test_try_changing_it_flips_a_copy_and_restore_verifies_again(browser, runs):
     reader = Reader(browser, _page(runs / "run-1"))
     try:
         reader.verdict("Valid")
-        reader.page.get_by_role("button", name="Tamper with it").click()
-        reader.page.get_by_role("button", name="Add one AI model call").click()
+        # No separate tamper panel: one click changes a copy and checks it.
+        assert reader.page.locator("#seal-tamper").count() == 0
+        reader.page.get_by_role("button", name="Try changing it").click()
         assert "subject_mismatch" in reader.verdict("Fails")
-        reader.page.get_by_role("button", name="Change the outcome in the Seal").click()
+        changed = reader.page.locator("[data-changed]")
+        text = changed.inner_text()
+        assert "execution_outcome" in text and "VERIFIED" in text and "HALTED" in text
+        assert "→" in text
+        assert (
+            "This changed copy fails: outcome VERIFIED → HALTED. The receipt no longer matches."
+            in text
+        )
+        assert (
+            "The published files are unchanged; this was a copy in your browser" in text
+        )
+        signer = reader.page.locator("[data-signer]").inner_text()
+        assert signer.startswith("Not verified")
+        # The other two changes appear only after "Try another change".
+        assert not reader.page.locator("#receipt-changes").is_visible()
+        reader.page.get_by_role("button", name="Try another change").click()
+        another = reader.page.get_by_role("group", name="Other changes")
+        assert another.get_by_role("button").count() == 2
+        another.get_by_role("button", name="Change the outcome in the receipt").click()
         assert "bad_signature" in reader.verdict("Fails. The Ed25519")
-        reader.page.get_by_role("button", name="Restore and verify").click()
+        reader.page.get_by_role("button", name="Restore", exact=True).click()
+        reader.verdict("Valid")
+        assert reader.page.locator("[data-changed]").count() == 0
+        # Verify checks the originals.
+        reader.page.get_by_role("button", name="Verify", exact=True).click()
         reader.verdict("Valid")
         assert reader.outside() == []
+        assert reader.errors == []
     finally:
         reader.close()
 
@@ -329,22 +370,63 @@ def test_the_stopped_run_verifies_and_replays_to_the_stop(browser, runs):
         reader.close()
 
 
-def test_the_map_shows_the_sealed_step_and_goes_back_to_the_seal(browser, runs):
-    reader = Reader(browser, _page(runs / "run-1"))
+@pytest.mark.parametrize("width", [375, 1440])
+def test_the_map_card_names_the_step_and_has_no_back_button(browser, runs, width):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": width, "height": 900}, reduced_motion="reduce"
+    )
+    page = context.new_page()
     try:
-        reader.verdict("Valid")
-        reader.page.locator("#map-h").scroll_into_view_if_needed()
-        reader.page.locator(".opg-node", has_text="Click Save Encounter").first.click()
-        card = reader.page.locator("[data-seal-card]")
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        if width < 900:
+            page.locator("[data-tab='program']").click()
+        page.locator(".opg-node", has_text="Click Save Encounter").first.click()
+        card = page.locator("[data-seal-card]")
         card.wait_for()
-        assert "This is the step the Seal certifies" in card.text_content()
+        assert "This is the step the receipt covers" in card.text_content()
         assert "2 of 2 read back · signature valid" in card.inner_text()
-        reader.page.get_by_role("button", name="Back to the Seal").click()
-        stage = reader.page.locator('section[aria-label="The Seal"]')
-        assert stage.get_attribute("data-pulse") in ("1", "2")
-        assert reader.outside() == []
+        assert card.get_by_role("button").count() == 0
+        assert page.get_by_role("button", name="Back to the Seal").count() == 0
+        assert page.get_by_text("Back to the", exact=False).count() == 0
     finally:
-        reader.close()
+        context.close()
+
+
+@pytest.mark.parametrize("width", [320, 1920])
+def test_buttons_wrap_inside_their_card(browser, runs, width):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": width, "height": 900}, reduced_motion="reduce"
+    )
+    page = context.new_page()
+    try:
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        page.get_by_role("button", name="Try changing it").click()
+        page.locator("[data-verdict='fails']").wait_for(timeout=15_000)
+        page.get_by_role("button", name="Try another change").click()
+        if width < 900:
+            page.locator("[data-tab='program']").click()
+        page.locator(".opg-node", has_text="Click Save Encounter").first.click()
+        page.locator("[data-seal-card]").wait_for()
+        overflow = page.evaluate(
+            """() => {
+                const out = []
+                const check = (button, box) => {
+                    const b = button.getBoundingClientRect(), c = box.getBoundingClientRect()
+                    if (b.left < c.left - 0.5 || b.right > c.right + 0.5) out.push(button.textContent)
+                }
+                for (const box of document.querySelectorAll('[data-seal-card], [data-changed]'))
+                    for (const b of box.querySelectorAll('button, a')) check(b, box)
+                return out
+            }"""
+        )
+        assert overflow == []
+        assert page.evaluate("document.documentElement.scrollWidth") <= width
+    finally:
+        context.close()
 
 
 @pytest.mark.parametrize("activation", ["pointer", "keyboard"])
@@ -390,7 +472,184 @@ def test_a_page_with_no_run_says_how_to_make_one(browser, tmp_path):
     empty.write_text(viewer_template(), encoding="utf-8")
     reader = Reader(browser, empty)
     try:
-        reader.page.get_by_text("openadapt seal view RUN_FOLDER").first.wait_for()
+        reader.page.get_by_text("openadapt receipt view RUN_FOLDER").first.wait_for()
         assert reader.outside() == []
+    finally:
+        reader.close()
+
+
+def test_a_link_can_open_one_steps_evidence(browser, runs):
+    """The fragment keeps the tab and the step: #step=6 opens step 6's evidence."""
+    page_path = _page(runs / "run-broken")
+    reader = Reader(browser, page_path, reduced=True)
+    try:
+        reader.page.goto(reader.uri + "#step=6")
+        reader.verdict("Valid")
+        tab = reader.page.locator("[data-tab='evidence']")
+        assert tab.get_attribute("aria-selected") == "true"
+        panel = reader.page.locator("#seal-panel-evidence")
+        assert "Step 6 of 6".upper() in panel.inner_text().upper()
+        assert "Click Save Encounter" in panel.inner_text()
+        # A failed read-back says so; it never reads as found.
+        assert "not exactly 1" in panel.inner_text()
+        # The next step from the list moves the fragment with it.
+        reader.page.locator("[data-tab='steps']").click()
+        reader.page.locator("[data-row='2']").click()
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=evidence&step=3'", timeout=2_000
+        )
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_the_tabs_and_the_steps_take_the_keyboard(browser, runs):
+    reader = Reader(browser, _page(runs / "run-1"), reduced=True)
+    try:
+        reader.verdict("Valid")
+        summary = reader.page.locator("[data-tab='summary']")
+        summary.focus()
+        summary.press("ArrowRight")
+        steps = reader.page.locator("[data-tab='steps']")
+        assert steps.get_attribute("aria-selected") == "true"
+        assert reader.page.evaluate("document.activeElement.dataset.tab") == "steps"
+        first = reader.page.locator("[data-row='0']")
+        first.focus()
+        reader.page.keyboard.press("ArrowDown")
+        reader.page.keyboard.press("ArrowDown")
+        assert reader.page.evaluate("document.activeElement.dataset.row") == "2"
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=steps&step=3'", timeout=2_000
+        )
+        reader.page.keyboard.press("Enter")
+        assert (
+            reader.page.locator("[data-tab='evidence']").get_attribute("aria-selected")
+            == "true"
+        )
+        # j and k step through the run from anywhere but a field.
+        reader.page.locator("body").press("j")
+        reader.page.wait_for_function(
+            "() => location.hash === '#tab=evidence&step=4'", timeout=2_000
+        )
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_the_theme_follows_the_system_and_the_switch(browser, runs):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": 1280, "height": 900}, color_scheme="light"
+    )
+    page = context.new_page()
+    try:
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.dataset.theme") == "light"
+        page.get_by_role("button", name="Switch to the dark theme").click()
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+        page.reload()
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+    finally:
+        context.close()
+
+
+def test_a_phone_gets_one_column_with_the_map_as_a_tab(browser, runs):
+    page_path = _page(runs / "run-1")
+    context = browser.new_context(
+        viewport={"width": 375, "height": 812}, reduced_motion="reduce"
+    )
+    page = context.new_page()
+    requests: list[str] = []
+    page.on("request", lambda r: requests.append(r.url))
+    try:
+        page.goto(page_path.resolve().as_uri())
+        page.locator("[data-verdict='valid']").wait_for(timeout=15_000)
+        assert page.evaluate("document.documentElement.scrollWidth") <= 375
+        assert page.locator(".opg-node").count() == 0
+        page.locator("[data-tab='program']").click()
+        page.locator(".opg-node").first.wait_for()
+        assert page.locator(".opg-node").count() >= 6
+        # The verdict stays in view on every tab.
+        assert "Signature valid" in page.get_by_role("status").first.inner_text()
+        assert [u for u in requests if not u.startswith("file:")] == []
+    finally:
+        context.close()
+
+
+def _with_receipt(run_dir: Path, home: Path) -> dict:
+    """Sign the run's receipt (record/run/v1) with a throwaway key under ``home``.
+
+    Returns a registry that names the key's role: a supplied older Seal
+    registry names none, so the page never calls its keys this computer's."""
+    pytest.importorskip("openadapt_flow.receipt_record")
+    from openadapt_flow.offline_seal import public_key_entry, signer_for
+    from openadapt_flow.receipt_record import write_receipt_record
+
+    write_receipt_record(run_dir, signer=signer_for(home), home=home)
+    entry = public_key_entry(home)
+    return {
+        "schema": "openadapt.receipt-keys/v1",
+        "keys": [{**entry, "role": "this_computer"}],
+    }
+
+
+def test_the_page_checks_the_receipt_first(browser, runs, tmp_path):
+    keys = _with_receipt(runs / "run-1", tmp_path / "home")
+    page = write_seal_page(runs / "run-1", keys=keys, program=PROGRAM)
+    assert _data(page)["receipt_text"]
+    reader = Reader(browser, page)
+    try:
+        reader.verdict("Valid")
+        signer = reader.page.locator("[data-signer]")
+        assert signer.inner_text().strip() == "Signed by this computer"
+        assert "older format" not in signer.inner_text().lower()
+        reader.page.locator("[data-tab='raw']").click()
+        assert (
+            reader.page.locator("[data-format]").inner_text() == "Format: record/run/v1"
+        )
+        reader.page.locator("[data-tab='summary']").click()
+        # A changed copy of the report no longer matches the receipt.
+        reader.page.get_by_role("button", name="Try changing it").click()
+        assert "subject_mismatch" in reader.verdict("Fails")
+        # The same outcome flipped inside the signed receipt fails its signature.
+        reader.page.get_by_role("button", name="Try another change").click()
+        reader.page.get_by_role(
+            "button", name="Change the outcome in the receipt"
+        ).click()
+        reader.verdict("Fails")
+        assert (
+            "changed after it was signed"
+            in reader.page.locator("[data-signer]").inner_text()
+        )
+        reader.page.get_by_role("button", name="Restore", exact=True).click()
+        reader.verdict("Valid")
+        assert reader.outside() == []
+        assert reader.errors == []
+    finally:
+        reader.close()
+
+
+def test_a_supplied_older_registry_never_vouches_for_a_receipt(runs, tmp_path):
+    from openadapt.seal_view import receipt_registry
+
+    _with_receipt(runs / "run-1", tmp_path / "home")
+    assert _data(_page(runs / "run-1"))["receipt_keys"] is None
+    assert receipt_registry(KEYS) is None
+    assert receipt_registry(KEYS, own=True)["keys"][0]["role"] == "this_computer"
+
+
+def test_a_receipt_from_an_unpinned_key_is_not_verified(browser, runs, tmp_path):
+    _with_receipt(runs / "run-1", tmp_path / "home")
+    reader = Reader(
+        browser, _page(runs / "run-1")
+    )  # the fixture key, not the receipt's
+    try:
+        reader.verdict("Fails")
+        assert reader.page.locator("[data-signer]").inner_text().strip() == (
+            "Not verified: unknown signer"
+        )
     finally:
         reader.close()

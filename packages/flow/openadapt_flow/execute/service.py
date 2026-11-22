@@ -6,6 +6,7 @@ import functools
 import json
 import logging
 import threading
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional, cast
@@ -37,13 +38,16 @@ from openadapt_flow.execute.keys import (
     sign_bytes,
 )
 from openadapt_flow.execute.models import (
+    AdmittedBundle,
     SelfSignedSealV1,
     assert_no_forbidden_keys,
 )
 from openadapt_flow.execute.registry import (
     AdmissionError,
     lookup_admission,
-    seed_mockmed_admissions,
+)
+from openadapt_flow.execute.registry import (
+    seed_admissions as write_seeded_admissions,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,7 +76,7 @@ class ExecuteService:
         token: str | None = None,
         runner: Runner | None = None,
         process_inline: bool = True,
-        seed_mockmed: bool = False,
+        seed_admissions: Iterable[AdmittedBundle] = (),
         deployment: Path | str | None = None,
     ) -> None:
         self.data_dir = Path(data_dir).expanduser()
@@ -86,8 +90,9 @@ class ExecuteService:
             deployment=Path(deployment).expanduser() if deployment else None,
         )
         self.process_inline = process_inline
-        if seed_mockmed:
-            seed_mockmed_admissions(self.data_dir)
+        seeded = tuple(seed_admissions)
+        if seeded:
+            write_seeded_admissions(self.data_dir, seeded)
         (self.data_dir / "executions").mkdir(parents=True, exist_ok=True)
         (self.data_dir / "idempotency").mkdir(parents=True, exist_ok=True)
 

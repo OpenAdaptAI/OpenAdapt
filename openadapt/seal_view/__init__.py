@@ -1,4 +1,4 @@
-"""Write a sealed run's Seal as one offline HTML page: ``RUN_DIR/seal.html``.
+"""Write a signed run's receipt as one offline HTML page: ``RUN_DIR/seal.html``.
 
 The page is ``viewer.html`` (built from ``packages/seal-view``; Preact, the
 program map and the Seal inlined) with the run's own files embedded in it:
@@ -52,7 +52,7 @@ def viewer_template() -> str:
             .read_text(encoding="utf-8")
         )
     except (FileNotFoundError, ModuleNotFoundError) as exc:  # pragma: no cover
-        raise SealViewError("this install has no Seal viewer (viewer.html)") from exc
+        raise SealViewError("this install has no receipt viewer (viewer.html)") from exc
 
 
 def _text(path: Path) -> Optional[str]:
@@ -194,6 +194,37 @@ def local_keys(home: Optional[Path] = None) -> list[dict[str, str]]:
     return [public_key_entry(home or seal_home())]
 
 
+def receipt_registry(keys: Any, *, own: bool = False) -> Optional[dict[str, Any]]:
+    """The keys as an ``openadapt.receipt-keys/v1`` registry for the receipt check.
+
+    A registry that already names roles is used as it is. An older Seal key
+    registry names no role. Only this computer's own key (``own``) becomes
+    ``this_computer``; for any other older registry there is no role to give,
+    so the receipt isn't checked against it (None), never labelled as this
+    computer's (trust-label class).
+    """
+
+    if isinstance(keys, Mapping) and keys.get("schema") == "openadapt.receipt-keys/v1":
+        return dict(keys)
+    if not own:
+        return None
+    entries = keys.get("keys") if isinstance(keys, Mapping) else keys
+    out = []
+    for entry in entries or []:
+        if not isinstance(entry, Mapping):
+            continue
+        item = {
+            "key_id": entry.get("key_id"),
+            "public_key": entry.get("public_key"),
+            "role": "this_computer",
+            "status": entry.get("status", "active"),
+        }
+        if item["status"] == "revoked":
+            item["revoked_at"] = entry.get("revoked_at")
+        out.append(item)
+    return {"schema": "openadapt.receipt-keys/v1", "keys": out}
+
+
 def page_data(
     run_dir: Path,
     *,
@@ -202,6 +233,7 @@ def page_data(
     about: Optional[Mapping[str, Any]] = None,
     host: Optional[Mapping[str, Any]] = None,
     commands: Optional[str] = None,
+    own_keys: bool = False,
 ) -> dict[str, Any]:
     """What the viewer reads: the run's files exactly as they are on disk."""
 
@@ -211,6 +243,9 @@ def page_data(
     if seal is None:
         raise SealViewError(f"{run_dir} has no seal.json")
     present = [name for name in RUN_FILES if (run_dir / name).is_file()]
+    receipt = _text(run_dir / "receipt.json")
+    if receipt is not None and '"payloadType"' not in receipt:
+        receipt = None  # an older run summary under the receipt's name
     return {
         "report_b64": base64.b64encode(report).decode("ascii"),
         "seal_text": seal,
@@ -218,6 +253,10 @@ def page_data(
         "tsa_text": _text(run_dir / "seal.tsa.json"),
         "tsr_b64": _b64(run_dir / "seal.tsr"),
         "keys": keys,
+        # The receipt (record/run/v1), checked first; seal.json is the older format.
+        "receipt_text": receipt,
+        "receipt_anchor_text": _text(run_dir / "receipt.anchor.json"),
+        "receipt_keys": receipt_registry(keys, own=own_keys),
         "program": {"spec": dict(program)},
         "about": dict(about or {}),
         "host": {"files": present, **dict(host or {})},
@@ -230,7 +269,7 @@ def render_page(data: Mapping[str, Any], template: Optional[str] = None) -> str:
 
     template = template if template is not None else viewer_template()
     if DATA_SLOT not in template:
-        raise SealViewError("the Seal viewer has no slot for the run's files")
+        raise SealViewError("the receipt viewer has no slot for the run's files")
     # JSON in a script element: escape "<" so no "</script>" can end it early.
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     payload = payload.replace("<", "\\u003c")
@@ -265,11 +304,13 @@ def write_seal_page(
         report = json.loads(report_path.read_bytes())
     except (OSError, ValueError) as exc:
         raise SealViewError(f"{report_path} can't be read") from exc
+    own_keys = keys is None
     if keys is None:
         keys = local_keys()
         # A page forwarded to someone else stays a local check, not third-party proof.
         host = {
-            "trustWords": "checked against your computer's Seal key",
+            "trustWords": "checked against this computer's signing key",
+            "signer": "this_computer",
             **dict(host or {}),
         }
     if program is None or _digest_of(program) != report.get("bundle_content_digest"):
@@ -279,8 +320,9 @@ def write_seal_page(
         keys=keys,
         program=program,
         about=about,
-        host={"unchanged": "The files on disk are unchanged.", **dict(host or {})},
+        host=dict(host or {}),
         commands=commands,
+        own_keys=own_keys,
     )
     target = Path(out) if out else run_dir / PAGE_NAME
     target.write_text(render_page(data), encoding="utf-8")

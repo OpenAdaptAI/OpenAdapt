@@ -7,7 +7,7 @@ compiled bundle, then waits for one operator confirmation. Refusing a pin
 HALTs. Guessing is not a path.
 
 The accepted project is the existing
-:class:`~openadapt_flow.qualification.QualificationProject`. Local MockMed
+:class:`~openadapt_flow.qualification.QualificationProject`. Local demo
 quickstart can then sign a local-dev admission that production trust maps
 refuse.
 """

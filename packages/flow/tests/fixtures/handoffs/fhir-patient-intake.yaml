@@ -1,0 +1,18 @@
+# Counterparty profile: read a referral's patient back from a receiving
+# clinic's FHIR R4 server. Data, not code: any FHIR R4 server that keeps the
+# sender's reference as the patient's PT identifier reads the same way.
+#
+# The key is the sender's referral id, which the receiver records as the
+# patient's external identifier (identifier type PT). Every returned record
+# is checked for that exact value (key_path), so a server that ignores the
+# search parameter can't make a wrong record "found".
+resource: Patient
+key_param: identifier
+key_path: identifier[system=http://terminology.hl7.org/CodeSystem/v2-0203].value
+counterparty: receiving clinic (synthetic)
+system_kind: ehr
+fields:
+  given_name: {path: "name[use=official].given", kind: text}
+  family_name: {path: "name[use=official].family", kind: text}
+  birth_date: {path: birthDate, kind: date}
+  sex: {path: gender, kind: code}
