@@ -351,11 +351,11 @@ def screen_rows(
     2. When a text scrubber is given, each label (task id, task type,
        executor label, field names) must come back from it unchanged; a label
        the scrubber would rewrite looks like personal data and refuses that
-       row. The exemption is a field name or task id the run's own task,
-       verify, readiness or P7 files declared (kept beside the row at
-       ``add`` time): Presidio rewrites the name ``patient_id`` and the id
-       ``readiness-mockmed-0002``, but a declared name is an identifier the
-       operator chose, not a value.
+       row. The exemption is a field name the run's own task, verify or
+       readiness files declared (kept beside the row at ``add`` time):
+       Presidio rewrites the name ``patient_id``, but a declared name is a
+       form's identifier, not a value. A task id the scrubber would rewrite
+       leaves as an opaque ``tid-<16 hex>`` instead (:func:`_screen_one`).
 
     A refused row is left out; the others still go. A scrubber that can't
     run at all refuses everything (:class:`LedgerRefused`).
