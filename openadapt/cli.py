@@ -72,13 +72,37 @@ class _FlowFirstGroup(click.Group):
                 formatter.write_dl(legacy)
 
     def invoke(self, ctx):
+        import time
+
+        t0 = time.monotonic()
+        exit_code = 0
         try:
             return super().invoke(ctx)
         except (SystemExit, click.exceptions.Exit) as exc:
             code = getattr(exc, "exit_code", getattr(exc, "code", None))
+            exit_code = code if isinstance(code, int) else (0 if code is None else 1)
             if code == 0 and ctx.meta.get("alias_help"):
                 click.echo("\n" + ctx.meta["alias_help"])
             raise
+        except Exception:
+            exit_code = 1
+            raise
+        finally:
+            if not ctx.resilient_parsing:
+                try:
+                    from openadapt import telemetry
+
+                    elapsed_ms = (time.monotonic() - t0) * 1000.0
+                    sub = ctx.invoked_subcommand or "help"
+                    telemetry.capture_cli_command(
+                        sub, exit_code=exit_code, duration_ms=elapsed_ms
+                    )
+                    if sub == "quickstart":
+                        telemetry.capture_quickstart_completed(
+                            ok=(exit_code == 0), duration_ms=elapsed_ms
+                        )
+                except Exception:
+                    pass
 
     def get_command(self, ctx, name):
         from openadapt.cli_tasks import NATIVE_ROUTES, TASKS

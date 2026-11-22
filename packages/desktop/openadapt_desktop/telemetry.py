@@ -56,11 +56,32 @@ ALLOWED_EVENTS = frozenset(
         "teach_started",
         "teach_completed",
         "update_check",
+        "workflow_recorded",
+        "workflow_compiled",
+        "workflow_run_completed",
+        "phone_approval_resolved",
+        "receipt_exported",
     }
 )
 
 #: Per-event properties a caller may add. Strings must be short enum tokens.
-ALLOWED_PROPERTIES = frozenset({"surface", "mode", "outcome", "error_code", "update_available"})
+ALLOWED_PROPERTIES = frozenset(
+    {
+        "surface",
+        "mode",
+        "outcome",
+        "error_code",
+        "update_available",
+        "step_count_bucket",
+        "duration_bucket",
+        "duration_ms_bucket",
+        "success",
+        "verification_mode",
+        "decision",
+        "latency_bucket",
+        "format",
+    }
+)
 
 _TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
 
@@ -197,3 +218,125 @@ def capture(event: str, properties: dict[str, Any] | None = None) -> bool:
     except Exception:
         logger.debug("Usage stats event {} skipped", event)
         return False
+
+
+_SURFACES = frozenset({"browser", "desktop", "native", "hybrid", "controller", "engine"})
+_RUN_OUTCOMES = frozenset({"VERIFIED", "STOPPED", "FAILED"})
+_VERIFICATION_MODES = frozenset({"read_back", "same_screen", "visual_veto", "none"})
+_APPROVAL_DECISIONS = frozenset({"approved", "denied", "expired", "cancelled"})
+_EXPORT_FORMATS = frozenset({"json", "cbor", "card", "pdf", "bundle"})
+
+
+def step_count_bucket(count: int) -> str:
+    n = max(0, int(count))
+    if n == 0:
+        return "0"
+    if n <= 5:
+        return "1_5"
+    if n <= 20:
+        return "6_20"
+    if n <= 50:
+        return "21_50"
+    return "gt_50"
+
+
+def duration_bucket(elapsed_s: float) -> str:
+    s = max(0.0, float(elapsed_s))
+    if s < 10:
+        return "lt_10s"
+    if s < 60:
+        return "10s_60s"
+    if s < 300:
+        return "1m_5m"
+    return "gt_5m"
+
+
+def duration_ms_bucket(elapsed_ms: float) -> str:
+    ms = max(0.0, float(elapsed_ms))
+    if ms < 100:
+        return "lt_100ms"
+    if ms < 1_000:
+        return "100ms_1s"
+    if ms < 10_000:
+        return "1s_10s"
+    if ms < 60_000:
+        return "10s_60s"
+    return "gt_60s"
+
+
+def latency_bucket(latency_s: float) -> str:
+    s = max(0.0, float(latency_s))
+    if s < 5:
+        return "lt_5s"
+    if s < 30:
+        return "5s_30s"
+    if s < 120:
+        return "30s_2m"
+    return "gt_2m"
+
+
+def workflow_recorded(*, step_count: int, duration_s: float, surface: str) -> bool:
+    """Emit ``workflow_recorded`` with strictly categorical, non-PII properties."""
+    norm_surface = (surface or "").strip().lower()
+    return capture(
+        "workflow_recorded",
+        {
+            "step_count_bucket": step_count_bucket(step_count),
+            "duration_bucket": duration_bucket(duration_s),
+            "surface": norm_surface if norm_surface in _SURFACES else "other",
+        },
+    )
+
+
+def workflow_compiled(*, success: bool, step_count: int) -> bool:
+    """Emit ``workflow_compiled`` with strictly categorical, non-PII properties."""
+    return capture(
+        "workflow_compiled",
+        {
+            "success": bool(success),
+            "step_count_bucket": step_count_bucket(step_count),
+        },
+    )
+
+
+def workflow_run_completed(
+    *, outcome: str, verification_mode: str, duration_ms: float
+) -> bool:
+    """Emit ``workflow_run_completed`` with closed outcome (VERIFIED|STOPPED|FAILED)."""
+    norm_outcome = (outcome or "").strip().upper()
+    norm_mode = (verification_mode or "").strip().lower()
+    return capture(
+        "workflow_run_completed",
+        {
+            "outcome": norm_outcome if norm_outcome in _RUN_OUTCOMES else "FAILED",
+            "verification_mode": (
+                norm_mode if norm_mode in _VERIFICATION_MODES else "other"
+            ),
+            "duration_ms_bucket": duration_ms_bucket(duration_ms),
+        },
+    )
+
+
+def phone_approval_resolved(*, decision: str, latency_s: float) -> bool:
+    """Emit ``phone_approval_resolved`` with closed decision and latency bucket."""
+    norm_decision = (decision or "").strip().lower()
+    return capture(
+        "phone_approval_resolved",
+        {
+            "decision": (
+                norm_decision if norm_decision in _APPROVAL_DECISIONS else "other"
+            ),
+            "latency_bucket": latency_bucket(latency_s),
+        },
+    )
+
+
+def receipt_exported(*, format: str) -> bool:
+    """Emit ``receipt_exported`` with closed export format."""
+    norm_fmt = (format or "").strip().lower()
+    return capture(
+        "receipt_exported",
+        {
+            "format": norm_fmt if norm_fmt in _EXPORT_FORMATS else "other",
+        },
+    )

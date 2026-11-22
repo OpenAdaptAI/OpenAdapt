@@ -351,3 +351,58 @@ def test_openadapt_telemetry_zero_overrides_saved_share(clean_env, sent, monkeyp
     enabled = telemetry.telemetry_enabled()
     queued = telemetry.capture("app_opened")
     assert (enabled, queued, len(sent)) == (False, False, 0)
+
+
+def test_typed_workflow_and_receipt_helpers_enforce_closed_categoricals(
+    clean_env, sent
+) -> None:
+    privacy_settings.set_usage_stats(True)
+    assert telemetry.workflow_recorded(step_count=12, duration_s=45.0, surface="browser") is True
+    assert telemetry.workflow_compiled(success=True, step_count=12) is True
+    assert (
+        telemetry.workflow_run_completed(
+            outcome="VERIFIED", verification_mode="read_back", duration_ms=850.0
+        )
+        is True
+    )
+    assert telemetry.phone_approval_resolved(decision="approved", latency_s=12.0) is True
+    assert telemetry.receipt_exported(format="json") is True
+
+    # Unknown / PII-like strings normalize fail-closed to "other" / "FAILED"
+    assert (
+        telemetry.workflow_recorded(
+            step_count=3, duration_s=5.0, surface="Epic EHR - Jane Doe"
+        )
+        is True
+    )
+    assert (
+        telemetry.workflow_run_completed(
+            outcome="SECRET_ERROR_TEXT", verification_mode="custom_phi", duration_ms=50.0
+        )
+        is True
+    )
+
+    by_idx = [payload for _url, payload in sent]
+    assert by_idx[0]["event"] == "workflow_recorded"
+    assert by_idx[0]["properties"]["step_count_bucket"] == "6_20"
+    assert by_idx[0]["properties"]["duration_bucket"] == "10s_60s"
+    assert by_idx[0]["properties"]["surface"] == "browser"
+
+    assert by_idx[1]["event"] == "workflow_compiled"
+    assert by_idx[1]["properties"]["success"] is True
+
+    assert by_idx[2]["event"] == "workflow_run_completed"
+    assert by_idx[2]["properties"]["outcome"] == "VERIFIED"
+    assert by_idx[2]["properties"]["verification_mode"] == "read_back"
+    assert by_idx[2]["properties"]["duration_ms_bucket"] == "100ms_1s"
+
+    assert by_idx[3]["event"] == "phone_approval_resolved"
+    assert by_idx[3]["properties"]["decision"] == "approved"
+    assert by_idx[3]["properties"]["latency_bucket"] == "5s_30s"
+
+    assert by_idx[4]["event"] == "receipt_exported"
+    assert by_idx[4]["properties"]["format"] == "json"
+
+    assert by_idx[5]["properties"]["surface"] == "other"
+    assert by_idx[6]["properties"]["outcome"] == "FAILED"
+    assert by_idx[6]["properties"]["verification_mode"] == "other"
