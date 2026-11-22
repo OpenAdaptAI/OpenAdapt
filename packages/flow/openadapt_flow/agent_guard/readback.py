@@ -212,6 +212,7 @@ def settle(guard: Guard, result: ReadbackResult, verdict: GuardVerdict) -> Guard
     if prior is not None and prior.verdict is verdict:
         return prior
     evidence = dict(result.evidence)
+    reason: Optional[str]
     if differing_fields(guard.task, result.fields):
         reason = "readback:fields_differ"
     elif prior is not None or verdict is not result.verdict:
