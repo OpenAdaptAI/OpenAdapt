@@ -562,7 +562,7 @@ def run_one(ctx: Ctx, system: str, trial: Trial, task: str) -> dict[str, Any]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--system", required=True, choices=sorted(SCENARIOS))
     ap.add_argument("--clean", type=int, default=300)
     ap.add_argument("--faults", type=int, default=10, help="rounds of the fault set")

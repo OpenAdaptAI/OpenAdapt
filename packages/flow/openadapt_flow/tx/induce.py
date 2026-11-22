@@ -1200,13 +1200,16 @@ def induce_lens_from_har(
                 # ways. Learn it for this field; never a clobber or a replace.
                 if _null_or_empty(old_val) and _null_or_empty(new_val):
                     # Unproven-equivalence class: learn it only from this
-                    # write sending one empty spelling and the server storing
-                    # the other, never from two reads around someone's edit.
-                    sent_empty = (
-                        curr_ex.method in {"POST", "PUT", "PATCH"}
-                        and path in flat_req
-                        and _null_or_empty(flat_req[path])
-                        and flat_req[path] != new_val
+                    # write's own response, never from two reads around
+                    # someone else's edit.
+                    # The change must show in this write's own response: an
+                    # untouched field the server re-spelled, or an empty value
+                    # sent one way and stored the other.
+                    sent_empty = curr_ex.method in {"POST", "PUT", "PATCH"} and (
+                        path not in flat_req
+                        or (
+                            _null_or_empty(flat_req[path]) and flat_req[path] != new_val
+                        )
                     )
                     if sent_empty and path not in null_empty_paths:
                         null_empty_paths.append(path)
