@@ -2283,64 +2283,57 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 def _cmd_compile(args: argparse.Namespace) -> int:
     import json
 
+    from openadapt_flow.compile_code import maybe_emit_code_from_cli
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.compiler import param_confirm as pc
 
+    out_dir = Path(args.out)
     workflow = compile_recording(
         Path(args.recording),
-        Path(args.out),
+        out_dir,
         name=args.name,
         pixel_verify_enabled=bool(getattr(args, "pixel_verify_enabled", False)),
     )
-    print(
-        f"Compiled {len(workflow.steps)} steps into {args.out} "
-        f"(workflow: {workflow.name!r})"
-    )
-
-    # One-shot confirm pass for flagged field-label parameter proposals.
-    # Fail-closed: with no decision channel (no flags, no TTY) every proposal
-    # stays a demonstrated constant and the bundle above is final.
+    print(f"Compiled {len(workflow.steps)} steps into {args.out} (workflow: {workflow.name!r})")
     if args.params_from and args.accept_params:
         raise SystemExit("use --params-from or --accept-params, not both")
-    proposals = pc.load_proposals(Path(args.out))
-    if not proposals:
-        return 0
-    decisions: list[pc.ParamDecision] = []
-    if args.params_from:
-        decisions_json = json.loads(Path(args.params_from).read_text(encoding="utf-8"))
-        if not isinstance(decisions_json, dict):
-            raise SystemExit("--params-from: file must be a JSON object")
-        decisions = pc.decisions_from_file(proposals, decisions_json)
-    elif args.accept_params:
-        names = [n.strip() for n in args.accept_params.split(",") if n.strip()]
-        decisions = pc.decisions_from_accept_list(proposals, names)
-    elif sys.stdin.isatty() and sys.stdout.isatty() and not args.no_confirm_params:
-        decisions = pc.decisions_interactive(proposals)
-    else:
-        print(
-            f"{len(proposals)} field-label parameter proposal(s) left "
-            "unconfirmed (kept as demonstrated constants). Review "
-            f"{Path(args.out) / pc.PROPOSALS_FILENAME} and re-run with "
-            "--accept-params or --params-from to confirm."
-        )
-        return 0
-    if not decisions:
-        print("No parameter proposals confirmed; bundle unchanged.")
-        return 0
-    pc.apply_decisions(
-        Path(args.recording), Path(args.out), name=args.name, decisions=decisions
-    )
-    for d in decisions:
-        kind = "secret parameter" if d.secret else "parameter"
-        print(f"  confirmed {kind} {d.name!r} ({d.step_id})")
-        if d.secret:
+    proposals = pc.load_proposals(out_dir)
+    if proposals:
+        decisions: list[pc.ParamDecision] = []
+        if args.params_from:
+            decisions_json = json.loads(Path(args.params_from).read_text(encoding="utf-8"))
+            if not isinstance(decisions_json, dict):
+                raise SystemExit("--params-from: file must be a JSON object")
+            decisions = pc.decisions_from_file(proposals, decisions_json)
+        elif args.accept_params:
+            names = [n.strip() for n in args.accept_params.split(",") if n.strip()]
+            decisions = pc.decisions_from_accept_list(proposals, names)
+        elif sys.stdin.isatty() and sys.stdout.isatty() and not args.no_confirm_params:
+            decisions = pc.decisions_interactive(proposals)
+        else:
             print(
-                f"    note: supply OPENADAPT_FLOW_SECRET_{d.name.upper()} at "
-                "replay; the bundle carries no literal, but the RECORDING "
-                "still does (re-record with --secret for full at-rest "
-                "secrecy)."
+                f"{len(proposals)} field-label parameter proposal(s) left unconfirmed "
+                f"(kept as demonstrated constants). Review {out_dir / pc.PROPOSALS_FILENAME} "
+                "and re-run with --accept-params or --params-from to confirm."
             )
-    print(f"Recompiled with {len(decisions)} confirmed parameter(s).")
+            maybe_emit_code_from_cli(args, out_dir, workflow)
+            return 0
+        if not decisions:
+            print("No parameter proposals confirmed; bundle unchanged.")
+        else:
+            pc.apply_decisions(Path(args.recording), out_dir, name=args.name, decisions=decisions)
+            for d in decisions:
+                kind = "secret parameter" if d.secret else "parameter"
+                print(f"  confirmed {kind} {d.name!r} ({d.step_id})")
+                if d.secret:
+                    print(
+                        f"    note: supply OPENADAPT_FLOW_SECRET_{d.name.upper()} at replay; "
+                        "the bundle carries no literal, but the RECORDING still does "
+                        "(re-record with --secret for full at-rest secrecy)."
+                    )
+            print(f"Recompiled with {len(decisions)} confirmed parameter(s).")
+            workflow = None
+    maybe_emit_code_from_cli(args, out_dir, workflow)
     return 0
 
 
@@ -9802,6 +9795,9 @@ def build_parser() -> argparse.ArgumentParser:
             "an irreversible step on every run."
         ),
     )
+    from openadapt_flow.compile_code import register_compile_code_args
+
+    register_compile_code_args(p)
     p.set_defaults(func=_cmd_compile)
 
     p = sub.add_parser(
