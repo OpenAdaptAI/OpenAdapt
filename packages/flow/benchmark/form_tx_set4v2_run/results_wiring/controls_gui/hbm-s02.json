@@ -1,0 +1,389 @@
+{
+ "case_id": "hbm-s02",
+ "screen_id": "hbm_location",
+ "url": "http://127.0.0.1:63754/bop/worksheet",
+ "bound": [
+  {
+   "binding_id": "hbm_legal_name",
+   "dossier_key": "legal_name",
+   "intake": "Ines Carvalho-Brandt",
+   "observed": {
+    "label": "Legal name",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Legal name",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_dba_name",
+   "dossier_key": "dba_name",
+   "intake": "Rise Street Bakehouse",
+   "observed": {
+    "label": "Doing business as (DBA)",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Doing business as (DBA)",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_entity_type",
+   "dossier_key": "entity_type",
+   "intake": "Sole proprietorship",
+   "observed": {
+    "label": "Entity type",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [
+     {
+      "value": "",
+      "label": "-- select --"
+     },
+     {
+      "value": "Limited liability company",
+      "label": "Limited liability company"
+     },
+     {
+      "value": "Corporation",
+      "label": "Corporation"
+     },
+     {
+      "value": "Sole proprietorship",
+      "label": "Sole proprietorship"
+     },
+     {
+      "value": "General partnership",
+      "label": "General partnership"
+     }
+    ],
+    "row_cells": [
+     "Entity type",
+     "-- select --Limited liability companyCorporationSole proprietorshipGeneral partnership"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_fein",
+   "dossier_key": "fein",
+   "intake": "88-1174520",
+   "observed": {
+    "label": "FEIN",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "FEIN",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_year_established",
+   "dossier_key": "year_established",
+   "intake": 2021,
+   "observed": {
+    "label": "Year established",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Year established",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_location_street",
+   "dossier_key": "location_street",
+   "intake": "18 Rise Street",
+   "observed": {
+    "label": "Location street address",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Location street address",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_employees",
+   "dossier_key": "employees",
+   "intake": 6,
+   "observed": {
+    "label": "Number of employees",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Number of employees",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_annual_revenue",
+   "dossier_key": "annual_revenue",
+   "intake": 410000,
+   "observed": {
+    "label": "Annual gross sales ($)",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Annual gross sales ($)",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_owned",
+   "dossier_key": "building_owned",
+   "intake": false,
+   "observed": {
+    "label": "Does the insured own the building?",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [
+     {
+      "value": "",
+      "label": "-- select --"
+     },
+     {
+      "value": "Yes",
+      "label": "Yes"
+     },
+     {
+      "value": "No",
+      "label": "No"
+     }
+    ],
+    "row_cells": [
+     "Does the insured own the building?",
+     "-- select --YesNo"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_building_limit",
+   "dossier_key": "building_limit",
+   "intake": 0,
+   "observed": {
+    "label": "Building limit ($)",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Building limit ($)",
+     "enter 0 if not owned"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_bpp_limit",
+   "dossier_key": "bpp_limit",
+   "intake": 130700,
+   "observed": {
+    "label": "Business personal property limit ($)",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Business personal property limit ($)",
+     "Open BPP worksheet Equipment Inventory Furniture and fixtures Calculated BPP: $0 Copy to limit"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_liability_limit",
+   "dossier_key": "liability_limit",
+   "intake": "$500,000 / $1,000,000",
+   "observed": {
+    "label": "Liability limits",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [
+     {
+      "value": "",
+      "label": "-- select --"
+     },
+     {
+      "value": "$300,000 / $600,000",
+      "label": "$300,000 / $600,000"
+     },
+     {
+      "value": "$500,000 / $1,000,000",
+      "label": "$500,000 / $1,000,000"
+     },
+     {
+      "value": "$1,000,000 / $2,000,000",
+      "label": "$1,000,000 / $2,000,000"
+     }
+    ],
+    "row_cells": [
+     "Liability limits",
+     "-- select --$300,000 / $600,000$500,000 / $1,000,000$1,000,000 / $2,000,000 occurrence / aggregate"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_deductible",
+   "dossier_key": "deductible",
+   "intake": 1000,
+   "observed": {
+    "label": "Property deductible",
+    "group_label": "",
+    "value": "1000",
+    "checked": null,
+    "options": [
+     {
+      "value": "",
+      "label": "-- select --"
+     },
+     {
+      "value": "500",
+      "label": "$500"
+     },
+     {
+      "value": "1000",
+      "label": "$1,000"
+     },
+     {
+      "value": "2500",
+      "label": "$2,500"
+     },
+     {
+      "value": "5000",
+      "label": "$5,000"
+     }
+    ],
+    "row_cells": [
+     "Property deductible",
+     "-- select --$500$1,000$2,500$5,000"
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  },
+  {
+   "binding_id": "hbm_effective_date",
+   "dossier_key": "effective_date",
+   "intake": "2027-02-01",
+   "observed": {
+    "label": "Effective date",
+    "group_label": "",
+    "value": "",
+    "checked": null,
+    "options": [],
+    "row_cells": [
+     "Effective date",
+     ""
+    ],
+    "error_text": ""
+   },
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "State entity number",
+   "value": "",
+   "selector": "#en",
+   "options": []
+  },
+  {
+   "label": "Look up entity",
+   "value": "",
+   "selector": "#applicant > tbody > tr:nth-of-type(2) > td > button",
+   "options": []
+  },
+  {
+   "label": "Save applicant",
+   "value": "",
+   "selector": "#applicant > tbody > tr:nth-of-type(8) > td > button",
+   "options": []
+  },
+  {
+   "label": "Class code",
+   "value": "",
+   "selector": "#class-code",
+   "options": []
+  },
+  {
+   "label": "Find class...",
+   "value": "",
+   "selector": "#find-class",
+   "options": []
+  },
+  {
+   "label": "Save location",
+   "value": "",
+   "selector": "#location > tbody > tr:nth-of-type(8) > td > button",
+   "options": []
+  },
+  {
+   "label": "Open BPP worksheet",
+   "value": "",
+   "selector": "#bpp-open",
+   "options": []
+  },
+  {
+   "label": "Save coverage",
+   "value": "",
+   "selector": "#coverage > tbody > tr:nth-of-type(6) > td > button",
+   "options": []
+  },
+  {
+   "label": "Rate this risk",
+   "value": "",
+   "selector": "#rate",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "HOLLOWFEN BUSINESS MUTUAL\nBOP Rating Worksheet v4.2\n1. Applicant\nState entity number\t Look up entity\nLegal name\t\nDoing business as (DBA)\t\nEntity type\t\n-- select --\nLimited liability company\nCorporation\nSole proprietorship\nGeneral partnership\n\nFEIN\t\nYear established\t\nSave applicant\n2. Location and operations\nLocation street address\t\nClass code\t Find class...\nNumber of employees\t\nAnnual gross sales ($)\t\nDoes the insured own the building?\t\n-- select --\nYes\nNo\n\nBuilding limit ($)\t enter 0 if not owned\nSave location\n3. Coverages\nBusiness personal property limit ($)\t Open BPP worksheet\nLiability limits\t\n-- select --\n$300,000 / $600,000\n$500,000 / $1,000,000\n$1,000,000 / $2,000,000\n occurrence / aggregate\nProperty deductible\t\n-- select --\n$500\n$1,000\n$2,500\n$5,000\n\nEffective date\t\nSave coverage\nRate this risk"
+}

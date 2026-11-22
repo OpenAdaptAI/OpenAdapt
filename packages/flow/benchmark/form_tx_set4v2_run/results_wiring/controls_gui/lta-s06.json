@@ -1,0 +1,159 @@
+{
+ "case_id": "lta-s06",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:63547/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Thaddeus Kimura",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "t.kimura@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "480-555-0121",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Arizona",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "New Zealand - Oceania",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-11-03",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-11-25",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 14200,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Premier",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "I confirm the details above are correct",
+   "value": "false",
+   "selector": "#agree",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nThaddeus Kimura\nEdit\nEmail\nt.kimura@example.test\nEdit\nMobile phone\n480-555-0121\nEdit\nState of residence\nArizona\nEdit\nDestination\nNew Zealand - Oceania\nEdit\nDeparture date\n11/03/2027\nEdit\nReturn date\n11/25/2027\nEdit\nTravellers\nThaddeus Kimura (05/19/1968); Marguerite Kimura (08/02/1970); Elias Kimura (12/12/2004)\nEdit\nTrip cost\n$14,200\nEdit\nPlan\nPremier\nEdit\nCancel For Any Reason\nNo\nEdit\nI confirm the details above are correct\nGet my quote"
+}

@@ -1,0 +1,159 @@
+{
+ "case_id": "lta-s05",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:63547/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Henrietta Moss-Achebe",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "h.mossachebe@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "612-555-0158",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Minnesota",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Norway - Northern Europe",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-06-12",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-06-24",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 11840,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Premier",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "I confirm the details above are correct",
+   "value": "false",
+   "selector": "#agree",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nHenrietta Moss-Achebe\nEdit\nEmail\nh.mossachebe@example.test\nEdit\nMobile phone\n612-555-0158\nEdit\nState of residence\nMinnesota\nEdit\nDestination\nNorway - Northern Europe\nEdit\nDeparture date\n06/12/2027\nEdit\nReturn date\n06/24/2027\nEdit\nTravellers\nHenrietta Moss-Achebe (09/30/1961); Gareth Achebe (02/14/1959)\nEdit\nTrip cost\n$11,840\nEdit\nPlan\nPremier\nEdit\nCancel For Any Reason\nYes\nEdit\nI confirm the details above are correct\nGet my quote"
+}

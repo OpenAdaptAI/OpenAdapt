@@ -1,0 +1,159 @@
+{
+ "case_id": "lta-s04",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:63547/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Leocadia Furness",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "leo.furness@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "802-555-0177",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Vermont",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Peru - South America",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-07-01",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-07-16",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 6380,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Plus",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": true,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "I confirm the details above are correct",
+   "value": "false",
+   "selector": "#agree",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nLeocadia Furness\nEdit\nEmail\nleo.furness@example.test\nEdit\nMobile phone\n802-555-0177\nEdit\nState of residence\nVermont\nEdit\nDestination\nPeru - South America\nEdit\nDeparture date\n07/01/2027\nEdit\nReturn date\n07/15/2027\nEdit\nTravellers\nLeocadia Furness (06/08/1993); Amos Furness (10/21/1991)\nEdit\nTrip cost\n$6,380\nEdit\nPlan\nPlus\nEdit\nCancel For Any Reason\nYes\nEdit\nI confirm the details above are correct\nGet my quote"
+}

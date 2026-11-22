@@ -1,0 +1,159 @@
+{
+ "case_id": "lta-s08",
+ "screen_id": "lta_review",
+ "url": "http://127.0.0.1:63547/trip",
+ "bound": [
+  {
+   "binding_id": "lta_purchaser_name",
+   "dossier_key": "purchaser_name",
+   "intake": "Felicity Oyelaran",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_email",
+   "dossier_key": "purchaser_email",
+   "intake": "f.oyelaran@example.test",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_purchaser_phone",
+   "dossier_key": "purchaser_phone",
+   "intake": "207-555-0198",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_residence_state",
+   "dossier_key": "residence_state",
+   "intake": "Maine",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_destination_choice",
+   "dossier_key": "destination_choice",
+   "intake": "Vietnam - Southeast Asia",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_departure_date",
+   "dossier_key": "departure_date",
+   "intake": "2027-02-10",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_return_date",
+   "dossier_key": "return_date",
+   "intake": "2027-02-28",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_trip_cost",
+   "dossier_key": "trip_cost",
+   "intake": 3995,
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_plan",
+   "dossier_key": "plan",
+   "intake": "Plus",
+   "observed": null,
+   "match_error": ""
+  },
+  {
+   "binding_id": "lta_cfar",
+   "dossier_key": "cfar",
+   "intake": false,
+   "observed": null,
+   "match_error": ""
+  }
+ ],
+ "unbound": [
+  {
+   "label": "Edit Name",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(1) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Email",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(2) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Mobile phone",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(3) > button",
+   "options": []
+  },
+  {
+   "label": "Edit State of residence",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(4) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Destination",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(5) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Departure date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(6) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Return date",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(7) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Travellers",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(8) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Trip cost",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(9) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Plan",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(10) > button",
+   "options": []
+  },
+  {
+   "label": "Edit Cancel For Any Reason",
+   "value": "",
+   "selector": "#rev > div:nth-of-type(11) > button",
+   "options": []
+  },
+  {
+   "label": "I confirm the details above are correct",
+   "value": "false",
+   "selector": "#agree",
+   "options": []
+  },
+  {
+   "label": "Get my quote",
+   "value": "",
+   "selector": "#buy",
+   "options": []
+  }
+ ],
+ "banners": [],
+ "page_text": "Larkspan Travel Assurance\n\nCheck everything\nName\nFelicity Oyelaran\nEdit\nEmail\nf.oyelaran@example.test\nEdit\nMobile phone\n207-555-0198\nEdit\nState of residence\nMaine\nEdit\nDestination\nVietnam - Southeast Asia\nEdit\nDeparture date\n02/10/2027\nEdit\nReturn date\n02/28/2027\nEdit\nTravellers\nFelicity Oyelaran (02/25/1982)\nEdit\nTrip cost\n$3,995\nEdit\nPlan\nPlus\nEdit\nCancel For Any Reason\nNo\nEdit\nI confirm the details above are correct\nGet my quote"
+}
