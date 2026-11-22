@@ -79,13 +79,74 @@ exact same set: `id IN (9, 10)` after `id = 9` is held too. The default task
 is one per database and project folder, stable across proxy restarts. Use
 `--task` to start a new one. A statement that only inserts is keyed by its table, with the same
 rule. An identical statement after the first apply changes nothing, and its
-dry run is empty.
+dry run is empty. A replay (the same task and payload, nothing sent) is
+`VERIFIED` only when the rows the statement left still read as it committed
+them and the rows it removed are still gone. The stored post-commit check is
+not reused.
 
 **What the dry run covers.** It covers SQL effects inside the transaction:
-rows, triggers that write rows, and cascades. It does not cover effects
-outside the database: a trigger that calls out, `NOTIFY` listeners, email
-sent by the application, sequences (a rolled-back `nextval` is not returned),
-or MySQL DDL (MySQL commits DDL at once, so it is refused). An app that other
+rows, triggers that write rows, and cascades. On PostgreSQL, deferred
+constraint triggers are made to fire inside the transaction (`SET CONSTRAINTS
+ALL IMMEDIATE`) before the checks. A statement or planned write that changes
+rows outside the current schema, as counted by the transaction's own row
+statistics, is refused (`diverged`), because the frame reads only that schema.
+A MySQL statement that names another database is refused the same way. It
+does not cover effects outside the database: a trigger that calls out,
+`NOTIFY` listeners, email sent by the application, sequences (a rolled-back
+`nextval` is not returned), or MySQL DDL (MySQL commits DDL at once, so it is
+refused).
+
+**Closed write scope.** Row counts can't show everything. A `TRUNCATE` resets
+them, a foreign table or `dblink` writes from another backend, and MySQL
+lists only the triggers the account holds the `TRIGGER` privilege for. So a
+SQL write is `VERIFIED` only when the catalog, read inside the write's own
+transaction, shows nothing that could write outside the frame. Coverage is
+decided from the catalog alone: no function body is read to decide that it
+is harmless. If the catalog can't be read, or shows an open item, the write
+still goes through, but its outcome is at best `COMPLETED_UNVERIFIED`. The
+apply report gives the reasons in `tx.not_covered`, and the plan shows them
+under each write before approval. The reasons are fixed codes and never name
+a table, trigger or schema.
+
+On PostgreSQL, an object is user-defined when its oid is at least 16384
+(`FirstNormalObjectId`), whatever its namespace, `pg_catalog` included.
+
+| Code | Open item |
+|---|---|
+| `trigger` | Any user trigger on a frame relation (PostgreSQL), or any trigger in the database (MySQL). What a trigger runs (helpers it calls, views it reads, objects it creates and drops) can't be bounded from the catalog |
+| `scope_changed` | The catalog rows that decide what a frame write runs differ between the inventory read before the write and the one after, in the same transaction. On PostgreSQL these are the triggers and rules on frame relations, user casts, event triggers and the user types of the frame's columns; on MySQL the triggers and routines. Unrelated DDL, such as another session's temp table, is not in it |
+| `rule` | PostgreSQL: a rewrite rule on a frame relation (a view's own `_RETURN` rule runs only when the view is read) |
+| `user_function`, `user_type`, `other_relation`, `user_object` | PostgreSQL: a user-defined function, type, relation outside the schema, or other object reachable through `pg_depend` from a frame relation or from its defaults, checks, indexes or policies; or a column whose type is user-defined (a domain, an extension type; an enum is allowed). `user_function` also covers a user function the planned statement reaches, as `EXPLAIN (VERBOSE)` resolves it, views expanded |
+| `system_function_with_effects` | PostgreSQL: a built-in that runs SQL given as text (`query_to_xml` and the other `*_to_xml` functions, `ts_stat`) or acts outside the frame's rows (`lo_*`, `set_config`, `pg_*`, `dblink*`), in the planned statement or a default, check, index or policy expression |
+| `other_schema` | PostgreSQL: the planned statement reads or writes a relation in another schema |
+| `truncate`, `planned_ddl` | PostgreSQL: the planned statement is `TRUNCATE` or other DDL. `DROP ... CASCADE` and event triggers reach past the frame |
+| `event_trigger`, `user_cast_or_operator`, `foreign_data`, `remote_link` | PostgreSQL, anywhere in the database: an enabled event trigger; a user-defined cast or operator; a foreign data wrapper, server or table; the `dblink` or `postgres_fdw` extension. `foreign_data` on MySQL: a `FEDERATED`, `CONNECT` or `SPIDER` table |
+| `snapshot_isolation` | PostgreSQL: the write's transaction runs at `REPEATABLE READ` or `SERIALIZABLE`. Every read then sees one snapshot, so the inventory read after the write can't see DDL another session committed since the read before it |
+| `search_path_open` | PostgreSQL: the search path holds a schema after the current one with a relation, function or type in it. A later schema that is empty, or doesn't exist, is closed. Under the default `"$user", public`, an existing schema named for the user becomes `current_schema()`, so the frame is that schema and `public`, if it holds anything, caps |
+| `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove database-level (or global) `SELECT` and `TRIGGER`. Table-level grants don't count, because a table the account can't list can hold a trigger it can't see. A wildcard grant counts only for the name it spells; a role grant or a partial revoke proves nothing |
+| `routine` | MySQL: a stored routine in the database |
+| `user_function` (MySQL) | The planned statement calls a function that isn't a known built-in. MySQL has no catalog resolution for a statement, so this one is read from the text |
+| `user_function`, `user_type` (raw statement) | PostgreSQL: the database holds any user function other than a trigger or event-trigger function, or any user domain, base or range type. The planner can fold an `IMMUTABLE` call away or hide one in a domain cast, so no plan proves a raw statement free of user code. Structured creates, updates and deletes aren't affected |
+| `scope_unreadable` | A catalog read failed. On PostgreSQL it runs under a savepoint, so the write's transaction survives |
+| `scope_unrecorded` | A replay or an adoption after a crash whose ledger entry doesn't hold the inventory of its send (PostgreSQL and MySQL; SQLite has nothing to list). So a crash adoption on PostgreSQL or MySQL is never `VERIFIED` |
+
+**Before and after.** The inventory is read twice inside the write's
+transaction: before the statement runs and after. Both reads' gaps count, and
+any change between them to the catalog rows that decide what the write runs
+caps it (`scope_changed`). Not detected: an object that a concurrent session
+creates and drops again between the two reads, with nothing left behind.
+That takes an administrator timing a single write on purpose.
+
+A reviewed-trigger exception (operator-reviewed digests covering a trigger's
+whole reachable code) is not in this version; any trigger caps.
+
+A database with no triggers, rules, user functions or user types around the
+frame, and a plain search path, gives an empty list, so its writes can be
+`VERIFIED`. An extension that adds operators or casts (PostGIS, `citext`) caps
+every write on its database. SQLite has nothing to list: ATTACH is refused,
+and the connection registers no functions.
+
+An app that other
 clients also write to needs the read-back: the apply-time diff check refuses
 a statement whose effect changed, and `plan_stale` refuses a plan whose
 database moved, but a write that lands after the commit is not covered. A
@@ -170,6 +231,40 @@ keys.
   In that case the approval isn't consumed;
 - the plan has no unused approval (`not_approved`, `approval_consumed`).
 
+**Lost updates (REST).** A `replace: true` update sends the baseline the plan
+read, merged with the planned fields, and a delete removes the whole record.
+If another caller saves the record after that read, the write erases their
+edit, and the read-back still looks right. A route can declare a
+`precondition`: the version read with the baseline goes out as `If-Match`,
+taken from the read's `ETag` (`precondition: {}`) or from a field
+(`precondition: {source: field, field: meta.versionId, format: 'W/"{value}"'}`).
+A server that finds a newer version refuses the write (`412`); nothing is
+written, and the result is `stale_baseline` (apply) or
+`changed_during_holdback` (release).
+
+A declared precondition counts only with evidence that the server enforces
+it, because a server that ignores `If-Match` applies the write anyway. There
+are two kinds of evidence:
+
+- `enforcement: {status: 412, observed: 2026-11-22, server: "..."}` records a
+  probe made by hand: a write sent with a version that didn't match got a
+  refusal status.
+- `probe: true` lets the adapter prove it once per route. It sends the first
+  write on the route with a version that can't match, and without the
+  idempotency key. A refusal proves enforcement, and the write then goes out
+  with the real version. If the server accepts the probe, the probe was the
+  write: it isn't sent again, and it is never `VERIFIED`. Any other answer
+  proves nothing. On a scoped API write with an audit log, the probe isn't
+  run, because a refused probe can be logged like a write of the record:
+  record the probe in the pack instead.
+
+A stored result (a replay, an adoption, a retry) counts the evidence only
+when that send recorded it (`precondition_enforced`); an entry from before
+this rule is capped. A replace update or a delete on a route with no
+precondition, or with one that has no evidence, is at best `COMPLETED_UNVERIFIED` (`confirmed_not_covered`,
+`released_unconditional`; `tx.not_covered` holds `unconditional_write` or
+`precondition_unproven`), because a lost update can't be ruled out.
+
 After the writes, apply reads every frame again and compares the diff with
 the prediction. A **missed effect** is something the read-back found that the
 dry run didn't predict. A **false diff** is something the dry run predicted
@@ -181,7 +276,19 @@ that the read-back didn't find. Either one makes the outcome
 `undo` runs latest write first, and only on writes this plan applied:
 
 - It refuses a record that changed since apply (`changed_since_apply`). A
-  person's later edit is never overwritten.
+  person's later edit is never overwritten. A REST undo checks the record it
+  reads and sends that read's version as `If-Match`, so an edit saved after
+  the check is refused by the server, not overwritten. An undo sent without
+  an enforced precondition is not a verified undo: when it reads back
+  correctly, the plan ends `COMPLETED_UNVERIFIED` (`undone_not_covered`,
+  `unconditional_undo`), never `ROLLED_BACK`. A SQL undo gets the same
+  closed write-scope check as an apply. The gaps are kept with the undone
+  entry: a second `undo` on the plan reports them again (`undo_unrecorded`
+  when the entry predates this rule), and an undo run that had nothing left
+  to undo ends `COMPLETED_UNVERIFIED`, never `ROLLED_BACK`. An undo that only
+  cancels held writes ends `STOPPED` (success: nothing was ever sent), and so
+  does a repeat of it; with collateral in the frame it is
+  `RECONCILIATION_REQUIRED`.
 - Held writes are cancelled.
 - After compensating, it reads each record back. A create must be gone. An
   update or delete must equal its baseline.

@@ -473,7 +473,7 @@ def is_write_shaped(text: str) -> bool:
 
 # A retained control label must carry at least this many letters or digits to
 # count as evidence of what the control does. Icon-only controls OCR to single
-# glyphs: openIMIS's floppy-disk Save button reads as the CJK glyph "日", a
+# glyphs: an icon-only floppy-disk Save button can OCR as the CJK glyph "日", a
 # check mark as "v", a close cross as "X". Such a fragment proves nothing about
 # the control's business effect, so it must not turn an icon-only actuator into
 # a "labelled non-write" control.
@@ -562,7 +562,7 @@ def confirmation_opener_step_ids(steps: Iterable[Step]) -> tuple[tuple[str, str]
     """Return ``(opener_id, confirm_id)`` for clicks that only open a confirmation.
 
     Many systems put a confirmation dialog between the form and the save:
-    OpenEMR's "Create New Patient" only opens "Confirm Create New Patient",
+    A multi-step form's "Create New Record" only opens "Confirm Create New Record",
     and the record is created by that dialog's Confirm button. Per-step
     inference marks both clicks irreversible from their labels, so the opener
     is counted as the save and the record check lands on the wrong step.

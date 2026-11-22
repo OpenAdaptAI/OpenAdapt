@@ -214,6 +214,9 @@ e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets
 # PR #2299: the literal GitLab-shaped string is explicitly SYNTHETIC-CREDENTIAL
 # in the auth-reference refusal matrix. This exact historical test finding only.
 cc5fba3e0b69646430c7e11ae0c181aaaad82d7f:packages/flow/tests/test_sanitized_artifact.py:gitlab-pat:1891
+# PR #2300: ZQX-CANARY-SECRET is a synthetic leak canary the connector pilot
+# tests search for in every egress body, never a credential. This exact finding only.
+f92237889163b242800c6aecd7c334c174ce4428:packages/flow/tests/test_connector_pilot.py:generic-api-key:56
 # #2293 squash merge: the same tx/lens.py:885 type annotation that is already ignored at 7571d9c8 (no secret).
 5e37bf177d46afddb4e48ea7b1bf87499964e276:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
 # PR #2411: benchmark/hooks_live/runs/*/report.json from one live hooks run. Each match is
