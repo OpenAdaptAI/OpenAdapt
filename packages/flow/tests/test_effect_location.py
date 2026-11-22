@@ -432,6 +432,9 @@ needs_words = pytest.mark.skipif(
         ("other_channel", "db_frame", "VERIFIED"),
         ("other_channel", "separate_session", "RECORDED"),
         ("same_screen", "db_frame", "SHOWN"),
+        ("fresh_navigation", "db_frame", "SHOWN"),
+        ("same_screen", "fresh_reload", "SHOWN"),
+        ("other_channel", "fresh_reload", "RECORDED"),
     ],
 )
 def test_words_come_from_the_ladder(start: str, basis: str | None, word: str) -> None:
@@ -511,3 +514,42 @@ def test_every_result_carries_a_listed_code() -> None:
         run_id=RUN,
     )
     assert stale.results[0].code == "stale_record"
+
+
+needs_reload = pytest.mark.skipif(
+    not _compat.reaches("fresh_reload", CheckLevel.SEPARATE_SESSION),
+    reason="the fresh_reload basis (#2509) is not on this branch yet",
+)
+
+
+@needs_reload
+def test_a_proven_fresh_reload_is_level_3_and_verified() -> None:
+    proven = evaluate(
+        loc(start="fresh_navigation"),
+        reading("Ada Byron", start="fresh_navigation", basis="fresh_reload"),
+        run_id=RUN,
+    )
+    assert proven.level is CheckLevel.SEPARATE_SESSION
+    assert proven.basis == "fresh_reload"
+    assert proven.word == "VERIFIED"
+
+
+def test_a_fresh_navigation_without_proof_stays_reopened() -> None:
+    plain = evaluate(
+        loc(start="fresh_navigation"),
+        reading("Ada Byron", start="fresh_navigation"),
+        run_id=RUN,
+    )
+    assert plain.level is CheckLevel.REOPENED
+    assert plain.basis is None
+    if _compat.has_ladder_words():
+        assert plain.word == "SHOWN"
+
+
+def test_a_reload_claim_never_meets_a_new_session_requirement() -> None:
+    report = evaluate(
+        loc(start="new_session"),
+        reading("Ada Byron", start="fresh_navigation", basis="fresh_reload"),
+        run_id=RUN,
+    )
+    assert report.status == "not_checked"

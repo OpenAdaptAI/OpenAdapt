@@ -182,14 +182,37 @@ def _shape_problem(loc: EffectLocation) -> Optional[str]:
     return None
 
 
-def _basis(start: Start, claimed: Optional[str]) -> Optional[str]:
+#: The basis an adapter names for a fresh navigation it proved fetched from
+#: the server (cache bypassed, the request kept as evidence).
+FRESH_RELOAD = "fresh_reload"
+
+
+def _level_and_basis(
+    start: Start, claimed: Optional[str]
+) -> tuple[CheckLevel, Optional[str]]:
+    """The level and basis a held check reaches from ``start``.
+
+    A fresh navigation is level 2 (``reopened``, SHOWN) unless the adapter
+    names the ``fresh_reload`` basis and the ladder lists it at level 3;
+    then it is level 3, which the ladder words VERIFIED. Another channel is
+    level 4 with the basis the adapter names, if the ladder lists that basis
+    at level 4.
+    """
+
+    level = LEVEL_OF_START[start]
     if start is Start.NEW_SESSION:
-        return "separate_session"
+        return level, "separate_session"
+    if (
+        start is Start.FRESH_NAVIGATION
+        and claimed == FRESH_RELOAD
+        and _compat.reaches(claimed, CheckLevel.SEPARATE_SESSION)
+    ):
+        return CheckLevel.SEPARATE_SESSION, claimed
     if start is Start.OTHER_CHANNEL and _compat.reaches(
         claimed, CheckLevel.SYSTEM_OF_RECORD
     ):
-        return claimed
-    return None
+        return level, claimed
+    return level, None
 
 
 def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyResult]:
@@ -230,8 +253,7 @@ def _judge(loc: EffectLocation, reading: Reading, run_id: str) -> dict[str, KeyR
         )
     decoded = [decode(loc.codec, m, loc.keys) for m in reading.matches]
     out: dict[str, KeyResult] = {}
-    level = LEVEL_OF_START[got]
-    basis = _basis(got, reading.basis)
+    level, basis = _level_and_basis(got, reading.basis)
     for key in loc.keys:
         codec = _codec_for(loc, key)
 
