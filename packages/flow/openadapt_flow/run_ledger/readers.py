@@ -345,17 +345,34 @@ def is_dispatch_result(doc: Any) -> bool:
 
 def _nothing_written(check: Any) -> bool:
     """P7's ``_nothing_written``: both reads of the record check succeeded
-    (``readable: true``) and saw no change. An unreadable store also reports
-    zero counts, so a check without ``readable: true`` (an older one, or a
-    failed read) proves nothing."""
+    (``readable: true``) and saw no change at all. An unreadable store also
+    reports zero counts, so a check without ``readable: true`` (an older one,
+    or a failed read) proves nothing. A change to another record during the
+    run (``outside_run``) may be the run's own write elsewhere, so it counts
+    as something written, and so does a check without ``outside_run``."""
+
+    def zero(counts: Any) -> bool:
+        return isinstance(counts, Mapping) and all(
+            _int(counts.get(key)) == 0 and not isinstance(counts.get(key), bool)
+            for key in ("created", "changed", "removed")
+        )
 
     return (
         isinstance(check, Mapping)
         and check.get("readable") is True
-        and all(
-            _int(check.get(key)) == 0 and not isinstance(check.get(key), bool)
-            for key in ("created", "changed", "removed")
-        )
+        and zero(check)
+        and zero(check.get("outside_run"))
+    )
+
+
+def policy_agrees(fallback: Mapping[str, Any]) -> bool:
+    """P7's own record of the fallback says VERIFIED: its ``status``, and its
+    ``run_status`` when it keeps one. Anything else (a missing record, a
+    RECONCILIATION_REQUIRED P7 put there) doesn't confirm the save."""
+
+    return (
+        fallback.get("status") == "VERIFIED"
+        and fallback.get("run_status", "VERIFIED") == "VERIFIED"
     )
 
 
@@ -470,6 +487,7 @@ def collect_fallback_result(path: Path) -> Contribution:
         isinstance(check, Mapping)
         and check.get("readable") is True
         and check.get("passed") is True
+        and policy_agrees(fallback)
     )
     reason = fallback_reason(
         status,

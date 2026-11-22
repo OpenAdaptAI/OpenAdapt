@@ -222,10 +222,10 @@ refused) replaces calls and cost with the proxy's count (`metered` when its
 
 | `status` (`path: agent_fallback`) | Bucket (reason) |
 | --- | --- |
-| VERIFIED with P7's `verified` and a record check that is `readable: true` and passed | VERIFIED (`readback_verified`, independent: the record check read the system of record before and after) |
-| VERIFIED, but the record check isn't `readable: true` (a failed read, or an older check without the flag) | UNKNOWN (`reconciliation_required`) |
+| VERIFIED with P7's `verified`, a record check that is `readable: true` and passed, and P7's own record (`fallback.status`, and `run_status` when kept) saying VERIFIED | VERIFIED (`readback_verified`, independent: the record check read the system of record before and after) |
+| VERIFIED, but the record check isn't `readable: true` (a failed read, or an older check without the flag), or P7's own status or run_status says otherwise | UNKNOWN (`reconciliation_required`) |
 | GATE_REFUSED, record check `readable: true` with no write | ESCALATED (`person_declined`) |
-| GATE_REFUSED or COST_CAP_EXCEEDED, record check missing, not `readable: true`, or showing a write | UNKNOWN (`write_unconfirmed`). An unreadable store also reports zero counts, so zeros alone prove nothing. |
+| GATE_REFUSED or COST_CAP_EXCEEDED, record check missing, not `readable: true`, or showing a write | UNKNOWN (`write_unconfirmed`). An unreadable store also reports zero counts, so zeros alone prove nothing. "No write" also needs every `outside_run` count zero, as P7's `_nothing_written` does: a change to another record during the run may be the run's own write, and a check without `outside_run` proves nothing. |
 | COST_CAP_EXCEEDED, no write | FAILED (`policy_rejected_no_write`) |
 | GATE_NOT_PROVED | UNKNOWN (`self_approved`) |
 | RECONCILIATION_REQUIRED | UNKNOWN (`reconciliation_required`) |
