@@ -265,62 +265,112 @@ def judge_record(
     return codes, detail
 
 
+def _usable_id(value: Any) -> bool:
+    """A record id: a non-empty string or an int (never a bool or a container)."""
+    if isinstance(value, bool):
+        return False
+    return (isinstance(value, str) and value != "") or isinstance(value, int)
+
+
+def _strict_items(got: Any, path: str) -> list[Mapping[str, Any]]:
+    """The records at ``path`` in a search answer, parsed closed by default.
+
+    ``path`` is dotted; ``*`` fans out over a list. Every step must exist:
+    a named step needs an object holding that key with a non-null value, a
+    ``*`` step needs a list, and each element must yield exactly one object.
+    A path that ends on a list yields its elements. Anything else raises, so
+    no shape can drop a record on the way to the id check."""
+    current: list[Any] = [got]
+    for step in [p for p in path.split(".") if p] if path else []:
+        nxt: list[Any] = []
+        for value in current:
+            if step == "*":
+                if not isinstance(value, list):
+                    raise AdapterError(
+                        "a marker search fan-out is not a list"
+                    )  # search-clause: fan-out-list
+                nxt.extend(value)
+            else:
+                if not isinstance(value, Mapping) or value.get(step) is None:
+                    raise AdapterError(
+                        f"a marker search item has no {step}"
+                    )  # search-clause: step-present
+                nxt.append(value[step])
+        current = nxt
+    if len(current) == 1 and isinstance(current[0], list):
+        current = current[0]
+    if not all(isinstance(x, Mapping) for x in current):
+        raise AdapterError(
+            "a marker search item is not an object"
+        )  # search-clause: leaf-object
+    return current
+
+
 def _search(
     adapter: RestAdapter, scoped: ScopedCollection, marker: str, id_field: str
 ) -> Optional[list[str]]:
+    """Record ids holding ``marker``, from an answer parsed strictly.
+
+    Missing-evidence class, closed by default: a declared shape is checked
+    on every answer; the items path must resolve exactly (see
+    :func:`_strict_items`); every record needs a usable id; a ``total``,
+    when present, must be an int equal to the number of records. The items
+    field may be absent only on an answer that reports ``total: 0`` or, for
+    a pack that declares ``search_empty``, matches that shape. Anything else
+    raises, so no answer reads as "not found" unless it says so."""
     if not scoped.search:
         return None
     _, got = _request(adapter, "GET", fill(scoped.search, {"marker": marker}))
-    # Missing-evidence class: a search response of the wrong shape is an
-    # error, never an empty result.
-    if scoped.search_items and not isinstance(got, Mapping):
-        raise AdapterError("the marker search did not return an object")
-    head = scoped.search_items.split(".", 1)[0] if scoped.search_items else ""
+    path = scoped.search_items
+    if path and not isinstance(got, Mapping):
+        raise AdapterError(
+            "the marker search did not return an object"
+        )  # search-clause: object-answer
+    if not path and not isinstance(got, list):
+        raise AdapterError(
+            "the marker search did not return a list"
+        )  # search-clause: list-answer
     total = got.get("total") if isinstance(got, Mapping) else None
     if total is not None and (type(total) is not int or total < 0):
-        # Missing-evidence class: a total that isn't a count can't say
-        # how many records matched.
-        raise AdapterError("the marker search total is not a count")
-    if head and head in got and not isinstance(got[head], (list, Mapping)):
-        raise AdapterError(f"the marker search {head} is not a list")
-    empty = scoped.search_empty
-    # The declared empty shape counts only when the answer claims no matches,
-    # holds every declared value and has none of the absent paths (a next
-    # link means a later page): a partial answer is never empty.
-    declared_empty = (
-        empty is not None
-        and total in (None, 0)
-        and all(
-            any(str(v) == want for v in pick(got, path))
-            for path, want in empty.equals.items()
-        )
-        and not any(pick(got, path) for path in empty.absent)
-    )
-    if head and head not in got and total != 0 and not declared_empty:
-        # Missing-evidence class: no results field is not an empty result,
-        # unless the response says it matched nothing (total 0) or has the
-        # pack's declared empty shape.
-        raise AdapterError(f"the marker search has no {head}")
-    if not scoped.search_items and not isinstance(got, list):
-        raise AdapterError("the marker search did not return a list")
-    items = pick(got, scoped.search_items) if scoped.search_items else got
-    if scoped.search_items and len(items) == 1 and isinstance(items[0], list):
-        items = items[0]
-    found = [
-        str(x.get(id_field))
-        for x in items
-        if isinstance(x, Mapping) and x.get(id_field) not in (None, "")
-    ]
-    if len(found) != len(items):
-        # Missing-evidence class: every returned item must name its record;
-        # an item without one may be the write already landed, so it never
-        # reads as absent, and every item counts toward a duplicate.
-        raise AdapterError("a marker search item has no usable id")
-    if not found and isinstance(total, int) and total > 0:
-        # An answer that says it matched something but returns no record is
-        # partial, never "not found".
-        raise AdapterError("the marker search reports matches it did not return")
-    return found
+        raise AdapterError(
+            "the marker search total is not a count"
+        )  # search-clause: total-count
+    shape = scoped.search_empty
+    if shape is not None:
+        # The declared shape is the answer's shape, checked on every answer.
+        for spec, want in shape.equals.items():
+            if not any(str(v) == want for v in pick(got, spec)):
+                raise AdapterError(
+                    f"the marker search answer has no {spec} {want}"
+                )  # search-clause: shape-equals
+        for spec in shape.absent:
+            if pick(got, spec):
+                raise AdapterError(
+                    f"the marker search answer has {spec}"
+                )  # search-clause: shape-absent
+    head = path.split(".", 1)[0] if path else ""
+    if head and head not in got:
+        if total != 0 and shape is None:
+            raise AdapterError(
+                f"the marker search has no {head}"
+            )  # search-clause: items-field
+        records: list[Mapping[str, Any]] = []
+    else:
+        records = _strict_items(got, path)
+    ids = [r.get(id_field) for r in records]
+    if not all(_usable_id(i) for i in ids):
+        # An item without a usable id may be the write already landed: it
+        # never reads as absent, and every item counts toward a duplicate.
+        raise AdapterError(
+            "a marker search item has no usable id"
+        )  # search-clause: usable-id
+    if total is not None and total != len(records):
+        # A total that differs from the records returned is a partial page
+        # (or a short answer): it can hide a match or a duplicate.
+        raise AdapterError(
+            "the marker search total doesn't match its records"
+        )  # search-clause: total-equals
+    return [str(i) for i in ids]
 
 
 def _read(

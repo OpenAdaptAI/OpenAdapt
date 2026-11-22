@@ -9,6 +9,7 @@ Medplum and Gitea is ``benchmark/api_scoped``.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -901,10 +902,8 @@ def test_the_audit_read_fails_closed_on_evidence_it_cannot_place() -> None:
     assert audit.collateral and audit.own
 
 
-def test_a_marker_search_without_its_results_is_not_empty() -> None:
-    from openadapt_flow.txplan.adapters import AdapterError
+def _search_packs():
     from openadapt_flow.txplan.audit import ScopedCollection
-    from openadapt_flow.txplan.scoped import _search
 
     base = {
         "audit_ref": "item/{id}",
@@ -912,8 +911,9 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
         "marker": {"ext": "{marker}"},
         "search": "/s?m={marker}",
     }
-    scoped = ScopedCollection.model_validate({**base, "search_items": "items"})
-    # Pack-shaped FHIR: entry.*.resource, with the declared empty shape.
+    items = ScopedCollection.model_validate({**base, "search_items": "items"})
+    root = ScopedCollection.model_validate({**base, "search_items": ""})
+    # Pack-shaped FHIR, as Medplum's pack declares it.
     fhir = ScopedCollection.model_validate(
         {
             **base,
@@ -924,50 +924,148 @@ def test_a_marker_search_without_its_results_is_not_empty() -> None:
             },
         }
     )
-    undeclared = fhir.model_copy(update={"search_empty": None})
+    return base, items, root, fhir
+
+
+def _run_search(body, pack):
+    from openadapt_flow.txplan.scoped import _search
 
     class Adapter:
-        def __init__(self, body):
+        def __init__(self):
             self.http = httpx.Client(
                 transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)),
                 base_url="http://x",
             )
 
-    def run(body, pack):
-        return _search(Adapter(body), pack, "m1", "id")
+    return _search(Adapter(), pack, "m1", "id")
 
-    def refused(body, pack):
+
+_BUNDLE = {"resourceType": "Bundle", "type": "searchset"}
+_P1 = {"resource": {"resourceType": "Patient", "id": "p1"}}
+_P2 = {"resource": {"resourceType": "Patient", "id": "p2"}}
+
+#: One refused answer per clause of the strict parser, with the message only
+#: that clause raises. Each clause's source line carries the same tag
+#: (``# search-clause: <tag>``), so the mutation test below can remove it.
+SEARCH_REFUSALS = {
+    "object-answer": ([], "items", "did not return an object"),
+    "list-answer": ({"items": []}, "root", "did not return a list"),
+    "total-count": ({**_BUNDLE, "total": True, "entry": [_P1]}, "fhir", "not a count"),
+    "shape-equals": (
+        {"resourceType": "Bundle", "type": "history", "entry": []},
+        "fhir",
+        "answer has no type",
+    ),
+    "shape-absent": (
+        {**_BUNDLE, "link": [{"relation": "next", "url": "u"}], "entry": []},
+        "fhir",
+        "answer has link",
+    ),
+    "items-field": ({"error": "busy"}, "items", "has no items"),
+    "fan-out-list": ({**_BUNDLE, "entry": {}}, "fhir", "fan-out is not a list"),
+    "step-present": (
+        {**_BUNDLE, "entry": [{"fullUrl": "x"}]},
+        "fhir",
+        "has no resource",
+    ),
+    "leaf-object": ({"items": [1]}, "items", "is not an object"),
+    "usable-id": (
+        {**_BUNDLE, "entry": [{"resource": {"id": False}}]},
+        "fhir",
+        "usable id",
+    ),
+    "total-equals": ({**_BUNDLE, "total": 2, "entry": [_P1]}, "fhir", "doesn't match"),
+}
+
+
+def _refuses(module, body, pack, message) -> bool:
+    from openadapt_flow.txplan.adapters import AdapterError
+
+    class Adapter:
+        def __init__(self):
+            self.http = httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)),
+                base_url="http://x",
+            )
+
+    try:
+        module._search(Adapter(), pack, "m1", "id")
+    except AdapterError as exc:
+        return message in str(exc)
+    except Exception:  # noqa: BLE001 - another error is not this clause
+        return False
+    return False
+
+
+def test_each_search_clause_is_load_bearing() -> None:
+    """Mutation test: remove one clause at a time; its refusal must stop."""
+    import types
+
+    from openadapt_flow.txplan import scoped as real
+
+    source = Path(real.__file__).read_text(encoding="utf-8")
+    _, items, root, fhir = _search_packs()
+    packs = {"items": items, "root": root, "fhir": fhir}
+    tags = set(re.findall(r"# search-clause: ([a-z-]+)", source))
+    assert tags == set(SEARCH_REFUSALS), tags ^ set(SEARCH_REFUSALS)
+    for tag, (body, pack, message) in SEARCH_REFUSALS.items():
+        assert _refuses(real, body, packs[pack], message), tag
+        mutated = re.sub(
+            rf"raise AdapterError\((?:(?!raise AdapterError).)*?\)"
+            rf"  # search-clause: {tag}\n",
+            "pass  # mutated\n",
+            source,
+            flags=re.S,
+        )
+        assert mutated != source, tag
+        module = types.ModuleType(f"scoped_without_{tag.replace('-', '_')}")
+        module.__file__ = real.__file__
+        exec(compile(mutated, real.__file__, "exec"), module.__dict__)
+        assert not _refuses(module, body, packs[pack], message), (
+            f"removing the {tag} clause leaves its case refused the same way"
+        )
+
+
+def test_a_marker_search_parses_strictly_and_closed_by_default() -> None:
+    from openadapt_flow.txplan.adapters import AdapterError
+    from openadapt_flow.txplan.audit import ScopedCollection
+
+    base, items, root, fhir = _search_packs()
+    packs = {"items": items, "root": root, "fhir": fhir}
+    for name, (body, pack, message) in SEARCH_REFUSALS.items():
+        with pytest.raises(AdapterError, match=re.escape(message)):
+            _run_search(body, packs[pack])
+    # Shapes the earlier guards let through, each refused.
+    for body in (
+        {**_BUNDLE, "entry": [{"resource": None}]},
+        {**_BUNDLE, "entry": [None]},
+        {**_BUNDLE, "entry": {}},
+        {**_BUNDLE, "entry": [_P1, {"fullUrl": "x"}]},  # undercounted duplicate
+        {**_BUNDLE, "entry": None},
+        {**_BUNDLE, "entry": [{"resource": {"id": {}}}]},
+        {**_BUNDLE, "entry": [{"resource": {"resourceType": "Patient"}}]},
+        {**_BUNDLE, "total": 1},
+        {**_BUNDLE, "total": 1, "entry": []},
+        {**_BUNDLE, "total": 1.0, "entry": [_P1]},
+        {"resourceType": "OperationOutcome", "total": 0},
+        {"resourceType": "Bundle", "type": "batch-response"},
+    ):
         with pytest.raises(AdapterError):
-            run(body, pack)
-
-    bundle = {"resourceType": "Bundle", "type": "searchset"}
-    patient = {"resource": {"resourceType": "Patient", "id": "p1"}}
-    # Empty: only the declared shape, or an explicit total 0.
-    assert run(bundle, fhir) == []
-    assert run({**bundle, "total": 0}, fhir) == []
-    assert run({"total": 0}, scoped) == []
-    refused(bundle, undeclared)
-    refused({"error": "busy"}, scoped)
-    # The declared shape never hides a partial answer.
-    refused({**bundle, "total": 1}, fhir)  # reports a match it doesn't return
-    refused({**bundle, "total": 1, "entry": []}, fhir)
-    refused({**bundle, "total": "1"}, fhir)  # a total that isn't a count
-    refused({**bundle, "total": 1.0}, fhir)
-    refused({**bundle, "type": "history"}, fhir)  # not a search answer
-    refused({**bundle, "type": "batch-response"}, fhir)
-    refused(
-        {**bundle, "link": [{"relation": "next", "url": "http://x/s?page=2"}]}, fhir
-    )
-    refused({**bundle, "entry": None}, fhir)
-    refused({"resourceType": "OperationOutcome"}, fhir)
-    # Every returned item must name its record, and each counts.
-    refused({**bundle, "entry": [{"resource": {"resourceType": "Patient"}}]}, fhir)
-    refused(
-        {**bundle, "entry": [patient, {"resource": {"resourceType": "Patient"}}]}, fhir
-    )
-    refused({"items": [{"title": "no id"}]}, scoped)
-    assert run({**bundle, "entry": [patient]}, fhir) == ["p1"]
-    assert run({"items": [{"id": 3}]}, scoped) == ["3"]
+            _run_search(body, fhir)
+    undeclared = fhir.model_copy(update={"search_empty": None})
+    with pytest.raises(AdapterError):
+        _run_search(_BUNDLE, undeclared)
+    # Answers that do say what they hold.
+    assert _run_search(_BUNDLE, fhir) == []
+    assert _run_search({**_BUNDLE, "total": 0}, fhir) == []
+    assert _run_search({**_BUNDLE, "entry": [_P1]}, fhir) == ["p1"]
+    assert _run_search({**_BUNDLE, "total": 2, "entry": [_P1, _P2]}, fhir) == [
+        "p1",
+        "p2",
+    ]
+    assert _run_search({"total": 0}, items) == []
+    assert _run_search({"items": [{"id": 3}]}, items) == ["3"]
+    assert _run_search([{"id": "a"}], root) == ["a"]
     # search_empty without search_items is refused when the pack loads.
     with pytest.raises(ValueError):
         ScopedCollection.model_validate(
