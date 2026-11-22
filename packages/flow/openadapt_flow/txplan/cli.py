@@ -58,7 +58,9 @@ def _fill(p: argparse.ArgumentParser) -> None:
         q.add_argument("--json", action="store_true", help="print JSON")
 
     q = verbs.add_parser(
-        "create", help="read the baseline and print the predicted diff"
+        "create",
+        help="read the baseline and print the predicted diff",
+        allow_abbrev=False,
     )
     q.add_argument(
         "--task",
@@ -77,11 +79,13 @@ def _fill(p: argparse.ArgumentParser) -> None:
         ("release", "release held irreversible writes whose holdback passed"),
         ("cancel", "cancel held writes before release"),
     ):
-        q = verbs.add_parser(verb, help=text)
+        q = verbs.add_parser(verb, help=text, allow_abbrev=False)
         q.add_argument("plan", help="a plan digest or its prefix")
         common(q, tx=verb not in ("show", "cancel"))
     q = verbs.add_parser(
-        "approve", help="approve one plan digest, once (a person at a terminal)"
+        "approve",
+        help="approve one plan digest, once (a person at a terminal)",
+        allow_abbrev=False,
     )
     q.add_argument("plan")
     q.add_argument(
@@ -93,7 +97,9 @@ def _fill(p: argparse.ArgumentParser) -> None:
         help="record the approval as automation (lab runs; the receipt then says agent)",
     )
     common(q, tx=False)
-    q = verbs.add_parser("status", help="list held writes and ledger entries")
+    q = verbs.add_parser(
+        "status", help="list held writes and ledger entries", allow_abbrev=False
+    )
     common(q, tx=False)
 
 

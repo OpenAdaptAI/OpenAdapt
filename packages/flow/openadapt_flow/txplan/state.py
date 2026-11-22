@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
 
+from openadapt_flow.private_file import open_binary
+
 STATE_ENV = "OPENADAPT_TX_STATE"
 
 
@@ -65,7 +67,7 @@ def write_private(path: Path, payload: Any) -> None:
     """Write JSON owner-only, atomically."""
     _private_dir(path.parent)
     tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = open_binary(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         os.write(
             fd,
@@ -126,7 +128,7 @@ class State:
         if not path.exists():
             fd = None
             with contextlib.suppress(FileExistsError):
-                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                fd = open_binary(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 os.write(fd, secrets.token_hex(32).encode())
                 os.fsync(fd)
             if fd is not None:
@@ -159,7 +161,7 @@ class State:
     def lock(self) -> Iterator[None]:
         """One applier per state folder at a time (an OS lock the kernel drops
         when the process dies)."""
-        fd = os.open(self.root / "lock", os.O_RDWR | os.O_CREAT, 0o600)
+        fd = open_binary(self.root / "lock", os.O_RDWR | os.O_CREAT, 0o600)
         try:
             if os.name == "nt":  # pragma: no cover - Windows
                 import msvcrt
@@ -185,7 +187,7 @@ class State:
         line = json.dumps(
             {"event": event, "at": now(), **fields}, sort_keys=True, default=str
         )
-        fd = os.open(
+        fd = open_binary(
             self._ledger_path(key), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
         )
         try:
