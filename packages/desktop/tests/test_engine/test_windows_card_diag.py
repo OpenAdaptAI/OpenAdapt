@@ -15,7 +15,8 @@ def test_diag(tmp_path):
     path.write_text("{}")
     out = []
     before = os.lstat(path)
-    out.append(f"lstat dev={before.st_dev} ino={before.st_ino} attrs={getattr(before, 'st_file_attributes', None)}")
+    attrs = getattr(before, "st_file_attributes", None)
+    out.append(f"lstat dev={before.st_dev} ino={before.st_ino} attrs={attrs}")
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
     try:
         info = os.fstat(fd)
