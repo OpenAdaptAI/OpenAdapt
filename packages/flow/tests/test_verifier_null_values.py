@@ -284,3 +284,283 @@ def test_field_equals_empty_text_is_not_a_stored_null() -> None:
     record = {"id": 1, "note": None}
     result = judge_records(effect, _state([record]), [record], substrate="sql")
     assert result.verdict.value == "refuted"
+
+
+# -- SQL verification read null binding (openadapt-internal#278 P7) ----------
+
+
+@pytest.mark.parametrize(
+    "sql_query",
+    [
+        "SELECT * FROM issue WHERE subject = :subject AND ref = :ref",
+        "SELECT * FROM issue WHERE subject = :subject AND :ref = ref",
+        'SELECT * FROM issue WHERE subject = :subject AND "issue"."ref" = :ref',
+        "SELECT * FROM issue WHERE subject = :subject AND (ref = :ref)",
+        "SELECT * FROM issue WHERE (ref = :ref) AND subject = :subject",
+        "SELECT * FROM issue WHERE (subject = :subject AND ref = :ref)",
+        "SELECT * FROM issue WHERE subject = :subject AND ref IS NOT DISTINCT FROM :ref",
+    ],
+)
+def test_null_sql_query_equality_confirms_stored_null(
+    tmp_path: Path, sql_query: str
+) -> None:
+    db = _store(tmp_path)
+    contract = _contract(
+        db,
+        verifier={
+            "sql_query": sql_query,
+            "sql_query_params": {
+                "subject": {"param": "subject"},
+                "ref": {"param": "ref"},
+            },
+        },
+    )
+    pending = begin_write(contract, NULLS, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO issue (subject, description, ref) VALUES (?, ?, ?)",
+        ("Tax rounding", None, None),
+    )
+    con.commit()
+    con.close()
+    result = verify_write(pending)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+
+
+@pytest.mark.parametrize(
+    "stored_ref",
+    ["R-9", "", "None", "null", "0"],
+)
+def test_null_sql_query_equality_refutes_planted_non_null_value(
+    tmp_path: Path, stored_ref: str
+) -> None:
+    """Planted null-vs-value fault: even if effect.match omits ``ref``, the
+    SQL ``IS NULL`` filter alone refutes any non-null stored value."""
+    db = _store(tmp_path)
+    contract = _contract(
+        db,
+        verifier={
+            "sql_query": "SELECT * FROM issue WHERE subject = :subject AND ref = :ref",
+            "sql_query_params": {
+                "subject": {"param": "subject"},
+                "ref": {"param": "ref"},
+            },
+        },
+        effect={
+            "kind": "record_written",
+            "match": {"subject": {"param": "subject"}},
+            "expected_count": 1,
+            "count_new_only": True,
+        },
+    )
+    params = {"subject": "Tax rounding", "ref": None}
+    pending = begin_write(contract, params, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO issue (subject, description, ref) VALUES (?, ?, ?)",
+        ("Tax rounding", None, stored_ref),
+    )
+    con.commit()
+    con.close()
+    result = verify_write(pending)
+    assert result.outcome is not Outcome.CONFIRMED, result.reasons
+    assert any("record_written was refuted" in r for r in result.reasons), (
+        result.reasons
+    )
+
+
+def test_non_null_sql_query_equality_refutes_planted_stored_null(
+    tmp_path: Path,
+) -> None:
+    """Planted value-vs-null fault: expecting ``ref='R-9'`` refutes stored NULL."""
+    db = _store(tmp_path)
+    contract = _contract(
+        db,
+        verifier={
+            "sql_query": "SELECT * FROM issue WHERE subject = :subject AND ref = :ref",
+            "sql_query_params": {
+                "subject": {"param": "subject"},
+                "ref": {"param": "ref"},
+            },
+        },
+        effect={
+            "kind": "record_written",
+            "match": {"subject": {"param": "subject"}},
+            "expected_count": 1,
+            "count_new_only": True,
+        },
+    )
+    params = {"subject": "Tax rounding", "ref": "R-9"}
+    pending = begin_write(contract, params, actor=BOT, ledger=MemoryLedger())
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO issue (subject, description, ref) VALUES (?, ?, ?)",
+        ("Tax rounding", None, None),
+    )
+    con.commit()
+    con.close()
+    result = verify_write(pending)
+    assert result.outcome is not Outcome.CONFIRMED, result.reasons
+    assert any("record_written was refuted" in r for r in result.reasons), (
+        result.reasons
+    )
+
+
+def test_null_sql_query_param_in_multi_surface_contract(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    contract = Contract.from_dict(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "verifier": {
+                "kind": "surfaces",
+                "surfaces": {
+                    "issues": {
+                        "kind": "sql",
+                        "sqlite_database": str(db),
+                        "sql_query": (
+                            "SELECT * FROM issue "
+                            "WHERE subject = :subject AND ref = :ref"
+                        ),
+                        "sql_query_params": {
+                            "subject": {"param": "subject"},
+                            "ref": {"param": "ref"},
+                        },
+                    }
+                },
+            },
+            "effects": [
+                {
+                    "kind": "record_written",
+                    "probe": "surface=issues",
+                    "match": {
+                        "subject": {"param": "subject"},
+                        "ref": {"param": "ref"},
+                    },
+                    "expected_count": 1,
+                    "count_new_only": True,
+                }
+            ],
+            "frame": {"identity_field": "id"},
+        }
+    )
+    pending = begin_write(
+        contract,
+        {"subject": "Tax rounding", "ref": None},
+        actor=BOT,
+        ledger=MemoryLedger(),
+    )
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO issue (subject, description, ref) VALUES (?, ?, ?)",
+        ("Tax rounding", None, None),
+    )
+    con.commit()
+    con.close()
+    result = verify_write(pending)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+
+
+def test_null_sql_query_param_still_refused_if_also_used_in_idempotency_key(
+    tmp_path: Path,
+) -> None:
+    db = _store(tmp_path)
+    contract = _contract(
+        db,
+        verifier={
+            "sql_query": "SELECT * FROM issue WHERE ref = :ref",
+            "sql_query_params": {"ref": {"param": "ref"}},
+        },
+        effect={"idempotency_key": {"param": "ref"}, "key_field": "ref"},
+    )
+    with pytest.raises(VerifierError, match=r"ref \(used in effects\[0\]"):
+        begin_write(contract, NULLS, actor=BOT, ledger=MemoryLedger())
+
+
+def test_bind_null_sql_params_pyformat_and_multiple_occurrences() -> None:
+    from openadapt_flow.runtime.effects.sql import bind_null_sql_params
+
+    rewritten, remaining = bind_null_sql_params(
+        "SELECT * FROM patient WHERE given = %(given)s AND middle = %(middle)s",
+        {"given": "Ada", "middle": None},
+    )
+    assert (
+        rewritten == "SELECT * FROM patient WHERE given = %(given)s AND middle IS NULL"
+    )
+    assert remaining == {"given": "Ada"}
+
+    rewritten2, remaining2 = bind_null_sql_params(
+        "SELECT * FROM t WHERE t.a = %(x)s AND t.b = %(x)s",
+        {"x": None},
+    )
+    assert rewritten2 == "SELECT * FROM t WHERE t.a IS NULL AND t.b IS NULL"
+    assert remaining2 == {}
+
+    rewritten3, remaining3 = bind_null_sql_params(
+        "SELECT * FROM t WHERE a=:a",
+        {"a": None},
+    )
+    assert rewritten3 == "SELECT * FROM t WHERE a IS NULL"
+    assert remaining3 == {}
+
+    # Native null-safe operators keep None bound in query_params.
+    rewritten4, remaining4 = bind_null_sql_params(
+        "SELECT * FROM t WHERE a <=> %(a)s",
+        {"a": None},
+    )
+    assert rewritten4 == "SELECT * FROM t WHERE a <=> %(a)s"
+    assert remaining4 == {"a": None}
+
+
+@pytest.mark.parametrize(
+    "unsafe_query",
+    [
+        "SELECT * FROM issue WHERE ref = :ref OR :ref IS NULL",
+        "SELECT * FROM issue WHERE ref LIKE :ref",
+        "SELECT * FROM issue WHERE ref IN (:ref)",
+        "SELECT * FROM issue WHERE ref != :ref",
+        "SELECT * FROM issue WHERE ref <> :ref",
+        "SELECT * FROM issue WHERE ref > :ref",
+        "SELECT * FROM issue WHERE NOT ref = :ref",
+        "SELECT * FROM issue WHERE subject = 'x' AND NOT ref = :ref",
+        "SELECT * FROM issue WHERE NOT (ref = :ref)",
+        "SELECT * FROM issue WHERE NOT (subject = 'x' AND ref = :ref)",
+        "SELECT * FROM issue WHERE NOT :ref = ref",
+        "SELECT * FROM issue WHERE NOT ref IS NOT DISTINCT FROM :ref",
+        "SELECT * FROM issue WHERE ref = :ref + 1",
+        "SELECT * FROM issue WHERE ref = :ref || 'x'",
+        "SELECT * FROM issue WHERE subject = ref = :ref",
+        "SELECT * FROM issue WHERE (ref = :ref) = 1",
+        "SELECT * FROM issue WHERE COALESCE(ref = :ref, 0) = 1",
+        "SELECT * FROM issue WHERE lower(ref = :ref)",
+        "SELECT :ref FROM issue",
+        "SELECT (ref = :ref) FROM issue",
+        "SELECT * FROM issue LIMIT :ref",
+        "SELECT * FROM issue",  # unused param
+    ],
+)
+def test_unsafe_null_sql_query_positions_fail_closed(unsafe_query: str) -> None:
+    from openadapt_flow.runtime.effects.sql import (
+        bind_null_sql_params,
+        sql_param_is_null_safe,
+    )
+
+    assert not sql_param_is_null_safe(unsafe_query, "ref")
+    with pytest.raises(ValueError, match="null SQL query parameter 'ref'"):
+        bind_null_sql_params(unsafe_query, {"ref": None})
+
+
+def test_missing_or_unmapped_sql_query_param_still_fails_loud() -> None:
+    from openadapt_flow.deployment import _resolve_sql_query_params
+
+    with pytest.raises(ValueError, match="was not supplied"):
+        _resolve_sql_query_params({"ref": ValueExpr(param="ref")}, {})
+
+    with pytest.raises(ValueError, match="was not supplied"):
+        _resolve_sql_query_params(
+            {"status": ValueExpr(param="status", map={"Active": "1"})},
+            {"status": "Unknown"},
+        )
+
+    assert _resolve_sql_query_params(
+        {"ref": ValueExpr(param="ref")}, {"ref": None}
+    ) == {"ref": None}

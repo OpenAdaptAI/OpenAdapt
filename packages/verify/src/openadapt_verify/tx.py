@@ -145,7 +145,8 @@ def run_cli_induce(
         assert har_path is not None
         har_doc = load_har(Path(har_path))
 
-    lens = induce_lens_from_har(har_doc)
+    # A guessed item route is allowed only when the sandbox certifies it.
+    lens = induce_lens_from_har(har_doc, allow_unobserved_item_route=bool(sandbox_url))
     if sandbox_url:
         if not sample_record_path or not sample_update_path:
             raise ValueError(
