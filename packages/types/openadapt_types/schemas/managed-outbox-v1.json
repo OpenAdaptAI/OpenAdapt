@@ -1,0 +1,42 @@
+{
+  "$defs": {
+    "ManagedOutboxActionV1": {
+      "enum": [
+        "collect",
+        "attach_artifact",
+        "create_task"
+      ],
+      "title": "ManagedOutboxActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Actuation intent. OpenAdapt applies the template only after a human approval.",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ManagedOutboxActionV1"
+    },
+    "needs_human": {
+      "title": "Needs Human",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.managed-outbox/v1",
+      "default": "openadapt.managed-outbox/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "template": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Template",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "template",
+    "needs_human"
+  ],
+  "title": "ManagedOutboxV1",
+  "type": "object"
+}

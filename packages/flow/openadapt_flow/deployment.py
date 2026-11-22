@@ -112,7 +112,7 @@ class BackendConfig(BaseModel):
     deployment_surface: Optional[DeclaredSurface] = None
 
     #: The GUI URL to drive (the app under automation). None => the caller's
-    #: own default (e.g. ``replay`` serves the bundled MockMed demo).
+    #: own default (e.g. ``replay --demo-app`` serves the bundled demo).
     #: ``web`` only.
     url: Optional[str] = None
     #: Run the browser headed (visible). Default headless. ``web`` only.
@@ -144,7 +144,7 @@ class BackendConfig(BaseModel):
     agent_tls_pin: Optional[str] = None
 
     # -- native macOS --------------------------------------------------------
-    #: Owner application name/substring (e.g. ``"TextEdit"``). REQUIRED for
+    #: Owner application name/substring (e.g. ``"MyApp"``). REQUIRED for
     #: ``kind: macos``.
     macos_app: Optional[str] = None
     #: Window-title substring. The backend refuses ambiguous matches rather
@@ -1129,7 +1129,7 @@ class RollbackSection(BaseModel):
     #: Many record systems forbid deleting a chart for audit or legal reasons:
     #: prefer a ``void`` compensation there.
     allow_delete: bool = False
-    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: The app's versioned bookkeeping profile, by name (e.g. an app profile;
     #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
     #: the RL grader: which tables move on their own and how (append-only,
     #: session state, named columns). Never patient data. Applies to

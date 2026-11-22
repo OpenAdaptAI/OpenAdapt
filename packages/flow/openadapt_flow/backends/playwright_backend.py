@@ -1040,7 +1040,7 @@ _FORM_EXPECTED_JS = (
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
-# A data-entry form (OpenEMR's new-patient page, most CRUD screens) lays its
+# A data-entry form (most CRUD screens) lays its
 # fields out in label/control groups (``.form-group.row`` and the like), not
 # table rows, so the row rule above abstains and identity used to fall to the
 # OCR band read across the field's visual row. This mirrors that band in the
