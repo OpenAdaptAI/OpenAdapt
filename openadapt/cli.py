@@ -768,6 +768,39 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     return root
 
 
+def _quickstart_own(root: Path, url: Optional[str], watch: bool) -> None:
+    """`openadapt quickstart --own`: see openadapt/quickstart/own.py."""
+    from functools import partial
+
+    from openadapt.quickstart.engine import display_available
+    from openadapt.quickstart.own import OwnTaskError, run_own, share_runs
+
+    def ask(prompt: str) -> str:
+        return input(prompt)
+
+    from contextlib import nullcontext
+
+    context = _synthetic_scrub_off() if url is None else nullcontext()
+    try:
+        with context:
+            run_own(
+                root,
+                url=url,
+                visible=_watch_window(watch),
+                can_record_here=sys.stdin.isatty() and display_available(),
+                ask=ask,
+                say=click.echo,
+                hint=_hint,
+                quote=_shell_quote,
+                share=partial(share_runs, ask=ask, say=click.echo, command=_hint),
+            )
+    except OwnTaskError as error:
+        raise click.ClickException(str(error)) from error
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
+        raise click.exceptions.Exit(130)
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -834,6 +867,19 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 # --headed is the older spelling of --watch. --headless was the opt-out when
 # the window showed by default; hidden is the default now, so it changes
 # nothing and is kept so older commands still run.
+@click.option(
+    "--own",
+    is_flag=True,
+    help=(
+        "Your own task: record it once (in the sample app, or your web app "
+        "with --url), run it with new inputs, and end with an agent tool."
+    ),
+)
+@click.option(
+    "--url",
+    default=None,
+    help="With --own: your web app's address. Recording opens a browser window.",
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--headless", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
@@ -847,6 +893,8 @@ def quickstart(
     no_break: bool,
     verbose: bool,
     more: bool,
+    own: bool,
+    url: Optional[str],
     headed: bool,
     headless: bool,
     break_it: bool,
@@ -873,6 +921,11 @@ def quickstart(
         _quickstart_more(out, app)
         return
     _require_supported_python()
+    if url is not None and not own:
+        raise click.UsageError("--url works with --own.")
+    if own:
+        _quickstart_own(_quickstart_root(out), url, watch or headed)
+        return
     _refuse_unknown_tutorial_options(command_ctx.args)
     openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
@@ -2054,6 +2107,56 @@ def hooks(command_ctx: click.Context) -> None:
         )
         sys.exit(2)
     sys.exit(int(hooks_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "plan",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def plan(command_ctx: click.Context) -> None:
+    """Dry-run a batch of writes to external systems, then apply, undo or release it."""
+    _require_supported_python()
+    plan_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.txplan.cli",))
+    if plan_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no plan command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(plan_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "proxy",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def proxy(command_ctx: click.Context) -> None:
+    """Hold the database credentials; give the agent tools that preview, apply once and undo."""
+    _require_supported_python()
+    proxy_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_flow.txplan.proxy_cli",)
+    )
+    if proxy_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no proxy command.", err=True
+        )
+        sys.exit(2)
+    args = list(command_ctx.args)
+    # Click drops a bare "--"; restore it from argv so the agent's arguments stay its own.
+    if "--" in sys.argv and "--" not in args:
+        tail = sys.argv[sys.argv.index("--") + 1 :]
+        if tail and args[-len(tail) :] == tail:
+            args = args[: -len(tail)] + ["--"] + tail
+    sys.exit(int(proxy_main(args) or 0))
 
 
 @main.command(
