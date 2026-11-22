@@ -156,6 +156,10 @@ class Contribution:
     #: Field names the run's own task, verify or readiness reference config
     #: declares (``ledger export`` lets only these past the scrubber check).
     declared_fields: set[str] = field(default_factory=set)
+    #: True when the source shows no person was asked during the run (a
+    #: shadow hold, a guard run with approval ``not_gated``): the row's
+    #: ``intervention_s`` is then 0 rather than unknown.
+    no_person: bool = False
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
     duration_s: Optional[float] = None
@@ -280,6 +284,8 @@ def collect_agent_guard(path: Path) -> Contribution:
         return refused
     out = Contribution(name, files=[path], executor_kind="agent")
     out.executor_label = "agent-guard"
+    # ``not_gated``: the guard never asks a person (no approval card).
+    out.no_person = doc.get("approval") == "not_gated"
     if (tid := _task_id(doc.get("task_id"))) is not None:
         out.task_ids.append(tid)
     out.duration_s = _float(doc.get("seconds"))
@@ -825,6 +831,8 @@ def collect_flight(path: Path) -> Contribution:
             ),
         )
     pending = False
+    # A flight with no gate events never stopped for a person.
+    out.no_person = doc.get("gate_events") == []
     for event in doc.get("gate_events") or []:
         kind = event.get("kind") if isinstance(event, dict) else None
         if kind == "held":

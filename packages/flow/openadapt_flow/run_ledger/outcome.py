@@ -287,17 +287,33 @@ READINESS_RUN_NO_WRITE_REASON: dict[str, str] = {
 
 
 def shadow_reason(
-    case_status: Optional[str], run_status: Optional[str], landed_writes: Optional[int]
+    case_status: Optional[str],
+    run_status: Optional[str],
+    landed_writes: Optional[int],
+    *,
+    egress_refused: bool = False,
 ) -> str:
     """The reason for one shadow run (J1).
 
     ``landed_writes`` is P1's count of saves that reached the app (``None``
     when unknown). A landed write wins: something was saved and nothing read
     it back. A missing ``case.json`` is never a match.
+
+    ``EXTRA_TARGET``: a write came from, or could have come from, a tab,
+    popup or worker the hold didn't guard; the hold can't vouch that nothing
+    was written there. ``EGRESS_REFUSED`` (or ``run.json`` ``egress.refused``):
+    the run's model traffic wasn't scrubbed or metered as required, so P1
+    keeps no scorecard for it. Both are UNKNOWN, never a match. A healthy
+    ``--egress blocked`` run also says ``mode: blocked``; only ``refused``
+    tells the two apart.
     """
 
     if case_status == "FAILED_SCOPE" or (landed_writes or 0) > 0:
         return "shadow_write_landed"
+    if run_status == "EXTRA_TARGET":
+        return "shadow_extra_target"
+    if run_status == "EGRESS_REFUSED" or egress_refused:
+        return "egress_refused"
     if case_status in ("MISMATCHED", "WRONG_RECORD"):
         # The proposal was held, so the error the shadow caught stands even
         # when the landed count is unknown.

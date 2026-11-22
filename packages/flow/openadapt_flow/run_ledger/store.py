@@ -190,6 +190,11 @@ def _human(collected: Collected) -> RunLedgerHumanV1:
             )
         )
     intervals.sort(key=lambda i: i.opened_at)
+    if not intervals:
+        # No interval in the run's files is not proof nobody spent time on
+        # it: 0 only when a source shows no person was asked, else unknown.
+        nobody = any(c.no_person for c in collected.contributions)
+        return RunLedgerHumanV1(intervention_s=0.0 if nobody else None)
     spans = [i.seconds() for i in intervals]
     total: Optional[float] = (
         None

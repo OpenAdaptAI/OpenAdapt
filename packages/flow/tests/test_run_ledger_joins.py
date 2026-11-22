@@ -1,11 +1,18 @@
 """The joins with the agent-control-plane pieces, on copies of their real files.
 
-Every fixture here is a copy of a synthetic artifact the producer wrote in the
-end-to-end run of 2026-11-21 (only local paths were shortened): P1 readiness
-run directories (J1), P5 guarded saves (J3), P6 exception folders (J4), P7
-fallback results and the dispatcher envelope built with P7's own ``finish``
-(J5). ``shadow_egress/egress.json`` is the one exception: P3 has not written a
-real egress summary yet, so it follows J7's keys.
+Every fixture here is a copy of a synthetic artifact a producer wrote (only
+local paths were shortened):
+
+* ``shadow_matched``, ``shadow_mismatched``, ``shadow_extra_target``: P1's
+  committed samples (``benchmark/readiness/sample/``, branch
+  claude/acp-P1-shadow-scorecard at d5339c054). ``shadow_egress`` is the
+  matched sample with P3's real scrubbed-mode ``egress.json``
+  (``tests/fixtures/readiness/p3_egress.json`` on that branch).
+* ``shadow_wrong_record``, ``shadow_no_case``: the 2026-11-21 end-to-end run;
+  the wrong-record ``case.json`` is that run's ``card/cases.json`` entry.
+* P5 guarded saves (J3), P6 exception folders (J4) and P7 fallback results
+  from the same run, and the dispatcher envelope built with P7's own
+  ``WrappedTask._result`` and ``finish`` (J5).
 """
 
 from __future__ import annotations
@@ -47,15 +54,15 @@ def test_a_matched_shadow_run_is_escalated_never_verified_or_caught():
     row, _, _ = build_row(FIXTURES / "shadow_matched")
     assert _outcome(row) == ("ESCALATED", "shadow_matched")
     assert row.readback_tier is None
-    # P5's old shadow-hold row says CAUGHT_ERROR; it isn't read at all.
-    assert "guard_ledger_row.json" not in row.sources
-    assert "guard_events.jsonl" not in row.sources
     assert set(row.sources) == {
         "case.json",
+        "egress.json",
         "proposed_write.json",
         "run.json",
         "usage.json",
     }
+    # The shadow hold asks nobody: 0, not unknown.
+    assert row.human.intervention_s == 0.0
     assert [(f.name, f.check) for f in row.fields_written] == [
         ("note", "matched"),
         ("patient_id", "not_checked"),
@@ -63,20 +70,33 @@ def test_a_matched_shadow_run_is_escalated_never_verified_or_caught():
     ]
 
 
+def test_an_old_shadow_hold_guard_row_is_ignored():
+    # The demo run's shadow dirs carry P5's shadow-hold row (CAUGHT_ERROR).
+    row, _, _ = build_row(FIXTURES / "shadow_wrong_record")
+    assert "guard_ledger_row.json" not in row.sources
+    assert "guard_events.jsonl" not in row.sources
+
+
 def test_shadow_time_and_cost_come_from_the_run():
     row, _, _ = build_row(FIXTURES / "shadow_matched")
-    assert row.duration_s == 2.001  # agent_wall_s
-    assert row.model.calls == 6
-    assert (row.model.input_tokens, row.model.output_tokens) == (12000, 600)
-    assert (row.model.cost_usd, row.model.cost_source) == (0.03, "reported")
+    assert row.duration_s == 2.123  # agent_wall_s
+    # A healthy ``--egress blocked`` run: the proxy metered 0 calls, $0.
+    assert (row.model.calls, row.model.input_tokens) == (0, 0)
+    assert (row.model.cost_usd, row.model.cost_source) == (0.0, "metered")
     assert row.executor_kind == "agent"
+    assert row.executor_label == "readiness-shadow"  # usage names no model
+    row, _, _ = build_row(FIXTURES / "shadow_wrong_record")
+    assert row.duration_s == 2.042 and row.model.calls == 6
+    assert (row.model.cost_usd, row.model.cost_source) == (0.03, "reported")
     assert row.executor_label == "claude-sonnet-5-5"
 
 
 def test_metered_egress_cost_beats_the_agents_report():
+    # P1's matched sample with P3's real scrubbed-mode egress.json: the
+    # proxy saw one call the agent's usage didn't report.
     row, _, _ = build_row(FIXTURES / "shadow_egress")
-    assert (row.model.cost_usd, row.model.cost_source) == (0.0412, "metered")
-    assert row.model.calls == 6 and row.model.input_tokens == 12000
+    assert (row.model.cost_usd, row.model.cost_source) == (0.008, "metered")
+    assert row.model.calls == 1
 
 
 def test_a_wrong_record_shadow_is_the_error_the_shadow_caught():
@@ -97,6 +117,31 @@ def test_a_mismatched_shadow_is_caught():
     row, _, _ = build_row(FIXTURES / "shadow_mismatched")
     assert _outcome(row) == ("CAUGHT_ERROR", "shadow_field_mismatch")
     assert row.fields_differing >= 1
+
+
+def test_an_extra_target_run_is_unknown_never_a_match():
+    row, _, _ = build_row(FIXTURES / "shadow_extra_target")
+    assert _outcome(row) == ("UNKNOWN", "shadow_extra_target")
+
+
+def test_a_refused_egress_is_told_apart_from_a_healthy_blocked_run(tmp_path):
+    # Both say mode "blocked"; only run.json egress.refused differs.
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "shadow_matched", run)
+    doc = json.loads((run / "run.json").read_text())
+    doc["egress"] = {"refused": True, "reason": "the OS egress block is unavailable"}
+    (run / "run.json").write_text(json.dumps(doc))
+    row, _, _ = build_row(run)
+    assert _outcome(row) == ("UNKNOWN", "egress_refused")
+    doc["status"] = "EGRESS_REFUSED"
+    (run / "run.json").write_text(json.dumps(doc))
+    (run / "egress.json").unlink()
+    row, _, _ = build_row(run)
+    assert _outcome(row) == ("UNKNOWN", "egress_refused")
+    # A refused session metered nothing: the agent's own report stands.
+    assert row.model.cost_source == "reported"
+    healthy, _, _ = build_row(FIXTURES / "shadow_matched")
+    assert _outcome(healthy) == ("ESCALATED", "shadow_matched")
 
 
 def test_a_shadow_run_without_its_case_is_not_a_match():
@@ -438,8 +483,10 @@ def test_the_real_scrubber_lets_every_demo_run_out(tmp_path):
         pytest.skip("openadapt-privacy's text scrubber can't run here")
     store = _store(tmp_path)
     for path in sorted(FIXTURES.iterdir()):
-        if path.name == "shadow_no_case":
-            continue  # nothing declares its fields: see the test below
+        if path.name in ("shadow_no_case", "shadow_extra_target"):
+            # No case.json declares its fields (see below); and Presidio
+            # reads the task id readiness-mockmed-0002 as an organisation.
+            continue
         if path.name.startswith(("shadow_", "fallback_")):
             store.add(path)
         elif path.name.startswith("guard_") and not path.name.endswith("_config"):
@@ -517,3 +564,22 @@ def test_a_guard_rows_field_diff_alone_does_not_pick_the_bucket(tmp_path):
     row, _, _ = build_row(run)
     assert _outcome(row) == ("UNKNOWN", "reconciliation_required")
     assert [(f.name, f.check) for f in row.fields_written] == [("note", "differs")]
+
+
+# -- a person's time: unknown unless a source shows nobody was asked ----------------
+
+
+@pytest.mark.parametrize(
+    ("fixture", "expected"),
+    [
+        ("shadow_matched", 0.0),  # the shadow hold asks nobody
+        ("guard_no_persist", 0.0),  # approval not_gated
+        ("compiled_verified", None),  # a compiled run's report doesn't say
+        ("compiled_halted_receipt", None),
+        ("fallback_verified", None),  # a person approved at a gate
+        ("dispatch_envelope_refused.json", None),  # no gate times at all
+    ],
+)
+def test_no_intervals_is_unknown_unless_nobody_was_asked(fixture, expected):
+    row, _, _ = build_row(FIXTURES / fixture)
+    assert row.human.intervention_s == expected

@@ -1,12 +1,24 @@
 {
-  "agent_wall_s": 2.001,
+  "agent_wall_s": 2.123,
   "before_screen": true,
   "double_save": false,
+  "egress": {
+    "cost_source": "metered",
+    "cost_usd": 0.0,
+    "enforced": true,
+    "mode": "blocked",
+    "model_calls": 0,
+    "reason": null,
+    "refused": false,
+    "refused_requests": 0
+  },
   "ended": "held",
   "exit_code": 0,
+  "extra_target_writes": 0,
   "held": 1,
   "landed_writes": 0,
-  "model_cost_usd": 0.03,
+  "model_cost_source": "metered",
+  "model_cost_usd": 0.0,
   "notes": [],
   "other_origin_refused": 0,
   "proposed": true,
@@ -14,13 +26,20 @@
     "save": 1
   },
   "schema": "openadapt.readiness-task-run/v1",
+  "session": "fresh",
   "status": "HELD",
+  "target_gate": {
+    "errors": [],
+    "extra_targets": {},
+    "gate_lost": false,
+    "ungated_targets": {}
+  },
   "task_id": "readiness-mockmed-0000",
   "usage": {
-    "calls": 6,
-    "cost_usd": 0.03,
-    "input_tokens": 12000,
-    "model": "claude-sonnet-5-5",
-    "output_tokens": 600
+    "calls": 0,
+    "cost_usd": 0.0,
+    "input_tokens": 0,
+    "model": null,
+    "output_tokens": 0
   }
 }

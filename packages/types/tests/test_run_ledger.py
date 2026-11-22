@@ -195,3 +195,12 @@ def test_the_j6_examples_validate_against_the_model_and_its_json_schema() -> Non
         nulls += payload["model"]["calls"] is None
     # Unknown values travel as null.
     assert nulls >= 1
+
+
+def test_no_intervals_is_zero_or_unknown_never_another_number() -> None:
+    from openadapt_types.run_ledger import RunLedgerHumanV1
+
+    assert RunLedgerHumanV1().intervention_s is None
+    assert RunLedgerHumanV1(intervention_s=0.0).intervention_s == 0.0
+    with pytest.raises(ValidationError):
+        RunLedgerHumanV1(intervention_s=5.0)

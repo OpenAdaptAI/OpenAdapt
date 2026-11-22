@@ -32,7 +32,8 @@ Unknown is never zero
 ---------------------
 Model calls, tokens, cost and intervention time are ``null`` when a source
 doesn't say, never ``0``. ``human.intervention_s`` is ``null`` whenever any
-interval has no ``decided_at``.
+interval has no ``decided_at``, and with no intervals unless a source shows no
+person was asked.
 """
 
 from __future__ import annotations
@@ -131,6 +132,8 @@ RunLedgerOutcomeReason = Literal[
     "shadow_write_landed",
     "completed_unverified",
     "shadow_not_compared",
+    "shadow_extra_target",
+    "egress_refused",
     "reconciliation_required",
     "screen_readback_only",
     "lost_reply",
@@ -181,6 +184,8 @@ RUN_LEDGER_REASON_OUTCOME: Mapping[str, RunLedgerOutcome] = {
     "shadow_write_landed": _U,
     "completed_unverified": _U,
     "shadow_not_compared": _U,
+    "shadow_extra_target": _U,
+    "egress_refused": _U,
     "reconciliation_required": _U,
     "screen_readback_only": _U,
     "lost_reply": _U,
@@ -259,13 +264,19 @@ class RunLedgerIntervalV1(_Strict):
 
 class RunLedgerHumanV1(_Strict):
     """A person's time on the run. ``intervention_s`` is the sum of the
-    intervals, and ``null`` when any interval is still open (never ``0``)."""
+    intervals, and ``null`` when any interval is still open (never ``0``).
+    With no intervals it is ``0`` only when a source shows no person was
+    asked, else ``null`` (unknown)."""
 
     intervention_s: Optional[StrictFloat] = Field(default=None, ge=0.0)
     intervals: tuple[RunLedgerIntervalV1, ...] = ()
 
     @model_validator(mode="after")
     def _sum(self) -> "RunLedgerHumanV1":
+        if not self.intervals:
+            if self.intervention_s not in (None, 0.0):
+                raise ValueError("intervention_s is the sum of the intervals")
+            return self
         spans = [interval.seconds() for interval in self.intervals]
         if any(span is None for span in spans):
             if self.intervention_s is not None:
@@ -303,9 +314,7 @@ class _RowBody(_Strict):
     )
     duration_s: Optional[StrictFloat] = Field(default=None, ge=0.0)
     model: RunLedgerModelUsageV1 = Field(default_factory=RunLedgerModelUsageV1)
-    human: RunLedgerHumanV1 = Field(
-        default_factory=lambda: RunLedgerHumanV1(intervention_s=0.0)
-    )
+    human: RunLedgerHumanV1 = Field(default_factory=RunLedgerHumanV1)
     outcome: RunLedgerOutcome
     outcome_reason: RunLedgerOutcomeReason
     fields_written: tuple[RunLedgerFieldV1, ...] = ()

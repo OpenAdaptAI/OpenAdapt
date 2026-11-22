@@ -30,7 +30,7 @@ Schema `openadapt.run-ledger/v1`, defined in
 | `inputs_commitment` | `sha256:` of a random salt plus the run's inputs. The salt is only in the private sidecar. `null` when no source names the inputs. |
 | `started_at`, `ended_at`, `duration_s` | From sources that keep wall-clock times. Relative or monotonic clocks give a duration only. |
 | `model` | `calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `cost_source` (`metered`, `reported` or `unknown`). A value a source doesn't give is `null`, never `0`. |
-| `human` | `intervals` (`approval`, `question`, `exception`, `second_factor`, each with `opened_at` and `decided_at`) and `intervention_s`, their sum. If any interval has no `decided_at`, `intervention_s` is `null`. With no intervals in the run's files it is `0`. A shadow run's person did the real save in a separate recorded run, so the shadow row itself has no intervals. |
+| `human` | `intervals` (`approval`, `question`, `exception`, `second_factor`, each with `opened_at` and `decided_at`) and `intervention_s`, their sum. If any interval has no `decided_at`, `intervention_s` is `null`. With no intervals it is `0` only when a source shows no person was asked (a shadow hold, which never asks; an agent-guard run with approval `not_gated`; a flight with no gate events), and `null` (unknown) otherwise. A shadow run's person did the real save in a separate recorded run, so the shadow row itself is `0`. |
 | `outcome`, `outcome_reason` | See below. |
 | `fields_written`, `fields_differing` | Field names with `matched`, `differs` or `not_checked`, and how many differ. Names only. |
 | `readback_tier` | The weakest read: `independent_readback`, `screen_readback` or `unchecked`. |
@@ -59,7 +59,7 @@ reason names another bucket is refused.
 | ESCALATED | The run stopped for a person, a person declined it, or a person did the step. | `approval_held`, `person_declined`, `approval_declined`, `question_asked`, `exception_card`, `second_factor`, `halted_before_effect`, `gate_held`, `shadow_matched` |
 | CAUGHT_ERROR | A check caught a wrong save. A person declining is not a catch on its own. | `readback_refuted`, `save_blocked_wrong_record`, `save_blocked_other_origin`, `save_blocked_double_save`, `save_blocked_out_of_scope`, `gate_refused`, `shadow_wrong_record`, `shadow_field_mismatch` |
 | FAILED | Crashed, timed out, canceled or gave up, with no evidence of a write. | `crashed_no_write`, `timed_out_no_write`, `agent_gave_up`, `platform_failed`, `canceled_no_write`, `policy_rejected_no_write` |
-| UNKNOWN | Nothing settles it. Never folded into another bucket. | `shadow_write_landed`, `completed_unverified`, `shadow_not_compared`, `reconciliation_required`, `screen_readback_only`, `lost_reply`, `write_unconfirmed`, `saved_awaiting_check`, `rolled_back`, `self_approved`, `observe_only_would_block`, `schema_unrecognised`, `source_unreadable`, `task_id_conflict`, `unmapped_outcome`, `no_sources` |
+| UNKNOWN | Nothing settles it. Never folded into another bucket. | `shadow_write_landed`, `completed_unverified`, `shadow_not_compared`, `shadow_extra_target`, `egress_refused`, `reconciliation_required`, `screen_readback_only`, `lost_reply`, `write_unconfirmed`, `saved_awaiting_check`, `rolled_back`, `self_approved`, `observe_only_would_block`, `schema_unrecognised`, `source_unreadable`, `task_id_conflict`, `unmapped_outcome`, `no_sources` |
 
 When sources disagree, the stronger finding wins:
 CAUGHT_ERROR > UNKNOWN > ESCALATED > FAILED > VERIFIED. A run in which the
@@ -165,6 +165,8 @@ save is the real one.
 | Case | Bucket (reason) |
 | --- | --- |
 | `landed_writes` > 0 or `FAILED_SCOPE` (a write reached the app) | UNKNOWN (`shadow_write_landed`) |
+| Run `EXTRA_TARGET` (a write from, or a target outside, the guarded tab) | UNKNOWN (`shadow_extra_target`) |
+| Run `EGRESS_REFUSED`, or `run.json` `egress.refused: true` | UNKNOWN (`egress_refused`). A healthy `--egress blocked` run also writes `mode: blocked`; only `refused` tells them apart. |
 | `WRONG_RECORD` | CAUGHT_ERROR (`shadow_wrong_record`) |
 | `MISMATCHED` | CAUGHT_ERROR (`shadow_field_mismatch`) |
 | `MATCHED` | ESCALATED (`shadow_matched`): a person did the step; not a catch |
@@ -177,8 +179,9 @@ Fields come from `case.json`: `matched` is matched; `mismatched`, `missing`,
 field the case doesn't list (an expected-record field that matched, or an
 ignored one) is `not_checked`. Values go to the sidecar only. Duration is
 `agent_wall_s`. Model usage is `run.json` `usage` (else `usage.json`),
-`reported`; an `egress.json` replaces calls and cost with the proxy's count
-(`metered` when its `cost_source` says so).
+`reported`; an `egress.json` (else the copy in `run.json` `egress`, unless
+refused) replaces calls and cost with the proxy's count (`metered` when its
+`cost_source` says so).
 
 #### Fallback runs (J5)
 
@@ -197,8 +200,7 @@ On `path: program` or `held` the envelope is read like a wrap result;
 `NO_ADMITTED_PROGRAM` is FAILED (`policy_rejected_no_write`, nothing ran).
 A fallback gate in `result.json` keeps one time, not an opened/decided pair,
 so a person's time on it is unknown (`null`), not zero. The envelope keeps
-no gate times at all; its row says `0` there, which is a known gap (the row
-schema has no way to say "unknown" without an interval). A wrap run record
+no gate times at all, so its row's time is unknown too. A wrap run record
 (`openadapt-agent.run/v1`) whose result `path` is `agent_fallback` is read
 like an agent's first run: P7's `verified` is VERIFIED, anything else without
 the policy record is UNKNOWN (`write_unconfirmed`).

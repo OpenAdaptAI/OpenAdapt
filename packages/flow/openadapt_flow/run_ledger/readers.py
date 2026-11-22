@@ -185,6 +185,16 @@ def collect_shadow_run(folder: Path) -> Contribution:
             usage = _egress_usage(egress, usage)
         elif egress is not None:
             out.signal("schema_unrecognised")
+    else:
+        # P1 also copies the egress summary into run.json (``egress``); a
+        # refused session there has no ``mode`` and no counts.
+        copy = run.get("egress")
+        if (
+            isinstance(copy, dict)
+            and "mode" in copy
+            and copy.get("refused") is not True
+        ):
+            usage = _egress_usage(copy, usage)
     out.usage = usage
 
     proposed = _optional(folder, "proposed_write.json", PROPOSED_WRITE_SCHEMA, out)
@@ -249,13 +259,19 @@ def collect_shadow_run(folder: Path) -> Contribution:
     if case is not None and _int(case.get("landed_writes")):
         landed = max(landed or 0, _int(case.get("landed_writes")) or 0)
     status = case.get("status") if case is not None else None
+    run_egress = run.get("egress")
     out.signal(
         shadow_reason(
             status if isinstance(status, str) else None,
             run.get("status") if isinstance(run.get("status"), str) else None,
             landed,
+            egress_refused=isinstance(run_egress, dict)
+            and run_egress.get("refused") is True,
         )
     )
+    # The shadow hold never asks a person: the person's own save is a
+    # separate recorded run. Nobody spent time on this one.
+    out.no_person = True
     return out
 
 

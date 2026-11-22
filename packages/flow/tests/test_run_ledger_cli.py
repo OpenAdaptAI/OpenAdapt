@@ -91,8 +91,7 @@ def test_add_dedupes_and_writes_private_files(capsys, home):
     # The run directory is never written to.
     assert sorted(p.name for p in run.iterdir()) == [
         "case.json",
-        "guard_events.jsonl",
-        "guard_ledger_row.json",
+        "egress.json",
         "proposed_write.json",
         "run.json",
         "usage.json",

@@ -1,1 +1,1 @@
-{"schema": "openadapt.agent-usage/v1", "calls": 6, "input_tokens": 12000, "output_tokens": 600, "model": "claude-sonnet-5-5", "cost_usd": null}
+{"schema": "openadapt.agent-usage/v1", "calls": 0, "input_tokens": 0, "output_tokens": 0, "model": null, "cost_usd": 0.0}
