@@ -114,9 +114,9 @@ trigger or schema.
 | `search_path_open` | PostgreSQL: the search path holds more than the current schema, so an unqualified name can resolve elsewhere |
 | `rule` | PostgreSQL: a rewrite rule on a relation in the schema |
 | `user_operator` | PostgreSQL: an operator outside `pg_catalog` (its function could write anywhere) |
-| `user_function_default` | PostgreSQL: a column default or a check constraint that calls a function outside `pg_catalog` |
+| `user_function_default` | PostgreSQL: a column default, a check constraint, a row-level security policy or an index expression that calls a function outside `pg_catalog` |
 | `trigger_not_local` | PostgreSQL: a trigger function not in SQL or PL/pgSQL, `SECURITY DEFINER`, or with its own settings |
-| `truncate`, `dynamic_sql`, `copy`, `other_schema` | A trigger body or the planned statement uses `TRUNCATE`, `EXECUTE`, `COPY`, or names another schema |
+| `truncate`, `dynamic_sql`, `copy`, `other_schema` | A trigger body, a trigger's `WHEN` condition or the planned statement uses `TRUNCATE`, `EXECUTE`, `COPY`, or names another schema |
 | `user_function`, `system_function_with_effects` | A trigger body or the planned statement calls a function outside `pg_catalog`, or a system function with effects (`lo_*`, `set_config`, `pg_*`, sequences). On MySQL, any call to a function that isn't a known built-in |
 | `trigger_privilege_unproven` | MySQL: `SHOW GRANTS` doesn't prove `TRIGGER` (or `ALL`) on every frame table. A wildcard grant counts only for the name it spells. A role grant or a partial revoke proves nothing |
 | `routine_call`, `other_qualifier` | MySQL: a trigger body uses `CALL` or prepared SQL, or a qualifier other than `NEW`, `OLD` or the current database |
@@ -127,8 +127,12 @@ trigger or schema.
 A trigger in SQL or PL/pgSQL that writes only the frame's schema and calls
 only built-in functions leaves the list empty, so the write can still be
 `VERIFIED`. The check reads text: it allows only what it recognizes, so an
-unusual but harmless body can cap a write. SQLite has nothing to list: ATTACH
-is refused, and the connection registers no functions.
+unusual but harmless body can cap a write, and an extension that adds
+operators (PostGIS, `citext`) caps every write on that database. SQLite has
+nothing to list: ATTACH is refused, and the connection registers no
+functions. Not listed yet: functions reached through a domain's check
+constraint or a column type's input function. MySQL table-level grants are
+checked against the tables the account can list.
 
 An app that other
 clients also write to needs the read-back: the apply-time diff check refuses
