@@ -195,11 +195,6 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
-from openadapt_flow.runtime.model_egress import (
-    EgressRecorder,
-    model_calls_in_process,
-    model_calls_off_box,
-)
 from openadapt_flow.runtime.dialog_delivery import (
     _DIALOG_WAIT_S as _DIALOG_WAIT_S,
 )
@@ -249,6 +244,11 @@ from openadapt_flow.runtime.effects.adapter import (
 from openadapt_flow.runtime.effects.pipeline_safety import _pipeline_safe_verifier
 from openadapt_flow.runtime.known_ids import (
     lookalike_class as known_ids_lookalike_class,
+)
+from openadapt_flow.runtime.model_egress import (
+    EgressRecorder,
+    model_calls_in_process,
+    model_calls_off_box,
 )
 from openadapt_flow.runtime.program_predicates import (
     evaluate_program_predicate,
