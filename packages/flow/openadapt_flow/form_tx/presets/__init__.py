@@ -63,6 +63,7 @@ def load_domain_schema(name: str) -> "CanonicalDomainSchema":
     return CanonicalDomainSchema.model_validate(_raw(name))
 
 
+@lru_cache(maxsize=None)
 def load_words(name: str) -> tuple[str, ...]:
     """The words of word list ``name`` (``presets/words/<name>.json``), in order."""
 
@@ -72,7 +73,8 @@ def load_words(name: str) -> tuple[str, ...]:
     data = json.loads((_WORDS / f"{name}.json").read_text(encoding="utf-8"))
     words = data.get("words") if isinstance(data, dict) else None
     if (
-        data.get("schema") != WORD_LIST_SCHEMA
+        not isinstance(data, dict)
+        or data.get("schema") != WORD_LIST_SCHEMA
         or data.get("name") != name
         or not isinstance(words, list)
         or not all(isinstance(w, str) for w in words)
