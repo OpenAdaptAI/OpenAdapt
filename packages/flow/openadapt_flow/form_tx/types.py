@@ -17,6 +17,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from openadapt_flow.form_tx.presets import load_words
+
 FORM_DOSSIER_SCHEMA: Literal["openadapt.form-dossier/v1"] = "openadapt.form-dossier/v1"
 UI_PROFILE_SCHEMA: Literal["openadapt.ui-profile/v1"] = "openadapt.ui-profile/v1"
 FORM_PACK_SCHEMA: Literal["openadapt.form-pack/v1"] = "openadapt.form-pack/v1"
@@ -330,18 +332,7 @@ class FieldBindingSpec(BaseModel):
     prefill_policy: PrefillPolicy = PrefillPolicy.HALT_ON_CONFLICT
     triggers_re_render: bool = False
     required_in_pack: bool = False
-    placeholder_values: tuple[str, ...] = (
-        "",
-        "-- Select --",
-        "Select...",
-        "Choose...",
-        "Select one",
-        "-- Select one --",
-        "Choose one",
-        "Please choose",
-        "Choose",
-        "-- Choose one --",
-    )
+    placeholder_values: tuple[str, ...] = load_words("placeholders")
     # Type-ahead comboboxes: type only this many leading characters of the
     # formatted value before reading suggestions. None types the whole value.
     typeahead_query_chars: Optional[int] = Field(default=None, ge=1, le=200)

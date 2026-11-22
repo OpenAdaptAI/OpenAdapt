@@ -31,6 +31,7 @@ from openadapt_flow.form_tx.playwright_surface import (
     PopupContractError,
     SurfaceSettleTimeoutError,
 )
+from openadapt_flow.form_tx.presets import load_words
 from openadapt_flow.form_tx.receipt import issue_form_tx_receipt
 from openadapt_flow.form_tx.surface import (
     AmbiguousAnchorError,
@@ -92,18 +93,9 @@ _PRIMARY_ENTITY_KINDS = frozenset(
         "self",
     }
 )
-_DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
-    "",
-    "-- Select --",
-    "Select...",
-    "Choose...",
-    "Select one",
-    "-- Select one --",
-    "Choose one",
-    "Please choose",
-    "Choose",
-    "-- Choose one --",
-)
+#: Option texts that mean nothing is chosen (data:
+#: ``presets/words/placeholders.json``).
+_DEFAULT_PLACEHOLDERS: tuple[str, ...] = load_words("placeholders")
 
 
 class ReconcilerSession:

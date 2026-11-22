@@ -1,0 +1,17 @@
+{
+  "schema": "openadapt.form-word-list/v1",
+  "name": "placeholders",
+  "about": "Option texts that mean nothing is chosen yet. A control or summary showing one of these holds no value. A binding may list its own.",
+  "words": [
+    "",
+    "-- Select --",
+    "Select...",
+    "Choose...",
+    "Select one",
+    "-- Select one --",
+    "Choose one",
+    "Please choose",
+    "Choose",
+    "-- Choose one --"
+  ]
+}
