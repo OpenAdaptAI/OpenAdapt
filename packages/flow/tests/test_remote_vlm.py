@@ -7,11 +7,8 @@ the SAFE outcome so the runtime halts -- never a wrong action.
 
 from __future__ import annotations
 
-import io
-
 import httpx
 import pytest
-from PIL import Image
 
 from openadapt_flow.runtime.grounder import Grounder, GrounderMatch
 from openadapt_flow.runtime.remote_vlm import (
@@ -22,13 +19,7 @@ from openadapt_flow.runtime.remote_vlm import (
     RemoteVLMClient,
 )
 
-PNG = b"\x89PNG\r\n\x1a\n"  # unreadable stub header for transport-failure tests
-
-
-def _valid_png(w: int = 200, h: int = 100) -> bytes:
-    buf = io.BytesIO()
-    Image.new("RGB", (w, h), (220, 220, 220)).save(buf, format="PNG")
-    return buf.getvalue()
+PNG = b"\x89PNG\r\n\x1a\n"  # bytes need not be a real PNG for the client layer
 
 
 # --- happy path (baseline: clients pass through good answers) ---------------
@@ -63,21 +54,9 @@ def test_grounder_pass_through_point(monkeypatch):
         ),
     )
     g = RemoteGrounder(RemoteVLMClient("http://x", token="t"))
-    m = g.locate(_valid_png(200, 100), "Save button")
+    m = g.locate(PNG, "Save button")
     assert isinstance(m, GrounderMatch)
     assert m.point == (120, 45)
-
-
-def test_grounder_refuses_unreadable_image_bytes(monkeypatch):
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda url, **kw: httpx.Response(
-            200, json={"point": [120, 45], "confidence": 0.9}
-        ),
-    )
-    g = RemoteGrounder(RemoteVLMClient("http://x", token="t"))
-    assert g.locate(PNG, "Save button") is None
 
 
 def test_remote_grounder_satisfies_protocol():

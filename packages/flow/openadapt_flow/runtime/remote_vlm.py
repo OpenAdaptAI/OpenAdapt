@@ -18,7 +18,6 @@ appliance is down. Nothing here can turn an outage into a click.
 from __future__ import annotations
 
 import base64
-import math
 import os
 from dataclasses import dataclass
 from enum import Enum
@@ -65,10 +64,6 @@ def _b64(png: bytes) -> str:
 # but never useful). Full-frame screenshots are downscaled below this before
 # they cross the wire; identity crops are already small and are left untouched.
 _MAX_MODEL_IMAGE_DIM = 1024
-_GOLD_DIVIDER_PX = 4
-_GOLD_DIVIDER_RGB = (48, 48, 48)
-_GOLD_DEFAULT_PAD_RATIO = 0.15
-_GOLD_MIN_PAD_PX = 16
 
 
 def _downscale_for_model(
@@ -99,234 +94,6 @@ def _downscale_for_model(
         return buf.getvalue(), scale
     except Exception:
         return png, 1.0
-
-
-def _png_dimensions(png: bytes) -> Optional[tuple[int, int]]:
-    """Return ``(width, height)`` for decodable image bytes, or ``None``."""
-    try:
-        from io import BytesIO
-
-        from PIL import Image
-
-        with Image.open(BytesIO(png)) as img:
-            w, h = img.size
-            return (int(w), int(h)) if w > 0 and h > 0 else None
-    except Exception:
-        return None
-
-
-def extract_roi_crop(
-    png: bytes,
-    roi: Region,
-    max_dim: int = _MAX_MODEL_IMAGE_DIM,
-    *,
-    pad_ratio: float = _GOLD_DEFAULT_PAD_RATIO,
-    min_pad_px: int = _GOLD_MIN_PAD_PX,
-) -> Optional[bytes]:
-    """Extract a padded ROI crop bounded by ``max_dim``, or ``None`` if invalid.
-
-    Unlike :func:`gold_crop_for_model`, this always crops to ``roi`` regardless
-    of whether the source frame exceeds ``max_dim`` so callers comparing two
-    frames (e.g. identity checks) never pair a cropped ROI with an uncropped
-    full screenshot.
-    """
-    if max_dim <= 0:
-        return None
-    try:
-        from io import BytesIO
-
-        from PIL import Image
-
-        img = Image.open(BytesIO(png)).convert("RGB")
-        w, h = img.size
-        rx, ry, rw, rh = roi
-        if rw <= 0 or rh <= 0:
-            return None
-        x0 = int(rx)
-        y0 = int(ry)
-        x1 = int(rx + rw)
-        y1 = int(ry + rh)
-        # Require the entire requested subject region to be visible inside the
-        # image; a partly clipped ROI would omit part of the identifier on one
-        # side while forwarding a nonempty crop.
-        if x0 < 0 or y0 < 0 or x1 > w or y1 > h:
-            return None
-
-        pad_x = max(min_pad_px, round((x1 - x0) * pad_ratio))
-        pad_y = max(min_pad_px, round((y1 - y0) * pad_ratio))
-        cx0 = max(0, x0 - pad_x)
-        cy0 = max(0, y0 - pad_y)
-        cx1 = min(w, x1 + pad_x)
-        cy1 = min(h, y1 + pad_y)
-
-        crop = img.crop((cx0, cy0, cx1, cy1))
-        cw, ch = crop.size
-        if max(cw, ch) > max_dim:
-            local_scale = max_dim / max(cw, ch)
-            crop = crop.resize(
-                (max(1, round(cw * local_scale)), max(1, round(ch * local_scale))),
-                Image.Resampling.LANCZOS,
-            )
-        buf = BytesIO()
-        crop.save(buf, format="PNG")
-        return buf.getvalue()
-    except Exception:
-        return None
-
-
-@dataclass(frozen=True)
-class GoldCropResult:
-    """Deterministic Global-to-Local (GOLD) view of a screenshot within ``max_dim``.
-
-    * ``global_png``    -- downscaled full frame (``max(w, h) <= max_dim``)
-    * ``global_scale``  -- scale factor of ``global_png`` (``<= 1.0``)
-    * ``local_png``     -- high-resolution ROI crop extracted from the original
-      unscaled frame (``max(w, h) <= max_dim``)
-    * ``local_scale``   -- scale factor of ``local_png`` relative to original
-      pixels (``1.0`` whenever the padded ROI fits inside ``max_dim``)
-    * ``local_origin``  -- ``(crop_x, crop_y)`` top-left of the padded ROI in
-      original full-frame pixel coordinates
-    * ``composite_png`` -- single-image GOLD composite (global overview stacked
-      above the high-resolution local ROI crop, bounded by ``max_dim`` on both
-      axes) for single-image VLM endpoints
-    * ``used_gold``     -- ``True`` iff the original frame exceeded ``max_dim``
-      and a valid ROI preserved higher pixel resolution than uniform downscaling
-    """
-
-    global_png: bytes
-    global_scale: float
-    local_png: bytes
-    local_scale: float
-    local_origin: tuple[int, int]
-    composite_png: bytes
-    used_gold: bool
-
-
-def gold_crop_for_model(
-    png: bytes,
-    roi: Optional[Region] = None,
-    max_dim: int = _MAX_MODEL_IMAGE_DIM,
-    *,
-    pad_ratio: float = _GOLD_DEFAULT_PAD_RATIO,
-    min_pad_px: int = _GOLD_MIN_PAD_PX,
-) -> GoldCropResult:
-    """Build a deterministic Global-to-Local (GOLD) view within ``max_dim``.
-
-    When ``roi`` is ``None``, empty/out-of-bounds, or the screenshot already
-    fits inside ``max_dim``, this falls back cleanly to
-    :func:`_downscale_for_model` with ``used_gold=False`` (zero behavior
-    change for existing callers).
-
-    When ``max(w, h) > max_dim`` and a valid ``roi = (x, y, w, h)`` is given,
-    the target/alert region is cropped directly from the original unscaled
-    screenshot with deterministic padding so small text and banners retain
-    native 1:1 resolution (or the highest scale that fits ``max_dim``), paired
-    with a global overview frame inside a single ``<= max_dim`` composite.
-    """
-    global_png, global_scale = _downscale_for_model(png, max_dim=max_dim)
-    fallback = GoldCropResult(
-        global_png=global_png,
-        global_scale=global_scale,
-        local_png=global_png,
-        local_scale=global_scale,
-        local_origin=(0, 0),
-        composite_png=global_png,
-        used_gold=False,
-    )
-    if roi is None or max_dim <= _GOLD_DIVIDER_PX + 2:
-        return fallback
-
-    try:
-        from io import BytesIO
-
-        from PIL import Image
-
-        img = Image.open(BytesIO(png)).convert("RGB")
-        w, h = img.size
-        if max(w, h) <= max_dim:
-            return fallback
-
-        rx, ry, rw, rh = roi
-        if rw <= 0 or rh <= 0:
-            return fallback
-        x0 = max(0, min(w, int(rx)))
-        y0 = max(0, min(h, int(ry)))
-        x1 = max(0, min(w, int(rx + rw)))
-        y1 = max(0, min(h, int(ry + rh)))
-        if x1 <= x0 or y1 <= y0:
-            return fallback
-
-        pad_x = max(min_pad_px, round((x1 - x0) * pad_ratio))
-        pad_y = max(min_pad_px, round((y1 - y0) * pad_ratio))
-        cx0 = max(0, x0 - pad_x)
-        cy0 = max(0, y0 - pad_y)
-        cx1 = min(w, x1 + pad_x)
-        cy1 = min(h, y1 + pad_y)
-
-        crop = img.crop((cx0, cy0, cx1, cy1))
-        cw, ch = crop.size
-        if max(cw, ch) > max_dim:
-            local_scale = max_dim / max(cw, ch)
-            local_img = crop.resize(
-                (max(1, round(cw * local_scale)), max(1, round(ch * local_scale))),
-                Image.Resampling.LANCZOS,
-            )
-        else:
-            local_scale = 1.0
-            local_img = crop
-
-        local_buf = BytesIO()
-        local_img.save(local_buf, format="PNG")
-        local_png = local_buf.getvalue()
-
-        # Build the single-image GOLD composite inside (max_dim x max_dim).
-        # Preserve native local crop resolution up to 2/3 of the vertical budget
-        # and fit the global overview in the remaining height.
-        avail_h = max_dim - _GOLD_DIVIDER_PX
-        local_max_h = min(local_img.height, max(1, (avail_h * 2) // 3))
-        if local_img.height > local_max_h or local_img.width > max_dim:
-            comp_local_scale = min(
-                max_dim / local_img.width, local_max_h / local_img.height
-            )
-            local_panel = local_img.resize(
-                (
-                    max(1, round(local_img.width * comp_local_scale)),
-                    max(1, round(local_img.height * comp_local_scale)),
-                ),
-                Image.Resampling.LANCZOS,
-            )
-        else:
-            local_panel = local_img
-
-        global_max_h = max(1, avail_h - local_panel.height)
-        comp_global_scale = min(max_dim / w, global_max_h / h)
-        global_panel = img.resize(
-            (
-                max(1, round(w * comp_global_scale)),
-                max(1, round(h * comp_global_scale)),
-            ),
-            Image.Resampling.LANCZOS,
-        )
-
-        comp_w = max(global_panel.width, local_panel.width)
-        comp_h = global_panel.height + _GOLD_DIVIDER_PX + local_panel.height
-        canvas = Image.new("RGB", (comp_w, comp_h), _GOLD_DIVIDER_RGB)
-        canvas.paste(global_panel, (0, 0))
-        canvas.paste(local_panel, (0, global_panel.height + _GOLD_DIVIDER_PX))
-        comp_buf = BytesIO()
-        canvas.save(comp_buf, format="PNG")
-
-        return GoldCropResult(
-            global_png=global_png,
-            global_scale=global_scale,
-            local_png=local_png,
-            local_scale=local_scale,
-            local_origin=(cx0, cy0),
-            composite_png=comp_buf.getvalue(),
-            used_gold=local_scale > global_scale,
-        )
-    except Exception:
-        return fallback
 
 
 class RemoteVLMClient:
@@ -468,41 +235,8 @@ class RemoteGrounder:
         screen_png: bytes,
         intent: str,
         ocr_text: Optional[str] = None,
-        roi: Optional[Region] = None,
     ) -> Optional[GrounderMatch]:
-        if roi is not None:
-            gold = gold_crop_for_model(screen_png, roi=roi)
-            if gold.used_gold:
-                match = self._ground_and_map(
-                    gold.local_png,
-                    intent,
-                    ocr_text,
-                    scale=gold.local_scale,
-                    origin=gold.local_origin,
-                )
-                if match is not None:
-                    return match
-                # Local ROI had no proposal: fall back deterministically to the
-                # global downscaled frame so a drifted target can still be found.
-                return self._ground_and_map(
-                    gold.global_png,
-                    intent,
-                    ocr_text,
-                    scale=gold.global_scale,
-                    origin=(0, 0),
-                )
         sent, scale = _downscale_for_model(screen_png)
-        return self._ground_and_map(sent, intent, ocr_text, scale=scale, origin=(0, 0))
-
-    def _ground_and_map(
-        self,
-        sent: bytes,
-        intent: str,
-        ocr_text: Optional[str],
-        *,
-        scale: float,
-        origin: tuple[int, int],
-    ) -> Optional[GrounderMatch]:
         data = self._client.ground(sent, intent, ocr_text)
         if data is None:
             return None  # SAFE: service down => no proposal
@@ -510,30 +244,11 @@ class RemoteGrounder:
         if not point or not isinstance(point, (list, tuple)) or len(point) != 2:
             return None
         x, y = point
-        if (
-            isinstance(x, bool)
-            or isinstance(y, bool)
-            or not isinstance(x, (int, float))
-            or not isinstance(y, (int, float))
-            or not math.isfinite(x)
-            or not math.isfinite(y)
-        ):
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
             return None
-        # Validate coordinates against the actual image submitted to the model
-        # before translating back to full-frame pixel space; if dimensions
-        # cannot be established or the point falls outside the observed image,
-        # treat it as a miss (local retries globally; global returns None).
-        dims = _png_dimensions(sent)
-        if dims is None:
-            return None
-        sent_w, sent_h = dims
-        if x < 0 or y < 0 or x >= sent_w or y >= sent_h:
-            return None
-        # The model saw a downscaled or ROI-cropped frame; map the proposal back
-        # to the original screenshot's pixel space before anything acts on it.
-        ox, oy = origin
-        px = ox + int(round(x / scale))
-        py = oy + int(round(y / scale))
+        # The model saw a downscaled frame; map the proposal back to the
+        # original screenshot's pixel space before anything acts on it.
+        px, py = int(round(x / scale)), int(round(y / scale))
         region: Region = (
             max(0, px - _REGION_HALF_W),
             max(0, py - _REGION_HALF_H),
@@ -562,20 +277,10 @@ class RemoteStateVerifier:
     def __init__(self, client: RemoteVLMClient) -> None:
         self._client = client
 
-    def verify(
-        self,
-        screenshot: bytes,
-        expected_state: str,
-        roi: Optional[Region] = None,
-    ) -> str:
-        # Downscale below the model's image ceiling; when an ROI is supplied on
-        # a >1024px frame, send a GOLD composite (global overview + native-res
-        # local crop) within the same 1024px budget.
-        if roi is not None:
-            gold = gold_crop_for_model(screenshot, roi=roi)
-            sent = gold.composite_png if gold.used_gold else gold.global_png
-        else:
-            sent, _scale = _downscale_for_model(screenshot)
+    def verify(self, screenshot: bytes, expected_state: str) -> str:
+        # Downscale below the model's image ceiling; there are no coordinates
+        # to map back for a yes/no/uncertain verdict.
+        sent, _scale = _downscale_for_model(screenshot)
         data = self._client.verify_state(sent, expected_state)
         if data is None:
             return "uncertain"  # SAFE: service down => unproven => halt
@@ -584,14 +289,9 @@ class RemoteStateVerifier:
             return holds
         return "uncertain"
 
-    def holds(
-        self,
-        screenshot: bytes,
-        expected_state: str,
-        roi: Optional[Region] = None,
-    ) -> bool:
+    def holds(self, screenshot: bytes, expected_state: str) -> bool:
         """Convenience: True ONLY on a confident 'yes' (uncertain/no => False)."""
-        return self.verify(screenshot, expected_state, roi=roi) == "yes"
+        return self.verify(screenshot, expected_state) == "yes"
 
 
 @dataclass

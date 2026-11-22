@@ -15,6 +15,25 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- Effect locations (`openadapt.effect-location/v1`,
+  `openadapt_flow/effect_location/`): the place a careful person would look
+  again to see an intended value, stored as pack data. Each record holds the
+  demonstration path and start condition (`same_screen`, `fresh_navigation`,
+  `new_session`, `other_channel`), a locator (label, row key or region), the
+  expected value, a codec (including a `template` codec that reads one
+  summary row as two values and a `split_date` codec), the expected count
+  and an optional baseline. `evaluate_all` judges every planned value as
+  `held`, `refuted` or `not_checked`. A location that can't be reached,
+  found or read is `not_checked`, never a pass. The check level comes from
+  the start condition; the receipt word comes from
+  `check_level.outcome_word` when it is available. The engine holds no
+  application vocabulary: month names, yes and no words, currency signs and
+  tables come from the pack. See docs/EFFECT_LOCATION.md.
+
 ## v3.4.0 (2026-11-21)
 
 ### Features
