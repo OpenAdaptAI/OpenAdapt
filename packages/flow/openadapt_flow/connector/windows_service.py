@@ -236,9 +236,13 @@ def serve(
         )
         return 2
     logger.info(
-        "service starting: config %s, settings %s",
+        "service starting: config %s, control_plane_url=%s, org_id=%s, name=%s, poll_wait_s=%s, max_workers=%s",
         config_file(config_dir),
-        settings.redacted(),
+        settings.control_plane_url,
+        settings.org_id,
+        settings.name,
+        settings.poll_wait_s,
+        settings.max_workers,
     )
 
     delay = _RETRY_START_S
