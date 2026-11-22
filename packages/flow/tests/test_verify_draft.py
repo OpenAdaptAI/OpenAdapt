@@ -415,6 +415,73 @@ def test_untestable_is_never_a_pass() -> None:
     assert adm.only_untestable() and "not the contract's fault" in adm.feedback()
 
 
+@pytest.mark.parametrize(
+    ("status", "kept", "credited"),
+    [
+        (409, True, True),
+        (412, True, True),
+        (503, True, False),  # an outage observed nothing
+        (401, True, False),  # an expired session observed nothing
+        (409, False, False),  # a conflict that lost the other user's save
+    ],
+)
+def test_a_refused_stale_save_is_credited_only_for_a_kept_conflict(
+    status: int, kept: bool, credited: bool
+) -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.verify_draft.sandbox import Move
+
+    base = {"t": {1: {"v": "a"}}}
+    saved = {"t": {1: {"v": "other"}}}
+    state = {"rows": base}
+    q = object.__new__(A.Qualifier)
+    q.sandbox = SimpleNamespace(actors={"agent": {}, "other": {}})
+    q.demo = A.Demo(
+        writes=[],
+        params={"v": "a"},
+        base=base,
+        after={"t": {1: {"v": "b"}}},
+        main=Move("t", 1, "changed", ["v"], {"v": "a"}, {"v": "b"}),
+        param_columns={"v": "v"},
+    )
+
+    def send(writes: Any, actor: str, swaps: Any) -> list[int]:
+        state["rows"] = saved  # the other user's save lands
+        return [200]
+
+    q.app = SimpleNamespace(send=send)
+    q.store = SimpleNamespace(read_moved=lambda _base: state["rows"])
+    q.refused_statuses = []
+
+    def run(contract: Any, case: A.Case, *, values: Any, before: Any) -> None:
+        assert before() is None
+        if not kept:
+            state["rows"] = {"t": {1: {"v": "agent"}}}
+        q.refused_statuses = [status]
+        case.applicable = False
+        case.untestable = True
+        case.note = f"the app refused the write (HTTP {status})"
+
+    q.run = run  # type: ignore[method-assign]
+    (case,) = q._fault({}, "lost_update", {"v": "b"}, [{"v": "other"}])
+    A.Qualifier._judge(case)
+    assert case.untestable is (not credited)
+    assert case.passed is credited
+
+
+def test_a_single_user_sandbox_never_admits(mockloan: Path) -> None:
+    sandbox = yaml.safe_load((mockloan / "sandbox.yaml").read_text())
+    sandbox["actors"].pop("other")
+    (mockloan / "sandbox.yaml").write_text(yaml.safe_dump(sandbox))
+    outcome = _run(mockloan, Fixed(GOOD), rounds=1)
+    assert not outcome.admitted
+    adm = outcome.admissions[-1]
+    (missing,) = [c for c in adm.cases if c.name == "attribution:other"]
+    assert missing.untestable and not missing.passed
+    assert adm.only_untestable()
+
+
 def test_one_question_at_most(mockloan: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A masked column is asked about once; the answer is a decision, and
     'bookkeeping' lets the same draft be qualified again."""

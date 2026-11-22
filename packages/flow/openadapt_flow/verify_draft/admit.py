@@ -560,6 +560,8 @@ class Qualifier:
         #: ``table.column`` a person said is bookkeeping (the one question).
         self.bookkeeping = set(bookkeeping)
         self.masked: list[dict[str, str]] = []
+        #: The HTTP statuses of the last write the app refused in :meth:`run`.
+        self.refused_statuses: list[int] = []
         os.environ.setdefault("OPENADAPT_LOCAL_SEAL", "off")
 
     # -- one write under the contract
@@ -637,6 +639,7 @@ class Qualifier:
             if any(s >= 400 for s in statuses):
                 # For a clean write: the values were invalid (the caller
                 # skips them). For anything else the case can't be built.
+                self.refused_statuses = list(statuses)
                 case.applicable = False
                 case.untestable = case.group != "clean"
                 case.note = f"the app refused the write (HTTP {max(statuses)})"
@@ -1055,25 +1058,44 @@ class Qualifier:
                 )
                 return [case]
 
+            other_saved: list[Rows] = []
+
             def first_save() -> Optional[str]:
                 st = self.app.send(
                     demo.writes, "other", swap_map(demo.params, other_values)
                 )
                 if any(s >= 400 for s in st):
                     return f"the other user's save was refused (HTTP {max(st)})"
+                other_saved.append(self.store.read_moved(demo.base))
                 return None
 
             case.detail = (
                 "the other user saves the record, then the agent's save overwrites it"
             )
+            self.refused_statuses = []
             self.run(contract, case, values=values, before=first_save)
+            refused = [s for s in self.refused_statuses if s >= 400]
             if case.note.startswith("the app refused"):
-                # The app itself refuses a save from a stale copy: nothing to
-                # catch, a true not-applicable.
-                case.untestable = False
-                case.note = (
-                    "the app refused the stale save: it prevents lost updates itself"
+                # fail-open class: absent-evidence-as-success. Only a conflict
+                # status that left the other user's save in the store shows
+                # the app prevents lost updates itself. An outage or an
+                # expired session (503, 401) observed nothing: untestable.
+                kept = bool(other_saved) and (
+                    bool(moves(demo.base, other_saved[0]))
+                    and not moves(other_saved[0], self.store.read_moved(demo.base))
                 )
+                if refused and set(refused) <= {409, 412} and kept:
+                    case.untestable = False
+                    case.note = (
+                        "the app refused the stale save with a conflict and kept "
+                        "the other user's save: it prevents lost updates itself"
+                    )
+                else:
+                    case.untestable = True
+                    case.note = (
+                        f"the stale save failed (HTTP {max(refused or [0])}) "
+                        "without a conflict that kept the other user's save"
+                    )
             return [case]
         raise ValueError(f"unknown fault {name}")
 
@@ -1117,6 +1139,19 @@ class Qualifier:
             return [], []
         runs: dict[tuple[str, int], list[Move]] = {}
         cases = []
+        if "other" not in self.sandbox.actors:
+            # fail-open class: absent-evidence-as-success. Without a second
+            # user the actor axis is never probed, so nothing shows which
+            # moves follow the actor: untestable, never a smaller pass.
+            missing = Case(
+                "probe",
+                "attribution:other",
+                "the writes by a second user",
+                "confirmed",
+            )
+            missing.untestable = True
+            missing.note = "the sandbox has no second user (actors.other)"
+            cases.append(missing)
         # Each actor with each payload, plus the first one again: what moves
         # between two identical writes moves on its own (a clock, a new id).
         plan = [(a, i) for a in actors for i in (0, 1)] + [(actors[0], 2)]
