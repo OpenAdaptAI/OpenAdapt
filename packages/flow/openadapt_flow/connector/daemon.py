@@ -397,6 +397,7 @@ def run_loop(
             persist_token=persist_token,
             persist_pending=persist_pending,
             heartbeat_s=heartbeat_s,
+            stop_requested=stop_requested,
         )
 
 
@@ -412,6 +413,7 @@ def _run_loop(
     persist_token: Optional[TokenPersister] = None,
     persist_pending: Optional[TokenPersister] = None,
     heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
 ) -> int:
     """Poll -> execute -> callback -> ack until interrupted.
 
