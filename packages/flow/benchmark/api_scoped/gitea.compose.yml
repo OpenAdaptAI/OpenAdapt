@@ -1,0 +1,28 @@
+# Gitea (MIT), self-hosted for the API-verification bench. Synthetic data only.
+# The image is pinned by digest; the one port binds to loopback; SQLite keeps
+# the stack to one container.
+services:
+  gitea:
+    image: docker.io/gitea/gitea:1.24.6@sha256:2edc102cbb636ae1ddac5fa0c715aa5b03079dee13ac6800b2cef6d4e912e718
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__ROOT_URL: "http://127.0.0.1:${GITEA_PORT}/"
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__api__ENABLE_SWAGGER: "false"
+      GITEA__api__MAX_RESPONSE_ITEMS: "100"
+      GITEA__log__LEVEL: warn
+    ports:
+      - "127.0.0.1:${GITEA_PORT}:3000"
+    volumes:
+      - gitea:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+volumes:
+  gitea:

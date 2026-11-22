@@ -113,3 +113,24 @@ def test_har_induction_learns_the_codec_instead_of_replace_mode() -> None:
     assert lens.field_codecs["email"].kind == "null_empty"
     assert lens.field_codecs["city"].kind == "null_empty"
     assert lens.write_mode == "patch"
+
+
+def test_two_reads_around_another_callers_edit_teach_no_codec() -> None:
+    """A NULL/"" change seen only between two GETs may be someone else's edit."""
+    base = "http://127.0.0.1:8000"
+    r0 = {"id": 7, "phone": "1", "email": None}
+    r1 = {"id": 7, "phone": "1", "email": ""}
+    har = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                _entry("GET", f"{base}/api/rec/7", None, r0),
+                _entry("GET", f"{base}/api/rec/7", None, r1),
+                _entry(
+                    "PUT", f"{base}/api/rec/7", {"phone": "2"}, {**r1, "phone": "2"}
+                ),
+            ],
+        }
+    }
+    lens = induce_lens_from_har(har)
+    assert "email" not in lens.field_codecs

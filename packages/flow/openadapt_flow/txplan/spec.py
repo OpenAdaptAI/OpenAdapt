@@ -49,6 +49,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from openadapt_flow.txplan.audit import AuditSource, ScopedCollection
+
 TX_SCHEMA = "openadapt.tx/v1"
 _NAME = r"^[a-z][a-z0-9_-]{0,47}$"
 _TEMPLATE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
@@ -112,6 +114,10 @@ class Collection(_Closed):
     #: A delete that the API can't reverse exactly (the record gets a new id
     #: when recreated) is irreversible: it waits in the holdback queue.
     delete_reversible: bool = False
+    #: Resource-scoped verification for a system with no frame to diff (an
+    #: API or SaaS system): read the record back and check the system's own
+    #: log. See :mod:`openadapt_flow.txplan.audit`.
+    scoped: Optional[ScopedCollection] = None
 
 
 class RestSystem(_Closed):
@@ -125,6 +131,8 @@ class RestSystem(_Closed):
     idempotency_header: Optional[str] = None
     timeout_s: float = Field(default=20.0, gt=0, le=300)
     collections: list[Collection] = Field(min_length=1)
+    #: The system's own event or audit log, for resource-scoped verification.
+    audit: Optional[AuditSource] = None
 
     @model_validator(mode="after")
     def _check(self) -> "RestSystem":
