@@ -16,31 +16,6 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 WRAP_EXAMPLE_COMMAND = "uvx --python 3.12 'openadapt[wrap]@latest' wrap --example"
 
 
-def add_parser(sub: Any) -> None:
-    """List ``wrap`` in ``openadapt-flow``'s parser.
-
-    ``openadapt_flow.__main__.main`` hands ``wrap`` to :func:`main` before
-    parsing, so this entry only names the verb for help and the command map.
-    """
-
-    wrap = sub.add_parser(
-        "wrap",
-        help=(
-            "Run an agent task once, compile and admit the run, then reuse the "
-            "program with no model calls (see openadapt wrap --help; "
-            "--example runs a bundled sample)"
-        ),
-        add_help=False,
-        allow_abbrev=False,
-    )
-    wrap.set_defaults(func=_cmd_wrap)
-
-
-def _cmd_wrap(args: argparse.Namespace) -> int:
-    """Reached only when a caller parses ``wrap`` itself; same as no arguments."""
-    return main([])
-
-
 class NoAdmittedProgram(RuntimeError):
     """``wrap run``: the task has no admitted program, so nothing ran.
 

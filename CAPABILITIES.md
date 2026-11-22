@@ -393,7 +393,6 @@ A test fails when a command has no file or this list is out of date.
 - `skill`: Bind a pulled skill to your instance, qualify it there, and check whether it may run.
 - `variants`
 - `visualize`
-- `wrap`: Runs an agent task once (OpenAdapt's built-in agent, or your own command after `--`, which drives OpenAdapt's browser through a local MCP endpoint), reads the save back, compiles and admits the run; `wrap run` then runs the program with no model calls. `--example` does all of it on a bundled synthetic task. Also `openadapt wrap`.
 
 **Check and admit:**
 

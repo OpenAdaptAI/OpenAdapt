@@ -13214,10 +13214,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_guard_parser(sub)
 
-    from openadapt_flow.wrap.cli import add_parser as _add_wrap_parser
-
-    _add_wrap_parser(sub)
-
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
@@ -13629,9 +13625,17 @@ def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
 
 def _qualify_default_form(argv: list[str]) -> list[str]:
     """``qualify <bundle> --verify ...`` means ``qualify campaign <bundle> ...``."""
-    from openadapt_flow.cli_forms import qualify_default_form
 
-    return qualify_default_form(argv, build_parser)
+    if len(argv) >= 2 and argv[0] == "qualify" and not argv[1].startswith("-"):
+        verbs = set()
+        for action in build_parser()._subparsers._group_actions:  # type: ignore[union-attr]
+            qualify_parser = getattr(action, "choices", {}).get("qualify")
+            if qualify_parser is not None:
+                for sub_action in qualify_parser._subparsers._group_actions:  # type: ignore[union-attr]
+                    verbs |= set(getattr(sub_action, "choices", {}) or {})
+        if argv[1] not in verbs:
+            return [argv[0], "campaign", *argv[1:]]
+    return argv
 
 
 # Flags that print and exit before any work, so loading OCR would only slow
@@ -14237,10 +14241,6 @@ def main(
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    if argv[:1] == ["wrap"]:  # own parser; listed below for help and the map
-        from openadapt_flow.wrap.cli import main as wrap_main
-
-        return wrap_main(argv[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
