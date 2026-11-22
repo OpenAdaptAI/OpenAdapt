@@ -260,6 +260,7 @@ def test_push_sends_the_row_minus_sources(monkeypatch, capsys):
         host="https://app.openadapt.ai",
         poster=poster,
         environ={"OPENADAPT_API_KEY": "test-key-not-real"},
+        scrubber=_PassThrough(),
     )
     assert results[0]["status"] == 202
     ((url, headers, payload),) = sent
@@ -279,6 +280,7 @@ def test_push_refuses_an_untrusted_destination():
             host="http://203.0.113.7",
             poster=lambda *_: 202,
             environ={"OPENADAPT_API_KEY": "test-key-not-real"},
+            scrubber=_PassThrough(),
         )
 
 
@@ -322,3 +324,44 @@ def test_export_refuses_when_the_scrubber_cannot_run(tmp_path, monkeypatch, caps
     assert main(["ledger", "export", "--out", str(out)]) == 2
     assert "could not run" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_push_refuses_without_a_working_scrubber(monkeypatch, capsys):
+    # Gemini review: push sent rows with only a warning when openadapt-privacy
+    # was missing. Rows leave the machine, so push now fails closed.
+    import httpx
+
+    import openadapt_flow.privacy as privacy
+
+    def no_network(*_a, **_k):
+        raise AssertionError("push must not send without a scrubber")
+
+    monkeypatch.setattr(httpx, "post", no_network)
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: None)
+    monkeypatch.setenv("OPENADAPT_API_KEY", "test-key-not-real")
+    assert main(["ledger", "add", str(FIXTURES / "flight_held")]) == 0
+    assert main(["ledger", "push", "--host", "https://app.openadapt.ai"]) == 2
+    assert "scrubber" in capsys.readouterr().err
+    with pytest.raises(LedgerRefused, match="scrubber"):
+        push(
+            LedgerStore(),
+            host="https://app.openadapt.ai",
+            poster=no_network,
+            environ={"OPENADAPT_API_KEY": "test-key-not-real"},
+        )
+    # A dry run sends nothing, so it still prints what would go.
+    assert main(["ledger", "push", "--dry-run"]) == 0
+
+
+def test_push_refuses_when_the_scrubber_cannot_run(monkeypatch, capsys):
+    import openadapt_flow.privacy as privacy
+
+    class Broken:
+        def scrub_text(self, text: str, is_separated: bool = False) -> str:
+            raise RuntimeError("model not installed")
+
+    monkeypatch.setattr(privacy, "get_text_scrubber", lambda: Broken())
+    monkeypatch.setenv("OPENADAPT_API_KEY", "test-key-not-real")
+    assert main(["ledger", "add", str(FIXTURES / "flight_held")]) == 0
+    assert main(["ledger", "push", "--host", "https://app.openadapt.ai"]) == 2
+    assert "could not run" in capsys.readouterr().err

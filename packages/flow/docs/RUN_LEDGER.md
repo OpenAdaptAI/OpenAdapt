@@ -91,7 +91,12 @@ Two more rules:
   and the run's own result decides, so a save read back independently is
   VERIFIED. An approval declined, an exception stopped (`skip`, `abort`,
   `decline`), expired or not yet answered is ESCALATED, and ESCALATED
-  outranks VERIFIED.
+  outranks VERIFIED. A task-ledger or item-approval question stays ESCALATED
+  (`question_asked`) even once answered: the ledger never reads the answer
+  text, so it can't tell whether the answer let the run go on or stopped it,
+  and a person's answer was part of the work either way. Approvals and
+  exceptions carry a closed decision (`approve`, `continue`,
+  `done_by_person`), which is why they can be cleared.
 - **"No write" needs evidence.** A crash, failure or timeout can come after a
   request went out. `crashed_no_write` and `timed_out_no_write` are used only
   where the source also shows nothing was sent (the agent guard's own save
@@ -112,6 +117,7 @@ Two more rules:
 | verify-run `effect_verdict` REFUTED, with an effect row the store shows (`observed_effect` `present` or `conflicting`) | CAUGHT_ERROR |
 | verify-run `effect_verdict` REFUTED with the effect `absent` (a halt before the save, a save that never landed) | the receipt `outcome` decides |
 | `GuardVerdict` VERIFIED / REFUTED / RECONCILIATION_REQUIRED | VERIFIED / CAUGHT_ERROR / UNKNOWN |
+| Guard block code `values_unread` (P5: the card couldn't show the values, so no one was asked) | ESCALATED (`values_unread`) |
 | Guard block code `declined` / `request_expired`, `approval_wait_timed_out`, `approval_required` / P5's could-not-check codes (`baseline_unreadable`, `answer_malformed` ...) | ESCALATED (`person_declined`) / ESCALATED (`approval_declined`) / FAILED (`policy_rejected_no_write`; the save was blocked before it was sent) |
 | Agent runner `RunOutcome.status` success / halt / refused / timeout / error | UNKNOWN / UNKNOWN / FAILED / UNKNOWN / UNKNOWN |
 | Any other value | UNKNOWN (`unmapped_outcome`) |
@@ -325,7 +331,10 @@ A refused row stays local and the rest still go: each refused row is listed
 on stderr with its reason, and the command exits 2. A scrubber that can't run
 refuses everything.
 
-`push` also refuses before anything else when `OPENADAPT_API_KEY` isn't set,
+`push` also refuses before anything else when `OPENADAPT_API_KEY` isn't set
+or openadapt-privacy's text scrubber isn't available or can't run (rows
+leave this computer, so it always runs the label check; `push --dry-run`,
+which sends nothing, only warns),
 and sends only to a destination the hosted destination policy accepts (the
 same check `ingest-report` uses).
 

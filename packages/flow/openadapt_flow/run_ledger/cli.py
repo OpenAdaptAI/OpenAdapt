@@ -512,6 +512,12 @@ def push(
     key = env.get(API_KEY_ENV, "").strip()
     if not key and not dry_run:
         raise LedgerRefused(f"{API_KEY_ENV} isn't set; nothing was sent")
+    if scrubber is None and not dry_run:
+        # Fail closed: without openadapt-privacy's scrubber no label check
+        # ran, so nothing is sent.
+        raise LedgerRefused(
+            "openadapt-privacy's text scrubber isn't available; nothing was sent"
+        )
     screened = screen_rows(store, summary=True, scrubber=scrubber)
     if refused is not None:
         refused.extend(screened.refused)
@@ -550,7 +556,9 @@ def cmd_push(args: argparse.Namespace) -> int:
             _store(args),
             host=args.host,
             dry_run=args.dry_run,
-            scrubber=_scrubber(False),
+            # Rows leave this computer: a working text scrubber is required,
+            # as with ``export --require-scrubber``. A dry run sends nothing.
+            scrubber=_scrubber(not args.dry_run),
             refused=refused,
         )
     except LedgerRefused as exc:

@@ -121,6 +121,7 @@ def test_an_unmapped_outcome_is_unknown_never_another_bucket() -> None:
         ("save_waiting_for_person", "save_blocked_double_save"),
         # A person said no: ESCALATED, not a catch (skeptic #16).
         ("declined", "person_declined"),
+        ("values_unread", "values_unread"),
         ("request_expired", "approval_declined"),
         ("approval_wait_timed_out", "approval_declined"),
         ("baseline_unreadable", "policy_rejected_no_write"),

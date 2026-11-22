@@ -1009,3 +1009,25 @@ def test_the_decline_rows_duration_is_the_runs_own_span():
     assert row.duration_s == 5.893
     assert row.human.intervention_s == 3.191
     assert row.started_at == "2026-11-22T05:56:43.053948Z"
+
+
+# -- review fixes ---------------------------------------------------------------------
+
+
+def test_p5s_values_unread_block_is_escalated_values_unread():
+    # P5 6fa9c3a36: the card couldn't show the values, so the guard asked no
+    # one and blocked the save. summary.json and the row are P5's own output
+    # (its unit test; summary.json is CommitGuard.summary.to_dict() as
+    # agent_guard/session.py writes it).
+    row, _, _ = build_row(FIXTURES / "guard_values_unread")
+    assert _outcome(row) == ("ESCALATED", "values_unread")
+    assert row.human.intervention_s == 0.0  # nobody was asked
+
+
+def test_an_answered_question_stays_escalated():
+    # The ledger never reads a question's answer text, so it can't tell
+    # whether the answer let the run go on: an answered question is still
+    # a person's step (ESCALATED question_asked), unlike a cleared exception.
+    row, _, _ = build_row(FIXTURES / "task_ledger_question")
+    assert _outcome(row) == ("ESCALATED", "question_asked")
+    assert row.human.intervention_s == 120.0

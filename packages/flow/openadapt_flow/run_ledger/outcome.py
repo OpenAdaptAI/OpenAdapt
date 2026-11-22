@@ -211,6 +211,10 @@ def _guard_block_reason(code: str) -> Optional[str]:
         "approval_already_used",
     ):
         return "save_blocked_double_save"
+    if code == "values_unread":
+        # P5: the card couldn't show the values to approve, so the guard asked
+        # no one and blocked the save. Nothing was written; a person acts.
+        return "values_unread"
     if code == "declined":
         # P5 writes ``declined`` only for a readable answer that isn't
         # "approve": a person said no. Not a catch (skeptic #16).
