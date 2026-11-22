@@ -398,13 +398,16 @@ def _repeat(
     planned = planned_rows(rspec, items)
     bound: dict[str, str] = {}
     held = False
+    wrote = False
     if (
         read.usable
         and len(read.instances) == len(items)
         and not all(i.blank() for i in read.instances)
+        and spec.group_id in _state(session)["groups"]
     ):
-        # Already entered (a walk back after a sign-in, or a second pass):
-        # check it, write nothing.
+        # This run already entered them (the pass after filling, or a walk
+        # back after a sign-in): check them, write nothing. Rows showing data
+        # this run did not enter go to fill_instances, which stops on them.
         bound = {str(i): inst.handle for i, inst in enumerate(read.instances)}
         verdict = judge_instances(
             planned,
@@ -422,6 +425,7 @@ def _repeat(
                 sig=f"repeat_check|{spec.group_id}",
             )
     else:
+        wrote = True
         outcome = fill_instances(act, rspec, items, run_id=session.run_id)
         if not outcome.held:
             return _halt(
@@ -448,7 +452,9 @@ def _repeat(
                 selector=ctrl.handle,
             )
     _state(session)["groups"].add(spec.group_id)
-    return CONTINUE
+    # Rows were written: look again. Rows that already showed the intake
+    # were only checked, so the screen goes on with this snapshot.
+    return CONTINUE if wrote else None
 
 
 # -- hubs --------------------------------------------------------------------------
@@ -635,7 +641,9 @@ def before_leaving_screen(
     for spec in gui.repeats:
         if spec.screen_id == sid:
             out = _repeat(rec, session, surface, snapshot, spec)
-            if out is not CONTINUE:
+            if out is not None:
+                # A stop, or rows were just added and filled: the main loop
+                # takes a fresh snapshot (and re-checks them) before going on.
                 return out
     for hub in gui.hubs:
         if hub.screen_id == sid:

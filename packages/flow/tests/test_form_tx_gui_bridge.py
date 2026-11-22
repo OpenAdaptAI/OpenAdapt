@@ -51,9 +51,15 @@ CONFIRM = "I confirm this medication list is complete"
 
 class _Site:
     def __init__(
-        self, *, pharmacy: bool = False, ignore_saves: bool = False, notes: str = ""
+        self,
+        *,
+        pharmacy: bool = False,
+        ignore_saves: bool = False,
+        notes: str = "",
+        row_note: bool = False,
     ) -> None:
         self.notes = notes
+        self.row_note = row_note
         self.state: dict[str, Any] = {"meds": [], "sections": {}}
         self.records: list[dict[str, Any]] = []
         self.pharmacy = pharmacy
@@ -66,7 +72,8 @@ class _Site:
                 if self.notes
                 else ""
             )
-            return MEDS_PAGE.replace("<!--NOTES-->", extra)
+            page = MEDS_PAGE.replace("<!--NOTES-->", extra)
+            return page.replace("ROW_NOTE", "true" if self.row_note else "false")
         if path == "/review":
             rows = "".join(
                 f"<div><span>Medication {i + 1}</span><span>{m['drug']} {m['dose']}</span></div>"
@@ -104,7 +111,8 @@ MEDS_PAGE = """<h1>Medications</h1><!--NOTES--><div id="list"></div>
 <script>
 function add(){const n=document.querySelectorAll('#list fieldset').length+1;
 const f=document.createElement('fieldset');
-f.innerHTML='<legend>Medication '+n+'</legend><label>Drug <input class="d"></label><label>Dose <input class="s"></label>';
+f.innerHTML='<legend>Medication '+n+'</legend><label>Drug <input class="d"></label><label>Dose <input class="s"></label>'
++(ROW_NOTE && n>1 ? '<label>Row note <input value="copied from row 1"></label>' : '');
 document.getElementById('list').appendChild(f);}
 add();
 function keep(){const meds=[...document.querySelectorAll('#list fieldset')].map(f=>({drug:f.querySelector('.d').value,dose:f.querySelector('.s').value}));
@@ -434,4 +442,21 @@ def test_a_prefilled_field_no_binding_covers_stops_before_the_link_is_taken(
     )
     assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
     assert "Notes" in result.halts[0].message
+    assert site.state["meds"] == [] and site.records == []
+
+
+def test_a_prefilled_field_inside_an_added_row_stops_before_the_link(
+    browser: Any,
+) -> None:
+    site = _Site(row_note=True)
+    result, _ = _run(
+        browser,
+        site,
+        "/meds",
+        MEDS_PACK,
+        _dossier(medications=MEDS),
+        attester="clinician 7",
+    )
+    assert result.outcome is FormTxOutcome.HALTED_NEEDS_HUMAN
+    assert "Row note" in result.halts[0].message
     assert site.state["meds"] == [] and site.records == []
