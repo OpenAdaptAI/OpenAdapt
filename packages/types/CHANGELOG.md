@@ -1,7 +1,10 @@
 # CHANGELOG
 
 
-## v0.24.1 (2026-11-22)
+## v0.24.2 (2026-11-22)
+
+0.24.1 was stamped on main but never published. 0.24.2 is the first
+published release with this content, and the version to install.
 
 openadapt-flow 3.4.0 imports `openadapt_types.receipt`, which 0.24.0 does not
 have. This release adds it and the other modules Flow imports on main
@@ -55,7 +58,7 @@ package repairs a Flow 3.4.0 install.
   `managed_tool_status=` argument beside `clinic_tool_status=`. Each is
   stored and written as its v1 form, so
   output is byte-identical to 0.24.0. The packaged schemas, and readers
-  older than 0.24.1, accept only the v1 forms
+  older than 0.24.2, accept only the v1 forms
   ([#2487](https://github.com/OpenAdaptAI/OpenAdapt/pull/2487)).
 
 ### Compatibility
@@ -70,7 +73,7 @@ package repairs a Flow 3.4.0 install.
   and plain outcome loads and serializes to the same bytes and digests, and
   every 0.24.0 name and enum member still exists under its 0.24.0 name.
 - `escalated_after_effect_reward` is serialized, and so hashed, only when it
-  differs from 0, so a file 0.24.1 writes for an undeclared contract is one
+  differs from 0, so a file 0.24.2 writes for an undeclared contract is one
   0.24.0 can read. A contract that declares a non-zero value can't be read
   by 0.24.0, which forbids unknown fields.
 
