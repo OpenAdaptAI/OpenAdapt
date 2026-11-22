@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-agent"
-version = "2.2.2"
+version = "2.2.3"
 description = "Let your AI agent enter information in apps with no API and get back whether it saved (MCP and Agent Skills)"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
