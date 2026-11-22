@@ -2,7 +2,7 @@
 
 Verifies a typed :class:`Effect` against a REST/JSON system of record: an
 HTTP endpoint that returns the authoritative records (an EMR's own JSON API,
-an internal service, the MockMed transactional back end at ``GET /api/db``).
+an internal service, or a transactional REST back end).
 This is the ``api`` implementation tier of the RFC's transition contract
 (``docs/design/WORKFLOW_PROGRAM_IR.md`` section 4: "call the app's API / DB
 write; effect probed against the system of record") for a plain-JSON back end.
@@ -422,7 +422,7 @@ class RestRecordVerifier(VerifierAdapterBase):
                 return None
             following = urljoin(url, following)
             if not _same_origin(following, self.base_url):
-                # OpenEMR, for one, builds next links from its configured site
+                # Some servers build next links from a configured site
                 # address, which can differ from the address the read uses.
                 self.read_problem = (
                     f"next link origin {_origin(following)} != base_url "

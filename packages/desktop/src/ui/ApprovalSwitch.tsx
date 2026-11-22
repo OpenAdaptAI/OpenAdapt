@@ -1,7 +1,7 @@
 // The switch "Only ask a person about problems" on a task card.
 //
 // Read-only, plus Turn off. Turning it on happens in OpenAdapt Cloud, by an
-// owner or admin, and the clinic's privacy contact confirms. The panel shows
+// owner or admin, and the organization's privacy contact confirms. The panel shows
 // the evidence behind the state: who turned it on and confirmed, what the
 // switch is bound to, the local switch log, and the requirements.
 import { useId, useState } from "react";

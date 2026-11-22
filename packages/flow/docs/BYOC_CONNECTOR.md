@@ -110,11 +110,15 @@ service runs that installation's `python.exe`, and `install` refuses a venv.
 - **Stop.** A job already running finishes and reports. A lease returned while
   the service is stopping never starts; it is left unacknowledged for the
   control plane to reconcile, rather than reported as completed.
-- **Token replacement.** The service account reads its configuration and can
-  write only to its log directory. Replace the enrollment token as an
-  administrator while the service is stopped, then start it again. Automatic
-  token persistence needs a separate writable-state contract; the wrapper's
-  authorization-refusal check does not prove token rotation.
+- **Token rotation.** For a file-enrolled connector, the service stores the
+  active and pending rotation in its virtual account's Windows Credential
+  Manager. The entry is local to the machine. The service retries the pending
+  candidate after restart before polling. Clearing an old pending field in
+  the enrollment file preserves the committed rotation. The service waits
+  between failed confirmations. If Cloud can no longer confirm the candidate,
+  replace the enrollment token as an administrator and restart the service.
+  An environment override for the token, control-plane URL or organization
+  leaves rotation with the operator.
 
 Update by stopping the service, installing the pinned version, and starting
 it again:
@@ -125,9 +129,11 @@ pip install "openadapt-flow[vision,connector-windows]==<new version>"
 openadapt-flow connector service start
 ```
 
-Uninstall with `openadapt-flow connector service remove`. The config
-directory, with the token, is kept; delete it to remove the enrollment, and
-revoke the token in Cloud settings.
+Uninstall with `openadapt-flow connector service remove`. Removal preserves
+the enrollment and its local rotation state for reinstallation. To
+decommission the connector, revoke it in Cloud and remove its config directory.
+The service requires that enrollment before it can use the stored rotation
+state. Starting with a replacement enrollment discards the old credential.
 
 On other operating systems, `connector service` prints a message and exits
 with code 2; run `connector run` under systemd or launchd instead.
@@ -152,15 +158,55 @@ with code 2; run `connector run` under systemd or launchd instead.
   only the verified copy. A pre-verification failure never echoes the unverified
   digest claim in its callback.
 
-**Fail-closed everywhere.** A dispatch is refused (reported `failed`, no GUI
-touched) when it is missing the governed safety policy, missing the run-scoped
-callback token, exact archive digest, or execution substrate; carries an
-our-owned signed URL; points at archive bytes that do not match the signed
-digest; conflicts with the substrate compatibility hint; or enables a grounding
-rung whose API key env is not set on this machine. The governed `run` itself
-refuses any bundle that is not certified, identity-armed, effect-verified, and
-encrypted — those engine gates are unchanged, so identity checks, effect
-verification, and halt-don't-guess all remain intact.
+A live job requires the exact retained `managed_dispatch_session_id`, a
+run-scoped callback capability, a closed managed authority and its bundle
+binding. The connector advertises `managed_delivery_authority_v3`; older
+qualification-v2 capability alone cannot lease these jobs. Parsing an older
+payload does not authorize execution or let it inherit a daemon's session.
+The per-run session enters the child environment and must match the signed
+v3 delivery response. Each live input needs a fresh signed input-start deadline.
+
+Authority has two declared forms. A qualified workflow carries the signed
+admission v2 artifact and its digest. A program carries either the closed
+person reference v1 or registered-admitter reference v2. Unknown or mixed
+fields, a different run or organization, conflicting digests, an unpinned key,
+and an admitter-to-person downgrade are refused before input. Only after these
+extensions are consumed does the connector write the exact six-field Flow
+envelope to an owner-only local file.
+
+Programs use operator-pinned public admission keys. An admitter reference also
+requires the current local principal registry, matching principal/key fields
+and the exact signed admission. Configure `admission_key_dir` as a public-only,
+read-only directory; keep signing material elsewhere. The shared runtime reads
+that live registry again at input edges. A person key staged without that
+directory is a snapshot and does not provide live local principal revocation.
+Remote v3 permit checks remain mandatory for both forms.
+
+Qualified jobs additionally require an independent operator-owned
+`ProductionQualificationAuthority` file. Its wrapper v1 contains the actual
+signed admission v2, known expected runtime/deployment contracts and trusted
+signer registry. The connector matches its proof and tenant, workflow, version,
+validation, archive, content and substrate bindings, then the existing Flow
+qualification guard verifies it against the sealed bundle. It never constructs
+expected contracts from the remote proof itself. Set the path in
+`connector.toml` or `BYOC_QUALIFICATION_AUTHORITY_FILE`:
+
+```toml
+[connector]
+qualification_authority_file = "/etc/openadapt/qualification-authority.json"
+```
+
+That file is owner-only and must match each qualified job exactly. Absent,
+changed or unrelated local context refuses the job. Its verified canonical
+wrapper is handed to the child through the existing
+`--qualification-authority-file` channel; the runtime-local qualification field
+stays null on the Cloud wire. The operator's deployment profile and default
+per-save approval gate remain authoritative.
+
+A dispatch also refuses a missing safety policy, archive digest or substrate,
+an our-owned bundle URL, conflicting substrate hints and a required grounding
+key absent from this machine. The governed child rechecks its normal admission,
+identity, effect and storage requirements before execution.
 
 The callback is retried a bounded three times. The Connector ACKs a job only
 after the control plane accepts its outcome. If delivery still fails, the lease
@@ -175,34 +221,17 @@ The lane is off by default. An operator enables it with
 (`RUNNER_SHARED_SECRET`), then sets the organization's `deployment_kind` to
 `byoc`. See openadapt-cloud `src/lib/byocLane.ts`.
 
-## What works today vs. what remains for production
+## Qualification and operating scope
 
-**Works end to end (this release):**
+The source tests exercise an in-process control plane, actual program and
+qualification signatures, exact file parsing, session binding, egress refusal,
+rotation, cancellation and uncertain lease handling. These are synthetic source
+controls. A complete managed BYOC run on a real system of record has not yet
+been established by this change.
 
-* enrollment -> per-connector token -> outbound poll/lease;
-* governed local execution via `openadapt-flow run` (fail-closed admission +
-  Replayer) against the customer's own `local` storage;
-* PHI-free status/halt/metrics callback with the run-scoped token + bundle
-  binding the control plane verifies;
-* cross-org isolation (a Connector only ever leases its own org's jobs);
-* the resolved safety + grounding policy delivered and applied fail-closed.
-
-**Remaining for production:**
-
-* **Private transport options.** Connector tokens are organization-scoped,
-  revocable, and stored only as hashes in Cloud. Deployments that require
-  mTLS/private-link add that transport at the customer network boundary.
-* **Full policy materialization.** The delivered safety block governs *dispatch*
-  and the two fail-closed gates above; materializing every safety key into the
-  engine's runtime config (so e.g. the delivered grounding endpoint is the one
-  the Replayer dials) is the same cross-runner "runner-side consumption" half the
-  Modal and Windows runners have not finished either. The operator's local
-  `deployment.yaml` (`--config`) is authoritative for the engine posture today.
-* **S3 / Azure Blob customer storage.** Only `local` is built into the engine
-  Connector; the operator-reference agent (openadapt-cloud `connector/agent.py`)
-  carries S3/Azure backends that need a customer cloud to exercise.
-* **Autoscaling / HA.** One Connector process, one lease at a time; production
-  wants supervised restart, multiple Connectors per org, and a server-side lease
-  reaper for a Connector that dies mid-run.
-* **Customer-facing install/packaging.** A signed installer / container image and
-  an operator runbook (partly in openadapt-cloud `deploy/byoc/`).
+The engine connector currently reads exact archives and writes reports through
+its `local` customer-storage backend. The local deployment profile governs the
+engine posture: the delivered safety block does not materialize every runtime
+setting, including grounding endpoints. Operators must qualify that profile and
+the installed runtime together. Container/service supervision and separate
+customer network controls remain part of the deployment.
