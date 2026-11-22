@@ -20,6 +20,14 @@ export function cardFor(outcome, transaction, { readBack = false } = {}) {
             line: "Every step's checks passed. This run didn't read the saved record back.",
         }
     }
+    if (transaction === 'SAVED_AWAITING_CHECK') {
+        // Sent, not settled: never shown as saved and checked.
+        return {
+            tone: 'halt',
+            label: 'Awaiting counterparty confirmation',
+            line: 'The entry was sent. The other party has not confirmed it yet; a signed update records the answer.',
+        }
+    }
     if (transaction === 'HALTED_BEFORE_EFFECT') {
         return {
             tone: 'halt',

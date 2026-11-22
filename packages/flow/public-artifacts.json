@@ -807,6 +807,8 @@
     "benchmark/grounding_eval/results_sweep.json",
     "benchmark/halt_cleanup/results/openemr.json",
     "benchmark/handoff_real_run/2026-11-21/evidence.json",
+    "benchmark/handoff_receiver/docker-compose.yml",
+    "benchmark/handoff_receiver/results/2026-11-21.json",
     "benchmark/harness2_scorer/evidence/base/results.json",
     "benchmark/harness2_scorer/evidence/harness2/results.json",
     "benchmark/harness2_scorer/evidence/harness2_readback/results.json",
