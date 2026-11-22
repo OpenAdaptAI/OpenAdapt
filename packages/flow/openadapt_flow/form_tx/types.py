@@ -520,6 +520,10 @@ class FormPack(BaseModel):
     # knowingly does not enter. Any other intake key with a value that no
     # binding enters keeps the run from ``verified_done``.
     ignored_intake_keys: tuple[str, ...] = ()
+    # Intake keys that must be entered. An intake value no binding enters is
+    # otherwise named on the receipt as not covered; one listed here keeps
+    # the run from verified_done instead.
+    required_intake_keys: tuple[str, ...] = ()
 
     def digest(self) -> str:
         return canonical_sha256(self)

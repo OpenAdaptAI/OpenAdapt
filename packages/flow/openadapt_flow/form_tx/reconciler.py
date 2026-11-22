@@ -3152,9 +3152,13 @@ class FormReconciler:
             supplemental_facts=session.effective_facts,
             writes=session.writes,
             uncovered=session._uncovered,
-            unentered_intake_keys=self._unconsumed_intake_keys(
-                session, include_ignored=False
-            ),
+            # Intake values the portal never asked for: only pack-required ones
+            # block; the rest are named on the receipt as not covered.
+            unentered_intake_keys=[
+                k
+                for k in self._unconsumed_intake_keys(session, include_ignored=False)
+                if k in session.pack.required_intake_keys
+            ],
             review_skipped=session._review_skipped,
         )
         extracted_outputs = dict(verdict.extracted_outputs)
