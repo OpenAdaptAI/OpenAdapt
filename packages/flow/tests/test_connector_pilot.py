@@ -600,11 +600,64 @@ def test_a_nonzero_exit_after_start_is_judged_without_a_cancel(
         assert result.halt == {"present": True} and result.outcome is None
 
 
+def test_a_clean_exit_with_no_readable_report_is_uncertain_not_failed(tmp_path):
+    """Exit 0 but no report the connector can read (a sealed run's report it
+    could not decrypt, or none written): a write may have landed."""
+    job = parse_job(_payload(), lease_job_id="bjob_exit0_noreport")
+
+    def runner(argv, run_dir, env):
+        return RunOutcome(returncode=0, report={})
+
+    result = execute_job(
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
+    )
+    assert result.status == "halt"
+    assert result.error_code == "child_outcome_unknown"
+    assert result.halt == {"present": True} and result.outcome is None
+
+
+def test_the_report_is_read_through_the_sealed_set(tmp_path, monkeypatch):
+    from openadapt_flow import sealed_set
+
+    report = tmp_path / "report.json"
+    assert executor_mod._read_report(report) == {}  # missing
+    report.write_text("{not json", encoding="utf-8")
+    assert executor_mod._read_report(report) == {}  # unreadable
+    report.write_text('["a list"]', encoding="utf-8")
+    assert executor_mod._read_report(report) == {}  # not an object
+    report.write_text('{"success": true}', encoding="utf-8")
+    assert executor_mod._read_report(report) == {"success": True}
+
+    # A sealed run's report is decrypted by the sealed set, and a sealed
+    # report that can't be read (no key, a bad tag) is unknown, not plaintext.
+    monkeypatch.setattr(sealed_set, "is_sealed_path", lambda path: True)
+    monkeypatch.setattr(
+        sealed_set, "read_text", lambda path, encoding="utf-8": '{"halt": {}}'
+    )
+    assert executor_mod._read_report(report) == {"halt": {}}
+
+    def refuse(path, encoding="utf-8"):
+        raise ValueError("no key for this sealed set")
+
+    monkeypatch.setattr(sealed_set, "read_text", refuse)
+    assert executor_mod._read_report(report) == {}
+
+
 @pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
-def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(tmp_path):
-    """Ctrl-C or a service stop while a real child runs: halt, never failed."""
+@pytest.mark.parametrize("signame", ["SIGINT", "SIGTERM", "SIGHUP"])
+def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(
+    tmp_path, signame
+):
+    """Ctrl-C, a service stop, kill or a closed terminal while a real child
+    runs: the daemon stops the child and reports halt, never failed."""
+    if not hasattr(signal, signame):
+        pytest.skip(f"no {signame} here")
     plane = RecordingPlane()
-    plane.jobs.append({"id": "bjob_stop", "status": "queued", "payload": _payload()})
+    job_id = f"bjob_stop_{signame.lower()}"
+    plane.jobs.append({"id": job_id, "status": "queued", "payload": _payload()})
     started = threading.Event()
     child: dict = {}
 
@@ -614,9 +667,11 @@ def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(tmp_path
         # The operator's Ctrl-C (or the unit's SIGINT) reaches this process
         # while the child runs. Only this process: the test runner's own
         # process group is left alone.
-        if started.wait(10):
-            time.sleep(0.5)
-            os.kill(os.getpid(), signal.SIGINT)
+        # Signal even if the child never started, so a regression fails the
+        # assertions below instead of leaving the loop polling forever.
+        started.wait(10)
+        time.sleep(0.5)
+        os.kill(os.getpid(), getattr(signal, signame))
 
     threading.Thread(target=interrupt, daemon=True).start()
 
@@ -651,6 +706,7 @@ def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(tmp_path
         log=lambda _m: None,
     )
     assert time.monotonic() - began < 20  # stopped, not waited out
+    assert "proc" in child, "the governed child never started"
     proc = child["proc"]
     assert proc.poll() is not None  # the daemon stopped its child
     acks = [
@@ -658,7 +714,7 @@ def test_a_daemon_stop_mid_run_stops_the_child_and_reports_it_uncertain(tmp_path
         for r in plane.requests
         if r.url.path == "/api/connector/ack"
     ]
-    assert len(acks) == 1 and acks[0]["job_id"] == "bjob_stop"
+    assert len(acks) == 1 and acks[0]["job_id"] == job_id
     assert acks[0]["status"] != "failed"
     assert acks[0].get("error_code") == "child_outcome_unknown"
 

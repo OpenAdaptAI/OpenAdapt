@@ -307,14 +307,32 @@ def _subprocess_runner(
         if job_id:
             with _CHILDREN.lock:
                 _CHILDREN.procs.pop(job_id, None)
-    report_path = run_dir / "report.json"
-    report: dict[str, Any] = {}
-    if report_path.is_file():
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            report = {}
-    return RunOutcome(returncode=proc.returncode, report=report)
+    return RunOutcome(
+        returncode=proc.returncode, report=_read_report(run_dir / "report.json")
+    )
+
+
+def _read_report(report_path: Path) -> dict[str, Any]:
+    """The child's report, or ``{}`` when it is missing or cannot be read.
+
+    The run of a sealed bundle writes its report encrypted
+    (:mod:`openadapt_flow.sealed_set`), so it is read through the sealed set.
+    Any failure (no file, no key, a bad tag, invalid JSON) is ``{}``, which
+    the executor treats as an unknown outcome, never as a clean failure.
+    """
+    from openadapt_flow import sealed_set as _sealed
+
+    try:
+        if _sealed.is_sealed_path(report_path):
+            text = _sealed.read_text(report_path)
+        elif report_path.is_file():
+            text = report_path.read_text(encoding="utf-8")
+        else:
+            return {}
+        report = json.loads(text)
+    except Exception:  # noqa: BLE001 - unreadable is an unknown outcome
+        return {}
+    return report if isinstance(report, dict) else {}
 
 
 def status_from_report(returncode: int, report: dict[str, Any]) -> str:
@@ -899,9 +917,8 @@ def _execute_job(
         status = status_from_report(outcome.returncode, report)
         error_code: Optional[str] = None
         report_target_kind = report.get("execution_target_kind")
-        cancelled = job_cancelled(job.lease_job_id)
-        # After the child started, a nonzero exit with no report, or with a
-        # report that claims success, does not say whether the write landed:
+        # After the child started, no readable report, or a nonzero exit with
+        # a report that claims success, does not say whether the write landed:
         # a cancel, a service stop, an OOM kill or a crash can end a child
         # that already saved (or reported success and was still sealing).
         # That is never a clean failure (a re-run could repeat the write); it
@@ -912,9 +929,11 @@ def _execute_job(
             or report.get("success") is True
             or report.get("terminal_outcome") == "success"
         )
-        outcome_unknown = (cancelled and not _reported_terminal_outcome(report)) or (
-            outcome.returncode != 0
-            and (not _reported_terminal_outcome(report) or claims_success)
+        # A missing or unreadable report says nothing either, whatever the
+        # exit code: a child that exits 0 may still have saved (a sealed run
+        # whose report could not be read, a report that never got written).
+        outcome_unknown = not _reported_terminal_outcome(report) or (
+            outcome.returncode != 0 and claims_success
         )
         if outcome_unknown:
             status = "halt"
