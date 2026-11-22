@@ -87,11 +87,13 @@ def build_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamesp
     jit = SimpleNamespace(admitted=True, bundle_dir=bundle, runs_dir=directory / "runs")
     jit.runs_dir.mkdir()
     rows: list[dict[str, str]] = []
+    reads = SimpleNamespace(fail=False)
 
     class Observer:
         @property
         def system_of_record(self):
-            return copy.deepcopy(rows)
+            # None is what an unreachable system of record reads as.
+            return None if reads.fail else copy.deepcopy(rows)
 
     compiler = SimpleNamespace(
         dir=directory,
@@ -119,6 +121,7 @@ def build_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamesp
         compiler=compiler,
         jit=jit,
         rows=rows,
+        reads=reads,
         sent=[],
         digest=digest,
         tmp=tmp_path,
@@ -163,12 +166,15 @@ def install_reply(
     *,
     write: Optional[dict[str, str]] = None,
     report: Optional[str] = None,
+    fail_read_after: bool = False,
     **reply: Any,
 ) -> None:
     async def hit(_python, _server, params):
         model.sent.append(dict(params))
         if write is not None:
             model.rows.append(dict(write))
+        if fail_read_after:
+            model.reads.fail = True
         return {
             "status": "HALTED",
             "verified": False,
@@ -188,22 +194,40 @@ class FakeRun1:
 
     made: list["FakeRun1"] = []
 
-    def __init__(self, prompt: str, *, rows: list, spend: Any = None, **kw: Any):
+    def __init__(
+        self,
+        prompt: str,
+        *,
+        rows: list,
+        spend: Any = None,
+        after: Any = None,
+        **kw: Any,
+    ):
         self.kw = kw
         self.rows = rows
         self.spend = spend
+        #: Called after run 1 ends, before the policy's final read.
+        self.after = after
+        self.fail_reads = False
         self._baseline: Optional[list] = None
         self.observer = SimpleNamespace()
         type(self).made.append(self)
 
     @property
-    def system_of_record(self) -> list:
-        return copy.deepcopy(self.rows)
+    def system_of_record(self) -> Optional[list]:
+        return None if self.fail_reads else copy.deepcopy(self.rows)
 
     def _secret_params(self) -> frozenset:
         return frozenset()
 
     def record(self, agent: Any, params: dict, *, hold: Any) -> Any:
+        try:
+            return self._record(agent, params, hold=hold)
+        finally:
+            if self.after is not None:
+                self.after(self)
+
+    def _record(self, agent: Any, params: dict, *, hold: Any) -> Any:
         self._baseline = copy.deepcopy(self.rows)
         agent.calls += 1
         agent.seen_cap = getattr(agent, "max_cost_usd", None)
@@ -211,8 +235,11 @@ class FakeRun1:
             agent.last_ledger = self.spend
         if agent.raises:
             raise RuntimeError("the agent crashed after its save")
+        shot = Path(self.kw["cache_dir"]) / "gate-01.png"
+        shot.parent.mkdir(parents=True, exist_ok=True)
+        shot.write_bytes(b"\x89PNG\r\n\x1a\nsynthetic gate frame")
         request = compile_agent.GateRequest(
-            control="Save", identity=("Synthetic record",), url="", screenshot=None
+            control="Save", identity=("Synthetic record",), url="", screenshot=shot
         )
         approved = hold(request)
         gates = [{"decision": "approved_by_hold" if approved else "refused_by_hold"}]
@@ -248,11 +275,13 @@ class Agent:
 
 @pytest.fixture
 def run1(model, monkeypatch) -> SimpleNamespace:
-    state = SimpleNamespace(spend=None)
+    state = SimpleNamespace(spend=None, after=None)
     FakeRun1.made = []
 
     def factory(prompt: str, **kw: Any) -> FakeRun1:
-        made = FakeRun1(prompt, rows=model.rows, spend=state.spend, **kw)
+        made = FakeRun1(
+            prompt, rows=model.rows, spend=state.spend, after=state.after, **kw
+        )
         made.observer = made  # observer.system_of_record reads the same rows
         return made
 
@@ -550,3 +579,179 @@ def test_eligibility_agrees_with_open_repair(model, monkeypatch, report) -> None
     except RepairError:
         opened = False
     assert found.eligible is opened is (report is None), (report, found.reason)
+
+
+# -- review fixes: unreadable reads, the final read, the miss, the marker ------
+
+
+def test_an_unreadable_read_after_the_halt_never_falls_back(
+    model, monkeypatch, run1
+) -> None:
+    """An unreachable system of record also reports zero changes: that is not
+    "nothing written"."""
+    install_reply(model, monkeypatch, fail_read_after=True)
+    agent = Agent()
+    chosen = policy(model)
+    result = chosen.run(PROMPT, PARAMS, agent)
+    assert result.status == "HALTED" and result.path == "skill"
+    assert result.record_check["readable"] is False
+    assert agent.calls == 0 and FakeRun1.made == []
+    assert chosen.last == {"fallback": False, "reason": "record_changed_or_unproved"}
+    assert not (model.tmp / "cache" / "fallback" / "task" / fb._HALT).exists()
+
+
+def test_halt_evidence_without_a_readable_flag_proves_nothing(
+    model, monkeypatch, run1
+) -> None:
+    install_reply(model, monkeypatch)
+    assert model.cache.run(PROMPT, PARAMS, Agent()).status == "HALTED"
+    found = fb.proved_before_effect(model.cache, PROMPT, PARAMS)
+    root = model.tmp / "cache" / "fallback" / "task"
+    root.mkdir(parents=True)
+    zeros = {"created": 0, "changed": 0, "removed": 0, "passed": False}
+    (root / fb._HALT).write_text(
+        json.dumps(
+            {
+                "run_dir": str(found.run_dir),
+                "bundle_digest": found.bundle_digest,
+                "record_check": zeros,
+            }
+        )
+    )
+    agent = Agent()
+    result = policy(model).run(PROMPT, {"value": "two"}, agent)
+    assert result.status == "CACHE_HALTED" and agent.calls == 0
+
+
+@pytest.mark.parametrize("decision", ["refused", "approved"])
+def test_an_unreadable_final_read_keeps_the_marker(
+    model, monkeypatch, run1, decision
+) -> None:
+    install_reply(model, monkeypatch)
+
+    def unreadable(made: FakeRun1) -> None:
+        made.fail_reads = True
+
+    run1.after = unreadable
+    chosen = policy(model, gate=lambda request: decision == "approved")
+    result = chosen.run(PROMPT, PARAMS, Agent())
+    assert result.status == "RECONCILIATION_REQUIRED" and not result.verified
+    assert chosen.last["task_record_check"]["readable"] is False
+    assert chosen.last["repair"] is None
+    root = model.tmp / "cache" / "fallback" / "task"
+    assert (root / fb._ACTIVE).exists()
+    agent = Agent()
+    again = policy(model).run(PROMPT, {"value": "two"}, agent)
+    assert again.status == "RECONCILIATION_REQUIRED" and agent.calls == 0
+
+
+@pytest.mark.parametrize(
+    "late",
+    [
+        {"id": "f2", "kind": "synthetic", "value": "one"},  # a duplicate
+        None,  # the saved record changed after run 1's check
+    ],
+)
+def test_the_final_read_must_confirm_the_save(model, monkeypatch, run1, late) -> None:
+    install_reply(model, monkeypatch)
+
+    def after(made: FakeRun1) -> None:
+        if late is not None:
+            made.rows.append(dict(late))
+        else:
+            made.rows[-1]["value"] = "changed"
+
+    run1.after = after
+    chosen = policy(model)
+    result = chosen.run(PROMPT, PARAMS, Agent())
+    assert result.status == "RECONCILIATION_REQUIRED" and not result.verified
+    # Both readings are kept: run 1's check passed, the final read didn't.
+    assert result.record_check["passed"] is True
+    assert chosen.last["task_record_check"]["passed"] is False
+    assert chosen.last["run_status"] == "VERIFIED"
+    assert chosen.last["readings_agree"] is False
+    assert chosen.last["repair"] is None
+    assert (model.tmp / "cache" / "fallback" / "task" / fb._ACTIVE).exists()
+    saved = json.loads(
+        (
+            model.tmp
+            / "cache"
+            / "fallback"
+            / "task"
+            / chosen.last["request_id"]
+            / fb._RESULT
+        ).read_text()
+    )
+    assert saved["status"] == "RECONCILIATION_REQUIRED" and saved["verified"] is False
+
+
+def test_a_miss_at_dispatch_never_starts_the_agent(model, monkeypatch, run1) -> None:
+    """The program was evicted between the caller's check and the call: the
+    policy reports the miss; the cache's first run (fixture: pytest.fail) and
+    the agent are never reached."""
+    monkeypatch.setattr(model.cache, "_server", lambda *_: None)
+    agent = Agent()
+    result = policy(model).run(PROMPT, PARAMS, agent)
+    assert result.status == "NO_ADMITTED_PROGRAM" and not result.verified
+    assert agent.calls == 0 and model.sent == []
+    built = policy(
+        model, agent_factory=lambda: pytest.fail("agent built on a miss")
+    ).run(PROMPT, PARAMS, None)
+    assert built.status == "NO_ADMITTED_PROGRAM"
+
+
+def test_the_agent_is_built_only_for_an_eligible_halt(model, monkeypatch, run1) -> None:
+    install_reply(model, monkeypatch, report="reconciliation")
+    result = policy(
+        model, agent_factory=lambda: pytest.fail("agent built for a held halt")
+    ).run(PROMPT, PARAMS, None)
+    assert result.status == "HALTED"
+    model.stop.unlink()
+    install_reply(model, monkeypatch)
+    built: list = []
+    result = policy(
+        model, agent_factory=lambda: built.append(Agent()) or built[-1]
+    ).run(PROMPT, PARAMS, None)
+    assert result.verified and len(built) == 1 and built[0].calls == 1
+
+
+def test_an_unattended_gate_never_builds_the_agent(model, monkeypatch, run1) -> None:
+    install_reply(model, monkeypatch)
+    gate = TerminalGate(ask=lambda _: pytest.fail("asked"), attended=lambda: False)
+    result = policy(
+        model, gate=gate, agent_factory=lambda: pytest.fail("agent built")
+    ).run(PROMPT, PARAMS, None)
+    assert result.status == "FALLBACK_GATE_UNATTENDED"
+
+
+def test_a_worker_never_clears_a_marker_it_no_longer_owns(
+    model, monkeypatch, run1
+) -> None:
+    install_reply(model, monkeypatch)
+    root = model.tmp / "cache" / "fallback" / "task"
+
+    def swapped(request) -> bool:
+        # Someone replaced this run's marker with a later dispatch's.
+        (root / fb._ACTIVE).write_text(
+            json.dumps({"request_id": "later", "nonce": "n", "pid": 1, "host": "h"})
+        )
+        return True
+
+    result = policy(model, gate=swapped).run(PROMPT, PARAMS, Agent())
+    assert result.verified
+    assert json.loads((root / fb._ACTIVE).read_text())["request_id"] == "later"
+
+
+def test_release_never_drops_a_live_fallbacks_marker(model, monkeypatch, run1) -> None:
+    install_reply(model, monkeypatch)
+    seen: list = []
+
+    def gate(request) -> bool:
+        # A person runs release while this fallback waits at its gate.
+        seen.append(fb.release_in_flight(model.cache, PROMPT, PARAMS))
+        return True
+
+    result = policy(model, gate=gate).run(PROMPT, PARAMS, Agent())
+    assert seen[0]["cleared"] is False and seen[0]["owner"] == "running"
+    assert result.verified
+    assert not (model.tmp / "cache" / "fallback" / "task" / fb._ACTIVE).exists()

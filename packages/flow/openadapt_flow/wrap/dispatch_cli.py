@@ -24,6 +24,7 @@ or ``FAILED``. See docs/WRAP_FALLBACK.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -93,6 +94,9 @@ def finish(
     result: dict[str, Any], fallback: Optional[Mapping[str, Any]]
 ) -> dict[str, Any]:
     """Add the dispatch fields to a WrappedTask per-run result."""
+    if "outcome" in result and "fallback" in result:
+        # Already a dispatch envelope (stored, then replayed on a retry).
+        return dict(result)
     out = dict(result)
     out["path"] = dispatch_path(result)
     out["outcome"] = outcome(result)
@@ -177,6 +181,37 @@ def add_run_arguments(p: argparse.ArgumentParser) -> None:
         "--fallback-request-id",
         help="The fallback run's own ID (default: derived from --request-id)",
     )
+    p.add_argument(
+        "--fallback-gate",
+        choices=("terminal", "item-approval"),
+        default="terminal",
+        help="Who approves each fallback save: a person at this terminal "
+        "(terminal, the default), or a person in Desktop's Run it or on a "
+        "paired phone, through a signed item approval (item-approval; no "
+        "terminal needed)",
+    )
+    p.add_argument(
+        "--fallback-approvals-dir",
+        help="With --fallback-gate item-approval: the runs root Desktop or the "
+        "decision portal scans (default: inside the fallback run's directory)",
+    )
+    p.add_argument(
+        "--fallback-approval-wait-s",
+        type=float,
+        default=60.0,
+        help="With --fallback-gate item-approval: seconds to wait for each "
+        "answer (less than --max-run-seconds)",
+    )
+    p.add_argument(
+        "--fallback-approver-root",
+        help="With --fallback-gate item-approval: the pinned approver root "
+        "(else OPENADAPT_APPROVER_ROOT or --fallback-approvers-config)",
+    )
+    p.add_argument(
+        "--fallback-approvers-config",
+        help="With --fallback-gate item-approval: a deployment config whose "
+        "approvers section pins the root; it is then the only pin counted",
+    )
     p.add_argument("--provider", choices=("claude", "openai"), default="claude")
     p.add_argument("--model")
     p.add_argument(
@@ -260,6 +295,51 @@ def _fallback_agent(args: argparse.Namespace, setup: Any) -> Any:
     return agent
 
 
+def child_request_id(parent: str) -> str:
+    """The fallback request id for a dispatch request id.
+
+    A parent id is any 1 to 128 characters; a fallback id is a plain file
+    name. A digest of the parent fits both, and stays the same on a retry.
+    """
+
+    digest = hashlib.sha256(f"wrap-dispatch:{parent}".encode("utf-8")).hexdigest()
+    return f"fallback-{digest[:40]}"
+
+
+def item_approval_gate(args: argparse.Namespace) -> Any:
+    """The non-terminal gate from the ``--fallback-*`` flags."""
+
+    from openadapt_flow.wrap.approval_gate import ItemApprovalGate, pin_from_config
+
+    try:
+        pin = pin_from_config(args.fallback_approvers_config)
+    except ValueError as exc:
+        raise SystemExit(f"REFUSED (deployment_config_unreadable): {exc}") from None
+    key_dir = pin.pop("key_dir", None) or (
+        Path(args.key_dir).expanduser() if args.key_dir else None
+    )
+    return ItemApprovalGate(
+        approvals_dir=args.fallback_approvals_dir,
+        wait_s=args.fallback_approval_wait_s,
+        key_dir=key_dir,
+        approver_root=args.fallback_approver_root,
+        config_only=bool(args.fallback_approvers_config),
+        **pin,
+    )
+
+
+def _task(policy: Any, **options: Any) -> Any:
+    """A WrappedTask whose stored result is the whole dispatch envelope."""
+    from openadapt_flow.wrap import WrappedTask
+
+    class DispatchTask(WrappedTask):
+        def finalize(self, result: dict[str, Any]) -> dict[str, Any]:
+            last = getattr(policy, "last", None) if policy is not None else None
+            return finish(result, last)
+
+    return DispatchTask(**options)
+
+
 def run(
     args: argparse.Namespace,
     *,
@@ -268,9 +348,15 @@ def run(
     repair_desk: Any = None,
 ) -> dict[str, Any]:
     """One dispatch. ``agent``, ``gate`` and ``repair_desk`` are for tests and
-    embedding; the CLI builds the provider agent and the terminal gate."""
-    from openadapt_flow.wrap import WrappedTask
+    embedding; the CLI builds the provider agent and the gate.
+
+    Only the admitted program runs (:mod:`.compiled_only`): with none, the
+    result is ``NO_ADMITTED_PROGRAM`` and nothing runs. The result,
+    including ``fallback``, is stored with the request, so a retry of the
+    same request id returns it without running anything.
+    """
     from openadapt_flow.wrap.cli import _params, _with_secret_env
+    from openadapt_flow.wrap.compiled_only import CompiledOnly
 
     if not args.task or not args.request_id:
         raise SystemExit("wrap-dispatch needs --task and --request-id")
@@ -278,33 +364,25 @@ def run(
     cap = args.fallback_max_cost_usd
     if fallback_on and (cap is None or not math.isfinite(cap) or cap <= 0):
         raise SystemExit("--fallback agent requires a positive --fallback-max-cost-usd")
-    if not fallback_on and (cap is not None or args.fallback_request_id):
-        raise SystemExit("--fallback-max-cost-usd needs --fallback agent")
+    if not fallback_on and (
+        cap is not None
+        or args.fallback_request_id
+        or args.fallback_gate != "terminal"
+        or args.fallback_approvals_dir
+    ):
+        raise SystemExit("the --fallback-* options need --fallback agent")
+    if args.fallback_gate == "item-approval" and not (
+        0 < args.fallback_approval_wait_s < args.max_run_seconds
+    ):
+        raise SystemExit(
+            "--fallback-approval-wait-s must be more than 0 and less than "
+            "--max-run-seconds"
+        )
     from openadapt_flow.compile_agent.cli import _teach_authority
 
     setup = _setup(args.task, args.key_dir, _teach_authority(args))
     names = _names(setup)
-    started = time.monotonic()
-    if not setup.cache.held(setup.instruction, names) and (
-        setup.cache.server(setup.instruction, names) is None
-    ):
-        # Never a first run: that is openadapt wrap's, with its own review.
-        result = {
-            "request_id": args.request_id,
-            "path": "held",
-            "status": "NO_ADMITTED_PROGRAM",
-            "verified": False,
-            "model_calls": 0,
-            "cost_usd": 0.0,
-            "usage": [],
-            "usage_known": True,
-            "seconds": round(time.monotonic() - started, 3),
-            "wire_checked": False,
-            "receipt": None,
-            "receipt_outcome": None,
-        }
-        return finish(result, None)
-    cache: Any = setup.cache
+    cache: Any = CompiledOnly(setup.cache)
     policy = None
     if fallback_on:
         from openadapt_flow.wrap.fallback import (
@@ -318,26 +396,37 @@ def run(
 
             root = fallback_root(setup.cache, setup.instruction, names)
             repair_desk = RepairDesk(root / "repairs", RepairAccessPolicy(None))
-        if agent is None:
-            agent = _fallback_agent(args, setup)
+        if gate is None:
+            gate = (
+                item_approval_gate(args)
+                if args.fallback_gate == "item-approval"
+                else TerminalGate()
+            )
+        given = agent
         policy = FallbackPolicy(
             setup.cache,
             max_cost_usd=cap,
-            gate=gate if gate is not None else TerminalGate(),
-            request_id=args.fallback_request_id or f"{args.request_id}.fallback",
+            gate=gate,
+            request_id=args.fallback_request_id or child_request_id(args.request_id),
             repair_desk=repair_desk,
+            # Built only once a fallback may start: a miss or a hold that
+            # may not fall back never makes the agent or loads a model key.
+            agent_factory=(lambda: given)
+            if given is not None
+            else (lambda: _fallback_agent(args, setup)),
+            parent_request_id=args.request_id,
         )
         cache = policy
-    task = WrappedTask(
+    task = _task(
+        policy,
         cache=cache,
-        agent=agent if agent is not None else _NoAgent(),
+        agent=_NoAgent(),
         instruction=setup.instruction,
         parameters=setup.parameters,
         runs_dir=args.runs_dir,
     )
     values = _with_secret_env(_params(args.param), task.parameters)
-    result = task.call(args.request_id, values)
-    return finish(result, policy.last if policy is not None else None)
+    return finish(task.call(args.request_id, values), None)
 
 
 def _hold_file(setup: Any) -> Path:
@@ -381,10 +470,40 @@ def status(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _hold_is_proved_clean(setup: Any, names: Mapping[str, str]) -> bool:
+    """The hold's own evidence shows nothing was written: a halt the report
+    proves before effect, bound to the admitted bundle, or a hold whose
+    program never ran (no baseline, or no repair selection)."""
+    from openadapt_flow.wrap.fallback import proved_before_effect
+
+    try:
+        stopped = json.loads(_hold_file(setup).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(stopped, dict) or stopped.get("phase") != "halted":
+        return False
+    replay = stopped.get("replay")
+    if replay is None:
+        return stopped.get("reason") == "repair_selection_unavailable"
+    if not isinstance(replay, dict):
+        return False
+    if replay.get("status") == "BASELINE_UNAVAILABLE":
+        return replay.get("verified") is False
+    return proved_before_effect(setup.cache, setup.instruction, names).eligible
+
+
 def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:
-    """A person releases a hold at a terminal; the hold file is archived."""
+    """A person releases a hold at a terminal; the hold file is archived.
+
+    Without ``--after-reconciling`` only a hold whose evidence proves nothing
+    was written is released (see :func:`_hold_is_proved_clean`); a
+    ``RECONCILIATION_REQUIRED`` reply, a write, a ``running`` hold or an
+    unfinished fallback needs the person to check the record first. A
+    fallback whose owner is still running (or can't be checked from here)
+    is never released.
+    """
     from openadapt_flow.compile_agent.cli import _interactive
-    from openadapt_flow.wrap.fallback import clear_in_flight, fallback_runs
+    from openadapt_flow.wrap.fallback import fallback_runs, release_in_flight
 
     person = (args.person or "").strip()
     if not person:
@@ -394,7 +513,16 @@ def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:
     setup = _setup(args.task, args.key_dir)
     names = _names(setup)
     path = _hold_file(setup)
-    stuck = fallback_runs(setup.cache, setup.instruction, names)["in_flight"]
+    runs = fallback_runs(setup.cache, setup.instruction, names)
+    stuck = runs["in_flight"]
+    if stuck and runs["in_flight_owner"] != "ended":
+        return {
+            "released": False,
+            "reason": "FALLBACK_RUNNING",
+            "detail": "A fallback of this task is still running, or its owner "
+            "can't be checked from here; it may still save.",
+            "fallback_request_id": runs["in_flight_request_id"],
+        }
     phase = None
     if path.exists() or path.is_symlink():
         try:
@@ -403,7 +531,8 @@ def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:
             phase = "unreadable"
     elif not stuck:
         return {"released": False, "reason": "NOT_HELD"}
-    if (stuck or phase not in (None, "halted")) and not args.after_reconciling:
+    clean = phase is None or _hold_is_proved_clean(setup, names)
+    if (stuck or not clean) and not args.after_reconciling:
         return {
             "released": False,
             "reason": "RECONCILE_FIRST",
@@ -412,6 +541,16 @@ def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:
         }
     if ask("Type release to release this hold: ").strip().lower() != "release":
         return {"released": False, "reason": "NOT_CONFIRMED"}
+    cleared = None
+    if stuck:
+        cleared = release_in_flight(setup.cache, setup.instruction, names)
+        if not cleared["cleared"]:
+            # Its owner came back to life, or it changed: keep everything.
+            return {
+                "released": False,
+                "reason": "FALLBACK_RUNNING",
+                "fallback_request_id": cleared.get("request_id"),
+            }
     archived = None
     if phase is not None:
         archived = path.with_name(f"skill-stop-released-{time.time_ns()}.json")
@@ -420,14 +559,19 @@ def release(args: argparse.Namespace, ask: Any = input) -> dict[str, Any]:
 
         _write(
             archived.with_suffix(".by.json"),
-            {"person": person, "at": time.time(), "phase": phase},
+            {
+                "person": person,
+                "at": time.time(),
+                "phase": phase,
+                "after_reconciling": bool(args.after_reconciling),
+            },
         )
-    cleared = clear_in_flight(setup.cache, setup.instruction, names) if stuck else False
     return {
         "released": True,
         "person": person,
         "archived": str(archived) if archived else None,
-        "fallback_cleared": cleared,
+        "fallback_cleared": bool(cleared and cleared["cleared"]),
+        "fallback_request_id": cleared.get("request_id") if cleared else None,
     }
 
 

@@ -42,6 +42,8 @@ from typing import Any, Optional, Protocol
 
 from openadapt_flow.compile_agent.harness import GateRequest
 from openadapt_flow.integrations.agents.skills import SkillRun
+from openadapt_flow.wrap import fallback_marker
+from openadapt_flow.wrap.compiled_only import NO_ADMITTED_PROGRAM, compiled_only
 
 #: ``SkillRun.path`` of a run the agent did after a program's drift.
 FALLBACK_PATH = "agent_fallback"
@@ -58,7 +60,7 @@ NEVER_FALL_BACK = frozenset(
     }
 )
 
-_ACTIVE = "in-flight.json"
+_ACTIVE = fallback_marker.ACTIVE
 _HALT = "halt-evidence.json"
 _RESULT = "result.json"
 _REQUEST_CHARS = frozenset(
@@ -119,9 +121,12 @@ def _int_zero(value: Any) -> bool:
 
 
 def _nothing_written(check: Any) -> bool:
-    """The cache's record check saw no change to the task's record."""
+    """Both reads of the record check succeeded and saw no change to the
+    task's record. An unreadable store also reports zero counts; without
+    ``readable`` (an older check) nothing is proved."""
     return (
         isinstance(check, Mapping)
+        and check.get("readable") is True
         and _int_zero(check.get("created"))
         and _int_zero(check.get("changed"))
         and _int_zero(check.get("removed"))
@@ -249,6 +254,11 @@ class FallbackPolicy:
         request_id: The fallback run's own id. Default: a new one per run.
         repair_desk: When given, a verified fallback opens a repair
             candidate with :meth:`SkillCache.open_repair`.
+        agent_factory: Builds the fallback agent. Called only after the halt
+            is proved before effect and a person is at the gate; then the
+            agent :meth:`run` was given is ignored.
+        parent_request_id: The dispatch request this fallback answers,
+            recorded with the fallback's result.
     """
 
     def __init__(
@@ -259,6 +269,8 @@ class FallbackPolicy:
         gate: Optional[PreCommitGate] = None,
         request_id: Optional[str] = None,
         repair_desk: Any = None,
+        agent_factory: Optional[Callable[[], Any]] = None,
+        parent_request_id: Optional[str] = None,
     ) -> None:
         self.cache = cache
         self.max_cost_usd = _cap(max_cost_usd)
@@ -272,6 +284,9 @@ class FallbackPolicy:
             raise ValueError("a fallback request id is 1 to 128 of [A-Za-z0-9._-]")
         self.request_id = request_id
         self.repair_desk = repair_desk
+        #: Builds the fallback agent, called only once a fallback may start.
+        self.agent_factory = agent_factory
+        self.parent_request_id = parent_request_id
         #: What the last :meth:`run` did about a fallback (None: not tried).
         self.last: Optional[dict[str, Any]] = None
 
@@ -287,9 +302,15 @@ class FallbackPolicy:
 
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         self.last = None
-        # A lost reply raises here and stays held; it never falls back.
-        first = self.cache.run(prompt, params, agent)
-        if first.path != "skill" or first.verified or first.status in NEVER_FALL_BACK:
+        # Compiled replay only: a miss never reaches the agent. A lost reply
+        # raises here and stays held; it never falls back.
+        first = compiled_only(self.cache, prompt, params)
+        if (
+            first.path != "skill"
+            or first.verified
+            or first.status in NEVER_FALL_BACK
+            or first.status == NO_ADMITTED_PROGRAM
+        ):
             return first
         root = fallback_root(self.cache, prompt, params)
         found = proved_before_effect(self.cache, prompt, params)
@@ -355,6 +376,18 @@ class FallbackPolicy:
         root: Path,
     ) -> SkillRun:
         started = time.monotonic()
+        if getattr(self.gate, "attended", True) is False:
+            return self._refused(
+                first,
+                "FALLBACK_GATE_UNATTENDED",
+                "No person is at the pre-commit gate; the agent was not started.",
+                started,
+            )
+        if self.agent_factory is not None:
+            try:
+                agent = self.agent_factory()
+            except (Exception, SystemExit):  # noqa: BLE001 - nothing ran yet
+                agent = None
         if agent is None:
             return self._refused(
                 first, "FALLBACK_NO_AGENT", "No fallback agent was given.", started
@@ -370,20 +403,11 @@ class FallbackPolicy:
                 "The fallback agent has no spend cap this policy can set.",
                 started,
             )
-        if getattr(self.gate, "attended", True) is False:
-            return self._refused(
-                first,
-                "FALLBACK_GATE_UNATTENDED",
-                "No person is at the pre-commit gate; the agent was not started.",
-                started,
-            )
         request_id = self.request_id or f"fallback-{uuid.uuid4().hex}"
         root.mkdir(parents=True, exist_ok=True)
-        active = root / _ACTIVE
+        marker = fallback_marker.Marker(root, request_id)
         try:
-            _write(
-                active, {"request_id": request_id, "at": time.time()}, exclusive=True
-            )
+            marker.claim()
         except FileExistsError:
             # Another fallback is running, or one ended without proving what
             # it wrote. A person reconciles it before another one starts.
@@ -397,7 +421,7 @@ class FallbackPolicy:
         try:
             run_root.mkdir()
         except FileExistsError:
-            active.unlink()
+            marker.clear()
             return self._refused(
                 first,
                 "FALLBACK_REQUEST_REUSED",
@@ -405,8 +429,18 @@ class FallbackPolicy:
                 started,
                 request_id=request_id,
             )
-        # Any exception from here keeps the in-flight marker: a save may exist.
-        return self._run_agent(prompt, params, agent, first, root, run_root, started)
+        bind = getattr(self.gate, "bind", None)
+        if callable(bind):
+            # A gate that keeps its own evidence learns which run it serves.
+            bind(run_root, request_id)
+        try:
+            return self._run_agent(
+                prompt, params, agent, first, marker, run_root, started
+            )
+        finally:
+            # A run that did not prove what it wrote (or raised) keeps the
+            # marker, marked ended, for a person; a cleared one is gone.
+            marker.end()
 
     def _run_agent(
         self,
@@ -414,7 +448,7 @@ class FallbackPolicy:
         params: Mapping[str, Any],
         agent: Any,
         first: SkillRun,
-        root: Path,
+        marker: fallback_marker.Marker,
         run_root: Path,
         started: float,
     ) -> SkillRun:
@@ -514,11 +548,27 @@ class FallbackPolicy:
         )
         if status == "VERIFIED" and not verified:
             status, detail = "GATE_NOT_PROVED", "A save did not pass the gate."
+        # The final, task-scoped read decides: a success it doesn't confirm,
+        # or a stop it can't show wrote nothing, needs a person. Both
+        # readings are kept for that reconciliation.
+        confirmed = written.get("readable") is True and written.get("passed") is True
+        unchanged = _nothing_written(written)
+        run_status = status
+        if verified and not confirmed:
+            verified = False
+            status = "RECONCILIATION_REQUIRED"
+            detail = "The final read of the record does not confirm the save."
+        elif not verified and not unchanged and status != "GATE_NOT_PROVED":
+            status = "RECONCILIATION_REQUIRED"
+            detail = "The final read of the record can't show that nothing was saved."
         repair = self._open_repair(prompt, params, run_root) if verified else None
         self.last = {
             "fallback": True,
             "request_id": request_id,
+            "parent_request_id": self.parent_request_id,
             "status": status,
+            "run_status": run_status,
+            "readings_agree": verified or (unchanged and not check.get("passed")),
             "gates": gates,
             "decisions": decisions,
             "approvals": decisions.count("approved"),
@@ -526,6 +576,11 @@ class FallbackPolicy:
             "admitted": False,
             "task_record_check": written,
         }
+        answers = getattr(self.gate, "decisions", None)
+        if isinstance(answers, list):
+            # A gate that keeps its own evidence (ItemApprovalGate): which
+            # request each save asked and what answered it. PHI-free.
+            self.last["gate_answers"] = [dict(row) for row in answers]
         run = SkillRun(
             path=FALLBACK_PATH,
             status=status,
@@ -544,10 +599,11 @@ class FallbackPolicy:
             usage_known=usage_known,
         )
         _write(run_root / _RESULT, run.to_dict())
-        # The marker goes only when what the run did is known: a verified
-        # save, or an independent read that found the task's record unchanged.
-        if verified or _nothing_written(written):
-            (root / _ACTIVE).unlink(missing_ok=True)
+        # The marker goes only when what the run did is known (a save the
+        # final read confirmed, or a final read that found the task's record
+        # unchanged), and only while it is still this run's.
+        if verified or unchanged:
+            marker.clear()
         return run
 
     def _open_repair(
@@ -593,17 +649,28 @@ def fallback_runs(cache: Any, prompt: str, params: Mapping[str, Any]) -> dict[st
                     "repair": fallback.get("repair"),
                 }
             )
+    marker = fallback_marker.read(root)
     return {
         "dir": str(root),
-        "in_flight": (root / _ACTIVE).exists(),
+        "in_flight": marker is not None,
+        "in_flight_request_id": (marker or {}).get("request_id"),
+        # running or unknown: a save may still happen; release refuses.
+        "in_flight_owner": fallback_marker.owner_state(marker),
         "runs": runs,
     }
 
 
+def release_in_flight(
+    cache: Any, prompt: str, params: Mapping[str, Any]
+) -> dict[str, Any]:
+    """A person reconciled a stuck fallback: drop its marker (evidence stays).
+
+    Only a marker whose owner ended is dropped; a live or unprovable owner
+    keeps it (``owner`` says which).
+    """
+    return fallback_marker.release(fallback_root(cache, prompt, params))
+
+
 def clear_in_flight(cache: Any, prompt: str, params: Mapping[str, Any]) -> bool:
-    """A person reconciled a stuck fallback: drop its marker (evidence stays)."""
-    marker = fallback_root(cache, prompt, params) / _ACTIVE
-    if not marker.exists():
-        return False
-    marker.rename(marker.with_name(f"reconciled-{time.time_ns()}.json"))
-    return True
+    """:func:`release_in_flight`, True when a marker was dropped."""
+    return bool(release_in_flight(cache, prompt, params)["cleared"])

@@ -4,6 +4,7 @@ The task setup is the same modelled SkillCache as tests/test_wrap_fallback.py
 (real cache, hold and report checks; the MCP reply and run 1 modelled).
 """
 
+# ruff: noqa: F811 - pytest fixtures are imported by name
 from __future__ import annotations
 
 import argparse
@@ -48,7 +49,7 @@ def parse(*argv: str) -> argparse.Namespace:
 
 
 @pytest.fixture
-def task(model, monkeypatch, tmp_path) -> SimpleNamespace:  # noqa: F811
+def task(model, monkeypatch, tmp_path) -> SimpleNamespace:
     setup = SimpleNamespace(
         cache=model.cache, instruction=PROMPT, parameters=("value",)
     )
@@ -79,7 +80,7 @@ def test_the_verb_is_registered_in_openadapt_flow() -> None:
 
 
 def test_no_admitted_program_runs_nothing(task, monkeypatch) -> None:
-    monkeypatch.setattr(task.setup.cache, "server", lambda *_: None)
+    monkeypatch.setattr(task.setup.cache, "_server", lambda *_: None)
     result = dc.run(run_args(task, "r1", "one"))
     assert result["status"] == "NO_ADMITTED_PROGRAM" and result["path"] == "held"
     assert result["outcome"] == "ESCALATED" and result["model_calls"] == 0
@@ -131,7 +132,7 @@ def test_fallback_needs_its_own_cap(task) -> None:
         )
 
 
-def test_opt_in_fallback_result(task, monkeypatch, run1, tmp_path) -> None:  # noqa: F811
+def test_opt_in_fallback_result(task, monkeypatch, run1, tmp_path) -> None:
     install_reply(task.model, monkeypatch)
     out = tmp_path / "result.json"
     args = run_args(
@@ -149,7 +150,8 @@ def test_opt_in_fallback_result(task, monkeypatch, run1, tmp_path) -> None:  # n
     result = dc.run(args, agent=Agent(), gate=lambda r: approvals.append(r) or True)
     assert result["path"] == "agent_fallback" and result["outcome"] == "VERIFIED"
     assert result["verified"] and result["model_calls"] == 0 and len(approvals) == 1
-    assert result["fallback"]["request_id"] == "r1.fallback"
+    assert result["fallback"]["request_id"] == dc.child_request_id("r1")
+    assert result["fallback"]["parent_request_id"] == "r1"
     assert result["fallback"]["admitted"] is False
     assert result["fallback"]["repair"]["opened"] is True
     assert set(result) >= RUN_KEYS
@@ -159,7 +161,7 @@ def test_opt_in_fallback_result(task, monkeypatch, run1, tmp_path) -> None:  # n
     assert json.loads(out.read_text())["path"] == "agent_fallback"
 
 
-def test_status_evict_and_release(task, monkeypatch, run1, capsys) -> None:  # noqa: F811
+def test_status_evict_and_release(task, monkeypatch, run1, capsys) -> None:
     install_reply(task.model, monkeypatch)
     dc.run(run_args(task, "r1", "one"))
     shown = dc.status(parse("status", "task.json"))
@@ -213,3 +215,149 @@ def test_release_of_a_possible_write_needs_reconciling(task, monkeypatch) -> Non
 )
 def test_outcomes(status: str, verified: bool, expected: str) -> None:
     assert dc.outcome({"status": status, "verified": verified}) == expected
+
+
+# -- review fixes: compiled-only dispatch, stored envelope, release ------------
+
+FALLBACK = ("--fallback", "agent", "--fallback-max-cost-usd", "0.25")
+
+
+@pytest.mark.parametrize("extra", [(), FALLBACK])
+def test_a_program_evicted_after_the_check_is_a_miss(
+    task,
+    monkeypatch,
+    run1,
+    extra,
+) -> None:
+    """server() still says yes (the old precheck); at dispatch there is no
+    admitted program. Nothing runs: no first run (fixture fails on one), no
+    program call, no agent."""
+    monkeypatch.setattr(task.setup.cache, "server", lambda *_: Path("server.py"))
+    monkeypatch.setattr(task.setup.cache, "_server", lambda *_: None)
+    agent = Agent()
+    result = dc.run(run_args(task, "r1", "one", *extra), agent=agent)
+    assert result["status"] == "NO_ADMITTED_PROGRAM" and result["path"] == "held"
+    assert agent.calls == 0 and task.model.sent == []
+
+
+def test_no_admitted_program_is_stored_with_the_request(task, monkeypatch) -> None:
+    monkeypatch.setattr(task.setup.cache, "_server", lambda *_: None)
+    first = dc.run(run_args(task, "r1", "one"))
+    assert first["status"] == "NO_ADMITTED_PROGRAM" and first["replayed"] is False
+    # The program is admitted now; the same request still reports its outcome.
+    monkeypatch.undo()
+    monkeypatch.setattr(dc, "_setup", lambda *_a, **_k: task.setup)
+    install_reply(task.model, monkeypatch)
+    again = dc.run(run_args(task, "r1", "one"))
+    assert again["status"] == "NO_ADMITTED_PROGRAM" and again["replayed"] is True
+    assert task.model.sent == []
+
+
+def test_a_retry_replays_the_whole_dispatch_envelope(
+    task,
+    monkeypatch,
+    run1,
+) -> None:
+    install_reply(task.model, monkeypatch)
+    agent = Agent()
+    first = dc.run(
+        run_args(task, "r1", "one", *FALLBACK), agent=agent, gate=lambda r: True
+    )
+    assert first["verified"] and first["fallback"]["repair"]["opened"]
+    again = dc.run(
+        run_args(task, "r1", "one", *FALLBACK),
+        agent=agent,
+        gate=lambda r: pytest.fail("asked again"),
+    )
+    assert again["replayed"] is True and agent.calls == 1
+    assert again["fallback"] == first["fallback"]
+    assert again["path"] == "agent_fallback" and again["outcome"] == "VERIFIED"
+    # The stored run record is exactly the reply, so the strict readback
+    # does not fail on a reply/record mismatch.
+    from openadapt_flow.request_binding import BindingError
+
+    wrapped = WrappedTask(
+        cache=task.setup.cache,
+        agent=dc._NoAgent(),
+        instruction=PROMPT,
+        parameters=("value",),
+        runs_dir=task.runs,
+    )
+    try:
+        wrapped.verify_reply("r1", {"value": "one"}, first)
+    except BindingError as exc:
+        assert str(exc) != "terminal_result_mismatch"
+
+
+@pytest.mark.parametrize("parent", ["p" * 128, "tenant/a:b c", ".hidden"])
+def test_any_valid_parent_id_gets_a_fallback(
+    task,
+    monkeypatch,
+    run1,
+    parent,
+) -> None:
+    install_reply(task.model, monkeypatch)
+    result = dc.run(
+        run_args(task, parent, "one", *FALLBACK), agent=Agent(), gate=lambda r: True
+    )
+    child = result["fallback"]["request_id"]
+    assert result["verified"] and child == dc.child_request_id(parent)
+    assert len(child) <= 128 and child.replace("-", "").isalnum()
+    assert result["fallback"]["parent_request_id"] == parent
+
+
+def test_release_of_a_reconciliation_reply_needs_the_acknowledgement(
+    task, monkeypatch
+) -> None:
+    """The hold's phase is ``halted``, but its reply says a write may exist."""
+    install_reply(task.model, monkeypatch, status="RECONCILIATION_REQUIRED")
+    assert dc.run(run_args(task, "r1", "one"))["status"] == "RECONCILIATION_REQUIRED"
+    assert json.loads(task.model.stop.read_text())["phase"] == "halted"
+    monkeypatch.setattr(compile_cli, "_interactive", lambda: True)
+    args = parse("release", "task.json", "--person", "dana")
+    assert dc.release(args, ask=lambda _: "release")["reason"] == "RECONCILE_FIRST"
+    assert task.model.stop.exists()
+    args = parse("release", "task.json", "--person", "dana", "--after-reconciling")
+    done = dc.release(args, ask=lambda _: "release")
+    assert done["released"]
+    by = json.loads(Path(done["archived"]).with_suffix(".by.json").read_text())
+    assert by["after_reconciling"] is True
+
+
+def test_release_refuses_while_the_fallback_runs(
+    task,
+    monkeypatch,
+    run1,
+) -> None:
+    install_reply(task.model, monkeypatch)
+    monkeypatch.setattr(compile_cli, "_interactive", lambda: True)
+    tried: list = []
+
+    def gate(request) -> bool:
+        args = parse("release", "task.json", "--person", "dana", "--after-reconciling")
+        tried.append(dc.release(args, ask=lambda _: "release"))
+        return True
+
+    result = dc.run(run_args(task, "r1", "one", *FALLBACK), agent=Agent(), gate=gate)
+    assert tried[0]["released"] is False and tried[0]["reason"] == "FALLBACK_RUNNING"
+    assert result["verified"]
+    assert task.model.stop.exists()  # the hold was not released either
+
+
+def test_release_after_a_crashed_fallback(task, monkeypatch, run1) -> None:
+    install_reply(task.model, monkeypatch)
+    crashed = dc.run(
+        run_args(task, "r1", "one", *FALLBACK),
+        agent=Agent(raises=True),
+        gate=lambda r: True,
+    )
+    assert crashed["status"] == "RECONCILIATION_REQUIRED"
+    shown = dc.status(parse("status", "task.json"))
+    assert shown["fallback"]["in_flight_owner"] == "ended"
+    monkeypatch.setattr(compile_cli, "_interactive", lambda: True)
+    args = parse("release", "task.json", "--person", "dana")
+    assert dc.release(args, ask=lambda _: "release")["reason"] == "RECONCILE_FIRST"
+    args = parse("release", "task.json", "--person", "dana", "--after-reconciling")
+    done = dc.release(args, ask=lambda _: "release")
+    assert done["released"] and done["fallback_cleared"]
+    assert done["fallback_request_id"] == dc.child_request_id("r1")
