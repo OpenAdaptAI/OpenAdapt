@@ -16,18 +16,41 @@ After every read-back or refusal the commit guard writes, in the run folder:
     the same rows with each value replaced by a salted digest, so two copies
     can still be compared without the values.
 
-``verdict`` is the run's outcome in the ledger's words:
+``verdict`` is the run's outcome in the ledger's words. It is derived only
+from the guard's own verdict, the one ``summary.json`` carries, or, when the
+save was blocked before it was sent (``summary.json`` ``verdict`` is null),
+from the refusal code in ``blocked[].code``. ``guard_verdict`` repeats the
+``summary.json`` value and ``verdict_reason`` says which rule applied. The
+rules (:data:`READBACK_OUTCOMES` and :func:`refusal_outcome`) use the run
+ledger's reason names (``openadapt_flow.run_ledger.outcome``), so the row and
+the ledger never put one run in two buckets:
 
-* ``VERIFIED``: an independent read-back shows exactly the intended write.
-* ``CAUGHT_ERROR``: the guard stopped or caught a wrong save: a wrong record
-  on screen, a second save, a declined approval, or a read-back that shows
-  another value or another write (``REFUTED``).
-* ``ESCALATED``: the save went through and could not be confirmed
-  (``RECONCILIATION_REQUIRED``), or nobody answered its approval before it
-  expired; a person checks the record.
-* ``FAILED``: the guard could not do its job (the store couldn't be read
-  before the save, the approval couldn't be asked, or its answer was
-  unusable).
+=============================  ================  ==========================
+Guard verdict or refusal        ``verdict``       ``verdict_reason``
+=============================  ================  ==========================
+VERIFIED, independent tier      VERIFIED          readback_verified
+VERIFIED, screen tier           UNKNOWN           screen_readback_only
+VERIFIED, any other tier        UNKNOWN           completed_unverified
+VERIFIED, but a field differs   UNKNOWN           readback_fields_disagree
+REFUTED                         CAUGHT_ERROR      readback_refuted
+RECONCILIATION_REQUIRED         UNKNOWN           reconciliation_required
+blocked: wrong record           CAUGHT_ERROR      save_blocked_wrong_record
+blocked: another origin         CAUGHT_ERROR      save_blocked_other_origin
+blocked: a second save          CAUGHT_ERROR      save_blocked_double_save
+blocked: outside teach scope    CAUGHT_ERROR      save_blocked_out_of_scope
+blocked: a person declined      ESCALATED         person_declined
+blocked: nobody answered        ESCALATED         approval_declined
+blocked: guard couldn't check   FAILED            policy_rejected_no_write
+blocked: any other code         UNKNOWN           unmapped_outcome
+=============================  ================  ==========================
+
+RECONCILIATION_REQUIRED is UNKNOWN, not ESCALATED: the save was sent and
+the guard can't say whether it landed, so the row doesn't claim a person
+took it over. A declined approval is ESCALATED, not a caught error: a
+person said no, and the row can't tell whether the save was wrong. The run
+ledger decides its bucket from ``summary.json`` itself and reads only the
+row's names, times and tier (contract J3); these rules only keep the row
+from contradicting it.
 
 One row per run. A refusal after a read-back (a second save the guard
 blocked) keeps the read-back's row, since that is the save that happened;
@@ -53,6 +76,8 @@ __all__ = [
     "SCRUBBED_FILENAME",
     "export_scrubbed",
     "ledger_verdict",
+    "readback_outcome",
+    "refusal_outcome",
     "row_after_read_back",
     "write_readback_row",
     "write_refusal_row",
@@ -68,6 +93,8 @@ ROW_KEYS = (
     "schema",
     "task_id",
     "verdict",
+    "guard_verdict",
+    "verdict_reason",
     "fields_checked",
     "fields_differing",
     "hold_ms",
@@ -78,6 +105,12 @@ ROW_KEYS = (
     "diff_path",
 )
 
+#: The guard's read-back verdict -> (ledger outcome, reason). VERIFIED is
+#: decided with the read-back tier in :func:`readback_outcome`.
+READBACK_OUTCOMES: dict[str, tuple[str, str]] = {
+    "REFUTED": ("CAUGHT_ERROR", "readback_refuted"),
+    "RECONCILIATION_REQUIRED": ("UNKNOWN", "reconciliation_required"),
+}
 #: Refusals where the guard itself could not do its job.
 _FAILED_CODES = frozenset(
     {
@@ -98,10 +131,66 @@ _FAILED_CODES = frozenset(
         "initiator_changed",
         "request_unknown",
         "store_unsafe",
+        "approval_not_authenticated_person",
+        "approval_request_unwritable",
     }
 )
 #: Refusals where nobody decided in time: nothing was written, a person acts.
-_ESCALATED_CODES = frozenset({"request_expired"})
+_NOT_ANSWERED_CODES = frozenset(
+    {"request_expired", "approval_wait_timed_out", "approval_required"}
+)
+#: Refusals of a second save of the same task.
+_DOUBLE_SAVE_CODES = frozenset(
+    {
+        "already_committed",
+        "already_saved",
+        "needs_reconciliation",
+        "save_waiting_for_person",
+        "approval_already_used",
+    }
+)
+
+
+def readback_outcome(
+    verdict: Optional[GuardVerdict],
+    *,
+    tier: Optional[str] = None,
+    differing: bool = False,
+) -> tuple[str, str]:
+    """``(verdict, verdict_reason)`` for the guard's read-back verdict."""
+
+    if verdict is GuardVerdict.VERIFIED:
+        if differing:
+            # The guard and the field diff disagree: neither is trusted.
+            return "UNKNOWN", "readback_fields_disagree"
+        if tier == "independent_readback":
+            return "VERIFIED", "readback_verified"
+        if tier == "screen_readback":
+            return "UNKNOWN", "screen_readback_only"
+        return "UNKNOWN", "completed_unverified"
+    if verdict is None:
+        return "UNKNOWN", "unmapped_outcome"
+    return READBACK_OUTCOMES.get(verdict.value, ("UNKNOWN", "unmapped_outcome"))
+
+
+def refusal_outcome(code: str, *, scope: bool = False) -> tuple[str, str]:
+    """``(verdict, verdict_reason)`` for a save the guard blocked."""
+
+    if scope:
+        return "CAUGHT_ERROR", "save_blocked_out_of_scope"
+    if code.startswith("identity_"):
+        return "CAUGHT_ERROR", "save_blocked_wrong_record"
+    if code == "other_origin":
+        return "CAUGHT_ERROR", "save_blocked_other_origin"
+    if code in _DOUBLE_SAVE_CODES:
+        return "CAUGHT_ERROR", "save_blocked_double_save"
+    if code == "declined":
+        return "ESCALATED", "person_declined"
+    if code in _NOT_ANSWERED_CODES:
+        return "ESCALATED", "approval_declined"
+    if code in _FAILED_CODES or code.startswith(("approval_", "policy_")):
+        return "FAILED", "policy_rejected_no_write"
+    return "UNKNOWN", "unmapped_outcome"
 
 
 def ledger_verdict(
@@ -109,20 +198,14 @@ def ledger_verdict(
     *,
     differing: bool = False,
     refusal: Optional[str] = None,
+    tier: Optional[str] = "independent_readback",
+    scope: bool = False,
 ) -> str:
     """The ledger outcome for a read-back verdict or a refusal code."""
 
     if refusal is not None:
-        if refusal in _ESCALATED_CODES:
-            return "ESCALATED"
-        if refusal in _FAILED_CODES or refusal.startswith(("approval_", "policy_")):
-            return "FAILED"
-        return "CAUGHT_ERROR"
-    if differing or verdict is GuardVerdict.REFUTED:
-        return "CAUGHT_ERROR"
-    if verdict is GuardVerdict.VERIFIED:
-        return "VERIFIED"
-    return "ESCALATED"
+        return refusal_outcome(refusal, scope=scope)[0]
+    return readback_outcome(verdict, tier=tier, differing=differing)[0]
 
 
 def _approval_times(guard: Any) -> tuple[Optional[str], Optional[str]]:
@@ -152,7 +235,8 @@ def _approver_kind(guard: Any) -> str:
 def _row(
     *,
     task_id: str,
-    verdict: str,
+    verdict: tuple[str, str],
+    guard_verdict: Optional[str],
     checked: list[str],
     differing: list[str],
     hold_ms: Optional[float],
@@ -164,7 +248,9 @@ def _row(
     row = {
         "schema": ROW_SCHEMA,
         "task_id": task_id,
-        "verdict": verdict,
+        "verdict": verdict[0],
+        "guard_verdict": guard_verdict,
+        "verdict_reason": verdict[1],
         "fields_checked": sorted(checked),
         "fields_differing": sorted(differing),
         "hold_ms": hold_ms,
@@ -223,7 +309,8 @@ def write_readback_row(
     )
     row = _row(
         task_id=task.task_id,
-        verdict=ledger_verdict(verdict, differing=bool(differing)),
+        verdict=readback_outcome(verdict, tier=tier, differing=bool(differing)),
+        guard_verdict=verdict.value,
         checked=[r["field"] for r in rows if r["status"] != "not_read"],
         differing=differing,
         hold_ms=hold_ms,
@@ -281,6 +368,7 @@ def write_refusal_row(
     guard: Any,
     code: str,
     hold_ms: Optional[float],
+    scope: bool = False,
 ) -> Optional[dict[str, Any]]:
     """Write the row for a save the guard refused. Nothing was written.
 
@@ -291,7 +379,8 @@ def write_refusal_row(
         return None
     row = _row(
         task_id=task.task_id,
-        verdict=ledger_verdict(None, refusal=code),
+        verdict=refusal_outcome(code, scope=scope),
+        guard_verdict=None,
         checked=[],
         differing=[],
         hold_ms=hold_ms,

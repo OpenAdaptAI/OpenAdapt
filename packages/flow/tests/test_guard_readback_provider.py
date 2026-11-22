@@ -107,7 +107,10 @@ def test_a_screen_only_provider_never_yields_verified(sor, tmp_path: Path) -> No
     assert ledger["verdict"] == "RECONCILIATION_REQUIRED"
     row = json.loads((tmp_path / "guard_ledger_row.json").read_text())
     assert row["readback_tier"] == "screen_readback"
-    assert row["verdict"] == "ESCALATED"
+    # Unconfirmed, as summary.json says: the row doesn't call it escalated.
+    assert row["verdict"] == "UNKNOWN"
+    assert row["guard_verdict"] == "RECONCILIATION_REQUIRED"
+    assert row["verdict_reason"] == "reconciliation_required"
 
 
 @pytest.mark.parametrize("tier", ["screen_readback", "unchecked", "anything"])

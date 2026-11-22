@@ -161,9 +161,17 @@ class CommitGuard:
 
         #: How a save is read back (:class:`~.readback.ReadbackProvider`).
         self.readback = readback if readback is not None else VerifyRunReadback()
-        #: Where ``guard_ledger_row.json`` goes; None: no row.
+        #: Where ``guard_ledger_row.json`` goes; None: no row. A guard with no
+        #: store of its own (no ``state_dir``) and no events file writes none.
         self.ledger_dir = (
-            (ledger_dir or (events_path.parent if events_path else guarded.state_dir))
+            (
+                ledger_dir
+                or (
+                    events_path.parent
+                    if events_path
+                    else getattr(guarded, "state_dir", None)
+                )
+            )
             if ledger_row
             else None
         )
@@ -473,6 +481,7 @@ class CommitGuard:
                 code,
                 "the save is not the one the task declared (another record, "
                 "field or value)",
+                scope=True,
             )
             return
         if self.observe_only:
@@ -497,6 +506,8 @@ class CommitGuard:
         code: str,
         message: str,
         guard: Optional[Guard] = None,
+        *,
+        scope: bool = False,
     ) -> None:
         if self.observe_only:
             self.summary.would_block.append({"code": code})
@@ -542,7 +553,12 @@ class CommitGuard:
             from openadapt_flow.agent_guard.ledger_row import write_refusal_row
 
             write_refusal_row(
-                self.ledger_dir, task=self.task, guard=guard, code=code, hold_ms=hold_ms
+                self.ledger_dir,
+                task=self.task,
+                guard=guard,
+                code=code,
+                hold_ms=hold_ms,
+                scope=scope,
             )
         self._log(request, kind, "blocked", code=code)
         self.page.notify(
